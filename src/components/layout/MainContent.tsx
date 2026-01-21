@@ -3,6 +3,7 @@ import { Loader2, LayoutGrid, Network, Globe, Cuboid, BarChart2, Box, Archive, R
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import PortfolioView from '@/components/portfolio/PortfolioView';
 
 // Placeholder view component
 const PlaceholderView: React.FC<{ title: string; icon: React.ReactNode; description: string }> = ({ 
@@ -127,13 +128,7 @@ const MainContent: React.FC = () => {
             case 'home':
                 return <HomeView />;
             case 'portfolio':
-                return (
-                    <PlaceholderView 
-                        title="Portfolio" 
-                        icon={<LayoutGrid className="h-8 w-8 text-primary" />}
-                        description="Översikt av alla dina byggnader och fastigheter"
-                    />
-                );
+                return <PortfolioView />;
             case 'map':
                 return (
                     <PlaceholderView 

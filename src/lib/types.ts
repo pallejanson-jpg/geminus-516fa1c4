@@ -3,18 +3,23 @@ export type GroupedFacilities = {
 };
 
 export interface Facility {
-    fmGuid: string;
-    name: string;
+    fmGuid?: string;
+    name?: string;
     commonName?: string;
     buildingCommonName?: string;
     complexCommonName?: string;
     image?: string;
     coordinates?: { lat: number; lng: number };
-    area?: string | number;
-    grossArea?: string | number;
-    numberOfLevels?: number | string;
+    area?: number;
+    grossArea?: number;
+    numberOfLevels?: number;
     numberOfSpaces?: number;
     category?: string;
+    address?: string;
+    designation?: string;
+    siteId?: string;
+    buildingFmGuid?: string;
+    levelFmGuid?: string;
 }
 
 export interface AppConfig {

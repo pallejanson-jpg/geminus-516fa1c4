@@ -1,0 +1,282 @@
+import React, { useState, useContext, useMemo } from 'react';
+import { 
+  X, MapPin, Info, BarChart, Star, Table, Layers, 
+  DoorOpen, LayoutGrid, Zap 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
+import { AppContext } from '@/context/AppContext';
+import { Facility } from '@/lib/types';
+import KpiCard from './KpiCard';
+import QuickActions from './QuickActions';
+
+interface FacilityLandingPageProps {
+  facility: Facility;
+  onClose: () => void;
+  onEdit: (facility: Facility) => void;
+  onOpenMap: () => void;
+  onOpenNavigator: (facility: Facility) => void;
+  onOpen360: (siteId?: string) => void;
+  onShowAssets: (facility: Facility) => void;
+  onShowRooms: (facility: Facility) => void;
+  onShowDocs: (facility: Facility) => void;
+  onShowInsights: (facility: Facility) => void;
+  onOpenIoT: (facility: Facility) => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  setSelectedFacility: (facility: Facility) => void;
+}
+
+const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
+  facility,
+  onClose,
+  onEdit,
+  onOpenMap,
+  onOpenNavigator,
+  onOpen360,
+  onShowAssets,
+  onShowRooms,
+  onShowDocs,
+  onShowInsights,
+  onOpenIoT,
+  isFavorite,
+  onToggleFavorite,
+  setSelectedFacility
+}) => {
+  const { allData, setActiveApp } = useContext(AppContext);
+  const [showStoreys, setShowStoreys] = useState(false);
+
+  const isBuilding = facility.category === 'Building';
+  const isStorey = facility.category === 'Building Storey';
+  const isSpace = facility.category === 'Space';
+
+  // Get child storeys for buildings
+  const childStoreys = useMemo(() => {
+    if (!allData || facility.category !== 'Building') return [];
+    const storeys = allData.filter(item => 
+      item.category === 'Building Storey' &&
+      item.buildingFmGuid === facility.fmGuid
+    );
+    storeys.sort((a, b) => 
+      (a.commonName || a.name || '').localeCompare(
+        b.commonName || b.name || '', 
+        undefined, 
+        { numeric: true }
+      )
+    );
+    return storeys;
+  }, [allData, facility]);
+
+  // Get child spaces
+  const childSpaces = useMemo(() => {
+    if (!allData || (!isBuilding && !isStorey)) return [];
+    return allData.filter(item => 
+      item.category === 'Space' &&
+      (isBuilding ? item.buildingFmGuid === facility.fmGuid : item.levelFmGuid === facility.fmGuid)
+    );
+  }, [allData, facility, isBuilding, isStorey]);
+
+  // Calculate KPIs
+  const kpis = useMemo(() => {
+    const baseArea = typeof facility.area === 'number' ? facility.area : 0;
+    const areaString = baseArea > 0 ? `${baseArea.toFixed(2)} m²` : 'N/A';
+    
+    return {
+      floors: childStoreys.length || facility.numberOfLevels || 'N/A',
+      rooms: childSpaces.length || 0,
+      area: areaString,
+      atemp: baseArea > 0 ? `${(baseArea * 0.95).toFixed(0)} m²` : 'N/A',
+      loa: baseArea > 0 ? `${(baseArea * 1.05).toFixed(0)} m²` : 'N/A',
+      bia: baseArea > 0 ? `${(baseArea * 1.15).toFixed(0)} m²` : 'N/A',
+      energyPerSqm: isSpace ? '85 kWh/m²' : 'N/A',
+    };
+  }, [facility, childSpaces, childStoreys, isSpace]);
+
+  const handleToggle3D = () => {
+    setActiveApp('assetplus_viewer');
+  };
+
+  const title = facility.commonName || facility.name || 'Unnamed Object';
+  const subTitle = facility.designation || (isBuilding ? facility.address : 'No Designation') || facility.category || 'No Category';
+  const heroImage = facility.image || (isSpace 
+    ? 'https://images.unsplash.com/photo-1611048264355-27a69db69042?q=80&w=1600' 
+    : 'https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=1600'
+  );
+
+  return (
+    <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300 overflow-hidden">
+      {/* Background Image */}
+      <div className="absolute inset-0 h-full">
+        <img src={heroImage} className="w-full h-full object-cover" alt="Object hero" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+      </div>
+
+      {/* Close Button */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+        <Button 
+          onClick={onClose} 
+          variant="ghost" 
+          size="icon"
+          className="h-10 w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+        >
+          <X size={20} />
+        </Button>
+      </div>
+      
+      {/* Scrollable Content */}
+      <ScrollArea className="flex-1 z-10 pt-24 md:pt-32">
+        <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8 pb-24">
+          {/* Header */}
+          <header className="relative w-full shrink-0 flex items-start gap-8 text-white">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl md:text-4xl font-bold truncate">{title}</h1>
+              <div className="flex items-center gap-2 text-sm text-white/80 mt-1">
+                <MapPin size={14} className="text-primary" /> 
+                <span className="truncate">{subTitle}</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="space-y-6 mt-8">
+            {/* Basic Info Card */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Info size={16} className="text-primary" />
+                  Grundinformation
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    onClick={onToggleFavorite} 
+                    variant="ghost" 
+                    size="icon"
+                    className="h-8 w-8"
+                    title={isFavorite ? "Ta bort från favoriter" : "Lägg till i favoriter"}
+                  >
+                    <Star size={16} className={isFavorite ? 'text-warning fill-current' : 'text-muted-foreground'} />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="Visa alla egenskaper">
+                    <Table size={16} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-sm">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Namn</label>
+                    <p className="font-medium truncate">{title}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">
+                      {isBuilding ? 'Adress' : 'Beteckning'}
+                    </label>
+                    <p className="font-medium truncate">{subTitle}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Kategori</label>
+                    <p className="font-medium truncate">{facility.category || '-'}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* KPI Cards */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart size={16} className="text-success" />
+                  Nyckeltal
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {isBuilding && (
+                    <KpiCard 
+                      title="Våningar" 
+                      value={kpis.floors} 
+                      icon={Layers} 
+                      onClick={() => setShowStoreys(prev => !prev)} 
+                    />
+                  )}
+                  {(isBuilding || isStorey) && (
+                    <KpiCard 
+                      title="Rum" 
+                      value={kpis.rooms} 
+                      icon={DoorOpen} 
+                      onClick={() => onShowRooms(facility)} 
+                    />
+                  )}
+                  {isSpace && (
+                    <KpiCard title="Energi per m²" value={kpis.energyPerSqm} icon={Zap} />
+                  )}
+                  <KpiCard title="Area (NTA)" value={kpis.area} icon={LayoutGrid} />
+                  <KpiCard title="Area (Atemp)" value={kpis.atemp} icon={LayoutGrid} />
+                  <KpiCard title="Area (LOA)" value={kpis.loa} icon={LayoutGrid} />
+                  <KpiCard title="Area (BIA)" value={kpis.bia} icon={LayoutGrid} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Storeys Carousel */}
+            {isBuilding && showStoreys && (
+              <div className="mt-6 animate-in fade-in duration-500">
+                <h3 className="text-lg font-bold mb-4">Våningsplan ({childStoreys.length})</h3>
+                {childStoreys.length > 0 ? (
+                  <Carousel opts={{ align: "start" }} className="w-full">
+                    <CarouselContent className="-ml-2">
+                      {childStoreys.map((storey) => (
+                        <CarouselItem key={storey.fmGuid} className="md:basis-1/2 lg:basis-1/3 pl-2">
+                          <Card
+                            className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
+                            onClick={() => setSelectedFacility(storey)}
+                          >
+                            <div className="h-40 bg-muted relative">
+                              <img
+                                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?q=80&w=800&auto=format&fit=crop"
+                                className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+                                alt={storey.commonName}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                              <div className="absolute bottom-3 left-3 right-3">
+                                <h4 className="font-bold text-white truncate">{storey.commonName}</h4>
+                              </div>
+                            </div>
+                          </Card>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="-left-4" />
+                    <CarouselNext className="-right-4" />
+                  </Carousel>
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    Inga våningsplan hittades för denna byggnad.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <QuickActions
+            facility={facility}
+            onOpenMap={onOpenMap}
+            onOpenNavigator={onOpenNavigator}
+            onShowAssets={onShowAssets}
+            onShowRooms={onShowRooms}
+            onOpen360={onOpen360}
+            onToggle3D={handleToggle3D}
+            onShowDocs={onShowDocs}
+            onShowInsights={onShowInsights}
+            onOpenIoT={onOpenIoT}
+          />
+        </div>
+      </ScrollArea>
+    </div>
+  );
+};
+
+export default FacilityLandingPage;
