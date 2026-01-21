@@ -1,23 +1,36 @@
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "./AppSidebar";
-import { AppHeader } from "./AppHeader";
+import React, { useState } from 'react';
+import { AppProvider } from '@/context/AppContext';
+import LeftSidebar from './LeftSidebar';
+import AppHeader from './AppHeader';
+import RightSidebar from './RightSidebar';
+import MobileNav from './MobileNav';
+import MainContent from './MainContent';
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
+const AppLayout: React.FC = () => {
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-export function AppLayout({ children }: AppLayoutProps) {
-  return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <AppHeader />
-          <main className="flex-1 p-6">
-            {children}
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
-  );
-}
+    return (
+        <AppProvider>
+            <div className="flex h-screen w-full overflow-hidden font-sans relative">
+                <LeftSidebar />
+                
+                <div className="flex-1 flex flex-col min-w-0 w-full relative">
+                    <AppHeader
+                        isLoading={false}
+                        onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+                    />
+                    <MainContent />
+                </div>
+                
+                <RightSidebar />
+                
+                <MobileNav 
+                    isMobileMenuOpen={isMobileMenuOpen}
+                    setIsMobileMenuOpen={setIsMobileMenuOpen}
+                />
+            </div>
+        </AppProvider>
+    );
+};
+
+export default AppLayout;
