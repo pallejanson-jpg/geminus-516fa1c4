@@ -44,7 +44,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           {isBuilding && (
             <Button variant="ghost" onClick={() => onShowInsights(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <BarChart size={14} className="text-success" />
+              <BarChart size={14} className="text-accent" />
               <span className="text-xs">Insights</span>
             </Button>
           )}
@@ -65,7 +65,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             </Button>
           )}
           <Button variant="ghost" onClick={() => onShowDocs(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-            <FileText size={14} className="text-warning" />
+             <FileText size={14} className="text-primary" />
             <span className="text-xs">Docs+</span>
           </Button>
           <Button variant="ghost" onClick={() => onOpenNavigator(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
@@ -85,7 +85,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             </Button>
           )}
           <Button variant="ghost" onClick={() => onOpenIoT(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-            <Zap size={14} className="text-warning" />
+             <Zap size={14} className="text-primary" />
             <span className="text-xs">IOT+</span>
           </Button>
         </div>
