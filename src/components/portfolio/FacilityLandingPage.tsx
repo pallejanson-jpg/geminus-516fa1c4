@@ -156,7 +156,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     className="h-8 w-8"
                     title={isFavorite ? "Ta bort från favoriter" : "Lägg till i favoriter"}
                   >
-                    <Star size={16} className={isFavorite ? 'text-warning fill-current' : 'text-muted-foreground'} />
+                    <Star size={16} className={isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'} />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="Visa alla egenskaper">
                     <Table size={16} />
@@ -187,7 +187,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             <Card>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart size={16} className="text-success" />
+                  <BarChart size={16} className="text-accent" />
                   Nyckeltal
                 </CardTitle>
               </CardHeader>
