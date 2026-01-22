@@ -50,15 +50,15 @@ async function getAccessToken(): Promise<string> {
     );
   }
 
-  // Some Keycloak setups expect client credentials in the request body,
-  // others expect HTTP Basic auth (client_secret_basic), and some are
-  // configured as public clients (no secret). We try:
-  // 1) body secret
-  // 2) basic auth
-  // 3) public client (no secret)
+  // We try multiple auth strategies in order:
+  // 1) Password grant with client_secret in body
+  // 2) Password grant with Basic auth
+  // 3) Password grant as public client (no secret)
+  // 4) Token exchange flow (client_credentials + token exchange)
+  
   type ClientAuthMode = "body" | "basic" | "public";
 
-  async function requestToken(mode: ClientAuthMode) {
+  async function requestPasswordToken(mode: ClientAuthMode) {
     const headers: Record<string, string> = {
       "Content-Type": "application/x-www-form-urlencoded",
     };
@@ -74,8 +74,6 @@ async function getAccessToken(): Promise<string> {
       password: passwordStr,
     };
 
-    // Include secret only when using body auth.
-    // For basic/public we omit it to avoid conflicts.
     if (mode === "body") {
       bodyParams.client_secret = clientSecretStr;
     }
@@ -90,37 +88,96 @@ async function getAccessToken(): Promise<string> {
     return { res, text };
   }
 
+  // Token exchange flow: first get machine token, then exchange for user token
+  async function requestTokenExchange(): Promise<{ res: Response; text: string }> {
+    console.log("Trying token exchange flow (client_credentials + token exchange)...");
+    
+    // Step 1: Get machine-to-machine token
+    const m2mRes = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientIdStr,
+        client_secret: clientSecretStr,
+      }),
+    });
+
+    const m2mText = await m2mRes.text();
+    
+    if (!m2mRes.ok) {
+      console.log(`Token exchange step 1 failed: ${m2mRes.status} - ${m2mText}`);
+      return { res: m2mRes, text: m2mText };
+    }
+
+    const m2mData = JSON.parse(m2mText);
+    const subjectToken = m2mData.access_token;
+    console.log("Got machine-to-machine token, exchanging for user token...");
+
+    // Step 2: Exchange for user token
+    const exchangeRes = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        client_id: clientIdStr,
+        client_secret: clientSecretStr,
+        subject_token: subjectToken,
+        requested_subject: usernameStr,
+      }),
+    });
+
+    const exchangeText = await exchangeRes.text();
+    return { res: exchangeRes, text: exchangeText };
+  }
+
   console.log(`Keycloak token request -> url=${tokenUrl} client_id=${clientIdStr}`);
 
-  const first = await requestToken("body");
+  // Try password grant with body secret
+  console.log("Trying password grant with client_secret in body...");
+  const first = await requestPasswordToken("body");
 
-  if (!first.res.ok) {
-    const shouldRetry =
-      first.res.status === 401 &&
-      (first.text.includes("invalid_client") || first.text.includes("Invalid client"));
+  if (first.res.ok) {
+    const data = JSON.parse(first.text);
+    return data.access_token;
+  }
 
-    if (shouldRetry) {
-      console.log("Keycloak returned invalid_client with body auth, retrying with Basic auth...");
-      const second = await requestToken("basic");
-      if (second.res.ok) {
-        const data = JSON.parse(second.text);
-        return data.access_token;
-      }
+  const isInvalidClient =
+    first.res.status === 401 &&
+    (first.text.includes("invalid_client") || first.text.includes("Invalid client"));
 
-      console.log("Keycloak still returned invalid_client, retrying as public client (no secret)...");
-      const third = await requestToken("public");
-      if (!third.res.ok) {
-        throw new Error(`Keycloak auth failed: ${third.res.status} - ${third.text}`);
-      }
+  if (isInvalidClient) {
+    // Try password grant with Basic auth
+    console.log("Trying password grant with Basic auth...");
+    const second = await requestPasswordToken("basic");
+    if (second.res.ok) {
+      const data = JSON.parse(second.text);
+      return data.access_token;
+    }
+
+    // Try password grant as public client
+    console.log("Trying password grant as public client (no secret)...");
+    const third = await requestPasswordToken("public");
+    if (third.res.ok) {
       const data = JSON.parse(third.text);
       return data.access_token;
     }
 
-    throw new Error(`Keycloak auth failed: ${first.res.status} - ${first.text}`);
+    // Try token exchange flow
+    const fourth = await requestTokenExchange();
+    if (fourth.res.ok) {
+      const data = JSON.parse(fourth.text);
+      return data.access_token;
+    }
+
+    throw new Error(`Keycloak auth failed after trying all methods. Last error: ${fourth.res.status} - ${fourth.text}`);
   }
 
-  const data = JSON.parse(first.text);
-  return data.access_token;
+  throw new Error(`Keycloak auth failed: ${first.res.status} - ${first.text}`);
 }
 
 // Fetch objects from Asset+ API
