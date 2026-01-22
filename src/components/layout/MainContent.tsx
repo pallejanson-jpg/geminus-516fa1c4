@@ -1,10 +1,12 @@
-import React, { useContext } from 'react';
+import React, { useContext, lazy, Suspense } from 'react';
 import { Loader2, LayoutGrid, Network, Globe, Cuboid, BarChart2, Box, Archive, Radar, Zap } from 'lucide-react';
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import PortfolioView from '@/components/portfolio/PortfolioView';
 
+// Lazy load MapView to improve initial load time
+const MapView = lazy(() => import('@/components/map/MapView'));
 // Placeholder view component
 const PlaceholderView: React.FC<{ title: string; icon: React.ReactNode; description: string }> = ({ 
     title, 
@@ -131,11 +133,13 @@ const MainContent: React.FC = () => {
                 return <PortfolioView />;
             case 'map':
                 return (
-                    <PlaceholderView 
-                        title="Karta" 
-                        icon={<Globe className="h-8 w-8 text-primary" />}
-                        description="Geografisk vy med Cesium 3D-karta"
-                    />
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <MapView />
+                    </Suspense>
                 );
             case 'navigation':
                 return (
