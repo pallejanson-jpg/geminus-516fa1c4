@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Settings, Sun, Moon, Menu as MenuIcon, Cuboid, HelpCircle, Loader2
+    Settings, Sun, Moon, Menu as MenuIcon, Cuboid, HelpCircle, Loader2,
+    Server
 } from 'lucide-react';
+import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -40,6 +42,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const { toast } = useToast();
     const [globalSearch, setGlobalSearch] = useState('');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
     const isLight = theme === 'light';
@@ -166,6 +169,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <UserIcon className="mr-2 h-4 w-4" />
                             Profil
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
+                            <Server className="mr-2 h-4 w-4" />
+                            API-inställningar
+                        </DropdownMenuItem>
                         <DropdownMenuItem>
                             <Settings className="mr-2 h-4 w-4" />
                             Inställningar
@@ -178,6 +185,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+
+                <ApiSettingsModal 
+                    isOpen={isApiSettingsOpen} 
+                    onClose={() => setIsApiSettingsOpen(false)} 
+                />
             </div>
         </header>
     );
