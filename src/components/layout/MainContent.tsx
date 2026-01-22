@@ -1,10 +1,11 @@
 import React, { useContext, lazy, Suspense } from "react";
-import { Loader2, Network, Cuboid, BarChart2, Box, Archive, Radar } from "lucide-react";
+import { Loader2, Cuboid, BarChart2, Box, Archive, Radar } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
+import NavigatorView from "@/components/navigator/NavigatorView";
 
 // Lazy load MapView to improve initial load time
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -30,13 +31,7 @@ const MainContent: React.FC = () => {
                     </Suspense>
                 );
             case 'navigation':
-                return (
-                    <PlaceholderView 
-                        title="Navigator" 
-                        icon={<Network className="h-8 w-8 text-primary" />}
-                        description="Navigera genom byggnadsstruktur och rum"
-                    />
-                );
+                return <NavigatorView />;
             case 'assetplus_viewer':
                 return (
                     <PlaceholderView 
