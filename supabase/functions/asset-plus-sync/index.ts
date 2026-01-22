@@ -18,7 +18,14 @@ async function getAccessToken(): Promise<string> {
     throw new Error("Missing Keycloak configuration");
   }
 
-  const raw = keycloakUrl.trim();
+  // After validation above, these are guaranteed to be strings.
+  const keycloakUrlStr = keycloakUrl;
+  const clientIdStr = clientId;
+  const clientSecretStr = clientSecret;
+  const usernameStr = username;
+  const passwordStr = password;
+
+  const raw = keycloakUrlStr.trim();
 
   // We accept either:
   // 1) Realm base URL: https://auth.example.com/auth/realms/myrealm
@@ -42,27 +49,65 @@ async function getAccessToken(): Promise<string> {
       "Invalid ASSET_PLUS_KEYCLOAK_URL format after normalization. Ensure it contains no spaces and is a valid https URL.",
     );
   }
-  
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "password",
-      client_id: clientId,
-      client_secret: clientSecret,
-      username: username,
-      password: password,
-    }),
-  });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Keycloak auth failed: ${response.status} - ${errorText}`);
+  // Some Keycloak setups expect client credentials in the request body,
+  // others expect HTTP Basic auth (client_secret_basic). We try body first
+  // and fallback to Basic auth if we get invalid_client.
+  async function requestToken(useBasicAuth: boolean) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    if (useBasicAuth) {
+      headers["Authorization"] = `Basic ${btoa(`${clientIdStr}:${clientSecretStr}`)}`;
+    }
+
+    const bodyParams: Record<string, string> = {
+      grant_type: "password",
+      client_id: clientIdStr,
+      username: usernameStr,
+      password: passwordStr,
+    };
+
+    // If not using Basic auth, include the secret in the form body.
+    // If using Basic auth, omit it to avoid conflicts in some deployments.
+    if (!useBasicAuth) {
+      bodyParams.client_secret = clientSecretStr;
+    }
+
+    const res = await fetch(tokenUrl, {
+      method: "POST",
+      headers,
+      body: new URLSearchParams(bodyParams),
+    });
+
+    const text = await res.text();
+    return { res, text };
   }
 
-  const data = await response.json();
+  console.log(`Keycloak token request -> url=${tokenUrl} client_id=${clientIdStr}`);
+
+  const first = await requestToken(false);
+
+  if (!first.res.ok) {
+    const shouldRetry =
+      first.res.status === 401 &&
+      (first.text.includes("invalid_client") || first.text.includes("Invalid client"));
+
+    if (shouldRetry) {
+      console.log("Keycloak returned invalid_client with body auth, retrying with Basic auth...");
+      const second = await requestToken(true);
+      if (!second.res.ok) {
+        throw new Error(`Keycloak auth failed: ${second.res.status} - ${second.text}`);
+      }
+      const data = JSON.parse(second.text);
+      return data.access_token;
+    }
+
+    throw new Error(`Keycloak auth failed: ${first.res.status} - ${first.text}`);
+  }
+
+  const data = JSON.parse(first.text);
   return data.access_token;
 }
 
