@@ -51,14 +51,19 @@ async function getAccessToken(): Promise<string> {
   }
 
   // Some Keycloak setups expect client credentials in the request body,
-  // others expect HTTP Basic auth (client_secret_basic). We try body first
-  // and fallback to Basic auth if we get invalid_client.
-  async function requestToken(useBasicAuth: boolean) {
+  // others expect HTTP Basic auth (client_secret_basic), and some are
+  // configured as public clients (no secret). We try:
+  // 1) body secret
+  // 2) basic auth
+  // 3) public client (no secret)
+  type ClientAuthMode = "body" | "basic" | "public";
+
+  async function requestToken(mode: ClientAuthMode) {
     const headers: Record<string, string> = {
       "Content-Type": "application/x-www-form-urlencoded",
     };
 
-    if (useBasicAuth) {
+    if (mode === "basic") {
       headers["Authorization"] = `Basic ${btoa(`${clientIdStr}:${clientSecretStr}`)}`;
     }
 
@@ -69,9 +74,9 @@ async function getAccessToken(): Promise<string> {
       password: passwordStr,
     };
 
-    // If not using Basic auth, include the secret in the form body.
-    // If using Basic auth, omit it to avoid conflicts in some deployments.
-    if (!useBasicAuth) {
+    // Include secret only when using body auth.
+    // For basic/public we omit it to avoid conflicts.
+    if (mode === "body") {
       bodyParams.client_secret = clientSecretStr;
     }
 
@@ -87,7 +92,7 @@ async function getAccessToken(): Promise<string> {
 
   console.log(`Keycloak token request -> url=${tokenUrl} client_id=${clientIdStr}`);
 
-  const first = await requestToken(false);
+  const first = await requestToken("body");
 
   if (!first.res.ok) {
     const shouldRetry =
@@ -96,11 +101,18 @@ async function getAccessToken(): Promise<string> {
 
     if (shouldRetry) {
       console.log("Keycloak returned invalid_client with body auth, retrying with Basic auth...");
-      const second = await requestToken(true);
-      if (!second.res.ok) {
-        throw new Error(`Keycloak auth failed: ${second.res.status} - ${second.text}`);
+      const second = await requestToken("basic");
+      if (second.res.ok) {
+        const data = JSON.parse(second.text);
+        return data.access_token;
       }
-      const data = JSON.parse(second.text);
+
+      console.log("Keycloak still returned invalid_client, retrying as public client (no secret)...");
+      const third = await requestToken("public");
+      if (!third.res.ok) {
+        throw new Error(`Keycloak auth failed: ${third.res.status} - ${third.text}`);
+      }
+      const data = JSON.parse(third.text);
       return data.access_token;
     }
 
