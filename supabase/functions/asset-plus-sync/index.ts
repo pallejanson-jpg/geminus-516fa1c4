@@ -18,7 +18,30 @@ async function getAccessToken(): Promise<string> {
     throw new Error("Missing Keycloak configuration");
   }
 
-  const tokenUrl = `${keycloakUrl}/protocol/openid-connect/token`;
+  const raw = keycloakUrl.trim();
+
+  // We accept either:
+  // 1) Realm base URL: https://auth.example.com/auth/realms/myrealm
+  // 2) Full token URL: https://auth.example.com/auth/realms/myrealm/protocol/openid-connect/token
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(
+      "Invalid ASSET_PLUS_KEYCLOAK_URL. It must start with https:// and be either the realm base URL (e.g. https://auth.bim.cloud/auth/realms/swg_demo) or the full token URL ending with /protocol/openid-connect/token.",
+    );
+  }
+
+  const tokenUrl = raw.endsWith("/protocol/openid-connect/token")
+    ? raw
+    : `${raw.replace(/\/+$/, "")}/protocol/openid-connect/token`;
+
+  // Validate URL early to return a clear error.
+  try {
+    // eslint-disable-next-line no-new
+    new URL(tokenUrl);
+  } catch {
+    throw new Error(
+      "Invalid ASSET_PLUS_KEYCLOAK_URL format after normalization. Ensure it contains no spaces and is a valid https URL.",
+    );
+  }
   
   const response = await fetch(tokenUrl, {
     method: "POST",
