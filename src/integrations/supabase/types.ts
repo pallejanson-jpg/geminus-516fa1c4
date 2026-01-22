@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      asset_sync_state: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          last_sync_completed_at: string | null
+          last_sync_started_at: string | null
+          subtree_id: string
+          subtree_name: string | null
+          sync_status: string | null
+          total_assets: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_sync_completed_at?: string | null
+          last_sync_started_at?: string | null
+          subtree_id: string
+          subtree_name?: string | null
+          sync_status?: string | null
+          total_assets?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_sync_completed_at?: string | null
+          last_sync_started_at?: string | null
+          subtree_id?: string
+          subtree_name?: string | null
+          sync_status?: string | null
+          total_assets?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      assets: {
+        Row: {
+          asset_type: string | null
+          attributes: Json | null
+          building_fm_guid: string | null
+          category: string
+          common_name: string | null
+          complex_common_name: string | null
+          created_at: string
+          fm_guid: string
+          gross_area: number | null
+          id: string
+          in_room_fm_guid: string | null
+          level_fm_guid: string | null
+          name: string | null
+          source_updated_at: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          asset_type?: string | null
+          attributes?: Json | null
+          building_fm_guid?: string | null
+          category: string
+          common_name?: string | null
+          complex_common_name?: string | null
+          created_at?: string
+          fm_guid: string
+          gross_area?: number | null
+          id?: string
+          in_room_fm_guid?: string | null
+          level_fm_guid?: string | null
+          name?: string | null
+          source_updated_at?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: string | null
+          attributes?: Json | null
+          building_fm_guid?: string | null
+          category?: string
+          common_name?: string | null
+          complex_common_name?: string | null
+          created_at?: string
+          fm_guid?: string
+          gross_area?: number | null
+          id?: string
+          in_room_fm_guid?: string | null
+          level_fm_guid?: string | null
+          name?: string | null
+          source_updated_at?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
