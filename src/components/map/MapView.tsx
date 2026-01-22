@@ -1,16 +1,14 @@
-import React, { useState, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback, useEffect } from 'react';
 import Map, { Marker, Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
-import { Building2, MapPin, Maximize2, Layers } from 'lucide-react';
+import { Building2, MapPin, Maximize2, Layers, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { NORDIC_CITIES, BUILDING_IMAGES } from '@/lib/constants';
+import { supabase } from '@/integrations/supabase/client';
 import 'mapbox-gl/dist/mapbox-gl.css';
-
-// Mapbox public access token - stored as environment variable
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
 
 // Mock facilities with coordinates for demo
 const MOCK_MAP_FACILITIES: (Facility & { lat: number; lng: number })[] = [
@@ -83,6 +81,9 @@ const MOCK_MAP_FACILITIES: (Facility & { lat: number; lng: number })[] = [
 
 const MapView: React.FC = () => {
   const { setSelectedFacility, setActiveApp } = useContext(AppContext);
+  const [mapboxToken, setMapboxToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewState, setViewState] = useState({
     latitude: 59.0,
     longitude: 15.0,
@@ -90,6 +91,34 @@ const MapView: React.FC = () => {
   });
   const [selectedMarker, setSelectedMarker] = useState<typeof MOCK_MAP_FACILITIES[0] | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
+
+  // Fetch Mapbox token from backend
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-mapbox-token');
+        
+        if (error) {
+          console.error('Error fetching Mapbox token:', error);
+          setError('Kunde inte hämta karttoken');
+          return;
+        }
+        
+        if (data?.token) {
+          setMapboxToken(data.token);
+        } else {
+          setError('Mapbox token är inte konfigurerad');
+        }
+      } catch (err) {
+        console.error('Failed to fetch Mapbox token:', err);
+        setError('Kunde inte ansluta till servern');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchToken();
+  }, []);
 
   const handleMarkerClick = useCallback((facility: typeof MOCK_MAP_FACILITIES[0]) => {
     setSelectedMarker(facility);
@@ -114,20 +143,32 @@ const MapView: React.FC = () => {
     );
   }, []);
 
-  if (!MAPBOX_TOKEN) {
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Laddar karta...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !mapboxToken) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="text-destructive" />
-              Mapbox Token saknas
+              {error || 'Mapbox Token saknas'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              För att använda kartvyn behöver du en Mapbox access token. 
-              Lägg till VITE_MAPBOX_ACCESS_TOKEN i projektets miljövariabler.
+              Kontakta administratören för att konfigurera kartfunktionen.
             </p>
           </CardContent>
         </Card>
@@ -191,7 +232,7 @@ const MapView: React.FC = () => {
         onMove={(evt) => setViewState(evt.viewState)}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyle}
-        mapboxAccessToken={MAPBOX_TOKEN}
+        mapboxAccessToken={mapboxToken}
       >
         <NavigationControl position="bottom-right" />
         <GeolocateControl position="bottom-right" />
