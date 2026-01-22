@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Box, Menu as MenuIcon, Home, ExternalLink } from 'lucide-react';
+import { Box, Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
@@ -92,9 +92,6 @@ const LeftSidebar: React.FC = () => {
                             >
                                 <IconComp size={18} className={getIconColor(key)} /> 
                                 <span className={`${!isSidebarExpanded && 'hidden'}`}>{String(cfg.label)}</span>
-                                {currentAppConfig.openMode === 'external' && (
-                                    <ExternalLink size={12} className={`ml-auto ${!isSidebarExpanded && 'hidden'}`} />
-                                )}
                             </AppButton>
                         );
                     })}
