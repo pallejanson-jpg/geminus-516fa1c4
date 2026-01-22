@@ -4,6 +4,7 @@ import { Database, FileQuestion, Sparkles } from "lucide-react";
 import { DEFAULT_APP_CONFIGS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -33,11 +34,24 @@ export default function HomeLanding() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Välkommen till My SWG</h1>
-        <p className="text-muted-foreground">Din digitala ryggrad för digital twins och fastighetsdata</p>
+    <div className="space-y-6">
+      <header className="relative overflow-hidden rounded-2xl border border-border">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${chicagoHero})` }}
+          aria-hidden="true"
+        />
+        {/* Overlay for readability (uses design tokens) */}
+        <div className="absolute inset-0 bg-background/70" aria-hidden="true" />
+        <div className="relative p-6 sm:p-8">
+          <div className="max-w-3xl space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight">Välkommen till My SWG</h1>
+            <p className="text-muted-foreground">Din digitala ryggrad för digital twins och fastighetsdata</p>
+          </div>
+        </div>
       </header>
+
+      <div className="px-6 pb-6 space-y-6">
 
       <section className="space-y-3">
         <div>
@@ -117,6 +131,7 @@ export default function HomeLanding() {
           </CardContent>
         </Card>
       </section>
+      </div>
     </div>
   );
 }
