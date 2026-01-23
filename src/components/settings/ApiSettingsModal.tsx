@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
-    Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2
+    Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
@@ -64,6 +64,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [connectionMessage, setConnectionMessage] = useState('');
     const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [originalConfig, setOriginalConfig] = useState<ConfigState | null>(null);
 
     // Fetch current config
     const fetchConfig = async () => {
@@ -76,17 +79,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
 
             if (data?.config) {
-                setConfig(prev => ({
-                    ...prev,
+                const loadedConfig = {
                     keycloakUrl: data.config.keycloakUrl || '',
                     apiUrl: data.config.apiUrl || '',
                     clientId: data.config.clientId || '',
                     username: data.config.username || '',
-                    // Keep secret fields empty but show placeholders if configured
                     clientSecret: data.config.hasClientSecret ? '••••••••' : '',
                     password: data.config.hasPassword ? '••••••••' : '',
                     apiKey: data.config.hasApiKey ? '••••••••' : '',
-                }));
+                };
+                setConfig(loadedConfig);
+                setOriginalConfig(loadedConfig);
             }
         } catch (error) {
             console.error('Failed to fetch config:', error);
@@ -120,8 +123,51 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             fetchConfig();
             setConnectionStatus('idle');
             setConnectionMessage('');
+            setIsEditMode(false);
         }
     }, [isOpen]);
+
+    const handleCancelEdit = () => {
+        if (originalConfig) {
+            setConfig(originalConfig);
+        }
+        setIsEditMode(false);
+    };
+
+    const handleSaveConfig = async () => {
+        setIsSaving(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+                body: { action: 'update-config', config }
+            });
+
+            if (error) throw error;
+
+            if (data?.secretsToUpdate && data.secretsToUpdate.length > 0) {
+                toast({
+                    title: "Uppdatera secrets",
+                    description: `Följande secrets måste uppdateras i Lovable: ${data.secretsToUpdate.join(", ")}`,
+                    duration: 10000,
+                });
+            }
+
+            setIsEditMode(false);
+            setOriginalConfig(config);
+            
+            toast({
+                title: "Konfiguration sparad",
+                description: "Värdena har registrerats. Uppdatera secrets i Lovable för att tillämpa ändringarna.",
+            });
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Fel vid sparning",
+                description: error.message,
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleTestConnection = async () => {
         setIsTestingConnection(true);
@@ -257,15 +303,28 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <Settings2 className="h-4 w-4" />
                                             Keycloak & API-konfiguration
                                         </h4>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setShowSecrets(!showSecrets)}
-                                            className="gap-2"
-                                        >
-                                            {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                            {showSecrets ? 'Dölj' : 'Visa'}
-                                        </Button>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setShowSecrets(!showSecrets)}
+                                                className="gap-2"
+                                            >
+                                                {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                {showSecrets ? 'Dölj' : 'Visa'}
+                                            </Button>
+                                            {!isEditMode && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setIsEditMode(true)}
+                                                    className="gap-2"
+                                                >
+                                                    <Edit2 className="h-4 w-4" />
+                                                    Redigera
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="grid gap-4">
@@ -276,9 +335,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     id="keycloakUrl"
                                                     value={config.keycloakUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
-                                                    placeholder="https://sso.example.com/.../token"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    placeholder="https://auth.example.com/realms/xxx/protocol/openid-connect/token"
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -288,8 +347,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     value={config.apiUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                                                     placeholder="https://api.example.com"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                         </div>
@@ -302,8 +361,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     value={config.clientId}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
                                                     placeholder="my-client-id"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -311,11 +370,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <Input
                                                     id="clientSecret"
                                                     type={showSecrets ? "text" : "password"}
-                                                    value={config.clientSecret}
+                                                    value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
-                                                    placeholder="••••••••"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                         </div>
@@ -328,8 +387,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     value={config.username}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
                                                     placeholder="service-user"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -337,11 +396,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <Input
                                                     id="password"
                                                     type={showSecrets ? "text" : "password"}
-                                                    value={config.password}
+                                                    value={isEditMode && config.password === '••••••••' ? '' : config.password}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder="••••••••"
-                                                    disabled
-                                                    className="bg-muted"
+                                                    placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                         </div>
@@ -351,21 +410,30 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <Input
                                                 id="apiKey"
                                                 type={showSecrets ? "text" : "password"}
-                                                value={config.apiKey}
+                                                value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
                                                 onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                                                placeholder="••••••••"
-                                                disabled
-                                                className="bg-muted"
+                                                placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
+                                                disabled={!isEditMode}
+                                                className={!isEditMode ? "bg-muted" : ""}
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="rounded-lg border p-3 bg-muted/30">
-                                        <p className="text-sm text-muted-foreground">
-                                            <strong>OBS:</strong> Dessa värden hanteras som säkra backend-secrets. 
-                                            Använd knappen nedan för att uppdatera dem.
-                                        </p>
-                                    </div>
+                                    {isEditMode ? (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3">
+                                            <p className="text-sm text-amber-800 dark:text-amber-200">
+                                                <strong>OBS:</strong> Efter att du sparar kommer du behöva uppdatera secrets i Lovable manuellt. 
+                                                Skriv i chatten: "Uppdatera ASSET_PLUS_CLIENT_ID till [värde]" etc.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-lg border p-3 bg-muted/30">
+                                            <p className="text-sm text-muted-foreground">
+                                                <strong>OBS:</strong> Dessa värden hanteras som säkra backend-secrets. 
+                                                Klicka på "Redigera" för att ändra dem.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Connection test result */}
@@ -398,19 +466,43 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 )}
 
                                 <div className="flex gap-2">
-                                    <Button
-                                        onClick={handleTestConnection}
-                                        disabled={isTestingConnection}
-                                        variant="outline"
-                                        className="gap-2"
-                                    >
-                                        {isTestingConnection ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Zap className="h-4 w-4" />
-                                        )}
-                                        {isTestingConnection ? 'Testar...' : 'Testa anslutning'}
-                                    </Button>
+                                    {isEditMode ? (
+                                        <>
+                                            <Button
+                                                onClick={handleSaveConfig}
+                                                disabled={isSaving}
+                                                className="gap-2"
+                                            >
+                                                {isSaving ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-4 w-4" />
+                                                )}
+                                                {isSaving ? 'Sparar...' : 'Spara ändringar'}
+                                            </Button>
+                                            <Button
+                                                onClick={handleCancelEdit}
+                                                variant="outline"
+                                                disabled={isSaving}
+                                            >
+                                                Avbryt
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <Button
+                                            onClick={handleTestConnection}
+                                            disabled={isTestingConnection}
+                                            variant="outline"
+                                            className="gap-2"
+                                        >
+                                            {isTestingConnection ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Zap className="h-4 w-4" />
+                                            )}
+                                            {isTestingConnection ? 'Testar...' : 'Testa anslutning'}
+                                        </Button>
+                                    )}
                                 </div>
                             </>
                         )}
