@@ -45,13 +45,13 @@ export default function HomeLanding() {
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
       <div className="relative z-10 px-6 py-6 space-y-6">
-        <header className="space-y-2">
+        <header className="space-y-2 text-center">
           <h1 className="text-3xl font-semibold tracking-tight">Välkommen till My SWG</h1>
           <p className="text-muted-foreground">Din digitala ryggrad för digital twins och fastighetsdata</p>
         </header>
 
       <section className="space-y-3">
-        <div>
+        <div className="text-center">
           <h2 className="text-lg font-semibold">AI Assistants</h2>
           <p className="text-sm text-muted-foreground">Snabb hjälp för data, dokument och integrationer</p>
         </div>
