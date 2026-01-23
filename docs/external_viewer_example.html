@@ -1,0 +1,400 @@
+﻿<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <link href="/dist/assetplusviewer.css" rel="stylesheet" />
+
+    <style scoped>
+        .main {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #888888;
+        }
+
+        .content {
+            flex: 1 1 auto;
+            background-color: #666666;
+            min-width: 0;
+        }
+
+        .content-left {
+            flex: 1 0 auto;
+            width: 300px;
+            background-color: #555555;
+        }
+
+        .content-right {
+            flex: 1 1 auto;
+            background-color: #666666;
+            min-width: 0;
+        }
+
+        .fullscreen {
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            bottom: 0px;
+            left: 0px;
+        }
+
+        .footer {
+            background-color: #777777;
+        }
+    </style>
+</head>
+
+<body class="dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography" style="height: 100%; margin: 0px;">
+    <div style="height: 5%;" style="width: 100%; margin: 5px; display: flex; flex: 1 0 auto;">
+      <div>
+        <span>
+          JWT:
+          <input id="jwt_input" type="text" placeholder="JWT">
+        </span>
+        <span>
+          FmGuid:
+          <input id="fmguid_input" type="text" placeholder="FmGuid">
+          <input id="display_fmguid_button" type="button" value="Display" onclick="onDisplayFmGuidButtonClick();">
+          <input id="zoom_button" type="button" value="Zoom" onclick="onZoomButtonClick();">
+          <input id="viewinspace_button" type="button" value="View in space" onclick="onViewInSpaceButtonClick();">
+        </span>
+        <span style="margin-right: 5px;">
+          <input id="display_buildingfmguid_button" type="button" value="Display Building" onclick="onDisplayBuildingFmGuidButtonClick();">
+        </span>
+        <span style="margin-right: 5px;">
+          <input id="space_viewinspace_button" type="button" value="View in space (Space)" onclick="onSpaceViewInSpaceButtonClick();">
+        </span>
+        <span style="margin-right: 5px;">
+          <input id="display_instancefmguid_button" type="button" value="Display (Instance)" onclick="onDisplayInstanceFmGuidButtonClick();">
+          <input id="display_instancefmguid_button" type="button" value="Display (Door)" onclick="onDisplayDoorFmGuidButtonClick();">
+        </span>
+        <span>
+          <input id="editable_input" type="checkbox" value="false">
+          <label for="editable_input">Editable</label>
+        </span>
+        <span>
+          Annotation:
+          <input id="annotation_modelid_input" type="text" placeholder="ModelId">
+          <input id="annotation_fmguid_input" type="text" placeholder="FmGuid">
+          <input id="annotation_button" type="button" value="Set" onclick="onAnnotationButtonClick();">
+        </span>
+      </div>
+    </div>
+    
+    <div class="dx-viewport" style="height: 95%; margin: 0px;">
+      <div id="AssetPlusViewer"
+           style="width: 100%; height: 100%; display: flex; flex: 1 0 auto; background-image: radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50));">
+      </div>
+    </div>
+
+    <script src="/dist/assetplusviewer.umd.min.js"></script>
+    <script>
+        var viewer;
+        var deferCalls = true;
+        var deferredFmGuid;
+        var deferredDisplayAction;
+        var deferredFmGuidForDisplay;
+        var deferredDisplayActionForDisplay;
+
+        // Demo interface, replace with own implementation or an injection
+        var DemoScriptInterface = {
+          getAccessToken: async function() {
+            return Promise.resolve(document.getElementById("jwt_input").value);
+          },
+          selectedFmGuidsChanged: function(items, added, removed) {
+            console.log("UNHANDLED: DemoScriptInterface.selectedFmGuidsChanged");
+          },
+          isFmGuidEditable: async function(fmGuid) {
+            return Promise.resolve(document.getElementById('editable_input').checked);
+          },
+          viewerReady: function() {
+            console.log("UNHANDLED: DemoScriptInterface.viewerReady");
+          }
+        };
+
+        function FaciliateAPI() {
+          try {
+              let api = window?.chrome?.webview?.hostObjects?.sync?.FaciliateScriptInterface;
+              if (typeof api !== 'undefined') {
+                  return api;
+              }
+          } catch (err) {
+              // WebView2 not running
+          }
+          if (typeof FaciliateScriptInterface !== 'undefined') {
+            return FaciliateScriptInterface;
+          } else if (typeof window.FaciliateScriptInterface !== 'undefined') {
+            return window.FaciliateScriptInterface;
+          } else if (typeof DemoScriptInterface !== 'undefined') {
+            return DemoScriptInterface;
+          }
+          return undefined;
+        }
+
+        // Button helpers
+        function onDisplayFmGuidButtonClick() {
+          const fmGuid = document.getElementById('fmguid_input').value;
+          const displayAction = {
+            action: 'cutoutfloor',
+            parameter: {
+              fmGuid: fmGuid,
+              includeRelatedFloors: true
+            }
+          };
+
+          displayFmGuid(fmGuid, displayAction);
+        }
+
+        function onDisplayBuildingFmGuidButtonClick() {
+          const fmGuid = document.getElementById('fmguid_input').value;
+          const displayAction = {
+            action: 'viewall'
+          };
+
+          viewer.clearSelection();
+          displayFmGuid(fmGuid, displayAction);
+        }
+
+        function onDisplayInstanceFmGuidButtonClick() {
+          const fmGuid = document.getElementById('fmguid_input').value;
+
+          displayFmGuid(fmGuid, undefined);
+        }
+
+        function onDisplayDoorFmGuidButtonClick() {
+          const fmGuid = document.getElementById('fmguid_input').value;
+          const displayAction = {
+            action: 'viewfitfirstperson',
+            parameter: {
+              fmGuid: fmGuid
+            }
+          };
+
+          displayFmGuid(fmGuid, displayAction);
+        }
+
+        function onZoomButtonClick() {
+          zoomFmGuid(document.getElementById('fmguid_input').value);
+        }
+
+        function onSpaceViewInSpaceButtonClick() {
+          const fmGuid = (document.getElementById('fmguid_input').value || "").trim().toUpperCase(); // AssetViewer uses UPPERCASE GUIDs internally
+          const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+          if (assetView && fmGuid.length > 0) {
+            const matches = assetView.getItemsByPropertyValue("fmguid", fmGuid);
+
+            if (matches.length > 0) {
+              // Hide the space geometry object so it doesn't interfere
+              assetView.setVisible(matches, false);
+
+              // Place the camera inside the space
+              assetView.viewInSpace(matches[0]);
+            }
+          }
+        }
+
+        function onViewInSpaceButtonClick() {
+          const fmGuid = (document.getElementById('fmguid_input').value || "").trim().toUpperCase(); // AssetViewer uses UPPERCASE GUIDs internally
+          const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+          if (assetView && fmGuid.length > 0) {
+            const matches = assetView.getItemsByPropertyValue("fmguid", fmGuid);
+
+            if (matches.length > 0) {
+              assetView.viewInSpace(matches[0]);
+            }
+          }
+        }
+
+        function onContextMenuViewInSpaceClick(context) {
+          const entityId = context.entity?.id;
+          const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+          const internalViewer = assetView?.viewer;
+          const metaScene = internalViewer?.metaScene;
+          const metaObjects = metaScene?.metaObjects;
+
+          if (entityId) {
+            let category = undefined;
+
+            // Try to find the object's category
+            if (metaObjects && metaObjects[entityId]) {
+              category = metaObjects[entityId].type;
+            }
+
+            if (category && category.toLowerCase().includes("space")) {
+              // Hide the space geometry object so it doesn't interfere
+              assetView.setVisible([entityId], false);
+            }
+
+            assetView.viewInSpace(entityId);
+          }
+        }
+
+        function onAnnotationButtonClick() {
+          viewer.setModelIdToAnnotate(document.getElementById('annotation_modelid_input').value);
+          viewer.setFmGuidToAnnotate(document.getElementById('annotation_fmguid_input').value);
+        }
+
+        // "Public API"
+        function displayFmGuid(fmGuid, displayAction) {
+            deferredFmGuid = undefined;
+            deferredDisplayAction = undefined;
+
+            if (!deferCalls) {
+                console.log("displayFmGuid: Not deferring calls, showing immediately");
+
+                doDisplayFmGuid(fmGuid, displayAction);
+            } else {
+                console.log("displayFmGuid: Deferring calls, will show later");
+
+                if (fmGuid) {
+                    deferredFmGuid = fmGuid;
+                }
+
+                if (displayAction) {
+                    deferredDisplayAction = displayAction;
+                }
+            }
+        }
+
+        function zoomFmGuid(fmGuid) {
+            viewer.selectFmGuidAndViewFit(fmGuid);
+        }
+
+        // Internals
+        function doDisplayFmGuid(fmGuid, displayAction) {
+            console.log("doDisplayFmGuid");
+
+            deferredFmGuidForDisplay = fmGuid;
+            deferredDisplayActionForDisplay = displayAction;
+
+            viewer.setObjectDetailsVisibility(false);
+            viewer.setAvailableModelsByFmGuid(fmGuid);
+        }
+
+        function processDeferred() {
+            if (deferredFmGuid) {
+                const fmGuid = deferredFmGuid;
+                const displayAction = deferredDisplayAction;
+
+                deferredFmGuid = undefined;
+                deferredDisplayAction = undefined;
+
+                doDisplayFmGuid(fmGuid, displayAction);
+            }
+        }
+
+        function executeDisplayAction(displayAction) {
+            switch (displayAction?.action?.toLowerCase()) {
+                case "cutoutfloor":
+                    if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
+                        console.log("Cutting out floor with FMGUID " + displayAction.parameter.fmGuid + ", includeRelatedFloors: " + displayAction.parameter.includeRelatedFloors);
+                        viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors);
+                    }
+                    break;
+                case "viewall":
+                    console.log("Viewing all and adjusting camera.");
+                    viewer.assetViewer.$refs.assetView.viewFit(undefined, true);
+                    break;
+                case "viewfitfirstperson":
+                    if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
+                        const matches = viewer.assetViewer.$refs.assetView.getItemsByPropertyValue("fmguid", displayAction.parameter.fmGuid.toUpperCase());
+
+                        if (matches.length > 0) {
+                          console.log("ViewFit (First Person Mode) FMGUID " + displayAction.parameter.fmGuid);
+
+                          viewer.assetViewer.$refs.assetView.viewFit(matches, false);
+                          viewer.assetViewer.$refs.assetView.setNavMode("firstPerson");
+                        }
+                    }
+                    break;
+            }
+        }
+
+        // Callbacks
+        async function getAccessTokenCallback() {
+            console.log("getAccessTokenCallback");
+            return await FaciliateAPI().getAccessToken();
+        }
+
+        function selectionChangedCallback(items, added, removed) {
+            console.log("selectionChangedCallback - " + items?.length + " items. " + added?.length + " added. " + removed?.length + " removed. ");
+        }
+
+        function selectedFmGuidsChangedCallback(items, added, removed) {
+            console.log("selectedFmGuidsChangedCallback - " + items?.length + " items. " + added?.length + " added. " + removed?.length + " removed. ");
+
+            FaciliateAPI().selectedFmGuidsChanged(items, added, removed);
+        }
+
+        function allModelsLoadedCallback() {
+            console.log("allModelsLoadedCallback");
+
+            if (deferredFmGuidForDisplay) {
+                console.log("allModelsLoadedCallback - got an FMGUID to look at");
+                const fmGuid = deferredFmGuidForDisplay;
+                const displayAction = deferredDisplayActionForDisplay;
+
+                deferredFmGuidForDisplay = undefined;
+                deferredDisplayActionForDisplay = undefined;
+
+                // If we're not cutting the floor, then select + viewfit (zoom), because cutting the floor will adjust camera
+                if (!displayAction) {
+                  console.log("allModelsLoadedCallback - just select + zoom");
+                  viewer.selectFmGuidAndViewFit(fmGuid);
+                } else {
+                  console.log("allModelsLoadedCallback - display action + select");
+                  executeDisplayAction(displayAction);
+                  viewer.selectFmGuid(fmGuid);
+                }
+            }
+        }
+
+        async function isFmGuidEditableCallback(fmGuid) {
+            console.log("isFmGuidEditableCallback - fmGuid: " + JSON.stringify(fmGuid));
+
+            const result = await FaciliateAPI().isFmGuidEditable(fmGuid);
+
+            console.log("isFmGuidEditableCallback - result: " + result);
+
+            return result;
+        }
+
+        (async () => {
+            console.log("viewer.html: Init - Calling initAssetViewer");
+
+            viewer = await assetplusviewer(
+                "", // URL to the API Backend, ex: https://localhost/api/v1/AssetDB
+                "", // API Key in UUID format, ex: 279f14fa-1bc9-42c0-856a-779a1133b615
+                getAccessTokenCallback,
+                selectionChangedCallback,
+                selectedFmGuidsChangedCallback,
+                allModelsLoadedCallback,
+                undefined, // isItemIdEditableCallback, for BimObjectId instead of FmGuid
+                isFmGuidEditableCallback,
+                (model) => (model?.name || "").toLowerCase().startsWith("a"),
+                [{
+                  title: "View in space",
+                  doAction: onContextMenuViewInSpaceClick
+                }], // Custom object context menu items,
+                undefined, undefined, // Horizontal and vertical default angles, leave undefined for defaults, ex: 135, 45
+                undefined, undefined); // Annotation offsets (top, left), leave undefined for defaults, ex: -5, -5
+
+            console.log("viewer.html: Mounted");
+
+            deferCalls = false;
+
+            // Was something deferred?
+            processDeferred();
+
+            // Viewer is ready
+            FaciliateAPI().viewerReady();
+        })();
+    </script>
+</body>
+</html>
