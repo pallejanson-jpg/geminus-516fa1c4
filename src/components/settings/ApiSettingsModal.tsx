@@ -40,6 +40,7 @@ interface ConfigState {
     username: string;
     password: string;
     apiKey: string;
+    audience: string;
 }
 
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
@@ -58,6 +59,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         username: '',
         password: '',
         apiKey: '',
+        audience: 'asset-api',
     });
     const [showSecrets, setShowSecrets] = useState(false);
     const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -84,6 +86,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     apiUrl: data.config.apiUrl || '',
                     clientId: data.config.clientId || '',
                     username: data.config.username || '',
+                    audience: data.config.audience || 'asset-api',
                     clientSecret: data.config.hasClientSecret ? '••••••••' : '',
                     password: data.config.hasPassword ? '••••••••' : '',
                     apiKey: data.config.hasApiKey ? '••••••••' : '',
@@ -145,8 +148,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             if (data?.secretsToUpdate && data.secretsToUpdate.length > 0) {
                 toast({
-                    title: "Uppdatera secrets",
-                    description: `Följande secrets måste uppdateras i Lovable: ${data.secretsToUpdate.join(", ")}`,
+                    title: "Update Secrets",
+                    description: `The following secrets need to be updated in Lovable: ${data.secretsToUpdate.join(", ")}`,
                     duration: 10000,
                 });
             }
@@ -155,13 +158,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setOriginalConfig(config);
             
             toast({
-                title: "Konfiguration sparad",
-                description: "Värdena har registrerats. Uppdatera secrets i Lovable för att tillämpa ändringarna.",
+                title: "Configuration Saved",
+                description: "Values have been registered. Update secrets in Lovable to apply changes.",
             });
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Fel vid sparning",
+                title: "Save Error",
                 description: error.message,
             });
         } finally {
@@ -185,15 +188,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 setConnectionStatus('success');
                 setConnectionMessage(data.message);
                 toast({
-                    title: "Anslutning lyckades",
+                    title: "Connection Successful",
                     description: data.message,
                 });
             } else {
                 setConnectionStatus('error');
-                setConnectionMessage(data?.error || 'Okänt fel');
+                setConnectionMessage(data?.error || 'Unknown error');
                 toast({
                     variant: "destructive",
-                    title: "Anslutning misslyckades",
+                    title: "Connection Failed",
                     description: data?.error,
                 });
             }
@@ -202,7 +205,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setConnectionMessage(error.message);
             toast({
                 variant: "destructive",
-                title: "Fel",
+                title: "Error",
                 description: error.message,
             });
         } finally {
@@ -220,8 +223,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
 
             toast({
-                title: "Synkronisering startad",
-                description: `Synkar data från Asset+...`,
+                title: "Sync Started",
+                description: `Syncing data from Asset+...`,
             });
 
             // Poll for status updates
@@ -240,28 +243,28 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             console.error('Sync error:', error);
             toast({
                 variant: "destructive",
-                title: "Synkronisering misslyckades",
-                description: error.message || "Kunde inte starta synkronisering",
+                title: "Sync Failed",
+                description: error.message || "Could not start synchronization",
             });
             setIsSyncing(false);
         }
     };
 
     const formatDate = (dateStr: string | null) => {
-        if (!dateStr) return 'Aldrig';
-        return new Date(dateStr).toLocaleString('sv-SE');
+        if (!dateStr) return 'Never';
+        return new Date(dateStr).toLocaleString('en-US');
     };
 
     const getSyncStatusBadge = (status: string) => {
         switch (status) {
             case 'completed':
-                return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />Klar</Badge>;
+                return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />Complete</Badge>;
             case 'running':
-                return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Synkar</Badge>;
+                return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Syncing</Badge>;
             case 'failed':
-                return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Fel</Badge>;
+                return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />Failed</Badge>;
             default:
-                return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Väntar</Badge>;
+                return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
         }
     };
 
@@ -271,10 +274,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
-                        API-inställningar
+                        API Settings
                     </DialogTitle>
                     <DialogDescription>
-                        Hantera anslutningar till externa system och synkronisering av data.
+                        Manage connections to external systems and data synchronization.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -286,7 +289,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         </TabsTrigger>
                         <TabsTrigger value="sync" className="gap-2">
                             <Database className="h-4 w-4" />
-                            Datasynk
+                            Data Sync
                         </TabsTrigger>
                     </TabsList>
 
@@ -301,7 +304,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <div className="flex items-center justify-between">
                                         <h4 className="font-medium flex items-center gap-2">
                                             <Settings2 className="h-4 w-4" />
-                                            Keycloak & API-konfiguration
+                                            Keycloak & API Configuration
                                         </h4>
                                         <div className="flex items-center gap-2">
                                             <Button
@@ -311,7 +314,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 className="gap-2"
                                             >
                                                 {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                {showSecrets ? 'Dölj' : 'Visa'}
+                                                {showSecrets ? 'Hide' : 'Show'}
                                             </Button>
                                             {!isEditMode && (
                                                 <Button
@@ -321,7 +324,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     className="gap-2"
                                                 >
                                                     <Edit2 className="h-4 w-4" />
-                                                    Redigera
+                                                    Edit
                                                 </Button>
                                             )}
                                         </div>
@@ -330,12 +333,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <div className="grid gap-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
-                                                <Label htmlFor="keycloakUrl">Keycloak Token URL</Label>
+                                                <Label htmlFor="keycloakUrl">OpenID Token Endpoint</Label>
                                                 <Input
                                                     id="keycloakUrl"
                                                     value={config.keycloakUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
-                                                    placeholder="https://auth.example.com/realms/xxx/protocol/openid-connect/token"
+                                                    placeholder="https://sso.example.com/realms/xxx/protocol/openid-connect/token"
                                                     disabled={!isEditMode}
                                                     className={!isEditMode ? "bg-muted" : ""}
                                                 />
@@ -360,7 +363,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     id="clientId"
                                                     value={config.clientId}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
-                                                    placeholder="my-client-id"
+                                                    placeholder="faciliate-api"
                                                     disabled={!isEditMode}
                                                     className={!isEditMode ? "bg-muted" : ""}
                                                 />
@@ -372,7 +375,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
-                                                    placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
+                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
                                                     className={!isEditMode ? "bg-muted" : ""}
                                                 />
@@ -381,56 +384,69 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
-                                                <Label htmlFor="username">Användarnamn</Label>
+                                                <Label htmlFor="audience">Audience</Label>
                                                 <Input
-                                                    id="username"
-                                                    value={config.username}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
-                                                    placeholder="service-user"
+                                                    id="audience"
+                                                    value={config.audience}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, audience: e.target.value }))}
+                                                    placeholder="asset-api"
                                                     disabled={!isEditMode}
                                                     className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="password">Lösenord</Label>
+                                                <Label htmlFor="apiKey">API Key</Label>
                                                 <Input
-                                                    id="password"
+                                                    id="apiKey"
                                                     type={showSecrets ? "text" : "password"}
-                                                    value={isEditMode && config.password === '••••••••' ? '' : config.password}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
+                                                    value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
                                                     className={!isEditMode ? "bg-muted" : ""}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="apiKey">API Key</Label>
-                                            <Input
-                                                id="apiKey"
-                                                type={showSecrets ? "text" : "password"}
-                                                value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
-                                                onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                                                placeholder={isEditMode ? "Ange nytt värde..." : "••••••••"}
-                                                disabled={!isEditMode}
-                                                className={!isEditMode ? "bg-muted" : ""}
-                                            />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="username">Username (optional)</Label>
+                                                <Input
+                                                    id="username"
+                                                    value={config.username}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
+                                                    placeholder="service-user@example.com"
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="password">Password (optional)</Label>
+                                                <Input
+                                                    id="password"
+                                                    type={showSecrets ? "text" : "password"}
+                                                    value={isEditMode && config.password === '••••••••' ? '' : config.password}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
+                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
+                                                    disabled={!isEditMode}
+                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
                                     {isEditMode ? (
                                         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3">
                                             <p className="text-sm text-amber-800 dark:text-amber-200">
-                                                <strong>OBS:</strong> Efter att du sparar kommer du behöva uppdatera secrets i Lovable manuellt. 
-                                                Skriv i chatten: "Uppdatera ASSET_PLUS_CLIENT_ID till [värde]" etc.
+                                                <strong>Note:</strong> After saving, you will need to update secrets in Lovable manually. 
+                                                Type in chat: "Update ASSET_PLUS_CLIENT_ID to [value]" etc.
                                             </p>
                                         </div>
                                     ) : (
                                         <div className="rounded-lg border p-3 bg-muted/30">
                                             <p className="text-sm text-muted-foreground">
-                                                <strong>OBS:</strong> Dessa värden hanteras som säkra backend-secrets. 
-                                                Klicka på "Redigera" för att ändra dem.
+                                                <strong>Note:</strong> These values are managed as secure backend secrets. 
+                                                Click "Edit" to modify them.
                                             </p>
                                         </div>
                                     )}
@@ -453,7 +469,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <p className={`font-medium ${
                                                     connectionStatus === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
                                                 }`}>
-                                                    {connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}
+                                                    {connectionStatus === 'success' ? 'Connection Successful' : 'Connection Failed'}
                                                 </p>
                                                 <p className={`text-sm ${
                                                     connectionStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
@@ -478,14 +494,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 ) : (
                                                     <Save className="h-4 w-4" />
                                                 )}
-                                                {isSaving ? 'Sparar...' : 'Spara ändringar'}
+                                                {isSaving ? 'Saving...' : 'Save Changes'}
                                             </Button>
                                             <Button
                                                 onClick={handleCancelEdit}
                                                 variant="outline"
                                                 disabled={isSaving}
                                             >
-                                                Avbryt
+                                                Cancel
                                             </Button>
                                         </>
                                     ) : (
@@ -500,7 +516,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             ) : (
                                                 <Zap className="h-4 w-4" />
                                             )}
-                                            {isTestingConnection ? 'Testar...' : 'Testa anslutning'}
+                                            {isTestingConnection ? 'Testing...' : 'Test Connection'}
                                         </Button>
                                     )}
                                 </div>
@@ -511,9 +527,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     <TabsContent value="sync" className="space-y-4 mt-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="font-medium">Synkronisera från Asset+</h4>
+                                <h4 className="font-medium">Sync from Asset+</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    {assetCount.toLocaleString()} assets i lokal databas
+                                    {assetCount.toLocaleString()} assets in local database
                                 </p>
                             </div>
                             <Button 
@@ -526,16 +542,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 ) : (
                                     <RefreshCw className="h-4 w-4" />
                                 )}
-                                {isSyncing ? 'Synkar...' : 'Starta synk'}
+                                {isSyncing ? 'Syncing...' : 'Start Sync'}
                             </Button>
                         </div>
 
                         <div className="space-y-2">
-                            <h5 className="text-sm font-medium text-muted-foreground">Sync-status</h5>
+                            <h5 className="text-sm font-medium text-muted-foreground">Sync Status</h5>
                             {syncStatuses.length === 0 ? (
                                 <div className="text-center py-6 text-muted-foreground border rounded-lg">
                                     <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                    <p>Ingen synkronisering har körts ännu</p>
+                                    <p>No synchronization has been run yet</p>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -547,7 +563,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex-1">
                                                 <p className="font-medium">{status.subtree_name || status.subtree_id}</p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {status.total_assets} assets • Senast: {formatDate(status.last_sync_completed_at)}
+                                                    {status.total_assets} assets • Last: {formatDate(status.last_sync_completed_at)}
                                                 </p>
                                                 {status.error_message && (
                                                     <p className="text-xs text-destructive mt-1">{status.error_message}</p>

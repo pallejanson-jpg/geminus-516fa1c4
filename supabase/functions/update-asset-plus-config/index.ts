@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,11 +14,6 @@ serve(async (req) => {
     const { action, config } = await req.json();
 
     if (action === "update-config") {
-      // Update secrets via Supabase Management API
-      // For now, we'll store non-secret config in a settings table
-      // and inform the user about which secrets need updating via Lovable
-      
-      const updates: string[] = [];
       const secretsToUpdate: string[] = [];
 
       if (config.keycloakUrl !== undefined && config.keycloakUrl !== "") {
@@ -43,68 +37,106 @@ serve(async (req) => {
       if (config.apiKey !== undefined && config.apiKey !== "" && !config.apiKey.includes("•")) {
         secretsToUpdate.push("ASSET_PLUS_API_KEY");
       }
+      if (config.audience !== undefined && config.audience !== "") {
+        secretsToUpdate.push("ASSET_PLUS_AUDIENCE");
+      }
 
       return new Response(
         JSON.stringify({
           success: true,
-          message: "Konfigurationen behöver uppdateras via Lovable secrets.",
+          message: "Configuration needs to be updated via Lovable secrets.",
           secretsToUpdate,
-          instructions: "Använd Lovable för att uppdatera följande secrets: " + secretsToUpdate.join(", "),
+          instructions: "Use Lovable to update the following secrets: " + secretsToUpdate.join(", "),
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (action === "test-connection") {
-      // Test the current Keycloak configuration
       const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
       const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
       const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
       const username = Deno.env.get("ASSET_PLUS_USERNAME");
       const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+      const audience = Deno.env.get("ASSET_PLUS_AUDIENCE") || "asset-api";
 
-      if (!keycloakUrl || !clientId || !username || !password) {
+      if (!keycloakUrl || !clientId) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: "Saknar konfiguration. Alla fält måste fyllas i.",
+            error: "Missing configuration. At minimum ASSET_PLUS_KEYCLOAK_URL and ASSET_PLUS_CLIENT_ID are required.",
             configured: {
               keycloakUrl: !!keycloakUrl,
               clientId: !!clientId,
               clientSecret: !!clientSecret,
               username: !!username,
               password: !!password,
+              audience: !!audience,
             },
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Try to get a token from Keycloak
-      const tokenParams = new URLSearchParams({
-        grant_type: "password",
+      // Build token URL
+      const tokenUrl = keycloakUrl.endsWith("/protocol/openid-connect/token")
+        ? keycloakUrl
+        : `${keycloakUrl.replace(/\/+$/, "")}/protocol/openid-connect/token`;
+
+      console.log(`Testing connection to: ${tokenUrl}`);
+      console.log(`Client ID: ${clientId}`);
+      console.log(`Audience: ${audience}`);
+
+      // Try client_credentials flow first (as shown in screenshot)
+      const credParams = new URLSearchParams({
+        grant_type: "client_credentials",
         client_id: clientId,
-        username: username,
-        password: password,
+        audience: audience,
       });
       
       if (clientSecret) {
-        tokenParams.set("client_secret", clientSecret);
+        credParams.set("client_secret", clientSecret);
       }
 
-      console.log(`Testing connection to: ${keycloakUrl}`);
-      console.log(`Client ID: ${clientId}`);
-      console.log(`Username: ${username}`);
-
-      const tokenResponse = await fetch(keycloakUrl, {
+      console.log("Trying client_credentials flow with audience...");
+      let tokenResponse = await fetch(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: tokenParams.toString(),
+        body: credParams.toString(),
       });
 
-      const responseText = await tokenResponse.text();
-      console.log(`Keycloak response status: ${tokenResponse.status}`);
-      console.log(`Keycloak response: ${responseText}`);
+      let responseText = await tokenResponse.text();
+      console.log(`Response status: ${tokenResponse.status}`);
+
+      // If client_credentials fails and we have username/password, try password grant
+      if (!tokenResponse.ok && username && password) {
+        console.log("client_credentials failed, trying password grant...");
+        
+        const passwordParams = new URLSearchParams({
+          grant_type: "password",
+          client_id: clientId,
+          username: username,
+          password: password,
+        });
+        
+        if (clientSecret) {
+          passwordParams.set("client_secret", clientSecret);
+        }
+        if (audience) {
+          passwordParams.set("audience", audience);
+        }
+
+        tokenResponse = await fetch(tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: passwordParams.toString(),
+        });
+
+        responseText = await tokenResponse.text();
+        console.log(`Password grant response: ${tokenResponse.status}`);
+      }
+
+      console.log(`Final response: ${responseText}`);
 
       if (!tokenResponse.ok) {
         let errorDetail = responseText;
@@ -116,7 +148,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Keycloak-autentisering misslyckades: ${errorDetail}`,
+            error: `Keycloak authentication failed: ${errorDetail}`,
             status: tokenResponse.status,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -128,7 +160,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          message: "Anslutning lyckades! Token mottagen.",
+          message: "Connection successful! Token received.",
           tokenType: tokenData.token_type,
           expiresIn: tokenData.expires_in,
         }),
@@ -137,7 +169,6 @@ serve(async (req) => {
     }
 
     if (action === "get-config") {
-      // Return current configuration (without sensitive values)
       return new Response(
         JSON.stringify({
           success: true,
@@ -146,7 +177,7 @@ serve(async (req) => {
             apiUrl: Deno.env.get("ASSET_PLUS_API_URL") || "",
             clientId: Deno.env.get("ASSET_PLUS_CLIENT_ID") || "",
             username: Deno.env.get("ASSET_PLUS_USERNAME") || "",
-            // Don't expose secrets
+            audience: Deno.env.get("ASSET_PLUS_AUDIENCE") || "asset-api",
             hasClientSecret: !!Deno.env.get("ASSET_PLUS_CLIENT_SECRET"),
             hasPassword: !!Deno.env.get("ASSET_PLUS_PASSWORD"),
             hasApiKey: !!Deno.env.get("ASSET_PLUS_API_KEY"),
