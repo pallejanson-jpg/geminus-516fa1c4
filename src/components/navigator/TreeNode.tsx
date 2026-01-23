@@ -35,6 +35,15 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const canAddChild = node.category === 'Building' || node.category === 'Building Storey';
   const canView = true; // All nodes can be viewed
 
+  // Get child count and appropriate label
+  const childCount = node.children?.length || 0;
+  const getChildLabel = (category: string | undefined, count: number): string => {
+    if (count === 0) return "";
+    if (category === 'Building') return count === 1 ? "våningsplan" : "våningsplan";
+    if (category === 'Building Storey') return count === 1 ? "rum" : "rum";
+    return count === 1 ? "objekt" : "objekt";
+  };
+
   return (
     <div>
       <div
@@ -65,7 +74,14 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm text-foreground">{label}</div>
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm text-foreground">{label}</span>
+            {childCount > 0 && (
+              <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {childCount} {getChildLabel(node.category, childCount)}
+              </span>
+            )}
+          </div>
           {node.category ? (
             <div className="truncate text-xs text-muted-foreground">{node.category}</div>
           ) : null}
