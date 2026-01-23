@@ -184,7 +184,8 @@ async function fetchAssetPlusObjects(
   const baseUrl = apiUrl.replace(/\/+$/, "");
   
   // Use PublishDataServiceGetMerged endpoint as documented
-  const endpoint = `${baseUrl}/PublishDataService/GetMerged`;
+  // Note: Endpoint name is "PublishDataServiceGetMerged" (single path segment, not /PublishDataService/GetMerged)
+  const endpoint = `${baseUrl}/PublishDataServiceGetMerged`;
   
   console.log(`Calling Asset+ API: ${endpoint}`);
 
