@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
-    Loader2, Server, Clock 
+    Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
@@ -32,12 +32,68 @@ interface SyncStatus {
     error_message: string | null;
 }
 
+interface ConfigState {
+    keycloakUrl: string;
+    apiUrl: string;
+    clientId: string;
+    clientSecret: string;
+    username: string;
+    password: string;
+    apiKey: string;
+}
+
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
     const { toast } = useToast();
     const [activeTab, setActiveTab] = useState('assetplus');
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
+    
+    // Config form state
+    const [config, setConfig] = useState<ConfigState>({
+        keycloakUrl: '',
+        apiUrl: '',
+        clientId: '',
+        clientSecret: '',
+        username: '',
+        password: '',
+        apiKey: '',
+    });
+    const [showSecrets, setShowSecrets] = useState(false);
+    const [isTestingConnection, setIsTestingConnection] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [connectionMessage, setConnectionMessage] = useState('');
+    const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+
+    // Fetch current config
+    const fetchConfig = async () => {
+        setIsLoadingConfig(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+                body: { action: 'get-config' }
+            });
+
+            if (error) throw error;
+
+            if (data?.config) {
+                setConfig(prev => ({
+                    ...prev,
+                    keycloakUrl: data.config.keycloakUrl || '',
+                    apiUrl: data.config.apiUrl || '',
+                    clientId: data.config.clientId || '',
+                    username: data.config.username || '',
+                    // Keep secret fields empty but show placeholders if configured
+                    clientSecret: data.config.hasClientSecret ? '••••••••' : '',
+                    password: data.config.hasPassword ? '••••••••' : '',
+                    apiKey: data.config.hasApiKey ? '••••••••' : '',
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to fetch config:', error);
+        } finally {
+            setIsLoadingConfig(false);
+        }
+    };
 
     // Fetch sync status and asset count
     const fetchSyncStatus = async () => {
@@ -61,8 +117,52 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     useEffect(() => {
         if (isOpen) {
             fetchSyncStatus();
+            fetchConfig();
+            setConnectionStatus('idle');
+            setConnectionMessage('');
         }
     }, [isOpen]);
+
+    const handleTestConnection = async () => {
+        setIsTestingConnection(true);
+        setConnectionStatus('idle');
+        setConnectionMessage('');
+
+        try {
+            const { data, error } = await supabase.functions.invoke('update-asset-plus-config', {
+                body: { action: 'test-connection' }
+            });
+
+            if (error) throw error;
+
+            if (data?.success) {
+                setConnectionStatus('success');
+                setConnectionMessage(data.message);
+                toast({
+                    title: "Anslutning lyckades",
+                    description: data.message,
+                });
+            } else {
+                setConnectionStatus('error');
+                setConnectionMessage(data?.error || 'Okänt fel');
+                toast({
+                    variant: "destructive",
+                    title: "Anslutning misslyckades",
+                    description: data?.error,
+                });
+            }
+        } catch (error: any) {
+            setConnectionStatus('error');
+            setConnectionMessage(error.message);
+            toast({
+                variant: "destructive",
+                title: "Fel",
+                description: error.message,
+            });
+        } finally {
+            setIsTestingConnection(false);
+        }
+    };
 
     const handleTriggerSync = async () => {
         setIsSyncing(true);
@@ -121,7 +221,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
@@ -145,33 +245,175 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsList>
 
                     <TabsContent value="assetplus" className="space-y-4 mt-4">
-                        <div className="rounded-lg border p-4 bg-muted/30">
-                            <h4 className="font-medium mb-2 flex items-center gap-2">
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                Asset+ är konfigurerat
-                            </h4>
-                            <p className="text-sm text-muted-foreground">
-                                API-credentials hanteras säkert som backend-secrets. 
-                                Kontakta administratör för att uppdatera credentials.
-                            </p>
-                        </div>
+                        {isLoadingConfig ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-medium flex items-center gap-2">
+                                            <Settings2 className="h-4 w-4" />
+                                            Keycloak & API-konfiguration
+                                        </h4>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowSecrets(!showSecrets)}
+                                            className="gap-2"
+                                        >
+                                            {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                            {showSecrets ? 'Dölj' : 'Visa'}
+                                        </Button>
+                                    </div>
 
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between p-3 rounded-lg border">
-                                <div>
-                                    <p className="font-medium">Keycloak OAuth</p>
-                                    <p className="text-sm text-muted-foreground">Autentisering mot Asset+ API</p>
+                                    <div className="grid gap-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="keycloakUrl">Keycloak Token URL</Label>
+                                                <Input
+                                                    id="keycloakUrl"
+                                                    value={config.keycloakUrl}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
+                                                    placeholder="https://sso.example.com/.../token"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="apiUrl">API URL</Label>
+                                                <Input
+                                                    id="apiUrl"
+                                                    value={config.apiUrl}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
+                                                    placeholder="https://api.example.com"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="clientId">Client ID</Label>
+                                                <Input
+                                                    id="clientId"
+                                                    value={config.clientId}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
+                                                    placeholder="my-client-id"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="clientSecret">Client Secret</Label>
+                                                <Input
+                                                    id="clientSecret"
+                                                    type={showSecrets ? "text" : "password"}
+                                                    value={config.clientSecret}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
+                                                    placeholder="••••••••"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="username">Användarnamn</Label>
+                                                <Input
+                                                    id="username"
+                                                    value={config.username}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
+                                                    placeholder="service-user"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="password">Lösenord</Label>
+                                                <Input
+                                                    id="password"
+                                                    type={showSecrets ? "text" : "password"}
+                                                    value={config.password}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
+                                                    placeholder="••••••••"
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="apiKey">API Key</Label>
+                                            <Input
+                                                id="apiKey"
+                                                type={showSecrets ? "text" : "password"}
+                                                value={config.apiKey}
+                                                onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                                                placeholder="••••••••"
+                                                disabled
+                                                className="bg-muted"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-lg border p-3 bg-muted/30">
+                                        <p className="text-sm text-muted-foreground">
+                                            <strong>OBS:</strong> Dessa värden hanteras som säkra backend-secrets. 
+                                            Använd knappen nedan för att uppdatera dem.
+                                        </p>
+                                    </div>
                                 </div>
-                                <Badge variant="outline" className="text-green-600 border-green-600">Aktiv</Badge>
-                            </div>
-                            <div className="flex items-center justify-between p-3 rounded-lg border">
-                                <div>
-                                    <p className="font-medium">API Endpoint</p>
-                                    <p className="text-sm text-muted-foreground">ASSET_PLUS_API_URL</p>
+
+                                {/* Connection test result */}
+                                {connectionStatus !== 'idle' && (
+                                    <div className={`rounded-lg border p-4 ${
+                                        connectionStatus === 'success' 
+                                            ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
+                                            : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                                    }`}>
+                                        <div className="flex items-start gap-3">
+                                            {connectionStatus === 'success' ? (
+                                                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                                            ) : (
+                                                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                                            )}
+                                            <div>
+                                                <p className={`font-medium ${
+                                                    connectionStatus === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
+                                                }`}>
+                                                    {connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}
+                                                </p>
+                                                <p className={`text-sm ${
+                                                    connectionStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                                }`}>
+                                                    {connectionMessage}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={handleTestConnection}
+                                        disabled={isTestingConnection}
+                                        variant="outline"
+                                        className="gap-2"
+                                    >
+                                        {isTestingConnection ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Zap className="h-4 w-4" />
+                                        )}
+                                        {isTestingConnection ? 'Testar...' : 'Testa anslutning'}
+                                    </Button>
                                 </div>
-                                <Badge variant="outline" className="text-green-600 border-green-600">Konfigurerad</Badge>
-                            </div>
-                        </div>
+                            </>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="sync" className="space-y-4 mt-4">
