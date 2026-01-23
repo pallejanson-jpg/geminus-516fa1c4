@@ -39,9 +39,9 @@ export default function NavigatorView() {
 
   const handleAddChild = useCallback((parentNode: NavigatorNode) => {
     // Placeholder - will be implemented when Asset+ write API is available
-    const childType = parentNode.category === 'Building' ? 'våningsplan' : 'rum';
-    toast.info(`Lägg till ${childType} under "${parentNode.commonName || parentNode.name}"`, {
-      description: "Denna funktion kommer snart.",
+    // For Space nodes, this creates objectType 4
+    toast.info(`Lägg till objekt i "${parentNode.commonName || parentNode.name}"`, {
+      description: "Skapar objekttyp 4. Denna funktion kommer snart.",
     });
   }, []);
 
