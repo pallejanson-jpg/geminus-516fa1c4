@@ -57,7 +57,6 @@ export default function NavigatorView() {
       <section className="h-full w-full p-4">
         <header className="mb-3">
           <h1 className="text-lg font-semibold text-foreground">Navigator</h1>
-          <p className="text-sm text-muted-foreground">Byggnad → Våningsplan → Rum</p>
         </header>
 
         <div className="mb-3">

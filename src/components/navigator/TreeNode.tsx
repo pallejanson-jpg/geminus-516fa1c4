@@ -82,9 +82,6 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               </span>
             )}
           </div>
-          {node.category ? (
-            <div className="truncate text-xs text-muted-foreground">{node.category}</div>
-          ) : null}
         </div>
 
         {/* Action buttons - visible on hover */}
