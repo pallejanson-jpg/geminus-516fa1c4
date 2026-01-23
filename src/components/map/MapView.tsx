@@ -1,4 +1,4 @@
-import React, { useState, useContext, useCallback, useEffect } from 'react';
+import React, { useState, useContext, useCallback, useEffect, useMemo } from 'react';
 import Map, { Marker, Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
 import { Building2, MapPin, Maximize2, Layers, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,81 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
-import { NORDIC_CITIES, BUILDING_IMAGES } from '@/lib/constants';
+import { BUILDING_IMAGES, NORDIC_CITIES } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Mock facilities with coordinates for demo
-const MOCK_MAP_FACILITIES: (Facility & { lat: number; lng: number })[] = [
-  {
-    fmGuid: '1',
-    name: 'Kontorshus Centrum',
-    commonName: 'Kontorshus Centrum',
-    category: 'Building',
-    address: 'Storgatan 1, Stockholm',
-    image: BUILDING_IMAGES[0],
-    numberOfLevels: 8,
-    numberOfSpaces: 156,
-    area: 12500,
-    lat: 59.3293,
-    lng: 18.0686,
-  },
-  {
-    fmGuid: '2',
-    name: 'Kv. Björken',
-    commonName: 'Kv. Björken',
-    category: 'Building',
-    address: 'Björkvägen 23, Göteborg',
-    image: BUILDING_IMAGES[1],
-    numberOfLevels: 5,
-    numberOfSpaces: 84,
-    area: 7800,
-    lat: 57.7089,
-    lng: 11.9746,
-  },
-  {
-    fmGuid: '3',
-    name: 'Lagerlokaler Syd',
-    commonName: 'Lagerlokaler Syd',
-    category: 'Building',
-    address: 'Industrivägen 45, Malmö',
-    image: BUILDING_IMAGES[2],
-    numberOfLevels: 2,
-    numberOfSpaces: 12,
-    area: 15200,
-    lat: 55.6049,
-    lng: 13.0038,
-  },
-  {
-    fmGuid: '4',
-    name: 'Oslo Kontor',
-    commonName: 'Oslo Kontor',
-    category: 'Building',
-    address: 'Karl Johans gate 15, Oslo',
-    image: BUILDING_IMAGES[3],
-    numberOfLevels: 6,
-    numberOfSpaces: 92,
-    area: 9200,
-    lat: 59.9139,
-    lng: 10.7522,
-  },
-  {
-    fmGuid: '5',
-    name: 'Helsingfors Center',
-    commonName: 'Helsingfors Center',
-    category: 'Building',
-    address: 'Mannerheimintie 10, Helsinki',
-    image: BUILDING_IMAGES[4],
-    numberOfLevels: 7,
-    numberOfSpaces: 120,
-    area: 11000,
-    lat: 60.1699,
-    lng: 24.9384,
-  },
-];
+type MapFacility = Facility & { lat: number; lng: number };
 
 const MapView: React.FC = () => {
-  const { setSelectedFacility, setActiveApp } = useContext(AppContext);
+  const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +22,42 @@ const MapView: React.FC = () => {
     longitude: 15.0,
     zoom: 4.5,
   });
-  const [selectedMarker, setSelectedMarker] = useState<typeof MOCK_MAP_FACILITIES[0] | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState<MapFacility | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
+
+  // Convert navigatorTreeData to map facilities with coordinates
+  const mapFacilities: MapFacility[] = useMemo(() => {
+    return navigatorTreeData.map((building, index) => {
+      // Count storeys and spaces
+      const storeys = building.children || [];
+      const totalSpaces = storeys.reduce((sum: number, storey: any) => {
+        return sum + (storey.children?.length || 0);
+      }, 0);
+      
+      // Calculate total area from spaces
+      const totalArea = allData
+        .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
+        .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
+
+      // Assign coordinates from Nordic cities (cycle through them)
+      const cityIndex = index % NORDIC_CITIES.length;
+      const city = NORDIC_CITIES[cityIndex];
+
+      return {
+        fmGuid: building.fmGuid,
+        name: building.name,
+        commonName: building.commonName,
+        category: 'Building',
+        image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
+        numberOfLevels: storeys.length,
+        numberOfSpaces: totalSpaces,
+        area: totalArea,
+        address: building.attributes?.address || city.name,
+        lat: city.lat + (Math.random() - 0.5) * 0.1, // Small offset for visual separation
+        lng: city.lng + (Math.random() - 0.5) * 0.1,
+      };
+    });
+  }, [navigatorTreeData, allData]);
 
   // Fetch Mapbox token from backend
   useEffect(() => {
@@ -120,7 +87,7 @@ const MapView: React.FC = () => {
     fetchToken();
   }, []);
 
-  const handleMarkerClick = useCallback((facility: typeof MOCK_MAP_FACILITIES[0]) => {
+  const handleMarkerClick = useCallback((facility: MapFacility) => {
     setSelectedMarker(facility);
     setViewState(prev => ({
       ...prev,
@@ -144,7 +111,7 @@ const MapView: React.FC = () => {
   }, []);
 
   // Loading state
-  if (isLoading) {
+  if (isLoading || isLoadingData) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="flex flex-col items-center gap-4">
@@ -204,24 +171,30 @@ const MapView: React.FC = () => {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Building2 size={16} className="text-primary" />
-              Fastigheter ({MOCK_MAP_FACILITIES.length})
+              Byggnader ({mapFacilities.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="max-h-80 overflow-y-auto space-y-2 pt-0">
-            {MOCK_MAP_FACILITIES.map((facility) => (
-              <div
-                key={facility.fmGuid}
-                onClick={() => handleMarkerClick(facility)}
-                className={`p-2 rounded-md cursor-pointer transition-colors ${
-                  selectedMarker?.fmGuid === facility.fmGuid
-                    ? 'bg-primary/20 border border-primary/50'
-                    : 'bg-muted/50 hover:bg-muted'
-                }`}
-              >
-                <p className="text-sm font-medium truncate">{facility.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{facility.address}</p>
-              </div>
-            ))}
+            {mapFacilities.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Inga byggnader laddade
+              </p>
+            ) : (
+              mapFacilities.map((facility) => (
+                <div
+                  key={facility.fmGuid}
+                  onClick={() => handleMarkerClick(facility)}
+                  className={`p-2 rounded-md cursor-pointer transition-colors ${
+                    selectedMarker?.fmGuid === facility.fmGuid
+                      ? 'bg-primary/20 border border-primary/50'
+                      : 'bg-muted/50 hover:bg-muted'
+                  }`}
+                >
+                  <p className="text-sm font-medium truncate">{facility.commonName || facility.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{facility.address}</p>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
@@ -238,7 +211,7 @@ const MapView: React.FC = () => {
         <GeolocateControl position="bottom-right" />
 
         {/* Markers */}
-        {MOCK_MAP_FACILITIES.map((facility) => (
+        {mapFacilities.map((facility) => (
           <Marker
             key={facility.fmGuid}
             latitude={facility.lat}
@@ -281,7 +254,7 @@ const MapView: React.FC = () => {
                   />
                 )}
                 <div className="p-3">
-                  <h3 className="font-semibold text-foreground">{selectedMarker.name}</h3>
+                  <h3 className="font-semibold text-foreground">{selectedMarker.commonName || selectedMarker.name}</h3>
                   <p className="text-xs text-muted-foreground mb-2">{selectedMarker.address}</p>
                   <div className="flex gap-2 mb-3">
                     <Badge variant="secondary" className="text-xs">

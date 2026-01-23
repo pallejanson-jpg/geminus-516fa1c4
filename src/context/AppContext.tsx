@@ -33,6 +33,10 @@ interface AppContextType {
     isLoadingData: boolean;
     navigatorTreeData: NavigatorNode[];
     refreshInitialData: () => Promise<void>;
+
+    // 3D Viewer
+    viewer3dFmGuid: string | null;
+    setViewer3dFmGuid: (fmGuid: string | null) => void;
 }
 
 export const AppContext = createContext<AppContextType>({
@@ -56,6 +60,9 @@ export const AppContext = createContext<AppContextType>({
     isLoadingData: false,
     navigatorTreeData: [],
     refreshInitialData: async () => {},
+
+    viewer3dFmGuid: null,
+    setViewer3dFmGuid: () => {},
 });
 
 interface AppProviderProps {
@@ -77,6 +84,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
+    const [viewer3dFmGuid, setViewer3dFmGuid] = useState<string | null>(null);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         const buildings = items.filter(item => item.category === 'Building');
@@ -221,6 +229,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 isLoadingData,
                 navigatorTreeData,
                 refreshInitialData,
+
+                viewer3dFmGuid,
+                setViewer3dFmGuid,
             }}
         >
             {children}
