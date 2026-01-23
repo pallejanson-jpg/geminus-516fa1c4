@@ -7,177 +7,175 @@ const corsHeaders = {
 };
 
 // Get Keycloak access token
+// Based on screenshot analysis: Uses client_credentials flow with audience parameter
 async function getAccessToken(): Promise<string> {
   const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
   const clientId = Deno.env.get("ASSET_PLUS_CLIENT_ID");
   const clientSecret = Deno.env.get("ASSET_PLUS_CLIENT_SECRET");
   const username = Deno.env.get("ASSET_PLUS_USERNAME");
   const password = Deno.env.get("ASSET_PLUS_PASSWORD");
+  const audience = Deno.env.get("ASSET_PLUS_AUDIENCE") || "asset-api"; // Default from screenshot
 
-  if (!keycloakUrl || !clientId || !clientSecret || !username || !password) {
-    throw new Error("Missing Keycloak configuration");
+  if (!keycloakUrl || !clientId) {
+    throw new Error("Missing Keycloak configuration (ASSET_PLUS_KEYCLOAK_URL, ASSET_PLUS_CLIENT_ID required)");
   }
 
-  // After validation above, these are guaranteed to be strings.
-  const keycloakUrlStr = keycloakUrl;
+  const keycloakUrlStr = keycloakUrl.trim();
   const clientIdStr = clientId;
-  const clientSecretStr = clientSecret;
-  const usernameStr = username;
-  const passwordStr = password;
+  const clientSecretStr = clientSecret || "";
+  const usernameStr = username || "";
+  const passwordStr = password || "";
 
-  const raw = keycloakUrlStr.trim();
-
-  // We accept either:
-  // 1) Realm base URL: https://auth.example.com/auth/realms/myrealm
-  // 2) Full token URL: https://auth.example.com/auth/realms/myrealm/protocol/openid-connect/token
-  if (!/^https?:\/\//i.test(raw)) {
+  // Accept either realm base URL or full token URL
+  if (!/^https?:\/\//i.test(keycloakUrlStr)) {
     throw new Error(
-      "Invalid ASSET_PLUS_KEYCLOAK_URL. It must start with https:// and be either the realm base URL (e.g. https://auth.bim.cloud/auth/realms/swg_demo) or the full token URL ending with /protocol/openid-connect/token.",
+      "Invalid ASSET_PLUS_KEYCLOAK_URL. It must start with https://"
     );
   }
 
-  const tokenUrl = raw.endsWith("/protocol/openid-connect/token")
-    ? raw
-    : `${raw.replace(/\/+$/, "")}/protocol/openid-connect/token`;
+  const tokenUrl = keycloakUrlStr.endsWith("/protocol/openid-connect/token")
+    ? keycloakUrlStr
+    : `${keycloakUrlStr.replace(/\/+$/, "")}/protocol/openid-connect/token`;
 
-  // Validate URL early to return a clear error.
   try {
-    // eslint-disable-next-line no-new
     new URL(tokenUrl);
   } catch {
-    throw new Error(
-      "Invalid ASSET_PLUS_KEYCLOAK_URL format after normalization. Ensure it contains no spaces and is a valid https URL.",
-    );
+    throw new Error("Invalid ASSET_PLUS_KEYCLOAK_URL format");
   }
 
-  // We try multiple auth strategies in order:
-  // 1) Password grant with client_secret in body
-  // 2) Password grant with Basic auth
-  // 3) Password grant as public client (no secret)
-  // 4) Token exchange flow (client_credentials + token exchange)
-  
-  type ClientAuthMode = "body" | "basic" | "public";
+  console.log(`Keycloak token request -> url=${tokenUrl} client_id=${clientIdStr}`);
 
-  async function requestPasswordToken(mode: ClientAuthMode) {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/x-www-form-urlencoded",
+  // Strategy 1: client_credentials with audience (as shown in screenshot)
+  // This is the primary method based on the Faciliate screenshot
+  async function requestClientCredentialsWithAudience(): Promise<{ res: Response; text: string }> {
+    console.log("Trying client_credentials flow with audience...");
+    
+    const params: Record<string, string> = {
+      grant_type: "client_credentials",
+      client_id: clientIdStr,
+      audience: audience,
     };
-
-    if (mode === "basic") {
-      headers["Authorization"] = `Basic ${btoa(`${clientIdStr}:${clientSecretStr}`)}`;
+    
+    if (clientSecretStr) {
+      params.client_secret = clientSecretStr;
     }
 
-    const bodyParams: Record<string, string> = {
+    const res = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params),
+    });
+
+    const text = await res.text();
+    console.log(`client_credentials response: ${res.status}`);
+    return { res, text };
+  }
+
+  // Strategy 2: password grant (fallback if user mapping exists)
+  async function requestPasswordToken(): Promise<{ res: Response; text: string }> {
+    if (!usernameStr || !passwordStr) {
+      return { res: new Response(null, { status: 400 }), text: "No username/password configured" };
+    }
+    
+    console.log("Trying password grant flow...");
+    
+    const params: Record<string, string> = {
       grant_type: "password",
       client_id: clientIdStr,
       username: usernameStr,
       password: passwordStr,
     };
-
-    if (mode === "body") {
-      bodyParams.client_secret = clientSecretStr;
+    
+    if (clientSecretStr) {
+      params.client_secret = clientSecretStr;
+    }
+    
+    if (audience) {
+      params.audience = audience;
     }
 
     const res = await fetch(tokenUrl, {
       method: "POST",
-      headers,
-      body: new URLSearchParams(bodyParams),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params),
     });
 
     const text = await res.text();
+    console.log(`password grant response: ${res.status}`);
     return { res, text };
   }
 
-  // Token exchange flow: first get machine token, then exchange for user token
+  // Strategy 3: client_credentials then token exchange
   async function requestTokenExchange(): Promise<{ res: Response; text: string }> {
-    console.log("Trying token exchange flow (client_credentials + token exchange)...");
+    if (!usernameStr) {
+      return { res: new Response(null, { status: 400 }), text: "No username configured for exchange" };
+    }
     
-    // Step 1: Get machine-to-machine token
+    console.log("Trying token exchange flow...");
+    
+    // Step 1: Get machine token
+    const m2mParams: Record<string, string> = {
+      grant_type: "client_credentials",
+      client_id: clientIdStr,
+    };
+    if (clientSecretStr) m2mParams.client_secret = clientSecretStr;
+    if (audience) m2mParams.audience = audience;
+
     const m2mRes = await fetch(tokenUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: clientIdStr,
-        client_secret: clientSecretStr,
-      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(m2mParams),
     });
 
     const m2mText = await m2mRes.text();
-    
     if (!m2mRes.ok) {
-      console.log(`Token exchange step 1 failed: ${m2mRes.status} - ${m2mText}`);
       return { res: m2mRes, text: m2mText };
     }
 
     const m2mData = JSON.parse(m2mText);
-    const subjectToken = m2mData.access_token;
-    console.log("Got machine-to-machine token, exchanging for user token...");
+    console.log("Got M2M token, exchanging...");
 
     // Step 2: Exchange for user token
+    const exchangeParams: Record<string, string> = {
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      client_id: clientIdStr,
+      subject_token: m2mData.access_token,
+      requested_subject: usernameStr,
+    };
+    if (clientSecretStr) exchangeParams.client_secret = clientSecretStr;
+
     const exchangeRes = await fetch(tokenUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        client_id: clientIdStr,
-        client_secret: clientSecretStr,
-        subject_token: subjectToken,
-        requested_subject: usernameStr,
-      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(exchangeParams),
     });
 
-    const exchangeText = await exchangeRes.text();
-    return { res: exchangeRes, text: exchangeText };
+    return { res: exchangeRes, text: await exchangeRes.text() };
   }
 
-  console.log(`Keycloak token request -> url=${tokenUrl} client_id=${clientIdStr}`);
-
-  // Try password grant with body secret
-  console.log("Trying password grant with client_secret in body...");
-  const first = await requestPasswordToken("body");
-
+  // Try strategies in order based on screenshot analysis:
+  // 1. client_credentials with audience (primary)
+  const first = await requestClientCredentialsWithAudience();
   if (first.res.ok) {
     const data = JSON.parse(first.text);
     return data.access_token;
   }
 
-  const isInvalidClient =
-    first.res.status === 401 &&
-    (first.text.includes("invalid_client") || first.text.includes("Invalid client"));
-
-  if (isInvalidClient) {
-    // Try password grant with Basic auth
-    console.log("Trying password grant with Basic auth...");
-    const second = await requestPasswordToken("basic");
-    if (second.res.ok) {
-      const data = JSON.parse(second.text);
-      return data.access_token;
-    }
-
-    // Try password grant as public client
-    console.log("Trying password grant as public client (no secret)...");
-    const third = await requestPasswordToken("public");
-    if (third.res.ok) {
-      const data = JSON.parse(third.text);
-      return data.access_token;
-    }
-
-    // Try token exchange flow
-    const fourth = await requestTokenExchange();
-    if (fourth.res.ok) {
-      const data = JSON.parse(fourth.text);
-      return data.access_token;
-    }
-
-    throw new Error(`Keycloak auth failed after trying all methods. Last error: ${fourth.res.status} - ${fourth.text}`);
+  // 2. password grant (fallback)
+  const second = await requestPasswordToken();
+  if (second.res.ok) {
+    const data = JSON.parse(second.text);
+    return data.access_token;
   }
 
-  throw new Error(`Keycloak auth failed: ${first.res.status} - ${first.text}`);
+  // 3. token exchange
+  const third = await requestTokenExchange();
+  if (third.res.ok) {
+    const data = JSON.parse(third.text);
+    return data.access_token;
+  }
+
+  throw new Error(`Keycloak auth failed. Last response: ${first.res.status} - ${first.text}`);
 }
 
 // Fetch objects from Asset+ API
@@ -191,7 +189,7 @@ async function fetchAssetPlusObjects(
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
 
   if (!apiUrl || !apiKey) {
-    throw new Error("Missing Asset+ API configuration");
+    throw new Error("Missing Asset+ API configuration (ASSET_PLUS_API_URL, ASSET_PLUS_API_KEY)");
   }
 
   const response = await fetch(`${apiUrl}/api/v2/object/list`, {
@@ -283,7 +281,7 @@ async function updateSyncState(
     .from('asset_sync_state')
     .upsert({
       subtree_id: subtreeId,
-      subtree_name: subtreeId === 'full' ? 'Fullständig synk' : subtreeId,
+      subtree_name: subtreeId === 'full' ? 'Full Sync' : subtreeId,
       ...updateData,
     }, { onConflict: 'subtree_id' });
 }
