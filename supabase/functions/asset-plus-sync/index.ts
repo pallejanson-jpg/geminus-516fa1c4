@@ -15,8 +15,11 @@ async function getAccessToken(): Promise<string> {
   const username = Deno.env.get("ASSET_PLUS_USERNAME");
   const password = Deno.env.get("ASSET_PLUS_PASSWORD");
 
-  if (!keycloakUrl || !clientId || !clientSecret) {
-    throw new Error("Missing Keycloak configuration (ASSET_PLUS_KEYCLOAK_URL, ASSET_PLUS_CLIENT_ID, ASSET_PLUS_CLIENT_SECRET required)");
+  // Client secret may be optional if the Keycloak client is configured as "public".
+  if (!keycloakUrl || !clientId) {
+    throw new Error(
+      "Missing Keycloak configuration (ASSET_PLUS_KEYCLOAK_URL and ASSET_PLUS_CLIENT_ID required)"
+    );
   }
 
   const keycloakUrlStr = keycloakUrl.trim();
@@ -42,8 +45,11 @@ async function getAccessToken(): Promise<string> {
       username: username,
       password: password,
       client_id: clientId,
-      client_secret: clientSecret,
     });
+
+    if (clientSecret) {
+      params.set("client_secret", clientSecret);
+    }
 
     const res = await fetch(tokenUrl, {
       method: "POST",
@@ -61,6 +67,36 @@ async function getAccessToken(): Promise<string> {
     }
     
     console.log(`Password grant failed: ${text}`);
+
+    // If the client is actually configured as a public client, sending a (wrong/empty) client_secret
+    // can yield invalid_client. Retry once without client_secret.
+    if (clientSecret && text.includes("invalid_client")) {
+      console.log("Retrying password grant without client_secret (public client fallback)...");
+
+      const publicParams = new URLSearchParams({
+        grant_type: "password",
+        username: username,
+        password: password,
+        client_id: clientId,
+      });
+
+      const publicRes = await fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: publicParams,
+      });
+
+      const publicText = await publicRes.text();
+      console.log(`Public password grant response: ${publicRes.status}`);
+
+      if (publicRes.ok) {
+        const data = JSON.parse(publicText);
+        console.log("Public password grant successful!");
+        return data.access_token;
+      }
+
+      console.log(`Public password grant failed: ${publicText}`);
+    }
   }
 
   // Method 2: Token Exchange (M2M) - fallback
@@ -68,6 +104,13 @@ async function getAccessToken(): Promise<string> {
   // Step 2: Exchange for user token
   if (username) {
     console.log("Trying token exchange flow (Method 2)...");
+
+    if (!clientSecret) {
+      console.log("Token exchange requires ASSET_PLUS_CLIENT_SECRET; skipping Method 2.");
+      throw new Error(
+        "Keycloak auth failed. Token exchange requires ASSET_PLUS_CLIENT_SECRET, and password grant also failed."
+      );
+    }
     
     // Step 1: client_credentials
     const m2mParams = new URLSearchParams({
@@ -316,7 +359,8 @@ serve(async (req) => {
         error: errorMessage 
       }),
       { 
-        status: 500, 
+        // Return 200 so frontend callers using invoke() don't crash on non-2xx responses.
+        status: 200, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       }
     );
