@@ -1,6 +1,6 @@
 import React, { createContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
-import { fetchAssetPlusData } from '@/services/asset-plus-service';
+import { fetchLocalAssets } from '@/services/asset-plus-service';
 
 type NavigatorNode = {
     fmGuid: string;
@@ -136,14 +136,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const refreshInitialData = useCallback(async () => {
         setIsLoadingData(true);
         try {
-            const allObjects = await fetchAssetPlusData([
-                ["category", "=", "Building"], "or",
-                ["category", "=", "Building Storey"], "or",
-                ["category", "=", "Space"], "or",
-                ["category", "=", "Door"],
+            // Fetch from local synced database instead of external API
+            const allObjects = await fetchLocalAssets([
+                'Building',
+                'Building Storey',
+                'Space',
+                'Door',
             ]);
             setAllData(allObjects);
             setNavigatorTreeData(buildNavigatorTree(allObjects));
+        } catch (error) {
+            console.error('Failed to load assets:', error);
         } finally {
             setIsLoadingData(false);
         }
