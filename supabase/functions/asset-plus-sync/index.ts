@@ -165,13 +165,14 @@ async function getAccessToken(): Promise<string> {
   throw new Error("Keycloak auth failed. Check credentials: CLIENT_ID, CLIENT_SECRET, USERNAME, PASSWORD");
 }
 
-// Fetch objects from Asset+ API
+// Fetch objects from Asset+ API using PublishDataServiceGetMerged endpoint
+// Based on Asset+ Sync documentation: https://js.devexpress.com/Documentation/Guide/Data_Binding/Data_Layer/#Reading_Data
 async function fetchAssetPlusObjects(
   accessToken: string, 
   filter: any[], 
   skip = 0, 
   take = 1000
-): Promise<{ items: any[]; totalCount: number }> {
+): Promise<{ data: any[]; totalCount: number }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
 
@@ -179,27 +180,58 @@ async function fetchAssetPlusObjects(
     throw new Error("Missing Asset+ API configuration (ASSET_PLUS_API_URL, ASSET_PLUS_API_KEY)");
   }
 
-  const response = await fetch(`${apiUrl}/api/v2/object/list`, {
+  // Normalize the base URL (remove trailing slashes)
+  const baseUrl = apiUrl.replace(/\/+$/, "");
+  
+  // Use PublishDataServiceGetMerged endpoint as documented
+  const endpoint = `${baseUrl}/PublishDataService/GetMerged`;
+  
+  console.log(`Calling Asset+ API: ${endpoint}`);
+
+  // Request body format from documentation - includes apiKey in body
+  const requestBody = {
+    filter,
+    skip,
+    take,
+    requireTotalCount: true,
+    outputType: "raw", // Required per documentation to get raw values
+    apiKey, // API key goes in body per documentation examples
+  };
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${accessToken}`,
-      "x-api-key": apiKey,
     },
-    body: JSON.stringify({
-      filter,
-      skip,
-      take,
-      includeCount: true,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`Asset+ API error response: ${errorText}`);
     throw new Error(`Asset+ API failed: ${response.status} - ${errorText}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  
+  // The response format from PublishDataServiceGetMerged has 'data' array and 'totalCount'
+  return {
+    data: result.data || [],
+    totalCount: result.totalCount || 0,
+  };
+}
+
+// Map objectType to category string
+function objectTypeToCategory(objectType: number): string {
+  const categories: Record<number, string> = {
+    0: 'Complex',
+    1: 'Building',
+    2: 'Building Storey',
+    3: 'Space',
+    4: 'Door',
+  };
+  return categories[objectType] || 'Unknown';
 }
 
 // Upsert assets to Supabase
@@ -208,15 +240,15 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
 
   const assets = items.map((item: any) => ({
     fm_guid: item.fmGuid,
-    category: item.category || 'Unknown',
-    name: item.name || null,
+    category: objectTypeToCategory(item.objectType),
+    name: item.designation || null, // designation is the object's name/number
     common_name: item.commonName || null,
     building_fm_guid: item.buildingFmGuid || null,
     level_fm_guid: item.levelFmGuid || null,
     in_room_fm_guid: item.inRoomFmGuid || null,
     complex_common_name: item.complexCommonName || null,
     gross_area: item.grossArea || null,
-    asset_type: item.assetType || null,
+    asset_type: item.ObjectTypeValue || null,
     attributes: item,
     synced_at: new Date().toISOString(),
   }));
@@ -294,12 +326,18 @@ serve(async (req) => {
     const accessToken = await getAccessToken();
     console.log('Got Keycloak access token');
 
-    // Categories to sync
-    const categories = ['Building', 'Building Storey', 'Space', 'Door'];
-    
-    const filter = categories.flatMap((cat, i) => 
-      i === 0 ? [["category", "=", cat]] : ["or", ["category", "=", cat]]
-    ).flat();
+    // ObjectType values from Asset+ documentation:
+    // 0 = Complex, 1 = Building, 2 = Level (Building Storey), 3 = Space, 4 = Instance (Door, etc.)
+    // Filter to sync: Building (1), Level (2), Space (3), Door/Instance (4)
+    const filter = [
+      ["objectType", "=", 1],
+      "or",
+      ["objectType", "=", 2],
+      "or",
+      ["objectType", "=", 3],
+      "or",
+      ["objectType", "=", 4]
+    ];
 
     let totalSynced = 0;
     let skip = 0;
@@ -310,7 +348,7 @@ serve(async (req) => {
       console.log(`Fetching batch at skip=${skip}...`);
       
       const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
-      const items = result.items || [];
+      const items = result.data || [];
       
       if (items.length > 0) {
         const synced = await upsertAssets(supabase, items);
