@@ -82,23 +82,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         const buildings = items.filter(item => item.category === 'Building');
         const storeys = items.filter(item => item.category === 'Building Storey');
         const spaces = items.filter(item => item.category === 'Space');
-        const doors = items.filter(item => item.category === 'Door');
+        // Doors excluded from hierarchy per user request
 
-        // Build door map (parent = inRoomFmGuid)
-        const doorMap = new Map<string, any[]>();
-        doors.forEach((door: any) => {
-            const parentRoomGuid = door.inRoomFmGuid;
-            if (parentRoomGuid) {
-                if (!doorMap.has(parentRoomGuid)) doorMap.set(parentRoomGuid, []);
-                doorMap.get(parentRoomGuid)!.push(door);
-            }
-        });
-
-        // Build space nodes with door children
+        // Build space nodes (no door children)
         const spaceMap = new Map<string, NavigatorNode>();
         spaces.forEach((space: any) => {
-            const children = (doorMap.get(space.fmGuid) || []) as NavigatorNode[];
-            spaceMap.set(space.fmGuid, { ...space, children });
+            spaceMap.set(space.fmGuid, { ...space, children: [] });
         });
 
         // Build storey nodes
@@ -107,7 +96,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             storeyMap.set(storey.fmGuid, { ...storey, children: [] });
         });
 
-        // Attach spaces to storeys
+        // Attach spaces to storeys via levelFmGuid
         spaceMap.forEach((space) => {
             const parentStorey = storeyMap.get((space as any).levelFmGuid);
             if (parentStorey) parentStorey.children!.push(space);
@@ -126,7 +115,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             // Use attributes from first storey or item to get building name
             const buildingInfo = new Map<string, { commonName?: string; name?: string }>();
             
-            [...storeys, ...spaces, ...doors].forEach((item: any) => {
+            [...storeys, ...spaces].forEach((item: any) => {
                 const bguid = item.buildingFmGuid;
                 if (bguid && !buildingInfo.has(bguid)) {
                     // Try to get building name from attributes
@@ -175,11 +164,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setIsLoadingData(true);
         try {
             // Fetch from local synced database instead of external API
+            // Doors excluded from navigator per user request
             const allObjects = await fetchLocalAssets([
                 'Building',
                 'Building Storey',
                 'Space',
-                'Door',
             ]);
             setAllData(allObjects);
             setNavigatorTreeData(buildNavigatorTree(allObjects));

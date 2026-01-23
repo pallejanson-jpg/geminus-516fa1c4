@@ -1,7 +1,12 @@
 import React from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type NavigatorNode = {
   fmGuid: string;
@@ -17,18 +22,24 @@ type Props = {
   depth?: number;
   expanded: Set<string>;
   onToggle: (fmGuid: string) => void;
+  onAddChild?: (parentNode: NavigatorNode) => void;
+  onView?: (node: NavigatorNode) => void;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView }: Props) {
   const label = node.commonName || node.name || "(namnlös)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
+
+  // Determine which actions are available based on category
+  const canAddChild = node.category === 'Building' || node.category === 'Building Storey';
+  const canView = true; // All nodes can be viewed
 
   return (
     <div>
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5",
+          "group flex items-center gap-2 rounded-md px-2 py-1.5",
           "hover:bg-accent/40",
         )}
         style={{ paddingLeft: 8 + depth * 14 }}
@@ -39,7 +50,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle }: Props) {
             variant="ghost"
             size="icon"
             onClick={() => onToggle(node.fmGuid)}
-            className="h-7 w-7"
+            className="h-7 w-7 shrink-0"
             aria-label={isOpen ? "Fäll ihop" : "Fäll ut"}
           >
             <ChevronRight
@@ -50,7 +61,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle }: Props) {
             />
           </Button>
         ) : (
-          <span className="h-7 w-7" />
+          <span className="h-7 w-7 shrink-0" />
         )}
 
         <div className="min-w-0 flex-1">
@@ -58,6 +69,52 @@ export function TreeNode({ node, depth = 0, expanded, onToggle }: Props) {
           {node.category ? (
             <div className="truncate text-xs text-muted-foreground">{node.category}</div>
           ) : null}
+        </div>
+
+        {/* Action buttons - visible on hover */}
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {canView && onView && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onView(node);
+                  }}
+                  className="h-6 w-6"
+                  aria-label="Visa"
+                >
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Visa detaljer</TooltipContent>
+            </Tooltip>
+          )}
+          {canAddChild && onAddChild && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddChild(node);
+                  }}
+                  className="h-6 w-6"
+                  aria-label="Lägg till"
+                >
+                  <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {node.category === 'Building' ? 'Lägg till våningsplan' : 'Lägg till rum'}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -70,6 +127,8 @@ export function TreeNode({ node, depth = 0, expanded, onToggle }: Props) {
               depth={depth + 1}
               expanded={expanded}
               onToggle={onToggle}
+              onAddChild={onAddChild}
+              onView={onView}
             />
           ))}
         </div>
