@@ -48,6 +48,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
 
+  // Refs for deferred loading (matching Asset+ external_viewer.html pattern)
+  const deferCallsRef = useRef(true);
+  const deferredFmGuidRef = useRef<string | null>(null);
+  const deferredDisplayActionRef = useRef<any>(null);
+  const accessTokenRef = useRef<string>('');
+
   // Fetch access token and initialize viewer
   const initializeViewer = useCallback(async () => {
     if (!viewerContainerRef.current) return;
@@ -70,12 +76,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         throw new Error('Asset+ åtkomsttoken saknas. Kontrollera API-inställningarna.');
       }
 
+      accessTokenRef.current = accessToken;
+
       // Check if assetplusviewer is available globally
-      // The viewer package should be loaded via script tag
       const assetplusviewer = (window as any).assetplusviewer;
       
       if (!assetplusviewer) {
-        // Viewer package not loaded - show setup instructions
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -92,36 +98,69 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       const baseUrl = configData?.apiUrl || '';
       const apiKey = configData?.apiKey || '';
 
-      // Initialize the viewer following Asset+ documentation
+      // Store fmGuid for deferred loading
+      deferredFmGuidRef.current = fmGuid;
+
+      // Initialize the viewer following Asset+ external_viewer.html pattern
       const viewer = await assetplusviewer(
         baseUrl,
         apiKey,
-        async () => accessToken, // getAccessTokenCallback
+        // getAccessTokenCallback - return the stored token
+        async () => {
+          console.log('getAccessTokenCallback called');
+          return accessTokenRef.current;
+        },
+        // selectionChangedCallback
         (items: any[], added: any[], removed: any[]) => {
-          console.log('Selection changed:', { items, added, removed });
+          console.log('Selection changed:', items?.length, 'items');
         },
+        // selectedFmGuidsChangedCallback
         (fmGuids: string[], added: string[], removed: string[]) => {
-          console.log('FMGUIDs changed:', { fmGuids, added, removed });
+          console.log('FMGUIDs changed:', fmGuids?.length, 'items');
         },
+        // allModelsLoadedCallback
         () => {
-          console.log('All models loaded');
+          console.log('allModelsLoadedCallback');
+          
+          // Process deferred display after models are loaded
+          if (deferredFmGuidRef.current && viewerInstanceRef.current) {
+            const fmGuidToShow = deferredFmGuidRef.current;
+            deferredFmGuidRef.current = null;
+            
+            console.log('Selecting and fitting to FMGUID:', fmGuidToShow);
+            viewerInstanceRef.current.selectFmGuidAndViewFit(fmGuidToShow);
+          }
+          
           toast.success('3D-modell laddad');
         },
-        async () => true, // isItemIdEditableCallback
-        async () => false, // isFmGuidEditableCallback
-        () => true, // additionalDefaultPredicate - load all models
-        [], // externalCustomObjectContextMenuItems
-        135, // horizontalAngle
-        45, // verticalAngle
-        -10, // annotationTopOffset
-        -10 // annotationLeftOffset
+        // isItemIdEditableCallback
+        undefined,
+        // isFmGuidEditableCallback
+        async (fmGuid: string) => {
+          console.log('isFmGuidEditableCallback:', fmGuid);
+          return false;
+        },
+        // additionalDefaultPredicate - load models whose name starts with "a"
+        (model: any) => (model?.name || "").toLowerCase().startsWith("a"),
+        // externalCustomObjectContextMenuItems
+        [],
+        // horizontalAngle, verticalAngle (undefined for defaults)
+        undefined, 
+        undefined,
+        // annotationTopOffset, annotationLeftOffset (undefined for defaults)
+        undefined, 
+        undefined
       );
 
       viewerInstanceRef.current = viewer;
+      console.log('Viewer initialized, now loading model by FMGUID:', fmGuid);
 
-      // Load the model by FMGUID
-      await viewer.setAvailableModelsByFmGuid(fmGuid);
-      viewer.clearSelection();
+      // Stop deferring calls
+      deferCallsRef.current = false;
+
+      // Set visibility and load the model by FMGUID
+      viewer.setObjectDetailsVisibility(false);
+      viewer.setAvailableModelsByFmGuid(fmGuid);
 
       setState(prev => ({
         ...prev,
