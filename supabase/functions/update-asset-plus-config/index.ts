@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +12,48 @@ serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const { action, config } = await req.json();
+
+    if (action === "update-config") {
+      // Update secrets via Supabase Management API
+      // For now, we'll store non-secret config in a settings table
+      // and inform the user about which secrets need updating via Lovable
+      
+      const updates: string[] = [];
+      const secretsToUpdate: string[] = [];
+
+      if (config.keycloakUrl !== undefined && config.keycloakUrl !== "") {
+        secretsToUpdate.push("ASSET_PLUS_KEYCLOAK_URL");
+      }
+      if (config.apiUrl !== undefined && config.apiUrl !== "") {
+        secretsToUpdate.push("ASSET_PLUS_API_URL");
+      }
+      if (config.clientId !== undefined && config.clientId !== "") {
+        secretsToUpdate.push("ASSET_PLUS_CLIENT_ID");
+      }
+      if (config.clientSecret !== undefined && config.clientSecret !== "" && !config.clientSecret.includes("•")) {
+        secretsToUpdate.push("ASSET_PLUS_CLIENT_SECRET");
+      }
+      if (config.username !== undefined && config.username !== "") {
+        secretsToUpdate.push("ASSET_PLUS_USERNAME");
+      }
+      if (config.password !== undefined && config.password !== "" && !config.password.includes("•")) {
+        secretsToUpdate.push("ASSET_PLUS_PASSWORD");
+      }
+      if (config.apiKey !== undefined && config.apiKey !== "" && !config.apiKey.includes("•")) {
+        secretsToUpdate.push("ASSET_PLUS_API_KEY");
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Konfigurationen behöver uppdateras via Lovable secrets.",
+          secretsToUpdate,
+          instructions: "Använd Lovable för att uppdatera följande secrets: " + secretsToUpdate.join(", "),
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (action === "test-connection") {
       // Test the current Keycloak configuration
