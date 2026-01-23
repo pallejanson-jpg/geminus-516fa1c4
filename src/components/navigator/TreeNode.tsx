@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Plus, Eye } from "lucide-react";
+import { ChevronRight, Plus, Eye, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,9 +24,10 @@ type Props = {
   onToggle: (fmGuid: string) => void;
   onAddChild?: (parentNode: NavigatorNode) => void;
   onView?: (node: NavigatorNode) => void;
+  onOpen3D?: (node: NavigatorNode) => void;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D }: Props) {
   const label = node.commonName || node.name || "(namnlös)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
@@ -34,6 +35,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   // Determine which actions are available based on category
   const canAddChild = node.category === 'Building' || node.category === 'Building Storey';
   const canView = true; // All nodes can be viewed
+  const canOpen3D = true; // All nodes can potentially have 3D models
 
   // Get child count and appropriate label
   const childCount = node.children?.length || 0;
@@ -86,6 +88,26 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
 
         {/* Action buttons - visible on hover */}
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {canOpen3D && onOpen3D && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen3D(node);
+                  }}
+                  className="h-6 w-6"
+                  aria-label="Öppna 3D"
+                >
+                  <Box className="h-3.5 w-3.5 text-primary" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Visa i 3D</TooltipContent>
+            </Tooltip>
+          )}
           {canView && onView && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -142,6 +164,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               onToggle={onToggle}
               onAddChild={onAddChild}
               onView={onView}
+              onOpen3D={onOpen3D}
             />
           ))}
         </div>
