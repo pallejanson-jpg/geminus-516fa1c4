@@ -79,11 +79,44 @@ export async function fetchAssetPlusData(filter: AssetPlusFilter): Promise<any[]
   return items;
 }
 
-// Stubs for later migration (kept for parity with Firebase project).
-export async function createAssetPlusObject(_payload: any): Promise<any> {
-  throw new Error("createAssetPlusObject is not implemented yet");
+// Types for Asset+ object creation
+export interface AssetProperty {
+  name: string;
+  value: string | number | boolean;
+  dataType: number; // 0=String, 1=Int32, 2=Int64, 3=Decimal, 4=DateTime, 5=Bool
 }
 
+export interface CreateAssetPayload {
+  parentSpaceFmGuid: string;
+  designation: string;
+  commonName?: string;
+  properties?: AssetProperty[];
+}
+
+/**
+ * Create a new asset (ObjectType 4) in Asset+ via edge function.
+ * The asset will be linked to the specified parent Space.
+ */
+export async function createAssetPlusObject(payload: CreateAssetPayload): Promise<any> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-create", {
+    body: payload,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to create asset");
+  }
+
+  if (!data?.success) {
+    throw new Error(data?.error || "Unknown error creating asset");
+  }
+
+  return data.asset;
+}
+
+/**
+ * Update an existing asset in Asset+.
+ * @deprecated Not yet implemented
+ */
 export async function updateAssetPlus(_payload: any): Promise<any> {
   throw new Error("updateAssetPlus is not implemented yet");
 }

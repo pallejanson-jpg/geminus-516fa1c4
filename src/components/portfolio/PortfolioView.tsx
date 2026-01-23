@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { Search, Plus, LayoutGrid, List, Filter, Loader2 } from 'lucide-react';
+import { Search, LayoutGrid, List, Filter, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -101,17 +101,13 @@ const PortfolioView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-6">
+    <div className="h-full flex flex-col p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Portfolio</h1>
-          <p className="text-muted-foreground">Översikt av alla dina byggnader och fastigheter</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Portfolio</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Översikt av alla dina byggnader</p>
         </div>
-        <Button className="gap-2">
-          <Plus size={16} />
-          Lägg till fastighet
-        </Button>
       </div>
 
       {/* Filters */}
