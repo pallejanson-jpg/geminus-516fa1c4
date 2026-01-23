@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { Search, Plus, LayoutGrid, List, Filter } from 'lucide-react';
+import { Search, Plus, LayoutGrid, List, Filter, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,93 +10,52 @@ import { BUILDING_IMAGES } from '@/lib/constants';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
 
-// Mock data for demonstration
-const MOCK_FACILITIES: Facility[] = [
-  {
-    fmGuid: '1',
-    name: 'Kontorshus Centrum',
-    commonName: 'Kontorshus Centrum',
-    category: 'Building',
-    address: 'Storgatan 1, Stockholm',
-    image: BUILDING_IMAGES[0],
-    numberOfLevels: 8,
-    numberOfSpaces: 156,
-    area: 12500,
-  },
-  {
-    fmGuid: '2',
-    name: 'Kv. Björken',
-    commonName: 'Kv. Björken',
-    category: 'Building',
-    address: 'Björkvägen 23, Göteborg',
-    image: BUILDING_IMAGES[1],
-    numberOfLevels: 5,
-    numberOfSpaces: 84,
-    area: 7800,
-  },
-  {
-    fmGuid: '3',
-    name: 'Lagerlokaler Syd',
-    commonName: 'Lagerlokaler Syd',
-    category: 'Building',
-    address: 'Industrivägen 45, Malmö',
-    image: BUILDING_IMAGES[2],
-    numberOfLevels: 2,
-    numberOfSpaces: 12,
-    area: 15200,
-  },
-  {
-    fmGuid: '4',
-    name: 'Affärshus Norra',
-    commonName: 'Affärshus Norra',
-    category: 'Building',
-    address: 'Torggatan 8, Uppsala',
-    image: BUILDING_IMAGES[3],
-    numberOfLevels: 4,
-    numberOfSpaces: 42,
-    area: 5600,
-  },
-  {
-    fmGuid: '5',
-    name: 'Bostadshus Väst',
-    commonName: 'Bostadshus Väst',
-    category: 'Building',
-    address: 'Parkgatan 12, Linköping',
-    image: BUILDING_IMAGES[4],
-    numberOfLevels: 6,
-    numberOfSpaces: 72,
-    area: 8900,
-  },
-  {
-    fmGuid: '6',
-    name: 'Teknikhuset',
-    commonName: 'Teknikhuset',
-    category: 'Building',
-    address: 'Innovationsvägen 3, Stockholm',
-    image: BUILDING_IMAGES[0],
-    numberOfLevels: 10,
-    numberOfSpaces: 200,
-    area: 18500,
-  },
-];
-
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
 
+  // Convert navigatorTreeData (buildings) to Facility[] format
+  const facilities: Facility[] = useMemo(() => {
+    return navigatorTreeData.map((building, index) => {
+      // Count storeys and spaces
+      const storeys = building.children || [];
+      const totalSpaces = storeys.reduce((sum: number, storey: any) => {
+        return sum + (storey.children?.length || 0);
+      }, 0);
+      
+      // Calculate total area from spaces
+      const totalArea = allData
+        .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
+        .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
+
+      return {
+        fmGuid: building.fmGuid,
+        name: building.name,
+        commonName: building.commonName,
+        category: 'Building',
+        image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
+        numberOfLevels: storeys.length,
+        numberOfSpaces: totalSpaces,
+        area: totalArea,
+        address: building.attributes?.address || undefined,
+      };
+    });
+  }, [navigatorTreeData, allData]);
+
   // Filter facilities based on search and category
   const filteredFacilities = useMemo(() => {
-    return MOCK_FACILITIES.filter(facility => {
+    return facilities.filter(facility => {
       const matchesSearch = 
         (facility.name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (facility.commonName?.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (facility.address?.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesCategory = categoryFilter === 'all' || facility.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, categoryFilter]);
+  }, [facilities, searchQuery, categoryFilter]);
 
   // Handlers for FacilityLandingPage
   const handleClose = () => setSelectedFacility(null);
@@ -197,58 +156,74 @@ const PortfolioView: React.FC = () => {
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-2xl font-bold">{MOCK_FACILITIES.length}</p>
-            <p className="text-xs text-muted-foreground">Totalt fastigheter</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-2xl font-bold">
-              {MOCK_FACILITIES.reduce((sum, f) => sum + (typeof f.numberOfSpaces === 'number' ? f.numberOfSpaces : 0), 0)}
-            </p>
-            <p className="text-xs text-muted-foreground">Totalt rum</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-2xl font-bold">
-              {(MOCK_FACILITIES.reduce((sum, f) => sum + (f.area || 0), 0) / 1000).toFixed(0)}k m²
-            </p>
-            <p className="text-xs text-muted-foreground">Total area</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-2xl font-bold">{favorites.length}</p>
-            <p className="text-xs text-muted-foreground">Favoriter</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Facilities Grid */}
-      {filteredFacilities.length > 0 ? (
-        <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-          {filteredFacilities.map(facility => (
-            <FacilityCard 
-              key={facility.fmGuid} 
-              facility={facility} 
-              onClick={setSelectedFacility} 
-            />
-          ))}
+      {/* Loading state */}
+      {isLoadingData && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Laddar byggnader...</span>
         </div>
-      ) : (
-        <Card className="flex-1">
-          <CardContent className="flex flex-col items-center justify-center h-64 text-center">
-            <LayoutGrid className="h-12 w-12 text-muted-foreground mb-4" />
-            <CardTitle className="mb-2">Inga fastigheter hittades</CardTitle>
-            <CardDescription>
-              Prova att ändra dina sökfilter eller lägg till en ny fastighet
-            </CardDescription>
-          </CardContent>
-        </Card>
+      )}
+
+      {!isLoadingData && (
+        <>
+          {/* Stats Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="pt-4">
+                <p className="text-2xl font-bold">{facilities.length}</p>
+                <p className="text-xs text-muted-foreground">Totalt byggnader</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <p className="text-2xl font-bold">
+                  {facilities.reduce((sum, f) => sum + (typeof f.numberOfSpaces === 'number' ? f.numberOfSpaces : 0), 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">Totalt rum</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <p className="text-2xl font-bold">
+                  {facilities.reduce((sum, f) => sum + (f.area || 0), 0).toLocaleString()} m²
+                </p>
+                <p className="text-xs text-muted-foreground">Total area</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <p className="text-2xl font-bold">{favorites.length}</p>
+                <p className="text-xs text-muted-foreground">Favoriter</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Facilities Grid */}
+          {filteredFacilities.length > 0 ? (
+            <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+              {filteredFacilities.map(facility => (
+                <FacilityCard 
+                  key={facility.fmGuid} 
+                  facility={facility} 
+                  onClick={setSelectedFacility} 
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="flex-1">
+              <CardContent className="flex flex-col items-center justify-center h-64 text-center">
+                <LayoutGrid className="h-12 w-12 text-muted-foreground mb-4" />
+                <CardTitle className="mb-2">Inga byggnader hittades</CardTitle>
+                <CardDescription>
+                  {facilities.length === 0 
+                    ? 'Synkronisera data från Asset+ för att visa byggnader'
+                    : 'Prova att ändra dina sökfilter'
+                  }
+                </CardDescription>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

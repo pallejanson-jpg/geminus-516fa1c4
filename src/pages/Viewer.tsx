@@ -1,5 +1,6 @@
+import { useContext, useMemo } from "react";
 import { Box, Maximize2, RotateCcw, ZoomIn, ZoomOut, Layers } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,10 +9,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AppContext } from "@/context/AppContext";
+import AssetPlusViewer from "@/components/viewer/AssetPlusViewer";
 
 export default function Viewer() {
+  const { viewer3dFmGuid, setViewer3dFmGuid, navigatorTreeData } = useContext(AppContext);
+
+  // Get list of all buildings for the selector
+  const buildings = useMemo(() => {
+    return navigatorTreeData.map(building => ({
+      fmGuid: building.fmGuid,
+      name: building.commonName || building.name || 'Okänd byggnad',
+    }));
+  }, [navigatorTreeData]);
+
+  // Handle building selection change
+  const handleBuildingChange = (fmGuid: string) => {
+    setViewer3dFmGuid(fmGuid);
+  };
+
+  // Handle close action
+  const handleClose = () => {
+    setViewer3dFmGuid(null);
+  };
+
+  // If we have a selected FMGUID, show the Asset+ viewer
+  if (viewer3dFmGuid) {
+    return (
+      <div className="h-full p-6">
+        <AssetPlusViewer fmGuid={viewer3dFmGuid} onClose={handleClose} />
+      </div>
+    );
+  }
+
+  // Default view - building selector and placeholder
   return (
-    <div className="space-y-6 h-full">
+    <div className="space-y-6 h-full p-6">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -20,14 +53,23 @@ export default function Viewer() {
             Utforska fastigheter i 3D med BIM-data
           </p>
         </div>
-        <Select defaultValue="property-1">
+        <Select 
+          value={viewer3dFmGuid || ""} 
+          onValueChange={handleBuildingChange}
+        >
           <SelectTrigger className="w-[240px]">
-            <SelectValue placeholder="Välj fastighet" />
+            <SelectValue placeholder="Välj byggnad..." />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="property-1">Kontorshus Centrum</SelectItem>
-            <SelectItem value="property-2">Lagerlokaler Syd</SelectItem>
-            <SelectItem value="property-3">Kv. Björken</SelectItem>
+            {buildings.length === 0 ? (
+              <SelectItem value="none" disabled>Inga byggnader laddade</SelectItem>
+            ) : (
+              buildings.map((building) => (
+                <SelectItem key={building.fmGuid} value={building.fmGuid}>
+                  {building.name}
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -38,16 +80,16 @@ export default function Viewer() {
         <Card className="lg:col-span-3">
           <CardContent className="p-0">
             <div className="relative aspect-video w-full bg-muted rounded-lg overflow-hidden">
-              {/* Placeholder for 3D Viewer (xeokit integration point) */}
+              {/* Placeholder for 3D Viewer */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center space-y-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mx-auto">
                     <Box className="h-8 w-8 text-primary" />
                   </div>
                   <div>
-                    <p className="text-lg font-medium">3D-visare</p>
+                    <p className="text-lg font-medium">Välj en byggnad</p>
                     <p className="text-sm text-muted-foreground">
-                      xeokit BIM-visare integreras här
+                      Använd rullgardinsmenyn ovan eller klicka på 3D-ikonen i Navigator
                     </p>
                   </div>
                 </div>
@@ -55,24 +97,24 @@ export default function Viewer() {
 
               {/* Viewer Controls */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-2 border">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                   <ZoomIn className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                   <ZoomOut className="h-4 w-4" />
                 </Button>
                 <div className="w-px h-6 bg-border" />
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                   <RotateCcw className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
                   <Maximize2 className="h-4 w-4" />
                 </Button>
               </div>
 
               {/* Layer Toggle */}
               <div className="absolute top-4 right-4">
-                <Button variant="secondary" size="sm" className="gap-2">
+                <Button variant="secondary" size="sm" className="gap-2" disabled>
                   <Layers className="h-4 w-4" />
                   Lager
                 </Button>
@@ -83,49 +125,50 @@ export default function Viewer() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Model Info */}
+          {/* Instructions */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Modellinformation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Fastighet</p>
-                <p className="text-sm font-medium">Kontorshus Centrum</p>
+            <CardContent className="pt-6 space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
+                <Box className="h-6 w-6 text-primary" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Modelltyp</p>
-                <p className="text-sm font-medium">IFC 4.0</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Senast uppdaterad</p>
-                <p className="text-sm font-medium">2024-01-15</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Antal objekt</p>
-                <p className="text-sm font-medium">12,847</p>
-              </div>
+              <h3 className="font-semibold">Kom igång</h3>
+              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                <li>Välj en byggnad från menyn ovan</li>
+                <li>Eller klicka på 3D-ikonen (kub) i Navigator</li>
+                <li>3D-modellen laddas från Asset+</li>
+              </ol>
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
+          {/* Available Buildings */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Åtgärder</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Exportera vy
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Mät avstånd
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Lägg till anteckning
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Dela länk
-              </Button>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-3">Tillgängliga byggnader</h3>
+              {buildings.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Inga byggnader laddade. Synkronisera data från Asset+ för att visa byggnader.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {buildings.slice(0, 5).map((building) => (
+                    <Button
+                      key={building.fmGuid}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start text-left truncate"
+                      onClick={() => handleBuildingChange(building.fmGuid)}
+                    >
+                      <Box className="h-4 w-4 mr-2 shrink-0 text-primary" />
+                      <span className="truncate">{building.name}</span>
+                    </Button>
+                  ))}
+                  {buildings.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                      +{buildings.length - 5} fler byggnader
+                    </p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
