@@ -22,7 +22,7 @@ function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
 }
 
 export default function NavigatorView() {
-  const { navigatorTreeData, isLoadingData } = useContext(AppContext);
+  const { navigatorTreeData, isLoadingData, setActiveApp, setViewer3dFmGuid, setSelectedFacility } = useContext(AppContext);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
@@ -46,11 +46,30 @@ export default function NavigatorView() {
   }, []);
 
   const handleView = useCallback((node: NavigatorNode) => {
-    // Placeholder - navigate to detail view or open 3D viewer
-    toast.info(`Visa: ${node.commonName || node.name}`, {
-      description: `Kategori: ${node.category}`,
+    // Navigate to Portfolio view for buildings
+    if (node.category === 'Building') {
+      setSelectedFacility({
+        fmGuid: node.fmGuid,
+        name: node.name,
+        commonName: node.commonName,
+        category: node.category,
+      });
+      setActiveApp('portfolio');
+    } else {
+      toast.info(`Visa: ${node.commonName || node.name}`, {
+        description: `Kategori: ${node.category}`,
+      });
+    }
+  }, [setSelectedFacility, setActiveApp]);
+
+  const handleOpen3D = useCallback((node: NavigatorNode) => {
+    // Set the FMGUID and navigate to 3D viewer
+    setViewer3dFmGuid(node.fmGuid);
+    setActiveApp('viewer');
+    toast.success(`Laddar 3D-modell för "${node.commonName || node.name}"`, {
+      description: `FMGUID: ${node.fmGuid.substring(0, 8)}...`,
     });
-  }, []);
+  }, [setViewer3dFmGuid, setActiveApp]);
 
   return (
     <TooltipProvider>
@@ -84,6 +103,7 @@ export default function NavigatorView() {
                   onToggle={onToggle}
                   onAddChild={handleAddChild}
                   onView={handleView}
+                  onOpen3D={handleOpen3D}
                 />
               ))}
             </div>
