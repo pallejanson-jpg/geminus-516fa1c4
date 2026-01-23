@@ -84,34 +84,72 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         const spaces = items.filter(item => item.category === 'Space');
         const doors = items.filter(item => item.category === 'Door');
 
+        // Build door map (parent = inRoomFmGuid)
         const doorMap = new Map<string, any[]>();
         doors.forEach((door: any) => {
             const parentRoomGuid = door.inRoomFmGuid;
-            if (!doorMap.has(parentRoomGuid)) doorMap.set(parentRoomGuid, []);
-            doorMap.get(parentRoomGuid)!.push(door);
+            if (parentRoomGuid) {
+                if (!doorMap.has(parentRoomGuid)) doorMap.set(parentRoomGuid, []);
+                doorMap.get(parentRoomGuid)!.push(door);
+            }
         });
 
+        // Build space nodes with door children
         const spaceMap = new Map<string, NavigatorNode>();
         spaces.forEach((space: any) => {
             const children = (doorMap.get(space.fmGuid) || []) as NavigatorNode[];
             spaceMap.set(space.fmGuid, { ...space, children });
         });
 
+        // Build storey nodes
         const storeyMap = new Map<string, NavigatorNode>();
         storeys.forEach((storey: any) => {
             storeyMap.set(storey.fmGuid, { ...storey, children: [] });
         });
 
+        // Attach spaces to storeys
         spaceMap.forEach((space) => {
             const parentStorey = storeyMap.get((space as any).levelFmGuid);
             if (parentStorey) parentStorey.children!.push(space);
         });
 
+        // Build building map - either from actual Building items or synthesize from unique buildingFmGuid
         const buildingMap = new Map<string, NavigatorNode>();
-        buildings.forEach((building: any) => {
-            buildingMap.set(building.fmGuid, { ...building, children: [] });
-        });
+        
+        if (buildings.length > 0) {
+            // Use actual building records
+            buildings.forEach((building: any) => {
+                buildingMap.set(building.fmGuid, { ...building, children: [] });
+            });
+        } else {
+            // Synthesize buildings from unique buildingFmGuid values in storeys
+            // Use attributes from first storey or item to get building name
+            const buildingInfo = new Map<string, { commonName?: string; name?: string }>();
+            
+            [...storeys, ...spaces, ...doors].forEach((item: any) => {
+                const bguid = item.buildingFmGuid;
+                if (bguid && !buildingInfo.has(bguid)) {
+                    // Try to get building name from attributes
+                    const attrs = item.attributes || {};
+                    buildingInfo.set(bguid, {
+                        commonName: attrs.buildingCommonName || attrs.buildingDesignation || undefined,
+                        name: attrs.buildingDesignation || undefined,
+                    });
+                }
+            });
 
+            buildingInfo.forEach((info, bguid) => {
+                buildingMap.set(bguid, {
+                    fmGuid: bguid,
+                    category: 'Building',
+                    commonName: info.commonName || info.name || `Byggnad ${bguid.substring(0, 8)}`,
+                    name: info.name,
+                    children: [],
+                });
+            });
+        }
+
+        // Attach storeys to buildings
         storeyMap.forEach((storey) => {
             const parentBuilding = buildingMap.get((storey as any).buildingFmGuid);
             if (parentBuilding) parentBuilding.children!.push(storey);
