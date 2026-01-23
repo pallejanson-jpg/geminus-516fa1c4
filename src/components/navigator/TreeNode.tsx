@@ -33,7 +33,8 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const isOpen = expanded.has(node.fmGuid);
 
   // Determine which actions are available based on category
-  const canAddChild = node.category === 'Building' || node.category === 'Building Storey';
+  // Plus button only on Space level (to create objectType 4)
+  const canAddChild = node.category === 'Space';
   const canView = true; // All nodes can be viewed
   const canOpen3D = true; // All nodes can potentially have 3D models
 
@@ -145,9 +146,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                   <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">
-                {node.category === 'Building' ? 'Lägg till våningsplan' : 'Lägg till rum'}
-              </TooltipContent>
+              <TooltipContent side="top">Lägg till objekt</TooltipContent>
             </Tooltip>
           )}
         </div>
