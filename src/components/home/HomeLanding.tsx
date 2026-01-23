@@ -81,39 +81,7 @@ export default function HomeLanding() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card className="bg-card/60">
-          <CardHeader>
-            <CardTitle className="text-lg">Snabbåtgärder</CardTitle>
-            <CardDescription>Vanliga uppgifter</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {Object.entries(DEFAULT_APP_CONFIGS)
-                .slice(0, 4)
-                .map(([key, cfg]) => {
-                  const IconComp = cfg.icon;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted"
-                      onClick={() =>
-                        toast({
-                          title: cfg.label,
-                          description: "Koppla den här knappen till rätt modul när du vill (Portfolio/Karta/Viewer).",
-                        })
-                      }
-                    >
-                      <IconComp className="h-5 w-5 text-primary" />
-                      <span className="text-sm font-medium">{cfg.label}</span>
-                    </button>
-                  );
-                })}
-            </div>
-          </CardContent>
-        </Card>
-
+      <section>
         <Card className="bg-card/60">
           <CardHeader>
             <CardTitle className="text-lg">Mina favoriter</CardTitle>
