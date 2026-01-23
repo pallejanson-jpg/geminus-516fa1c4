@@ -222,7 +222,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
               <div 
                 ref={viewerContainerRef}
                 id="AssetPlusViewer"
-                className="relative aspect-video w-full bg-muted rounded-lg overflow-hidden"
+                className="relative aspect-video w-full bg-muted rounded-lg overflow-hidden dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
                 style={{
                   background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
                 }}
@@ -364,7 +364,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             <div 
               ref={viewerContainerRef}
               id="AssetPlusViewer"
-              className="relative aspect-video w-full rounded-lg overflow-hidden dx-viewport"
+              className="relative aspect-video w-full rounded-lg overflow-hidden dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
               style={{
                 background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
               }}
