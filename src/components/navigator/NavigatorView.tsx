@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { TreeNode, type NavigatorNode } from "@/components/navigator/TreeNode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { AddAssetDialog } from "./AddAssetDialog";
 
 function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   if (!q.trim()) return nodes;
@@ -22,9 +23,13 @@ function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
 }
 
 export default function NavigatorView() {
-  const { navigatorTreeData, isLoadingData, setActiveApp, setViewer3dFmGuid, setSelectedFacility } = useContext(AppContext);
+  const { navigatorTreeData, isLoadingData, setActiveApp, setViewer3dFmGuid, setSelectedFacility, refreshInitialData } = useContext(AppContext);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  
+  // Add Asset Dialog state
+  const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
+  const [selectedParentNode, setSelectedParentNode] = useState<NavigatorNode | null>(null);
 
   const visibleTree = useMemo(() => filterTree(navigatorTreeData, query), [navigatorTreeData, query]);
 
@@ -38,12 +43,18 @@ export default function NavigatorView() {
   };
 
   const handleAddChild = useCallback((parentNode: NavigatorNode) => {
-    // Placeholder - will be implemented when Asset+ write API is available
-    // For Space nodes, this creates objectType 4
-    toast.info(`Lägg till objekt i "${parentNode.commonName || parentNode.name}"`, {
-      description: "Skapar objekttyp 4. Denna funktion kommer snart.",
-    });
+    // Open the Add Asset dialog with the parent node (Space)
+    setSelectedParentNode(parentNode);
+    setAddAssetDialogOpen(true);
   }, []);
+
+  const handleAssetCreated = useCallback(() => {
+    // Refresh data after asset creation
+    refreshInitialData?.();
+    toast.success('Data uppdateras...', {
+      description: 'Synkronisering kan ta en stund.',
+    });
+  }, [refreshInitialData]);
 
   const handleView = useCallback((node: NavigatorNode) => {
     // Navigate to Portfolio view for buildings
@@ -73,7 +84,7 @@ export default function NavigatorView() {
 
   return (
     <TooltipProvider>
-      <section className="h-full w-full p-4">
+      <section className="h-full w-full p-2 sm:p-4">
         <header className="mb-3">
           <h1 className="text-lg font-semibold text-foreground">Navigator</h1>
         </header>
@@ -110,6 +121,14 @@ export default function NavigatorView() {
           )}
         </div>
       </section>
+
+      {/* Add Asset Dialog */}
+      <AddAssetDialog
+        open={addAssetDialogOpen}
+        onOpenChange={setAddAssetDialogOpen}
+        parentNode={selectedParentNode}
+        onAssetCreated={handleAssetCreated}
+      />
     </TooltipProvider>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo } from 'react';
 import Map, { Marker, Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
-import { Building2, MapPin, Maximize2, Layers, Loader2 } from 'lucide-react';
+import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,70 @@ import { supabase } from '@/integrations/supabase/client';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 type MapFacility = Facility & { lat: number; lng: number };
+
+// Collapsible building sidebar component for mobile responsiveness
+const BuildingSidebar: React.FC<{
+  facilities: MapFacility[];
+  selectedMarker: MapFacility | null;
+  onMarkerClick: (facility: MapFacility) => void;
+}> = ({ facilities, selectedMarker, onMarkerClick }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="absolute top-4 left-4 z-10 w-[calc(100%-2rem)] sm:w-72 max-h-[calc(100%-2rem)]">
+      <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
+        <CardHeader 
+          className="pb-2 cursor-pointer sm:cursor-default"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Building2 size={16} className="text-primary" />
+              Byggnader ({facilities.length})
+            </span>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 sm:hidden"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+            >
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent 
+          className={`overflow-y-auto space-y-2 pt-0 transition-all duration-200 ${
+            isExpanded ? 'max-h-60' : 'max-h-0 sm:max-h-80'
+          } ${!isExpanded && 'hidden sm:block'}`}
+        >
+          {facilities.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              Inga byggnader laddade
+            </p>
+          ) : (
+            facilities.map((facility) => (
+              <div
+                key={facility.fmGuid}
+                onClick={() => onMarkerClick(facility)}
+                className={`p-2 rounded-md cursor-pointer transition-colors ${
+                  selectedMarker?.fmGuid === facility.fmGuid
+                    ? 'bg-primary/20 border border-primary/50'
+                    : 'bg-muted/50 hover:bg-muted'
+                }`}
+              >
+                <p className="text-sm font-medium truncate">{facility.commonName || facility.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{facility.address}</p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
 const MapView: React.FC = () => {
   const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
@@ -165,39 +229,12 @@ const MapView: React.FC = () => {
         </Button>
       </div>
 
-      {/* Facility List Sidebar */}
-      <div className="absolute top-4 left-4 z-10 w-72 max-h-[calc(100%-2rem)] overflow-hidden">
-        <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Building2 size={16} className="text-primary" />
-              Byggnader ({mapFacilities.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="max-h-80 overflow-y-auto space-y-2 pt-0">
-            {mapFacilities.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Inga byggnader laddade
-              </p>
-            ) : (
-              mapFacilities.map((facility) => (
-                <div
-                  key={facility.fmGuid}
-                  onClick={() => handleMarkerClick(facility)}
-                  className={`p-2 rounded-md cursor-pointer transition-colors ${
-                    selectedMarker?.fmGuid === facility.fmGuid
-                      ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-muted/50 hover:bg-muted'
-                  }`}
-                >
-                  <p className="text-sm font-medium truncate">{facility.commonName || facility.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{facility.address}</p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Facility List Sidebar - Collapsible on mobile */}
+      <BuildingSidebar 
+        facilities={mapFacilities}
+        selectedMarker={selectedMarker}
+        onMarkerClick={handleMarkerClick}
+      />
 
       {/* Map */}
       <Map
