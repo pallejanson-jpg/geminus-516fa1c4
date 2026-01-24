@@ -110,6 +110,33 @@ export type Database = {
         }
         Relationships: []
       }
+      building_settings: {
+        Row: {
+          created_at: string
+          fm_guid: string
+          id: string
+          is_favorite: boolean
+          ivion_site_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fm_guid: string
+          id?: string
+          is_favorite?: boolean
+          ivion_site_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fm_guid?: string
+          id?: string
+          is_favorite?: boolean
+          ivion_site_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
