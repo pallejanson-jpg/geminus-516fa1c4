@@ -29,19 +29,38 @@ const PortfolioView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
 
+  // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
+  const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
+    if (!attributes) return 0;
+    for (const key of Object.keys(attributes)) {
+      if (key.toLowerCase().startsWith('nta')) {
+        const ntaObj = attributes[key];
+        if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
+          return ntaObj.value;
+        }
+      }
+    }
+    return 0;
+  };
+
   // Convert navigatorTreeData (buildings) to Facility[] format
   const facilities: Facility[] = useMemo(() => {
     return navigatorTreeData.map((building, index) => {
-      // Count storeys and spaces
-      const storeys = building.children || [];
-      const totalSpaces = storeys.reduce((sum: number, storey: any) => {
-        return sum + (storey.children?.length || 0);
-      }, 0);
+      // Get spaces for this building from allData
+      const buildingSpaces = allData.filter(
+        (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid
+      );
       
-      // Calculate total area from spaces
-      const totalArea = allData
-        .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
-        .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
+      // Get storeys for this building from allData (more reliable than tree children)
+      const buildingStoreys = allData.filter(
+        (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
+      );
+      
+      // Calculate total area by summing NTA from each space's attributes
+      const totalArea = buildingSpaces.reduce((sum: number, space: any) => {
+        const nta = extractNtaFromAttributes(space.attributes);
+        return sum + nta;
+      }, 0);
 
       return {
         fmGuid: building.fmGuid,
@@ -49,9 +68,9 @@ const PortfolioView: React.FC = () => {
         commonName: building.commonName,
         category: 'Building',
         image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
-        numberOfLevels: storeys.length,
-        numberOfSpaces: totalSpaces,
-        area: totalArea,
+        numberOfLevels: buildingStoreys.length,
+        numberOfSpaces: buildingSpaces.length,
+        area: Math.round(totalArea * 100) / 100, // Round to 2 decimals
         address: building.attributes?.address || undefined,
         complexCommonName: building.complexCommonName || undefined,
       };
