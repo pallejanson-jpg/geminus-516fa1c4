@@ -7,10 +7,8 @@ import {
   Maximize,
   Box,
   Eye,
-  EyeOff,
   Ruler,
   Search,
-  Settings2,
   Layers,
   Focus,
   Scissors,
@@ -18,37 +16,37 @@ import {
   Grid3X3,
   ChevronUp,
   ChevronDown,
+  Cuboid,
+  SquareDashed,
+  Map,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onToggleNavCube?: (visible: boolean) => void;
+  onToggleMinimap?: (visible: boolean) => void;
   className?: string;
 }
 
 type ViewerTool = 'select' | 'measure' | 'slicer' | null;
 type NavMode = 'orbit' | 'firstPerson' | 'planView';
+type ViewMode = '3d' | '2d';
 
 /**
  * Custom toolbar for the Asset+ 3D Viewer
  * Centered at the bottom with all viewer controls
  */
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, className }) => {
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, onToggleMinimap, className }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
+  const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [showSpaces, setShowSpaces] = useState(true);
   const [showNavCube, setShowNavCube] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Get AssetView reference
@@ -152,6 +150,59 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
       navCubeCanvas.style.display = newValue ? 'block' : 'none';
     }
   }, [showNavCube, onToggleNavCube]);
+
+  const handleToggleMinimap = useCallback(() => {
+    const newValue = !showMinimap;
+    setShowMinimap(newValue);
+    onToggleMinimap?.(newValue);
+  }, [showMinimap, onToggleMinimap]);
+
+  // Switch between 3D and 2D (top-down) view
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    const viewer = getXeokitViewer();
+    if (!viewer) return;
+
+    setViewMode(mode);
+    
+    if (mode === '2d') {
+      // Switch to top-down orthographic view
+      const camera = viewer.camera;
+      const scene = viewer.scene;
+      const aabb = scene?.getAABB?.();
+      
+      if (camera && aabb) {
+        // Calculate center and extent
+        const centerX = (aabb[0] + aabb[3]) / 2;
+        const centerY = (aabb[1] + aabb[4]) / 2;
+        const centerZ = (aabb[2] + aabb[5]) / 2;
+        const height = Math.max(aabb[3] - aabb[0], aabb[5] - aabb[2]) * 1.5;
+        
+        // Set camera to look straight down
+        viewer.cameraFlight.flyTo({
+          eye: [centerX, centerY + height, centerZ],
+          look: [centerX, centerY, centerZ],
+          up: [0, 0, -1],
+          duration: 0.5,
+          orthoScale: height
+        });
+        
+        // Switch to orthographic projection
+        camera.projection = 'ortho';
+      }
+    } else {
+      // Switch back to 3D perspective view
+      const camera = viewer.camera;
+      if (camera) {
+        camera.projection = 'perspective';
+        
+        // Reset to orbit view
+        const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+        if (assetView) {
+          assetView.viewFit(undefined, true);
+        }
+      }
+    }
+  }, [getXeokitViewer, viewerRef]);
 
   const handleToggleXray = useCallback(() => {
     const viewer = getXeokitViewer();
@@ -379,6 +430,39 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
 
         <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
 
+        {/* View Mode: 3D/2D */}
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={viewMode === '3d' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => handleViewModeChange('3d')}
+              >
+                <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">3D-vy</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={viewMode === '2d' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => handleViewModeChange('2d')}
+              >
+                <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">2D-vy (toppvy)</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+
         {/* View Options */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <Tooltip>
@@ -421,6 +505,20 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Visa/dölj navigeringskub</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={showMinimap ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={handleToggleMinimap}
+              >
+                <Map className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Visa/dölj minimap</TooltipContent>
           </Tooltip>
         </div>
 
