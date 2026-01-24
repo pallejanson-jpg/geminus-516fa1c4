@@ -152,8 +152,8 @@ export default function GunnarChat({ open, onClose }: GunnarChatProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-background shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+      <div className="flex h-[92vh] sm:h-[90vh] w-full max-w-2xl flex-col rounded-t-xl sm:rounded-xl border border-border bg-background shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-3">
