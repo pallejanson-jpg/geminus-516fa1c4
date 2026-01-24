@@ -76,7 +76,7 @@ export default function NavigatorView() {
   const handleOpen3D = useCallback((node: NavigatorNode) => {
     // Set the FMGUID and navigate to 3D viewer
     setViewer3dFmGuid(node.fmGuid);
-    setActiveApp('viewer');
+    setActiveApp('assetplus_viewer');
     toast.success(`Laddar 3D-modell för "${node.commonName || node.name}"`, {
       description: `FMGUID: ${node.fmGuid.substring(0, 8)}...`,
     });
