@@ -6,6 +6,7 @@ import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
+import Viewer from "@/pages/Viewer";
 
 // Lazy load MapView to improve initial load time
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -33,13 +34,10 @@ const MainContent: React.FC = () => {
             case 'navigation':
                 return <NavigatorView />;
             case 'assetplus_viewer':
-                return (
-                    <PlaceholderView 
-                        title="3D Viewer" 
-                        icon={<Cuboid className="h-8 w-8 text-primary" />}
-                        description="BIM-visare med xeokit för IFC-modeller"
-                    />
-                );
+                return <Viewer />;
+            case 'viewer':
+                // Backwards-compatible key used by Navigator
+                return <Viewer />;
             case 'insights':
                 return (
                     <PlaceholderView 

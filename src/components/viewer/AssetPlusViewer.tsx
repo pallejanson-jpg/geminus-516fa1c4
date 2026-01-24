@@ -31,6 +31,19 @@ interface ViewerState {
 
 type ModelFilter = 'all' | 'a-prefix' | 'buildings-only';
 
+type InitStep =
+  | 'idle'
+  | 'wait_dom'
+  | 'fetch_token'
+  | 'fetch_config'
+  | 'check_script'
+  | 'mount_viewer'
+  | 'request_models'
+  | 'ready'
+  | 'error';
+
+type ModelLoadState = 'idle' | 'requested' | 'loaded';
+
 const MODEL_FILTERS: { value: ModelFilter; label: string; description: string }[] = [
   { value: 'all', label: 'Alla modeller', description: 'Visa alla tillgängliga modeller' },
   { value: 'a-prefix', label: 'Modeller (a-prefix)', description: 'Modeller som börjar med "a"' },
@@ -68,6 +81,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     error: null,
     modelInfo: null,
   });
+
+  const [initStep, setInitStep] = useState<InitStep>('idle');
+  const [modelLoadState, setModelLoadState] = useState<ModelLoadState>('idle');
   
   const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
@@ -347,6 +363,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
     console.log("doDisplayFmGuid:", fmGuidToShow);
 
+    setModelLoadState('requested');
+    setInitStep('request_models');
+
     deferredFmGuidForDisplayRef.current = fmGuidToShow;
     deferredDisplayActionForDisplayRef.current = displayAction;
 
@@ -390,6 +409,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const handleAllModelsLoaded = useCallback(() => {
     console.log("allModelsLoadedCallback");
 
+    setModelLoadState('loaded');
+    setInitStep('ready');
+
     if (deferredFmGuidForDisplayRef.current) {
       console.log("allModelsLoadedCallback - got an FMGUID to look at");
       const fmGuidToShow = deferredFmGuidForDisplayRef.current;
@@ -414,11 +436,25 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
   const initializeViewer = useCallback(async () => {
-    if (!viewerContainerRef.current) return;
+    // Wait one frame so refs are attached (critical: otherwise init silently never runs)
+    setInitStep('wait_dom');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    if (!viewerContainerRef.current) {
+      setInitStep('error');
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: '3D-container saknas i DOM. Försök igen eller ladda om sidan.',
+      }));
+      return;
+    }
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
+    setModelLoadState('idle');
 
     try {
+      setInitStep('fetch_token');
       // Fetch Asset+ access token via edge function
       const { data: tokenData, error: tokenError } = await supabase.functions.invoke('asset-plus-query', {
         body: { action: 'getToken' }
@@ -437,6 +473,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       accessTokenRef.current = accessToken;
       console.log("AssetPlusViewer: Access token received");
 
+      setInitStep('check_script');
       // Check if assetplusviewer is available globally
       const assetplusviewer = (window as any).assetplusviewer;
       
@@ -444,6 +481,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         throw new Error('Asset+ 3D Viewer-paketet är inte laddat. Kontrollera att /lib/assetplus/assetplusviewer.umd.min.js är inkluderat.');
       }
 
+      setInitStep('fetch_config');
       // Get API configuration
       const { data: configData } = await supabase.functions.invoke('asset-plus-query', {
         body: { action: 'getConfig' }
@@ -454,6 +492,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
       console.log("AssetPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
 
+      setInitStep('mount_viewer');
       // Initialize the viewer following EXACT Asset+ external_viewer.html pattern
       const viewer = await assetplusviewer(
         baseUrl,  // URL to the API Backend
@@ -526,6 +565,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
     } catch (error) {
       console.error('Failed to initialize 3D viewer:', error);
+      setInitStep('error');
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -578,24 +618,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     }
     deferCallsRef.current = true;
     setState(prev => ({ ...prev, isInitialized: false }));
+    setInitStep('idle');
+    setModelLoadState('idle');
   };
-
-  // Show loading state
-  if (state.isLoading) {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 flex items-center justify-center bg-muted rounded-lg">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-            <div>
-              <p className="text-lg font-medium">Laddar 3D-modell...</p>
-              <p className="text-sm text-muted-foreground">FMGUID: {fmGuid.substring(0, 8)}...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Model filter dropdown
   const FilterDropdown = () => (
@@ -626,8 +651,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     </DropdownMenu>
   );
 
-  // Show error state with placeholder
-  if (state.error || !state.isInitialized) {
+  // Show error state
+  if (state.error) {
     return (
       <div className="h-full flex flex-col p-2 sm:p-4">
         {/* Header */}
@@ -705,6 +730,32 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                   background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
                 }}
               />
+
+              {/* Status overlay (shows while init is running and while models are loading) */}
+              {(!state.isInitialized || state.isLoading || initStep !== 'ready') && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+                  <div className="max-w-md w-[92%] sm:w-[420px] rounded-lg border bg-card p-4 sm:p-5">
+                    <div className="flex items-start gap-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="font-medium">Initierar 3D-visning</p>
+                        <p className="text-sm text-muted-foreground">
+                          Steg: {initStep === 'idle' ? 'startar' : initStep.replace('_', ' ')} · Modeller: {modelLoadState}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                      <div>• Hämtar token och konfiguration från backend</div>
+                      <div>• Monterar viewer-scriptet i sidan</div>
+                      <div>• Begär modeller/XKT från Asset+</div>
+                      <div className="pt-1">
+                        Om detta fastnar på <span className="font-medium">request models</span> betyder det oftast att inga XKT/modeller hittas för FMGUID eller att API-miljön inte matchar.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Viewer Controls */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
@@ -744,13 +795,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <span className="text-muted-foreground">Namn:</span>
-                <span className="font-medium truncate">{state.modelInfo?.name}</span>
+                <span className="font-medium truncate">{state.modelInfo?.name || '—'}</span>
                 <span className="text-muted-foreground">Format:</span>
-                <span className="font-medium">{state.modelInfo?.type}</span>
+                <span className="font-medium">{state.modelInfo?.type || '—'}</span>
                 <span className="text-muted-foreground">Kategori:</span>
                 <span className="font-medium">{assetData?.category || '-'}</span>
                 <span className="text-muted-foreground">Filter:</span>
                 <span className="font-medium">{MODEL_FILTERS.find(f => f.value === modelFilter)?.label}</span>
+                <span className="text-muted-foreground">Status:</span>
+                <span className="font-medium">{initStep === 'ready' ? 'Klar' : 'Laddar...'}</span>
               </div>
             </CardContent>
           </Card>
