@@ -78,7 +78,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
                                 className={`flex-col !h-auto !w-auto !p-2 ${activeApp === 'map' ? 'text-primary' : t.textSec}`}
                             >
                                 <Globe size={22} />
-                                <span className="text-[10px] mt-1">Karta</span>
+                                <span className="text-[10px] mt-1">Map</span>
                             </AppButton>
                         </div>
                         

@@ -21,16 +21,16 @@ const BuildingSidebar: React.FC<{
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="absolute top-4 left-4 z-10 w-[calc(100%-2rem)] sm:w-72 max-h-[calc(100%-2rem)]">
+    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-1.5rem)] sm:max-h-[calc(100%-2rem)]">
       <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
         <CardHeader 
-          className="pb-2 cursor-pointer sm:cursor-default"
+          className="pb-2 cursor-pointer sm:cursor-default p-3 sm:p-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <CardTitle className="text-sm flex items-center justify-between">
+          <CardTitle className="text-xs sm:text-sm flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Building2 size={16} className="text-primary" />
-              Byggnader ({facilities.length})
+              <Building2 size={14} className="sm:w-4 sm:h-4 text-primary" />
+              Buildings ({facilities.length})
             </span>
             <Button 
               variant="ghost" 
@@ -46,13 +46,13 @@ const BuildingSidebar: React.FC<{
           </CardTitle>
         </CardHeader>
         <CardContent 
-          className={`overflow-y-auto space-y-2 pt-0 transition-all duration-200 ${
-            isExpanded ? 'max-h-60' : 'max-h-0 sm:max-h-80'
+          className={`overflow-y-auto space-y-2 pt-0 px-3 sm:px-4 pb-3 sm:pb-4 transition-all duration-200 ${
+            isExpanded ? 'max-h-48 sm:max-h-60' : 'max-h-0 sm:max-h-80'
           } ${!isExpanded && 'hidden sm:block'}`}
         >
           {facilities.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Inga byggnader laddade
+            <p className="text-xs sm:text-sm text-muted-foreground py-4 text-center">
+              No buildings loaded
             </p>
           ) : (
             facilities.map((facility) => (
@@ -65,8 +65,8 @@ const BuildingSidebar: React.FC<{
                     : 'bg-muted/50 hover:bg-muted'
                 }`}
               >
-                <p className="text-sm font-medium truncate">{facility.commonName || facility.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{facility.address}</p>
+                <p className="text-xs sm:text-sm font-medium truncate">{facility.commonName || facility.name}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{facility.address}</p>
               </div>
             ))
           )}
@@ -131,18 +131,18 @@ const MapView: React.FC = () => {
         
         if (error) {
           console.error('Error fetching Mapbox token:', error);
-          setError('Kunde inte hämta karttoken');
+          setError('Could not fetch map token');
           return;
         }
         
         if (data?.token) {
           setMapboxToken(data.token);
         } else {
-          setError('Mapbox token är inte konfigurerad');
+          setError('Mapbox token is not configured');
         }
       } catch (err) {
         console.error('Failed to fetch Mapbox token:', err);
-        setError('Kunde inte ansluta till servern');
+        setError('Could not connect to server');
       } finally {
         setIsLoading(false);
       }
@@ -177,10 +177,10 @@ const MapView: React.FC = () => {
   // Loading state
   if (isLoading || isLoadingData) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Laddar karta...</p>
+          <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading map...</p>
         </div>
       </div>
     );
@@ -189,17 +189,17 @@ const MapView: React.FC = () => {
   // Error state
   if (error || !mapboxToken) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
               <MapPin className="text-destructive" />
-              {error || 'Mapbox Token saknas'}
+              {error || 'Mapbox Token Missing'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">
-              Kontakta administratören för att konfigurera kartfunktionen.
+            <p className="text-sm text-muted-foreground">
+              Contact the administrator to configure the map functionality.
             </p>
           </CardContent>
         </Card>
@@ -210,22 +210,22 @@ const MapView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full relative">
       {/* Map Controls */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+      <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-10 flex flex-col gap-2">
         <Button
           variant="secondary"
           size="icon"
           onClick={toggleMapStyle}
-          className="bg-card/90 backdrop-blur-sm shadow-lg"
+          className="h-8 w-8 sm:h-9 sm:w-9 bg-card/90 backdrop-blur-sm shadow-lg"
         >
-          <Layers size={18} />
+          <Layers size={16} className="sm:w-[18px] sm:h-[18px]" />
         </Button>
         <Button
           variant="secondary"
           size="icon"
           onClick={() => setViewState({ latitude: 59.0, longitude: 15.0, zoom: 4.5 })}
-          className="bg-card/90 backdrop-blur-sm shadow-lg"
+          className="h-8 w-8 sm:h-9 sm:w-9 bg-card/90 backdrop-blur-sm shadow-lg"
         >
-          <Maximize2 size={18} />
+          <Maximize2 size={16} className="sm:w-[18px] sm:h-[18px]" />
         </Button>
       </div>
 
@@ -260,13 +260,13 @@ const MapView: React.FC = () => {
             }}
           >
             <div
-              className={`p-2 rounded-full cursor-pointer transition-all ${
+              className={`p-1.5 sm:p-2 rounded-full cursor-pointer transition-all ${
                 selectedMarker?.fmGuid === facility.fmGuid
                   ? 'bg-primary scale-125 shadow-lg'
                   : 'bg-primary/80 hover:bg-primary hover:scale-110'
               }`}
             >
-              <Building2 size={16} className="text-primary-foreground" />
+              <Building2 size={14} className="sm:w-4 sm:h-4 text-primary-foreground" />
             </div>
           </Marker>
         ))}
@@ -287,26 +287,26 @@ const MapView: React.FC = () => {
                   <img
                     src={selectedMarker.image}
                     alt={selectedMarker.name}
-                    className="w-full h-24 object-cover rounded-t-md"
+                    className="w-full h-20 sm:h-24 object-cover rounded-t-md"
                   />
                 )}
-                <div className="p-3">
-                  <h3 className="font-semibold text-foreground">{selectedMarker.commonName || selectedMarker.name}</h3>
-                  <p className="text-xs text-muted-foreground mb-2">{selectedMarker.address}</p>
-                  <div className="flex gap-2 mb-3">
-                    <Badge variant="secondary" className="text-xs">
-                      {selectedMarker.numberOfLevels} våningar
+                <div className="p-2 sm:p-3">
+                  <h3 className="font-semibold text-sm text-foreground">{selectedMarker.commonName || selectedMarker.name}</h3>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mb-2">{selectedMarker.address}</p>
+                  <div className="flex gap-2 mb-2 sm:mb-3">
+                    <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                      {selectedMarker.numberOfLevels} floors
                     </Badge>
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-[10px] sm:text-xs">
                       {selectedMarker.area?.toLocaleString()} m²
                     </Badge>
                   </div>
                   <Button
                     size="sm"
-                    className="w-full"
+                    className="w-full text-xs sm:text-sm"
                     onClick={() => handleOpenFacility(selectedMarker)}
                   >
-                    Visa detaljer
+                    View details
                   </Button>
                 </div>
               </CardContent>

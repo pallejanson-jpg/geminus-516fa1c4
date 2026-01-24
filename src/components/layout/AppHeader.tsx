@@ -68,19 +68,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
     const viewButtons = [
         { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
-        { key: 'map', mode: undefined, icon: Globe, label: 'Karta' },
+        { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
         { key: 'navigation', mode: undefined, icon: Network, label: 'Navigator' },
         { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D Viewer' },
     ];
 
     return (
-        <header className={`sticky top-0 z-30 h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-4 gap-4`}>
+        <header className={`sticky top-0 z-30 h-14 sm:h-16 ${t.bgSec} border-b ${t.border} flex items-center justify-between px-2 sm:px-4 gap-2 sm:gap-4`}>
             {/* Left section */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
                 <AppButton 
                     onClick={onToggleMobileMenu} 
                     variant="ghost" 
-                    className="md:hidden h-10 w-10"
+                    className="md:hidden h-9 w-9 sm:h-10 sm:w-10"
                 >
                     <MenuIcon size={20} />
                 </AppButton>
@@ -111,13 +111,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
 
             {/* Center - Search */}
-            <div ref={searchRef} className="flex-1 max-w-md relative">
+            <div ref={searchRef} className="flex-1 max-w-xs sm:max-w-md relative">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Sök byggnader, rum, tillgångar..."
-                        className="pl-10 w-full"
+                        placeholder="Search buildings, rooms, assets..."
+                        className="pl-10 w-full text-sm"
                         value={globalSearch}
                         onChange={(e) => setGlobalSearch(e.target.value)}
                         onFocus={() => setIsSearchFocused(true)}
@@ -129,12 +129,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
 
             {/* Right section */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
                 <AppButton
                     onClick={() => setTheme(isLight ? 'dark' : 'light')}
                     variant="ghost"
-                    className="h-10 w-10"
-                    title={isLight ? 'Mörkt läge' : 'Ljust läge'}
+                    className="h-9 w-9 sm:h-10 sm:w-10"
+                    title={isLight ? 'Dark mode' : 'Light mode'}
                 >
                     {isLight ? <Moon size={18} /> : <Sun size={18} />}
                 </AppButton>
@@ -142,8 +142,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
-                    className="h-10 w-10"
-                    title="Hjälpcenter"
+                    className="hidden sm:flex h-10 w-10"
+                    title="Help Center"
                 >
                     <HelpCircle size={18} />
                 </AppButton>
@@ -151,7 +151,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-muted transition-colors">
-                            <Avatar className="h-8 w-8">
+                            <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                                 <AvatarImage src="" />
                                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                                     U
@@ -161,27 +161,27 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
                         <div className="px-2 py-1.5">
-                            <p className="text-sm font-medium">Användare</p>
+                            <p className="text-sm font-medium">User</p>
                             <p className="text-xs text-muted-foreground">user@example.com</p>
                         </div>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem>
                             <UserIcon className="mr-2 h-4 w-4" />
-                            Profil
+                            Profile
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
                             <Server className="mr-2 h-4 w-4" />
-                            API-inställningar
+                            API Settings
                         </DropdownMenuItem>
                         <DropdownMenuItem>
                             <Settings className="mr-2 h-4 w-4" />
-                            Inställningar
+                            Settings
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
-                            onClick={() => toast({ title: "Logga ut", description: "Autentisering kommer snart med Lovable Cloud" })}
+                            onClick={() => toast({ title: "Sign Out", description: "Authentication coming soon with Lovable Cloud" })}
                         >
-                            Logga ut
+                            Sign Out
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

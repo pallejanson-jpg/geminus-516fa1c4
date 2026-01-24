@@ -43,7 +43,7 @@ const MainContent: React.FC = () => {
                     <PlaceholderView 
                         title="Insights" 
                         icon={<BarChart2 className="h-8 w-8 text-green-500" />}
-                        description="Analyser och rapporter"
+                        description="Analytics and reports"
                     />
                 );
             case 'asset_plus':
@@ -51,7 +51,7 @@ const MainContent: React.FC = () => {
                     <PlaceholderView 
                         title="Asset+" 
                         icon={<Box className="h-8 w-8 text-purple-500" />}
-                        description="Tillgångshantering"
+                        description="Asset management"
                     />
                 );
             case 'original_archive':
@@ -59,7 +59,7 @@ const MainContent: React.FC = () => {
                     <PlaceholderView 
                         title="OA+" 
                         icon={<Archive className="h-8 w-8 text-indigo-500" />}
-                        description="Originalarkiv och dokument"
+                        description="Original archive and documents"
                     />
                 );
             case 'radar':
@@ -67,7 +67,7 @@ const MainContent: React.FC = () => {
                     <PlaceholderView 
                         title="360+" 
                         icon={<Radar className="h-8 w-8 text-pink-500" />}
-                        description="360-graders visning"
+                        description="360-degree viewing"
                     />
                 );
             default:
