@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import ViewerToolbar from './ViewerToolbar';
+import MinimapPanel from './MinimapPanel';
 import { xktCacheService } from '@/services/xkt-cache-service';
 
 interface AssetPlusViewerProps {
@@ -89,6 +90,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const [initStep, setInitStep] = useState<InitStep>('idle');
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>('idle');
   const [cacheStatus, setCacheStatus] = useState<'checking' | 'hit' | 'miss' | 'stored' | null>(null);
+  const [showMinimap, setShowMinimap] = useState(false);
   
   const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
@@ -859,7 +861,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
           {/* Custom toolbar - centered at bottom */}
           {state.isInitialized && initStep === 'ready' && (
-            <ViewerToolbar viewerRef={viewerInstanceRef} />
+            <>
+              <ViewerToolbar 
+                viewerRef={viewerInstanceRef} 
+                onToggleMinimap={(visible) => setShowMinimap(visible)}
+              />
+              <MinimapPanel
+                viewerRef={viewerInstanceRef}
+                isVisible={showMinimap}
+                onClose={() => setShowMinimap(false)}
+              />
+            </>
           )}
 
           {/* Navigation cube canvas - positioned by CSS */}
