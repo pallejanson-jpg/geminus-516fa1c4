@@ -25,12 +25,14 @@ type Props = {
   onAddChild?: (parentNode: NavigatorNode) => void;
   onView?: (node: NavigatorNode) => void;
   onOpen3D?: (node: NavigatorNode) => void;
+  selectedFmGuids?: Set<string>;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, selectedFmGuids }: Props) {
   const label = node.commonName || node.name || "(unnamed)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
+  const isSelected = selectedFmGuids?.has(node.fmGuid) ?? false;
 
   // Determine which actions are available based on category
   // Plus button only on Space level (to create objectType 4)
@@ -53,6 +55,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
         className={cn(
           "group flex items-center gap-2 rounded-md px-2 py-1.5",
           "hover:bg-accent/40",
+          isSelected && "bg-primary/15 ring-1 ring-primary/40 hover:bg-primary/20",
         )}
         style={{ paddingLeft: 8 + depth * 14 }}
       >
@@ -78,7 +81,15 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm text-foreground">{label}</span>
+            <span className={cn(
+              "truncate text-sm",
+              isSelected ? "font-medium text-primary" : "text-foreground"
+            )}>{label}</span>
+            {isSelected && (
+              <span className="shrink-0 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                AI match
+              </span>
+            )}
             {childCount > 0 && (
               <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {childCount} {getChildLabel(node.category, childCount)}
@@ -164,6 +175,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               onAddChild={onAddChild}
               onView={onView}
               onOpen3D={onOpen3D}
+              selectedFmGuids={selectedFmGuids}
             />
           ))}
         </div>

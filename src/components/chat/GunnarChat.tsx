@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Database, Loader2 } from "lucide-react";
+import { X, Send, Database, Loader2, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useApp } from "@/context/AppContext";
+import { toast } from "sonner";
 
 type Message = {
   role: "user" | "assistant";
@@ -18,7 +20,25 @@ interface GunnarChatProps {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
 
+// Parse selectInTree action from AI response
+function parseSelectInTreeAction(content: string): string[] | null {
+  // Look for JSON block with selectInTree action
+  const jsonMatch = content.match(/```json\s*(\{[\s\S]*?"action"\s*:\s*"selectInTree"[\s\S]*?\})\s*```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed.action === "selectInTree" && Array.isArray(parsed.fmGuids)) {
+        return parsed.fmGuids;
+      }
+    } catch {
+      // Invalid JSON
+    }
+  }
+  return null;
+}
+
 export default function GunnarChat({ open, onClose }: GunnarChatProps) {
+  const { setAiSelectedFmGuids, setActiveApp, clearAiSelection } = useApp();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -27,9 +47,10 @@ export default function GunnarChat({ open, onClose }: GunnarChatProps) {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<string[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
+  const { toast: toastHook } = useToast();
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -123,14 +144,21 @@ export default function GunnarChat({ open, onClose }: GunnarChatProps) {
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    setPendingSelection(null);
 
     try {
       // Filter out the initial greeting for the API call
       const apiMessages = newMessages.filter((_, i) => i > 0);
-      await streamChat(apiMessages);
+      const response = await streamChat(apiMessages);
+      
+      // Check for selectInTree action in the response
+      const fmGuids = parseSelectInTreeAction(response);
+      if (fmGuids && fmGuids.length > 0) {
+        setPendingSelection(fmGuids);
+      }
     } catch (error) {
       console.error("Chat error:", error);
-      toast({
+      toastHook({
         variant: "destructive",
         title: "Chat Error",
         description: error instanceof Error ? error.message : "Failed to get response",
@@ -141,6 +169,17 @@ export default function GunnarChat({ open, onClose }: GunnarChatProps) {
       setIsLoading(false);
     }
   };
+
+  const handleShowInNavigator = useCallback(() => {
+    if (pendingSelection && pendingSelection.length > 0) {
+      setAiSelectedFmGuids(pendingSelection);
+      setActiveApp('navigator');
+      onClose();
+      toast.success(`Showing ${pendingSelection.length} items in Navigator`, {
+        description: "Items are highlighted in the tree view",
+      });
+    }
+  }, [pendingSelection, setAiSelectedFmGuids, setActiveApp, onClose]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -206,6 +245,16 @@ export default function GunnarChat({ open, onClose }: GunnarChatProps) {
 
         {/* Input */}
         <div className="border-t border-border p-4">
+          {pendingSelection && pendingSelection.length > 0 && (
+            <Button
+              onClick={handleShowInNavigator}
+              className="mb-3 w-full gap-2"
+              variant="secondary"
+            >
+              <Navigation className="h-4 w-4" />
+              Show {pendingSelection.length} items in Navigator
+            </Button>
+          )}
           <div className="flex gap-2">
             <Input
               ref={inputRef}

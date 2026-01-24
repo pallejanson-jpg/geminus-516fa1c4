@@ -1,10 +1,12 @@
-import React, { useContext, useMemo, useState, useCallback } from "react";
+import React, { useContext, useMemo, useState, useCallback, useEffect } from "react";
 import { AppContext } from "@/context/AppContext";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { TreeNode, type NavigatorNode } from "@/components/navigator/TreeNode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { AddAssetDialog } from "./AddAssetDialog";
+import { X } from "lucide-react";
 
 function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   if (!q.trim()) return nodes;
@@ -22,14 +24,70 @@ function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   return nodes.map(walk).filter(Boolean) as NavigatorNode[];
 }
 
+// Find all ancestor fmGuids for a set of target fmGuids
+function findAncestorGuids(tree: NavigatorNode[], targetGuids: Set<string>): Set<string> {
+  const ancestors = new Set<string>();
+  
+  const walk = (node: NavigatorNode, path: string[]): boolean => {
+    const isTarget = targetGuids.has(node.fmGuid);
+    let hasTargetDescendant = isTarget;
+    
+    if (node.children) {
+      for (const child of node.children) {
+        if (walk(child, [...path, node.fmGuid])) {
+          hasTargetDescendant = true;
+        }
+      }
+    }
+    
+    if (hasTargetDescendant && !isTarget) {
+      // This node is an ancestor of a target
+      ancestors.add(node.fmGuid);
+    }
+    
+    if (hasTargetDescendant) {
+      // Add all ancestors in the path
+      path.forEach(guid => ancestors.add(guid));
+    }
+    
+    return hasTargetDescendant;
+  };
+  
+  tree.forEach(node => walk(node, []));
+  return ancestors;
+}
+
 export default function NavigatorView() {
-  const { navigatorTreeData, isLoadingData, setActiveApp, setViewer3dFmGuid, setSelectedFacility, refreshInitialData } = useContext(AppContext);
+  const { 
+    navigatorTreeData, 
+    isLoadingData, 
+    setActiveApp, 
+    setViewer3dFmGuid, 
+    setSelectedFacility, 
+    refreshInitialData,
+    aiSelectedFmGuids,
+    clearAiSelection,
+  } = useContext(AppContext);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   
   // Add Asset Dialog state
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [selectedParentNode, setSelectedParentNode] = useState<NavigatorNode | null>(null);
+
+  // Auto-expand tree when AI selection changes
+  useEffect(() => {
+    if (aiSelectedFmGuids.length > 0 && navigatorTreeData.length > 0) {
+      const targetSet = new Set(aiSelectedFmGuids);
+      const ancestorGuids = findAncestorGuids(navigatorTreeData, targetSet);
+      
+      setExpanded(prev => {
+        const next = new Set(prev);
+        ancestorGuids.forEach(guid => next.add(guid));
+        return next;
+      });
+    }
+  }, [aiSelectedFmGuids, navigatorTreeData]);
 
   const visibleTree = useMemo(() => filterTree(navigatorTreeData, query), [navigatorTreeData, query]);
 
@@ -82,11 +140,24 @@ export default function NavigatorView() {
     });
   }, [setViewer3dFmGuid, setActiveApp]);
 
+  const selectedFmGuidSet = useMemo(() => new Set(aiSelectedFmGuids), [aiSelectedFmGuids]);
+
   return (
     <TooltipProvider>
       <section className="h-full w-full p-2 sm:p-4">
-        <header className="mb-3">
+        <header className="mb-3 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-foreground">Navigator</h1>
+          {aiSelectedFmGuids.length > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={clearAiSelection}
+              className="gap-1.5 text-xs"
+            >
+              <X className="h-3 w-3" />
+              Clear {aiSelectedFmGuids.length} selected
+            </Button>
+          )}
         </header>
 
         <div className="mb-3">
@@ -115,6 +186,7 @@ export default function NavigatorView() {
                   onAddChild={handleAddChild}
                   onView={handleView}
                   onOpen3D={handleOpen3D}
+                  selectedFmGuids={selectedFmGuidSet}
                 />
               ))}
             </div>
