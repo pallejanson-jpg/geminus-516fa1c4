@@ -732,40 +732,73 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             </div>
           )}
           
-          {/* Close button - top left */}
-          {onClose && (
-            <div className="absolute top-4 left-4 z-10">
-              <Button variant="secondary" size="sm" onClick={onClose} className="gap-2">
+          {/* Top toolbar - contains close and filter/layers */}
+          <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10 flex items-center justify-between pointer-events-none">
+            {/* Close button - left side */}
+            {onClose && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={onClose} 
+                className="gap-1.5 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 pointer-events-auto shadow-md"
+              >
                 <X className="h-4 w-4" />
-                <span className="hidden sm:inline">Close</span>
+                <span className="hidden sm:inline text-sm">Close</span>
+              </Button>
+            )}
+            {!onClose && <div />}
+            
+            {/* Filter & Layer Toggle - right side */}
+            <div className="flex gap-1.5 sm:gap-2 pointer-events-auto">
+              <FilterDropdown />
+              <Button variant="secondary" size="sm" className="gap-1.5 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 shadow-md">
+                <Layers className="h-4 w-4" />
+                <span className="hidden sm:inline text-sm">Layers</span>
               </Button>
             </div>
-          )}
-
-          {/* Viewer Controls - bottom center */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
-            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn}>
-              <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut}>
-              <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-            <div className="w-px h-5 sm:h-6 bg-border" />
-            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleResetView}>
-              <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleFullscreen}>
-              <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
           </div>
 
-          {/* Filter & Layer Toggle - top right */}
-          <div className="absolute top-4 right-4 z-10 flex gap-2">
-            <FilterDropdown />
-            <Button variant="secondary" size="sm" className="gap-2">
-              <Layers className="h-4 w-4" />
-              <span className="hidden sm:inline">Layers</span>
-            </Button>
+          {/* Viewer Controls - bottom center, safe from mobile nav */}
+          <div className="absolute bottom-16 sm:bottom-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="flex items-center gap-1 bg-background/95 backdrop-blur-sm rounded-lg p-1 sm:p-1.5 border shadow-lg">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 sm:h-9 sm:w-9" 
+                onClick={handleZoomIn}
+                title="Zoom in"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 sm:h-9 sm:w-9" 
+                onClick={handleZoomOut}
+                title="Zoom out"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <div className="w-px h-5 bg-border mx-0.5" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 sm:h-9 sm:w-9" 
+                onClick={handleResetView}
+                title="Reset view"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 sm:h-9 sm:w-9" 
+                onClick={handleFullscreen}
+                title="Fullscreen"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
