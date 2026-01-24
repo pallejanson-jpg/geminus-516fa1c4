@@ -85,7 +85,29 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isLoadingConfig, setIsLoadingConfig] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingApps, setIsSavingApps] = useState(false);
     const [originalConfig, setOriginalConfig] = useState<ConfigState | null>(null);
+
+    // Save app configs to localStorage (no backend table for apps currently)
+    const handleSaveAppConfigs = async () => {
+        setIsSavingApps(true);
+        try {
+            // Persist to localStorage for now
+            localStorage.setItem('appConfigs', JSON.stringify(appConfigs));
+            toast({
+                title: "Settings Saved",
+                description: "Application settings have been saved.",
+            });
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Save Error",
+                description: error.message || "Failed to save settings",
+            });
+        } finally {
+            setIsSavingApps(false);
+        }
+    };
 
     // Fetch current config
     const fetchConfig = async () => {
@@ -317,9 +339,24 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* Applications Settings Tab */}
                     <TabsContent value="apps" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <div className="space-y-4">
-                            <p className="text-sm text-muted-foreground">
-                                Configure how external applications are launched and their credentials.
-                            </p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm text-muted-foreground">
+                                    Configure how external applications are launched and their credentials.
+                                </p>
+                                <Button
+                                    onClick={handleSaveAppConfigs}
+                                    disabled={isSavingApps}
+                                    size="sm"
+                                    className="gap-2"
+                                >
+                                    {isSavingApps ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Save className="h-4 w-4" />
+                                    )}
+                                    Save
+                                </Button>
+                            </div>
                             
                             {Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]: [string, any]) => {
                                 const cfg = appConfigs[key] || defaultCfg;

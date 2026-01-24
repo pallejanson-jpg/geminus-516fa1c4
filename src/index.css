@@ -120,3 +120,52 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Asset+ 3D Viewer - ObjectDetails popup responsive scaling */
+#AssetPlusViewer .dx-popup-wrapper.dx-popup-flex-height .dx-popup-content {
+  max-height: 60vh !important;
+}
+
+@media (max-width: 640px) {
+  /* Scale down ObjectDetails popup for mobile */
+  #AssetPlusViewer .dx-popup-wrapper {
+    max-width: 95vw !important;
+    left: 2.5vw !important;
+    right: 2.5vw !important;
+  }
+  
+  #AssetPlusViewer .dx-popup-wrapper .dx-popup-content {
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+    font-size: 0.875rem !important;
+  }
+  
+  #AssetPlusViewer .dx-popup-wrapper .dx-popup-title {
+    font-size: 1rem !important;
+    padding: 8px 12px !important;
+  }
+  
+  #AssetPlusViewer .dx-popup-wrapper .dx-scrollable-content {
+    padding: 8px !important;
+  }
+}
+
+/* NavCube canvas styling */
+#navCubeCanvas {
+  position: absolute;
+  bottom: 70px;
+  right: 10px;
+  width: 120px;
+  height: 120px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+@media (min-width: 640px) {
+  #navCubeCanvas {
+    bottom: 20px;
+    right: 20px;
+    width: 150px;
+    height: 150px;
+  }
+}
