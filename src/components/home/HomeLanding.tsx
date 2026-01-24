@@ -1,7 +1,6 @@
 import React, { useCallback } from "react";
 import { Database, FileQuestion, Sparkles } from "lucide-react";
 
-import { DEFAULT_APP_CONFIGS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
@@ -24,10 +23,9 @@ export default function HomeLanding() {
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
-      // UI-only migration: assistant functionality is not implemented in Lovable yet.
       toast({
-        title: "AI-assistent (kommer snart)",
-        description: `Du klickade på ${type}. Jag kan koppla detta till en riktig assistent när du vill.`,
+        title: "AI Assistant (coming soon)",
+        description: `You clicked on ${type}. I can connect this to a real assistant when you're ready.`,
       });
     },
     [toast],
@@ -44,16 +42,16 @@ export default function HomeLanding() {
       {/* Overlay for readability (uses design tokens) */}
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
-      <div className="relative z-10 px-6 py-6 space-y-6">
+      <div className="relative z-10 px-4 sm:px-6 py-6 space-y-6">
         <header className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">Välkommen till My SWG</h1>
-          <p className="text-muted-foreground">Din digitala ryggrad för digital twins och fastighetsdata</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Welcome to My SWG</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Your digital backbone for digital twins and property data</p>
         </header>
 
       <section className="space-y-3">
         <div className="text-center">
           <h2 className="text-lg font-semibold">AI Assistants</h2>
-          <p className="text-sm text-muted-foreground">Snabb hjälp för data, dokument och integrationer</p>
+          <p className="text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -84,13 +82,13 @@ export default function HomeLanding() {
       <section>
         <Card className="bg-card/60">
           <CardHeader>
-            <CardTitle className="text-lg">Mina favoriter</CardTitle>
-            <CardDescription>Snabb åtkomst till dina mest använda byggnader</CardDescription>
+            <CardTitle className="text-lg">My Favorites</CardTitle>
+            <CardDescription>Quick access to your most used buildings</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-dashed border-border p-4">
               <p className="text-sm text-muted-foreground">
-                Inga favoriter än. När vi kopplar in favoriter från Portfölj kan vi lista dem här.
+                No favorites yet. When we connect favorites from the Portfolio, they will appear here.
               </p>
             </div>
           </CardContent>

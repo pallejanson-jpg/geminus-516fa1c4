@@ -10,17 +10,17 @@ type PlaceholderViewProps = {
 
 export default function PlaceholderView({ title, icon, description }: PlaceholderViewProps) {
   return (
-    <div className="h-full flex items-center justify-center p-8">
+    <div className="h-full flex items-center justify-center p-4 sm:p-8">
       <Card className="max-w-md w-full text-center">
         <CardHeader>
-          <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+          <div className="mx-auto mb-4 h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-primary/10 flex items-center justify-center">
             {icon}
           </div>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          <CardTitle className="text-lg sm:text-xl">{title}</CardTitle>
+          <CardDescription className="text-sm">{description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Denna vy kommer att migreras från Firebase-projektet.</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">This view will be migrated from the Firebase project.</p>
         </CardContent>
       </Card>
     </div>

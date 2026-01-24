@@ -75,7 +75,7 @@ const PortfolioView: React.FC = () => {
     const grouped = new Map<string, Facility[]>();
     
     filteredFacilities.forEach(facility => {
-      const complexName = facility.complexCommonName || 'Övriga byggnader';
+      const complexName = facility.complexCommonName || 'Other buildings';
       if (!grouped.has(complexName)) {
         grouped.set(complexName, []);
       }
@@ -91,9 +91,9 @@ const PortfolioView: React.FC = () => {
         ),
       }))
       .sort((a, b) => {
-        // Put "Övriga byggnader" last
-        if (a.complexName === 'Övriga byggnader') return 1;
-        if (b.complexName === 'Övriga byggnader') return -1;
+        // Put "Other buildings" last
+        if (a.complexName === 'Other buildings') return 1;
+        if (b.complexName === 'Other buildings') return -1;
         return a.complexName.localeCompare(b.complexName);
       });
   }, [filteredFacilities]);
@@ -142,21 +142,21 @@ const PortfolioView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6 overflow-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 md:p-6 overflow-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold">Portfolio</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Översikt av alla dina byggnader</p>
+          <p className="text-sm text-muted-foreground">Overview of all your buildings</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4 sm:mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Sök fastigheter..."
+            placeholder="Search properties..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -165,13 +165,13 @@ const PortfolioView: React.FC = () => {
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <Filter size={14} className="mr-2" />
-            <SelectValue placeholder="Kategori" />
+            <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Alla kategorier</SelectItem>
-            <SelectItem value="Building">Byggnader</SelectItem>
-            <SelectItem value="Building Storey">Våningsplan</SelectItem>
-            <SelectItem value="Space">Rum</SelectItem>
+            <SelectItem value="all">All categories</SelectItem>
+            <SelectItem value="Building">Buildings</SelectItem>
+            <SelectItem value="Building Storey">Floors</SelectItem>
+            <SelectItem value="Space">Rooms</SelectItem>
           </SelectContent>
         </Select>
         <div className="hidden sm:flex border rounded-md">
@@ -197,55 +197,55 @@ const PortfolioView: React.FC = () => {
       {isLoadingData && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Laddar byggnader...</span>
+          <span className="ml-2 text-muted-foreground">Loading buildings...</span>
         </div>
       )}
 
       {!isLoadingData && (
         <>
           {/* Stats Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
             <Card>
-              <CardContent className="pt-4">
-                <p className="text-2xl font-bold">{facilities.length}</p>
-                <p className="text-xs text-muted-foreground">Totalt byggnader</p>
+              <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
+                <p className="text-xl sm:text-2xl font-bold">{facilities.length}</p>
+                <p className="text-xs text-muted-foreground">Total buildings</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4">
-                <p className="text-2xl font-bold">
+              <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
+                <p className="text-xl sm:text-2xl font-bold">
                   {facilities.reduce((sum, f) => sum + (typeof f.numberOfSpaces === 'number' ? f.numberOfSpaces : 0), 0)}
                 </p>
-                <p className="text-xs text-muted-foreground">Totalt rum</p>
+                <p className="text-xs text-muted-foreground">Total rooms</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4">
-                <p className="text-2xl font-bold">
+              <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
+                <p className="text-xl sm:text-2xl font-bold">
                   {facilities.reduce((sum, f) => sum + (f.area || 0), 0).toLocaleString()} m²
                 </p>
                 <p className="text-xs text-muted-foreground">Total area</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-4">
-                <p className="text-2xl font-bold">{complexGroups.length}</p>
-                <p className="text-xs text-muted-foreground">Fastigheter</p>
+              <CardContent className="pt-4 p-3 sm:p-4 sm:pt-4">
+                <p className="text-xl sm:text-2xl font-bold">{complexGroups.length}</p>
+                <p className="text-xs text-muted-foreground">Properties</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Complex Groups with Carousels */}
           {complexGroups.length > 0 ? (
-            <div className="space-y-8">
+            <div className="space-y-6 sm:space-y-8">
               {complexGroups.map((group) => (
                 <div key={group.complexName} className="space-y-3">
                   {/* Complex Header */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold">{group.complexName}</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {group.facilities.length} {group.facilities.length === 1 ? 'byggnad' : 'byggnader'}
+                      <h2 className="text-base sm:text-lg font-semibold">{group.complexName}</h2>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        {group.facilities.length} {group.facilities.length === 1 ? 'building' : 'buildings'}
                       </p>
                     </div>
                   </div>
@@ -285,7 +285,7 @@ const PortfolioView: React.FC = () => {
                       <div className="flex sm:hidden justify-center gap-1 mt-3">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <ChevronLeft size={14} />
-                          <span>Svep för att se fler</span>
+                          <span>Swipe for more</span>
                           <ChevronRight size={14} />
                         </div>
                       </div>
@@ -298,11 +298,11 @@ const PortfolioView: React.FC = () => {
             <Card className="flex-1">
               <CardContent className="flex flex-col items-center justify-center h-64 text-center">
                 <LayoutGrid className="h-12 w-12 text-muted-foreground mb-4" />
-                <CardTitle className="mb-2">Inga byggnader hittades</CardTitle>
+                <CardTitle className="mb-2">No buildings found</CardTitle>
                 <CardDescription>
                   {facilities.length === 0 
-                    ? 'Synkronisera data från Asset+ för att visa byggnader'
-                    : 'Prova att ändra dina sökfilter'
+                    ? 'Sync data from Asset+ to display buildings'
+                    : 'Try adjusting your search filters'
                   }
                 </CardDescription>
               </CardContent>

@@ -115,68 +115,69 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       </div>
 
       {/* Close Button */}
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+      <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-50 flex items-center gap-2">
         <Button 
           onClick={onClose} 
           variant="ghost" 
           size="icon"
-          className="h-10 w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          className="h-9 w-9 sm:h-10 sm:w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
         >
-          <X size={20} />
+          <X size={18} className="sm:hidden" />
+          <X size={20} className="hidden sm:block" />
         </Button>
       </div>
       
       {/* Scrollable Content */}
-      <ScrollArea className="flex-1 z-10 pt-24 md:pt-32">
-        <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8 pb-24">
+      <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
+        <div className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 pb-24">
           {/* Header */}
-          <header className="relative w-full shrink-0 flex items-start gap-8 text-white">
+          <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white">
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl md:text-4xl font-bold truncate">{title}</h1>
-              <div className="flex items-center gap-2 text-sm text-white/80 mt-1">
-                <MapPin size={14} className="text-primary" /> 
+              <h1 className="text-xl sm:text-2xl md:text-4xl font-bold truncate">{title}</h1>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-white/80 mt-1">
+                <MapPin size={12} className="sm:w-3.5 sm:h-3.5 text-primary" /> 
                 <span className="truncate">{subTitle}</span>
               </div>
             </div>
           </header>
 
-          <div className="space-y-6 mt-8">
+          <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
             {/* Basic Info Card */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-4">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Info size={16} className="text-primary" />
-                  Grundinformation
+              <CardHeader className="flex flex-row items-center justify-between pb-3 sm:pb-4">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Info size={14} className="sm:w-4 sm:h-4 text-primary" />
+                  Basic Information
                 </CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <Button 
                     onClick={onToggleFavorite} 
                     variant="ghost" 
                     size="icon"
-                    className="h-8 w-8"
-                    title={isFavorite ? "Ta bort från favoriter" : "Lägg till i favoriter"}
+                    className="h-7 w-7 sm:h-8 sm:w-8"
+                    title={isFavorite ? "Remove from favorites" : "Add to favorites"}
                   >
-                    <Star size={16} className={isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'} />
+                    <Star size={14} className={`sm:w-4 sm:h-4 ${isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'}`} />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="Visa alla egenskaper">
-                    <Table size={16} />
+                  <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
+                    <Table size={14} className="sm:w-4 sm:h-4" />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-6 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm">
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Namn</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">
-                      {isBuilding ? 'Adress' : 'Beteckning'}
+                      {isBuilding ? 'Address' : 'Designation'}
                     </label>
                     <p className="font-medium truncate">{subTitle}</p>
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Kategori</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Category</label>
                     <p className="font-medium truncate">{facility.category || '-'}</p>
                   </div>
                 </div>
@@ -185,17 +186,17 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* KPI Cards */}
             <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart size={16} className="text-accent" />
-                  Nyckeltal
+              <CardHeader className="pb-3 sm:pb-4">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <BarChart size={14} className="sm:w-4 sm:h-4 text-accent" />
+                  Key Metrics
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {isBuilding && (
                     <KpiCard 
-                      title="Våningar" 
+                      title="Floors" 
                       value={kpis.floors} 
                       icon={Layers} 
                       onClick={() => setShowStoreys(prev => !prev)} 
@@ -203,14 +204,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   )}
                   {(isBuilding || isStorey) && (
                     <KpiCard 
-                      title="Rum" 
+                      title="Rooms" 
                       value={kpis.rooms} 
                       icon={DoorOpen} 
                       onClick={() => onShowRooms(facility)} 
                     />
                   )}
                   {isSpace && (
-                    <KpiCard title="Energi per m²" value={kpis.energyPerSqm} icon={Zap} />
+                    <KpiCard title="Energy per m²" value={kpis.energyPerSqm} icon={Zap} />
                   )}
                   <KpiCard title="Area (NTA)" value={kpis.area} icon={LayoutGrid} />
                   <KpiCard title="Area (Atemp)" value={kpis.atemp} icon={LayoutGrid} />
@@ -222,8 +223,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* Storeys Carousel */}
             {isBuilding && showStoreys && (
-              <div className="mt-6 animate-in fade-in duration-500">
-                <h3 className="text-lg font-bold mb-4">Våningsplan ({childStoreys.length})</h3>
+              <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
+                <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Floors ({childStoreys.length})</h3>
                 {childStoreys.length > 0 ? (
                   <Carousel opts={{ align: "start" }} className="w-full">
                     <CarouselContent className="-ml-2">
@@ -233,27 +234,27 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                             className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
                             onClick={() => setSelectedFacility(storey)}
                           >
-                            <div className="h-40 bg-muted relative">
+                            <div className="h-32 sm:h-40 bg-muted relative">
                               <img
                                 src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?q=80&w=800&auto=format&fit=crop"
                                 className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
                                 alt={storey.commonName}
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                              <div className="absolute bottom-3 left-3 right-3">
-                                <h4 className="font-bold text-white truncate">{storey.commonName}</h4>
+                              <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 right-2 sm:right-3">
+                                <h4 className="font-bold text-white text-sm sm:text-base truncate">{storey.commonName}</h4>
                               </div>
                             </div>
                           </Card>
                         </CarouselItem>
                       ))}
                     </CarouselContent>
-                    <CarouselPrevious className="-left-4" />
-                    <CarouselNext className="-right-4" />
+                    <CarouselPrevious className="hidden sm:flex -left-4" />
+                    <CarouselNext className="hidden sm:flex -right-4" />
                   </Carousel>
                 ) : (
                   <div className="text-center text-muted-foreground py-8">
-                    Inga våningsplan hittades för denna byggnad.
+                    No floors found for this building.
                   </div>
                 )}
               </div>
