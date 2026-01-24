@@ -270,8 +270,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
+            <DialogContent className="max-w-2xl h-[85vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
                         API Settings
@@ -281,8 +281,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </DialogDescription>
                 </DialogHeader>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                    <TabsList className="grid w-full grid-cols-2">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
+                    <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
                         <TabsTrigger value="assetplus" className="gap-2">
                             <Box className="h-4 w-4" />
                             Asset+
@@ -293,7 +293,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="assetplus" className="space-y-4 mt-4">
+                    <TabsContent value="assetplus" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         {isLoadingConfig ? (
                             <div className="flex items-center justify-center py-8">
                                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -524,7 +524,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         )}
                     </TabsContent>
 
-                    <TabsContent value="sync" className="space-y-4 mt-4">
+                    <TabsContent value="sync" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <div className="flex items-center justify-between">
                             <div>
                                 <h4 className="font-medium">Sync from Asset+</h4>
