@@ -150,22 +150,55 @@
   }
 }
 
+/* Hide built-in Asset+ toolbars - we use our custom toolbar */
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar .viewer-toolbar,
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar .asset-viewer-toolbar,
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar .toolbar-container,
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar .dx-toolbar,
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar > div > div > .toolbar,
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar [class*="toolbar"]:not(.dx-popup-wrapper *) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Keep the popup toolbars (like in ObjectDetails) visible */
+#AssetPlusViewer .dx-popup-wrapper [class*="toolbar"] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
 /* NavCube canvas styling */
 #navCubeCanvas {
   position: absolute;
   bottom: 70px;
   right: 10px;
-  width: 120px;
-  height: 120px;
-  z-index: 10;
+  width: 100px;
+  height: 100px;
+  z-index: 15;
   pointer-events: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
 }
 
 @media (min-width: 640px) {
   #navCubeCanvas {
-    bottom: 20px;
+    bottom: 80px;
     right: 20px;
-    width: 150px;
-    height: 150px;
+    width: 120px;
+    height: 120px;
+  }
+}
+
+@media (min-width: 1024px) {
+  #navCubeCanvas {
+    bottom: 80px;
+    right: 20px;
+    width: 140px;
+    height: 140px;
   }
 }
