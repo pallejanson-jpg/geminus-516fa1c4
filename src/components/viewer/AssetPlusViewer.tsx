@@ -698,10 +698,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       // Restore original fetch on unmount
       restoreFetch();
       
-      // Cleanup viewer on unmount
-      if (viewerInstanceRef.current?.clearData) {
-        viewerInstanceRef.current.clearData();
+      // Cleanup viewer on unmount - guard against null viewer
+      try {
+        const viewer = viewerInstanceRef.current;
+        if (viewer?.clearData && viewer?.viewer?.scene) {
+          viewer.clearData();
+        }
+      } catch (e) {
+        console.warn('Viewer cleanup warning:', e);
       }
+      viewerInstanceRef.current = null;
       deferCallsRef.current = true;
     };
   }, [initializeViewer, restoreFetch]);

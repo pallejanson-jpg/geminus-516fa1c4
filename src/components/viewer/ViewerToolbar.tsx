@@ -202,22 +202,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   return (
     <TooltipProvider delayDuration={300}>
       <div className={cn(
-        "absolute bottom-4 left-1/2 -translate-x-1/2 z-20",
-        "flex items-center gap-1 p-1.5 rounded-lg",
+        "absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-20",
+        "flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-lg",
         "bg-card/95 backdrop-blur-sm border shadow-lg",
+        "max-w-[95vw] overflow-x-auto",
         className
       )}>
         {/* Navigation Group */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant={navMode === 'orbit' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleNavModeChange('orbit')}
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Orbit (rotera)</TooltipContent>
@@ -228,10 +229,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={navMode === 'firstPerson' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleNavModeChange('firstPerson')}
               >
-                <Move className="h-4 w-4" />
+                <Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Första person (gå)</TooltipContent>
@@ -242,29 +243,29 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={navMode === 'planView' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleNavModeChange('planView')}
               >
-                <Grid3X3 className="h-4 w-4" />
+                <Grid3X3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Planvy</TooltipContent>
           </Tooltip>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
 
         {/* Zoom Group */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleZoomIn}
               >
-                <ZoomIn className="h-4 w-4" />
+                <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Zooma in</TooltipContent>
@@ -275,10 +276,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleZoomOut}
               >
-                <ZoomOut className="h-4 w-4" />
+                <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Zooma ut</TooltipContent>
@@ -289,10 +290,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleViewFit}
               >
-                <Focus className="h-4 w-4" />
+                <Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Anpassa vy</TooltipContent>
@@ -303,29 +304,29 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleResetView}
               >
-                <Maximize className="h-4 w-4" />
+                <Maximize className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Återställ vy</TooltipContent>
           </Tooltip>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
 
         {/* Tools Group */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant={activeTool === 'select' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleToolChange('select')}
               >
-                <Crosshair className="h-4 w-4" />
+                <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Välj objekt</TooltipContent>
@@ -336,10 +337,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={activeTool === 'measure' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleToolChange('measure')}
               >
-                <Ruler className="h-4 w-4" />
+                <Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Mätverktyg</TooltipContent>
@@ -350,10 +351,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={activeTool === 'slicer' ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={() => handleToolChange('slicer')}
               >
-                <Scissors className="h-4 w-4" />
+                <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Snittplan</TooltipContent>
@@ -365,10 +366,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
                   onClick={handleClearSlices}
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  <RotateCcw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top">Rensa snitt</TooltipContent>
@@ -376,19 +377,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           )}
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
 
         {/* View Options */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleToggleXray}
               >
-                <Eye className="h-4 w-4" />
+                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">X-ray läge</TooltipContent>
@@ -399,10 +400,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={showSpaces ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleToggleSpaces}
               >
-                <Layers className="h-4 w-4" />
+                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Visa/dölj rum</TooltipContent>
@@ -413,17 +414,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
               <Button
                 variant={showNavCube ? 'secondary' : 'ghost'}
                 size="icon"
-                className="h-8 w-8"
+                className="h-7 w-7 sm:h-8 sm:w-8"
                 onClick={handleToggleNavCube}
               >
-                <Box className="h-4 w-4" />
+                <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">Visa/dölj navigeringskub</TooltipContent>
           </Tooltip>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
 
         {/* Object Info */}
         <Tooltip>
@@ -431,10 +432,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7 sm:h-8 sm:w-8"
               onClick={handleShowObjectDetails}
             >
-              <Search className="h-4 w-4" />
+              <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">Objektinfo</TooltipContent>
@@ -446,10 +447,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 ml-1"
+              className="h-7 w-7 sm:h-8 sm:w-8 ml-0.5 sm:ml-1"
               onClick={() => setIsExpanded(false)}
             >
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">Dölj verktygsfält</TooltipContent>

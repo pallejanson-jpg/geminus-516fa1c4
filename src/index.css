@@ -185,6 +185,24 @@
   background: rgba(0, 0, 0, 0.2);
 }
 
+/* Map popup styling - ensure text is visible */
+.mapboxgl-popup-content {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: none !important;
+}
+
+.mapboxgl-popup-content h3 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapboxgl-popup-close-button {
+  color: hsl(var(--foreground)) !important;
+  font-size: 18px !important;
+  padding: 4px 8px !important;
+}
+
 @media (min-width: 640px) {
   #navCubeCanvas {
     bottom: 80px;

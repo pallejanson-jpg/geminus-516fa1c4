@@ -83,12 +83,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
           {(isBuilding || isStorey) && (
             <Button 
               variant="ghost" 
-              onClick={() => onOpen360(ivionSiteId || undefined)} 
-              className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+              onClick={() => ivionSiteId ? onOpen360(ivionSiteId) : undefined} 
+              className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!ivionSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
               title={ivionSiteId ? `Open Ivion: ${ivionSiteId}` : 'Configure Ivion Site ID in settings'}
+              disabled={!ivionSiteId}
             >
               <View size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-destructive' : 'text-muted-foreground'}`} />
-              <span className="text-[10px] sm:text-xs">360+</span>
+              <span className={`text-[10px] sm:text-xs ${!ivionSiteId ? 'text-muted-foreground' : ''}`}>360+</span>
             </Button>
           )}
           <Button variant="ghost" onClick={() => onOpenIoT(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
