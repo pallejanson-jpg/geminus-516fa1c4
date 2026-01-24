@@ -89,6 +89,8 @@ export const AppContext = createContext<AppContextType>({
     setViewerDiagnostics: () => {},
 });
 
+export const useApp = () => React.useContext(AppContext);
+
 interface AppProviderProps {
     children: ReactNode;
 }
