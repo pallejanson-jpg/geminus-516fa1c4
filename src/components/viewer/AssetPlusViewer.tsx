@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback, useContext } from 'react';
-import { Box, Maximize2, RotateCcw, ZoomIn, ZoomOut, Layers, Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
+import { Maximize2, RotateCcw, ZoomIn, ZoomOut, Layers, Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useRequestDiagnostics } from '@/hooks/use-request-diagnostics';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +62,7 @@ const lookAtSpaceAndInstanceFlyToDuration = 1;
  * Based on Asset+ external_viewer.html implementation pattern.
  */
 const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) => {
-  const { allData, setViewerDiagnostics } = useContext(AppContext);
+  const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
@@ -92,98 +91,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
 
-  // Diagnose Asset+ network calls (incl. XKT) from inside the viewer
-  const classify = useCallback((url: string) => {
-    const u = (url || "").toLowerCase();
-    // Asset+ may load XKT via direct .xkt files OR via API endpoints.
-    if (u.includes('.xkt')) return 'xkt';
-    if (
-      u.includes('getxkt') ||
-      u.includes('getxktdata') ||
-      u.includes('getxktdatastream') ||
-      u.includes('publishxkt')
-    ) {
-      return 'xkt';
-    }
-    if (u.includes('/functions/v1/asset-plus-query')) return 'backend';
-    if (baseUrlRef.current) {
-      const base = baseUrlRef.current.toLowerCase();
-      if (u.startsWith(base)) return 'assetplus';
-      // Some calls might hit same host but different base path
-      try {
-        const baseHost = new URL(baseUrlRef.current).host;
-        const host = new URL(url).host;
-        if (baseHost && host && baseHost === host) return 'assetplus';
-      } catch {
-        // ignore URL parsing
-      }
-    }
-    // Heuristic: if it smells like the Asset+ viewer backend
-    if (u.includes('assetplus') || u.includes('keycloak') || u.includes('bim')) return 'assetplus';
-    return 'other';
-  }, []);
-
-  const diagIncludeTags = useMemo(() => ['backend', 'assetplus', 'xkt'] as const, []);
-
-  const { events: diagEvents, summary: diagSummary } = useRequestDiagnostics({
-    enabled: true,
-    classify,
-    includeTags: diagIncludeTags,
-    maxEvents: 20,
-  });
-
-  const modelCount = useMemo(() => {
-    const viewer = viewerInstanceRef.current;
-    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-    const models = assetView?.viewer?.scene?.models;
-    if (models && typeof models === 'object') return Object.keys(models).length;
-    return null;
-  }, [modelLoadState, initStep]);
-
-  // Push diagnostics into the global RightSidebar
-  useEffect(() => {
-    const lastError = diagSummary.lastError
-      ? {
-          status: diagSummary.lastError.status,
-          message: diagSummary.lastError.error,
-          timedOut: diagSummary.lastError.timedOut,
-        }
-      : null;
-
-    setViewerDiagnostics({
-      fmGuid,
-      initStep,
-      modelLoadState,
-      modelCount: modelCount ?? null,
-      xkt: {
-        attempted: diagSummary.xktAttempted,
-        ok: diagSummary.xktOk,
-        fail: diagSummary.xktFail,
-      },
-      lastError,
-      lastRequests: diagEvents.slice(0, 10).map((e) => ({
-        tag: e.tag,
-        method: e.method,
-        url: e.url,
-        status: e.status,
-        durationMs: e.durationMs,
-        error: e.error,
-        timedOut: e.timedOut,
-      })),
-      updatedAt: Date.now(),
-    });
-  }, [
-    fmGuid,
-    initStep,
-    modelLoadState,
-    modelCount,
-    diagSummary.xktAttempted,
-    diagSummary.xktOk,
-    diagSummary.xktFail,
-    diagSummary.lastError,
-    diagEvents,
-    setViewerDiagnostics,
-  ]);
 
   // Get model filter predicate based on selection (matches external_viewer.html pattern)
   const getModelPredicate = useCallback((filter: ModelFilter) => {
@@ -681,7 +588,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         viewerInstanceRef.current.clearData();
       }
       deferCallsRef.current = true;
-      setViewerDiagnostics(null);
     };
   }, [initializeViewer]);
 
@@ -789,221 +695,78 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     );
   }
 
-  // Main viewer - with proper dx-viewport wrapper
+  // Main viewer - fullscreen layout without sidebar
   return (
-    <div className="h-full flex flex-col p-2 sm:p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg sm:text-xl font-semibold truncate">3D-visning</h2>
-          <p className="text-sm text-muted-foreground truncate">
-            {state.modelInfo?.name || fmGuid.substring(0, 16) + '...'}
-          </p>
-        </div>
-        {onClose && (
-          <Button variant="ghost" size="icon" onClick={onClose} className="flex-shrink-0 ml-2">
-            <X className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
+    <div className="h-full flex flex-col">
       {/* Viewer area with dx-viewport wrapper (CRITICAL for Asset+ popups) */}
-      {/* Mobile: viewer first (fixed height), sidebar below. Desktop: row layout */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 overflow-auto lg:overflow-hidden lg:min-h-0">
-        {/* Viewer card: on mobile use fixed aspect ratio, on desktop flex-grow */}
-        <Card className="flex-shrink-0 lg:flex-1 lg:flex-[3] overflow-hidden">
-          <CardContent className="p-0 h-full">
-            {/* dx-viewport wrapper - required by Asset+ for ObjectDetails popup constraint */}
-            <div 
-              ref={viewportWrapperRef}
-              className="dx-viewport relative w-full aspect-[4/3] lg:aspect-auto lg:h-full"
-              style={{ margin: 0 }}
-            >
-              {/* AssetPlusViewer container - MUST have id="AssetPlusViewer" */}
-              <div 
-                ref={viewerContainerRef}
-                id="AssetPlusViewer"
-                className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
-                style={{
-                  display: 'flex',
-                  flex: '1 0 auto',
-                  background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
-                }}
-              />
+      <div className="flex-1 min-h-0">
+        {/* dx-viewport wrapper - required by Asset+ for ObjectDetails popup constraint */}
+        <div 
+          ref={viewportWrapperRef}
+          className="dx-viewport relative w-full h-full"
+          style={{ margin: 0 }}
+        >
+          {/* AssetPlusViewer container - MUST have id="AssetPlusViewer" */}
+          <div 
+            ref={viewerContainerRef}
+            id="AssetPlusViewer"
+            className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
+            style={{
+              display: 'flex',
+              flex: '1 0 auto',
+              background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
+            }}
+          />
 
-              {/* Status overlay (shows while init is running and while models are loading) */}
-              {(!state.isInitialized || state.isLoading || initStep !== 'ready') && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-                  <div className="max-w-md w-[92%] sm:w-[420px] rounded-lg border bg-card p-4 sm:p-5">
-                    <div className="flex items-start gap-3">
-                      <Loader2 className="h-5 w-5 animate-spin text-primary mt-0.5" />
-                      <div className="min-w-0">
-                        <p className="font-medium">Initierar 3D-visning</p>
-                        <p className="text-sm text-muted-foreground">
-                          Steg: {initStep === 'idle' ? 'startar' : initStep.replace('_', ' ')} · Modeller: {modelLoadState}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 text-xs text-muted-foreground space-y-1">
-                      <div>• Hämtar token och konfiguration från backend</div>
-                      <div>• Monterar viewer-scriptet i sidan</div>
-                      <div>• Begär modeller/XKT från Asset+</div>
-                      <div className="pt-1">
-                        Om detta fastnar på <span className="font-medium">request models</span> betyder det oftast att inga XKT/modeller hittas för FMGUID eller att API-miljön inte matchar.
-                      </div>
-                    </div>
+          {/* Status overlay (shows while init is running and while models are loading) */}
+          {(!state.isInitialized || state.isLoading || initStep !== 'ready') && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+              <div className="max-w-md w-[92%] sm:w-[420px] rounded-lg border bg-card p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="font-medium">Laddar 3D-modell...</p>
                   </div>
                 </div>
-              )}
-              
-              {/* Viewer Controls */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
-                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn}>
-                  <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut}>
-                  <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-                <div className="w-px h-5 sm:h-6 bg-border" />
-                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleResetView}>
-                  <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleFullscreen}>
-                  <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
-              </div>
-
-              {/* Filter & Layer Toggle */}
-              <div className="absolute top-4 right-4 z-10 flex gap-2">
-                <FilterDropdown />
-                <Button variant="secondary" size="sm" className="gap-2">
-                  <Layers className="h-4 w-4" />
-                  <span className="hidden sm:inline">Lager</span>
-                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Sidebar */}
-        <div className="lg:w-64 xl:w-72 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Modellinformation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">Namn:</span>
-                <span className="font-medium truncate">{state.modelInfo?.name || '—'}</span>
-                <span className="text-muted-foreground">Format:</span>
-                <span className="font-medium">{state.modelInfo?.type || '—'}</span>
-                <span className="text-muted-foreground">Kategori:</span>
-                <span className="font-medium">{assetData?.category || '-'}</span>
-                <span className="text-muted-foreground">Filter:</span>
-                <span className="font-medium">{MODEL_FILTERS.find(f => f.value === modelFilter)?.label}</span>
-                <span className="text-muted-foreground">Status:</span>
-                <span className="font-medium">{initStep === 'ready' ? 'Klar' : 'Laddar...'}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Diagnostik</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Senaste steg:</span>
-                  <span className="font-medium truncate">{initStep === 'idle' ? 'startar' : initStep.replace('_', ' ')}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Modeller:</span>
-                  <span className="font-medium">{modelCount ?? '—'}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">XKT (försök/ok/fel):</span>
-                  <span className="font-medium">{diagSummary.xktAttempted}/{diagSummary.xktOk}/{diagSummary.xktFail}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Senaste fel:</span>
-                  <span className="font-medium truncate">
-                    {diagSummary.lastError?.timedOut
-                      ? 'timeout'
-                      : diagSummary.lastError?.status === 401
-                        ? '401 unauthorized'
-                        : diagSummary.lastError?.status === 404
-                          ? '404 not_found'
-                          : (diagSummary.lastError?.error || (diagSummary.lastError?.status ? String(diagSummary.lastError.status) : '—'))}
-                  </span>
-                </div>
-              </div>
-
-              <div className="border-t pt-3">
-                <p className="text-xs text-muted-foreground mb-2">Senaste anrop</p>
-                {diagEvents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Inga matchande anrop fångade ännu.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {diagEvents.slice(0, 8).map((e) => (
-                      <div key={e.id} className="text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium truncate">{e.tag.toUpperCase()} · {e.method}</span>
-                          <span className="text-muted-foreground">
-                            {e.timedOut
-                              ? 'timeout'
-                              : e.error
-                                ? e.error
-                                : (e.status ?? '—')}
-                            {typeof e.durationMs === 'number' ? ` · ${e.durationMs}ms` : ''}
-                          </span>
-                        </div>
-                        <div className="text-muted-foreground truncate" title={e.url}>{e.url}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Åtgärder</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="w-full justify-start"
-                onClick={handleResetView}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Återställ vy
+          )}
+          
+          {/* Close button - top left */}
+          {onClose && (
+            <div className="absolute top-4 left-4 z-10">
+              <Button variant="secondary" size="sm" onClick={onClose} className="gap-2">
+                <X className="h-4 w-4" />
+                <span className="hidden sm:inline">Stäng</span>
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="w-full justify-start"
-                onClick={handleFullscreen}
-              >
-                <Maximize2 className="h-4 w-4 mr-2" />
-                Helskärm
-              </Button>
-              {onClose && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full justify-start"
-                  onClick={onClose}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Stäng viewer
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          )}
+
+          {/* Viewer Controls - bottom center */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
+            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn}>
+              <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut}>
+              <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+            <div className="w-px h-5 sm:h-6 bg-border" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleResetView}>
+              <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleFullscreen}>
+              <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+          </div>
+
+          {/* Filter & Layer Toggle - top right */}
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <FilterDropdown />
+            <Button variant="secondary" size="sm" className="gap-2">
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Lager</span>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
