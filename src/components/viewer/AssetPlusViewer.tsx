@@ -37,6 +37,11 @@ const MODEL_FILTERS: { value: ModelFilter; label: string; description: string }[
   { value: 'buildings-only', label: 'Endast byggnader', description: 'Visa endast byggnadsmodeller' },
 ];
 
+// Default camera settings from external_viewer.html
+const defaultHeightAboveAABB = 1;
+const defaultMinimumHeightAboveBase = 2.6;
+const lookAtSpaceAndInstanceFlyToDuration = 1;
+
 /**
  * Asset+ 3D Viewer Component
  * 
@@ -46,15 +51,16 @@ const MODEL_FILTERS: { value: ModelFilter; label: string; description: string }[
 const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
+  const viewportWrapperRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
   const accessTokenRef = useRef<string>('');
   
-  // Deferred loading state (matching Asset+ pattern)
+  // Deferred loading state (matching Asset+ pattern exactly)
   const deferCallsRef = useRef(true);
-  const deferredFmGuidRef = useRef<string | null>(null);
-  const deferredDisplayActionRef = useRef<any>(null);
-  const deferredFmGuidForDisplayRef = useRef<string | null>(null);
-  const deferredDisplayActionForDisplayRef = useRef<any>(null);
+  const deferredFmGuidRef = useRef<string | undefined>(undefined);
+  const deferredDisplayActionRef = useRef<any>(undefined);
+  const deferredFmGuidForDisplayRef = useRef<string | undefined>(undefined);
+  const deferredDisplayActionForDisplayRef = useRef<any>(undefined);
   
   const [state, setState] = useState<ViewerState>({
     isLoading: true,
@@ -63,12 +69,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     modelInfo: null,
   });
   
-  const [modelFilter, setModelFilter] = useState<ModelFilter>('all');
+  const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
 
-  // Get model filter predicate based on selection
+  // Get model filter predicate based on selection (matches external_viewer.html pattern)
   const getModelPredicate = useCallback((filter: ModelFilter) => {
     switch (filter) {
       case 'a-prefix':
@@ -76,7 +82,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       case 'buildings-only':
         return (model: any) => {
           const name = (model?.name || "").toLowerCase();
-          return name.includes("building") || name.includes("byggnad");
+          return name.includes("building") || name.includes("byggnad") || model?.type === 0;
         };
       case 'all':
       default:
@@ -84,7 +90,192 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     }
   }, []);
 
-  // Execute display action (from Asset+ pattern)
+  // Helper: Get item IDs by FmGuid
+  const getItemIdsByFmGuid = useCallback((fmGuidToFind: string) => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+    if (assetView) {
+      const itemIds = assetView.getItemsByPropertyValue("fmguid", fmGuidToFind.toUpperCase());
+      const annotation = assetView.findAnnotation?.("fmguid", fmGuidToFind.toUpperCase());
+      if (annotation) {
+        itemIds.push(annotation.getField("bimObjectId"));
+      }
+      return itemIds;
+    }
+    return [];
+  }, []);
+
+  // Helper: Find closest ancestor by category
+  const findClosestAncestorByItemIdAndIfcCategory = useCallback((itemId: string, category: string) => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+    let metaObject = assetView?.viewer?.metaScene?.metaObjects?.[itemId];
+
+    while (metaObject?.id) {
+      if (metaObject.type?.toLowerCase() === category.toLowerCase()) {
+        return metaObject.id;
+      } else if (metaObject.parent) {
+        metaObject = metaObject.parent;
+      } else {
+        break;
+      }
+    }
+    return undefined;
+  }, []);
+
+  const findClosestAncestorByFmGuidAndIfcCategory = useCallback((fmGuidToFind: string, category: string) => {
+    const itemIds = getItemIdsByFmGuid(fmGuidToFind);
+    for (const id of itemIds) {
+      const parentId = findClosestAncestorByItemIdAndIfcCategory(id, category);
+      if (parentId) return parentId;
+    }
+    return undefined;
+  }, [getItemIdsByFmGuid, findClosestAncestorByItemIdAndIfcCategory]);
+
+  // Helper: Fly to coordinates
+  const flyToCoordinates = useCallback((eye: number[], look: number[], duration: number) => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+    if (assetView && Array.isArray(eye) && eye.length > 2 && Array.isArray(look) && look.length > 2 && typeof duration === "number") {
+      assetView.viewer.cameraFlight.flyTo({
+        eye: eye,
+        look: look,
+        up: [0, 1, 0],
+        duration: duration
+      });
+    }
+  }, []);
+
+  // Helper: Look at instance from angle (from external_viewer.html)
+  const lookAtInstanceFromAngle = useCallback((fmGuidToView: string, minimumHeightAboveBase: number, heightAboveAABB: number) => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+    if (assetView && fmGuidToView) {
+      const itemsIds = getItemIdsByFmGuid(fmGuidToView);
+      const aabb = assetView.getAABB(itemsIds);
+
+      if (aabb) {
+        const horizontalAngle = assetView.horizontalAngle * (Math.PI / 180);
+        const verticalAngle = assetView.verticalAngle * (Math.PI / 180);
+        const look = [
+          (aabb[0] + aabb[3]) / 2,
+          (aabb[1] + aabb[4]) / 2,
+          (aabb[2] + aabb[5]) / 2
+        ];
+
+        const diagonal = Math.sqrt(
+          Math.pow(aabb[3] - aabb[0], 2) +
+          Math.pow(aabb[4] - aabb[1], 2) +
+          Math.pow(aabb[5] - aabb[2], 2)
+        );
+        
+        const fov = assetView.viewer.cameraFlight.fitFOV * (Math.PI / 180);
+        const distance = Math.abs(diagonal / (2 * Math.tan(fov / 2)));
+
+        const eye = [
+          look[0] + distance * Math.sin(horizontalAngle) * Math.cos(verticalAngle),
+          look[1] + distance * Math.sin(verticalAngle),
+          look[2] + distance * Math.cos(horizontalAngle) * Math.cos(verticalAngle)
+        ];
+
+        let largestHeight = Math.abs(aabb[4] - aabb[1]);
+        let foundSpace = false;
+        const containingSpaceId = findClosestAncestorByFmGuidAndIfcCategory(fmGuidToView, "IfcSpace");
+
+        if (containingSpaceId) {
+          const containingSpaceAABB = assetView.getAABB(containingSpaceId);
+          if (containingSpaceAABB) {
+            const baseToTopOfSpaceHeight = containingSpaceAABB[4] - aabb[1];
+            largestHeight = Math.max(largestHeight, baseToTopOfSpaceHeight);
+            foundSpace = true;
+          }
+        }
+
+        if (!foundSpace && typeof minimumHeightAboveBase === "number") {
+          largestHeight = Math.max(largestHeight, minimumHeightAboveBase);
+        }
+
+        if (typeof heightAboveAABB === "number") {
+          largestHeight += heightAboveAABB;
+        }
+
+        const eyeHeight = eye[1] - aabb[1];
+        if (eyeHeight < largestHeight) {
+          const virtualDiagonal = Math.sqrt(
+            Math.pow(aabb[3] - aabb[0], 2) +
+            Math.pow(largestHeight, 2) +
+            Math.pow(aabb[5] - aabb[2], 2)
+          );
+          const scale = virtualDiagonal / diagonal;
+          eye[0] += (eye[0] - look[0]) * scale;
+          eye[1] += (eye[1] - look[1]) * scale;
+          eye[2] += (eye[2] - look[2]) * scale;
+        }
+
+        flyToCoordinates(eye, look, lookAtSpaceAndInstanceFlyToDuration);
+      }
+    }
+  }, [getItemIdsByFmGuid, findClosestAncestorByFmGuidAndIfcCategory, flyToCoordinates]);
+
+  // Helper: Look at space from angle (from external_viewer.html)
+  const lookAtSpaceFromAngle = useCallback((fmGuidToView: string, heightAboveAABB: number) => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+
+    if (assetView && fmGuidToView) {
+      const itemsIds = getItemIdsByFmGuid(fmGuidToView);
+      const aabb = assetView.getAABB(itemsIds);
+
+      if (aabb) {
+        const horizontalAngle = assetView.horizontalAngle * (Math.PI / 180);
+        const verticalAngle = assetView.verticalAngle * (Math.PI / 180);
+        const look = [
+          (aabb[0] + aabb[3]) / 2,
+          (aabb[1] + aabb[4]) / 2,
+          (aabb[2] + aabb[5]) / 2
+        ];
+
+        const diagonal = Math.sqrt(
+          Math.pow(aabb[3] - aabb[0], 2) +
+          Math.pow(aabb[4] - aabb[1], 2) +
+          Math.pow(aabb[5] - aabb[2], 2)
+        );
+        
+        const fov = assetView.viewer.cameraFlight.fitFOV * (Math.PI / 180);
+        const distance = Math.abs(diagonal / (2 * Math.tan(fov / 2)));
+
+        const eye = [
+          look[0] + distance * Math.sin(horizontalAngle) * Math.cos(verticalAngle),
+          look[1] + distance * Math.sin(verticalAngle),
+          look[2] + distance * Math.cos(horizontalAngle) * Math.cos(verticalAngle)
+        ];
+
+        if (typeof heightAboveAABB === "number") {
+          const minimumHeightAboveBase = aabb[4] - aabb[1] + heightAboveAABB;
+          const eyeHeight = eye[1] - aabb[1];
+
+          if (eyeHeight < minimumHeightAboveBase) {
+            const virtualDiagonal = Math.sqrt(
+              Math.pow(aabb[3] - aabb[0], 2) +
+              Math.pow(minimumHeightAboveBase, 2) +
+              Math.pow(aabb[5] - aabb[2], 2)
+            );
+            const scale = virtualDiagonal / diagonal;
+            eye[0] += (eye[0] - look[0]) * scale;
+            eye[1] += (eye[1] - look[1]) * scale;
+            eye[2] += (eye[2] - look[2]) * scale;
+          }
+        }
+
+        flyToCoordinates(eye, look, lookAtSpaceAndInstanceFlyToDuration);
+      }
+    }
+  }, [getItemIdsByFmGuid, flyToCoordinates]);
+
+  // Execute display action (updated from external_viewer-2.html)
   const executeDisplayAction = useCallback((displayAction: any) => {
     const viewer = viewerInstanceRef.current;
     if (!viewer) return;
@@ -92,8 +283,26 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     switch (displayAction?.action?.toLowerCase()) {
       case "cutoutfloor":
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
-          console.log("Cutting out floor with FMGUID", displayAction.parameter.fmGuid);
+          console.log("Cutting out floor with FMGUID", displayAction.parameter.fmGuid, "includeRelatedFloors:", displayAction.parameter.includeRelatedFloors);
           viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors);
+        }
+        break;
+      case "cutoutfloor_and_lookatspace":
+        if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
+          console.log("Cutting out floor & looking at Space with FMGUID", displayAction.parameter.fmGuid);
+          viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
+          lookAtSpaceFromAngle(displayAction.parameter.fmGuid, displayAction.parameter.heightAboveAABB ?? defaultHeightAboveAABB);
+        }
+        break;
+      case "cutoutfloor_and_lookatinstance":
+        if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
+          console.log("Cutting out floor & looking at Instance with FMGUID", displayAction.parameter.fmGuid);
+          viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
+          lookAtInstanceFromAngle(
+            displayAction.parameter.fmGuid, 
+            displayAction.parameter.minimumHeightAboveBase ?? defaultMinimumHeightAboveBase,
+            displayAction.parameter.heightAboveAABB ?? defaultHeightAboveAABB
+          );
         }
         break;
       case "viewall":
@@ -111,9 +320,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         }
         break;
     }
+  }, [lookAtSpaceFromAngle, lookAtInstanceFromAngle]);
+
+  // Change X-ray material (from external_viewer-2.html)
+  const changeXrayMaterial = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+    const xeokitViewer = assetView?.viewer;
+    const scene = xeokitViewer?.scene;
+    const xrayMaterial = scene?.xrayMaterial;
+
+    if (xrayMaterial) {
+      xrayMaterial.fill = true;
+      xrayMaterial.fillAlpha = 0.7;
+      xrayMaterial.fillColor = [200 / 255, 200 / 255, 200 / 255];
+      xrayMaterial.edges = true;
+      xrayMaterial.edgeAlpha = 0.6;
+      xrayMaterial.edgeColor = [15 / 255, 15 / 255, 15 / 255];
+    }
   }, []);
 
-  // Do display FMGUID (from Asset+ pattern)
+  // Do display FMGUID (from Asset+ pattern - INTERNALS section)
   const doDisplayFmGuid = useCallback((fmGuidToShow: string, displayAction?: any) => {
     const viewer = viewerInstanceRef.current;
     if (!viewer) return;
@@ -127,16 +354,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     viewer.setAvailableModelsByFmGuid(fmGuidToShow);
   }, []);
 
-  // Display FMGUID with deferred handling
+  // Display FMGUID with deferred handling (PUBLIC API section from external_viewer.html)
   const displayFmGuid = useCallback((fmGuidToShow: string, displayAction?: any) => {
     deferredFmGuidRef.current = undefined;
     deferredDisplayActionRef.current = undefined;
 
     if (!deferCallsRef.current) {
-      console.log("displayFmGuid: Not deferring, showing immediately");
+      console.log("displayFmGuid: Not deferring calls, showing immediately");
       doDisplayFmGuid(fmGuidToShow, displayAction);
     } else {
-      console.log("displayFmGuid: Deferring, will show later");
+      console.log("displayFmGuid: Deferring calls, will show later");
       if (fmGuidToShow) {
         deferredFmGuidRef.current = fmGuidToShow;
       }
@@ -152,14 +379,40 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       const fmGuidToShow = deferredFmGuidRef.current;
       const displayAction = deferredDisplayActionRef.current;
 
-      deferredFmGuidRef.current = null;
-      deferredDisplayActionRef.current = null;
+      deferredFmGuidRef.current = undefined;
+      deferredDisplayActionRef.current = undefined;
 
       doDisplayFmGuid(fmGuidToShow, displayAction);
     }
   }, [doDisplayFmGuid]);
 
-  // Fetch access token and initialize viewer
+  // allModelsLoadedCallback - executed when all models are loaded
+  const handleAllModelsLoaded = useCallback(() => {
+    console.log("allModelsLoadedCallback");
+
+    if (deferredFmGuidForDisplayRef.current) {
+      console.log("allModelsLoadedCallback - got an FMGUID to look at");
+      const fmGuidToShow = deferredFmGuidForDisplayRef.current;
+      const displayAction = deferredDisplayActionForDisplayRef.current;
+
+      deferredFmGuidForDisplayRef.current = undefined;
+      deferredDisplayActionForDisplayRef.current = undefined;
+
+      // If we're not cutting the floor, then select + viewfit (zoom)
+      if (!displayAction) {
+        console.log("allModelsLoadedCallback - just select + zoom");
+        viewerInstanceRef.current?.selectFmGuidAndViewFit(fmGuidToShow);
+      } else {
+        console.log("allModelsLoadedCallback - display action + select");
+        executeDisplayAction(displayAction);
+        viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
+      }
+    }
+
+    toast.success('3D-modell laddad');
+  }, [executeDisplayAction]);
+
+  // Initialize viewer - following EXACT pattern from external_viewer.html
   const initializeViewer = useCallback(async () => {
     if (!viewerContainerRef.current) return;
 
@@ -182,17 +435,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       }
 
       accessTokenRef.current = accessToken;
+      console.log("AssetPlusViewer: Access token received");
 
       // Check if assetplusviewer is available globally
       const assetplusviewer = (window as any).assetplusviewer;
       
       if (!assetplusviewer) {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Asset+ 3D Viewer-paketet är inte laddat. Paketet behöver inkluderas i projektet.',
-        }));
-        return;
+        throw new Error('Asset+ 3D Viewer-paketet är inte laddat. Kontrollera att /lib/assetplus/assetplusviewer.umd.min.js är inkluderat.');
       }
 
       // Get API configuration
@@ -203,9 +452,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       const baseUrl = configData?.apiUrl || '';
       const apiKey = configData?.apiKey || '';
 
-      console.log("AssetPlusViewer: Init - Calling assetplusviewer");
+      console.log("AssetPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
 
-      // Initialize the viewer following exact Asset+ external_viewer.html pattern
+      // Initialize the viewer following EXACT Asset+ external_viewer.html pattern
       const viewer = await assetplusviewer(
         baseUrl,  // URL to the API Backend
         apiKey,   // API Key in UUID format
@@ -223,30 +472,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           console.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
         },
         // allModelsLoadedCallback
-        () => {
-          console.log("allModelsLoadedCallback");
-
-          if (deferredFmGuidForDisplayRef.current) {
-            console.log("allModelsLoadedCallback - got an FMGUID to look at");
-            const fmGuidToShow = deferredFmGuidForDisplayRef.current;
-            const displayAction = deferredDisplayActionForDisplayRef.current;
-
-            deferredFmGuidForDisplayRef.current = null;
-            deferredDisplayActionForDisplayRef.current = null;
-
-            // If we're not cutting the floor, then select + viewfit (zoom)
-            if (!displayAction) {
-              console.log("allModelsLoadedCallback - just select + zoom");
-              viewerInstanceRef.current?.selectFmGuidAndViewFit(fmGuidToShow);
-            } else {
-              console.log("allModelsLoadedCallback - display action + select");
-              executeDisplayAction(displayAction);
-              viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
-            }
-          }
-
-          toast.success('3D-modell laddad');
-        },
+        handleAllModelsLoaded,
         // isItemIdEditableCallback (for BimObjectId instead of FmGuid)
         undefined,
         // isFmGuidEditableCallback
@@ -254,7 +480,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // additionalDefaultPredicate - model filter
+        // additionalDefaultPredicate - model filter (matches external_viewer.html default)
         getModelPredicate(modelFilter),
         // Custom object context menu items
         [],
@@ -267,16 +493,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       viewerInstanceRef.current = viewer;
       console.log("AssetPlusViewer: Mounted");
 
-      // Stop deferring calls
+      // Apply X-ray material settings
+      changeXrayMaterial();
+
+      // CRITICAL: Stop deferring calls AFTER viewer is mounted
       deferCallsRef.current = false;
 
       // Process any deferred calls
       processDeferred();
 
-      // Display the initial FMGUID with viewall action for buildings
+      // Now display the initial FMGUID
       const displayAction = assetData?.category === 'Building' 
         ? { action: 'viewall' }
-        : undefined;
+        : assetData?.category === 'Storey'
+          ? { action: 'cutoutfloor', parameter: { fmGuid: fmGuid, includeRelatedFloors: true } }
+          : assetData?.category === 'Space'
+            ? { action: 'cutoutfloor_and_lookatspace', parameter: { fmGuid: fmGuid, includeRelatedFloors: true, heightAboveAABB: defaultHeightAboveAABB } }
+            : undefined;
       
       displayFmGuid(fmGuid, displayAction);
 
@@ -299,7 +532,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         error: error instanceof Error ? error.message : 'Kunde inte ladda 3D-visaren',
       }));
     }
-  }, [fmGuid, assetData, modelFilter, getModelPredicate, executeDisplayAction, processDeferred, displayFmGuid]);
+  }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid]);
 
   // Initialize on mount
   useEffect(() => {
@@ -328,11 +561,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   };
 
   const handleFullscreen = () => {
-    if (viewerContainerRef.current) {
+    if (viewportWrapperRef.current) {
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        viewerContainerRef.current.requestFullscreen();
+        viewportWrapperRef.current.requestFullscreen();
       }
     }
   };
@@ -393,46 +626,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     </DropdownMenu>
   );
 
-  // Common viewer container with dx classes
-  const ViewerContainer = ({ children, showPlaceholder = false }: { children?: React.ReactNode; showPlaceholder?: boolean }) => (
-    <div 
-      ref={viewerContainerRef}
-      id="AssetPlusViewer"
-      className="relative w-full h-full min-h-[300px] md:min-h-[400px] rounded-lg overflow-hidden dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
-      style={{
-        background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
-      }}
-    >
-      {showPlaceholder && children}
-      
-      {/* Viewer Controls */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
-        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn}>
-          <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut}>
-          <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        </Button>
-        <div className="w-px h-5 sm:h-6 bg-border" />
-        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleResetView}>
-          <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleFullscreen}>
-          <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        </Button>
-      </div>
-
-      {/* Filter & Layer Toggle */}
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
-        <FilterDropdown />
-        <Button variant="secondary" size="sm" className="gap-2">
-          <Layers className="h-4 w-4" />
-          <span className="hidden sm:inline">Lager</span>
-        </Button>
-      </div>
-    </div>
-  );
-
   // Show error state with placeholder
   if (state.error || !state.isInitialized) {
     return (
@@ -452,71 +645,28 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           )}
         </div>
 
-        {/* Viewer area */}
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-          <Card className="flex-1 lg:flex-[3] min-h-0">
-            <CardContent className="p-0 h-full">
-              <ViewerContainer showPlaceholder>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center space-y-4 max-w-md px-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mx-auto">
-                      {state.error ? (
-                        <AlertCircle className="h-8 w-8 text-destructive" />
-                      ) : (
-                        <Box className="h-8 w-8 text-primary" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-lg font-medium text-foreground">
-                        {state.error ? 'Kunde inte ladda 3D-visaren' : '3D-visare'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {state.error || 'Asset+ 3D Viewer kommer att visas här'}
-                      </p>
-                    </div>
-                    {state.error && (
-                      <Button onClick={initializeViewer} variant="outline" size="sm">
-                        Försök igen
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </ViewerContainer>
-            </CardContent>
-          </Card>
-
-          {/* Sidebar - hidden on mobile when there's an error */}
-          <div className="hidden lg:flex flex-col space-y-4 lg:w-72">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Modellinformation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Objekt</p>
-                  <p className="text-sm font-medium">{assetData?.commonName || assetData?.name || 'Laddar...'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Kategori</p>
-                  <p className="text-sm font-medium">{assetData?.category || 'Okänd'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">FMGUID</p>
-                  <p className="text-sm font-medium font-mono text-xs truncate">{fmGuid}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <p className="text-sm font-medium text-amber-500">Väntar på viewer-paket</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        {/* Error display */}
+        <Card className="flex-1">
+          <CardContent className="h-full flex items-center justify-center p-6">
+            <div className="text-center space-y-4 max-w-md">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 mx-auto">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+              </div>
+              <div>
+                <p className="text-lg font-medium">Kunde inte ladda 3D-visaren</p>
+                <p className="text-sm text-muted-foreground mt-2">{state.error}</p>
+              </div>
+              <Button onClick={initializeViewer} variant="outline">
+                Försök igen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // Fully initialized viewer
+  // Main viewer - with proper dx-viewport wrapper
   return (
     <div className="h-full flex flex-col p-2 sm:p-4">
       {/* Header */}
@@ -524,7 +674,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg sm:text-xl font-semibold truncate">3D-visning</h2>
           <p className="text-sm text-muted-foreground truncate">
-            {state.modelInfo?.name}
+            {state.modelInfo?.name || fmGuid.substring(0, 16) + '...'}
           </p>
         </div>
         {onClose && (
@@ -534,67 +684,111 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         )}
       </div>
 
-      {/* Viewer content */}
+      {/* Viewer area with dx-viewport wrapper (CRITICAL for Asset+ popups) */}
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-        <Card className="flex-1 lg:flex-[3] min-h-0">
+        <Card className="flex-1 lg:flex-[3] min-h-0 overflow-hidden">
           <CardContent className="p-0 h-full">
-            <ViewerContainer />
+            {/* dx-viewport wrapper - required by Asset+ for ObjectDetails popup constraint */}
+            <div 
+              ref={viewportWrapperRef}
+              className="dx-viewport relative w-full h-full min-h-[300px] md:min-h-[400px]"
+              style={{ margin: 0 }}
+            >
+              {/* AssetPlusViewer container - MUST have id="AssetPlusViewer" */}
+              <div 
+                ref={viewerContainerRef}
+                id="AssetPlusViewer"
+                className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
+                style={{
+                  display: 'flex',
+                  flex: '1 0 auto',
+                  background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
+                }}
+              />
+              
+              {/* Viewer Controls */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2 bg-background/90 backdrop-blur-sm rounded-lg p-1.5 sm:p-2 border z-10">
+                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn}>
+                  <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut}>
+                  <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+                <div className="w-px h-5 sm:h-6 bg-border" />
+                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleResetView}>
+                  <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleFullscreen}>
+                  <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+              </div>
+
+              {/* Filter & Layer Toggle */}
+              <div className="absolute top-4 right-4 z-10 flex gap-2">
+                <FilterDropdown />
+                <Button variant="secondary" size="sm" className="gap-2">
+                  <Layers className="h-4 w-4" />
+                  <span className="hidden sm:inline">Lager</span>
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         {/* Sidebar */}
-        <div className="flex flex-col gap-4 lg:w-72">
+        <div className="lg:w-64 xl:w-72 space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Modellinformation</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Objekt</p>
-                <p className="text-sm font-medium">{state.modelInfo?.name}</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-muted-foreground">Namn:</span>
+                <span className="font-medium truncate">{state.modelInfo?.name}</span>
+                <span className="text-muted-foreground">Format:</span>
+                <span className="font-medium">{state.modelInfo?.type}</span>
+                <span className="text-muted-foreground">Kategori:</span>
+                <span className="font-medium">{assetData?.category || '-'}</span>
+                <span className="text-muted-foreground">Filter:</span>
+                <span className="font-medium">{MODEL_FILTERS.find(f => f.value === modelFilter)?.label}</span>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Format</p>
-                <p className="text-sm font-medium">{state.modelInfo?.type}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">FMGUID</p>
-                <p className="text-sm font-medium font-mono text-xs truncate">{fmGuid}</p>
-              </div>
-              {state.modelInfo?.objectCount && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Antal objekt</p>
-                  <p className="text-sm font-medium">{state.modelInfo.objectCount.toLocaleString()}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          <Card className="hidden lg:block">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Åtgärder</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Exportera vy
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Mät avstånd
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                Lägg till anteckning
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleResetView}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Återställ vy
               </Button>
               <Button 
                 variant="outline" 
-                className="w-full justify-start" 
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  toast.success('Länk kopierad!');
-                }}
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleFullscreen}
               >
-                Dela länk
+                <Maximize2 className="h-4 w-4 mr-2" />
+                Helskärm
               </Button>
+              {onClose && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full justify-start"
+                  onClick={onClose}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Stäng viewer
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
