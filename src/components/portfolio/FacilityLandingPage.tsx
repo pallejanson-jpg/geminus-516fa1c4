@@ -1,14 +1,17 @@
 import React, { useState, useContext, useMemo } from 'react';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap 
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
+import { useBuildingSettings } from '@/hooks/useBuildingSettings';
 import KpiCard from './KpiCard';
 import QuickActions from './QuickActions';
 
@@ -24,8 +27,6 @@ interface FacilityLandingPageProps {
   onShowDocs: (facility: Facility) => void;
   onShowInsights: (facility: Facility) => void;
   onOpenIoT: (facility: Facility) => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
   setSelectedFacility: (facility: Facility) => void;
 }
 
@@ -41,12 +42,28 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onShowDocs,
   onShowInsights,
   onOpenIoT,
-  isFavorite,
-  onToggleFavorite,
   setSelectedFacility
 }) => {
-  const { allData, setActiveApp } = useContext(AppContext);
+  const { allData, setActiveApp, setViewer3dFmGuid } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
+
+  // Use building settings hook
+  const { 
+    settings, 
+    isLoading: isLoadingSettings, 
+    isSaving, 
+    toggleFavorite, 
+    updateIvionSiteId 
+  } = useBuildingSettings(facility.fmGuid || null);
+
+  // Sync ivion input with settings
+  React.useEffect(() => {
+    if (settings?.ivionSiteId) {
+      setIvionSiteIdInput(settings.ivionSiteId);
+    }
+  }, [settings?.ivionSiteId]);
 
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -94,8 +111,16 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     };
   }, [facility, childSpaces, childStoreys, isSpace]);
 
+  // Handler for 3D button - passes the building's fmGuid to viewer
   const handleToggle3D = () => {
-    setActiveApp('assetplus_viewer');
+    if (facility.fmGuid) {
+      setViewer3dFmGuid(facility.fmGuid);
+    }
+  };
+
+  // Handler for saving Ivion Site ID
+  const handleSaveIvionSiteId = () => {
+    updateIvionSiteId(ivionSiteIdInput || null);
   };
 
   const title = facility.commonName || facility.name || 'Unnamed Object';
@@ -151,13 +176,27 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 </CardTitle>
                 <div className="flex items-center gap-1 sm:gap-2">
                   <Button 
-                    onClick={onToggleFavorite} 
+                    onClick={toggleFavorite} 
                     variant="ghost" 
                     size="icon"
                     className="h-7 w-7 sm:h-8 sm:w-8"
-                    title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    title={settings?.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    disabled={isSaving}
                   >
-                    <Star size={14} className={`sm:w-4 sm:h-4 ${isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'}`} />
+                    {isSaving ? (
+                      <Loader2 size={14} className="sm:w-4 sm:h-4 animate-spin" />
+                    ) : (
+                      <Star size={14} className={`sm:w-4 sm:h-4 ${settings?.isFavorite ? 'text-accent fill-current' : 'text-muted-foreground'}`} />
+                    )}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setShowSettings(prev => !prev)} 
+                    title="Building settings" 
+                    className="h-7 w-7 sm:h-8 sm:w-8"
+                  >
+                    <Settings2 size={14} className={`sm:w-4 sm:h-4 ${showSettings ? 'text-primary' : ''}`} />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
                     <Table size={14} className="sm:w-4 sm:h-4" />
@@ -183,6 +222,63 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Building Settings (collapsible) */}
+            {showSettings && isBuilding && (
+              <Card className="animate-in fade-in duration-300">
+                <CardHeader className="pb-3 sm:pb-4">
+                  <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                    <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary" />
+                    Building Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="ivionSiteId" className="text-xs">Ivion Site ID</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="ivionSiteId"
+                          value={ivionSiteIdInput}
+                          onChange={(e) => setIvionSiteIdInput(e.target.value)}
+                          placeholder="e.g. site-123"
+                          className="h-8 text-sm"
+                        />
+                        <Button 
+                          size="sm" 
+                          onClick={handleSaveIvionSiteId}
+                          disabled={isSaving}
+                          className="h-8"
+                        >
+                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Used for 360° viewer integration
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Show on Home Page</Label>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant={settings?.isFavorite ? "default" : "outline"}
+                          size="sm"
+                          onClick={toggleFavorite}
+                          disabled={isSaving}
+                          className="h-8 gap-2"
+                        >
+                          <Star size={14} className={settings?.isFavorite ? "fill-current" : ""} />
+                          {settings?.isFavorite ? 'In Favorites' : 'Add to Favorites'}
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Favorite buildings appear on the home landing page
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* KPI Cards */}
             <Card>

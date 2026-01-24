@@ -1,10 +1,13 @@
-import React, { useCallback, useState } from "react";
-import { Database, FileQuestion, Sparkles } from "lucide-react";
+import React, { useCallback, useState, useContext, useMemo } from "react";
+import { Database, FileQuestion, Sparkles, Building2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
 import GunnarChat from "@/components/chat/GunnarChat";
+import { useFavoriteBuildings } from "@/hooks/useBuildingSettings";
+import { AppContext } from "@/context/AppContext";
+import { BUILDING_IMAGES } from "@/lib/constants";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -22,6 +25,37 @@ const ASSISTANTS: Array<{
 export default function HomeLanding() {
   const { toast } = useToast();
   const [gunnarOpen, setGunnarOpen] = useState(false);
+  const { favorites, isLoading: isLoadingFavorites } = useFavoriteBuildings();
+  const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
+
+  // Get favorite buildings from navigator tree data
+  const favoriteBuildings = useMemo(() => {
+    return navigatorTreeData
+      .filter(building => favorites.includes(building.fmGuid))
+      .map((building, index) => {
+        // Calculate stats
+        const storeys = building.children || [];
+        const totalSpaces = storeys.reduce((sum: number, storey: any) => {
+          return sum + (storey.children?.length || 0);
+        }, 0);
+        const totalArea = allData
+          .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
+          .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
+
+        return {
+          fmGuid: building.fmGuid,
+          name: building.name,
+          commonName: building.commonName,
+          category: 'Building' as const,
+          image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
+          numberOfLevels: storeys.length,
+          numberOfSpaces: totalSpaces,
+          area: totalArea,
+          address: building.attributes?.address || undefined,
+          complexCommonName: building.complexCommonName || undefined,
+        };
+      });
+  }, [navigatorTreeData, favorites, allData]);
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
@@ -36,6 +70,11 @@ export default function HomeLanding() {
     },
     [toast],
   );
+
+  const handleBuildingClick = (building: any) => {
+    setSelectedFacility(building);
+    setActiveApp('portfolio');
+  };
 
   return (
     <div className="relative min-h-full">
@@ -92,11 +131,51 @@ export default function HomeLanding() {
             <CardDescription>Quick access to your most used buildings</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-dashed border-border p-4">
-              <p className="text-sm text-muted-foreground">
-                No favorites yet. When we connect favorites from the Portfolio, they will appear here.
-              </p>
-            </div>
+            {isLoadingFavorites ? (
+              <div className="text-center py-4 text-sm text-muted-foreground">
+                Loading favorites...
+              </div>
+            ) : favoriteBuildings.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {favoriteBuildings.map((building) => (
+                  <button
+                    key={building.fmGuid}
+                    type="button"
+                    onClick={() => handleBuildingClick(building)}
+                    className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg group"
+                  >
+                    <div className="h-24 relative overflow-hidden">
+                      <img 
+                        src={building.image} 
+                        alt={building.commonName || building.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <div className="absolute bottom-2 left-3 right-3">
+                        <h3 className="font-semibold text-white text-sm truncate">
+                          {building.commonName || building.name}
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="p-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{building.numberOfLevels || 0} floors</span>
+                      <span>{building.numberOfSpaces || 0} rooms</span>
+                      <span>{building.area?.toLocaleString() || 0} m²</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-4">
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <Building2 className="h-8 w-8 opacity-50" />
+                  <div>
+                    <p className="text-sm font-medium">No favorites yet</p>
+                    <p className="text-xs">Mark buildings as favorites from the Portfolio to see them here.</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>
