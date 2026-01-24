@@ -110,13 +110,7 @@ const PortfolioView: React.FC = () => {
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
   const handleOpenIoT = (facility: Facility) => console.log('Open IoT:', facility);
   const handleToggleFavorite = () => {
-    if (selectedFacility) {
-      setFavorites(prev => 
-        prev.includes(selectedFacility.fmGuid || '')
-          ? prev.filter(id => id !== selectedFacility.fmGuid)
-          : [...prev, selectedFacility.fmGuid || '']
-      );
-    }
+    // Now handled by useBuildingSettings hook in FacilityLandingPage
   };
 
   // Show landing page if facility is selected
@@ -134,8 +128,6 @@ const PortfolioView: React.FC = () => {
         onShowDocs={handleShowDocs}
         onShowInsights={handleShowInsights}
         onOpenIoT={handleOpenIoT}
-        isFavorite={favorites.includes(selectedFacility.fmGuid || '')}
-        onToggleFavorite={handleToggleFavorite}
         setSelectedFacility={setSelectedFacility}
       />
     );
