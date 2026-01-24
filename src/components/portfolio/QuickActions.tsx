@@ -9,6 +9,7 @@ import { Facility } from '@/lib/types';
 
 interface QuickActionsProps {
   facility: Facility;
+  ivionSiteId?: string | null;
   onOpenMap: () => void;
   onOpenNavigator: (facility: Facility) => void;
   onShowAssets: (facility: Facility) => void;
@@ -22,6 +23,7 @@ interface QuickActionsProps {
 
 const QuickActions: React.FC<QuickActionsProps> = ({ 
   facility, 
+  ivionSiteId,
   onOpenMap, 
   onOpenNavigator, 
   onShowAssets, 
@@ -79,8 +81,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             </Button>
           )}
           {(isBuilding || isStorey) && (
-            <Button variant="ghost" onClick={() => onOpen360(facility.siteId)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
-              <View size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
+            <Button 
+              variant="ghost" 
+              onClick={() => onOpen360(ivionSiteId || undefined)} 
+              className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+              title={ivionSiteId ? `Open Ivion: ${ivionSiteId}` : 'Configure Ivion Site ID in settings'}
+            >
+              <View size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-destructive' : 'text-muted-foreground'}`} />
               <span className="text-[10px] sm:text-xs">360+</span>
             </Button>
           )}
