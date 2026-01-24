@@ -108,7 +108,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
-    const [viewer3dFmGuid, setViewer3dFmGuid] = useState<string | null>(null);
+    const [viewer3dFmGuid, setViewer3dFmGuidInternal] = useState<string | null>(null);
+
+    // Wrapper: automatically switch to viewer app when fmGuid is set
+    const setViewer3dFmGuid = useCallback((fmGuid: string | null) => {
+        setViewer3dFmGuidInternal(fmGuid);
+        if (fmGuid) {
+            setActiveApp('assetplus_viewer');
+        }
+    }, []);
     const [viewerDiagnostics, setViewerDiagnostics] = useState<AppContextType["viewerDiagnostics"]>(null);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
