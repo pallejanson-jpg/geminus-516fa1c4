@@ -120,8 +120,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             });
         } else {
             // Synthesize buildings from unique buildingFmGuid values in storeys
-            // Use attributes from first storey or item to get building name
-            const buildingInfo = new Map<string, { commonName?: string; name?: string }>();
+            // Use attributes from first storey or item to get building name and complex
+            const buildingInfo = new Map<string, { commonName?: string; name?: string; complexCommonName?: string }>();
             
             [...storeys, ...spaces].forEach((item: any) => {
                 const bguid = item.buildingFmGuid;
@@ -131,6 +131,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     buildingInfo.set(bguid, {
                         commonName: attrs.buildingCommonName || attrs.buildingDesignation || undefined,
                         name: attrs.buildingDesignation || undefined,
+                        complexCommonName: item.complexCommonName || attrs.complexCommonName || undefined,
                     });
                 }
             });
@@ -141,6 +142,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     category: 'Building',
                     commonName: info.commonName || info.name || `Byggnad ${bguid.substring(0, 8)}`,
                     name: info.name,
+                    complexCommonName: info.complexCommonName,
                     children: [],
                 });
             });
