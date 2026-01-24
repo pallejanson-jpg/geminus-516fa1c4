@@ -70,7 +70,7 @@ const PortfolioView: React.FC = () => {
         image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
         numberOfLevels: buildingStoreys.length,
         numberOfSpaces: buildingSpaces.length,
-        area: Math.round(totalArea * 100) / 100, // Round to 2 decimals
+        area: Math.round(totalArea), // Round to integer
         address: building.attributes?.address || undefined,
         complexCommonName: building.complexCommonName || undefined,
       };
