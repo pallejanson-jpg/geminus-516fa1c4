@@ -103,7 +103,15 @@ const PortfolioView: React.FC = () => {
   const handleEdit = (facility: Facility) => console.log('Edit:', facility);
   const handleOpenMap = () => setActiveApp('map');
   const handleOpenNavigator = (facility: Facility) => setActiveApp('navigation');
-  const handleOpen360 = (siteId?: string) => setActiveApp('radar');
+  const handleOpen360 = (siteId?: string) => {
+    if (siteId) {
+      // Open Ivion 360 viewer in new tab with the site ID
+      window.open(`https://ivion.se/site/${siteId}`, '_blank');
+    } else {
+      // Fallback to internal placeholder if no site ID configured
+      setActiveApp('radar');
+    }
+  };
   const handleShowAssets = (facility: Facility) => setActiveApp('asset_plus');
   const handleShowRooms = (facility: Facility) => console.log('Show rooms:', facility);
   const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
