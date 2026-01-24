@@ -171,8 +171,8 @@ async function fetchAssetPlusObjects(
   accessToken: string, 
   filter: any[], 
   skip = 0, 
-  take = 1000
-): Promise<{ data: any[]; totalCount: number }> {
+  take = 500  // Reduced batch size to avoid memory overflow
+): Promise<{ data: any[]; hasMore: boolean }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
 
@@ -187,14 +187,16 @@ async function fetchAssetPlusObjects(
   // Note: Endpoint name is "PublishDataServiceGetMerged" (single path segment, not /PublishDataService/GetMerged)
   const endpoint = `${baseUrl}/PublishDataServiceGetMerged`;
   
-  console.log(`Calling Asset+ API: ${endpoint}`);
+  console.log(`Calling Asset+ API: ${endpoint} (skip=${skip}, take=${take})`);
 
   // Request body format from documentation - includes apiKey in body
+  // IMPORTANT: Removed requireTotalCount to avoid MongoDB sort memory overflow error
+  // The Asset+ backend uses MongoDB which has a 100MB sort limit
   const requestBody = {
     filter,
     skip,
     take,
-    requireTotalCount: true,
+    requireTotalCount: false, // Disabled to avoid sort memory overflow
     outputType: "raw", // Required per documentation to get raw values
     apiKey, // API key goes in body per documentation examples
   };
@@ -215,11 +217,12 @@ async function fetchAssetPlusObjects(
   }
 
   const result = await response.json();
+  const data = result.data || [];
   
-  // The response format from PublishDataServiceGetMerged has 'data' array and 'totalCount'
+  // Determine if there's more data by checking if we got a full batch
   return {
-    data: result.data || [],
-    totalCount: result.totalCount || 0,
+    data,
+    hasMore: data.length === take,
   };
 }
 
@@ -342,10 +345,12 @@ serve(async (req) => {
 
     let totalSynced = 0;
     let skip = 0;
-    const take = 1000;
+    const take = 500; // Smaller batch size to avoid MongoDB memory issues
     let hasMore = true;
+    let consecutiveEmptyBatches = 0;
+    const maxEmptyBatches = 3; // Safety limit
 
-    while (hasMore) {
+    while (hasMore && consecutiveEmptyBatches < maxEmptyBatches) {
       console.log(`Fetching batch at skip=${skip}...`);
       
       const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
@@ -355,9 +360,13 @@ serve(async (req) => {
         const synced = await upsertAssets(supabase, items);
         totalSynced += synced;
         console.log(`Synced ${synced} items (total: ${totalSynced})`);
+        consecutiveEmptyBatches = 0;
+      } else {
+        consecutiveEmptyBatches++;
+        console.log(`Empty batch ${consecutiveEmptyBatches}/${maxEmptyBatches}`);
       }
 
-      hasMore = items.length === take;
+      hasMore = result.hasMore;
       skip += take;
 
       // Update progress
