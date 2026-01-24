@@ -37,6 +37,27 @@ interface AppContextType {
     // 3D Viewer
     viewer3dFmGuid: string | null;
     setViewer3dFmGuid: (fmGuid: string | null) => void;
+
+    // 3D Viewer diagnostics (for RightSidebar)
+    viewerDiagnostics: {
+        fmGuid: string;
+        initStep: string;
+        modelLoadState: string;
+        modelCount: number | null;
+        xkt: { attempted: number; ok: number; fail: number };
+        lastError: { status?: number; message?: string; timedOut?: boolean } | null;
+        lastRequests: Array<{
+            tag: string;
+            method: string;
+            url: string;
+            status?: number;
+            durationMs?: number;
+            error?: string;
+            timedOut?: boolean;
+        }>;
+        updatedAt: number;
+    } | null;
+    setViewerDiagnostics: (diag: AppContextType["viewerDiagnostics"]) => void;
 }
 
 export const AppContext = createContext<AppContextType>({
@@ -63,6 +84,9 @@ export const AppContext = createContext<AppContextType>({
 
     viewer3dFmGuid: null,
     setViewer3dFmGuid: () => {},
+
+    viewerDiagnostics: null,
+    setViewerDiagnostics: () => {},
 });
 
 interface AppProviderProps {
@@ -85,6 +109,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
     const [viewer3dFmGuid, setViewer3dFmGuid] = useState<string | null>(null);
+    const [viewerDiagnostics, setViewerDiagnostics] = useState<AppContextType["viewerDiagnostics"]>(null);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         const buildings = items.filter(item => item.category === 'Building');
@@ -234,6 +259,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
                 viewer3dFmGuid,
                 setViewer3dFmGuid,
+
+                viewerDiagnostics,
+                setViewerDiagnostics,
             }}
         >
             {children}
