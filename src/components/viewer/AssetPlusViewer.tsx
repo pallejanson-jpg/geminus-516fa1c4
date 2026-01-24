@@ -808,13 +808,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       </div>
 
       {/* Viewer area with dx-viewport wrapper (CRITICAL for Asset+ popups) */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-        <Card className="flex-1 lg:flex-[3] min-h-0 overflow-hidden">
+      {/* Mobile: viewer first (fixed height), sidebar below. Desktop: row layout */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 overflow-auto lg:overflow-hidden lg:min-h-0">
+        {/* Viewer card: on mobile use fixed aspect ratio, on desktop flex-grow */}
+        <Card className="flex-shrink-0 lg:flex-1 lg:flex-[3] overflow-hidden">
           <CardContent className="p-0 h-full">
             {/* dx-viewport wrapper - required by Asset+ for ObjectDetails popup constraint */}
             <div 
               ref={viewportWrapperRef}
-              className="dx-viewport relative w-full h-full min-h-[300px] md:min-h-[400px]"
+              className="dx-viewport relative w-full aspect-[4/3] lg:aspect-auto lg:h-full"
               style={{ margin: 0 }}
             >
               {/* AssetPlusViewer container - MUST have id="AssetPlusViewer" */}
