@@ -74,6 +74,42 @@
     --sidebar-border: 0 0% 12%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  .swg {
+    /* SWG Brand theme - teal/cyan primary based on swg.com */
+    --background: 0 0% 8%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 186 56% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 186 30% 20%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 186 56% 47%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 186 56% 47%;
+    --chart-1: 186 56% 47%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 186 56% 47%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 186 30% 20%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 186 56% 47%;
+  }
 }
 
 @layer base {
