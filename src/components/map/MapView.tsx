@@ -98,10 +98,26 @@ const MapView: React.FC = () => {
         return sum + (storey.children?.length || 0);
       }, 0);
       
-      // Calculate total area from spaces
+      // Calculate total area from spaces - use NTA/area attributes
       const totalArea = allData
         .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
-        .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
+        .reduce((sum: number, space: any) => {
+          // Try to get area from attributes first (NTA keys)
+          const attrs = space.attributes || {};
+          let areaValue = 0;
+          
+          // Look for NTA keys in attributes
+          const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
+          if (ntaKey && attrs[ntaKey]) {
+            areaValue = Number(attrs[ntaKey]) || 0;
+          } else if (attrs.area) {
+            areaValue = Number(attrs.area) || 0;
+          } else if (space.grossArea) {
+            areaValue = Number(space.grossArea) || 0;
+          }
+          
+          return sum + areaValue;
+        }, 0);
 
       // Assign coordinates from Nordic cities (cycle through them)
       const cityIndex = index % NORDIC_CITIES.length;
@@ -115,7 +131,7 @@ const MapView: React.FC = () => {
         image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
         numberOfLevels: storeys.length,
         numberOfSpaces: totalSpaces,
-        area: totalArea,
+        area: Math.round(totalArea),
         address: building.attributes?.address || city.name,
         lat: city.lat + (Math.random() - 0.5) * 0.1, // Small offset for visual separation
         lng: city.lng + (Math.random() - 0.5) * 0.1,
