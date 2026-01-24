@@ -28,19 +28,40 @@ export default function HomeLanding() {
   const { favorites, isLoading: isLoadingFavorites } = useFavoriteBuildings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
 
+  // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
+  const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
+    if (!attributes) return 0;
+    for (const key of Object.keys(attributes)) {
+      if (key.toLowerCase().startsWith('nta')) {
+        const ntaObj = attributes[key];
+        if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
+          return ntaObj.value;
+        }
+      }
+    }
+    return 0;
+  };
+
   // Get favorite buildings from navigator tree data
   const favoriteBuildings = useMemo(() => {
     return navigatorTreeData
       .filter(building => favorites.includes(building.fmGuid))
       .map((building, index) => {
-        // Calculate stats
-        const storeys = building.children || [];
-        const totalSpaces = storeys.reduce((sum: number, storey: any) => {
-          return sum + (storey.children?.length || 0);
+        // Get spaces for this building from allData
+        const buildingSpaces = allData.filter(
+          (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid
+        );
+        
+        // Get storeys for this building from allData (more reliable than tree children)
+        const buildingStoreys = allData.filter(
+          (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
+        );
+        
+        // Calculate total area by summing NTA from each space's attributes
+        const totalArea = buildingSpaces.reduce((sum: number, space: any) => {
+          const nta = extractNtaFromAttributes(space.attributes);
+          return sum + nta;
         }, 0);
-        const totalArea = allData
-          .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
-          .reduce((sum: number, space: any) => sum + (space.grossArea || 0), 0);
 
         return {
           fmGuid: building.fmGuid,
@@ -48,9 +69,9 @@ export default function HomeLanding() {
           commonName: building.commonName,
           category: 'Building' as const,
           image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
-          numberOfLevels: storeys.length,
-          numberOfSpaces: totalSpaces,
-          area: totalArea,
+          numberOfLevels: buildingStoreys.length,
+          numberOfSpaces: buildingSpaces.length,
+          area: Math.round(totalArea * 100) / 100,
           address: building.attributes?.address || undefined,
           complexCommonName: building.complexCommonName || undefined,
         };
