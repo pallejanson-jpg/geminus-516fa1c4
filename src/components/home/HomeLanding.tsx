@@ -1,9 +1,10 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { Database, FileQuestion, Sparkles } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
+import GunnarChat from "@/components/chat/GunnarChat";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -20,12 +21,17 @@ const ASSISTANTS: Array<{
 
 export default function HomeLanding() {
   const { toast } = useToast();
+  const [gunnarOpen, setGunnarOpen] = useState(false);
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
+      if (type === "gunnar") {
+        setGunnarOpen(true);
+        return;
+      }
       toast({
         title: "AI Assistant (coming soon)",
-        description: `You clicked on ${type}. I can connect this to a real assistant when you're ready.`,
+        description: `You clicked on ${type}. This assistant is not yet implemented.`,
       });
     },
     [toast],
@@ -95,6 +101,9 @@ export default function HomeLanding() {
         </Card>
       </section>
       </div>
+
+      {/* Gunnar Chat Modal */}
+      <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} />
     </div>
   );
 }
