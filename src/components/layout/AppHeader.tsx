@@ -1,15 +1,15 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Settings, Sun, Moon, Menu as MenuIcon, Cuboid, HelpCircle, Loader2,
-    Server
+    Settings, Menu as MenuIcon, Cuboid, HelpCircle, Loader2,
+    Server, Palette, Check
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { THEMES } from '@/lib/constants';
-import { AppContext } from '@/context/AppContext';
+import { THEMES, THEME_OPTIONS } from '@/lib/constants';
+import { AppContext, ThemeType } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
@@ -17,6 +17,10 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
+    DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 
 interface AppHeaderProps {
@@ -45,7 +49,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
-    const isLight = theme === 'light';
 
     const handleMenuClick = (app: string, mode?: string) => {
         setSelectedFacility(null);
@@ -131,15 +134,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             {/* Right section */}
             <div className="flex items-center gap-1 sm:gap-2">
                 <AppButton
-                    onClick={() => setTheme(isLight ? 'dark' : 'light')}
-                    variant="ghost"
-                    className="h-9 w-9 sm:h-10 sm:w-10"
-                    title={isLight ? 'Dark mode' : 'Light mode'}
-                >
-                    {isLight ? <Moon size={18} /> : <Sun size={18} />}
-                </AppButton>
-
-                <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
                     className="hidden sm:flex h-10 w-10"
@@ -173,6 +167,29 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <Server className="mr-2 h-4 w-4" />
                             API Settings
                         </DropdownMenuItem>
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <Palette className="mr-2 h-4 w-4" />
+                                Theme
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuPortal>
+                                <DropdownMenuSubContent>
+                                    {THEME_OPTIONS.map((option) => (
+                                        <DropdownMenuItem 
+                                            key={option.value}
+                                            onClick={() => setTheme(option.value as ThemeType)}
+                                        >
+                                            {theme === option.value && (
+                                                <Check className="mr-2 h-4 w-4" />
+                                            )}
+                                            <span className={theme !== option.value ? "ml-6" : ""}>
+                                                {option.label}
+                                            </span>
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuPortal>
+                        </DropdownMenuSub>
                         <DropdownMenuItem>
                             <Settings className="mr-2 h-4 w-4" />
                             Settings

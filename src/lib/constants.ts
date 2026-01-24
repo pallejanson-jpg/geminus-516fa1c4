@@ -42,8 +42,25 @@ export const THEMES: Record<string, Record<string, string>> = {
         card: 'bg-card', 
         input: 'bg-input', 
         hover: 'hover:bg-muted'
+    },
+    swg: {
+        bg: 'bg-background', 
+        bgSec: 'bg-card', 
+        border: 'border-border',
+        text: 'text-foreground', 
+        textSec: 'text-muted-foreground', 
+        accent: 'text-primary',
+        card: 'bg-card', 
+        input: 'bg-input', 
+        hover: 'hover:bg-muted'
     }
 };
+
+export const THEME_OPTIONS = [
+    { value: 'dark', label: 'Dark' },
+    { value: 'light', label: 'Light' },
+    { value: 'swg', label: 'SWG' },
+] as const;
 
 export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
