@@ -34,6 +34,11 @@ interface AppContextType {
     navigatorTreeData: NavigatorNode[];
     refreshInitialData: () => Promise<void>;
 
+    // Navigator selection from AI (Gunnar)
+    aiSelectedFmGuids: string[];
+    setAiSelectedFmGuids: (fmGuids: string[]) => void;
+    clearAiSelection: () => void;
+
     // 3D Viewer
     viewer3dFmGuid: string | null;
     setViewer3dFmGuid: (fmGuid: string | null) => void;
@@ -82,6 +87,10 @@ export const AppContext = createContext<AppContextType>({
     navigatorTreeData: [],
     refreshInitialData: async () => {},
 
+    aiSelectedFmGuids: [],
+    setAiSelectedFmGuids: () => {},
+    clearAiSelection: () => {},
+
     viewer3dFmGuid: null,
     setViewer3dFmGuid: () => {},
 
@@ -111,6 +120,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
     const [viewer3dFmGuid, setViewer3dFmGuidInternal] = useState<string | null>(null);
+    const [aiSelectedFmGuids, setAiSelectedFmGuids] = useState<string[]>([]);
 
     // Wrapper: automatically switch to viewer app when fmGuid is set
     const setViewer3dFmGuid = useCallback((fmGuid: string | null) => {
@@ -119,6 +129,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             setActiveApp('assetplus_viewer');
         }
     }, []);
+
+    const clearAiSelection = useCallback(() => {
+        setAiSelectedFmGuids([]);
+    }, []);
+
     const [viewerDiagnostics, setViewerDiagnostics] = useState<AppContextType["viewerDiagnostics"]>(null);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
@@ -266,6 +281,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 isLoadingData,
                 navigatorTreeData,
                 refreshInitialData,
+
+                aiSelectedFmGuids,
+                setAiSelectedFmGuids,
+                clearAiSelection,
 
                 viewer3dFmGuid,
                 setViewer3dFmGuid,
