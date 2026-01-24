@@ -113,7 +113,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         return 'dark';
     });
     const [allData, setAllData] = useState<any[]>([]);
-    const [appConfigs, setAppConfigs] = useState(DEFAULT_APP_CONFIGS);
+    const [appConfigs, setAppConfigs] = useState(() => {
+        const stored = typeof window !== 'undefined' ? window.localStorage.getItem('appConfigs') : null;
+        if (stored) {
+            try {
+                return { ...DEFAULT_APP_CONFIGS, ...JSON.parse(stored) };
+            } catch (e) {
+                return DEFAULT_APP_CONFIGS;
+            }
+        }
+        return DEFAULT_APP_CONFIGS;
+    });
     const [activeApp, setActiveApp] = useState('home');
     const [viewMode, setViewMode] = useState('grid');
     const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
