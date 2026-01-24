@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -14,9 +14,13 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
-    Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2
+    Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { AppContext } from '@/context/AppContext';
+import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -42,10 +46,23 @@ interface ConfigState {
     apiKey: string;
     audience: string;
 }
+// Helper to get icon for app
+const getAppIcon = (key: string) => {
+    switch (key) {
+        case 'insights': return BarChart2;
+        case 'fma_plus': return Building2;
+        case 'asset_plus': return Box;
+        case 'iot': return Zap;
+        case 'original_archive': return Archive;
+        case 'radar': return Radar;
+        default: return Box;
+    }
+};
 
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
     const { toast } = useToast();
-    const [activeTab, setActiveTab] = useState('assetplus');
+    const { appConfigs, setAppConfigs } = useContext(AppContext);
+    const [activeTab, setActiveTab] = useState('apps');
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
@@ -282,16 +299,111 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
+                    <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
+                        <TabsTrigger value="apps" className="gap-2">
+                            <LayoutGrid className="h-4 w-4" />
+                            Apps
+                        </TabsTrigger>
                         <TabsTrigger value="assetplus" className="gap-2">
                             <Box className="h-4 w-4" />
                             Asset+
                         </TabsTrigger>
                         <TabsTrigger value="sync" className="gap-2">
                             <Database className="h-4 w-4" />
-                            Data Sync
+                            Sync
                         </TabsTrigger>
                     </TabsList>
+
+                    {/* Applications Settings Tab */}
+                    <TabsContent value="apps" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">
+                                Configure how external applications are launched and their credentials.
+                            </p>
+                            
+                            {Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]: [string, any]) => {
+                                const cfg = appConfigs[key] || defaultCfg;
+                                const IconComp = getAppIcon(key);
+                                
+                                return (
+                                    <div key={key} className="border rounded-lg p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <IconComp className="h-5 w-5 text-primary" />
+                                                <h4 className="font-medium">{cfg.label}</h4>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-muted-foreground">
+                                                    {cfg.openMode === 'external' ? 'New Tab' : 'In App'}
+                                                </span>
+                                                <Switch
+                                                    checked={cfg.openMode === 'external'}
+                                                    onCheckedChange={(checked) => {
+                                                        setAppConfigs({
+                                                            ...appConfigs,
+                                                            [key]: { 
+                                                                ...cfg, 
+                                                                openMode: checked ? 'external' : 'internal' 
+                                                            }
+                                                        });
+                                                    }}
+                                                />
+                                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">URL</Label>
+                                                <Input
+                                                    value={cfg.url || ''}
+                                                    onChange={(e) => {
+                                                        setAppConfigs({
+                                                            ...appConfigs,
+                                                            [key]: { ...cfg, url: e.target.value }
+                                                        });
+                                                    }}
+                                                    placeholder="https://app.example.com"
+                                                    className="h-8 text-sm"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">Username</Label>
+                                                    <Input
+                                                        value={cfg.username || ''}
+                                                        onChange={(e) => {
+                                                            setAppConfigs({
+                                                                ...appConfigs,
+                                                                [key]: { ...cfg, username: e.target.value }
+                                                            });
+                                                        }}
+                                                        placeholder="user@example.com"
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">Password</Label>
+                                                    <Input
+                                                        type="password"
+                                                        value={cfg.password || ''}
+                                                        onChange={(e) => {
+                                                            setAppConfigs({
+                                                                ...appConfigs,
+                                                                [key]: { ...cfg, password: e.target.value }
+                                                            });
+                                                        }}
+                                                        placeholder="••••••••"
+                                                        className="h-8 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </TabsContent>
 
                     <TabsContent value="assetplus" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         {isLoadingConfig ? (
