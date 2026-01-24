@@ -6,7 +6,9 @@ import { TreeNode, type NavigatorNode } from "@/components/navigator/TreeNode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { AddAssetDialog } from "./AddAssetDialog";
-import { X } from "lucide-react";
+import { X, List, Network } from "lucide-react";
+import { useSearchResults, SearchResult } from "@/hooks/useSearchResults";
+import { SearchResultsList } from "@/components/common/SearchResultsList";
 
 function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   if (!q.trim()) return nodes;
@@ -70,10 +72,14 @@ export default function NavigatorView() {
   } = useContext(AppContext);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [viewMode, setViewModeLocal] = useState<'tree' | 'list'>('tree');
   
   // Add Asset Dialog state
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [selectedParentNode, setSelectedParentNode] = useState<NavigatorNode | null>(null);
+
+  // Search results for list view
+  const searchResults = useSearchResults(navigatorTreeData, query, 50);
 
   // Auto-expand tree when AI selection changes
   useEffect(() => {
@@ -140,6 +146,22 @@ export default function NavigatorView() {
     });
   }, [setViewer3dFmGuid, setActiveApp]);
 
+  const handleSearchResultSelect = useCallback((result: SearchResult) => {
+    // Navigate based on category
+    if (result.category === 'Building') {
+      setSelectedFacility({
+        fmGuid: result.fmGuid,
+        name: result.name,
+        commonName: result.name,
+        category: result.category,
+      });
+      setActiveApp('portfolio');
+    } else {
+      // For non-buildings, open 3D viewer
+      setViewer3dFmGuid(result.fmGuid);
+    }
+  }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
+
   const selectedFmGuidSet = useMemo(() => new Set(aiSelectedFmGuids), [aiSelectedFmGuids]);
 
   return (
@@ -160,20 +182,48 @@ export default function NavigatorView() {
           )}
         </header>
 
-        <div className="mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search navigator..."
+            placeholder="Sök i navigator..."
+            className="flex-1"
           />
+          <div className="flex gap-1">
+            <Button
+              variant={viewMode === 'tree' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setViewModeLocal('tree')}
+              title="Trädvy"
+            >
+              <Network className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setViewModeLocal('list')}
+              title="Listvy"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <div className="rounded-lg border border-border bg-card p-2">
           {isLoadingData ? (
-            <div className="p-3 text-sm text-muted-foreground">Loading data...</div>
+            <div className="p-3 text-sm text-muted-foreground">Laddar data...</div>
+          ) : viewMode === 'list' && query.trim().length >= 2 ? (
+            // List view with search results
+            <SearchResultsList
+              results={searchResults}
+              onSelect={handleSearchResultSelect}
+              emptyMessage="Inga resultat för din sökning"
+            />
           ) : visibleTree.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground">
-              No items to display (check Asset+ connection or filter).
+              Inga objekt att visa (kontrollera Asset+ anslutning eller filter).
             </div>
           ) : (
             <div className="space-y-0.5">

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
     Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Server
@@ -17,6 +17,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSearchResults, SearchResult } from '@/hooks/useSearchResults';
+import { SearchResultsList } from '@/components/common/SearchResultsList';
 
 interface AppHeaderProps {
     isLoading?: boolean;
@@ -35,7 +37,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         viewMode, 
         setViewMode,
         setSelectedFacility,
-        toggleRightSidebar
+        toggleRightSidebar,
+        navigatorTreeData,
+        setViewer3dFmGuid,
     } = useContext(AppContext);
     
     const { toast } = useToast();
@@ -44,6 +48,27 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
+
+    // Search results from shared hook
+    const searchResults = useSearchResults(navigatorTreeData, globalSearch, 15);
+
+    const handleSearchResultSelect = useCallback((result: SearchResult) => {
+        setGlobalSearch('');
+        setIsSearchFocused(false);
+        
+        if (result.category === 'Building') {
+            setSelectedFacility({
+                fmGuid: result.fmGuid,
+                name: result.name,
+                commonName: result.name,
+                category: result.category,
+            });
+            setActiveApp('portfolio');
+        } else {
+            // For non-buildings, open 3D viewer
+            setViewer3dFmGuid(result.fmGuid);
+        }
+    }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
 
     const handleMenuClick = (app: string, mode?: string) => {
         setSelectedFacility(null);
@@ -114,7 +139,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Search buildings, rooms, assets..."
+                        placeholder="Sök byggnader, rum, utrymmen..."
                         className="pl-10 w-full text-sm"
                         value={globalSearch}
                         onChange={(e) => setGlobalSearch(e.target.value)}
@@ -124,6 +149,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
                     )}
                 </div>
+                
+                {/* Search Results Dropdown */}
+                {isSearchFocused && globalSearch.trim().length >= 2 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+                        <SearchResultsList
+                            results={searchResults}
+                            onSelect={handleSearchResultSelect}
+                            emptyMessage="Inga resultat för din sökning"
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Right section */}
