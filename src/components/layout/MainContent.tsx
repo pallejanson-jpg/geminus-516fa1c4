@@ -7,6 +7,7 @@ import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
 import Viewer from "@/pages/Viewer";
+import InsightsView from "@/components/insights/InsightsView";
 
 // Lazy load MapView to improve initial load time
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -39,13 +40,7 @@ const MainContent: React.FC = () => {
                 // Backwards-compatible key used by Navigator
                 return <Viewer />;
             case 'insights':
-                return (
-                    <PlaceholderView 
-                        title="Insights" 
-                        icon={<BarChart2 className="h-8 w-8 text-green-500" />}
-                        description="Analytics and reports"
-                    />
-                );
+                return <InsightsView />;
             case 'asset_plus':
                 return (
                     <PlaceholderView 
