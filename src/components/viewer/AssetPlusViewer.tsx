@@ -45,9 +45,9 @@ type InitStep =
 type ModelLoadState = 'idle' | 'requested' | 'loaded';
 
 const MODEL_FILTERS: { value: ModelFilter; label: string; description: string }[] = [
-  { value: 'all', label: 'Alla modeller', description: 'Visa alla tillgängliga modeller' },
-  { value: 'a-prefix', label: 'Modeller (a-prefix)', description: 'Modeller som börjar med "a"' },
-  { value: 'buildings-only', label: 'Endast byggnader', description: 'Visa endast byggnadsmodeller' },
+  { value: 'all', label: 'All models', description: 'Show all available models' },
+  { value: 'a-prefix', label: 'Models (a-prefix)', description: 'Models starting with "a"' },
+  { value: 'buildings-only', label: 'Buildings only', description: 'Show only building models' },
 ];
 
 // Default camera settings from external_viewer.html
@@ -433,7 +433,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       }
     }
 
-    toast.success('3D-modell laddad');
+    toast.success('3D model loaded');
   }, [executeDisplayAction]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
@@ -447,7 +447,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: '3D-container saknas i DOM. Försök igen eller ladda om sidan.',
+        error: '3D container missing in DOM. Try again or reload the page.',
       }));
       return;
     }
@@ -463,13 +463,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       });
 
       if (tokenError) {
-        throw new Error('Kunde inte hämta åtkomsttoken');
+        throw new Error('Could not fetch access token');
       }
 
       const accessToken = tokenData?.accessToken;
       
       if (!accessToken) {
-        throw new Error('Asset+ åtkomsttoken saknas. Kontrollera API-inställningarna.');
+        throw new Error('Asset+ access token is missing. Check your API settings.');
       }
 
       accessTokenRef.current = accessToken;
@@ -480,7 +480,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       const assetplusviewer = (window as any).assetplusviewer;
       
       if (!assetplusviewer) {
-        throw new Error('Asset+ 3D Viewer-paketet är inte laddat. Kontrollera att /lib/assetplus/assetplusviewer.umd.min.js är inkluderat.');
+        throw new Error('Asset+ 3D Viewer package is not loaded. Verify that /lib/assetplus/assetplusviewer.umd.min.js is included.');
       }
 
       setInitStep('fetch_config');
@@ -561,7 +561,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         isLoading: false,
         isInitialized: true,
         modelInfo: {
-          name: assetData?.commonName || assetData?.name || 'Okänd modell',
+          name: assetData?.commonName || assetData?.name || 'Unknown model',
           type: 'IFC/XKT',
           lastUpdated: assetData?.sourceUpdatedAt || new Date().toISOString().split('T')[0],
         },
@@ -573,7 +573,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Kunde inte ladda 3D-visaren',
+        error: error instanceof Error ? error.message : 'Could not load 3D viewer',
       }));
     }
   }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid]);
@@ -662,7 +662,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg sm:text-xl font-semibold truncate">3D-visning</h2>
+            <h2 className="text-lg sm:text-xl font-semibold truncate">3D Viewer</h2>
             <p className="text-sm text-muted-foreground truncate">
               {assetData?.commonName || assetData?.name || fmGuid.substring(0, 16) + '...'}
             </p>
@@ -682,11 +682,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 <AlertCircle className="h-8 w-8 text-destructive" />
               </div>
               <div>
-                <p className="text-lg font-medium">Kunde inte ladda 3D-visaren</p>
+                <p className="text-lg font-medium">Could not load 3D viewer</p>
                 <p className="text-sm text-muted-foreground mt-2">{state.error}</p>
               </div>
               <Button onClick={initializeViewer} variant="outline">
-                Försök igen
+                Try again
               </Button>
             </div>
           </CardContent>
@@ -725,7 +725,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 <div className="flex items-start gap-3">
                   <Loader2 className="h-5 w-5 animate-spin text-primary mt-0.5" />
                   <div className="min-w-0">
-                    <p className="font-medium">Laddar 3D-modell...</p>
+                    <p className="font-medium">Loading 3D model...</p>
                   </div>
                 </div>
               </div>
@@ -737,7 +737,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             <div className="absolute top-4 left-4 z-10">
               <Button variant="secondary" size="sm" onClick={onClose} className="gap-2">
                 <X className="h-4 w-4" />
-                <span className="hidden sm:inline">Stäng</span>
+                <span className="hidden sm:inline">Close</span>
               </Button>
             </div>
           )}
@@ -764,7 +764,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             <FilterDropdown />
             <Button variant="secondary" size="sm" className="gap-2">
               <Layers className="h-4 w-4" />
-              <span className="hidden sm:inline">Lager</span>
+              <span className="hidden sm:inline">Layers</span>
             </Button>
           </div>
         </div>

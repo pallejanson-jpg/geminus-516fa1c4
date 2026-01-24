@@ -28,7 +28,7 @@ type Props = {
 };
 
 export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D }: Props) {
-  const label = node.commonName || node.name || "(namnlös)";
+  const label = node.commonName || node.name || "(unnamed)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
 
@@ -42,9 +42,9 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const childCount = node.children?.length || 0;
   const getChildLabel = (category: string | undefined, count: number): string => {
     if (count === 0) return "";
-    if (category === 'Building') return count === 1 ? "våningsplan" : "våningsplan";
-    if (category === 'Building Storey') return count === 1 ? "rum" : "rum";
-    return count === 1 ? "objekt" : "objekt";
+    if (category === 'Building') return count === 1 ? "floor" : "floors";
+    if (category === 'Building Storey') return count === 1 ? "room" : "rooms";
+    return count === 1 ? "item" : "items";
   };
 
   return (
@@ -63,7 +63,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
             size="icon"
             onClick={() => onToggle(node.fmGuid)}
             className="h-7 w-7 shrink-0"
-            aria-label={isOpen ? "Fäll ihop" : "Fäll ut"}
+            aria-label={isOpen ? "Collapse" : "Expand"}
           >
             <ChevronRight
               className={cn(
@@ -101,12 +101,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onOpen3D(node);
                   }}
                   className="h-6 w-6"
-                  aria-label="Öppna 3D"
+                  aria-label="Open 3D"
                 >
                   <Box className="h-3.5 w-3.5 text-primary" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Visa i 3D</TooltipContent>
+              <TooltipContent side="top">View in 3D</TooltipContent>
             </Tooltip>
           )}
           {canView && onView && (
@@ -121,12 +121,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onView(node);
                   }}
                   className="h-6 w-6"
-                  aria-label="Visa"
+                  aria-label="View"
                 >
                   <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Visa detaljer</TooltipContent>
+              <TooltipContent side="top">View details</TooltipContent>
             </Tooltip>
           )}
           {canAddChild && onAddChild && (
@@ -141,12 +141,12 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
                     onAddChild(node);
                   }}
                   className="h-6 w-6"
-                  aria-label="Lägg till"
+                  aria-label="Add"
                 >
                   <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Lägg till objekt</TooltipContent>
+              <TooltipContent side="top">Add item</TooltipContent>
             </Tooltip>
           )}
         </div>

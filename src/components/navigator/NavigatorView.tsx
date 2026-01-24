@@ -51,8 +51,8 @@ export default function NavigatorView() {
   const handleAssetCreated = useCallback(() => {
     // Refresh data after asset creation
     refreshInitialData?.();
-    toast.success('Data uppdateras...', {
-      description: 'Synkronisering kan ta en stund.',
+    toast.success('Data updating...', {
+      description: 'Synchronization may take a moment.',
     });
   }, [refreshInitialData]);
 
@@ -67,8 +67,8 @@ export default function NavigatorView() {
       });
       setActiveApp('portfolio');
     } else {
-      toast.info(`Visa: ${node.commonName || node.name}`, {
-        description: `Kategori: ${node.category}`,
+      toast.info(`View: ${node.commonName || node.name}`, {
+        description: `Category: ${node.category}`,
       });
     }
   }, [setSelectedFacility, setActiveApp]);
@@ -77,7 +77,7 @@ export default function NavigatorView() {
     // Set the FMGUID and navigate to 3D viewer
     setViewer3dFmGuid(node.fmGuid);
     setActiveApp('assetplus_viewer');
-    toast.success(`Laddar 3D-modell för "${node.commonName || node.name}"`, {
+    toast.success(`Loading 3D model for "${node.commonName || node.name}"`, {
       description: `FMGUID: ${node.fmGuid.substring(0, 8)}...`,
     });
   }, [setViewer3dFmGuid, setActiveApp]);
@@ -93,16 +93,16 @@ export default function NavigatorView() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Sök i navigator…"
+            placeholder="Search navigator..."
           />
         </div>
 
         <div className="rounded-lg border border-border bg-card p-2">
           {isLoadingData ? (
-            <div className="p-3 text-sm text-muted-foreground">Laddar data…</div>
+            <div className="p-3 text-sm text-muted-foreground">Loading data...</div>
           ) : visibleTree.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground">
-              Inga objekt att visa (kontrollera Asset+-kopplingen eller filter).
+              No items to display (check Asset+ connection or filter).
             </div>
           ) : (
             <div className="space-y-0.5">

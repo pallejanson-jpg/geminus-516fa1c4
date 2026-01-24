@@ -36,57 +36,57 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const isStorey = facility.category === 'Building Storey';
 
   return (
-    <Card className="mt-6">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Snabbåtgärder</CardTitle>
+    <Card className="mt-4 sm:mt-6">
+      <CardHeader className="pb-3 sm:pb-4">
+        <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
           {isBuilding && (
-            <Button variant="ghost" onClick={() => onShowInsights(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <BarChart size={14} className="text-accent" />
-              <span className="text-xs">Insights</span>
+            <Button variant="ghost" onClick={() => onShowInsights(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <BarChart size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+              <span className="text-[10px] sm:text-xs">Insights</span>
             </Button>
           )}
-          <Button variant="ghost" onClick={() => onShowAssets(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-            <Package size={14} className="text-primary" />
-            <span className="text-xs">Assets</span>
+          <Button variant="ghost" onClick={() => onShowAssets(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+            <Package size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[10px] sm:text-xs">Assets</span>
           </Button>
           {(isBuilding || isStorey) && (
-            <Button variant="ghost" onClick={() => onShowRooms(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <DoorOpen size={14} className="text-accent" />
-              <span className="text-xs">Rum</span>
+            <Button variant="ghost" onClick={() => onShowRooms(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <DoorOpen size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+              <span className="text-[10px] sm:text-xs">Rooms</span>
             </Button>
           )}
           {(isBuilding || isStorey) && (
-            <Button variant="ghost" onClick={onOpenMap} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <Globe size={14} className="text-accent" />
-              <span className="text-xs">Karta</span>
+            <Button variant="ghost" onClick={onOpenMap} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <Globe size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+              <span className="text-[10px] sm:text-xs">Map</span>
             </Button>
           )}
-          <Button variant="ghost" onClick={() => onShowDocs(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-             <FileText size={14} className="text-primary" />
-            <span className="text-xs">Docs+</span>
+          <Button variant="ghost" onClick={() => onShowDocs(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+             <FileText size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[10px] sm:text-xs">Docs+</span>
           </Button>
-          <Button variant="ghost" onClick={() => onOpenNavigator(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-            <Network size={14} className="text-primary" />
-            <span className="text-xs">Navigator</span>
+          <Button variant="ghost" onClick={() => onOpenNavigator(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+            <Network size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[10px] sm:text-xs">Navigator</span>
           </Button>
           {isBuilding && (
-            <Button variant="ghost" onClick={() => onToggle3D(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <Cuboid size={14} className="text-primary" />
-              <span className="text-xs">3D</span>
+            <Button variant="ghost" onClick={() => onToggle3D(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+              <span className="text-[10px] sm:text-xs">3D</span>
             </Button>
           )}
           {(isBuilding || isStorey) && (
-            <Button variant="ghost" onClick={() => onOpen360(facility.siteId)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-              <View size={14} className="text-destructive" />
-              <span className="text-xs">360+</span>
+            <Button variant="ghost" onClick={() => onOpen360(facility.siteId)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <View size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
+              <span className="text-[10px] sm:text-xs">360+</span>
             </Button>
           )}
-          <Button variant="ghost" onClick={() => onOpenIoT(facility)} className="justify-start sm:justify-center gap-2 h-auto py-3">
-             <Zap size={14} className="text-primary" />
-            <span className="text-xs">IOT+</span>
+          <Button variant="ghost" onClick={() => onOpenIoT(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+             <Zap size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[10px] sm:text-xs">IOT+</span>
           </Button>
         </div>
       </CardContent>

@@ -39,11 +39,11 @@ type DataTypeKey = keyof typeof DataType;
 
 const DATA_TYPE_OPTIONS: { value: DataTypeKey; label: string }[] = [
   { value: 'String', label: 'Text' },
-  { value: 'Int32', label: 'Heltal (32-bit)' },
-  { value: 'Int64', label: 'Heltal (64-bit)' },
-  { value: 'Decimal', label: 'Decimaltal' },
-  { value: 'DateTime', label: 'Datum/Tid' },
-  { value: 'Bool', label: 'Ja/Nej' },
+  { value: 'Int32', label: 'Integer (32-bit)' },
+  { value: 'Int64', label: 'Integer (64-bit)' },
+  { value: 'Decimal', label: 'Decimal' },
+  { value: 'DateTime', label: 'Date/Time' },
+  { value: 'Bool', label: 'Yes/No' },
 ];
 
 interface AssetProperty {
@@ -105,12 +105,12 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
     e.preventDefault();
     
     if (!parentNode?.fmGuid) {
-      toast.error('Inget föräldrarum valt');
+      toast.error('No parent room selected');
       return;
     }
 
     if (!designation.trim()) {
-      toast.error('Beteckning/nummer krävs');
+      toast.error('Designation/number is required');
       return;
     }
 
@@ -149,15 +149,15 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
       });
 
       if (error) {
-        throw new Error(error.message || 'Kunde inte skapa objekt');
+        throw new Error(error.message || 'Could not create object');
       }
 
       if (!data?.success) {
-        throw new Error(data?.error || 'Okänt fel vid skapande');
+        throw new Error(data?.error || 'Unknown error during creation');
       }
 
-      toast.success('Objekt skapat!', {
-        description: `${designation} har lagts till i ${parentNode.commonName || parentNode.name}`,
+      toast.success('Object created!', {
+        description: `${designation} has been added to ${parentNode.commonName || parentNode.name}`,
       });
 
       handleClose();
@@ -165,8 +165,8 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
 
     } catch (error) {
       console.error('Failed to create asset:', error);
-      toast.error('Kunde inte skapa objekt', {
-        description: error instanceof Error ? error.message : 'Ett oväntat fel uppstod',
+      toast.error('Could not create object', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
       });
     } finally {
       setIsLoading(false);
@@ -179,9 +179,9 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Lägg till nytt objekt</DialogTitle>
+          <DialogTitle>Add New Object</DialogTitle>
           <DialogDescription>
-            Skapa ett nytt objekt (ObjectType 4) i rummet <strong>{parentNode.commonName || parentNode.name}</strong>.
+            Create a new object (ObjectType 4) in the room <strong>{parentNode.commonName || parentNode.name}</strong>.
           </DialogDescription>
         </DialogHeader>
 
@@ -189,38 +189,38 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
           {/* Basic Info */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="designation">Beteckning / Nummer *</Label>
+              <Label htmlFor="designation">Designation / Number *</Label>
               <Input
                 id="designation"
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
-                placeholder="t.ex. DOE-001, Fläkt-A1"
+                placeholder="e.g. DOE-001, Fan-A1"
                 required
                 disabled={isLoading}
               />
               <p className="text-xs text-muted-foreground">
-                Primär identifierare för objektet
+                Primary identifier for the object
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="commonName">Namn (frivilligt)</Label>
+              <Label htmlFor="commonName">Name (optional)</Label>
               <Input
                 id="commonName"
                 value={commonName}
                 onChange={(e) => setCommonName(e.target.value)}
-                placeholder="t.ex. Ventilationsfläkt"
+                placeholder="e.g. Ventilation Fan"
                 disabled={isLoading}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Beskrivning (frivilligt)</Label>
+              <Label htmlFor="description">Description (optional)</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Fritext beskrivning av objektet..."
+                placeholder="Free text description of the object..."
                 rows={2}
                 disabled={isLoading}
               />
@@ -230,7 +230,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
           {/* Extended Properties */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Utökade egenskaper</Label>
+              <Label>Extended Properties</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -240,13 +240,13 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
                 className="gap-1"
               >
                 <Plus className="h-3 w-3" />
-                Lägg till
+                Add
               </Button>
             </div>
 
             {properties.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md">
-                Inga utökade egenskaper. Klicka "Lägg till" för att lägga till.
+                No extended properties. Click "Add" to add some.
               </p>
             ) : (
               <div className="space-y-3">
@@ -254,7 +254,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
                   <div key={prop.id} className="flex gap-2 items-start p-3 border rounded-md bg-muted/30">
                     <div className="flex-1 space-y-2">
                       <Input
-                        placeholder="Egenskapsnamn"
+                        placeholder="Property name"
                         value={prop.name}
                         onChange={(e) => updateProperty(prop.id, 'name', e.target.value)}
                         disabled={isLoading}
@@ -262,7 +262,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
                       />
                       <div className="flex gap-2">
                         <Input
-                          placeholder="Värde"
+                          placeholder="Value"
                           value={prop.value}
                           onChange={(e) => updateProperty(prop.id, 'value', e.target.value)}
                           disabled={isLoading}
@@ -304,7 +304,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
 
           {/* Parent Info */}
           <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-md">
-            <p><strong>Föräldrarum:</strong> {parentNode.commonName || parentNode.name}</p>
+            <p><strong>Parent Room:</strong> {parentNode.commonName || parentNode.name}</p>
             <p className="font-mono mt-1">FMGUID: {parentNode.fmGuid}</p>
           </div>
 
@@ -315,16 +315,16 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
               onClick={handleClose}
               disabled={isLoading}
             >
-              Avbryt
+              Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Skapar...
+                  Creating...
                 </>
               ) : (
-                'Skapa objekt'
+                'Create Object'
               )}
             </Button>
           </DialogFooter>
