@@ -60,7 +60,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               <span className="text-[10px] sm:text-xs">Rooms</span>
             </Button>
           )}
-          {(isBuilding || isStorey) && (
+          {isBuilding && (
             <Button variant="ghost" onClick={onOpenMap} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
               <Globe size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
               <span className="text-[10px] sm:text-xs">Map</span>
