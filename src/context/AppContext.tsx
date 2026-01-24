@@ -11,9 +11,11 @@ type NavigatorNode = {
     [key: string]: any;
 };
 
+export type ThemeType = 'dark' | 'light' | 'swg';
+
 interface AppContextType {
-    theme: 'dark' | 'light';
-    setTheme: (theme: 'dark' | 'light') => void;
+    theme: ThemeType;
+    setTheme: (theme: ThemeType) => void;
     allData: any[];
     setAllData: (data: any[]) => void;
     appConfigs: Record<string, any>;
@@ -105,9 +107,10 @@ interface AppProviderProps {
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
-    const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const [theme, setTheme] = useState<ThemeType>(() => {
         const stored = typeof window !== 'undefined' ? window.localStorage.getItem('theme') : null;
-        return stored === 'light' ? 'light' : 'dark';
+        if (stored === 'light' || stored === 'swg') return stored;
+        return 'dark';
     });
     const [allData, setAllData] = useState<any[]>([]);
     const [appConfigs, setAppConfigs] = useState(DEFAULT_APP_CONFIGS);
@@ -243,10 +246,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setIsRightSidebarVisible(prev => !prev);
     }, []);
 
-    // Apply theme class to the document so Tailwind's `.dark` tokens take effect.
+    // Apply theme class to the document so Tailwind's dark/swg tokens take effect.
     useEffect(() => {
         const root = document.documentElement;
-        root.classList.toggle('dark', theme === 'dark');
+        root.classList.remove('dark', 'swg');
+        if (theme === 'dark' || theme === 'swg') {
+            root.classList.add(theme);
+        }
         window.localStorage.setItem('theme', theme);
     }, [theme]);
 
