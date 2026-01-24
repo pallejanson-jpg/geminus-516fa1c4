@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import ViewerToolbar from './ViewerToolbar';
+import { xktCacheService } from '@/services/xkt-cache-service';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -69,6 +70,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const viewerInstanceRef = useRef<any>(null);
   const accessTokenRef = useRef<string>('');
   const baseUrlRef = useRef<string>('');
+  const originalFetchRef = useRef<typeof fetch | null>(null);
   
   // Deferred loading state (matching Asset+ pattern exactly)
   const deferCallsRef = useRef(true);
@@ -86,11 +88,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
   const [initStep, setInitStep] = useState<InitStep>('idle');
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>('idle');
+  const [cacheStatus, setCacheStatus] = useState<'checking' | 'hit' | 'miss' | 'stored' | null>(null);
   
   const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
+  
+  // Get the building fmGuid for cache organization
+  const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
 
 
   // Get model filter predicate based on selection (matches external_viewer.html pattern)
@@ -416,6 +422,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
     setModelLoadState('loaded');
     setInitStep('ready');
+    
+    // Update cache status if we had a cache interaction
+    if (cacheStatus === 'checking') {
+      setCacheStatus('stored');
+    }
 
     // Initialize NavCube after models are loaded
     try {
@@ -464,10 +475,58 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       }
     }
 
-    toast.success('3D model loaded');
-  }, [executeDisplayAction]);
+    toast.success(cacheStatus === 'hit' ? 'Modell laddad från cache' : '3D-modell laddad');
+  }, [executeDisplayAction, cacheStatus]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
+  // Setup XKT fetch interceptor for caching
+  const setupCacheInterceptor = useCallback(() => {
+    // Store original fetch if not already stored
+    if (!originalFetchRef.current) {
+      originalFetchRef.current = window.fetch.bind(window);
+    }
+    
+    const originalFetch = originalFetchRef.current;
+    const currentBuildingFmGuid = buildingFmGuid;
+    
+    // Override global fetch to intercept XKT requests
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      
+      // Only intercept XKT file requests
+      if (url.includes('.xkt')) {
+        console.log('XKT request intercepted:', url);
+        setCacheStatus('checking');
+        
+        try {
+          // Try to get cached version
+          const cachedData = await xktCacheService.fetchWithCache(url, currentBuildingFmGuid, init);
+          setCacheStatus('hit');
+          
+          // Return as a Response object
+          return new Response(cachedData, {
+            status: 200,
+            headers: { 'Content-Type': 'application/octet-stream' }
+          });
+        } catch (e) {
+          console.warn('Cache fetch failed, using original:', e);
+          setCacheStatus('miss');
+        }
+      }
+      
+      // Fall back to original fetch
+      return originalFetch(input, init);
+    };
+  }, [buildingFmGuid]);
+
+  // Restore original fetch
+  const restoreFetch = useCallback(() => {
+    if (originalFetchRef.current) {
+      window.fetch = originalFetchRef.current;
+      originalFetchRef.current = null;
+    }
+  }, []);
+
   const initializeViewer = useCallback(async () => {
     // Wait one frame so refs are attached (critical: otherwise init silently never runs)
     setInitStep('wait_dom');
@@ -485,6 +544,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     setModelLoadState('idle');
+    setCacheStatus(null);
+    
+    // Setup cache interceptor before viewer initialization
+    setupCacheInterceptor();
 
     try {
       setInitStep('fetch_token');
@@ -625,25 +688,30 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         error: error instanceof Error ? error.message : 'Could not load 3D viewer',
       }));
     }
-  }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid]);
+  }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
   // Initialize on mount
   useEffect(() => {
     initializeViewer();
 
     return () => {
+      // Restore original fetch on unmount
+      restoreFetch();
+      
       // Cleanup viewer on unmount
       if (viewerInstanceRef.current?.clearData) {
         viewerInstanceRef.current.clearData();
       }
       deferCallsRef.current = true;
     };
-  }, [initializeViewer]);
+  }, [initializeViewer, restoreFetch]);
 
   // Viewer uses built-in Asset+ controls - no custom handlers needed
 
   const handleFilterChange = (filter: ModelFilter) => {
     setModelFilter(filter);
+    // Restore fetch before reinitializing
+    restoreFetch();
     // Reinitialize viewer with new filter
     if (viewerInstanceRef.current?.clearData) {
       viewerInstanceRef.current.clearData();
@@ -652,6 +720,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     setState(prev => ({ ...prev, isInitialized: false }));
     setInitStep('idle');
     setModelLoadState('idle');
+    setCacheStatus(null);
   };
 
   // Model filter dropdown
