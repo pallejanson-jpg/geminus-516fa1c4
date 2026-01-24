@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
-import { Maximize2, RotateCcw, ZoomIn, ZoomOut, Layers, Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
+import { Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
@@ -416,6 +416,34 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     setModelLoadState('loaded');
     setInitStep('ready');
 
+    // Initialize NavCube after models are loaded
+    try {
+      const viewer = viewerInstanceRef.current;
+      const xeokitViewer = viewer?.assetViewer?.$refs?.assetView?.viewer;
+      
+      if (xeokitViewer && (window as any).NavCubePlugin) {
+        const navCubeCanvas = document.getElementById('navCubeCanvas');
+        if (navCubeCanvas) {
+          new (window as any).NavCubePlugin(xeokitViewer, {
+            canvasId: 'navCubeCanvas',
+            visible: true,
+            cameraFly: true,
+            cameraFlyDuration: 0.5,
+            color: 'lightgrey',
+            frontColor: '#55FF55',
+            backColor: '#FF5555',
+            leftColor: '#FF5555',
+            rightColor: '#55FF55',
+            topColor: '#5555FF',
+            bottomColor: '#FFFF55',
+          });
+          console.log("NavCube initialized");
+        }
+      }
+    } catch (e) {
+      console.warn("Could not initialize NavCube:", e);
+    }
+
     if (deferredFmGuidForDisplayRef.current) {
       console.log("allModelsLoadedCallback - got an FMGUID to look at");
       const fmGuidToShow = deferredFmGuidForDisplayRef.current;
@@ -611,28 +639,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     };
   }, [initializeViewer]);
 
-  // Viewer control handlers
-  const handleZoomIn = () => {
-    viewerInstanceRef.current?.assetViewer?.$refs?.assetView?.onCommand?.('zoomIn');
-  };
-
-  const handleZoomOut = () => {
-    viewerInstanceRef.current?.assetViewer?.$refs?.assetView?.onCommand?.('zoomOut');
-  };
-
-  const handleResetView = () => {
-    viewerInstanceRef.current?.assetViewer?.$refs?.assetView?.viewFit?.(undefined, true);
-  };
-
-  const handleFullscreen = () => {
-    if (viewportWrapperRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        viewportWrapperRef.current.requestFullscreen();
-      }
-    }
-  };
+  // Viewer uses built-in Asset+ controls - no custom handlers needed
 
   const handleFilterChange = (filter: ModelFilter) => {
     setModelFilter(filter);
@@ -752,7 +759,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             </div>
           )}
           
-          {/* Top toolbar - contains close and filter/layers */}
+          {/* Top toolbar - contains close and filter */}
           <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10 flex items-center justify-between pointer-events-none">
             {/* Close button - left side */}
             {onClose && (
@@ -768,58 +775,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             )}
             {!onClose && <div />}
             
-            {/* Filter & Layer Toggle - right side */}
+            {/* Filter - right side */}
             <div className="flex gap-1.5 sm:gap-2 pointer-events-auto">
               <FilterDropdown />
-              <Button variant="secondary" size="sm" className="gap-1.5 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 shadow-md">
-                <Layers className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm">Layers</span>
-              </Button>
             </div>
           </div>
 
-          {/* Viewer Controls - bottom center, safe from mobile nav */}
-          <div className="absolute bottom-16 sm:bottom-4 left-1/2 -translate-x-1/2 z-10">
-            <div className="flex items-center gap-1 bg-background/95 backdrop-blur-sm rounded-lg p-1 sm:p-1.5 border shadow-lg">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 sm:h-9 sm:w-9" 
-                onClick={handleZoomIn}
-                title="Zoom in"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 sm:h-9 sm:w-9" 
-                onClick={handleZoomOut}
-                title="Zoom out"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <div className="w-px h-5 bg-border mx-0.5" />
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 sm:h-9 sm:w-9" 
-                onClick={handleResetView}
-                title="Reset view"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 sm:h-9 sm:w-9" 
-                onClick={handleFullscreen}
-                title="Fullscreen"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          {/* Navigation cube canvas - positioned by CSS */}
+          <canvas id="navCubeCanvas" />
         </div>
       </div>
     </div>
