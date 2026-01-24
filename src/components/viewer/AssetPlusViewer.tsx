@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, useContext } from 'react';
 import { Box, Maximize2, RotateCcw, ZoomIn, ZoomOut, Layers, Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useRequestDiagnostics } from '@/hooks/use-request-diagnostics';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,11 +63,12 @@ const lookAtSpaceAndInstanceFlyToDuration = 1;
  * Based on Asset+ external_viewer.html implementation pattern.
  */
 const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) => {
-  const { allData } = useContext(AppContext);
+  const { allData, setViewerDiagnostics } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
   const accessTokenRef = useRef<string>('');
+  const baseUrlRef = useRef<string>('');
   
   // Deferred loading state (matching Asset+ pattern exactly)
   const deferCallsRef = useRef(true);
@@ -89,6 +91,99 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
+
+  // Diagnose Asset+ network calls (incl. XKT) from inside the viewer
+  const classify = useCallback((url: string) => {
+    const u = (url || "").toLowerCase();
+    // Asset+ may load XKT via direct .xkt files OR via API endpoints.
+    if (u.includes('.xkt')) return 'xkt';
+    if (
+      u.includes('getxkt') ||
+      u.includes('getxktdata') ||
+      u.includes('getxktdatastream') ||
+      u.includes('publishxkt')
+    ) {
+      return 'xkt';
+    }
+    if (u.includes('/functions/v1/asset-plus-query')) return 'backend';
+    if (baseUrlRef.current) {
+      const base = baseUrlRef.current.toLowerCase();
+      if (u.startsWith(base)) return 'assetplus';
+      // Some calls might hit same host but different base path
+      try {
+        const baseHost = new URL(baseUrlRef.current).host;
+        const host = new URL(url).host;
+        if (baseHost && host && baseHost === host) return 'assetplus';
+      } catch {
+        // ignore URL parsing
+      }
+    }
+    // Heuristic: if it smells like the Asset+ viewer backend
+    if (u.includes('assetplus') || u.includes('keycloak') || u.includes('bim')) return 'assetplus';
+    return 'other';
+  }, []);
+
+  const diagIncludeTags = useMemo(() => ['backend', 'assetplus', 'xkt'] as const, []);
+
+  const { events: diagEvents, summary: diagSummary } = useRequestDiagnostics({
+    enabled: true,
+    classify,
+    includeTags: diagIncludeTags,
+    maxEvents: 20,
+  });
+
+  const modelCount = useMemo(() => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+    const models = assetView?.viewer?.scene?.models;
+    if (models && typeof models === 'object') return Object.keys(models).length;
+    return null;
+  }, [modelLoadState, initStep]);
+
+  // Push diagnostics into the global RightSidebar
+  useEffect(() => {
+    const lastError = diagSummary.lastError
+      ? {
+          status: diagSummary.lastError.status,
+          message: diagSummary.lastError.error,
+          timedOut: diagSummary.lastError.timedOut,
+        }
+      : null;
+
+    setViewerDiagnostics({
+      fmGuid,
+      initStep,
+      modelLoadState,
+      modelCount: modelCount ?? null,
+      xkt: {
+        attempted: diagSummary.xktAttempted,
+        ok: diagSummary.xktOk,
+        fail: diagSummary.xktFail,
+      },
+      lastError,
+      lastRequests: diagEvents.slice(0, 10).map((e) => ({
+        tag: e.tag,
+        method: e.method,
+        url: e.url,
+        status: e.status,
+        durationMs: e.durationMs,
+        error: e.error,
+        timedOut: e.timedOut,
+      })),
+      updatedAt: Date.now(),
+    });
+  }, [
+    fmGuid,
+    initStep,
+    modelLoadState,
+    modelCount,
+    diagSummary.xktAttempted,
+    diagSummary.xktOk,
+    diagSummary.xktFail,
+    diagSummary.lastError,
+    diagEvents,
+    setViewerDiagnostics,
+  ]);
 
   // Get model filter predicate based on selection (matches external_viewer.html pattern)
   const getModelPredicate = useCallback((filter: ModelFilter) => {
@@ -490,6 +585,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       const baseUrl = configData?.apiUrl || '';
       const apiKey = configData?.apiKey || '';
 
+      baseUrlRef.current = baseUrl;
+
       console.log("AssetPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
 
       setInitStep('mount_viewer');
@@ -584,6 +681,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         viewerInstanceRef.current.clearData();
       }
       deferCallsRef.current = true;
+      setViewerDiagnostics(null);
     };
   }, [initializeViewer]);
 
@@ -804,6 +902,66 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 <span className="font-medium">{MODEL_FILTERS.find(f => f.value === modelFilter)?.label}</span>
                 <span className="text-muted-foreground">Status:</span>
                 <span className="font-medium">{initStep === 'ready' ? 'Klar' : 'Laddar...'}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Diagnostik</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Senaste steg:</span>
+                  <span className="font-medium truncate">{initStep === 'idle' ? 'startar' : initStep.replace('_', ' ')}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Modeller:</span>
+                  <span className="font-medium">{modelCount ?? '—'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">XKT (försök/ok/fel):</span>
+                  <span className="font-medium">{diagSummary.xktAttempted}/{diagSummary.xktOk}/{diagSummary.xktFail}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Senaste fel:</span>
+                  <span className="font-medium truncate">
+                    {diagSummary.lastError?.timedOut
+                      ? 'timeout'
+                      : diagSummary.lastError?.status === 401
+                        ? '401 unauthorized'
+                        : diagSummary.lastError?.status === 404
+                          ? '404 not_found'
+                          : (diagSummary.lastError?.error || (diagSummary.lastError?.status ? String(diagSummary.lastError.status) : '—'))}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-xs text-muted-foreground mb-2">Senaste anrop</p>
+                {diagEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Inga matchande anrop fångade ännu.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {diagEvents.slice(0, 8).map((e) => (
+                      <div key={e.id} className="text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium truncate">{e.tag.toUpperCase()} · {e.method}</span>
+                          <span className="text-muted-foreground">
+                            {e.timedOut
+                              ? 'timeout'
+                              : e.error
+                                ? e.error
+                                : (e.status ?? '—')}
+                            {typeof e.durationMs === 'number' ? ` · ${e.durationMs}ms` : ''}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground truncate" title={e.url}>{e.url}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
