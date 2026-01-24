@@ -307,8 +307,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         break;
       case "cutoutfloor_and_lookatspace":
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
-          console.log("Cutting out floor & looking at Space with FMGUID", displayAction.parameter.fmGuid);
-          viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
+          // Use floorFmGuid if provided (for parent floor cutout), otherwise fall back to fmGuid
+          const floorGuid = displayAction.parameter.floorFmGuid || displayAction.parameter.fmGuid;
+          console.log("Cutting out floor (fmGuid:", floorGuid, ") & looking at Space with FMGUID", displayAction.parameter.fmGuid);
+          viewer.cutOutFloorsByFmGuid(floorGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
           lookAtSpaceFromAngle(displayAction.parameter.fmGuid, displayAction.parameter.heightAboveAABB ?? defaultHeightAboveAABB);
         }
         break;
@@ -545,14 +547,32 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       // Process any deferred calls
       processDeferred();
 
-      // Now display the initial FMGUID
-      const displayAction = assetData?.category === 'Building' 
-        ? { action: 'viewall' }
-        : assetData?.category === 'Storey'
-          ? { action: 'cutoutfloor', parameter: { fmGuid: fmGuid, includeRelatedFloors: true } }
-          : assetData?.category === 'Space'
-            ? { action: 'cutoutfloor_and_lookatspace', parameter: { fmGuid: fmGuid, includeRelatedFloors: true, heightAboveAABB: defaultHeightAboveAABB } }
-            : undefined;
+      // Now display the initial FMGUID with category-specific actions
+      // For Building Storey: cut out the floor using the storey's fmGuid
+      // For Space: cut out the parent floor (levelFmGuid) and look at the space
+      let displayAction: any = undefined;
+      
+      if (assetData?.category === 'Building') {
+        displayAction = { action: 'viewall' };
+      } else if (assetData?.category === 'Building Storey') {
+        // Storey: use the storey's own fmGuid for floor cutout
+        displayAction = { 
+          action: 'cutoutfloor', 
+          parameter: { fmGuid: fmGuid, includeRelatedFloors: true } 
+        };
+      } else if (assetData?.category === 'Space') {
+        // Space: use the parent floor's fmGuid (levelFmGuid) for cutout, then look at the space
+        const floorFmGuid = assetData?.levelFmGuid || fmGuid;
+        displayAction = { 
+          action: 'cutoutfloor_and_lookatspace', 
+          parameter: { 
+            fmGuid: fmGuid,  // Space fmGuid for lookAt
+            floorFmGuid: floorFmGuid, // Parent floor for cutout
+            includeRelatedFloors: true, 
+            heightAboveAABB: defaultHeightAboveAABB 
+          } 
+        };
+      }
       
       displayFmGuid(fmGuid, displayAction);
 
