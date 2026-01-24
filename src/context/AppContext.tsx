@@ -168,9 +168,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         });
 
         // Attach spaces to storeys via levelFmGuid
+        // Keep track of orphan spaces (spaces without a storey parent)
+        const orphanSpaces: NavigatorNode[] = [];
         spaceMap.forEach((space) => {
             const parentStorey = storeyMap.get((space as any).levelFmGuid);
-            if (parentStorey) parentStorey.children!.push(space);
+            if (parentStorey) {
+                parentStorey.children!.push(space);
+            } else {
+                // Space has no storey parent - will be attached directly to building
+                orphanSpaces.push(space);
+            }
         });
 
         // Build building map - either from actual Building items or synthesize from unique buildingFmGuid
@@ -182,7 +189,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 buildingMap.set(building.fmGuid, { ...building, children: [] });
             });
         } else {
-            // Synthesize buildings from unique buildingFmGuid values in storeys
+            // Synthesize buildings from unique buildingFmGuid values in storeys AND spaces
             // Use attributes from first storey or item to get building name and complex
             const buildingInfo = new Map<string, { commonName?: string; name?: string; complexCommonName?: string }>();
             
@@ -215,6 +222,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         storeyMap.forEach((storey) => {
             const parentBuilding = buildingMap.get((storey as any).buildingFmGuid);
             if (parentBuilding) parentBuilding.children!.push(storey);
+        });
+
+        // Attach orphan spaces directly to buildings (for buildings without storeys)
+        orphanSpaces.forEach((space) => {
+            const parentBuilding = buildingMap.get((space as any).buildingFmGuid);
+            if (parentBuilding) parentBuilding.children!.push(space);
         });
 
         const sortedTree = Array.from(buildingMap.values());
