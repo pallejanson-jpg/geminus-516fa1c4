@@ -360,6 +360,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           {/* Quick Actions */}
           <QuickActions
             facility={facility}
+            ivionSiteId={settings?.ivionSiteId}
             onOpenMap={onOpenMap}
             onOpenNavigator={onOpenNavigator}
             onShowAssets={onShowAssets}
