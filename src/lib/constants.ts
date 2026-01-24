@@ -57,9 +57,9 @@ export const THEMES: Record<string, Record<string, string>> = {
 };
 
 export const THEME_OPTIONS = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
-    { value: 'swg', label: 'SWG' },
+    { value: 'dark', label: 'Dark', colors: ['#000000', '#a78bfa', '#818cf8'] },
+    { value: 'light', label: 'Light', colors: ['#f5f3ff', '#7c3aed', '#6366f1'] },
+    { value: 'swg', label: 'SWG', colors: ['#141414', '#39a5b5', '#39a5b5'] },
 ] as const;
 
 export const DEFAULT_APP_CONFIGS: Record<string, any> = {

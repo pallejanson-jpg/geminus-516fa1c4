@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Settings, Menu as MenuIcon, Cuboid, HelpCircle, Loader2,
-    Server, Palette, Check
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Server
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import { AppButton } from '@/components/common/AppButton';
@@ -17,10 +16,6 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-    DropdownMenuSub,
-    DropdownMenuSubTrigger,
-    DropdownMenuSubContent,
-    DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 
 interface AppHeaderProps {
@@ -165,35 +160,37 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
                             <Server className="mr-2 h-4 w-4" />
-                            API Settings
-                        </DropdownMenuItem>
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <Palette className="mr-2 h-4 w-4" />
-                                Theme
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuPortal>
-                                <DropdownMenuSubContent>
-                                    {THEME_OPTIONS.map((option) => (
-                                        <DropdownMenuItem 
-                                            key={option.value}
-                                            onClick={() => setTheme(option.value as ThemeType)}
-                                        >
-                                            {theme === option.value && (
-                                                <Check className="mr-2 h-4 w-4" />
-                                            )}
-                                            <span className={theme !== option.value ? "ml-6" : ""}>
-                                                {option.label}
-                                            </span>
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuSubContent>
-                            </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                        <DropdownMenuItem>
-                            <Settings className="mr-2 h-4 w-4" />
                             Settings
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <div className="px-2 py-1.5">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Theme</p>
+                            <div className="flex gap-2">
+                                {THEME_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.value}
+                                        onClick={() => setTheme(option.value as ThemeType)}
+                                        className={`flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
+                                            theme === option.value 
+                                                ? 'bg-primary/20 ring-1 ring-primary' 
+                                                : 'hover:bg-muted'
+                                        }`}
+                                        title={option.label}
+                                    >
+                                        <div className="flex gap-0.5">
+                                            {option.colors.map((color, i) => (
+                                                <div 
+                                                    key={i}
+                                                    className="w-3 h-3 rounded-full border border-border"
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                        </div>
+                                        <span className="text-[10px]">{option.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                             onClick={() => toast({ title: "Sign Out", description: "Authentication coming soon with Lovable Cloud" })}
