@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ViewerToolbar from './ViewerToolbar';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -737,7 +738,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           <div 
             ref={viewerContainerRef}
             id="AssetPlusViewer"
-            className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography"
+            className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar"
             style={{
               display: 'flex',
               flex: '1 0 auto',
@@ -770,7 +771,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 className="gap-1.5 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 pointer-events-auto shadow-md"
               >
                 <X className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm">Close</span>
+                <span className="hidden sm:inline text-sm">Stäng</span>
               </Button>
             )}
             {!onClose && <div />}
@@ -780,6 +781,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
               <FilterDropdown />
             </div>
           </div>
+
+          {/* Custom toolbar - centered at bottom */}
+          {state.isInitialized && initStep === 'ready' && (
+            <ViewerToolbar viewerRef={viewerInstanceRef} />
+          )}
 
           {/* Navigation cube canvas - positioned by CSS */}
           <canvas id="navCubeCanvas" />
