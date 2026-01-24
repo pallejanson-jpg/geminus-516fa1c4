@@ -1,5 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
-import { Search, LayoutGrid, List, Filter, Loader2 } from 'lucide-react';
+import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,18 @@ import { Facility } from '@/lib/types';
 import { BUILDING_IMAGES } from '@/lib/constants';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
+
+interface ComplexGroup {
+  complexName: string;
+  facilities: Facility[];
+}
 
 const PortfolioView: React.FC = () => {
   const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
@@ -41,6 +53,7 @@ const PortfolioView: React.FC = () => {
         numberOfSpaces: totalSpaces,
         area: totalArea,
         address: building.attributes?.address || undefined,
+        complexCommonName: building.complexCommonName || undefined,
       };
     });
   }, [navigatorTreeData, allData]);
@@ -56,6 +69,34 @@ const PortfolioView: React.FC = () => {
       return matchesSearch && matchesCategory;
     });
   }, [facilities, searchQuery, categoryFilter]);
+
+  // Group filtered facilities by Complex
+  const complexGroups: ComplexGroup[] = useMemo(() => {
+    const grouped = new Map<string, Facility[]>();
+    
+    filteredFacilities.forEach(facility => {
+      const complexName = facility.complexCommonName || 'Övriga byggnader';
+      if (!grouped.has(complexName)) {
+        grouped.set(complexName, []);
+      }
+      grouped.get(complexName)!.push(facility);
+    });
+
+    // Convert to array and sort by complex name
+    return Array.from(grouped.entries())
+      .map(([complexName, facilities]) => ({
+        complexName,
+        facilities: facilities.sort((a, b) => 
+          (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '')
+        ),
+      }))
+      .sort((a, b) => {
+        // Put "Övriga byggnader" last
+        if (a.complexName === 'Övriga byggnader') return 1;
+        if (b.complexName === 'Övriga byggnader') return -1;
+        return a.complexName.localeCompare(b.complexName);
+      });
+  }, [filteredFacilities]);
 
   // Handlers for FacilityLandingPage
   const handleClose = () => setSelectedFacility(null);
@@ -101,7 +142,7 @@ const PortfolioView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6">
+    <div className="h-full flex flex-col p-4 sm:p-6 overflow-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -133,7 +174,7 @@ const PortfolioView: React.FC = () => {
             <SelectItem value="Space">Rum</SelectItem>
           </SelectContent>
         </Select>
-        <div className="flex border rounded-md">
+        <div className="hidden sm:flex border rounded-md">
           <Button 
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
             size="icon"
@@ -188,21 +229,69 @@ const PortfolioView: React.FC = () => {
             </Card>
             <Card>
               <CardContent className="pt-4">
-                <p className="text-2xl font-bold">{favorites.length}</p>
-                <p className="text-xs text-muted-foreground">Favoriter</p>
+                <p className="text-2xl font-bold">{complexGroups.length}</p>
+                <p className="text-xs text-muted-foreground">Fastigheter</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Facilities Grid */}
-          {filteredFacilities.length > 0 ? (
-            <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-              {filteredFacilities.map(facility => (
-                <FacilityCard 
-                  key={facility.fmGuid} 
-                  facility={facility} 
-                  onClick={setSelectedFacility} 
-                />
+          {/* Complex Groups with Carousels */}
+          {complexGroups.length > 0 ? (
+            <div className="space-y-8">
+              {complexGroups.map((group) => (
+                <div key={group.complexName} className="space-y-3">
+                  {/* Complex Header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold">{group.complexName}</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {group.facilities.length} {group.facilities.length === 1 ? 'byggnad' : 'byggnader'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Carousel for buildings in this complex */}
+                  <div className="relative px-2 sm:px-12">
+                    <Carousel
+                      opts={{
+                        align: 'start',
+                        loop: group.facilities.length > 3,
+                      }}
+                      className="w-full"
+                    >
+                      <CarouselContent className="-ml-2 md:-ml-4">
+                        {group.facilities.map((facility) => (
+                          <CarouselItem 
+                            key={facility.fmGuid} 
+                            className="pl-2 md:pl-4 basis-full sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
+                          >
+                            <FacilityCard 
+                              facility={facility} 
+                              onClick={setSelectedFacility} 
+                            />
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                      {group.facilities.length > 1 && (
+                        <>
+                          <CarouselPrevious className="hidden sm:flex -left-2 sm:-left-4" />
+                          <CarouselNext className="hidden sm:flex -right-2 sm:-right-4" />
+                        </>
+                      )}
+                    </Carousel>
+                    
+                    {/* Mobile scroll indicator */}
+                    {group.facilities.length > 1 && (
+                      <div className="flex sm:hidden justify-center gap-1 mt-3">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <ChevronLeft size={14} />
+                          <span>Svep för att se fler</span>
+                          <ChevronRight size={14} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
