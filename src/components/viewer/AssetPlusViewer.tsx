@@ -14,6 +14,8 @@ import {
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import { xktCacheService } from '@/services/xkt-cache-service';
+import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
+import { NavigatorNode } from '@/components/navigator/TreeNode';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -95,6 +97,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const [showNavCube, setShowNavCube] = useState(true);
   
   const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
+
+  // Coordinate picker state
+  const [isPickMode, setIsPickMode] = useState(false);
+  const [pickedCoordinates, setPickedCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
+  const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
+  const pickModeListenerRef = useRef<(() => void) | null>(null);
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -508,6 +517,150 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       navCubeRef.current.setVisible(showNavCube);
     }
   }, [showNavCube]);
+
+  // Handle coordinate picking mode
+  const handleTogglePickMode = useCallback(() => {
+    if (isPickMode) {
+      // Disable pick mode
+      setIsPickMode(false);
+      toast.info('Registreringsläge avbrutet');
+      
+      // Remove listener if exists
+      if (pickModeListenerRef.current) {
+        pickModeListenerRef.current();
+        pickModeListenerRef.current = null;
+      }
+    } else {
+      // Enable pick mode
+      setIsPickMode(true);
+      toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+        duration: 5000,
+      });
+
+      // Set up click listener on xeokit scene
+      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (xeokitViewer?.scene) {
+        const handlePick = (pickResult: any) => {
+          if (pickResult?.worldPos) {
+            const [x, y, z] = pickResult.worldPos;
+            console.log('Picked coordinates:', { x, y, z });
+            
+            // Store coordinates
+            setPickedCoordinates({ x, y, z });
+            
+            // Get current room from picked entity or use current space context
+            let parentNode: NavigatorNode | null = null;
+            
+            // Fallback: use current asset's room if it's a Space, or building storey
+            if (assetData) {
+              if (assetData.category === 'Space') {
+                parentNode = {
+                  fmGuid: assetData.fmGuid,
+                  name: assetData.name || '',
+                  commonName: assetData.commonName || assetData.name || '',
+                  category: 'Space',
+                  children: [],
+                };
+              } else if (assetData.inRoomFmGuid) {
+                const roomData = allData.find((a: any) => a.fmGuid === assetData.inRoomFmGuid);
+                if (roomData) {
+                  parentNode = {
+                    fmGuid: roomData.fmGuid,
+                    name: roomData.name || '',
+                    commonName: roomData.commonName || roomData.name || '',
+                    category: 'Space',
+                    children: [],
+                  };
+                }
+              } else if (assetData.levelFmGuid) {
+                // Use the storey/level as parent
+                const levelData = allData.find((a: any) => a.fmGuid === assetData.levelFmGuid);
+                if (levelData) {
+                  parentNode = {
+                    fmGuid: levelData.fmGuid,
+                    name: levelData.name || '',
+                    commonName: levelData.commonName || levelData.name || '',
+                    category: 'Building Storey',
+                    children: [],
+                  };
+                }
+              }
+            }
+
+            // If still no parent, use the current fmGuid asset
+            if (!parentNode) {
+              parentNode = {
+                fmGuid: fmGuid,
+                name: assetData?.name || 'Current View',
+                commonName: assetData?.commonName || assetData?.name || 'Current View',
+                category: assetData?.category || 'Space',
+                children: [],
+              };
+            }
+
+            setAddAssetParentNode(parentNode);
+            setAddAssetDialogOpen(true);
+            setIsPickMode(false);
+            
+            // Cleanup listener
+            if (pickModeListenerRef.current) {
+              pickModeListenerRef.current();
+              pickModeListenerRef.current = null;
+            }
+            
+            toast.success(`Position vald: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+          }
+        };
+
+        // Use xeokit's pick on click
+        const canvas = xeokitViewer.scene.canvas.canvas;
+        const handleClick = (e: MouseEvent) => {
+          const rect = canvas.getBoundingClientRect();
+          const canvasPos = [
+            e.clientX - rect.left,
+            e.clientY - rect.top
+          ];
+          
+          // Use xeokit's pickSurface for accurate 3D coordinates
+          const pickResult = xeokitViewer.scene.pick({
+            canvasPos,
+            pickSurface: true, // Get exact surface coordinates
+          });
+          
+          if (pickResult) {
+            handlePick(pickResult);
+          } else {
+            toast.error('Ingen yta hittades. Klicka på ett synligt objekt.');
+          }
+        };
+
+        canvas.addEventListener('click', handleClick, { once: true });
+        
+        // Store cleanup function
+        pickModeListenerRef.current = () => {
+          canvas.removeEventListener('click', handleClick);
+        };
+      }
+    }
+  }, [isPickMode, allData, assetData, fmGuid]);
+
+  // Cleanup pick mode listener on unmount
+  useEffect(() => {
+    return () => {
+      if (pickModeListenerRef.current) {
+        pickModeListenerRef.current();
+        pickModeListenerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Handle asset created - close dialog and show toast
+  const handleAssetCreated = useCallback(() => {
+    setAddAssetDialogOpen(false);
+    setPickedCoordinates(null);
+    setAddAssetParentNode(null);
+    toast.success('Tillgång registrerad med 3D-koordinater!');
+  }, []);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
@@ -937,6 +1090,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             }}
           />
 
+          {/* Pick mode indicator overlay */}
+          {isPickMode && (
+            <div className="absolute inset-0 pointer-events-none z-10 border-4 border-dashed border-accent/50 animate-pulse">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
+                <p className="text-sm font-medium text-center">
+                  🎯 Klicka på en yta för att välja position
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Custom toolbar - centered at bottom */}
           {state.isInitialized && initStep === 'ready' && (
             <>
@@ -944,6 +1108,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 viewerRef={viewerInstanceRef} 
                 onToggleMinimap={(visible) => setShowMinimap(visible)}
                 onToggleNavCube={(visible) => setShowNavCube(visible)}
+                onPickCoordinate={handleTogglePickMode}
+                isPickMode={isPickMode}
               />
               <MinimapPanel
                 viewerRef={viewerInstanceRef}
@@ -968,6 +1134,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
               />
             </>
           )}
+
+          {/* Add Asset Dialog with coordinates */}
+          <AddAssetDialog
+            open={addAssetDialogOpen}
+            onOpenChange={setAddAssetDialogOpen}
+            parentNode={addAssetParentNode}
+            onAssetCreated={handleAssetCreated}
+            initialCoordinates={pickedCoordinates || undefined}
+          />
         </div>
       </div>
     </div>
