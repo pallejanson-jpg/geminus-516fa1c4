@@ -124,6 +124,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
   };
 
+  // Handler for 2D button - passes the storey's fmGuid to viewer
+  const handleToggle2D = () => {
+    if (facility.fmGuid) {
+      setViewer3dFmGuid(facility.fmGuid);
+    }
+  };
+
   // Handler for saving Ivion Site ID
   const handleSaveIvionSiteId = () => {
     updateIvionSiteId(ivionSiteIdInput || null);
@@ -373,6 +380,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onShowRooms={onShowRooms}
             onOpen360={onOpen360}
             onToggle3D={handleToggle3D}
+            onToggle2D={handleToggle2D}
             onShowDocs={onShowDocs}
             onShowInsights={onShowInsights}
             onOpenIoT={onOpenIoT}

@@ -477,7 +477,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       }
     }
 
-    toast.success(cacheStatus === 'hit' ? 'Modell laddad från cache' : '3D-modell laddad');
+    // Silent success - no toast needed
   }, [executeDisplayAction, cacheStatus]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
@@ -692,23 +692,40 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     }
   }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = React.useRef(true);
+  
   // Initialize on mount
   useEffect(() => {
+    isMountedRef.current = true;
     initializeViewer();
 
     return () => {
+      isMountedRef.current = false;
+      
       // Restore original fetch on unmount
       restoreFetch();
       
-      // Cleanup viewer on unmount - guard against null viewer
+      // Cleanup viewer on unmount - guard against null/incomplete viewer
+      // The 'e.nextSibling' error occurs when Asset+ tries to manipulate DOM
+      // elements that were removed before cleanup completed
       try {
         const viewer = viewerInstanceRef.current;
-        if (viewer?.clearData && viewer?.viewer?.scene) {
-          viewer.clearData();
+        if (viewer) {
+          // Only call clearData if the viewer is fully initialized
+          // Check for the presence of key internal objects
+          const assetView = viewer.$refs?.AssetViewer?.$refs?.assetView;
+          const scene = assetView?.viewer?.scene;
+          
+          if (scene && typeof viewer.clearData === 'function') {
+            viewer.clearData();
+          }
         }
       } catch (e) {
-        console.warn('Viewer cleanup warning:', e);
+        // Silently ignore cleanup errors - the DOM is being torn down anyway
+        console.debug('Viewer cleanup (expected during teardown):', e);
       }
+      
       viewerInstanceRef.current = null;
       deferCallsRef.current = true;
     };
