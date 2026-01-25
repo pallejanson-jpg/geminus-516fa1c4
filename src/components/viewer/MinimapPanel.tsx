@@ -1,25 +1,37 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Maximize2, Minimize2, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+interface RoomData {
+  id: string;
+  fmGuid: string;
+  name: string;
+  aabb: number[]; // [xMin, yMin, zMin, xMax, yMax, zMax]
+  canvasRect?: { x: number; y: number; width: number; height: number };
+}
 
 interface MinimapPanelProps {
   viewerRef: React.MutableRefObject<any>;
   isVisible: boolean;
   onClose: () => void;
+  onRoomClick?: (fmGuid: string) => void;
 }
 
 /**
  * Minimap panel for 3D Viewer
- * Shows a top-down overview of the model with current camera position
- * Click to navigate to different areas
+ * Shows a top-down overview of the model with rooms and current camera position
+ * Click rooms to navigate to them, or click empty space to reposition camera
  */
-const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClose }) => {
+const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClose, onRoomClick }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [size, setSize] = useState({ width: 200, height: 150 });
+  const [size, setSize] = useState({ width: 240, height: 180 });
   const [isExpanded, setIsExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [showRooms, setShowRooms] = useState(true);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
+  const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
   const [sceneInfo, setSceneInfo] = useState<{ aabb: number[] | null; scale: number; offsetX: number; offsetZ: number } | null>(null);
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -31,6 +43,95 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       return null;
     }
   }, [viewerRef]);
+
+  // Get asset view reference for additional methods
+  const getAssetView = useCallback(() => {
+    try {
+      return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+    } catch (e) {
+      return null;
+    }
+  }, [viewerRef]);
+
+  // Extract room data from metaScene
+  const extractRooms = useCallback(() => {
+    const viewer = getXeokitViewer();
+    const assetView = getAssetView();
+    if (!viewer || !assetView) return [];
+
+    const metaScene = viewer.metaScene;
+    if (!metaScene?.metaObjects) return [];
+
+    const extractedRooms: RoomData[] = [];
+
+    // Iterate through all meta objects to find IfcSpace elements
+    Object.values(metaScene.metaObjects).forEach((metaObject: any) => {
+      if (metaObject?.type?.toLowerCase() === 'ifcspace') {
+        try {
+          // Get the AABB for this space
+          const aabb = assetView.getAABB(metaObject.id);
+          if (aabb && aabb.length >= 6) {
+            // Try to get fmGuid from properties
+            let fmGuid = '';
+            let name = metaObject.name || 'Room';
+            
+            // Get object from scene to read properties
+            const sceneObject = viewer.scene?.objects?.[metaObject.id];
+            if (sceneObject) {
+              // Try to extract fmGuid from the object's properties
+              const props = sceneObject.propertySet?.properties;
+              if (props) {
+                const fmGuidProp = Object.values(props).find((p: any) => 
+                  p?.name?.toLowerCase() === 'fmguid'
+                );
+                if (fmGuidProp && (fmGuidProp as any).value) {
+                  fmGuid = String((fmGuidProp as any).value);
+                }
+              }
+            }
+
+            // Use metaObject id as fallback for fmGuid
+            if (!fmGuid) {
+              fmGuid = metaObject.id;
+            }
+
+            extractedRooms.push({
+              id: metaObject.id,
+              fmGuid,
+              name,
+              aabb
+            });
+          }
+        } catch (e) {
+          // Skip objects that can't be processed
+        }
+      }
+    });
+
+    return extractedRooms;
+  }, [getXeokitViewer, getAssetView]);
+
+  // Update rooms data when models are loaded
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const checkForRooms = () => {
+      const newRooms = extractRooms();
+      if (newRooms.length > 0) {
+        setRooms(newRooms);
+      }
+    };
+
+    // Check immediately and then periodically until we get rooms
+    checkForRooms();
+    const interval = setInterval(() => {
+      if (rooms.length === 0) {
+        checkForRooms();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isVisible, extractRooms, rooms.length]);
 
   // Update minimap from current view
   const updateMinimap = useCallback(() => {
@@ -104,24 +205,76 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       modelDepth * scale
     );
 
-    // Draw grid lines for reference
-    ctx.strokeStyle = 'hsl(var(--border) / 0.3)';
-    ctx.lineWidth = 0.5;
-    const gridSize = 4;
-    for (let i = 1; i < gridSize; i++) {
-      // Vertical lines
-      const gx = offsetX + (modelWidth * scale * i) / gridSize;
-      ctx.beginPath();
-      ctx.moveTo(gx, offsetZ);
-      ctx.lineTo(gx, offsetZ + modelDepth * scale);
-      ctx.stroke();
-      
-      // Horizontal lines
-      const gz = offsetZ + (modelDepth * scale * i) / gridSize;
-      ctx.beginPath();
-      ctx.moveTo(offsetX, gz);
-      ctx.lineTo(offsetX + modelWidth * scale, gz);
-      ctx.stroke();
+    // Draw rooms if enabled
+    if (showRooms && rooms.length > 0) {
+      const updatedRooms = rooms.map(room => {
+        const roomAabb = room.aabb;
+        const roomX = offsetX + (roomAabb[0] - aabb[0]) * scale;
+        const roomZ = offsetZ + (roomAabb[2] - aabb[2]) * scale;
+        const roomWidth = (roomAabb[3] - roomAabb[0]) * scale;
+        const roomHeight = (roomAabb[5] - roomAabb[2]) * scale;
+
+        // Store canvas rect for click detection
+        const canvasRect = { x: roomX, y: roomZ, width: roomWidth, height: roomHeight };
+
+        // Draw room rectangle
+        const isHovered = hoveredRoom === room.id;
+        
+        if (isHovered) {
+          ctx.fillStyle = 'hsl(var(--primary) / 0.4)';
+          ctx.strokeStyle = 'hsl(var(--primary))';
+          ctx.lineWidth = 2;
+        } else {
+          ctx.fillStyle = 'hsl(var(--primary) / 0.15)';
+          ctx.strokeStyle = 'hsl(var(--primary) / 0.5)';
+          ctx.lineWidth = 1;
+        }
+        
+        ctx.fillRect(roomX, roomZ, roomWidth, roomHeight);
+        ctx.strokeRect(roomX, roomZ, roomWidth, roomHeight);
+
+        // Draw room name if large enough
+        if (roomWidth > 20 && roomHeight > 12) {
+          ctx.fillStyle = isHovered ? 'hsl(var(--primary))' : 'hsl(var(--foreground) / 0.7)';
+          ctx.font = isHovered ? 'bold 9px sans-serif' : '8px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Truncate name if needed
+          const maxChars = Math.floor(roomWidth / 5);
+          let displayName = room.name;
+          if (displayName.length > maxChars) {
+            displayName = displayName.substring(0, maxChars - 1) + '…';
+          }
+          
+          ctx.fillText(displayName, roomX + roomWidth / 2, roomZ + roomHeight / 2);
+        }
+
+        return { ...room, canvasRect };
+      });
+
+      // Update rooms with canvas rects (only if changed)
+      if (JSON.stringify(updatedRooms.map(r => r.canvasRect)) !== JSON.stringify(rooms.map(r => r.canvasRect))) {
+        setRooms(updatedRooms);
+      }
+    } else {
+      // Draw grid lines for reference when rooms not shown
+      ctx.strokeStyle = 'hsl(var(--border) / 0.3)';
+      ctx.lineWidth = 0.5;
+      const gridSize = 4;
+      for (let i = 1; i < gridSize; i++) {
+        const gx = offsetX + (modelWidth * scale * i) / gridSize;
+        ctx.beginPath();
+        ctx.moveTo(gx, offsetZ);
+        ctx.lineTo(gx, offsetZ + modelDepth * scale);
+        ctx.stroke();
+        
+        const gz = offsetZ + (modelDepth * scale * i) / gridSize;
+        ctx.beginPath();
+        ctx.moveTo(offsetX, gz);
+        ctx.lineTo(offsetX + modelWidth * scale, gz);
+        ctx.stroke();
+      }
     }
 
     // Draw camera position indicator
@@ -187,9 +340,39 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       ctx.fill();
       ctx.stroke();
     }
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, showRooms, rooms, hoveredRoom]);
 
-  // Handle click on minimap to navigate
+  // Find room at canvas position
+  const findRoomAtPosition = useCallback((canvasX: number, canvasY: number): RoomData | null => {
+    if (!showRooms) return null;
+    
+    // Check rooms in reverse order (top-most first)
+    for (let i = rooms.length - 1; i >= 0; i--) {
+      const room = rooms[i];
+      if (room.canvasRect) {
+        const { x, y, width, height } = room.canvasRect;
+        if (canvasX >= x && canvasX <= x + width && canvasY >= y && canvasY <= y + height) {
+          return room;
+        }
+      }
+    }
+    return null;
+  }, [rooms, showRooms]);
+
+  // Handle mouse move for hover effect
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = minimapCanvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const room = findRoomAtPosition(x, y);
+    setHoveredRoom(room?.id || null);
+  }, [findRoomAtPosition]);
+
+  // Handle click on minimap
   const handleMinimapClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = minimapCanvasRef.current;
     const viewer = getXeokitViewer();
@@ -199,6 +382,14 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
+    // Check if clicked on a room
+    const clickedRoom = findRoomAtPosition(x, y);
+    if (clickedRoom && onRoomClick) {
+      onRoomClick(clickedRoom.fmGuid);
+      return;
+    }
+
+    // Otherwise, navigate to clicked position
     const { aabb, scale, offsetX, offsetZ } = sceneInfo;
 
     // Convert canvas coords to world coords
@@ -210,7 +401,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     const camera = viewer.camera;
     if (camera && viewer.cameraFlight) {
       const currentEye = camera.eye;
-      const height = currentEye[1] - worldY;
       
       viewer.cameraFlight.flyTo({
         eye: [worldX, currentEye[1], worldZ],
@@ -219,7 +409,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
         duration: 0.5
       });
     }
-  }, [getXeokitViewer, sceneInfo]);
+  }, [getXeokitViewer, sceneInfo, findRoomAtPosition, onRoomClick]);
 
   // Update minimap periodically when visible
   useEffect(() => {
@@ -246,12 +436,12 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
   useEffect(() => {
     if (!isResizing) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMouseMoveResize = (e: MouseEvent) => {
       const dx = resizeStartRef.current.x - e.clientX;
       const dy = resizeStartRef.current.y - e.clientY;
       setSize({
-        width: Math.max(150, Math.min(400, resizeStartRef.current.width + dx)),
-        height: Math.max(100, Math.min(300, resizeStartRef.current.height + dy)),
+        width: Math.max(180, Math.min(400, resizeStartRef.current.width + dx)),
+        height: Math.max(120, Math.min(300, resizeStartRef.current.height + dy)),
       });
     };
 
@@ -259,11 +449,11 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       setIsResizing(false);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', handleMouseMoveResize);
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousemove', handleMouseMoveResize);
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizing]);
@@ -271,9 +461,9 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
   // Toggle expand/collapse
   const toggleExpand = useCallback(() => {
     if (isExpanded) {
-      setSize({ width: 200, height: 150 });
+      setSize({ width: 240, height: 180 });
     } else {
-      setSize({ width: 320, height: 240 });
+      setSize({ width: 360, height: 270 });
     }
     setIsExpanded(!isExpanded);
   }, [isExpanded]);
@@ -293,8 +483,24 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     >
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1 bg-muted/50 border-b">
-        <span className="text-xs font-medium text-muted-foreground">Minimap</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Minimap</span>
+          {rooms.length > 0 && (
+            <span className="text-[10px] text-muted-foreground/70">
+              ({rooms.length} rum)
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant={showRooms ? "secondary" : "ghost"}
+            size="icon"
+            className="h-5 w-5"
+            onClick={() => setShowRooms(!showRooms)}
+            title={showRooms ? "Dölj rum" : "Visa rum"}
+          >
+            <Layers className="h-3 w-3" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -323,9 +529,14 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
         ref={minimapCanvasRef}
         width={size.width}
         height={size.height - 28}
-        className="w-full h-[calc(100%-28px)] cursor-crosshair"
+        className={cn(
+          "w-full h-[calc(100%-28px)]",
+          hoveredRoom ? "cursor-pointer" : "cursor-crosshair"
+        )}
         onClick={handleMinimapClick}
-        title="Klicka för att navigera"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredRoom(null)}
+        title={hoveredRoom ? "Klicka för att navigera till rum" : "Klicka för att flytta kameran"}
       />
 
       {/* Resize handle */}
