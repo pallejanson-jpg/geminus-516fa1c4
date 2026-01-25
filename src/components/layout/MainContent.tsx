@@ -9,8 +9,9 @@ import NavigatorView from "@/components/navigator/NavigatorView";
 import Viewer from "@/pages/Viewer";
 import InsightsView from "@/components/insights/InsightsView";
 
-// Lazy load MapView to improve initial load time
+// Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
+const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 
 const MainContent: React.FC = () => {
     const { theme, activeApp } = useContext(AppContext);
@@ -39,6 +40,16 @@ const MainContent: React.FC = () => {
             case 'viewer':
                 // Backwards-compatible key used by Navigator
                 return <Viewer />;
+            case 'asset_registration':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <AssetRegistration />
+                    </Suspense>
+                );
             case 'insights':
                 return <InsightsView />;
             case 'asset_plus':

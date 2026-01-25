@@ -1,11 +1,10 @@
 /**
- * NavCubePlugin - Professional 3D Navigation Cube for xeokit viewer
+ * NavCubePlugin - Clean Monochrome 3D Navigation Cube for xeokit viewer
  * 
  * Features:
+ * - Clean monochrome design with subtle hover states
  * - Real 3D perspective rendering with proper face sorting
- * - Smooth hover effects with gradient shading
  * - Interactive click navigation to fly camera to faces
- * - Drop shadows and edge highlighting for professional look
  * - Synchronized camera orientation display
  */
 (function(global) {
@@ -21,22 +20,6 @@
     left:   { eye: [-1, 0, 0], look: [0, 0, 0], up: [0, 1, 0], label: 'LEFT' }
   };
 
-  // Edge definitions (connecting two faces)
-  const EDGES = [
-    { faces: ['front', 'top'], eye: [0, 0.707, 0.707] },
-    { faces: ['front', 'bottom'], eye: [0, -0.707, 0.707] },
-    { faces: ['front', 'left'], eye: [-0.707, 0, 0.707] },
-    { faces: ['front', 'right'], eye: [0.707, 0, 0.707] },
-    { faces: ['back', 'top'], eye: [0, 0.707, -0.707] },
-    { faces: ['back', 'bottom'], eye: [0, -0.707, -0.707] },
-    { faces: ['back', 'left'], eye: [-0.707, 0, -0.707] },
-    { faces: ['back', 'right'], eye: [0.707, 0, -0.707] },
-    { faces: ['top', 'left'], eye: [-0.707, 0.707, 0] },
-    { faces: ['top', 'right'], eye: [0.707, 0.707, 0] },
-    { faces: ['bottom', 'left'], eye: [-0.707, -0.707, 0] },
-    { faces: ['bottom', 'right'], eye: [0.707, -0.707, 0] }
-  ];
-
   class NavCubePlugin {
     constructor(viewer, cfg = {}) {
       this.viewer = viewer;
@@ -45,18 +28,14 @@
       this._cameraFly = cfg.cameraFly !== false;
       this._cameraFlyDuration = cfg.cameraFlyDuration || 0.5;
       
-      // Professional color scheme
-      this._faceColors = {
-        front:  cfg.frontColor  || '#4CAF50',  // Green
-        back:   cfg.backColor   || '#E53935',  // Red
-        top:    cfg.topColor    || '#2196F3',  // Blue
-        bottom: cfg.bottomColor || '#FF9800',  // Orange
-        left:   cfg.leftColor   || '#9C27B0',  // Purple
-        right:  cfg.rightColor  || '#00BCD4'   // Cyan
-      };
-      this._hoverColor = cfg.hoverColor || '#FFC107';
-      this._edgeColor = cfg.edgeColor || '#333333';
-      this._shadowColor = 'rgba(0, 0, 0, 0.3)';
+      // Clean monochrome color scheme
+      this._baseFaceColor = '#3a3a3a';
+      this._lightFaceColor = '#4a4a4a';
+      this._darkFaceColor = '#2a2a2a';
+      this._hoverColor = '#5a5a5a';
+      this._edgeColor = '#555555';
+      this._textColor = '#999999';
+      this._textHoverColor = '#ffffff';
       
       this._canvas = document.getElementById(cfg.canvasId);
       if (!this._canvas) {
@@ -66,7 +45,7 @@
       
       this._ctx = this._canvas.getContext('2d');
       this._hoveredFace = null;
-      this._cubeSize = 35;
+      this._cubeSize = 38;
       this._destroyed = false;
       this._lastProjectedFaces = [];
       
@@ -236,17 +215,8 @@
         }
       }
       
-      // Draw drop shadow
-      ctx.save();
-      ctx.shadowColor = this._shadowColor;
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 3;
-      
       // Draw the 3D cube
       this._drawCube3D(ctx, cx, cy, size, rotX, rotY);
-      
-      ctx.restore();
     }
     
     _drawCube3D(ctx, cx, cy, size, rotX, rotY) {
@@ -328,15 +298,15 @@
         }
         ctx.closePath();
         
-        // Fill with gradient for 3D effect
-        const baseColor = isHovered ? this._hoverColor : this._faceColors[face.name];
-        const gradient = this._createFaceGradient(ctx, points, baseColor, face.depth);
-        ctx.fillStyle = gradient;
+        // Fill with clean monochrome shading based on face orientation
+        const baseShade = this._getFaceShade(face.name);
+        const fillColor = isHovered ? this._hoverColor : baseShade;
+        ctx.fillStyle = fillColor;
         ctx.fill();
         
-        // Draw edges
+        // Draw subtle edges
         ctx.strokeStyle = this._edgeColor;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.stroke();
         
         // Draw face label
@@ -344,44 +314,17 @@
       });
     }
     
-    _createFaceGradient(ctx, points, baseColor, depth) {
-      // Calculate bounding box
-      const minX = Math.min(...points.map(p => p.x));
-      const maxX = Math.max(...points.map(p => p.x));
-      const minY = Math.min(...points.map(p => p.y));
-      const maxY = Math.max(...points.map(p => p.y));
-      
-      const gradient = ctx.createLinearGradient(minX, minY, maxX, maxY);
-      
-      // Parse base color and create lighter/darker variants
-      const lighterColor = this._adjustColorBrightness(baseColor, 30);
-      const darkerColor = this._adjustColorBrightness(baseColor, -20);
-      
-      gradient.addColorStop(0, lighterColor);
-      gradient.addColorStop(1, darkerColor);
-      
-      return gradient;
-    }
-    
-    _adjustColorBrightness(hex, percent) {
-      // Remove # if present
-      hex = hex.replace(/^#/, '');
-      
-      // Parse RGB
-      let r = parseInt(hex.substr(0, 2), 16);
-      let g = parseInt(hex.substr(2, 2), 16);
-      let b = parseInt(hex.substr(4, 2), 16);
-      
-      // Adjust brightness
-      r = Math.min(255, Math.max(0, r + (r * percent / 100)));
-      g = Math.min(255, Math.max(0, g + (g * percent / 100)));
-      b = Math.min(255, Math.max(0, b + (b * percent / 100)));
-      
-      // Convert back to hex
-      return '#' + 
-        Math.round(r).toString(16).padStart(2, '0') +
-        Math.round(g).toString(16).padStart(2, '0') +
-        Math.round(b).toString(16).padStart(2, '0');
+    _getFaceShade(faceName) {
+      // Different shades for 3D depth perception
+      switch(faceName) {
+        case 'top': return this._lightFaceColor;
+        case 'bottom': return this._darkFaceColor;
+        case 'front': return this._baseFaceColor;
+        case 'back': return this._darkFaceColor;
+        case 'left': return '#353535';
+        case 'right': return '#404040';
+        default: return this._baseFaceColor;
+      }
     }
     
     _drawFaceLabel(ctx, points, faceName, isHovered) {
@@ -391,31 +334,26 @@
       
       // Calculate face size for font scaling
       const width = Math.abs(points[1].x - points[0].x) + Math.abs(points[2].x - points[1].x);
-      const fontSize = Math.max(8, Math.min(12, width / 4));
+      const fontSize = Math.max(9, Math.min(11, width / 4));
       
-      // Draw label with shadow for readability
       ctx.save();
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Label text
+      // Label text - short abbreviations
       const labels = {
         front: 'F',
         back: 'B', 
         top: 'T',
-        bottom: 'Bo',
+        bottom: 'U',
         left: 'L',
         right: 'R'
       };
       const label = labels[faceName] || '';
       
-      // Text shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillText(label, centerX + 1, centerY + 1);
-      
-      // Text
-      ctx.fillStyle = isHovered ? '#000000' : '#FFFFFF';
+      // Text color
+      ctx.fillStyle = isHovered ? this._textHoverColor : this._textColor;
       ctx.fillText(label, centerX, centerY);
       
       ctx.restore();
