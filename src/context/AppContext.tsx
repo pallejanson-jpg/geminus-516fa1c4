@@ -242,6 +242,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             }
         });
 
+        // Create lookup for storey by name within each building (for fallback matching)
+        // Key: "buildingFmGuid|storeyName" -> storey fmGuid
+        const storeyNameLookup = new Map<string, string>();
+        storeyMap.forEach((storey: any) => {
+            const storeyName = (storey.commonName || storey.name || '').toLowerCase().trim();
+            if (storeyName && storey.buildingFmGuid) {
+                const key = `${storey.buildingFmGuid}|${storeyName}`;
+                storeyNameLookup.set(key, storey.fmGuid);
+            }
+        });
+
         // Attach storeys to buildings
         storeyMap.forEach((storey) => {
             const parentBuilding = buildingMap.get((storey as any).buildingFmGuid);
@@ -250,14 +261,35 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             }
         });
 
-        // Attach spaces ONLY to storeys - strict hierarchy, no orphan spaces
+        // Attach spaces to storeys - with fallback matching by levelCommonName
         spaces.forEach((space: any) => {
-            const parentStorey = storeyMap.get(space.levelFmGuid);
+            let parentStorey = storeyMap.get(space.levelFmGuid);
+            
+            // Fallback: Try to match by levelCommonName from attributes
+            if (!parentStorey && space.buildingFmGuid) {
+                const attrs = space.attributes || {};
+                // Try different attribute fields that might contain the storey name
+                const levelName = (
+                    attrs.levelCommonName || 
+                    attrs.levelDesignation || 
+                    attrs.levelName ||
+                    attrs.parentCommonName ||
+                    ''
+                ).toLowerCase().trim();
+                
+                if (levelName) {
+                    const lookupKey = `${space.buildingFmGuid}|${levelName}`;
+                    const matchedStoreyGuid = storeyNameLookup.get(lookupKey);
+                    if (matchedStoreyGuid) {
+                        parentStorey = storeyMap.get(matchedStoreyGuid);
+                    }
+                }
+            }
+            
             if (parentStorey) {
-                // Space belongs to a known storey - add it
                 parentStorey.children!.push({ ...space, children: [] });
             }
-            // Spaces without valid levelFmGuid are excluded from the tree
+            // Spaces that still can't be matched are excluded from the tree
         });
 
         const sortedTree = Array.from(buildingMap.values());
