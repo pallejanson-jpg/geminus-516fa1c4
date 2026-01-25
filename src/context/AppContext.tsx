@@ -134,14 +134,22 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const [navigatorTreeData, setNavigatorTreeData] = useState<NavigatorNode[]>([]);
     const [viewer3dFmGuid, setViewer3dFmGuidInternal] = useState<string | null>(null);
     const [aiSelectedFmGuids, setAiSelectedFmGuids] = useState<string[]>([]);
+    // Track previous app before opening 3D viewer for proper navigation on close
+    const [previousAppBeforeViewer, setPreviousAppBeforeViewer] = useState<string>('home');
 
-    // Wrapper: automatically switch to viewer app when fmGuid is set
+    // Wrapper: automatically switch to viewer app when fmGuid is set, and return to previous app when cleared
     const setViewer3dFmGuid = useCallback((fmGuid: string | null) => {
-        setViewer3dFmGuidInternal(fmGuid);
         if (fmGuid) {
+            // Save current app before switching to viewer
+            setPreviousAppBeforeViewer(activeApp);
+            setViewer3dFmGuidInternal(fmGuid);
             setActiveApp('assetplus_viewer');
+        } else {
+            // Return to previous app when closing viewer
+            setViewer3dFmGuidInternal(null);
+            setActiveApp(previousAppBeforeViewer);
         }
-    }, []);
+    }, [activeApp, previousAppBeforeViewer]);
 
     const clearAiSelection = useCallback(() => {
         setAiSelectedFmGuids([]);
