@@ -11,6 +11,14 @@ type NavigatorNode = {
     [key: string]: any;
 };
 
+// Asset registration context for the 3D-assisted registration flow
+export interface AssetRegistrationContext {
+    parentNode: NavigatorNode;
+    buildingFmGuid: string;
+    storeyFmGuid?: string;
+    spaceFmGuid?: string;
+}
+
 export type ThemeType = 'dark' | 'light' | 'swg';
 
 interface AppContextType {
@@ -44,6 +52,11 @@ interface AppContextType {
     // 3D Viewer
     viewer3dFmGuid: string | null;
     setViewer3dFmGuid: (fmGuid: string | null) => void;
+
+    // Asset registration flow with 3D support
+    assetRegistrationContext: AssetRegistrationContext | null;
+    startAssetRegistration: (context: AssetRegistrationContext) => void;
+    cancelAssetRegistration: () => void;
 
     // 3D Viewer diagnostics (for RightSidebar)
     viewerDiagnostics: {
@@ -95,6 +108,10 @@ export const AppContext = createContext<AppContextType>({
 
     viewer3dFmGuid: null,
     setViewer3dFmGuid: () => {},
+
+    assetRegistrationContext: null,
+    startAssetRegistration: () => {},
+    cancelAssetRegistration: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -156,6 +173,24 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     }, []);
 
     const [viewerDiagnostics, setViewerDiagnostics] = useState<AppContextType["viewerDiagnostics"]>(null);
+
+    // Asset registration flow state
+    const [assetRegistrationContext, setAssetRegistrationContext] = useState<AssetRegistrationContext | null>(null);
+
+    const startAssetRegistration = useCallback((context: AssetRegistrationContext) => {
+        setAssetRegistrationContext(context);
+        // Save current app and switch to asset registration mode
+        setPreviousAppBeforeViewer(activeApp);
+        // Navigate to the building that contains the space
+        setViewer3dFmGuidInternal(context.buildingFmGuid);
+        setActiveApp('asset_registration');
+    }, [activeApp]);
+
+    const cancelAssetRegistration = useCallback(() => {
+        setAssetRegistrationContext(null);
+        setViewer3dFmGuidInternal(null);
+        setActiveApp(previousAppBeforeViewer);
+    }, [previousAppBeforeViewer]);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         const buildings = items.filter(item => item.category === 'Building');
@@ -325,6 +360,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
                 viewer3dFmGuid,
                 setViewer3dFmGuid,
+
+                assetRegistrationContext,
+                startAssetRegistration,
+                cancelAssetRegistration,
 
                 viewerDiagnostics,
                 setViewerDiagnostics,
