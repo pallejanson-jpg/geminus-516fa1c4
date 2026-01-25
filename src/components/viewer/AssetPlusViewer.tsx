@@ -949,6 +949,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
                 viewerRef={viewerInstanceRef}
                 isVisible={showMinimap}
                 onClose={() => setShowMinimap(false)}
+                onRoomClick={(roomFmGuid) => {
+                  // Navigate to clicked room with floor cutout and look-at
+                  const roomData = allData.find((a: any) => a.fmGuid === roomFmGuid);
+                  const floorFmGuid = roomData?.levelFmGuid || roomFmGuid;
+                  const displayAction = { 
+                    action: 'cutoutfloor_and_lookatspace', 
+                    parameter: { 
+                      fmGuid: roomFmGuid,
+                      floorFmGuid,
+                      includeRelatedFloors: true, 
+                      heightAboveAABB: defaultHeightAboveAABB 
+                    } 
+                  };
+                  executeDisplayAction(displayAction);
+                  viewerInstanceRef.current?.selectFmGuid(roomFmGuid);
+                }}
               />
             </>
           )}
