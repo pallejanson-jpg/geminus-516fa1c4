@@ -135,22 +135,32 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     }
   }, [getAssetView]);
 
-  // Tools
+  // Tools - with null safety to prevent 'e.nextSibling' errors
   const handleToolChange = useCallback((tool: ViewerTool) => {
-    const assetView = getAssetView();
-    if (assetView) {
-      assetView.useTool(tool);
-      setActiveTool(tool);
+    try {
+      const assetView = getAssetView();
+      if (assetView && typeof assetView.useTool === 'function') {
+        assetView.useTool(tool);
+        setActiveTool(tool);
+      } else {
+        console.warn('AssetView not ready for tool change');
+      }
+    } catch (error) {
+      console.warn('Tool change failed:', error);
     }
   }, [getAssetView]);
 
-  // View modes
+  // View modes - with null safety
   const handleToggleSpaces = useCallback(() => {
-    const viewer = viewerRef.current?.assetViewer;
-    if (viewer) {
-      const newValue = !showSpaces;
-      viewer.onShowSpacesChanged?.(newValue);
-      setShowSpaces(newValue);
+    try {
+      const viewer = viewerRef.current?.assetViewer;
+      if (viewer && typeof viewer.onShowSpacesChanged === 'function') {
+        const newValue = !showSpaces;
+        viewer.onShowSpacesChanged(newValue);
+        setShowSpaces(newValue);
+      }
+    } catch (error) {
+      console.warn('Toggle spaces failed:', error);
     }
   }, [viewerRef, showSpaces]);
 
@@ -172,11 +182,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   }, [showMinimap, onToggleMinimap]);
 
   const handleToggleAnnotations = useCallback(() => {
-    const viewer = viewerRef.current?.assetViewer;
-    if (viewer?.onToggleAnnotation) {
-      const newValue = !showAnnotations;
-      viewer.onToggleAnnotation(newValue);
-      setShowAnnotations(newValue);
+    try {
+      const viewer = viewerRef.current?.assetViewer;
+      if (viewer && typeof viewer.onToggleAnnotation === 'function') {
+        const newValue = !showAnnotations;
+        viewer.onToggleAnnotation(newValue);
+        setShowAnnotations(newValue);
+      }
+    } catch (error) {
+      console.warn('Toggle annotations failed:', error);
     }
   }, [viewerRef, showAnnotations]);
 
@@ -221,16 +235,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   }, [getXeokitViewer, viewerRef]);
 
   const handleToggleXray = useCallback(() => {
-    const viewer = getXeokitViewer();
-    if (viewer?.scene) {
-      const scene = viewer.scene;
-      const objectIds = Object.keys(scene.objects);
-      const firstObj = scene.objects[objectIds[0]];
-      const newXray = !firstObj?.xrayed;
-      objectIds.forEach(id => {
-        const obj = scene.objects[id];
-        if (obj) obj.xrayed = newXray;
-      });
+    try {
+      const viewer = getXeokitViewer();
+      if (viewer?.scene) {
+        const scene = viewer.scene;
+        const objectIds = Object.keys(scene.objects || {});
+        if (objectIds.length > 0) {
+          const firstObj = scene.objects[objectIds[0]];
+          const newXray = !firstObj?.xrayed;
+          objectIds.forEach(id => {
+            const obj = scene.objects[id];
+            if (obj) obj.xrayed = newXray;
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Toggle X-ray failed:', error);
     }
   }, [getXeokitViewer]);
 

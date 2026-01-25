@@ -374,17 +374,20 @@ export default function AssetRegistration() {
   // Import the actual viewer component
   const AssetPlusViewerComponent = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
 
+  // Determine correct fmGuid for viewer - use space if available for room context
+  const viewerFmGuid = assetRegistrationContext.parentNode?.fmGuid || assetRegistrationContext.buildingFmGuid;
+
   return (
     <div className="h-full flex flex-col">
-      {/* 3D Viewer - takes most of the space */}
-      <div className={`flex-1 min-h-0 ${isMobile ? 'h-[50vh]' : 'h-[60vh]'}`}>
+      {/* 3D Viewer - takes more space for better picking */}
+      <div className={`min-h-0 ${isMobile ? 'h-[55vh] min-h-[300px]' : 'h-[65vh] min-h-[400px]'}`}>
         <React.Suspense fallback={
           <div className="h-full flex items-center justify-center bg-muted">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         }>
           <AssetPlusViewerComponent 
-            fmGuid={assetRegistrationContext.buildingFmGuid} 
+            fmGuid={viewerFmGuid} 
             onClose={cancelAssetRegistration}
           />
         </React.Suspense>
