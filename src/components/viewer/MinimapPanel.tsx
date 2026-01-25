@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-// Room category color scheme - HSL values for canvas rendering
+// Room category color scheme
 const ROOM_CATEGORIES = {
   office: { label: 'Kontor', color: 'hsl(210, 70%, 50%)', fill: 'rgba(59, 130, 246, 0.25)', stroke: 'rgba(59, 130, 246, 0.7)' },
   technical: { label: 'Teknik', color: 'hsl(280, 60%, 50%)', fill: 'rgba(168, 85, 247, 0.25)', stroke: 'rgba(168, 85, 247, 0.7)' },
@@ -27,10 +27,16 @@ interface RoomData {
   id: string;
   fmGuid: string;
   name: string;
-  aabb: number[]; // [xMin, yMin, zMin, xMax, yMax, zMax]
+  aabb: number[];
   category: RoomCategoryKey;
   rentalObject?: string;
-  canvasRect?: { x: number; y: number; width: number; height: number };
+}
+
+interface CanvasRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface MinimapPanelProps {
@@ -44,39 +50,33 @@ interface MinimapPanelProps {
 const classifyRoom = (name: string, rentalObject?: string): RoomCategoryKey => {
   const lowerName = name.toLowerCase();
   
-  // Rental object takes priority
   if (rentalObject && rentalObject.length > 0) {
     return 'rental';
   }
   
-  // Technical spaces
   if (lowerName.includes('teknik') || lowerName.includes('tdk') || lowerName.includes('el') ||
       lowerName.includes('fläkt') || lowerName.includes('vvs') || lowerName.includes('server') ||
       lowerName.includes('it-') || lowerName.includes('ställverk')) {
     return 'technical';
   }
   
-  // Circulation / communication
   if (lowerName.includes('trappa') || lowerName.includes('korridor') || lowerName.includes('hall') ||
       lowerName.includes('entré') || lowerName.includes('lobby') || lowerName.includes('hiss') ||
       lowerName.includes('passage') || lowerName.includes('sluss')) {
     return 'circulation';
   }
   
-  // Sanitary
   if (lowerName.includes('wc') || lowerName.includes('toalett') || lowerName.includes('dusch') ||
       lowerName.includes('bad') || lowerName.includes('hygien') || lowerName.includes('tvätt') ||
       lowerName.includes('rkm') || lowerName.includes('städ')) {
     return 'sanitary';
   }
   
-  // Storage
   if (lowerName.includes('förråd') || lowerName.includes('arkiv') || lowerName.includes('lager') ||
       lowerName.includes('skåp') || lowerName.includes('magasin')) {
     return 'storage';
   }
   
-  // Office / workspace
   if (lowerName.includes('kontor') || lowerName.includes('rum') || lowerName.includes('arbets') ||
       lowerName.includes('möte') || lowerName.includes('samman') || lowerName.includes('pentry') ||
       lowerName.includes('kök') || lowerName.includes('lunch') || lowerName.includes('fikarum')) {
@@ -89,7 +89,6 @@ const classifyRoom = (name: string, rentalObject?: string): RoomCategoryKey => {
 /**
  * Minimap panel for 3D Viewer
  * Shows a top-down overview of the model with color-coded rooms
- * Click rooms to navigate to them, or click empty space to reposition camera
  */
 const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClose, onRoomClick }) => {
   const { allData } = useContext(AppContext);
@@ -101,9 +100,15 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
   const [showRooms, setShowRooms] = useState(true);
   const [showLegend, setShowLegend] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
-  const [hoveredRoom, setHoveredRoom] = useState<RoomData | null>(null);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
   const [sceneInfo, setSceneInfo] = useState<{ aabb: number[] | null; scale: number; offsetX: number; offsetZ: number } | null>(null);
+  
+  // Store canvas rects in a ref to avoid state updates during render
+  const roomRectsRef = useRef<Map<string, CanvasRect>>(new Map());
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
+  // Get hovered room data
+  const hoveredRoom = rooms.find(r => r.id === hoveredRoomId) || null;
 
   // Get xeokit viewer reference
   const getXeokitViewer = useCallback(() => {
@@ -123,7 +128,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     }
   }, [viewerRef]);
 
-  // Extract room data from metaScene with category classification
+  // Extract room data from metaScene
   const extractRooms = useCallback(() => {
     const viewer = getXeokitViewer();
     const assetView = getAssetView();
@@ -134,15 +139,16 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
 
     const extractedRooms: RoomData[] = [];
 
-    // Create a map of fmGuid to asset data for quick lookup
+    // Create a map of fmGuid to asset data
     const assetMap = new Map<string, any>();
-    allData.forEach((asset: any) => {
-      if (asset.fmGuid) {
-        assetMap.set(asset.fmGuid.toLowerCase(), asset);
-      }
-    });
+    if (allData) {
+      allData.forEach((asset: any) => {
+        if (asset.fmGuid) {
+          assetMap.set(asset.fmGuid.toLowerCase(), asset);
+        }
+      });
+    }
 
-    // Iterate through all meta objects to find IfcSpace elements
     Object.values(metaScene.metaObjects).forEach((metaObject: any) => {
       if (metaObject?.type?.toLowerCase() === 'ifcspace') {
         try {
@@ -152,7 +158,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
             let name = metaObject.name || 'Room';
             let rentalObject: string | undefined;
             
-            // Get object from scene to read properties
             const sceneObject = viewer.scene?.objects?.[metaObject.id];
             if (sceneObject) {
               const props = sceneObject.propertySet?.properties;
@@ -166,15 +171,12 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
               }
             }
 
-            // Use metaObject id as fallback
             if (!fmGuid) {
               fmGuid = metaObject.id;
             }
 
-            // Look up asset data to get rental object info
             const assetInfo = assetMap.get(fmGuid.toLowerCase());
             if (assetInfo?.attributes) {
-              // Search for hyresobjekt in attributes
               const attrs = assetInfo.attributes;
               Object.keys(attrs).forEach(key => {
                 const attr = attrs[key];
@@ -182,7 +184,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
                   rentalObject = String(attr.value);
                 }
               });
-              // Use common name if available
               if (assetInfo.commonName) {
                 name = assetInfo.commonName;
               }
@@ -214,7 +215,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
 
     const checkForRooms = () => {
       const newRooms = extractRooms();
-      if (newRooms.length > 0) {
+      if (newRooms.length > 0 && newRooms.length !== rooms.length) {
         setRooms(newRooms);
       }
     };
@@ -232,17 +233,9 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
   // Get category stats for legend
   const categoryStats = React.useMemo(() => {
     const stats: Record<RoomCategoryKey, number> = {
-      office: 0,
-      technical: 0,
-      circulation: 0,
-      storage: 0,
-      sanitary: 0,
-      rental: 0,
-      other: 0,
+      office: 0, technical: 0, circulation: 0, storage: 0, sanitary: 0, rental: 0, other: 0,
     };
-    rooms.forEach(room => {
-      stats[room.category]++;
-    });
+    rooms.forEach(room => { stats[room.category]++; });
     return stats;
   }, [rooms]);
 
@@ -273,11 +266,9 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       return;
     }
 
-    // Clear with dark background
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate scale
     const modelWidth = aabb[3] - aabb[0];
     const modelDepth = aabb[5] - aabb[2];
     const padding = 12;
@@ -290,27 +281,28 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
 
     setSceneInfo({ aabb, scale, offsetX, offsetZ });
 
-    // Draw model footprint
     ctx.fillStyle = '#1a1a1a';
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 1;
     ctx.fillRect(offsetX, offsetZ, modelWidth * scale, modelDepth * scale);
     ctx.strokeRect(offsetX, offsetZ, modelWidth * scale, modelDepth * scale);
 
-    // Draw rooms with category colors
+    // Draw rooms with category colors - store rects in ref, not state
     if (showRooms && rooms.length > 0) {
-      const updatedRooms = rooms.map(room => {
+      const newRects = new Map<string, CanvasRect>();
+      
+      rooms.forEach(room => {
         const roomAabb = room.aabb;
         const roomX = offsetX + (roomAabb[0] - aabb[0]) * scale;
         const roomZ = offsetZ + (roomAabb[2] - aabb[2]) * scale;
         const roomWidth = (roomAabb[3] - roomAabb[0]) * scale;
         const roomHeight = (roomAabb[5] - roomAabb[2]) * scale;
 
-        const canvasRect = { x: roomX, y: roomZ, width: roomWidth, height: roomHeight };
-        const isHovered = hoveredRoom?.id === room.id;
+        newRects.set(room.id, { x: roomX, y: roomZ, width: roomWidth, height: roomHeight });
+        
+        const isHovered = hoveredRoomId === room.id;
         const categoryColors = ROOM_CATEGORIES[room.category];
         
-        // Draw room with category color
         if (isHovered) {
           ctx.fillStyle = categoryColors.fill.replace('0.25', '0.5');
           ctx.strokeStyle = categoryColors.stroke.replace('0.7', '1');
@@ -324,7 +316,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
         ctx.fillRect(roomX, roomZ, roomWidth, roomHeight);
         ctx.strokeRect(roomX, roomZ, roomWidth, roomHeight);
 
-        // Draw room name if large enough
         if (roomWidth > 25 && roomHeight > 14) {
           ctx.fillStyle = isHovered ? '#fff' : 'rgba(255,255,255,0.8)';
           ctx.font = isHovered ? 'bold 9px system-ui' : '8px system-ui';
@@ -339,13 +330,9 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
           
           ctx.fillText(displayName, roomX + roomWidth / 2, roomZ + roomHeight / 2);
         }
-
-        return { ...room, canvasRect };
       });
 
-      if (JSON.stringify(updatedRooms.map(r => r.canvasRect)) !== JSON.stringify(rooms.map(r => r.canvasRect))) {
-        setRooms(updatedRooms);
-      }
+      roomRectsRef.current = newRects;
     }
 
     // Draw camera
@@ -359,7 +346,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       const lookX = offsetX + (look[0] - aabb[0]) * scale;
       const lookZ = offsetZ + (look[2] - aabb[2]) * scale;
 
-      // View frustum
       const angle = Math.atan2(lookZ - camZ, lookX - camX);
       const fovAngle = 0.4;
       const coneLength = 20;
@@ -372,7 +358,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       ctx.closePath();
       ctx.fill();
 
-      // Look direction line
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -380,7 +365,6 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       ctx.lineTo(lookX, lookZ);
       ctx.stroke();
 
-      // Camera position with glow
       ctx.shadowColor = '#fff';
       ctx.shadowBlur = 8;
       ctx.fillStyle = '#fff';
@@ -389,23 +373,23 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       ctx.fill();
       ctx.shadowBlur = 0;
       
-      // Inner dot
       ctx.fillStyle = '#0a0a0a';
       ctx.beginPath();
       ctx.arc(camX, camZ, 2, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [getXeokitViewer, showRooms, rooms, hoveredRoom]);
+  }, [getXeokitViewer, showRooms, rooms, hoveredRoomId]);
 
-  // Find room at canvas position
+  // Find room at canvas position using ref
   const findRoomAtPosition = useCallback((canvasX: number, canvasY: number): RoomData | null => {
     if (!showRooms) return null;
     
     for (let i = rooms.length - 1; i >= 0; i--) {
       const room = rooms[i];
-      if (room.canvasRect) {
-        const { x, y, width, height } = room.canvasRect;
-        if (canvasX >= x && canvasX <= x + width && canvasY >= y && canvasY <= y + height) {
+      const rect = roomRectsRef.current.get(room.id);
+      if (rect) {
+        if (canvasX >= rect.x && canvasX <= rect.x + rect.width && 
+            canvasY >= rect.y && canvasY <= rect.y + rect.height) {
           return room;
         }
       }
@@ -423,7 +407,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
 
     const room = findRoomAtPosition(x, y);
-    setHoveredRoom(room);
+    setHoveredRoomId(room?.id || null);
   }, [findRoomAtPosition]);
 
   // Handle click
@@ -513,7 +497,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
         className={cn(
           "absolute bottom-16 right-4 z-20",
           "bg-card/95 backdrop-blur-sm border border-border/50 rounded-lg shadow-xl",
-          "overflow-hidden animate-scale-in",
+          "overflow-hidden",
           isResizing && "select-none"
         )}
         style={{ width: size.width, height: size.height }}
@@ -597,7 +581,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
           style={{ height: `calc(100% - ${showLegend ? 56 : 32}px)` }}
           onClick={handleMinimapClick}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHoveredRoom(null)}
+          onMouseLeave={() => setHoveredRoomId(null)}
         />
 
         {/* Hovered room tooltip */}
