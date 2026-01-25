@@ -430,33 +430,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       setCacheStatus('stored');
     }
 
-    // Initialize NavCube after models are loaded
-    try {
-      const viewer = viewerInstanceRef.current;
-      const xeokitViewer = viewer?.assetViewer?.$refs?.assetView?.viewer;
-      
-      if (xeokitViewer && (window as any).NavCubePlugin) {
-        const navCubeCanvas = document.getElementById('navCubeCanvas');
-        if (navCubeCanvas) {
-          new (window as any).NavCubePlugin(xeokitViewer, {
-            canvasId: 'navCubeCanvas',
-            visible: true,
-            cameraFly: true,
-            cameraFlyDuration: 0.5,
-            color: 'lightgrey',
-            frontColor: '#55FF55',
-            backColor: '#FF5555',
-            leftColor: '#FF5555',
-            rightColor: '#55FF55',
-            topColor: '#5555FF',
-            bottomColor: '#FFFF55',
-          });
-          console.log("NavCube initialized");
-        }
-      }
-    } catch (e) {
-      console.warn("Could not initialize NavCube:", e);
-    }
+    // Note: NavCube is not available in this Asset+ package version
+    // The xeokit NavCubePlugin would need to be loaded separately
+    // For now, navigation is handled through the custom toolbar
 
     if (deferredFmGuidForDisplayRef.current) {
       console.log("allModelsLoadedCallback - got an FMGUID to look at");
@@ -733,20 +709,40 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
 
   // Viewer uses built-in Asset+ controls - no custom handlers needed
 
-  const handleFilterChange = (filter: ModelFilter) => {
+  const handleFilterChange = useCallback((filter: ModelFilter) => {
     setModelFilter(filter);
+    
+    // Cleanup current viewer safely before reinitializing
+    try {
+      const viewer = viewerInstanceRef.current;
+      if (viewer) {
+        const assetView = viewer.$refs?.AssetViewer?.$refs?.assetView;
+        const scene = assetView?.viewer?.scene;
+        
+        if (scene && typeof viewer.clearData === 'function') {
+          viewer.clearData();
+        }
+      }
+    } catch (e) {
+      console.debug('Filter change cleanup:', e);
+    }
+    
     // Restore fetch before reinitializing
     restoreFetch();
-    // Reinitialize viewer with new filter
-    if (viewerInstanceRef.current?.clearData) {
-      viewerInstanceRef.current.clearData();
-    }
+    
+    // Reset all state for fresh initialization
+    viewerInstanceRef.current = null;
     deferCallsRef.current = true;
-    setState(prev => ({ ...prev, isInitialized: false }));
+    setState(prev => ({ ...prev, isInitialized: false, isLoading: true, error: null }));
     setInitStep('idle');
     setModelLoadState('idle');
     setCacheStatus(null);
-  };
+    
+    // Trigger reinitialization after state reset
+    setTimeout(() => {
+      initializeViewer();
+    }, 100);
+  }, [restoreFetch, initializeViewer]);
 
   // Model filter dropdown
   const FilterDropdown = () => (
@@ -890,9 +886,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
               />
             </>
           )}
-
-          {/* Navigation cube canvas - positioned by CSS */}
-          <canvas id="navCubeCanvas" />
         </div>
       </div>
     </div>
