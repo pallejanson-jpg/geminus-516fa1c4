@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,6 +84,9 @@ async function getAccessToken(): Promise<string> {
 }
 
 interface CreateAssetRequest {
+  // Generated fmGuid for the new asset
+  fmGuid?: string;
+  
   // Parent Space FM GUID - required for objectType 4
   parentSpaceFmGuid: string;
   
@@ -96,9 +100,17 @@ interface CreateAssetRequest {
     value: string | number | boolean;
     dataType: number; // DataType enum value
   }>;
+  
+  // 3D coordinates for placement
+  coordinates?: {
+    x: number | null;
+    y: number | null;
+    z: number | null;
+  };
 }
 
 interface BimObjectWithParent {
+  fmGuid?: string;
   objectType: number;
   designation: string;
   commonName?: string;
@@ -163,6 +175,11 @@ serve(async (req) => {
       inRoomFmGuid: body.parentSpaceFmGuid, // Link to parent Space
     };
 
+    // Use provided fmGuid or let Asset+ generate one
+    if (body.fmGuid) {
+      bimObject.fmGuid = body.fmGuid;
+    }
+
     if (body.commonName) {
       bimObject.commonName = body.commonName;
     }
@@ -219,6 +236,42 @@ serve(async (req) => {
       createdAsset = JSON.parse(responseText);
     } catch {
       createdAsset = { rawResponse: responseText };
+    }
+
+    // Also store locally with coordinates if provided
+    if (body.coordinates) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        
+        if (supabaseUrl && supabaseKey) {
+          const supabase = createClient(supabaseUrl, supabaseKey);
+          
+          const assetFmGuid = createdAsset?.fmGuid || body.fmGuid;
+          if (assetFmGuid) {
+            // Upsert local record with coordinates
+            await supabase
+              .from("assets")
+              .upsert({
+                fm_guid: assetFmGuid,
+                name: body.designation,
+                common_name: body.commonName || null,
+                category: "Instance",
+                in_room_fm_guid: body.parentSpaceFmGuid,
+                coordinate_x: body.coordinates.x,
+                coordinate_y: body.coordinates.y,
+                coordinate_z: body.coordinates.z,
+                is_local: false, // Created in Asset+, so synced
+                synced_at: new Date().toISOString(),
+              }, { onConflict: "fm_guid" });
+            
+            console.log(`Stored asset ${assetFmGuid} locally with coordinates`);
+          }
+        }
+      } catch (localError) {
+        console.warn("Failed to store asset locally:", localError);
+        // Don't fail the request - Asset+ creation succeeded
+      }
     }
 
     return new Response(
