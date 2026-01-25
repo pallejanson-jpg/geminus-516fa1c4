@@ -172,17 +172,17 @@
   opacity: 1 !important;
 }
 
-/* NavCube canvas styling */
+/* NavCube canvas styling - smaller, less intrusive */
 #navCubeCanvas {
   position: absolute;
   bottom: 70px;
   right: 10px;
-  width: 100px;
-  height: 100px;
+  width: 70px;
+  height: 70px;
   z-index: 15;
   pointer-events: auto;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* Map popup styling - ensure text is visible */
@@ -206,17 +206,17 @@
 @media (min-width: 640px) {
   #navCubeCanvas {
     bottom: 80px;
-    right: 20px;
-    width: 120px;
-    height: 120px;
+    right: 16px;
+    width: 80px;
+    height: 80px;
   }
 }
 
 @media (min-width: 1024px) {
   #navCubeCanvas {
     bottom: 80px;
-    right: 20px;
-    width: 140px;
-    height: 140px;
+    right: 16px;
+    width: 90px;
+    height: 90px;
   }
 }

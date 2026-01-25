@@ -2,23 +2,31 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { xktCacheService } from '@/services/xkt-cache-service';
 
+// Global cache to persist preloaded buildings across component unmounts
+const globalPreloadedBuildings = new Set<string>();
+
 /**
  * Hook to preload XKT models in the background when a building is selected
  * This significantly reduces load times when the user opens the 3D viewer
  */
 export function useXktPreload(buildingFmGuid: string | null | undefined) {
-  const preloadStartedRef = useRef<Set<string>>(new Set());
+  const preloadStartedRef = useRef(false);
 
   useEffect(() => {
     if (!buildingFmGuid) return;
     
-    // Prevent duplicate preloads for the same building
-    if (preloadStartedRef.current.has(buildingFmGuid)) {
+    // Prevent duplicate preloads - check global cache
+    if (globalPreloadedBuildings.has(buildingFmGuid)) {
+      console.log(`XKT Preload: ${buildingFmGuid.substring(0, 8)}... already preloaded`);
       return;
     }
+
+    // Prevent duplicate trigger within same component instance
+    if (preloadStartedRef.current) return;
+    preloadStartedRef.current = true;
     
     const preloadModels = async () => {
-      preloadStartedRef.current.add(buildingFmGuid);
+      console.log(`XKT Preload: Starting background preload for building ${buildingFmGuid.substring(0, 8)}...`);
       
       try {
         // First, get access token and config
@@ -101,17 +109,15 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           }
         }
 
-        console.log('XKT Preload: Background preload complete');
+        // Mark building as preloaded in global cache
+        globalPreloadedBuildings.add(buildingFmGuid);
+        console.log(`XKT Preload: Background preload complete for ${buildingFmGuid.substring(0, 8)}...`);
       } catch (error) {
         console.warn('XKT Preload: Error during preload:', error);
       }
     };
 
-    // Start preload after a short delay to not interfere with UI rendering
-    const timeoutId = setTimeout(preloadModels, 1000);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    // Start preload immediately (no delay) to maximize cache hit chance
+    preloadModels();
   }, [buildingFmGuid]);
 }

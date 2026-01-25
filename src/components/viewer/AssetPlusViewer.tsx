@@ -894,14 +894,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       try {
         const viewer = viewerInstanceRef.current;
         if (viewer) {
-          // Only call clearData if the viewer is fully initialized
-          // Check for the presence of key internal objects
-          const assetView = viewer.$refs?.AssetViewer?.$refs?.assetView;
-          const scene = assetView?.viewer?.scene;
-          
-          if (scene && typeof viewer.clearData === 'function') {
-            viewer.clearData();
-          }
+          // Defer cleanup to next frame to allow Asset+ to complete pending operations
+          requestAnimationFrame(() => {
+            try {
+              // Only call clearData if the viewer is fully initialized
+              const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+              const scene = assetView?.viewer?.scene;
+              
+              if (scene && typeof viewer.clearData === 'function') {
+                viewer.clearData();
+              }
+            } catch (e) {
+              // Silently ignore cleanup errors - the DOM is being torn down anyway
+              console.debug('Viewer cleanup (expected during teardown):', e);
+            }
+          });
         }
       } catch (e) {
         // Silently ignore cleanup errors - the DOM is being torn down anyway
@@ -1042,8 +1049,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             }}
           />
 
-          {/* Loading spinner overlay (shows while init is running and while models are loading) */}
-          {(!state.isInitialized || state.isLoading || initStep !== 'ready') && (
+          {/* Loading spinner overlay (shows while init is running - single spinner) */}
+          {(state.isLoading && !state.isInitialized) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
@@ -1071,23 +1078,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             </div>
           </div>
 
-          {/* NavCube canvas - positioned in bottom-right corner */}
+          {/* NavCube canvas - positioned in bottom-right corner, smaller */}
           <canvas 
             id="navCubeCanvas" 
-            width={100}
-            height={100}
+            width={80}
+            height={80}
             style={{
               position: 'absolute',
-              bottom: '80px',
-              right: '16px',
-              width: '100px',
-              height: '100px',
+              bottom: '70px',
+              right: '12px',
+              width: '80px',
+              height: '80px',
               zIndex: 25,
               display: showNavCube ? 'block' : 'none',
-              background: 'rgba(20, 20, 20, 0.6)',
-              borderRadius: '8px',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'rgba(20, 20, 20, 0.5)',
+              borderRadius: '6px',
+              backdropFilter: 'blur(6px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
             }}
           />
 
