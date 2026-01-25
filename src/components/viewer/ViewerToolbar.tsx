@@ -20,6 +20,7 @@ import {
   SquareDashed,
   Map,
   MoreHorizontal,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -57,6 +58,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   const [showSpaces, setShowSpaces] = useState(true);
   const [showNavCube, setShowNavCube] = useState(true);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(true);
   const [isExpanded, setIsExpanded] = useState(true);
   
   const isMobile = useIsMobile();
@@ -165,6 +167,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     setShowMinimap(newValue);
     onToggleMinimap?.(newValue);
   }, [showMinimap, onToggleMinimap]);
+
+  const handleToggleAnnotations = useCallback(() => {
+    const viewer = viewerRef.current?.assetViewer;
+    if (viewer?.onToggleAnnotation) {
+      const newValue = !showAnnotations;
+      viewer.onToggleAnnotation(newValue);
+      setShowAnnotations(newValue);
+    }
+  }, [viewerRef, showAnnotations]);
 
   // Switch between 3D and 2D (top-down) view
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -329,6 +340,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleToggleMinimap} className={showMinimap ? 'bg-accent' : ''}>
           <Map className="h-4 w-4 mr-2" /> {showMinimap ? 'Dölj minimap' : 'Visa minimap'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleToggleAnnotations} className={showAnnotations ? 'bg-accent' : ''}>
+          <MessageSquare className="h-4 w-4 mr-2" /> {showAnnotations ? 'Dölj annotationer' : 'Visa annotationer'}
         </DropdownMenuItem>
         
         <DropdownMenuSeparator />
@@ -518,6 +532,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             label="Visa/dölj minimap"
             onClick={handleToggleMinimap}
             active={showMinimap}
+          />
+          <ToolButton
+            icon={<MessageSquare className="h-4 w-4" />}
+            label="Visa/dölj annotationer"
+            onClick={handleToggleAnnotations}
+            active={showAnnotations}
           />
         </div>
 
