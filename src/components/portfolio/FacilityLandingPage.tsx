@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
+import { useXktPreload } from '@/hooks/useXktPreload';
 import KpiCard from './KpiCard';
 import QuickActions from './QuickActions';
 
@@ -68,6 +69,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
   const isSpace = facility.category === 'Space';
+
+  // Preload XKT models in background when viewing a building
+  // This significantly speeds up 3D viewer loading times
+  const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid;
+  useXktPreload(buildingGuid);
 
   // Get child storeys for buildings
   const childStoreys = useMemo(() => {
