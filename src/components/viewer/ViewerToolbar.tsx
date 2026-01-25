@@ -21,6 +21,7 @@ import {
   Map,
   MoreHorizontal,
   MessageSquare,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -40,6 +41,8 @@ interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
+  onPickCoordinate?: () => void;
+  isPickMode?: boolean;
   className?: string;
 }
 
@@ -51,7 +54,7 @@ type ViewMode = '3d' | '2d';
  * Custom toolbar for the Asset+ 3D Viewer
  * Mobile-optimized with 4 primary tools + overflow menu
  */
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, onToggleMinimap, className }) => {
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, onToggleMinimap, onPickCoordinate, isPickMode, className }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
@@ -349,6 +352,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
         <DropdownMenuItem onClick={handleShowObjectDetails}>
           <Search className="h-4 w-4 mr-2" /> Objektinfo
         </DropdownMenuItem>
+        {onPickCoordinate && (
+          <DropdownMenuItem onClick={onPickCoordinate} className={isPickMode ? 'bg-accent' : ''}>
+            <Plus className="h-4 w-4 mr-2" /> {isPickMode ? 'Avbryt registrering' : 'Registrera tillgång'}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => setIsExpanded(false)}>
           <ChevronDown className="h-4 w-4 mr-2" /> Dölj verktygsfält
         </DropdownMenuItem>
@@ -549,6 +557,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           label="Objektinfo"
           onClick={handleShowObjectDetails}
         />
+
+        {/* Add Asset (Pick Coordinate) */}
+        {onPickCoordinate && (
+          <ToolButton
+            icon={<Plus className="h-4 w-4" />}
+            label={isPickMode ? 'Avbryt registrering' : 'Registrera tillgång (klicka i 3D)'}
+            onClick={onPickCoordinate}
+            active={isPickMode}
+          />
+        )}
 
         {/* Collapse button */}
         <ToolButton
