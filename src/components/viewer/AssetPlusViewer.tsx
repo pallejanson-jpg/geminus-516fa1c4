@@ -1074,19 +1074,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           {/* NavCube canvas - positioned in bottom-right corner */}
           <canvas 
             id="navCubeCanvas" 
-            width={120}
-            height={120}
+            width={100}
+            height={100}
             style={{
               position: 'absolute',
               bottom: '80px',
               right: '16px',
-              width: '120px',
-              height: '120px',
+              width: '100px',
+              height: '100px',
               zIndex: 25,
               display: showNavCube ? 'block' : 'none',
-              background: 'rgba(0,0,0,0.3)',
+              background: 'rgba(20, 20, 20, 0.6)',
               borderRadius: '8px',
-              backdropFilter: 'blur(4px)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
             }}
           />
 
