@@ -193,58 +193,31 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     }, [previousAppBeforeViewer]);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
+        // STRICT HIERARCHY: Building → Building Storey → Space
+        // No other categories or orphan attachments allowed
         const buildings = items.filter(item => item.category === 'Building');
         const storeys = items.filter(item => item.category === 'Building Storey');
         const spaces = items.filter(item => item.category === 'Space');
-        // Doors excluded from hierarchy per user request
 
-        // Build space nodes (no door children)
-        const spaceMap = new Map<string, NavigatorNode>();
-        spaces.forEach((space: any) => {
-            spaceMap.set(space.fmGuid, { ...space, children: [] });
-        });
-
-        // Build storey nodes
-        const storeyMap = new Map<string, NavigatorNode>();
-        storeys.forEach((storey: any) => {
-            storeyMap.set(storey.fmGuid, { ...storey, children: [] });
-        });
-
-        // Attach spaces to storeys via levelFmGuid
-        // Keep track of orphan spaces (spaces without a storey parent)
-        const orphanSpaces: NavigatorNode[] = [];
-        spaceMap.forEach((space) => {
-            const parentStorey = storeyMap.get((space as any).levelFmGuid);
-            if (parentStorey) {
-                parentStorey.children!.push(space);
-            } else {
-                // Space has no storey parent - will be attached directly to building
-                orphanSpaces.push(space);
-            }
-        });
-
-        // Build building map - either from actual Building items or synthesize from unique buildingFmGuid
+        // Build building map first
         const buildingMap = new Map<string, NavigatorNode>();
         
         if (buildings.length > 0) {
-            // Use actual building records
             buildings.forEach((building: any) => {
                 buildingMap.set(building.fmGuid, { ...building, children: [] });
             });
         } else {
-            // Synthesize buildings from unique buildingFmGuid values in storeys AND spaces
-            // Use attributes from first storey or item to get building name and complex
+            // Synthesize buildings from unique buildingFmGuid values in storeys
             const buildingInfo = new Map<string, { commonName?: string; name?: string; complexCommonName?: string }>();
             
-            [...storeys, ...spaces].forEach((item: any) => {
-                const bguid = item.buildingFmGuid;
+            storeys.forEach((storey: any) => {
+                const bguid = storey.buildingFmGuid;
                 if (bguid && !buildingInfo.has(bguid)) {
-                    // Try to get building name from attributes
-                    const attrs = item.attributes || {};
+                    const attrs = storey.attributes || {};
                     buildingInfo.set(bguid, {
                         commonName: attrs.buildingCommonName || attrs.buildingDesignation || undefined,
                         name: attrs.buildingDesignation || undefined,
-                        complexCommonName: item.complexCommonName || attrs.complexCommonName || undefined,
+                        complexCommonName: storey.complexCommonName || attrs.complexCommonName || undefined,
                     });
                 }
             });
@@ -261,16 +234,30 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             });
         }
 
+        // Build storey map - only storeys that belong to a known building
+        const storeyMap = new Map<string, NavigatorNode>();
+        storeys.forEach((storey: any) => {
+            if (buildingMap.has(storey.buildingFmGuid)) {
+                storeyMap.set(storey.fmGuid, { ...storey, children: [] });
+            }
+        });
+
         // Attach storeys to buildings
         storeyMap.forEach((storey) => {
             const parentBuilding = buildingMap.get((storey as any).buildingFmGuid);
-            if (parentBuilding) parentBuilding.children!.push(storey);
+            if (parentBuilding) {
+                parentBuilding.children!.push(storey);
+            }
         });
 
-        // Attach orphan spaces directly to buildings (for buildings without storeys)
-        orphanSpaces.forEach((space) => {
-            const parentBuilding = buildingMap.get((space as any).buildingFmGuid);
-            if (parentBuilding) parentBuilding.children!.push(space);
+        // Attach spaces ONLY to storeys - strict hierarchy, no orphan spaces
+        spaces.forEach((space: any) => {
+            const parentStorey = storeyMap.get(space.levelFmGuid);
+            if (parentStorey) {
+                // Space belongs to a known storey - add it
+                parentStorey.children!.push({ ...space, children: [] });
+            }
+            // Spaces without valid levelFmGuid are excluded from the tree
         });
 
         const sortedTree = Array.from(buildingMap.values());
