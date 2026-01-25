@@ -13,6 +13,7 @@ import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
 import { useXktPreload } from '@/hooks/useXktPreload';
+import { NavigatorNode } from '@/components/navigator/TreeNode';
 import KpiCard from './KpiCard';
 import QuickActions from './QuickActions';
 
@@ -28,6 +29,7 @@ interface FacilityLandingPageProps {
   onShowDocs: (facility: Facility) => void;
   onShowInsights: (facility: Facility) => void;
   onOpenIoT: (facility: Facility) => void;
+  onAddAsset?: (parentNode: NavigatorNode) => void;
   setSelectedFacility: (facility: Facility) => void;
 }
 
@@ -43,6 +45,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onShowDocs,
   onShowInsights,
   onOpenIoT,
+  onAddAsset,
   setSelectedFacility
 }) => {
   const { allData, setActiveApp, setViewer3dFmGuid } = useContext(AppContext);
@@ -128,6 +131,21 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const handleToggle2D = () => {
     if (facility.fmGuid) {
       setViewer3dFmGuid(facility.fmGuid);
+    }
+  };
+
+  // Handler for Add Asset button
+  const handleAddAsset = () => {
+    if (onAddAsset && facility.fmGuid) {
+      // Convert Facility to NavigatorNode format for AddAssetDialog
+      const parentNode: NavigatorNode = {
+        fmGuid: facility.fmGuid,
+        name: facility.name || '',
+        commonName: facility.commonName || '',
+        category: facility.category || 'Space',
+        children: [],
+      };
+      onAddAsset(parentNode);
     }
   };
 
@@ -384,6 +402,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onShowDocs={onShowDocs}
             onShowInsights={onShowInsights}
             onOpenIoT={onOpenIoT}
+            onAddAsset={handleAddAsset}
           />
         </div>
       </ScrollArea>

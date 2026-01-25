@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Plus, X, Loader2 } from 'lucide-react';
+import { Plus, X, Loader2, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,9 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { NavigatorNode } from './TreeNode';
+
+/**
+ * Generate a 128-bit UUID/GUID for fmGuid
+ */
+function generateFmGuid(): string {
+  return crypto.randomUUID();
+}
 
 /**
  * Property data types for Asset+ API
@@ -53,25 +65,53 @@ interface AssetProperty {
   dataType: DataTypeKey;
 }
 
+interface Coordinates {
+  x: string;
+  y: string;
+  z: string;
+}
+
 interface AddAssetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   parentNode: NavigatorNode | null;
   onAssetCreated?: () => void;
+  /** Pre-filled coordinates from 3D picker */
+  initialCoordinates?: { x: number; y: number; z: number };
 }
 
-export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated }: AddAssetDialogProps) {
+export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated, initialCoordinates }: AddAssetDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [designation, setDesignation] = useState('');
   const [commonName, setCommonName] = useState('');
   const [description, setDescription] = useState('');
   const [properties, setProperties] = useState<AssetProperty[]>([]);
+  const [showCoordinates, setShowCoordinates] = useState(false);
+  const [coordinates, setCoordinates] = useState<Coordinates>({
+    x: initialCoordinates?.x?.toString() || '',
+    y: initialCoordinates?.y?.toString() || '',
+    z: initialCoordinates?.z?.toString() || '',
+  });
+
+  // Update coordinates when initialCoordinates changes (from 3D picker)
+  React.useEffect(() => {
+    if (initialCoordinates) {
+      setCoordinates({
+        x: initialCoordinates.x.toString(),
+        y: initialCoordinates.y.toString(),
+        z: initialCoordinates.z.toString(),
+      });
+      setShowCoordinates(true);
+    }
+  }, [initialCoordinates]);
 
   const resetForm = useCallback(() => {
     setDesignation('');
     setCommonName('');
     setDescription('');
     setProperties([]);
+    setCoordinates({ x: '', y: '', z: '' });
+    setShowCoordinates(false);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -117,6 +157,9 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
     setIsLoading(true);
 
     try {
+      // Generate a new fmGuid for this asset
+      const newFmGuid = generateFmGuid();
+
       // Build properties array with proper data types
       const formattedProperties = properties
         .filter(p => p.name.trim() && p.value.trim())
@@ -135,11 +178,20 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
         });
       }
 
+      // Parse coordinates if provided
+      const coordX = coordinates.x ? parseFloat(coordinates.x) : null;
+      const coordY = coordinates.y ? parseFloat(coordinates.y) : null;
+      const coordZ = coordinates.z ? parseFloat(coordinates.z) : null;
+
       const payload = {
+        fmGuid: newFmGuid,
         parentSpaceFmGuid: parentNode.fmGuid,
         designation: designation.trim(),
         commonName: commonName.trim() || undefined,
         properties: formattedProperties.length > 0 ? formattedProperties : undefined,
+        coordinates: (coordX !== null || coordY !== null || coordZ !== null) 
+          ? { x: coordX, y: coordY, z: coordZ } 
+          : undefined,
       };
 
       console.log('Creating asset with payload:', payload);
@@ -171,7 +223,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
     } finally {
       setIsLoading(false);
     }
-  }, [parentNode, designation, commonName, description, properties, handleClose, onAssetCreated]);
+  }, [parentNode, designation, commonName, description, properties, coordinates, handleClose, onAssetCreated]);
 
   if (!parentNode) return null;
 
@@ -301,6 +353,72 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated 
               </div>
             )}
           </div>
+
+          {/* Coordinates Section (collapsible, for future 3D picker) */}
+          <Collapsible open={showCoordinates} onOpenChange={setShowCoordinates}>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                disabled={isLoading}
+              >
+                <span className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  3D Coordinates
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {showCoordinates ? 'Hide' : 'Show'}
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Set the 3D position for this asset. In the future, you can pick coordinates directly from the 3D viewer.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="coord-x" className="text-xs">X</Label>
+                  <Input
+                    id="coord-x"
+                    type="number"
+                    step="0.001"
+                    value={coordinates.x}
+                    onChange={(e) => setCoordinates(prev => ({ ...prev, x: e.target.value }))}
+                    placeholder="0.000"
+                    disabled={isLoading}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="coord-y" className="text-xs">Y</Label>
+                  <Input
+                    id="coord-y"
+                    type="number"
+                    step="0.001"
+                    value={coordinates.y}
+                    onChange={(e) => setCoordinates(prev => ({ ...prev, y: e.target.value }))}
+                    placeholder="0.000"
+                    disabled={isLoading}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="coord-z" className="text-xs">Z</Label>
+                  <Input
+                    id="coord-z"
+                    type="number"
+                    step="0.001"
+                    value={coordinates.z}
+                    onChange={(e) => setCoordinates(prev => ({ ...prev, z: e.target.value }))}
+                    placeholder="0.000"
+                    disabled={isLoading}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Parent Info */}
           <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-md">
