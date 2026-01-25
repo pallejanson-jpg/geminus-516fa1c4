@@ -9,6 +9,7 @@ import { Facility } from '@/lib/types';
 import { BUILDING_IMAGES } from '@/lib/constants';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
+import RoomsView from './RoomsView';
 import {
   Carousel,
   CarouselContent,
@@ -23,11 +24,12 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid } = useContext(AppContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [showRoomsFor, setShowRoomsFor] = useState<Facility | null>(null);
 
   // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
   const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
@@ -132,13 +134,43 @@ const PortfolioView: React.FC = () => {
     }
   };
   const handleShowAssets = (facility: Facility) => setActiveApp('asset_plus');
-  const handleShowRooms = (facility: Facility) => console.log('Show rooms:', facility);
+  const handleShowRooms = (facility: Facility) => setShowRoomsFor(facility);
   const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
   const handleOpenIoT = (facility: Facility) => console.log('Open IoT:', facility);
   const handleToggleFavorite = () => {
     // Now handled by useBuildingSettings hook in FacilityLandingPage
   };
+
+  // Get rooms for a facility
+  const getRoomsForFacility = (facility: Facility) => {
+    if (!allData) return [];
+    const isBuilding = facility.category === 'Building';
+    const isStorey = facility.category === 'Building Storey';
+    
+    return allData.filter((item: any) => 
+      item.category === 'Space' &&
+      (isBuilding ? item.buildingFmGuid === facility.fmGuid : isStorey ? item.levelFmGuid === facility.fmGuid : false)
+    );
+  };
+
+  // Handle opening 3D viewer for a room
+  const handleOpen3DRoom = (fmGuid: string, levelFmGuid?: string) => {
+    setViewer3dFmGuid(fmGuid);
+    setShowRoomsFor(null);
+  };
+
+  // Show rooms view if requested
+  if (showRoomsFor) {
+    return (
+      <RoomsView
+        facility={showRoomsFor}
+        rooms={getRoomsForFacility(showRoomsFor)}
+        onClose={() => setShowRoomsFor(null)}
+        onOpen3D={handleOpen3DRoom}
+      />
+    );
+  }
 
   // Show landing page if facility is selected
   if (selectedFacility) {
