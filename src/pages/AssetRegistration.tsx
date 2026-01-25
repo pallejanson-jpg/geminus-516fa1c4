@@ -1,10 +1,10 @@
-import React, { useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { useContext, useState, useCallback, useEffect } from 'react';
 import { AppContext, AssetRegistrationContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Loader2, MapPin, Check, ChevronDown } from 'lucide-react';
+import { X, Loader2, MapPin, Check } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -15,6 +15,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { NavigatorNode } from '@/components/navigator/TreeNode';
 
 // Asset type options for dropdown
 const ASSET_TYPES = [
@@ -45,93 +46,34 @@ function generateFmGuid(): string {
   return crypto.randomUUID();
 }
 
-interface AssetRegistrationViewProps {
-  viewerRef: React.MutableRefObject<any>;
+interface AssetRegistrationFormProps {
   registrationContext: AssetRegistrationContext;
+  coordinates: { x: number; y: number; z: number } | null;
+  isPickingCoordinates: boolean;
+  onPickCoordinates: () => void;
   onComplete: () => void;
   onCancel: () => void;
 }
 
 /**
  * Asset Registration Form - shown below the 3D viewer
- * Allows picking coordinates from the 3D view
+ * Receives picked coordinates via callback from parent
  */
-export function AssetRegistrationForm({ 
-  viewerRef, 
+function AssetRegistrationForm({ 
   registrationContext, 
+  coordinates,
+  isPickingCoordinates,
+  onPickCoordinates,
   onComplete, 
   onCancel 
-}: AssetRegistrationViewProps) {
-  const isMobile = useIsMobile();
+}: AssetRegistrationFormProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [isPickingCoordinates, setIsPickingCoordinates] = useState(false);
-  const [coordinates, setCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
   
   // Form fields
   const [designation, setDesignation] = useState('');
   const [assetType, setAssetType] = useState('');
   const [objectCategory, setObjectCategory] = useState('IfcBuildingElementProxy');
   const [description, setDescription] = useState('');
-  
-  const pickListenerRef = useRef<(() => void) | null>(null);
-
-  // Cleanup pick listener on unmount
-  useEffect(() => {
-    return () => {
-      if (pickListenerRef.current) {
-        pickListenerRef.current();
-        pickListenerRef.current = null;
-      }
-    };
-  }, []);
-
-  // Handle coordinate picking from 3D view
-  const handlePickCoordinates = useCallback(() => {
-    if (isPickingCoordinates) {
-      // Cancel picking
-      setIsPickingCoordinates(false);
-      if (pickListenerRef.current) {
-        pickListenerRef.current();
-        pickListenerRef.current = null;
-      }
-      return;
-    }
-
-    setIsPickingCoordinates(true);
-    toast.info('Klicka på en yta i 3D-vyn för att välja position', { duration: 5000 });
-
-    const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.scene) {
-      toast.error('Kunde inte ansluta till 3D-vyn');
-      setIsPickingCoordinates(false);
-      return;
-    }
-
-    const canvas = xeokitViewer.scene.canvas.canvas;
-    
-    const handleClick = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const canvasPos = [e.clientX - rect.left, e.clientY - rect.top];
-      
-      const pickResult = xeokitViewer.scene.pick({
-        canvasPos,
-        pickSurface: true,
-      });
-      
-      if (pickResult?.worldPos) {
-        const [x, y, z] = pickResult.worldPos;
-        setCoordinates({ x, y, z });
-        toast.success(`Position vald: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
-      } else {
-        toast.error('Ingen yta hittades. Klicka på ett synligt objekt.');
-      }
-      
-      setIsPickingCoordinates(false);
-    };
-
-    canvas.addEventListener('click', handleClick, { once: true });
-    pickListenerRef.current = () => canvas.removeEventListener('click', handleClick);
-  }, [isPickingCoordinates, viewerRef]);
 
   // Handle form submission
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -216,7 +158,7 @@ export function AssetRegistrationForm({
                 type="button"
                 variant={isPickingCoordinates ? "default" : coordinates ? "secondary" : "outline"}
                 className="flex-1 gap-2"
-                onClick={handlePickCoordinates}
+                onClick={onPickCoordinates}
                 disabled={isLoading}
               >
                 <MapPin className="h-4 w-4" />
@@ -327,41 +269,39 @@ export function AssetRegistrationForm({
 /**
  * Full Asset Registration Page
  * Shows 3D viewer at top, registration form at bottom
+ * Uses callback-based coordinate picking from viewer
  */
 export default function AssetRegistration() {
   const { assetRegistrationContext, cancelAssetRegistration, refreshInitialData } = useContext(AppContext);
   const isMobile = useIsMobile();
-  const viewerRef = useRef<any>(null);
-  const viewerContainerRef = useRef<HTMLDivElement>(null);
-  const [isViewerReady, setIsViewerReady] = useState(false);
-
-  // Initialize viewer when component mounts
-  useEffect(() => {
-    if (!assetRegistrationContext) return;
-
-    // Load Asset+ viewer script if not already loaded
-    const initViewer = async () => {
-      // Wait for DOM
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Check if AssetPlusViewer component exists
-      const AssetPlusViewer = (window as any).assetplusviewer?.AssetPlusViewer;
-      if (!AssetPlusViewer) {
-        console.error('AssetPlusViewer not loaded');
-        return;
-      }
-
-      // Create viewer instance (simplified - full logic in AssetPlusViewer component)
-      setIsViewerReady(true);
-    };
-
-    initViewer();
-  }, [assetRegistrationContext]);
+  
+  // Coordinate picking state - managed at this level and passed to viewer via props
+  const [coordinates, setCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [isPickingCoordinates, setIsPickingCoordinates] = useState(false);
 
   const handleComplete = useCallback(() => {
     refreshInitialData?.();
     cancelAssetRegistration();
   }, [refreshInitialData, cancelAssetRegistration]);
+
+  // Toggle pick mode - tell the viewer to start picking
+  const handlePickCoordinates = useCallback(() => {
+    if (isPickingCoordinates) {
+      setIsPickingCoordinates(false);
+    } else {
+      setIsPickingCoordinates(true);
+    }
+  }, [isPickingCoordinates]);
+
+  // Callback from viewer when coordinates are picked
+  const handleCoordinatePicked = useCallback((
+    coords: { x: number; y: number; z: number },
+    parentNode: NavigatorNode | null
+  ) => {
+    setCoordinates(coords);
+    setIsPickingCoordinates(false);
+    // parentNode could be used to update context if needed
+  }, []);
 
   if (!assetRegistrationContext) {
     return (
@@ -389,6 +329,8 @@ export default function AssetRegistration() {
           <AssetPlusViewerComponent 
             fmGuid={viewerFmGuid} 
             onClose={cancelAssetRegistration}
+            pickModeEnabled={isPickingCoordinates}
+            onCoordinatePicked={handleCoordinatePicked}
           />
         </React.Suspense>
       </div>
@@ -396,8 +338,10 @@ export default function AssetRegistration() {
       {/* Registration Form - bottom section */}
       <div className={`${isMobile ? 'max-h-[50vh]' : 'max-h-[40vh]'} overflow-y-auto`}>
         <AssetRegistrationForm
-          viewerRef={viewerRef}
           registrationContext={assetRegistrationContext}
+          coordinates={coordinates}
+          isPickingCoordinates={isPickingCoordinates}
+          onPickCoordinates={handlePickCoordinates}
           onComplete={handleComplete}
           onCancel={cancelAssetRegistration}
         />

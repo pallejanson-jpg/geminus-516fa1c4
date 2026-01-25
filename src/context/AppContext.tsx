@@ -194,7 +194,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         // STRICT HIERARCHY: Building → Building Storey → Space
-        // No other categories or orphan attachments allowed
+        // With synthetic "Okänd våning" fallback for orphan spaces
         const buildings = items.filter(item => item.category === 'Building');
         const storeys = items.filter(item => item.category === 'Building Storey');
         const spaces = items.filter(item => item.category === 'Space');
@@ -261,6 +261,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             }
         });
 
+        // Track orphan spaces per building for synthetic storey fallback
+        const orphanSpacesByBuilding = new Map<string, any[]>();
+
         // Attach spaces to storeys - with fallback matching by levelCommonName
         spaces.forEach((space: any) => {
             let parentStorey = storeyMap.get(space.levelFmGuid);
@@ -288,17 +291,56 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             
             if (parentStorey) {
                 parentStorey.children!.push({ ...space, children: [] });
+            } else if (space.buildingFmGuid && buildingMap.has(space.buildingFmGuid)) {
+                // Orphan space with valid building - collect for synthetic storey
+                if (!orphanSpacesByBuilding.has(space.buildingFmGuid)) {
+                    orphanSpacesByBuilding.set(space.buildingFmGuid, []);
+                }
+                orphanSpacesByBuilding.get(space.buildingFmGuid)!.push(space);
             }
-            // Spaces that still can't be matched are excluded from the tree
+            // Spaces without building are truly orphaned and excluded
+        });
+
+        // Create synthetic "Okänd våning" storey for orphan spaces per building
+        orphanSpacesByBuilding.forEach((orphanSpaces, buildingGuid) => {
+            const building = buildingMap.get(buildingGuid);
+            if (building && orphanSpaces.length > 0) {
+                // Check if building has only ONE storey - if so, assign orphans there
+                const buildingStoreys = building.children?.filter(
+                    (c: NavigatorNode) => c.category === 'Building Storey' && !c.isSynthetic
+                ) || [];
+                
+                if (buildingStoreys.length === 1) {
+                    // Assign all orphans to the single storey
+                    orphanSpaces.forEach((space: any) => {
+                        buildingStoreys[0].children!.push({ ...space, children: [] });
+                    });
+                } else {
+                    // Create synthetic storey for orphans
+                    const syntheticStorey: NavigatorNode = {
+                        fmGuid: `synthetic-unknown-${buildingGuid}`,
+                        category: 'Building Storey',
+                        commonName: 'Okänd våning',
+                        name: 'Unknown Floor',
+                        isSynthetic: true,
+                        buildingFmGuid: buildingGuid,
+                        children: orphanSpaces.map((space: any) => ({ ...space, children: [] })),
+                    };
+                    building.children!.push(syntheticStorey);
+                }
+            }
         });
 
         const sortedTree = Array.from(buildingMap.values());
 
         const sortNode = (node: NavigatorNode) => {
             if (!node.children?.length) return;
-            node.children.sort((a, b) =>
-                (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true }),
-            );
+            node.children.sort((a, b) => {
+                // Put synthetic storeys at the end
+                if ((a as any).isSynthetic && !(b as any).isSynthetic) return 1;
+                if (!(a as any).isSynthetic && (b as any).isSynthetic) return -1;
+                return (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true });
+            });
             node.children.forEach(sortNode);
         };
 
