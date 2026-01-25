@@ -69,6 +69,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
+  const navCubeRef = useRef<any>(null);
   const accessTokenRef = useRef<string>('');
   const baseUrlRef = useRef<string>('');
   const originalFetchRef = useRef<typeof fetch | null>(null);
@@ -91,6 +92,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>('idle');
   const [cacheStatus, setCacheStatus] = useState<'checking' | 'hit' | 'miss' | 'stored' | null>(null);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [showNavCube, setShowNavCube] = useState(true);
   
   const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
@@ -446,6 +448,46 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       }
     } catch (e) {
       console.debug("Could not enable annotations:", e);
+    }
+
+    // Initialize NavCube - try multiple approaches
+    try {
+      const viewer = viewerInstanceRef.current;
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      
+      if (xeokitViewer && !navCubeRef.current) {
+        const navCubeCanvas = document.getElementById('navCubeCanvas') as HTMLCanvasElement;
+        if (navCubeCanvas) {
+          // Try to get NavCubePlugin from xeokit global or from viewer's scene
+          const NavCubePlugin = (window as any).xeokit?.NavCubePlugin 
+            || (window as any).NavCubePlugin
+            || xeokitViewer.plugins?.NavCubePlugin?.constructor;
+          
+          if (NavCubePlugin) {
+            navCubeRef.current = new NavCubePlugin(xeokitViewer, {
+              canvasId: 'navCubeCanvas',
+              visible: true,
+              cameraFly: true,
+              cameraFlyDuration: 0.5,
+              fitVisible: false,
+              synchProjection: false,
+              color: '#CFCFCF',
+              frontColor: '#55FF55',
+              backColor: '#FF5555',
+              leftColor: '#FF5555',
+              rightColor: '#55FF55',
+              topColor: '#7777FF',
+              bottomColor: '#FFFF55',
+              hoverColor: '#00AAFF',
+            });
+            console.log("NavCube initialized successfully");
+          } else {
+            console.log("NavCubePlugin not available - xeokit SDK may not be loaded");
+          }
+        }
+      }
+    } catch (e) {
+      console.debug("Could not initialize NavCube:", e);
     }
 
     if (deferredFmGuidForDisplayRef.current) {
@@ -877,12 +919,29 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             </div>
           </div>
 
+          {/* NavCube canvas - positioned in bottom-right corner */}
+          <canvas 
+            id="navCubeCanvas" 
+            style={{
+              position: 'absolute',
+              bottom: '80px',
+              right: '16px',
+              width: '120px',
+              height: '120px',
+              zIndex: 25,
+              display: showNavCube ? 'block' : 'none',
+              background: 'transparent',
+              borderRadius: '8px',
+            }}
+          />
+
           {/* Custom toolbar - centered at bottom */}
           {state.isInitialized && initStep === 'ready' && (
             <>
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
                 onToggleMinimap={(visible) => setShowMinimap(visible)}
+                onToggleNavCube={(visible) => setShowNavCube(visible)}
               />
               <MinimapPanel
                 viewerRef={viewerInstanceRef}
