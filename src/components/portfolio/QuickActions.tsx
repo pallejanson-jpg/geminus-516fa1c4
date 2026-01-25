@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View 
+  FileText, DoorOpen, Zap, View, Square 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ interface QuickActionsProps {
   onShowRooms: (facility: Facility) => void;
   onOpen360: (siteId?: string) => void;
   onToggle3D: (facility: Facility) => void;
+  onToggle2D?: (facility: Facility) => void;
   onShowDocs: (facility: Facility) => void;
   onShowInsights: (facility: Facility) => void;
   onOpenIoT: (facility: Facility) => void;
@@ -29,7 +30,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onShowAssets, 
   onShowRooms, 
   onOpen360, 
-  onToggle3D, 
+  onToggle3D,
+  onToggle2D,
   onShowDocs, 
   onShowInsights, 
   onOpenIoT 
@@ -75,6 +77,18 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             <span className="text-[10px] sm:text-xs">Navigator</span>
           </Button>
           {isBuilding && (
+            <Button variant="ghost" onClick={() => onToggle3D(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+              <span className="text-[10px] sm:text-xs">3D</span>
+            </Button>
+          )}
+          {isStorey && onToggle2D && (
+            <Button variant="ghost" onClick={() => onToggle2D(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+              <Square size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+              <span className="text-[10px] sm:text-xs">2D</span>
+            </Button>
+          )}
+          {isStorey && (
             <Button variant="ghost" onClick={() => onToggle3D(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
               <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
               <span className="text-[10px] sm:text-xs">3D</span>
