@@ -19,11 +19,21 @@ import {
   Cuboid,
   SquareDashed,
   Map,
+  MoreHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -38,7 +48,7 @@ type ViewMode = '3d' | '2d';
 
 /**
  * Custom toolbar for the Asset+ 3D Viewer
- * Centered at the bottom with all viewer controls
+ * Mobile-optimized with 4 primary tools + overflow menu
  */
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, onToggleMinimap, className }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
@@ -48,6 +58,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   const [showNavCube, setShowNavCube] = useState(true);
   const [showMinimap, setShowMinimap] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  
+  const isMobile = useIsMobile();
 
   // Get AssetView reference
   const getAssetView = useCallback(() => {
@@ -72,7 +84,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
       const camera = viewer.camera;
       const look = camera.look;
       const eye = camera.eye;
-      // Move eye 20% closer to look point
       const newEye = [
         eye[0] + (look[0] - eye[0]) * 0.2,
         eye[1] + (look[1] - eye[1]) * 0.2,
@@ -88,7 +99,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
       const camera = viewer.camera;
       const look = camera.look;
       const eye = camera.eye;
-      // Move eye 25% further from look point
       const newEye = [
         eye[0] - (look[0] - eye[0]) * 0.25,
         eye[1] - (look[1] - eye[1]) * 0.25,
@@ -144,7 +154,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     setShowNavCube(newValue);
     onToggleNavCube?.(newValue);
     
-    // Toggle visibility via CSS
     const navCubeCanvas = document.getElementById('navCubeCanvas');
     if (navCubeCanvas) {
       navCubeCanvas.style.display = newValue ? 'block' : 'none';
@@ -165,19 +174,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     setViewMode(mode);
     
     if (mode === '2d') {
-      // Switch to top-down orthographic view
       const camera = viewer.camera;
       const scene = viewer.scene;
       const aabb = scene?.getAABB?.();
       
       if (camera && aabb) {
-        // Calculate center and extent
         const centerX = (aabb[0] + aabb[3]) / 2;
         const centerY = (aabb[1] + aabb[4]) / 2;
         const centerZ = (aabb[2] + aabb[5]) / 2;
         const height = Math.max(aabb[3] - aabb[0], aabb[5] - aabb[2]) * 1.5;
         
-        // Set camera to look straight down
         viewer.cameraFlight.flyTo({
           eye: [centerX, centerY + height, centerZ],
           look: [centerX, centerY, centerZ],
@@ -186,16 +192,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           orthoScale: height
         });
         
-        // Switch to orthographic projection
         camera.projection = 'ortho';
       }
     } else {
-      // Switch back to 3D perspective view
       const camera = viewer.camera;
       if (camera) {
         camera.projection = 'perspective';
-        
-        // Reset to orbit view
         const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
         if (assetView) {
           assetView.viewFit(undefined, true);
@@ -208,7 +210,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     const viewer = getXeokitViewer();
     if (viewer?.scene) {
       const scene = viewer.scene;
-      // Toggle X-ray on all objects
       const objectIds = Object.keys(scene.objects);
       const firstObj = scene.objects[objectIds[0]];
       const newXray = !firstObj?.xrayed;
@@ -226,7 +227,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     }
   }, [getAssetView]);
 
-  // Show object details
   const handleShowObjectDetails = useCallback(() => {
     const viewer = viewerRef.current;
     if (viewer) {
@@ -244,315 +244,298 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           className="shadow-lg bg-card/95 backdrop-blur-sm border"
         >
           <ChevronUp className="h-4 w-4 mr-1" />
-          Visa verktygsfält
+          <span className="hidden sm:inline">Visa verktygsfält</span>
+          <span className="sm:hidden">Verktyg</span>
         </Button>
       </div>
     );
   }
 
+  // Desktop: Full toolbar
+  // Mobile: 4 primary tools + overflow menu
+  const ToolButton: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    variant?: 'ghost' | 'secondary';
+  }> = ({ icon, label, onClick, active, variant = 'ghost' }) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={active ? 'secondary' : variant}
+          size="icon"
+          className="h-8 w-8 sm:h-8 sm:w-8"
+          onClick={onClick}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+
+  // Mobile overflow menu items
+  const MobileOverflowMenu = () => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center" side="top" className="w-48 bg-card border shadow-lg z-50">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Navigering</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => handleNavModeChange('orbit')} className={navMode === 'orbit' ? 'bg-accent' : ''}>
+          <RotateCcw className="h-4 w-4 mr-2" /> Orbit (rotera)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleNavModeChange('firstPerson')} className={navMode === 'firstPerson' ? 'bg-accent' : ''}>
+          <Move className="h-4 w-4 mr-2" /> Första person
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleNavModeChange('planView')} className={navMode === 'planView' ? 'bg-accent' : ''}>
+          <Grid3X3 className="h-4 w-4 mr-2" /> Planvy
+        </DropdownMenuItem>
+        
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Verktyg</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => handleToolChange('select')} className={activeTool === 'select' ? 'bg-accent' : ''}>
+          <Crosshair className="h-4 w-4 mr-2" /> Välj objekt
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleToolChange('measure')} className={activeTool === 'measure' ? 'bg-accent' : ''}>
+          <Ruler className="h-4 w-4 mr-2" /> Mätverktyg
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleToolChange('slicer')} className={activeTool === 'slicer' ? 'bg-accent' : ''}>
+          <Scissors className="h-4 w-4 mr-2" /> Snittplan
+        </DropdownMenuItem>
+        {activeTool === 'slicer' && (
+          <DropdownMenuItem onClick={handleClearSlices}>
+            <RotateCcw className="h-4 w-4 mr-2" /> Rensa snitt
+          </DropdownMenuItem>
+        )}
+        
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Visning</DropdownMenuLabel>
+        <DropdownMenuItem onClick={handleToggleXray}>
+          <Eye className="h-4 w-4 mr-2" /> X-ray läge
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleToggleSpaces} className={showSpaces ? 'bg-accent' : ''}>
+          <Layers className="h-4 w-4 mr-2" /> {showSpaces ? 'Dölj rum' : 'Visa rum'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleToggleNavCube} className={showNavCube ? 'bg-accent' : ''}>
+          <Box className="h-4 w-4 mr-2" /> {showNavCube ? 'Dölj kub' : 'Visa kub'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleToggleMinimap} className={showMinimap ? 'bg-accent' : ''}>
+          <Map className="h-4 w-4 mr-2" /> {showMinimap ? 'Dölj minimap' : 'Visa minimap'}
+        </DropdownMenuItem>
+        
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleShowObjectDetails}>
+          <Search className="h-4 w-4 mr-2" /> Objektinfo
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setIsExpanded(false)}>
+          <ChevronDown className="h-4 w-4 mr-2" /> Dölj verktygsfält
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // Mobile toolbar: 4 primary + overflow
+  if (isMobile) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <div className={cn(
+          "absolute bottom-3 left-1/2 -translate-x-1/2 z-20",
+          "flex items-center gap-1 p-1.5 rounded-lg",
+          "bg-card/95 backdrop-blur-sm border shadow-lg",
+          className
+        )}>
+          {/* Primary tools: Zoom, Fit, 3D/2D toggle, Overflow */}
+          <ToolButton
+            icon={<ZoomIn className="h-4 w-4" />}
+            label="Zooma in"
+            onClick={handleZoomIn}
+          />
+          <ToolButton
+            icon={<ZoomOut className="h-4 w-4" />}
+            label="Zooma ut"
+            onClick={handleZoomOut}
+          />
+          <ToolButton
+            icon={<Focus className="h-4 w-4" />}
+            label="Anpassa vy"
+            onClick={handleViewFit}
+          />
+          
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+          
+          <ToolButton
+            icon={viewMode === '3d' ? <Cuboid className="h-4 w-4" /> : <SquareDashed className="h-4 w-4" />}
+            label={viewMode === '3d' ? 'Byt till 2D' : 'Byt till 3D'}
+            onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+            active={viewMode === '2d'}
+          />
+          
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+          
+          <MobileOverflowMenu />
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Desktop: Full toolbar
   return (
     <TooltipProvider delayDuration={300}>
       <div className={cn(
-        "absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-20",
-        "flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-lg",
+        "absolute bottom-4 left-1/2 -translate-x-1/2 z-20",
+        "flex items-center gap-1 p-1.5 rounded-lg",
         "bg-card/95 backdrop-blur-sm border shadow-lg",
-        "max-w-[95vw] overflow-x-auto",
         className
       )}>
         {/* Navigation Group */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={navMode === 'orbit' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleNavModeChange('orbit')}
-              >
-                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Orbit (rotera)</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={navMode === 'firstPerson' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleNavModeChange('firstPerson')}
-              >
-                <Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Första person (gå)</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={navMode === 'planView' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleNavModeChange('planView')}
-              >
-                <Grid3X3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Planvy</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={<RotateCcw className="h-4 w-4" />}
+            label="Orbit (rotera)"
+            onClick={() => handleNavModeChange('orbit')}
+            active={navMode === 'orbit'}
+          />
+          <ToolButton
+            icon={<Move className="h-4 w-4" />}
+            label="Första person (gå)"
+            onClick={() => handleNavModeChange('firstPerson')}
+            active={navMode === 'firstPerson'}
+          />
+          <ToolButton
+            icon={<Grid3X3 className="h-4 w-4" />}
+            label="Planvy"
+            onClick={() => handleNavModeChange('planView')}
+            active={navMode === 'planView'}
+          />
         </div>
 
-        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* Zoom Group */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleZoomIn}
-              >
-                <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Zooma in</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleZoomOut}
-              >
-                <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Zooma ut</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleViewFit}
-              >
-                <Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Anpassa vy</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleResetView}
-              >
-                <Maximize className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Återställ vy</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={<ZoomIn className="h-4 w-4" />}
+            label="Zooma in"
+            onClick={handleZoomIn}
+          />
+          <ToolButton
+            icon={<ZoomOut className="h-4 w-4" />}
+            label="Zooma ut"
+            onClick={handleZoomOut}
+          />
+          <ToolButton
+            icon={<Focus className="h-4 w-4" />}
+            label="Anpassa vy"
+            onClick={handleViewFit}
+          />
+          <ToolButton
+            icon={<Maximize className="h-4 w-4" />}
+            label="Återställ vy"
+            onClick={handleResetView}
+          />
         </div>
 
-        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* Tools Group */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={activeTool === 'select' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleToolChange('select')}
-              >
-                <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Välj objekt</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={activeTool === 'measure' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleToolChange('measure')}
-              >
-                <Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Mätverktyg</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={activeTool === 'slicer' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleToolChange('slicer')}
-              >
-                <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Snittplan</TooltipContent>
-          </Tooltip>
-
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={<Crosshair className="h-4 w-4" />}
+            label="Välj objekt"
+            onClick={() => handleToolChange('select')}
+            active={activeTool === 'select'}
+          />
+          <ToolButton
+            icon={<Ruler className="h-4 w-4" />}
+            label="Mätverktyg"
+            onClick={() => handleToolChange('measure')}
+            active={activeTool === 'measure'}
+          />
+          <ToolButton
+            icon={<Scissors className="h-4 w-4" />}
+            label="Snittplan"
+            onClick={() => handleToolChange('slicer')}
+            active={activeTool === 'slicer'}
+          />
           {activeTool === 'slicer' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 sm:h-8 sm:w-8"
-                  onClick={handleClearSlices}
-                >
-                  <RotateCcw className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Rensa snitt</TooltipContent>
-            </Tooltip>
+            <ToolButton
+              icon={<RotateCcw className="h-3 w-3" />}
+              label="Rensa snitt"
+              onClick={handleClearSlices}
+            />
           )}
         </div>
 
-        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* View Mode: 3D/2D */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={viewMode === '3d' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleViewModeChange('3d')}
-              >
-                <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">3D-vy</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={viewMode === '2d' ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={() => handleViewModeChange('2d')}
-              >
-                <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">2D-vy (toppvy)</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={<Cuboid className="h-4 w-4" />}
+            label="3D-vy"
+            onClick={() => handleViewModeChange('3d')}
+            active={viewMode === '3d'}
+          />
+          <ToolButton
+            icon={<SquareDashed className="h-4 w-4" />}
+            label="2D-vy (toppvy)"
+            onClick={() => handleViewModeChange('2d')}
+            active={viewMode === '2d'}
+          />
         </div>
 
-        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* View Options */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleToggleXray}
-              >
-                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">X-ray läge</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={showSpaces ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleToggleSpaces}
-              >
-                <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Visa/dölj rum</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={showNavCube ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleToggleNavCube}
-              >
-                <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Visa/dölj navigeringskub</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={showMinimap ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
-                onClick={handleToggleMinimap}
-              >
-                <Map className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Visa/dölj minimap</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={<Eye className="h-4 w-4" />}
+            label="X-ray läge"
+            onClick={handleToggleXray}
+          />
+          <ToolButton
+            icon={<Layers className="h-4 w-4" />}
+            label="Visa/dölj rum"
+            onClick={handleToggleSpaces}
+            active={showSpaces}
+          />
+          <ToolButton
+            icon={<Box className="h-4 w-4" />}
+            label="Visa/dölj navigeringskub"
+            onClick={handleToggleNavCube}
+            active={showNavCube}
+          />
+          <ToolButton
+            icon={<Map className="h-4 w-4" />}
+            label="Visa/dölj minimap"
+            onClick={handleToggleMinimap}
+            active={showMinimap}
+          />
         </div>
 
-        <Separator orientation="vertical" className="h-5 sm:h-6 mx-0.5 sm:mx-1 flex-shrink-0" />
+        <Separator orientation="vertical" className="h-6 mx-1" />
 
         {/* Object Info */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
-              onClick={handleShowObjectDetails}
-            >
-              <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Objektinfo</TooltipContent>
-        </Tooltip>
+        <ToolButton
+          icon={<Search className="h-4 w-4" />}
+          label="Objektinfo"
+          onClick={handleShowObjectDetails}
+        />
 
         {/* Collapse button */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8 ml-0.5 sm:ml-1"
-              onClick={() => setIsExpanded(false)}
-            >
-              <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Dölj verktygsfält</TooltipContent>
-        </Tooltip>
+        <ToolButton
+          icon={<ChevronDown className="h-4 w-4" />}
+          label="Dölj verktygsfält"
+          onClick={() => setIsExpanded(false)}
+        />
       </div>
     </TooltipProvider>
   );

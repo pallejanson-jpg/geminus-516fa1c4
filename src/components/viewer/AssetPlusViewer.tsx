@@ -838,23 +838,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           )}
           
           {/* Top toolbar - contains close and filter */}
-          <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-10 flex items-center justify-between pointer-events-none">
-            {/* Close button - left side */}
+          <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+            {/* Close button - left side - ALWAYS VISIBLE */}
             {onClose && (
               <Button 
                 variant="secondary" 
-                size="sm" 
+                size="icon"
                 onClick={onClose} 
-                className="gap-1.5 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 pointer-events-auto shadow-md"
+                className="h-10 w-10 pointer-events-auto shadow-lg bg-card/95 backdrop-blur-sm border"
+                aria-label="Stäng 3D-vy"
               >
-                <X className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm">Stäng</span>
+                <X className="h-5 w-5" />
               </Button>
             )}
             {!onClose && <div />}
             
             {/* Filter - right side */}
-            <div className="flex gap-1.5 sm:gap-2 pointer-events-auto">
+            <div className="flex gap-1.5 pointer-events-auto">
               <FilterDropdown />
             </div>
           </div>
