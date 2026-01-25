@@ -61,11 +61,15 @@ export type Database = {
           category: string
           common_name: string | null
           complex_common_name: string | null
+          coordinate_x: number | null
+          coordinate_y: number | null
+          coordinate_z: number | null
           created_at: string
           fm_guid: string
           gross_area: number | null
           id: string
           in_room_fm_guid: string | null
+          is_local: boolean
           level_fm_guid: string | null
           name: string | null
           source_updated_at: string | null
@@ -79,11 +83,15 @@ export type Database = {
           category: string
           common_name?: string | null
           complex_common_name?: string | null
+          coordinate_x?: number | null
+          coordinate_y?: number | null
+          coordinate_z?: number | null
           created_at?: string
           fm_guid: string
           gross_area?: number | null
           id?: string
           in_room_fm_guid?: string | null
+          is_local?: boolean
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null
@@ -97,11 +105,15 @@ export type Database = {
           category?: string
           common_name?: string | null
           complex_common_name?: string | null
+          coordinate_x?: number | null
+          coordinate_y?: number | null
+          coordinate_z?: number | null
           created_at?: string
           fm_guid?: string
           gross_area?: number | null
           id?: string
           in_room_fm_guid?: string | null
+          is_local?: boolean
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null

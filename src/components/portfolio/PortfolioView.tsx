@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { BUILDING_IMAGES } from '@/lib/constants';
+import { NavigatorNode } from '@/components/navigator/TreeNode';
+import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
 import RoomsView from './RoomsView';
@@ -24,12 +26,16 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData } = useContext(AppContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRoomsFor, setShowRoomsFor] = useState<Facility | null>(null);
+  
+  // Add Asset Dialog state
+  const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
+  const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
 
   // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
   const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
@@ -142,6 +148,17 @@ const PortfolioView: React.FC = () => {
     // Now handled by useBuildingSettings hook in FacilityLandingPage
   };
 
+  // Handle Add Asset
+  const handleAddAsset = (parentNode: NavigatorNode) => {
+    setAddAssetParentNode(parentNode);
+    setAddAssetDialogOpen(true);
+  };
+
+  // Handle asset created - refresh data
+  const handleAssetCreated = () => {
+    refreshInitialData?.();
+  };
+
   // Get rooms for a facility
   const getRoomsForFacility = (facility: Facility) => {
     if (!allData) return [];
@@ -175,20 +192,29 @@ const PortfolioView: React.FC = () => {
   // Show landing page if facility is selected
   if (selectedFacility) {
     return (
-      <FacilityLandingPage
-        facility={selectedFacility}
-        onClose={handleClose}
-        onEdit={handleEdit}
-        onOpenMap={handleOpenMap}
-        onOpenNavigator={handleOpenNavigator}
-        onOpen360={handleOpen360}
-        onShowAssets={handleShowAssets}
-        onShowRooms={handleShowRooms}
-        onShowDocs={handleShowDocs}
-        onShowInsights={handleShowInsights}
-        onOpenIoT={handleOpenIoT}
-        setSelectedFacility={setSelectedFacility}
-      />
+      <>
+        <FacilityLandingPage
+          facility={selectedFacility}
+          onClose={handleClose}
+          onEdit={handleEdit}
+          onOpenMap={handleOpenMap}
+          onOpenNavigator={handleOpenNavigator}
+          onOpen360={handleOpen360}
+          onShowAssets={handleShowAssets}
+          onShowRooms={handleShowRooms}
+          onShowDocs={handleShowDocs}
+          onShowInsights={handleShowInsights}
+          onOpenIoT={handleOpenIoT}
+          onAddAsset={handleAddAsset}
+          setSelectedFacility={setSelectedFacility}
+        />
+        <AddAssetDialog
+          open={addAssetDialogOpen}
+          onOpenChange={setAddAssetDialogOpen}
+          parentNode={addAssetParentNode}
+          onAssetCreated={handleAssetCreated}
+        />
+      </>
     );
   }
 

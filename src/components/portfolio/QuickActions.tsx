@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View, Square 
+  FileText, DoorOpen, Zap, View, Square, Plus 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ interface QuickActionsProps {
   onShowDocs: (facility: Facility) => void;
   onShowInsights: (facility: Facility) => void;
   onOpenIoT: (facility: Facility) => void;
+  onAddAsset?: (facility: Facility) => void;
 }
 
 const QuickActions: React.FC<QuickActionsProps> = ({ 
@@ -34,11 +35,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onToggle2D,
   onShowDocs, 
   onShowInsights, 
-  onOpenIoT 
+  onOpenIoT,
+  onAddAsset
 }) => {
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
-
+  const isSpace = facility.category === 'Space';
+  const canAddAsset = isStorey || isSpace;
   return (
     <Card className="mt-4 sm:mt-6">
       <CardHeader className="pb-3 sm:pb-4">
@@ -110,6 +113,17 @@ const QuickActions: React.FC<QuickActionsProps> = ({
              <Zap size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
             <span className="text-[10px] sm:text-xs">IOT+</span>
           </Button>
+          {canAddAsset && onAddAsset && (
+            <Button 
+              variant="ghost" 
+              onClick={() => onAddAsset(facility)} 
+              className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+              title="Register new asset in this location"
+            >
+              <Plus size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+              <span className="text-[10px] sm:text-xs">Add Asset</span>
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
