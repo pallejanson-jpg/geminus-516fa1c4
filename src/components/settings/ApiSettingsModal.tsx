@@ -322,10 +322,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 <DialogHeader className="flex-shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
-                        API Settings
+                        App & API Settings
                     </DialogTitle>
                     <DialogDescription>
-                        Manage connections to external systems and data synchronization.
+                        Manage application configurations and API connections.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -335,9 +335,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <LayoutGrid className="h-4 w-4" />
                             Apps
                         </TabsTrigger>
-                        <TabsTrigger value="assetplus" className="gap-2">
-                            <Box className="h-4 w-4" />
-                            Asset+
+                        <TabsTrigger value="apis" className="gap-2">
+                            <Settings2 className="h-4 w-4" />
+                            API's
                         </TabsTrigger>
                         <TabsTrigger value="sync" className="gap-2">
                             <Database className="h-4 w-4" />
@@ -451,234 +451,288 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="assetplus" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                    <TabsContent value="apis" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         {isLoadingConfig ? (
                             <div className="flex items-center justify-center py-8">
                                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : (
-                            <>
-                                <div className="space-y-4">
+                            <div className="space-y-6">
+                                {/* Asset+ API Section */}
+                                <div className="border rounded-lg p-4 space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="font-medium flex items-center gap-2">
-                                            <Settings2 className="h-4 w-4" />
-                                            Keycloak & API Configuration
-                                        </h4>
+                                        <div className="flex items-center gap-2">
+                                            <Box className="h-5 w-5 text-primary" />
+                                            <h4 className="font-medium">Asset+</h4>
+                                        </div>
                                         <div className="flex items-center gap-2">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setShowSecrets(!showSecrets)}
-                                                className="gap-2"
+                                                className="gap-1 h-7 text-xs"
                                             >
-                                                {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                {showSecrets ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                                                 {showSecrets ? 'Hide' : 'Show'}
                                             </Button>
-                                            {!isEditMode && (
+                                            {!isEditMode ? (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => setIsEditMode(true)}
-                                                    className="gap-2"
+                                                    className="gap-1 h-7 text-xs"
                                                 >
-                                                    <Edit2 className="h-4 w-4" />
+                                                    <Edit2 className="h-3 w-3" />
                                                     Edit
                                                 </Button>
+                                            ) : (
+                                                <>
+                                                    <Button
+                                                        onClick={handleSaveConfig}
+                                                        disabled={isSaving}
+                                                        size="sm"
+                                                        className="gap-1 h-7 text-xs"
+                                                    >
+                                                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                                        Save
+                                                    </Button>
+                                                    <Button
+                                                        onClick={handleCancelEdit}
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        disabled={isSaving}
+                                                        className="h-7 text-xs"
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="grid gap-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="keycloakUrl">OpenID Token Endpoint</Label>
+                                    <div className="grid gap-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">OpenID Token Endpoint</Label>
                                                 <Input
-                                                    id="keycloakUrl"
                                                     value={config.keycloakUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
-                                                    placeholder="https://sso.example.com/realms/xxx/protocol/openid-connect/token"
+                                                    placeholder="https://sso.example.com/realms/xxx/..."
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="apiUrl">API URL</Label>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">API URL</Label>
                                                 <Input
-                                                    id="apiUrl"
                                                     value={config.apiUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                                                     placeholder="https://api.example.com"
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="clientId">Client ID</Label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Client ID</Label>
                                                 <Input
-                                                    id="clientId"
                                                     value={config.clientId}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
-                                                    placeholder="faciliate-api"
+                                                    placeholder="asset-api"
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="clientSecret">Client Secret</Label>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Client Secret</Label>
                                                 <Input
-                                                    id="clientSecret"
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
                                                     placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="audience">Audience</Label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Username</Label>
                                                 <Input
-                                                    id="audience"
-                                                    value={config.audience}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, audience: e.target.value }))}
-                                                    placeholder="asset-api"
-                                                    disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="apiKey">API Key</Label>
-                                                <Input
-                                                    id="apiKey"
-                                                    type={showSecrets ? "text" : "password"}
-                                                    value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
-                                                    disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="username">Username (optional)</Label>
-                                                <Input
-                                                    id="username"
                                                     value={config.username}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
                                                     placeholder="service-user@example.com"
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="password">Password (optional)</Label>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Password</Label>
                                                 <Input
-                                                    id="password"
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.password === '••••••••' ? '' : config.password}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
                                                     placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
-                                                    className={!isEditMode ? "bg-muted" : ""}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {isEditMode ? (
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3">
-                                            <p className="text-sm text-amber-800 dark:text-amber-200">
-                                                <strong>Note:</strong> After saving, you will need to update secrets in Lovable manually. 
-                                                Type in chat: "Update ASSET_PLUS_CLIENT_ID to [value]" etc.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-lg border p-3 bg-muted/30">
-                                            <p className="text-sm text-muted-foreground">
-                                                <strong>Note:</strong> These values are managed as secure backend secrets. 
-                                                Click "Edit" to modify them.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Connection test result */}
-                                {connectionStatus !== 'idle' && (
-                                    <div className={`rounded-lg border p-4 ${
-                                        connectionStatus === 'success' 
-                                            ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
-                                            : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-                                    }`}>
-                                        <div className="flex items-start gap-3">
-                                            {connectionStatus === 'success' ? (
-                                                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                                            ) : (
-                                                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                                            )}
-                                            <div>
-                                                <p className={`font-medium ${
-                                                    connectionStatus === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
-                                                }`}>
-                                                    {connectionStatus === 'success' ? 'Connection Successful' : 'Connection Failed'}
-                                                </p>
-                                                <p className={`text-sm ${
-                                                    connectionStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
-                                                }`}>
-                                                    {connectionMessage}
-                                                </p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">API Key</Label>
+                                                <Input
+                                                    type={showSecrets ? "text" : "password"}
+                                                    value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
+                                                    disabled={!isEditMode}
+                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                />
+                                            </div>
+                                            <div className="space-y-1 flex items-end">
+                                                <Button
+                                                    onClick={handleTestConnection}
+                                                    disabled={isTestingConnection || isEditMode}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="gap-1 h-8 text-xs"
+                                                >
+                                                    {isTestingConnection ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <Zap className="h-3 w-3" />
+                                                    )}
+                                                    {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>
-                                )}
 
-                                <div className="flex gap-2">
-                                    {isEditMode ? (
-                                        <>
-                                            <Button
-                                                onClick={handleSaveConfig}
-                                                disabled={isSaving}
-                                                className="gap-2"
-                                            >
-                                                {isSaving ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    {/* Connection test result */}
+                                    {connectionStatus !== 'idle' && (
+                                        <div className={`rounded-lg border p-3 text-sm ${
+                                            connectionStatus === 'success' 
+                                                ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
+                                                : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                                        }`}>
+                                            <div className="flex items-start gap-2">
+                                                {connectionStatus === 'success' ? (
+                                                    <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
                                                 ) : (
-                                                    <Save className="h-4 w-4" />
+                                                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                                                 )}
-                                                {isSaving ? 'Saving...' : 'Save Changes'}
-                                            </Button>
-                                            <Button
-                                                onClick={handleCancelEdit}
-                                                variant="outline"
-                                                disabled={isSaving}
-                                            >
-                                                Cancel
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <Button
-                                            onClick={handleTestConnection}
-                                            disabled={isTestingConnection}
-                                            variant="outline"
-                                            className="gap-2"
-                                        >
-                                            {isTestingConnection ? (
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Zap className="h-4 w-4" />
-                                            )}
-                                            {isTestingConnection ? 'Testing...' : 'Test Connection'}
-                                        </Button>
+                                                <div>
+                                                    <p className={`font-medium ${
+                                                        connectionStatus === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
+                                                    }`}>
+                                                        {connectionStatus === 'success' ? 'Connection Successful' : 'Connection Failed'}
+                                                    </p>
+                                                    <p className={`text-xs ${
+                                                        connectionStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
+                                                    }`}>
+                                                        {connectionMessage}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
-                            </>
+
+                                {/* FM Access API Section */}
+                                <div className="border rounded-lg p-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Building2 className="h-5 w-5 text-primary" />
+                                            <h4 className="font-medium">FM Access</h4>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API URL</Label>
+                                            <Input
+                                                placeholder="https://fmaccess.example.com/api"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API Key</Label>
+                                            <Input
+                                                type="password"
+                                                placeholder="••••••••"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Senslinc API Section */}
+                                <div className="border rounded-lg p-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Radar className="h-5 w-5 text-primary" />
+                                            <h4 className="font-medium">Senslinc</h4>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API URL</Label>
+                                            <Input
+                                                placeholder="https://api.senslinc.se"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API Key</Label>
+                                            <Input
+                                                type="password"
+                                                placeholder="••••••••"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Ivion API Section */}
+                                <div className="border rounded-lg p-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Zap className="h-5 w-5 text-primary" />
+                                            <h4 className="font-medium">Ivion</h4>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Base URL</Label>
+                                            <Input
+                                                placeholder="https://ivion.se"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API Token</Label>
+                                            <Input
+                                                type="password"
+                                                placeholder="••••••••"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </TabsContent>
 
