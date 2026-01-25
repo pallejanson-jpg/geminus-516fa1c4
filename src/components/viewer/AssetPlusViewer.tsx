@@ -20,6 +20,12 @@ import { NavigatorNode } from '@/components/navigator/TreeNode';
 interface AssetPlusViewerProps {
   fmGuid: string;
   onClose?: () => void;
+  // External pick mode control for asset registration flow
+  pickModeEnabled?: boolean;
+  onCoordinatePicked?: (
+    coords: { x: number; y: number; z: number },
+    parentNode: NavigatorNode | null
+  ) => void;
 }
 
 interface ViewerState {
@@ -66,7 +72,7 @@ const lookAtSpaceAndInstanceFlyToDuration = 1;
  * Integrates with the Asset+ 3D Viewer package to display BIM models.
  * Based on Asset+ external_viewer.html implementation pattern.
  */
-const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) => {
+const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pickModeEnabled, onCoordinatePicked }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewportWrapperRef = useRef<HTMLDivElement>(null);
@@ -518,7 +524,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
     }
   }, [showNavCube]);
 
-  // Handle coordinate picking mode
+  // Handle coordinate picking mode - supports both internal and external control
   const handleTogglePickMode = useCallback(() => {
     if (isPickMode) {
       // Disable pick mode
@@ -537,112 +543,142 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         duration: 5000,
       });
 
-      // Set up click listener on xeokit scene
-      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (xeokitViewer?.scene) {
-        const handlePick = (pickResult: any) => {
-          if (pickResult?.worldPos) {
-            const [x, y, z] = pickResult.worldPos;
-            console.log('Picked coordinates:', { x, y, z });
-            
-            // Store coordinates
-            setPickedCoordinates({ x, y, z });
-            
-            // Get current room from picked entity or use current space context
-            let parentNode: NavigatorNode | null = null;
-            
-            // Fallback: use current asset's room if it's a Space, or building storey
-            if (assetData) {
-              if (assetData.category === 'Space') {
-                parentNode = {
-                  fmGuid: assetData.fmGuid,
-                  name: assetData.name || '',
-                  commonName: assetData.commonName || assetData.name || '',
-                  category: 'Space',
-                  children: [],
-                };
-              } else if (assetData.inRoomFmGuid) {
-                const roomData = allData.find((a: any) => a.fmGuid === assetData.inRoomFmGuid);
-                if (roomData) {
-                  parentNode = {
-                    fmGuid: roomData.fmGuid,
-                    name: roomData.name || '',
-                    commonName: roomData.commonName || roomData.name || '',
-                    category: 'Space',
-                    children: [],
-                  };
-                }
-              } else if (assetData.levelFmGuid) {
-                // Use the storey/level as parent
-                const levelData = allData.find((a: any) => a.fmGuid === assetData.levelFmGuid);
-                if (levelData) {
-                  parentNode = {
-                    fmGuid: levelData.fmGuid,
-                    name: levelData.name || '',
-                    commonName: levelData.commonName || levelData.name || '',
-                    category: 'Building Storey',
-                    children: [],
-                  };
-                }
-              }
-            }
+      setupPickModeListener();
+    }
+  }, [isPickMode]);
 
-            // If still no parent, use the current fmGuid asset
-            if (!parentNode) {
+  // Setup the pick mode click listener
+  const setupPickModeListener = useCallback(() => {
+    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) return;
+
+    const handlePick = (pickResult: any) => {
+      if (pickResult?.worldPos) {
+        const [x, y, z] = pickResult.worldPos;
+        console.log('Picked coordinates:', { x, y, z });
+        
+        // Store coordinates
+        const coords = { x, y, z };
+        setPickedCoordinates(coords);
+        
+        // Get current room from picked entity or use current space context
+        let parentNode: NavigatorNode | null = null;
+        
+        // Fallback: use current asset's room if it's a Space, or building storey
+        if (assetData) {
+          if (assetData.category === 'Space') {
+            parentNode = {
+              fmGuid: assetData.fmGuid,
+              name: assetData.name || '',
+              commonName: assetData.commonName || assetData.name || '',
+              category: 'Space',
+              children: [],
+            };
+          } else if (assetData.inRoomFmGuid) {
+            const roomData = allData.find((a: any) => a.fmGuid === assetData.inRoomFmGuid);
+            if (roomData) {
               parentNode = {
-                fmGuid: fmGuid,
-                name: assetData?.name || 'Current View',
-                commonName: assetData?.commonName || assetData?.name || 'Current View',
-                category: assetData?.category || 'Space',
+                fmGuid: roomData.fmGuid,
+                name: roomData.name || '',
+                commonName: roomData.commonName || roomData.name || '',
+                category: 'Space',
                 children: [],
               };
             }
-
-            setAddAssetParentNode(parentNode);
-            setAddAssetDialogOpen(true);
-            setIsPickMode(false);
-            
-            // Cleanup listener
-            if (pickModeListenerRef.current) {
-              pickModeListenerRef.current();
-              pickModeListenerRef.current = null;
+          } else if (assetData.levelFmGuid) {
+            // Use the storey/level as parent
+            const levelData = allData.find((a: any) => a.fmGuid === assetData.levelFmGuid);
+            if (levelData) {
+              parentNode = {
+                fmGuid: levelData.fmGuid,
+                name: levelData.name || '',
+                commonName: levelData.commonName || levelData.name || '',
+                category: 'Building Storey',
+                children: [],
+              };
             }
-            
-            toast.success(`Position vald: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
           }
-        };
+        }
 
-        // Use xeokit's pick on click
-        const canvas = xeokitViewer.scene.canvas.canvas;
-        const handleClick = (e: MouseEvent) => {
-          const rect = canvas.getBoundingClientRect();
-          const canvasPos = [
-            e.clientX - rect.left,
-            e.clientY - rect.top
-          ];
-          
-          // Use xeokit's pickSurface for accurate 3D coordinates
-          const pickResult = xeokitViewer.scene.pick({
-            canvasPos,
-            pickSurface: true, // Get exact surface coordinates
-          });
-          
-          if (pickResult) {
-            handlePick(pickResult);
-          } else {
-            toast.error('Ingen yta hittades. Klicka på ett synligt objekt.');
-          }
-        };
+        // If still no parent, use the current fmGuid asset
+        if (!parentNode) {
+          parentNode = {
+            fmGuid: fmGuid,
+            name: assetData?.name || 'Current View',
+            commonName: assetData?.commonName || assetData?.name || 'Current View',
+            category: assetData?.category || 'Space',
+            children: [],
+          };
+        }
 
-        canvas.addEventListener('click', handleClick, { once: true });
+        // If external callback is provided, use it (asset registration flow)
+        if (onCoordinatePicked) {
+          onCoordinatePicked(coords, parentNode);
+          setIsPickMode(false);
+        } else {
+          // Internal dialog flow
+          setAddAssetParentNode(parentNode);
+          setAddAssetDialogOpen(true);
+          setIsPickMode(false);
+        }
         
-        // Store cleanup function
-        pickModeListenerRef.current = () => {
-          canvas.removeEventListener('click', handleClick);
-        };
+        // Cleanup listener
+        if (pickModeListenerRef.current) {
+          pickModeListenerRef.current();
+          pickModeListenerRef.current = null;
+        }
+        
+        toast.success(`Position vald: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+      }
+    };
+
+    // Use xeokit's pick on click
+    const canvas = xeokitViewer.scene.canvas.canvas;
+    const handleClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const canvasPos = [
+        e.clientX - rect.left,
+        e.clientY - rect.top
+      ];
+      
+      // Use xeokit's pickSurface for accurate 3D coordinates
+      const pickResult = xeokitViewer.scene.pick({
+        canvasPos,
+        pickSurface: true, // Get exact surface coordinates
+      });
+      
+      if (pickResult) {
+        handlePick(pickResult);
+      } else {
+        toast.error('Ingen yta hittades. Klicka på ett synligt objekt.');
+      }
+    };
+
+    canvas.addEventListener('click', handleClick, { once: true });
+    
+    // Store cleanup function
+    pickModeListenerRef.current = () => {
+      canvas.removeEventListener('click', handleClick);
+    };
+  }, [allData, assetData, fmGuid, onCoordinatePicked]);
+
+  // Respond to external pickModeEnabled prop changes
+  useEffect(() => {
+    if (pickModeEnabled && !isPickMode && state.isInitialized) {
+      setIsPickMode(true);
+      toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+        duration: 5000,
+      });
+      setupPickModeListener();
+    } else if (!pickModeEnabled && isPickMode) {
+      // External cancelled pick mode
+      setIsPickMode(false);
+      if (pickModeListenerRef.current) {
+        pickModeListenerRef.current();
+        pickModeListenerRef.current = null;
       }
     }
-  }, [isPickMode, allData, assetData, fmGuid]);
+  }, [pickModeEnabled, isPickMode, state.isInitialized, setupPickModeListener]);
 
   // Cleanup pick mode listener on unmount
   useEffect(() => {
