@@ -737,55 +737,148 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
 
                     <TabsContent value="sync" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h4 className="font-medium">Sync from Asset+</h4>
-                                <p className="text-sm text-muted-foreground">
-                                    {assetCount.toLocaleString()} assets in local database
-                                </p>
-                            </div>
-                            <Button 
-                                onClick={handleTriggerSync} 
-                                disabled={isSyncing}
-                                className="gap-2"
-                            >
-                                {isSyncing ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <RefreshCw className="h-4 w-4" />
-                                )}
-                                {isSyncing ? 'Syncing...' : 'Start Sync'}
-                            </Button>
-                        </div>
-
-                        <div className="space-y-2">
-                            <h5 className="text-sm font-medium text-muted-foreground">Sync Status</h5>
-                            {syncStatuses.length === 0 ? (
-                                <div className="text-center py-6 text-muted-foreground border rounded-lg">
-                                    <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                    <p>No synchronization has been run yet</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {syncStatuses.map((status) => (
-                                        <div 
-                                            key={status.subtree_id} 
-                                            className="flex items-center justify-between p-3 rounded-lg border"
-                                        >
-                                            <div className="flex-1">
-                                                <p className="font-medium">{status.subtree_name || status.subtree_id}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {status.total_assets} assets • Last: {formatDate(status.last_sync_completed_at)}
-                                                </p>
-                                                {status.error_message && (
-                                                    <p className="text-xs text-destructive mt-1">{status.error_message}</p>
-                                                )}
-                                            </div>
-                                            {getSyncStatusBadge(status.sync_status)}
+                        <div className="space-y-6">
+                            {/* Asset+ Sync Section */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Box className="h-5 w-5 text-primary" />
+                                        <div>
+                                            <h4 className="font-medium">Asset+</h4>
+                                            <p className="text-xs text-muted-foreground">
+                                                {assetCount.toLocaleString()} assets i lokal databas
+                                            </p>
                                         </div>
-                                    ))}
+                                    </div>
+                                    <Button 
+                                        onClick={handleTriggerSync} 
+                                        disabled={isSyncing}
+                                        size="sm"
+                                        className="gap-1 h-8 text-xs"
+                                    >
+                                        {isSyncing ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-3 w-3" />
+                                        )}
+                                        {isSyncing ? 'Synkar...' : 'Starta synk'}
+                                    </Button>
                                 </div>
-                            )}
+
+                                {syncStatuses.length === 0 ? (
+                                    <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                        <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                        <p className="text-sm">Ingen synkronisering har körts ännu</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {syncStatuses.map((status) => (
+                                            <div 
+                                                key={status.subtree_id} 
+                                                className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                                            >
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-medium">{status.subtree_name || status.subtree_id}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {status.total_assets} objekt • Senast: {formatDate(status.last_sync_completed_at)}
+                                                    </p>
+                                                    {status.error_message && (
+                                                        <p className="text-xs text-destructive mt-1 line-clamp-2">{status.error_message}</p>
+                                                    )}
+                                                </div>
+                                                {getSyncStatusBadge(status.sync_status)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* FM Access Sync Section */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Building2 className="h-5 w-5 text-primary" />
+                                        <div>
+                                            <h4 className="font-medium">FM Access</h4>
+                                            <p className="text-xs text-muted-foreground">0 objekt synkade</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                        <Button 
+                                            disabled
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                            Starta synk
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">Konfigurera FM Access API först</p>
+                                </div>
+                            </div>
+
+                            {/* Senslinc Sync Section */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Radar className="h-5 w-5 text-primary" />
+                                        <div>
+                                            <h4 className="font-medium">Senslinc</h4>
+                                            <p className="text-xs text-muted-foreground">0 sensorer synkade</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                        <Button 
+                                            disabled
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                            Starta synk
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">Konfigurera Senslinc API först</p>
+                                </div>
+                            </div>
+
+                            {/* Ivion Sync Section */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Zap className="h-5 w-5 text-primary" />
+                                        <div>
+                                            <h4 className="font-medium">Ivion</h4>
+                                            <p className="text-xs text-muted-foreground">0 platser synkade</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                        <Button 
+                                            disabled
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                            Starta synk
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">Konfigurera Ivion API först</p>
+                                </div>
+                            </div>
                         </div>
                     </TabsContent>
                 </Tabs>
