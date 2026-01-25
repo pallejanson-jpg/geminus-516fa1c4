@@ -287,6 +287,7 @@ async function updateSyncState(
 
   if (status === 'running') {
     updateData.last_sync_started_at = new Date().toISOString();
+    updateData.error_message = null; // Clear previous errors when starting new sync
   } else if (status === 'completed') {
     updateData.last_sync_completed_at = new Date().toISOString();
     updateData.error_message = null;

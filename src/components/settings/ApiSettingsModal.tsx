@@ -255,28 +255,37 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleTriggerSync = async () => {
         setIsSyncing(true);
         try {
-            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+            // Fire and forget - the edge function may timeout for large datasets
+            // but continues syncing in batches. We track progress via polling.
+            supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'full-sync' }
+            }).catch((err) => {
+                // Edge function timeout is expected for large datasets
+                console.log('Edge function call ended (may be timeout):', err?.message);
             });
-
-            if (error) throw error;
 
             toast({
                 title: "Sync Started",
-                description: `Syncing data from Asset+...`,
+                description: `Syncing data from Asset+. This may take a few minutes for large datasets.`,
             });
 
-            // Poll for status updates
+            // Poll for status updates - longer duration for large datasets
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
-            }, 2000);
+                // Check if sync completed or failed
+                const latestStatus = syncStatuses.find(s => s.subtree_id === 'full');
+                if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
+                    clearInterval(pollInterval);
+                    setIsSyncing(false);
+                }
+            }, 3000);
 
-            // Stop polling after 30 seconds
+            // Stop polling after 5 minutes max
             setTimeout(() => {
                 clearInterval(pollInterval);
                 setIsSyncing(false);
                 fetchSyncStatus();
-            }, 30000);
+            }, 300000);
 
         } catch (error: any) {
             console.error('Sync error:', error);
