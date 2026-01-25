@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { TreeNode, type NavigatorNode } from "@/components/navigator/TreeNode";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { AddAssetDialog } from "./AddAssetDialog";
 import { X, List, Network } from "lucide-react";
 import { useSearchResults, SearchResult } from "@/hooks/useSearchResults";
 import { SearchResultsList } from "@/components/common/SearchResultsList";
@@ -69,14 +68,12 @@ export default function NavigatorView() {
     refreshInitialData,
     aiSelectedFmGuids,
     clearAiSelection,
+    startAssetRegistration,
+    allData,
   } = useContext(AppContext);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [viewMode, setViewModeLocal] = useState<'tree' | 'list'>('tree');
-  
-  // Add Asset Dialog state
-  const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
-  const [selectedParentNode, setSelectedParentNode] = useState<NavigatorNode | null>(null);
 
   // Search results for list view
   const searchResults = useSearchResults(navigatorTreeData, query, 50);
@@ -107,18 +104,31 @@ export default function NavigatorView() {
   };
 
   const handleAddChild = useCallback((parentNode: NavigatorNode) => {
-    // Open the Add Asset dialog with the parent node (Space)
-    setSelectedParentNode(parentNode);
-    setAddAssetDialogOpen(true);
-  }, []);
+    // Find building fmGuid for the parent node
+    let buildingFmGuid = '';
+    let storeyFmGuid = '';
+    
+    if (parentNode.category === 'Space') {
+      // Find building from the parent's buildingFmGuid attribute
+      const assetData = allData.find((a: any) => a.fmGuid === parentNode.fmGuid);
+      buildingFmGuid = assetData?.buildingFmGuid || '';
+      storeyFmGuid = assetData?.levelFmGuid || '';
+    }
+    
+    if (!buildingFmGuid) {
+      // Fallback: use the space's fmGuid as building
+      buildingFmGuid = parentNode.fmGuid;
+    }
 
-  const handleAssetCreated = useCallback(() => {
-    // Refresh data after asset creation
-    refreshInitialData?.();
-    toast.success('Data updating...', {
-      description: 'Synchronization may take a moment.',
+    // Start the 3D-assisted registration flow
+    startAssetRegistration({
+      parentNode,
+      buildingFmGuid,
+      storeyFmGuid,
+      spaceFmGuid: parentNode.fmGuid,
     });
-  }, [refreshInitialData]);
+  }, [allData, startAssetRegistration]);
+
 
   const handleView = useCallback((node: NavigatorNode) => {
     // Navigate to Portfolio view for buildings
@@ -251,14 +261,6 @@ export default function NavigatorView() {
           )}
         </div>
       </section>
-
-      {/* Add Asset Dialog */}
-      <AddAssetDialog
-        open={addAssetDialogOpen}
-        onOpenChange={setAddAssetDialogOpen}
-        parentNode={selectedParentNode}
-        onAssetCreated={handleAssetCreated}
-      />
     </TooltipProvider>
   );
 }
