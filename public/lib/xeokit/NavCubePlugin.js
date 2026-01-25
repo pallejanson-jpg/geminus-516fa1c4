@@ -1,52 +1,15 @@
 /**
- * NavCubePlugin - Standalone navigation cube for xeokit viewer
- * Based on xeokit-sdk NavCubePlugin but simplified for external use
+ * NavCubePlugin - Professional 3D Navigation Cube for xeokit viewer
  * 
- * This plugin provides a 3D cube gizmo that shows the current camera orientation
- * and allows clicking faces/edges/corners to rotate the camera.
+ * Features:
+ * - Real 3D perspective rendering with proper face sorting
+ * - Smooth hover effects with gradient shading
+ * - Interactive click navigation to fly camera to faces
+ * - Drop shadows and edge highlighting for professional look
+ * - Synchronized camera orientation display
  */
 (function(global) {
   'use strict';
-
-  const math = {
-    vec3: function(values) { return values ? [...values] : [0, 0, 0]; },
-    mat4: function() { return new Float32Array(16); },
-    identityMat4: function(m) {
-      m[0] = 1; m[1] = 0; m[2] = 0; m[3] = 0;
-      m[4] = 0; m[5] = 1; m[6] = 0; m[7] = 0;
-      m[8] = 0; m[9] = 0; m[10] = 1; m[11] = 0;
-      m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
-      return m;
-    },
-    mulMat4: function(a, b, dest) {
-      dest = dest || new Float32Array(16);
-      const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-      const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-      const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-      const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
-      let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
-      dest[0] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
-      dest[1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
-      dest[2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
-      dest[3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
-      b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
-      dest[4] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
-      dest[5] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
-      dest[6] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
-      dest[7] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
-      b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
-      dest[8] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
-      dest[9] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
-      dest[10] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
-      dest[11] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
-      b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
-      dest[12] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
-      dest[13] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
-      dest[14] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
-      dest[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
-      return dest;
-    }
-  };
 
   // Face definitions with camera positions
   const FACES = {
@@ -58,6 +21,22 @@
     left:   { eye: [-1, 0, 0], look: [0, 0, 0], up: [0, 1, 0], label: 'LEFT' }
   };
 
+  // Edge definitions (connecting two faces)
+  const EDGES = [
+    { faces: ['front', 'top'], eye: [0, 0.707, 0.707] },
+    { faces: ['front', 'bottom'], eye: [0, -0.707, 0.707] },
+    { faces: ['front', 'left'], eye: [-0.707, 0, 0.707] },
+    { faces: ['front', 'right'], eye: [0.707, 0, 0.707] },
+    { faces: ['back', 'top'], eye: [0, 0.707, -0.707] },
+    { faces: ['back', 'bottom'], eye: [0, -0.707, -0.707] },
+    { faces: ['back', 'left'], eye: [-0.707, 0, -0.707] },
+    { faces: ['back', 'right'], eye: [0.707, 0, -0.707] },
+    { faces: ['top', 'left'], eye: [-0.707, 0.707, 0] },
+    { faces: ['top', 'right'], eye: [0.707, 0.707, 0] },
+    { faces: ['bottom', 'left'], eye: [-0.707, -0.707, 0] },
+    { faces: ['bottom', 'right'], eye: [0.707, -0.707, 0] }
+  ];
+
   class NavCubePlugin {
     constructor(viewer, cfg = {}) {
       this.viewer = viewer;
@@ -65,17 +44,19 @@
       this._visible = cfg.visible !== false;
       this._cameraFly = cfg.cameraFly !== false;
       this._cameraFlyDuration = cfg.cameraFlyDuration || 0.5;
-      this._synchProjection = cfg.synchProjection || false;
       
-      // Colors
-      this._cubeColor = cfg.color || '#CFCFCF';
-      this._frontColor = cfg.frontColor || '#55FF55';
-      this._backColor = cfg.backColor || '#FF5555';
-      this._leftColor = cfg.leftColor || '#FFAA00';
-      this._rightColor = cfg.rightColor || '#00AAFF';
-      this._topColor = cfg.topColor || '#7777FF';
-      this._bottomColor = cfg.bottomColor || '#FFFF55';
-      this._hoverColor = cfg.hoverColor || '#00AAFF';
+      // Professional color scheme
+      this._faceColors = {
+        front:  cfg.frontColor  || '#4CAF50',  // Green
+        back:   cfg.backColor   || '#E53935',  // Red
+        top:    cfg.topColor    || '#2196F3',  // Blue
+        bottom: cfg.bottomColor || '#FF9800',  // Orange
+        left:   cfg.leftColor   || '#9C27B0',  // Purple
+        right:  cfg.rightColor  || '#00BCD4'   // Cyan
+      };
+      this._hoverColor = cfg.hoverColor || '#FFC107';
+      this._edgeColor = cfg.edgeColor || '#333333';
+      this._shadowColor = 'rgba(0, 0, 0, 0.3)';
       
       this._canvas = document.getElementById(cfg.canvasId);
       if (!this._canvas) {
@@ -85,8 +66,9 @@
       
       this._ctx = this._canvas.getContext('2d');
       this._hoveredFace = null;
-      this._cubeSize = 40;
+      this._cubeSize = 35;
       this._destroyed = false;
+      this._lastProjectedFaces = [];
       
       this._bindEvents();
       this._startRenderLoop();
@@ -97,16 +79,16 @@
       
       this._onMouseMove = (e) => {
         const rect = this._canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) * (this._canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (this._canvas.height / rect.height);
         this._hoveredFace = this._hitTest(x, y);
         this._canvas.style.cursor = this._hoveredFace ? 'pointer' : 'default';
       };
       
       this._onClick = (e) => {
         const rect = this._canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) * (this._canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (this._canvas.height / rect.height);
         const face = this._hitTest(x, y);
         if (face) {
           this._flyToFace(face);
@@ -118,33 +100,46 @@
         this._canvas.style.cursor = 'default';
       };
       
+      // Touch support
+      this._onTouchStart = (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = this._canvas.getBoundingClientRect();
+        const x = (touch.clientX - rect.left) * (this._canvas.width / rect.width);
+        const y = (touch.clientY - rect.top) * (this._canvas.height / rect.height);
+        const face = this._hitTest(x, y);
+        if (face) {
+          this._flyToFace(face);
+        }
+      };
+      
       this._canvas.addEventListener('mousemove', this._onMouseMove);
       this._canvas.addEventListener('click', this._onClick);
       this._canvas.addEventListener('mouseleave', this._onMouseLeave);
+      this._canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
     }
     
     _hitTest(x, y) {
-      const w = this._canvas.width;
-      const h = this._canvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
-      const size = this._cubeSize;
-      
-      // Simple hit regions for cube faces
-      const regions = {
-        front:  { x: cx - size/2, y: cy - size/2, w: size, h: size },
-        top:    { x: cx - size/2, y: cy - size - 10, w: size, h: 15 },
-        bottom: { x: cx - size/2, y: cy + size/2 - 5, w: size, h: 15 },
-        left:   { x: cx - size - 10, y: cy - size/2, w: 15, h: size },
-        right:  { x: cx + size/2 - 5, y: cy - size/2, w: 15, h: size }
-      };
-      
-      for (const [face, r] of Object.entries(regions)) {
-        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-          return face;
+      // Test against rendered faces (back to front, so check front first)
+      for (let i = this._lastProjectedFaces.length - 1; i >= 0; i--) {
+        const face = this._lastProjectedFaces[i];
+        if (this._pointInPolygon(x, y, face.points)) {
+          return face.name;
         }
       }
       return null;
+    }
+    
+    _pointInPolygon(x, y, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x, yi = points[i].y;
+        const xj = points[j].x, yj = points[j].y;
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      return inside;
     }
     
     _flyToFace(faceName) {
@@ -156,7 +151,17 @@
       if (!camera || !scene) return;
       
       // Get scene center and size for positioning
-      const aabb = scene.getAABB ? scene.getAABB() : [-10, -10, -10, 10, 10, 10];
+      let aabb;
+      try {
+        aabb = scene.getAABB ? scene.getAABB() : null;
+      } catch (e) {
+        aabb = null;
+      }
+      
+      if (!aabb) {
+        aabb = [-10, -10, -10, 10, 10, 10];
+      }
+      
       const center = [
         (aabb[0] + aabb[3]) / 2,
         (aabb[1] + aabb[4]) / 2,
@@ -175,6 +180,7 @@
         center[2] + face.eye[2] * dist
       ];
       
+      // Use cameraFlight if available, otherwise set directly
       if (this._cameraFly && this.viewer.cameraFlight) {
         this.viewer.cameraFlight.flyTo({
           eye: eye,
@@ -183,6 +189,7 @@
           duration: this._cameraFlyDuration
         });
       } else {
+        // Direct camera set
         camera.eye = eye;
         camera.look = center;
         camera.up = face.up;
@@ -210,70 +217,84 @@
       const cy = h / 2;
       const size = this._cubeSize;
       
-      // Clear canvas
+      // Clear with transparent background
       ctx.clearRect(0, 0, w, h);
       
-      // Get camera orientation
-      let rotX = 0, rotY = 0;
+      // Get camera orientation from viewer
+      let rotX = -0.5, rotY = 0.7; // Default view angle
       if (this.viewer && this.viewer.camera) {
         const camera = this.viewer.camera;
         const eye = camera.eye;
         const look = camera.look;
-        const dx = eye[0] - look[0];
-        const dy = eye[1] - look[1];
-        const dz = eye[2] - look[2];
-        rotY = Math.atan2(dx, dz);
-        const dist = Math.sqrt(dx*dx + dz*dz);
-        rotX = Math.atan2(dy, dist);
+        if (eye && look) {
+          const dx = eye[0] - look[0];
+          const dy = eye[1] - look[1];
+          const dz = eye[2] - look[2];
+          rotY = Math.atan2(dx, dz);
+          const dist = Math.sqrt(dx * dx + dz * dz);
+          rotX = Math.atan2(dy, dist);
+        }
       }
       
-      // Draw isometric cube based on camera orientation
-      this._drawCube(ctx, cx, cy, size, rotX, rotY);
+      // Draw drop shadow
+      ctx.save();
+      ctx.shadowColor = this._shadowColor;
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
+      
+      // Draw the 3D cube
+      this._drawCube3D(ctx, cx, cy, size, rotX, rotY);
+      
+      ctx.restore();
     }
     
-    _drawCube(ctx, cx, cy, size, rotX, rotY) {
-      // Simplified isometric cube representation
+    _drawCube3D(ctx, cx, cy, size, rotX, rotY) {
       const cosY = Math.cos(rotY);
       const sinY = Math.sin(rotY);
       const cosX = Math.cos(rotX);
       const sinX = Math.sin(rotX);
       
-      // Cube vertices (normalized)
+      // Cube vertices (normalized -1 to 1)
       const vertices = [
-        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // Back face
+        [-1, -1, 1],  [1, -1, 1],  [1, 1, 1],  [-1, 1, 1]   // Front face
       ];
       
-      // Project vertices
+      // Project vertices to 2D with perspective
       const projected = vertices.map(v => {
-        // Rotate around Y
+        // Rotate around Y axis
         let x = v[0] * cosY - v[2] * sinY;
         let z = v[0] * sinY + v[2] * cosY;
         let y = v[1];
         
-        // Rotate around X  
+        // Rotate around X axis
         const y2 = y * cosX - z * sinX;
         z = y * sinX + z * cosX;
         y = y2;
         
-        // Isometric projection
+        // Perspective projection
+        const perspective = 3;
+        const scale = perspective / (perspective + z * 0.3);
+        
         return {
-          x: cx + x * size * 0.5,
-          y: cy - y * size * 0.5 + z * size * 0.1
+          x: cx + x * size * scale,
+          y: cy - y * size * scale,
+          z: z
         };
       });
       
-      // Faces with vertex indices and colors
+      // Face definitions with vertex indices
       const faces = [
-        { verts: [0, 1, 2, 3], color: this._backColor, name: 'back', normal: [0, 0, -1] },
-        { verts: [4, 5, 6, 7], color: this._frontColor, name: 'front', normal: [0, 0, 1] },
-        { verts: [3, 2, 6, 7], color: this._topColor, name: 'top', normal: [0, 1, 0] },
-        { verts: [0, 1, 5, 4], color: this._bottomColor, name: 'bottom', normal: [0, -1, 0] },
-        { verts: [0, 3, 7, 4], color: this._leftColor, name: 'left', normal: [-1, 0, 0] },
-        { verts: [1, 2, 6, 5], color: this._rightColor, name: 'right', normal: [1, 0, 0] }
+        { verts: [0, 1, 2, 3], name: 'back', normal: [0, 0, -1] },
+        { verts: [4, 7, 6, 5], name: 'front', normal: [0, 0, 1] },
+        { verts: [3, 2, 6, 7], name: 'top', normal: [0, 1, 0] },
+        { verts: [0, 4, 5, 1], name: 'bottom', normal: [0, -1, 0] },
+        { verts: [0, 3, 7, 4], name: 'left', normal: [-1, 0, 0] },
+        { verts: [1, 5, 6, 2], name: 'right', normal: [1, 0, 0] }
       ];
       
-      // Calculate face visibility and sort by depth
+      // Calculate face visibility and depth, then sort
       const visibleFaces = faces.map(f => {
         // Rotate normal
         let nx = f.normal[0] * cosY - f.normal[2] * sinY;
@@ -282,41 +303,122 @@
         const ny2 = ny * cosX - nz * sinX;
         nz = ny * sinX + nz * cosX;
         
-        return { ...f, depth: nz, visible: nz > -0.1 };
+        // Calculate center depth
+        const centerZ = f.verts.reduce((sum, i) => sum + projected[i].z, 0) / 4;
+        
+        // Get projected points
+        const points = f.verts.map(i => ({ x: projected[i].x, y: projected[i].y }));
+        
+        return { ...f, depth: centerZ, visible: nz > -0.15, points };
       }).filter(f => f.visible).sort((a, b) => a.depth - b.depth);
       
-      // Draw faces
+      // Store for hit testing
+      this._lastProjectedFaces = visibleFaces;
+      
+      // Draw faces back to front
       visibleFaces.forEach(face => {
+        const points = face.points;
+        const isHovered = this._hoveredFace === face.name;
+        
+        // Create path
         ctx.beginPath();
-        const p0 = projected[face.verts[0]];
-        ctx.moveTo(p0.x, p0.y);
-        for (let i = 1; i < face.verts.length; i++) {
-          const p = projected[face.verts[i]];
-          ctx.lineTo(p.x, p.y);
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
         }
         ctx.closePath();
         
-        // Fill color (highlight if hovered)
-        ctx.fillStyle = this._hoveredFace === face.name ? this._hoverColor : face.color;
+        // Fill with gradient for 3D effect
+        const baseColor = isHovered ? this._hoverColor : this._faceColors[face.name];
+        const gradient = this._createFaceGradient(ctx, points, baseColor, face.depth);
+        ctx.fillStyle = gradient;
         ctx.fill();
         
-        // Outline
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
+        // Draw edges
+        ctx.strokeStyle = this._edgeColor;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
         
-        // Face label
-        const centerX = face.verts.reduce((sum, i) => sum + projected[i].x, 0) / 4;
-        const centerY = face.verts.reduce((sum, i) => sum + projected[i].y, 0) / 4;
-        
-        ctx.fillStyle = '#333';
-        ctx.font = 'bold 8px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        const labels = { front: 'F', back: 'B', top: 'T', bottom: 'Bo', left: 'L', right: 'R' };
-        ctx.fillText(labels[face.name] || '', centerX, centerY);
+        // Draw face label
+        this._drawFaceLabel(ctx, points, face.name, isHovered);
       });
+    }
+    
+    _createFaceGradient(ctx, points, baseColor, depth) {
+      // Calculate bounding box
+      const minX = Math.min(...points.map(p => p.x));
+      const maxX = Math.max(...points.map(p => p.x));
+      const minY = Math.min(...points.map(p => p.y));
+      const maxY = Math.max(...points.map(p => p.y));
+      
+      const gradient = ctx.createLinearGradient(minX, minY, maxX, maxY);
+      
+      // Parse base color and create lighter/darker variants
+      const lighterColor = this._adjustColorBrightness(baseColor, 30);
+      const darkerColor = this._adjustColorBrightness(baseColor, -20);
+      
+      gradient.addColorStop(0, lighterColor);
+      gradient.addColorStop(1, darkerColor);
+      
+      return gradient;
+    }
+    
+    _adjustColorBrightness(hex, percent) {
+      // Remove # if present
+      hex = hex.replace(/^#/, '');
+      
+      // Parse RGB
+      let r = parseInt(hex.substr(0, 2), 16);
+      let g = parseInt(hex.substr(2, 2), 16);
+      let b = parseInt(hex.substr(4, 2), 16);
+      
+      // Adjust brightness
+      r = Math.min(255, Math.max(0, r + (r * percent / 100)));
+      g = Math.min(255, Math.max(0, g + (g * percent / 100)));
+      b = Math.min(255, Math.max(0, b + (b * percent / 100)));
+      
+      // Convert back to hex
+      return '#' + 
+        Math.round(r).toString(16).padStart(2, '0') +
+        Math.round(g).toString(16).padStart(2, '0') +
+        Math.round(b).toString(16).padStart(2, '0');
+    }
+    
+    _drawFaceLabel(ctx, points, faceName, isHovered) {
+      // Calculate center of face
+      const centerX = points.reduce((sum, p) => sum + p.x, 0) / points.length;
+      const centerY = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+      
+      // Calculate face size for font scaling
+      const width = Math.abs(points[1].x - points[0].x) + Math.abs(points[2].x - points[1].x);
+      const fontSize = Math.max(8, Math.min(12, width / 4));
+      
+      // Draw label with shadow for readability
+      ctx.save();
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Label text
+      const labels = {
+        front: 'F',
+        back: 'B', 
+        top: 'T',
+        bottom: 'Bo',
+        left: 'L',
+        right: 'R'
+      };
+      const label = labels[faceName] || '';
+      
+      // Text shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillText(label, centerX + 1, centerY + 1);
+      
+      // Text
+      ctx.fillStyle = isHovered ? '#000000' : '#FFFFFF';
+      ctx.fillText(label, centerX, centerY);
+      
+      ctx.restore();
     }
     
     setVisible(visible) {
@@ -336,6 +438,7 @@
         this._canvas.removeEventListener('mousemove', this._onMouseMove);
         this._canvas.removeEventListener('click', this._onClick);
         this._canvas.removeEventListener('mouseleave', this._onMouseLeave);
+        this._canvas.removeEventListener('touchstart', this._onTouchStart);
       }
     }
   }
