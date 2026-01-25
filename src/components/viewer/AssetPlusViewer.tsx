@@ -450,41 +450,33 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       console.debug("Could not enable annotations:", e);
     }
 
-    // Initialize NavCube - try multiple approaches
+    // Initialize NavCube using custom plugin
     try {
       const viewer = viewerInstanceRef.current;
       const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const NavCubePlugin = (window as any).NavCubePlugin;
       
-      if (xeokitViewer && !navCubeRef.current) {
+      if (xeokitViewer && NavCubePlugin && !navCubeRef.current) {
         const navCubeCanvas = document.getElementById('navCubeCanvas') as HTMLCanvasElement;
         if (navCubeCanvas) {
-          // Try to get NavCubePlugin from xeokit global or from viewer's scene
-          const NavCubePlugin = (window as any).xeokit?.NavCubePlugin 
-            || (window as any).NavCubePlugin
-            || xeokitViewer.plugins?.NavCubePlugin?.constructor;
-          
-          if (NavCubePlugin) {
-            navCubeRef.current = new NavCubePlugin(xeokitViewer, {
-              canvasId: 'navCubeCanvas',
-              visible: true,
-              cameraFly: true,
-              cameraFlyDuration: 0.5,
-              fitVisible: false,
-              synchProjection: false,
-              color: '#CFCFCF',
-              frontColor: '#55FF55',
-              backColor: '#FF5555',
-              leftColor: '#FF5555',
-              rightColor: '#55FF55',
-              topColor: '#7777FF',
-              bottomColor: '#FFFF55',
-              hoverColor: '#00AAFF',
-            });
-            console.log("NavCube initialized successfully");
-          } else {
-            console.log("NavCubePlugin not available - xeokit SDK may not be loaded");
-          }
+          navCubeRef.current = new NavCubePlugin(xeokitViewer, {
+            canvasId: 'navCubeCanvas',
+            visible: showNavCube,
+            cameraFly: true,
+            cameraFlyDuration: 0.5,
+            color: '#CFCFCF',
+            frontColor: '#55FF55',
+            backColor: '#FF5555',
+            leftColor: '#FFAA00',
+            rightColor: '#00AAFF',
+            topColor: '#7777FF',
+            bottomColor: '#FFFF55',
+            hoverColor: '#00FFFF',
+          });
+          console.log("NavCube initialized successfully");
         }
+      } else if (!NavCubePlugin) {
+        console.debug("NavCubePlugin not loaded yet");
       }
     } catch (e) {
       console.debug("Could not initialize NavCube:", e);
@@ -508,7 +500,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
       }
     }
-  }, [executeDisplayAction, cacheStatus]);
+  }, [executeDisplayAction, cacheStatus, showNavCube]);
+
+  // Sync NavCube visibility with state
+  useEffect(() => {
+    if (navCubeRef.current) {
+      navCubeRef.current.setVisible(showNavCube);
+    }
+  }, [showNavCube]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
@@ -922,6 +921,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
           {/* NavCube canvas - positioned in bottom-right corner */}
           <canvas 
             id="navCubeCanvas" 
+            width={120}
+            height={120}
             style={{
               position: 'absolute',
               bottom: '80px',
@@ -930,8 +931,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
               height: '120px',
               zIndex: 25,
               display: showNavCube ? 'block' : 'none',
-              background: 'transparent',
+              background: 'rgba(0,0,0,0.3)',
               borderRadius: '8px',
+              backdropFilter: 'blur(4px)',
             }}
           />
 
