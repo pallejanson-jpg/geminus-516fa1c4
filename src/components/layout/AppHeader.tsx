@@ -167,7 +167,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 <AppButton
                     onClick={toggleRightSidebar}
                     variant="ghost"
-                    className="hidden sm:flex h-10 w-10"
+                    className="h-9 w-9 sm:h-10 sm:w-10"
                     title="Help Center"
                 >
                     <HelpCircle size={18} />
