@@ -430,9 +430,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
       setCacheStatus('stored');
     }
 
-    // Note: NavCube is not available in this Asset+ package version
-    // The xeokit NavCubePlugin would need to be loaded separately
-    // For now, navigation is handled through the custom toolbar
+    // Enable annotations after models are loaded
+    try {
+      const viewer = viewerInstanceRef.current;
+      const assetViewer = viewer?.assetViewer;
+      if (assetViewer?.onToggleAnnotation) {
+        // Enable annotation visibility
+        assetViewer.onToggleAnnotation(true);
+        console.log("Annotations enabled");
+        
+        // Fetch existing annotations
+        if (assetViewer.getAnnotations) {
+          assetViewer.getAnnotations();
+        }
+      }
+    } catch (e) {
+      console.debug("Could not enable annotations:", e);
+    }
 
     if (deferredFmGuidForDisplayRef.current) {
       console.log("allModelsLoadedCallback - got an FMGUID to look at");
@@ -452,8 +466,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
         viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
       }
     }
-
-    // Silent success - no toast needed
   }, [executeDisplayAction, cacheStatus]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
@@ -836,17 +848,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose }) =>
             }}
           />
 
-          {/* Status overlay (shows while init is running and while models are loading) */}
+          {/* Loading spinner overlay (shows while init is running and while models are loading) */}
           {(!state.isInitialized || state.isLoading || initStep !== 'ready') && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-              <div className="max-w-md w-[92%] sm:w-[420px] rounded-lg border bg-card p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="font-medium">Loading 3D model...</p>
-                  </div>
-                </div>
-              </div>
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           )}
           
