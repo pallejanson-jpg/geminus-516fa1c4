@@ -318,8 +318,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl h-[85vh] flex flex-col">
-                <DialogHeader className="flex-shrink-0">
+            <DialogContent className="sm:max-w-2xl h-full sm:h-[85vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0 pr-8">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
                         App & API Settings
@@ -399,8 +399,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                         
                                         <div className="grid gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">URL</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">URL</Label>
                                                 <Input
                                                     value={cfg.url || ''}
                                                     onChange={(e) => {
@@ -410,12 +410,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         });
                                                     }}
                                                     placeholder="https://app.example.com"
-                                                    className="h-8 text-sm"
+                                                    className="h-11 text-base"
                                                 />
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Username</Label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-sm font-medium">Username</Label>
                                                     <Input
                                                         value={cfg.username || ''}
                                                         onChange={(e) => {
@@ -425,11 +425,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             });
                                                         }}
                                                         placeholder="user@example.com"
-                                                        className="h-8 text-sm"
+                                                        className="h-11 text-base"
                                                     />
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Password</Label>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-sm font-medium">Password</Label>
                                                     <Input
                                                         type="password"
                                                         value={cfg.password || ''}
@@ -440,7 +440,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             });
                                                         }}
                                                         placeholder="••••••••"
-                                                        className="h-8 text-sm"
+                                                        className="h-11 text-base"
                                                     />
                                                 </div>
                                             </div>
@@ -510,102 +510,101 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                     </div>
 
-                                    <div className="grid gap-3">
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">OpenID Token Endpoint</Label>
+                                    <div className="grid gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">OpenID Token Endpoint</Label>
                                                 <Input
                                                     value={config.keycloakUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
                                                     placeholder="https://sso.example.com/realms/xxx/..."
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">API URL</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">API URL</Label>
                                                 <Input
                                                     value={config.apiUrl}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                                                     placeholder="https://api.example.com"
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Client ID</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">Client ID</Label>
                                                 <Input
                                                     value={config.clientId}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
                                                     placeholder="asset-api"
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Client Secret</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">Client Secret</Label>
                                                 <Input
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
                                                     placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Username</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">Username</Label>
                                                 <Input
                                                     value={config.username}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
                                                     placeholder="service-user@example.com"
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Password</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">Password</Label>
                                                 <Input
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.password === '••••••••' ? '' : config.password}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
                                                     placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">API Key</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-sm font-medium">API Key</Label>
                                                 <Input
                                                     type={showSecrets ? "text" : "password"}
                                                     value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
                                                     onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
                                                     placeholder={isEditMode ? "Enter new value..." : "••••••••"}
                                                     disabled={!isEditMode}
-                                                    className={`h-8 text-sm ${!isEditMode ? "bg-muted" : ""}`}
+                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
                                                 />
                                             </div>
-                                            <div className="space-y-1 flex items-end">
+                                            <div className="space-y-1.5 flex items-end">
                                                 <Button
                                                     onClick={handleTestConnection}
                                                     disabled={isTestingConnection || isEditMode}
                                                     variant="outline"
-                                                    size="sm"
-                                                    className="gap-1 h-8 text-xs"
+                                                    className="gap-2 h-11"
                                                 >
                                                     {isTestingConnection ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
                                                     ) : (
-                                                        <Zap className="h-3 w-3" />
+                                                        <Zap className="h-4 w-4" />
                                                     )}
                                                     {isTestingConnection ? 'Testing...' : 'Test Connection'}
                                                 </Button>
