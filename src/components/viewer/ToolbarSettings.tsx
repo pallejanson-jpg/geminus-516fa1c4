@@ -48,6 +48,7 @@ const DEFAULT_TOOLS: ToolConfig[] = [
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
   { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
+  { id: 'treeView', label: 'Modellträd', visible: true, inOverflow: false },
   { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: true },
   { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: true },
   { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: true },
@@ -65,11 +66,23 @@ export const getToolbarSettings = (): ToolConfig[] => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge with defaults to handle new tools
-      return DEFAULT_TOOLS.map(defaultTool => {
-        const stored = parsed.find((t: ToolConfig) => t.id === defaultTool.id);
-        return stored || defaultTool;
+      // Merge with defaults to handle new tools - add missing tools at end
+      const mergedTools = DEFAULT_TOOLS.map(defaultTool => {
+        const storedTool = parsed.find((t: ToolConfig) => t.id === defaultTool.id);
+        return storedTool || defaultTool;
       });
+      
+      // Check if any new tools were added (not in stored settings)
+      const hasNewTools = DEFAULT_TOOLS.some(
+        dt => !parsed.find((t: ToolConfig) => t.id === dt.id)
+      );
+      
+      // If new tools were added, save the merged settings
+      if (hasNewTools) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedTools));
+      }
+      
+      return mergedTools;
     }
   } catch (e) {
     console.warn('Failed to load toolbar settings:', e);
