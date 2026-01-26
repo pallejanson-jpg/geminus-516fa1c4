@@ -1,16 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
-import { Loader2, AlertCircle, X, Filter, ChevronDown } from 'lucide-react';
+import { Loader2, AlertCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
@@ -46,8 +40,6 @@ interface ViewerState {
   } | null;
 }
 
-type ModelFilter = 'all' | 'a-prefix' | 'buildings-only';
-
 type InitStep =
   | 'idle'
   | 'wait_dom'
@@ -60,12 +52,6 @@ type InitStep =
   | 'error';
 
 type ModelLoadState = 'idle' | 'requested' | 'loaded';
-
-const MODEL_FILTERS: { value: ModelFilter; label: string; description: string }[] = [
-  { value: 'all', label: 'All models', description: 'Show all available models' },
-  { value: 'a-prefix', label: 'Models (a-prefix)', description: 'Models starting with "a"' },
-  { value: 'buildings-only', label: 'Buildings only', description: 'Show only building models' },
-];
 
 // Default camera settings from external_viewer.html
 const defaultHeightAboveAABB = 1;
@@ -107,8 +93,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [cacheStatus, setCacheStatus] = useState<'checking' | 'hit' | 'miss' | 'stored' | null>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const [showNavCube, setShowNavCube] = useState(true);
-  
-  const [modelFilter, setModelFilter] = useState<ModelFilter>('a-prefix');
 
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
@@ -131,23 +115,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
-
-
-  // Get model filter predicate based on selection (matches external_viewer.html pattern)
-  const getModelPredicate = useCallback((filter: ModelFilter) => {
-    switch (filter) {
-      case 'a-prefix':
-        return (model: any) => (model?.name || "").toLowerCase().startsWith("a");
-      case 'buildings-only':
-        return (model: any) => {
-          const name = (model?.name || "").toLowerCase();
-          return name.includes("building") || name.includes("byggnad") || model?.type === 0;
-        };
-      case 'all':
-      default:
-        return () => true;
-    }
-  }, []);
 
   // Helper: Get item IDs by FmGuid
   const getItemIdsByFmGuid = useCallback((fmGuidToFind: string) => {
@@ -885,8 +852,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // additionalDefaultPredicate - model filter (matches external_viewer.html default)
-        getModelPredicate(modelFilter),
+        // additionalDefaultPredicate - show models with 'a' prefix by default
+        (model: any) => (model?.name || "").toLowerCase().startsWith("a"),
         // Custom object context menu items
         [],
         // Horizontal and vertical default angles (undefined for defaults)
@@ -956,7 +923,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         error: error instanceof Error ? error.message : 'Could not load 3D viewer',
       }));
     }
-  }, [fmGuid, assetData, modelFilter, getModelPredicate, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
+  }, [fmGuid, assetData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = React.useRef(true);
@@ -1005,70 +972,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   }, [initializeViewer, restoreFetch]);
 
   // Viewer uses built-in Asset+ controls - no custom handlers needed
-
-  const handleFilterChange = useCallback((filter: ModelFilter) => {
-    setModelFilter(filter);
-    
-    // Cleanup current viewer safely before reinitializing
-    try {
-      const viewer = viewerInstanceRef.current;
-      if (viewer) {
-        const assetView = viewer.$refs?.AssetViewer?.$refs?.assetView;
-        const scene = assetView?.viewer?.scene;
-        
-        if (scene && typeof viewer.clearData === 'function') {
-          viewer.clearData();
-        }
-      }
-    } catch (e) {
-      console.debug('Filter change cleanup:', e);
-    }
-    
-    // Restore fetch before reinitializing
-    restoreFetch();
-    
-    // Reset all state for fresh initialization
-    viewerInstanceRef.current = null;
-    deferCallsRef.current = true;
-    setState(prev => ({ ...prev, isInitialized: false, isLoading: true, error: null }));
-    setInitStep('idle');
-    setModelLoadState('idle');
-    setCacheStatus(null);
-    
-    // Trigger reinitialization after state reset
-    setTimeout(() => {
-      initializeViewer();
-    }, 100);
-  }, [restoreFetch, initializeViewer]);
-
-  // Model filter dropdown
-  const FilterDropdown = () => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="secondary" size="sm" className="gap-2">
-          <Filter className="h-4 w-4" />
-          <span className="hidden sm:inline">
-            {MODEL_FILTERS.find(f => f.value === modelFilter)?.label || 'Filter'}
-          </span>
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {MODEL_FILTERS.map((filter) => (
-          <DropdownMenuItem
-            key={filter.value}
-            onClick={() => handleFilterChange(filter.value)}
-            className={modelFilter === filter.value ? 'bg-accent' : ''}
-          >
-            <div>
-              <div className="font-medium">{filter.label}</div>
-              <div className="text-xs text-muted-foreground">{filter.description}</div>
-            </div>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 
   // Show error state
   if (state.error) {
@@ -1156,7 +1059,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             )}
             {!onClose && <div />}
             
-            {/* Filter and annotations - right side */}
+            {/* Annotations toggle - right side (removed FilterDropdown) */}
             <div className="flex gap-1.5 pointer-events-auto">
               {state.isInitialized && (
                 <AnnotationToggleMenu 
@@ -1164,7 +1067,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                   buildingFmGuid={fmGuid}
                 />
               )}
-              <FilterDropdown />
             </div>
           </div>
 

@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -965,6 +965,55 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 className="h-8 text-sm bg-muted"
                                             />
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Faciliate API Section */}
+                                <div className="border rounded-lg p-4 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Wrench className="h-5 w-5 text-orange-500" />
+                                            <h4 className="font-medium">Faciliate</h4>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                            FM System
+                                        </Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Integration med Faciliate för arbetsorder och underhållshantering.
+                                        Konfigureras via REST API med JWT eller Basic Auth.
+                                    </p>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">API Base URL</Label>
+                                            <Input
+                                                placeholder="https://faciliate.example.com/api/v2"
+                                                disabled
+                                                className="h-8 text-sm bg-muted"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Username</Label>
+                                                <Input
+                                                    placeholder="api-user"
+                                                    disabled
+                                                    className="h-8 text-sm bg-muted"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Password / Token</Label>
+                                                <Input
+                                                    type="password"
+                                                    placeholder="••••••••"
+                                                    disabled
+                                                    className="h-8 text-sm bg-muted"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                                        <strong>Endpoints:</strong> /workorder, /building, /customer
                                     </div>
                                 </div>
                             </div>
