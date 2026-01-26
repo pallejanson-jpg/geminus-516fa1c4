@@ -270,7 +270,7 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh]">
+      <DialogContent className="w-full sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Anpassa verktygsfält</DialogTitle>
         </DialogHeader>
@@ -279,7 +279,7 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
           Dra för att ändra ordning. Välj vilka verktyg som ska vara synliga och vilka som ska ligga i övermenyn.
         </p>
 
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="flex-1 max-h-[50vh] sm:max-h-[400px] pr-4">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -300,12 +300,12 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
           </DndContext>
         </ScrollArea>
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleReset}>
+        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+          <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
             <RotateCcw className="h-4 w-4 mr-2" />
             Återställ
           </Button>
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} className="w-full sm:w-auto">
             <Save className="h-4 w-4 mr-2" />
             Spara
           </Button>
