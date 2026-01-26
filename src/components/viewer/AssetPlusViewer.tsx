@@ -19,7 +19,6 @@ import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
-import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 
 interface AssetPlusViewerProps {
@@ -1217,20 +1216,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             </>
           )}
 
-          {/* Add Asset Dialog with coordinates */}
-          <AddAssetDialog
-            open={addAssetDialogOpen}
-            onOpenChange={setAddAssetDialogOpen}
-            parentNode={addAssetParentNode}
-            onAssetCreated={handleAssetCreated}
-            initialCoordinates={pickedCoordinates || undefined}
-          />
-          
-          {/* Properties Dialog - floating, dockable */}
+          {/* Properties Dialog - floating, dockable, supports both view/edit and create modes */}
           <AssetPropertiesDialog
-            isOpen={propertiesDialogOpen}
-            onClose={() => setPropertiesDialogOpen(false)}
-            selectedFmGuids={selectedFmGuids}
+            isOpen={propertiesDialogOpen || addAssetDialogOpen}
+            onClose={() => {
+              setPropertiesDialogOpen(false);
+              setAddAssetDialogOpen(false);
+              setPickedCoordinates(null);
+            }}
+            selectedFmGuids={addAssetDialogOpen ? [] : selectedFmGuids}
+            onUpdate={handleAssetCreated}
+            // Create mode props
+            createMode={addAssetDialogOpen}
+            parentSpaceFmGuid={addAssetParentNode?.fmGuid || null}
+            buildingFmGuid={buildingFmGuid || null}
+            levelFmGuid={assetData?.levelFmGuid || null}
+            initialCoordinates={pickedCoordinates}
+            onPickCoordinates={handleTogglePickMode}
+            isPickingCoordinates={isPickMode}
           />
           
           {/* Toolbar Settings Modal */}
