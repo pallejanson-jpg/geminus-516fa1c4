@@ -37,6 +37,14 @@ interface SyncStatus {
     error_message: string | null;
 }
 
+interface SyncCheckResult {
+    inSync: boolean;
+    localCount: number;
+    remoteCount: number;
+    modifiedSinceLastSync: number;
+    lastSyncAt: string | null;
+}
+
 interface ConfigState {
     keycloakUrl: string;
     apiUrl: string;
@@ -67,6 +75,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
+    const [syncCheck, setSyncCheck] = useState<SyncCheckResult | null>(null);
+    const [isCheckingSync, setIsCheckingSync] = useState(false);
     
     // Config form state
     const [config, setConfig] = useState<ConfigState>({
@@ -160,10 +170,72 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Check sync status against Asset+
+    const checkSyncStatus = async () => {
+        setIsCheckingSync(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'check-sync-status' }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                setSyncCheck(data as SyncCheckResult);
+            }
+        } catch (error) {
+            console.error('Failed to check sync status:', error);
+        } finally {
+            setIsCheckingSync(false);
+        }
+    };
+
+    // Trigger incremental sync
+    const handleIncrementalSync = async () => {
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'incremental-sync' }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Inkrementell synk startad",
+                description: "Synkar endast ändrade objekt sedan senaste synk.",
+            });
+
+            // Poll for status
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                const latestStatus = syncStatuses.find(s => s.subtree_id === 'full');
+                if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
+                    clearInterval(pollInterval);
+                    setIsSyncing(false);
+                    checkSyncStatus(); // Refresh sync check
+                }
+            }, 3000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 300000);
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Sync Failed",
+                description: error.message,
+            });
+            setIsSyncing(false);
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
             fetchSyncStatus();
             fetchConfig();
+            checkSyncStatus();
             setConnectionStatus('idle');
             setConnectionMessage('');
             setIsEditMode(false);
@@ -745,29 +817,82 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             {/* Asset+ Sync Section */}
                             <div className="border rounded-lg p-4 space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-3">
                                         <Box className="h-5 w-5 text-primary" />
                                         <div>
-                                            <h4 className="font-medium">Asset+</h4>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-medium">Asset+</h4>
+                                                {/* Sync status indicator */}
+                                                {isCheckingSync ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                                ) : syncCheck ? (
+                                                    syncCheck.inSync ? (
+                                                        <Badge variant="default" className="bg-green-600 text-xs gap-1">
+                                                            <CheckCircle2 className="h-3 w-3" />
+                                                            I synk
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="destructive" className="text-xs gap-1">
+                                                            <AlertCircle className="h-3 w-3" />
+                                                            {syncCheck.modifiedSinceLastSync > 0 
+                                                                ? `${syncCheck.modifiedSinceLastSync} ändringar` 
+                                                                : 'Ej synkad'}
+                                                        </Badge>
+                                                    )
+                                                ) : null}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">
-                                                {assetCount.toLocaleString()} assets i lokal databas
+                                                {assetCount.toLocaleString()} lokala • {syncCheck?.remoteCount?.toLocaleString() || '?'} i Asset+
                                             </p>
                                         </div>
                                     </div>
-                                    <Button 
-                                        onClick={handleTriggerSync} 
-                                        disabled={isSyncing}
-                                        size="sm"
-                                        className="gap-1 h-8 text-xs"
-                                    >
-                                        {isSyncing ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                            <RefreshCw className="h-3 w-3" />
-                                        )}
-                                        {isSyncing ? 'Synkar...' : 'Starta synk'}
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            onClick={checkSyncStatus}
+                                            disabled={isCheckingSync}
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            {isCheckingSync ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 className="h-3 w-3" />
+                                            )}
+                                            Kontrollera
+                                        </Button>
+                                        <Button 
+                                            onClick={syncCheck?.inSync ? handleIncrementalSync : handleTriggerSync} 
+                                            disabled={isSyncing}
+                                            size="sm"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            {isSyncing ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="h-3 w-3" />
+                                            )}
+                                            {isSyncing ? 'Synkar...' : (syncCheck?.inSync ? 'Uppdatera' : 'Full synk')}
+                                        </Button>
+                                    </div>
                                 </div>
+
+                                {/* Sync info card */}
+                                {syncCheck && !syncCheck.inSync && (
+                                    <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 p-3">
+                                        <div className="flex items-start gap-2">
+                                            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
+                                            <div className="text-sm">
+                                                <p className="font-medium text-amber-800 dark:text-amber-200">Synkronisering rekommenderas</p>
+                                                <p className="text-xs text-amber-700 dark:text-amber-300">
+                                                    {syncCheck.modifiedSinceLastSync > 0 
+                                                        ? `${syncCheck.modifiedSinceLastSync} objekt har ändrats i Asset+ sedan ${formatDate(syncCheck.lastSyncAt)}`
+                                                        : `Lokal databas (${syncCheck.localCount}) matchar inte Asset+ (${syncCheck.remoteCount})`}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {syncStatuses.length === 0 ? (
                                     <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
