@@ -12,6 +12,7 @@ import AnnotationToggleMenu from './AnnotationToggleMenu';
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
+import RoomVisualizationPanel from './RoomVisualizationPanel';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
@@ -105,6 +106,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const [showTreePanel, setShowTreePanel] = useState(false);
+  const [showVisualizationPanel, setShowVisualizationPanel] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
   
   // Flash highlighting hook
@@ -1117,11 +1119,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 onToggleMinimap={(visible) => setShowMinimap(visible)}
                 onToggleNavCube={(visible) => setShowNavCube(visible)}
                 onToggleTreeView={(visible) => setShowTreePanel(visible)}
+                onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
                 onPickCoordinate={handleTogglePickMode}
                 onShowProperties={() => setPropertiesDialogOpen(true)}
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
                 isPickMode={isPickMode}
                 showTreeView={showTreePanel}
+                showVisualization={showVisualizationPanel}
               />
               
               {/* Tree View Panel */}
@@ -1169,6 +1173,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 onFloorSelect={handleFloorSelect}
                 selectedFloorId={selectedFloorId || undefined}
               />
+              
+              {/* Room Visualization Panel */}
+              {showVisualizationPanel && buildingFmGuid && (
+                <RoomVisualizationPanel
+                  viewerRef={viewerInstanceRef}
+                  buildingFmGuid={buildingFmGuid}
+                  onClose={() => setShowVisualizationPanel(false)}
+                />
+              )}
             </>
           )}
 
