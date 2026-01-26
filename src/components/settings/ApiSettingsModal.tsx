@@ -99,6 +99,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSaving, setIsSaving] = useState(false);
     const [isSavingApps, setIsSavingApps] = useState(false);
     const [originalConfig, setOriginalConfig] = useState<ConfigState | null>(null);
+    const [favoriteBuildings, setFavoriteBuildings] = useState<any[]>([]);
 
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
@@ -189,6 +190,101 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Fetch favorite building(s)
+    const fetchFavoriteBuildings = async () => {
+        try {
+            const { data: favorites, error: favError } = await supabase
+                .from('building_settings')
+                .select('fm_guid')
+                .eq('is_favorite', true);
+
+            if (favError) throw favError;
+
+            if (favorites && favorites.length > 0) {
+                // Get building details for favorite buildings
+                const fmGuids = favorites.map(f => f.fm_guid);
+                const { data: buildings, error: buildError } = await supabase
+                    .from('assets')
+                    .select('fm_guid, common_name, name')
+                    .in('fm_guid', fmGuids)
+                    .eq('category', 'Building');
+
+                if (buildError) throw buildError;
+                setFavoriteBuildings(buildings || []);
+            } else {
+                // No favorites, get first building
+                const { data: firstBuilding, error: buildError } = await supabase
+                    .from('assets')
+                    .select('fm_guid, common_name, name')
+                    .eq('category', 'Building')
+                    .limit(1)
+                    .single();
+
+                if (buildError) throw buildError;
+                if (firstBuilding) {
+                    setFavoriteBuildings([firstBuilding]);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch favorite buildings:', error);
+        }
+    };
+
+    // Trigger building sync
+    const handleBuildingSync = async () => {
+        if (favoriteBuildings.length === 0) {
+            toast({
+                variant: "destructive",
+                title: "Ingen byggnad",
+                description: "Kunde inte hitta någon byggnad att synkronisera.",
+            });
+            return;
+        }
+
+        const buildingFmGuid = favoriteBuildings[0].fm_guid;
+        const buildingName = favoriteBuildings[0].common_name || favoriteBuildings[0].name;
+
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'building-sync', buildingFmGuid }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Byggnadssynk startad",
+                description: `Synkar ${buildingName} med byggnadsplan och rum.`,
+            });
+
+            // Poll for status
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                const latestStatus = syncStatuses.find(s => s.subtree_id === buildingFmGuid);
+                if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
+                    clearInterval(pollInterval);
+                    setIsSyncing(false);
+                    checkSyncStatus();
+                }
+            }, 3000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 300000);
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Synk misslyckades",
+                description: error.message,
+            });
+            setIsSyncing(false);
+        }
+    };
+
     // Trigger incremental sync
     const handleIncrementalSync = async () => {
         setIsSyncing(true);
@@ -237,6 +333,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             fetchSyncStatus();
             fetchConfig();
             checkSyncStatus();
+            fetchFavoriteBuildings();
             setConnectionStatus('idle');
             setConnectionMessage('');
             setIsEditMode(false);
@@ -874,7 +971,21 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             Kontrollera
                                         </Button>
                                         <Button 
-                                            onClick={syncCheck?.inSync ? handleIncrementalSync : handleTriggerSync} 
+                                            onClick={handleBuildingSync}
+                                            disabled={isSyncing || favoriteBuildings.length === 0}
+                                            size="sm"
+                                            variant="secondary"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            {isSyncing ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <Building2 className="h-3 w-3" />
+                                            )}
+                                            {isSyncing ? 'Synkar...' : 'Synka Byggnad'}
+                                        </Button>
+                                        <Button 
+                                            onClick={syncCheck?.inSync ? handleIncrementalSync : handleTriggerSync}
                                             disabled={isSyncing}
                                             size="sm"
                                             className="gap-1 h-8 text-xs"
