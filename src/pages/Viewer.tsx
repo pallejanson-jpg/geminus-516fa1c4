@@ -14,7 +14,7 @@ export default function Viewer() {
   // If we have a selected FMGUID, show the Asset+ viewer
   if (viewer3dFmGuid) {
     return (
-      <div className="h-full p-2 sm:p-4 md:p-6">
+      <div className="h-full">
         <AssetPlusViewer fmGuid={viewer3dFmGuid} onClose={handleClose} />
       </div>
     );

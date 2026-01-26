@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
-import { Loader2, AlertCircle, X } from 'lucide-react';
+import { Loader2, AlertCircle, X, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
@@ -108,6 +108,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const [showTreePanel, setShowTreePanel] = useState(false);
   const [showVisualizationPanel, setShowVisualizationPanel] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
   
   // Flash highlighting hook
@@ -1026,9 +1027,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
 
   // Main viewer - fullscreen layout without sidebar
   return (
-    <div className="h-full flex flex-col">
+    <div className={isFullscreen ? "fixed inset-0 z-50 bg-background" : "h-full flex flex-col"}>
       {/* Viewer area with dx-viewport wrapper (CRITICAL for Asset+ popups) */}
-      <div className="flex-1 min-h-0">
+      <div className={isFullscreen ? "h-full" : "flex-1 min-h-0"}>
         {/* dx-viewport wrapper - required by Asset+ for ObjectDetails popup constraint */}
         <div 
           ref={viewportWrapperRef}
@@ -1054,23 +1055,33 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             </div>
           )}
           
-          {/* Top toolbar - contains close and filter */}
+          {/* Top toolbar - contains close, fullscreen and filter */}
           <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
-            {/* Close button - left side - ALWAYS VISIBLE */}
-            {onClose && (
+            {/* Close and fullscreen buttons - left side */}
+            <div className="flex gap-1.5 pointer-events-auto">
+              {onClose && (
+                <Button 
+                  variant="secondary" 
+                  size="icon"
+                  onClick={onClose} 
+                  className="h-10 w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                  aria-label="Stäng 3D-vy"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              )}
               <Button 
                 variant="secondary" 
                 size="icon"
-                onClick={onClose} 
-                className="h-10 w-10 pointer-events-auto shadow-lg bg-card/95 backdrop-blur-sm border"
-                aria-label="Stäng 3D-vy"
+                onClick={() => setIsFullscreen(!isFullscreen)} 
+                className="h-10 w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
               >
-                <X className="h-5 w-5" />
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
               </Button>
-            )}
-            {!onClose && <div />}
+            </div>
             
-            {/* Annotations toggle - right side (removed FilterDropdown) */}
+            {/* Annotations toggle - right side */}
             <div className="flex gap-1.5 pointer-events-auto">
               {state.isInitialized && (
                 <AnnotationToggleMenu 

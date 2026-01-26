@@ -15,6 +15,7 @@ import {
   Check,
   FolderOpen,
   Folder,
+  Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,13 +30,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Sheet,
   SheetContent,
@@ -74,6 +68,7 @@ interface RoomsViewProps {
   rooms: any[];
   onClose: () => void;
   onOpen3D?: (fmGuid: string, levelFmGuid?: string) => void;
+  onSelectRoom?: (fmGuid: string) => void;
 }
 
 interface ColumnDef {
@@ -256,6 +251,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   rooms,
   onClose,
   onOpen3D,
+  onSelectRoom,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -453,6 +449,12 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     }
   };
 
+  const handleSelectRoom = (room: RoomData) => {
+    if (onSelectRoom) {
+      onSelectRoom(room.fmGuid);
+    }
+  };
+
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
     const ordered = columnOrder.filter(key => visibleColumns.includes(key));
@@ -511,7 +513,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       </div>
 
       {/* Toolbar */}
-      <div className="border-b px-4 py-2 flex flex-col sm:flex-row gap-2 shrink-0">
+      <div className="border-b px-4 py-2 flex gap-2 shrink-0">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -521,13 +523,74 @@ const RoomsView: React.FC<RoomsViewProps> = ({
             className="pl-9 h-9"
           />
         </div>
-        <div className="flex gap-2">
+        
+        {/* Mobile: Hamburger menu for column selector + view mode */}
+        <div className="sm:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9">
+                <Menu size={16} />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Settings2 size={18} />
+                  Inställningar
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-6">
+                {/* View mode section */}
+                <div>
+                  <p className="text-sm font-medium mb-2">Visningsläge</p>
+                  <div className="flex border rounded-md w-fit">
+                    <Button
+                      variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('grid')}
+                      className="h-9 gap-2"
+                    >
+                      <List size={16} />
+                      Tabell
+                    </Button>
+                    <Button
+                      variant={viewMode === 'gallery' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('gallery')}
+                      className="h-9 gap-2"
+                    >
+                      <LayoutGrid size={16} />
+                      Galleri
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Column selector section */}
+                <div>
+                  <p className="text-sm font-medium mb-2">
+                    Kolumner ({visibleColumns.length} valda)
+                  </p>
+                  <ScrollArea className="h-[calc(100vh-280px)]">
+                    <ColumnSelectorTree
+                      columns={allColumns}
+                      visibleColumns={visibleColumns}
+                      onToggle={toggleColumn}
+                    />
+                  </ScrollArea>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+        
+        {/* Desktop: Inline controls */}
+        <div className="hidden sm:flex gap-2">
           {/* Column selector (Sheet for tree menu) */}
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 gap-2">
                 <Settings2 size={14} />
-                <span className="hidden sm:inline">Kolumner</span>
+                <span>Kolumner</span>
                 <Badge variant="secondary" className="text-xs ml-1">
                   {visibleColumns.length}
                 </Badge>
@@ -554,31 +617,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
               </div>
             </SheetContent>
           </Sheet>
-
-          {/* Quick column dropdown for common columns */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9">
-                <ChevronDown size={14} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-popover">
-              <DropdownMenuLabel>Snabbval kolumner</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="max-h-64 overflow-y-auto p-2 space-y-1">
-                {allColumns.slice(0, 20).map((col) => (
-                  <div
-                    key={col.key}
-                    className="flex items-center gap-2 p-1.5 hover:bg-muted rounded cursor-pointer"
-                    onClick={() => toggleColumn(col.key)}
-                  >
-                    <Checkbox checked={visibleColumns.includes(col.key)} />
-                    <span className="text-sm truncate">{col.label}</span>
-                  </div>
-                ))}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
           {/* View mode toggle */}
           <div className="flex border rounded-md">
@@ -642,7 +680,11 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                   </TableHeader>
                   <TableBody>
                     {filteredRooms.map((room) => (
-                      <TableRow key={room.fmGuid} className="hover:bg-muted/50">
+                      <TableRow 
+                        key={room.fmGuid} 
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleSelectRoom(room)}
+                      >
                         {orderedVisibleColumns.map((colKey) => (
                           <TableCell key={colKey} className="py-2 whitespace-nowrap">
                             {formatCellValue(colKey, room[colKey])}
@@ -653,7 +695,10 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => handleOpen3D(room)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpen3D(room);
+                            }}
                             title="Visa i 3D"
                           >
                             <Cuboid size={14} />
@@ -684,7 +729,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                 <Card
                   key={room.fmGuid}
                   className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
-                  onClick={() => handleOpen3D(room)}
+                  onClick={() => handleSelectRoom(room)}
                 >
                   <div className="h-24 bg-gradient-to-br from-primary/20 to-accent/20 relative flex items-center justify-center">
                     <DoorOpen className="h-10 w-10 text-primary/40" />
@@ -715,6 +760,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           e.stopPropagation();
                           handleOpen3D(room);
                         }}
+                        title="Visa i 3D"
                       >
                         <Cuboid size={12} />
                       </Button>
