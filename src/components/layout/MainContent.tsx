@@ -1,5 +1,5 @@
 import React, { useContext, lazy, Suspense } from "react";
-import { Loader2, Cuboid, BarChart2, Box, Archive, Radar } from "lucide-react";
+import { Loader2, Box, Archive } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import PortfolioView from "@/components/portfolio/PortfolioView";
@@ -8,6 +8,7 @@ import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
 import Viewer from "@/pages/Viewer";
 import InsightsView from "@/components/insights/InsightsView";
+import Ivion360View from "@/components/viewer/Ivion360View";
 
 // Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -69,13 +70,7 @@ const MainContent: React.FC = () => {
                     />
                 );
             case 'radar':
-                return (
-                    <PlaceholderView 
-                        title="360+" 
-                        icon={<Radar className="h-8 w-8 text-pink-500" />}
-                        description="360-degree viewing"
-                    />
-                );
+                return <Ivion360View onClose={() => {}} />;
             default:
                 return <HomeLanding />;
         }
