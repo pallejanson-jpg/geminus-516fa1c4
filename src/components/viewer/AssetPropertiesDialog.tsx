@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, Plus, MapPin, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,29 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+// Asset type options for dropdown (Swedish)
+const ASSET_TYPES = [
+  { value: 'fire_extinguisher', label: 'Brandsläckare' },
+  { value: 'chair', label: 'Stol' },
+  { value: 'table', label: 'Bord' },
+  { value: 'hvac', label: 'Luftbehandlingsaggregat' },
+  { value: 'sprinkler', label: 'Sprinkler' },
+  { value: 'sensor', label: 'Sensor' },
+  { value: 'lamp', label: 'Lampa' },
+  { value: 'cabinet', label: 'Skåp' },
+  { value: 'other', label: 'Övrigt' },
+];
+
+// IFC Object categories (mandatory for Asset+)
+const OBJECT_CATEGORIES = [
+  { value: 'Instance', label: 'Instance (Inventarie)' },
+  { value: 'IfcFurniture', label: 'Furniture' },
+  { value: 'IfcBuildingElementProxy', label: 'Building Element' },
+  { value: 'IfcFlowTerminal', label: 'Flow Terminal' },
+  { value: 'IfcFireSuppressionTerminal', label: 'Fire Suppression' },
+  { value: 'IfcSensor', label: 'Sensor' },
+];
 
 interface AssetProperties {
   id: string;
@@ -51,6 +74,14 @@ interface AssetPropertiesDialogProps {
   onClose: () => void;
   selectedFmGuids: string[];
   onUpdate?: () => void;
+  // Create mode props
+  createMode?: boolean;
+  parentSpaceFmGuid?: string | null;
+  buildingFmGuid?: string | null;
+  levelFmGuid?: string | null;
+  initialCoordinates?: { x: number; y: number; z: number } | null;
+  onPickCoordinates?: () => void;
+  isPickingCoordinates?: boolean;
 }
 
 const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
@@ -58,23 +89,80 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   onClose,
   selectedFmGuids,
   onUpdate,
+  createMode = false,
+  parentSpaceFmGuid,
+  buildingFmGuid,
+  levelFmGuid,
+  initialCoordinates,
+  onPickCoordinates,
+  isPickingCoordinates,
 }) => {
   const [assets, setAssets] = useState<AssetProperties[]>([]);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(createMode);
   const [isSaving, setIsSaving] = useState(false);
-  const [editData, setEditData] = useState<Partial<AssetProperties>>({});
   const [position, setPosition] = useState({ x: 20, y: 100 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // Form data for editing/creating
+  const [formData, setFormData] = useState({
+    fm_guid: '',
+    name: '',
+    common_name: '',
+    category: 'Instance',
+    asset_type: '',
+    symbol_id: '',
+    coordinate_x: 0,
+    coordinate_y: 0,
+    coordinate_z: 0,
+  });
 
   const isMultiSelect = selectedFmGuids.length > 1;
 
+  // Initialize form for create mode
+  useEffect(() => {
+    if (createMode && isOpen) {
+      setFormData({
+        fm_guid: crypto.randomUUID(),
+        name: '',
+        common_name: '',
+        category: 'Instance',
+        asset_type: '',
+        symbol_id: '',
+        coordinate_x: initialCoordinates?.x ?? 0,
+        coordinate_y: initialCoordinates?.y ?? 0,
+        coordinate_z: initialCoordinates?.z ?? 0,
+      });
+      setIsEditing(true);
+      setIsLoading(false);
+    }
+  }, [createMode, isOpen, initialCoordinates]);
+
+  // Update coordinates when picked
+  useEffect(() => {
+    if (initialCoordinates) {
+      setFormData(prev => ({
+        ...prev,
+        coordinate_x: initialCoordinates.x,
+        coordinate_y: initialCoordinates.y,
+        coordinate_z: initialCoordinates.z,
+      }));
+    }
+  }, [initialCoordinates]);
+
   // Fetch assets and symbols
   useEffect(() => {
-    if (!isOpen || selectedFmGuids.length === 0) return;
+    if (!isOpen) return;
+    if (createMode) {
+      // Just fetch symbols in create mode
+      supabase.from('annotation_symbols').select('id, name, category, color, icon_url').order('name')
+        .then(({ data }) => setSymbols(data || []));
+      return;
+    }
+    if (selectedFmGuids.length === 0) return;
 
     const fetchData = async () => {
       setIsLoading(true);
@@ -90,8 +178,25 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         if (assetsRes.error) throw assetsRes.error;
         if (symbolsRes.error) throw symbolsRes.error;
 
-        setAssets(assetsRes.data as AssetProperties[] || []);
+        const fetchedAssets = assetsRes.data as AssetProperties[] || [];
+        setAssets(fetchedAssets);
         setSymbols(symbolsRes.data as AnnotationSymbol[] || []);
+        
+        // Populate form for single asset edit
+        if (fetchedAssets.length === 1) {
+          const a = fetchedAssets[0];
+          setFormData({
+            fm_guid: a.fm_guid,
+            name: a.name || '',
+            common_name: a.common_name || '',
+            category: a.category,
+            asset_type: a.asset_type || '',
+            symbol_id: a.symbol_id || '',
+            coordinate_x: a.coordinate_x ?? 0,
+            coordinate_y: a.coordinate_y ?? 0,
+            coordinate_z: a.coordinate_z ?? 0,
+          });
+        }
       } catch (error: any) {
         toast.error('Kunde inte hämta data: ' + error.message);
       } finally {
@@ -100,7 +205,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
     };
 
     fetchData();
-  }, [isOpen, selectedFmGuids]);
+  }, [isOpen, selectedFmGuids, createMode]);
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -114,7 +219,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
     const handleMouseMove = (e: MouseEvent) => {
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragOffset.x)),
+        x: Math.max(0, Math.min(window.innerWidth - 340, e.clientX - dragOffset.x)),
         y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y)),
       });
     };
@@ -131,30 +236,106 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
   const handleStartEdit = () => {
     if (isMultiSelect) {
-      setEditData({ symbol_id: assets[0]?.symbol_id || null });
-    } else if (assets[0]) {
-      setEditData({
-        name: assets[0].name,
-        common_name: assets[0].common_name,
-        symbol_id: assets[0].symbol_id,
-      });
+      setFormData(prev => ({ ...prev, symbol_id: assets[0]?.symbol_id || '' }));
     }
     setIsEditing(true);
   };
 
+  const handleCreate = async () => {
+    // Validation
+    if (!formData.name.trim()) {
+      toast.error('Benämning är obligatoriskt');
+      return;
+    }
+    if (!formData.category) {
+      toast.error('Kategori är obligatoriskt');
+      return;
+    }
+    if (!initialCoordinates && formData.coordinate_x === 0 && formData.coordinate_y === 0) {
+      toast.error('Välj position i 3D-vyn först');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const assetTypeLabel = ASSET_TYPES.find(t => t.value === formData.asset_type)?.label || formData.asset_type;
+
+      // Insert locally first
+      const { error: localError } = await supabase.from('assets').insert({
+        fm_guid: formData.fm_guid,
+        name: formData.name.trim(),
+        common_name: assetTypeLabel || formData.common_name || null,
+        category: formData.category,
+        asset_type: formData.asset_type || null,
+        symbol_id: formData.symbol_id || null,
+        building_fm_guid: buildingFmGuid || null,
+        level_fm_guid: levelFmGuid || null,
+        in_room_fm_guid: parentSpaceFmGuid || null,
+        coordinate_x: formData.coordinate_x,
+        coordinate_y: formData.coordinate_y,
+        coordinate_z: formData.coordinate_z,
+        is_local: true,
+        created_in_model: true,
+        annotation_placed: true,
+      });
+
+      if (localError) throw localError;
+
+      // Also try to create in Asset+ via edge function
+      try {
+        await supabase.functions.invoke('asset-plus-create', {
+          body: {
+            fmGuid: formData.fm_guid,
+            parentSpaceFmGuid: parentSpaceFmGuid,
+            designation: formData.name.trim(),
+            commonName: assetTypeLabel || undefined,
+            properties: [
+              ...(formData.asset_type ? [{ name: 'AssetType', value: formData.asset_type, dataType: 0 }] : []),
+              ...(formData.category ? [{ name: 'ObjectCategory', value: formData.category, dataType: 0 }] : []),
+            ],
+            coordinates: {
+              x: formData.coordinate_x,
+              y: formData.coordinate_y,
+              z: formData.coordinate_z,
+            },
+          },
+        });
+      } catch (apiError) {
+        console.warn('Failed to sync to Asset+:', apiError);
+        // Continue anyway - local save succeeded
+      }
+
+      toast.success('Tillgång skapad!', {
+        description: formData.name,
+      });
+
+      onUpdate?.();
+      onClose();
+    } catch (error: any) {
+      toast.error('Fel vid skapande: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (createMode) {
+      return handleCreate();
+    }
+
     if (assets.length === 0) return;
     setIsSaving(true);
 
     try {
       const updatePayload: Record<string, any> = {};
       
-      if (editData.symbol_id !== undefined) {
-        updatePayload.symbol_id = editData.symbol_id || null;
+      if (formData.symbol_id !== undefined) {
+        updatePayload.symbol_id = formData.symbol_id || null;
       }
       if (!isMultiSelect) {
-        if (editData.name !== undefined) updatePayload.name = editData.name;
-        if (editData.common_name !== undefined) updatePayload.common_name = editData.common_name;
+        if (formData.name !== undefined) updatePayload.name = formData.name || null;
+        if (formData.common_name !== undefined) updatePayload.common_name = formData.common_name || null;
+        if (formData.asset_type !== undefined) updatePayload.asset_type = formData.asset_type || null;
       }
 
       if (Object.keys(updatePayload).length > 0) {
@@ -180,9 +361,11 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   };
 
   const selectedSymbol = useMemo(() => 
-    symbols.find(s => s.id === (editData.symbol_id ?? assets[0]?.symbol_id)),
-    [symbols, editData.symbol_id, assets]
+    symbols.find(s => s.id === formData.symbol_id),
+    [symbols, formData.symbol_id]
   );
+
+  const hasCoordinates = (initialCoordinates || (formData.coordinate_x !== 0 || formData.coordinate_y !== 0));
 
   if (!isOpen) return null;
 
@@ -190,7 +373,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
     <div
       className={cn(
         "fixed z-50 bg-card border rounded-lg shadow-xl transition-all",
-        "w-80 max-h-[70vh] flex flex-col",
+        "w-80 sm:w-96 max-h-[80vh] flex flex-col",
         isDragging && "cursor-grabbing opacity-90"
       )}
       style={{ left: position.x, top: position.y }}
@@ -203,7 +386,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">
-            Egenskaper {isMultiSelect && <Badge variant="secondary" className="ml-1">{assets.length}</Badge>}
+            {createMode ? 'Skapa ny tillgång' : 'Egenskaper'}
+            {isMultiSelect && !createMode && <Badge variant="secondary" className="ml-1">{assets.length}</Badge>}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -224,6 +408,133 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
+            ) : createMode ? (
+              /* Create mode form */
+              <div className="space-y-4">
+                {/* Position picker */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Position i 3D *</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={isPickingCoordinates ? "default" : hasCoordinates ? "secondary" : "outline"}
+                      className="flex-1 gap-2 h-9"
+                      onClick={onPickCoordinates}
+                      disabled={isSaving}
+                    >
+                      <MapPin className="h-4 w-4" />
+                      {isPickingCoordinates ? 'Klicka i 3D...' : hasCoordinates ? 'Ändra' : 'Välj position'}
+                    </Button>
+                    {hasCoordinates && (
+                      <div className="flex items-center gap-1 px-2 bg-muted rounded text-xs">
+                        <Check className="h-3 w-3 text-green-500" />
+                        <span className="font-mono">
+                          {formData.coordinate_x.toFixed(1)}, {formData.coordinate_y.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* FM GUID (auto-generated, read-only) */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">FM GUID (auto)</Label>
+                  <p className="text-xs font-mono text-muted-foreground truncate">{formData.fm_guid}</p>
+                </div>
+
+                {/* Name/Designation - Required */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Benämning / Nummer *</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="t.ex. BS-001, Stol-A1"
+                    className="h-9"
+                    required
+                  />
+                </div>
+
+                {/* Category - Required */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Kategori *</Label>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(v) => setFormData({ ...formData, category: v })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border shadow-lg z-[100]">
+                      {OBJECT_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Asset Type */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Typ av tillgång</Label>
+                  <Select
+                    value={formData.asset_type}
+                    onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Välj typ..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border shadow-lg z-[100]">
+                      {ASSET_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Symbol selection */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Annotationssymbol</Label>
+                  <Select
+                    value={formData.symbol_id}
+                    onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Välj symbol..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border shadow-lg z-[100]">
+                      <SelectItem value="">Ingen symbol</SelectItem>
+                      {symbols.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <div className="flex items-center gap-2">
+                            {s.icon_url ? (
+                              <img src={s.icon_url} alt="" className="w-4 h-4 rounded" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.color }} />
+                            )}
+                            <span>{s.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Info about mandatory fields */}
+                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                  <p className="font-medium">Obligatoriska fält för Asset+:</p>
+                  <ul className="list-disc list-inside mt-1">
+                    <li>FM GUID (genereras automatiskt)</li>
+                    <li>Benämning</li>
+                    <li>Kategori</li>
+                    <li>Position (koordinater)</li>
+                  </ul>
+                </div>
+              </div>
             ) : assets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 <p>Ingen asset hittad i databasen</p>
@@ -240,8 +551,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Label className="text-xs">Gemensam symbol</Label>
                   {isEditing ? (
                     <Select
-                      value={editData.symbol_id || ''}
-                      onValueChange={(v) => setEditData({ ...editData, symbol_id: v || null })}
+                      value={formData.symbol_id}
+                      onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Välj symbol..." />
@@ -294,8 +605,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Label className="text-xs text-muted-foreground">Namn</Label>
                   {isEditing ? (
                     <Input
-                      value={editData.name || ''}
-                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="h-8 text-sm"
                     />
                   ) : (
@@ -307,8 +618,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Label className="text-xs text-muted-foreground">Common Name</Label>
                   {isEditing ? (
                     <Input
-                      value={editData.common_name || ''}
-                      onChange={(e) => setEditData({ ...editData, common_name: e.target.value })}
+                      value={formData.common_name}
+                      onChange={(e) => setFormData({ ...formData, common_name: e.target.value })}
                       className="h-8 text-sm"
                     />
                   ) : (
@@ -323,7 +634,25 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
 
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Asset Type</Label>
-                  <p className="text-sm">{assets[0].asset_type || '-'}</p>
+                  {isEditing ? (
+                    <Select
+                      value={formData.asset_type}
+                      onValueChange={(v) => setFormData({ ...formData, asset_type: v })}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Välj typ..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-card border shadow-lg z-[100]">
+                        {ASSET_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm">{assets[0].asset_type || '-'}</p>
+                  )}
                 </div>
 
                 <Separator />
@@ -332,8 +661,8 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Label className="text-xs text-muted-foreground">Annotationssymbol</Label>
                   {isEditing ? (
                     <Select
-                      value={editData.symbol_id || ''}
-                      onValueChange={(v) => setEditData({ ...editData, symbol_id: v || null })}
+                      value={formData.symbol_id}
+                      onValueChange={(v) => setFormData({ ...formData, symbol_id: v })}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Välj symbol..." />
@@ -397,9 +726,19 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           </ScrollArea>
 
           {/* Footer actions */}
-          {assets.length > 0 && (
-            <div className="p-3 border-t flex justify-end gap-2">
-              {isEditing ? (
+          <div className="p-3 border-t flex justify-end gap-2">
+            {createMode ? (
+              <>
+                <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
+                  Avbryt
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={isSaving || !hasCoordinates}>
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Skapa
+                </Button>
+              </>
+            ) : assets.length > 0 && (
+              isEditing ? (
                 <>
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
                     Avbryt
@@ -414,9 +753,9 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   <Pencil className="h-4 w-4 mr-1" />
                   Redigera
                 </Button>
-              )}
-            </div>
-          )}
+              )
+            )}
+          </div>
         </>
       )}
     </div>
