@@ -24,6 +24,7 @@ export type Database = {
           is_default: boolean
           marker_html: string | null
           name: string
+          symbol_id: number | null
           updated_at: string
         }
         Insert: {
@@ -35,6 +36,7 @@ export type Database = {
           is_default?: boolean
           marker_html?: string | null
           name: string
+          symbol_id?: number | null
           updated_at?: string
         }
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           is_default?: boolean
           marker_html?: string | null
           name?: string
+          symbol_id?: number | null
           updated_at?: string
         }
         Relationships: []
