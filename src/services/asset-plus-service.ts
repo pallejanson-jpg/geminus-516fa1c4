@@ -120,3 +120,27 @@ export async function createAssetPlusObject(payload: CreateAssetPayload): Promis
 export async function updateAssetPlus(_payload: any): Promise<any> {
   throw new Error("updateAssetPlus is not implemented yet");
 }
+
+/**
+ * Fetch room sensor data for a building.
+ * Returns rooms with their attributes for visualization purposes.
+ */
+export async function fetchRoomSensorData(buildingFmGuid: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("assets")
+    .select("fm_guid, name, common_name, attributes")
+    .eq("category", "Space")
+    .or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`);
+
+  if (error) {
+    console.error("Failed to fetch room sensor data:", error);
+    throw new Error(error.message || "Failed to fetch room sensor data");
+  }
+
+  return (data || []).map((room) => ({
+    fmGuid: room.fm_guid,
+    name: room.name,
+    commonName: room.common_name,
+    attributes: room.attributes,
+  }));
+}

@@ -24,6 +24,7 @@ import {
   Info,
   Settings,
   TreeDeciduous,
+  Palette,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -45,11 +46,13 @@ interface ViewerToolbarProps {
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
   onToggleTreeView?: (visible: boolean) => void;
+  onToggleVisualization?: (visible: boolean) => void;
   onPickCoordinate?: () => void;
   onShowProperties?: () => void;
   onOpenSettings?: () => void;
   isPickMode?: boolean;
   showTreeView?: boolean;
+  showVisualization?: boolean;
   className?: string;
 }
 
@@ -66,11 +69,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   onToggleNavCube,
   onToggleMinimap,
   onToggleTreeView,
+  onToggleVisualization,
   onPickCoordinate,
   onShowProperties,
   onOpenSettings,
   isPickMode,
   showTreeView,
+  showVisualization,
   className
 }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
@@ -217,6 +222,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const handleToggleTreeView = useCallback(() => {
     onToggleTreeView?.(!showTreeView);
   }, [showTreeView, onToggleTreeView]);
+
+  const handleToggleVisualization = useCallback(() => {
+    onToggleVisualization?.(!showVisualization);
+  }, [showVisualization, onToggleVisualization]);
 
   const handleToggleAnnotations = useCallback(() => {
     try {
@@ -420,6 +429,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         case 'treeView':
           if (onToggleTreeView) {
             items.push({ id: tool.id, label: showTreeView ? 'Dölj modellträd' : 'Visa modellträd', icon: <TreeDeciduous className="h-4 w-4" />, onClick: handleToggleTreeView, active: showTreeView });
+          }
+          break;
+        case 'visualization':
+          if (onToggleVisualization) {
+            items.push({ id: tool.id, label: showVisualization ? 'Dölj visualisering' : 'Rumsvisualisering', icon: <Palette className="h-4 w-4" />, onClick: handleToggleVisualization, active: showVisualization });
           }
           break;
       }
@@ -679,6 +693,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
               onClick={handleToggleTreeView}
               active={showTreeView}
               toolId="treeView"
+            />
+          )}
+          {onToggleVisualization && (
+            <ToolButton
+              icon={<Palette className="h-4 w-4" />}
+              label="Rumsvisualisering"
+              onClick={handleToggleVisualization}
+              active={showVisualization}
+              toolId="visualization"
             />
           )}
         </div>

@@ -85,11 +85,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch asset from local DB
+        // Fetch asset from local DB - case-insensitive search
         const { data: assetData, error: assetError } = await supabase
           .from('assets')
           .select('*')
-          .eq('fm_guid', fmGuid.toUpperCase())
+          .or(`fm_guid.eq.${fmGuid},fm_guid.eq.${fmGuid.toLowerCase()},fm_guid.eq.${fmGuid.toUpperCase()}`)
           .maybeSingle();
 
         if (assetError) throw assetError;
