@@ -193,38 +193,39 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Fetch favorite building(s)
     const fetchFavoriteBuildings = async () => {
         try {
-            const { data: favorites, error: favError } = await supabase
+            // Always get all buildings first
+            const { data: allBuildings, error: buildError } = await supabase
+                .from('assets')
+                .select('fm_guid, common_name, name')
+                .eq('category', 'Building');
+
+            if (buildError) throw buildError;
+            
+            if (!allBuildings || allBuildings.length === 0) {
+                console.log('No buildings found in assets table');
+                setFavoriteBuildings([]);
+                return;
+            }
+
+            // Check for favorites
+            const { data: favorites } = await supabase
                 .from('building_settings')
                 .select('fm_guid')
                 .eq('is_favorite', true);
 
-            if (favError) throw favError;
-
             if (favorites && favorites.length > 0) {
-                // Get building details for favorite buildings
-                const fmGuids = favorites.map(f => f.fm_guid);
-                const { data: buildings, error: buildError } = await supabase
-                    .from('assets')
-                    .select('fm_guid, common_name, name')
-                    .in('fm_guid', fmGuids)
-                    .eq('category', 'Building');
-
-                if (buildError) throw buildError;
-                setFavoriteBuildings(buildings || []);
-            } else {
-                // No favorites, get first building
-                const { data: firstBuilding, error: buildError } = await supabase
-                    .from('assets')
-                    .select('fm_guid, common_name, name')
-                    .eq('category', 'Building')
-                    .limit(1)
-                    .single();
-
-                if (buildError) throw buildError;
-                if (firstBuilding) {
-                    setFavoriteBuildings([firstBuilding]);
+                // Find matching buildings from our list
+                const favoriteFmGuids = favorites.map(f => f.fm_guid);
+                const favoriteBuildings = allBuildings.filter(b => favoriteFmGuids.includes(b.fm_guid));
+                
+                if (favoriteBuildings.length > 0) {
+                    setFavoriteBuildings(favoriteBuildings);
+                    return;
                 }
             }
+            
+            // Fallback: use first building if no favorites match
+            setFavoriteBuildings([allBuildings[0]]);
         } catch (error) {
             console.error('Failed to fetch favorite buildings:', error);
         }
