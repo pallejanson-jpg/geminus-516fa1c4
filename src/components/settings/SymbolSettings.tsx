@@ -374,17 +374,87 @@ const SymbolSettings: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <Label htmlFor="symbol-icon">Ikon URL (valfritt)</Label>
+                <Label htmlFor="symbol-icon">Ikon (valfritt)</Label>
               </div>
-              <Input
-                id="symbol-icon"
-                value={formData.icon_url}
-                onChange={(e) => setFormData({ ...formData, icon_url: e.target.value })}
-                placeholder="https://example.com/fire-extinguisher.png"
-                className="h-11"
-              />
+              
+              {/* Preview */}
+              {formData.icon_url && (
+                <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg">
+                  <img
+                    src={formData.icon_url}
+                    alt="Symbol preview"
+                    className="w-10 h-10 object-contain rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground truncate flex-1">
+                    {formData.icon_url.split('/').pop()}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, icon_url: '' })}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              
+              {/* File upload */}
+              <div className="flex gap-2">
+                <Input
+                  id="symbol-icon"
+                  value={formData.icon_url}
+                  onChange={(e) => setFormData({ ...formData, icon_url: e.target.value })}
+                  placeholder="URL eller ladda upp..."
+                  className="h-11 flex-1"
+                />
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      try {
+                        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                        const { data, error } = await supabase.storage
+                          .from('symbol-icons')
+                          .upload(fileName, file);
+                        
+                        if (error) throw error;
+                        
+                        const { data: { publicUrl } } = supabase.storage
+                          .from('symbol-icons')
+                          .getPublicUrl(data.path);
+                        
+                        setFormData({ ...formData, icon_url: publicUrl });
+                        toast({
+                          title: 'Ikon uppladdad',
+                          description: 'Bilden har laddats upp',
+                        });
+                      } catch (error: any) {
+                        toast({
+                          variant: 'destructive',
+                          title: 'Uppladdning misslyckades',
+                          description: error.message,
+                        });
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" className="h-11" asChild>
+                    <span>
+                      <ImageIcon className="h-4 w-4" />
+                    </span>
+                  </Button>
+                </label>
+              </div>
               <p className="text-xs text-muted-foreground">
-                URL till en bildfil som används istället för färgad punkt
+                Ladda upp en bild eller ange en URL
               </p>
             </div>
 

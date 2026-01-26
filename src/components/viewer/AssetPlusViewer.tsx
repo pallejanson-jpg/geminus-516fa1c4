@@ -15,6 +15,8 @@ import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
 import AnnotationToggleMenu from './AnnotationToggleMenu';
+import AssetPropertiesDialog from './AssetPropertiesDialog';
+import ToolbarSettings from './ToolbarSettings';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
@@ -114,6 +116,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
   const [showFloorCarousel, setShowFloorCarousel] = useState(false);
+  const [propertiesDialogOpen, setPropertiesDialogOpen] = useState(false);
+  const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
+  const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
 
   // Find the asset data for the given fmGuid
@@ -522,12 +527,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, [executeDisplayAction, cacheStatus, showNavCube]);
 
-  // Sync NavCube visibility with state
-  useEffect(() => {
-    if (navCubeRef.current) {
-      navCubeRef.current.setVisible(showNavCube);
-    }
-  }, [showNavCube]);
+  // NavCube visibility is now controlled via React style prop on the canvas
+  // The navCubeRef.setVisible() method is NOT used to avoid DOM manipulation crashes
+  // Visibility is handled in the canvas element's style: display: showNavCube ? 'block' : 'none'
 
   // Handle coordinate picking mode - supports both internal and external control
   const handleTogglePickMode = useCallback(() => {
@@ -846,9 +848,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         (items: any[], added: any[], removed: any[]) => {
           console.log("selectionChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
         },
-        // selectedFmGuidsChangedCallback
+        // selectedFmGuidsChangedCallback - Track selection for properties dialog
         (items: string[], added: string[], removed: string[]) => {
           console.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
+          setSelectedFmGuids(items || []);
         },
         // allModelsLoadedCallback
         handleAllModelsLoaded,
@@ -1181,6 +1184,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 onToggleMinimap={(visible) => setShowMinimap(visible)}
                 onToggleNavCube={(visible) => setShowNavCube(visible)}
                 onPickCoordinate={handleTogglePickMode}
+                onShowProperties={() => setPropertiesDialogOpen(true)}
+                onOpenSettings={() => setToolbarSettingsOpen(true)}
                 isPickMode={isPickMode}
               />
               <MinimapPanel
@@ -1219,6 +1224,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             parentNode={addAssetParentNode}
             onAssetCreated={handleAssetCreated}
             initialCoordinates={pickedCoordinates || undefined}
+          />
+          
+          {/* Properties Dialog - floating, dockable */}
+          <AssetPropertiesDialog
+            isOpen={propertiesDialogOpen}
+            onClose={() => setPropertiesDialogOpen(false)}
+            selectedFmGuids={selectedFmGuids}
+          />
+          
+          {/* Toolbar Settings Modal */}
+          <ToolbarSettings
+            isOpen={toolbarSettingsOpen}
+            onClose={() => setToolbarSettingsOpen(false)}
           />
         </div>
       </div>

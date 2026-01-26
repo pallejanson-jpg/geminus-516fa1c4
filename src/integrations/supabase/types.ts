@@ -112,6 +112,7 @@ export type Database = {
           level_fm_guid: string | null
           name: string | null
           source_updated_at: string | null
+          symbol_id: string | null
           synced_at: string
           updated_at: string
         }
@@ -137,6 +138,7 @@ export type Database = {
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null
+          symbol_id?: string | null
           synced_at?: string
           updated_at?: string
         }
@@ -162,10 +164,19 @@ export type Database = {
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null
+          symbol_id?: string | null
           synced_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "assets_symbol_id_fkey"
+            columns: ["symbol_id"]
+            isOneToOne: false
+            referencedRelation: "annotation_symbols"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       building_settings: {
         Row: {
