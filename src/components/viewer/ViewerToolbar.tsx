@@ -5,10 +5,7 @@ import {
   ZoomOut,
   RotateCcw,
   Maximize,
-  Box,
-  Eye,
   Ruler,
-  Layers,
   Focus,
   Scissors,
   MousePointer2,
@@ -16,15 +13,8 @@ import {
   ChevronDown,
   Cuboid,
   SquareDashed,
-  Map,
   MoreHorizontal,
-  MessageSquare,
-  Plus,
-  Search,
-  Info,
   Settings,
-  TreeDeciduous,
-  Palette,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,24 +25,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { getToolbarSettings, ToolConfig } from './ToolbarSettings';
+import { getNavigationToolSettings, ToolConfig } from './ToolbarSettings';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
-  onToggleNavCube?: (visible: boolean) => void;
-  onToggleMinimap?: (visible: boolean) => void;
-  onToggleTreeView?: (visible: boolean) => void;
-  onToggleVisualization?: (visible: boolean) => void;
-  onPickCoordinate?: () => void;
-  onShowProperties?: () => void;
   onOpenSettings?: () => void;
-  isPickMode?: boolean;
-  showTreeView?: boolean;
-  showVisualization?: boolean;
   className?: string;
 }
 
@@ -61,39 +41,27 @@ type NavMode = 'orbit' | 'firstPerson' | 'planView';
 type ViewMode = '3d' | '2d';
 
 /**
- * Custom toolbar for the Asset+ 3D Viewer
- * Configurable with overflow menu and user settings
+ * Navigation-focused toolbar for the Asset+ 3D Viewer
+ * Contains only navigation, zoom, and basic interaction tools
+ * Visualization tools are in VisualizationToolbar (right side)
  */
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   viewerRef,
-  onToggleNavCube,
-  onToggleMinimap,
-  onToggleTreeView,
-  onToggleVisualization,
-  onPickCoordinate,
-  onShowProperties,
   onOpenSettings,
-  isPickMode,
-  showTreeView,
-  showVisualization,
   className
 }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
-  const [showSpaces, setShowSpaces] = useState(true);
-  const [showNavCube, setShowNavCube] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(false);
-  const [showAnnotations, setShowAnnotations] = useState(true);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getToolbarSettings());
+  const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getNavigationToolSettings());
   
   const isMobile = useIsMobile();
 
   // Reload settings when they change
   useEffect(() => {
     const handleStorageChange = () => {
-      setToolSettings(getToolbarSettings());
+      setToolSettings(getNavigationToolSettings());
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
@@ -192,54 +160,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     }
   }, [getAssetView, activeTool]);
 
-  // View modes - with null safety
-  const handleToggleSpaces = useCallback(() => {
-    try {
-      const viewer = viewerRef.current?.assetViewer;
-      if (viewer && typeof viewer.onShowSpacesChanged === 'function') {
-        const newValue = !showSpaces;
-        viewer.onShowSpacesChanged(newValue);
-        setShowSpaces(newValue);
-      }
-    } catch (error) {
-      console.warn('Toggle spaces failed:', error);
-    }
-  }, [viewerRef, showSpaces]);
-
-  // Fixed: Remove direct DOM manipulation to prevent 'nextSibling' crash
-  const handleToggleNavCube = useCallback(() => {
-    const newValue = !showNavCube;
-    setShowNavCube(newValue);
-    onToggleNavCube?.(newValue);
-  }, [showNavCube, onToggleNavCube]);
-
-  const handleToggleMinimap = useCallback(() => {
-    const newValue = !showMinimap;
-    setShowMinimap(newValue);
-    onToggleMinimap?.(newValue);
-  }, [showMinimap, onToggleMinimap]);
-
-  const handleToggleTreeView = useCallback(() => {
-    onToggleTreeView?.(!showTreeView);
-  }, [showTreeView, onToggleTreeView]);
-
-  const handleToggleVisualization = useCallback(() => {
-    onToggleVisualization?.(!showVisualization);
-  }, [showVisualization, onToggleVisualization]);
-
-  const handleToggleAnnotations = useCallback(() => {
-    try {
-      const viewer = viewerRef.current?.assetViewer;
-      if (viewer && typeof viewer.onToggleAnnotation === 'function') {
-        const newValue = !showAnnotations;
-        viewer.onToggleAnnotation(newValue);
-        setShowAnnotations(newValue);
-      }
-    } catch (error) {
-      console.warn('Toggle annotations failed:', error);
-    }
-  }, [viewerRef, showAnnotations]);
-
   // Switch between 3D and 2D (top-down) view
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     const viewer = getXeokitViewer();
@@ -280,39 +200,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     }
   }, [getXeokitViewer, viewerRef]);
 
-  const handleToggleXray = useCallback(() => {
-    try {
-      const viewer = getXeokitViewer();
-      if (viewer?.scene) {
-        const scene = viewer.scene;
-        const objectIds = Object.keys(scene.objects || {});
-        if (objectIds.length > 0) {
-          const firstObj = scene.objects[objectIds[0]];
-          const newXray = !firstObj?.xrayed;
-          objectIds.forEach(id => {
-            const obj = scene.objects[id];
-            if (obj) obj.xrayed = newXray;
-          });
-        }
-      }
-    } catch (error) {
-      console.warn('Toggle X-ray failed:', error);
-    }
-  }, [getXeokitViewer]);
-
   const handleClearSlices = useCallback(() => {
     const assetView = getAssetView();
     if (assetView) {
       assetView.clearSlices?.();
     }
   }, [getAssetView]);
-
-  const handleShowObjectDetails = useCallback(() => {
-    const viewer = viewerRef.current;
-    if (viewer) {
-      viewer.onShowObjectDetailsButtonClick?.();
-    }
-  }, [viewerRef]);
 
   // Tool visibility check based on settings
   const isToolVisible = useCallback((toolId: string) => {
@@ -377,7 +270,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   });
   ToolButton.displayName = 'ToolButton';
 
-  // Get overflow items for menu
+  // Get overflow items for menu (only navigation tools)
   const getOverflowItems = () => {
     const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
     
@@ -398,43 +291,26 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         case 'slicer':
           items.push({ id: tool.id, label: 'Snittplan', icon: <Scissors className="h-4 w-4" />, onClick: () => handleToolChange('slicer'), active: activeTool === 'slicer' });
           break;
-        case 'xray':
-          items.push({ id: tool.id, label: 'X-ray läge', icon: <Eye className="h-4 w-4" />, onClick: handleToggleXray });
+        case 'zoomIn':
+          items.push({ id: tool.id, label: 'Zooma in', icon: <ZoomIn className="h-4 w-4" />, onClick: handleZoomIn });
           break;
-        case 'spaces':
-          items.push({ id: tool.id, label: showSpaces ? 'Dölj rum' : 'Visa rum', icon: <Layers className="h-4 w-4" />, onClick: handleToggleSpaces, active: showSpaces });
+        case 'zoomOut':
+          items.push({ id: tool.id, label: 'Zooma ut', icon: <ZoomOut className="h-4 w-4" />, onClick: handleZoomOut });
           break;
-        case 'navCube':
-          items.push({ id: tool.id, label: showNavCube ? 'Dölj kub' : 'Visa kub', icon: <Box className="h-4 w-4" />, onClick: handleToggleNavCube, active: showNavCube });
+        case 'viewFit':
+          items.push({ id: tool.id, label: 'Anpassa vy', icon: <Focus className="h-4 w-4" />, onClick: handleViewFit });
           break;
-        case 'minimap':
-          items.push({ id: tool.id, label: showMinimap ? 'Dölj minimap' : 'Visa minimap', icon: <Map className="h-4 w-4" />, onClick: handleToggleMinimap, active: showMinimap });
+        case 'resetView':
+          items.push({ id: tool.id, label: 'Återställ vy', icon: <Maximize className="h-4 w-4" />, onClick: handleResetView });
           break;
-        case 'annotations':
-          items.push({ id: tool.id, label: showAnnotations ? 'Dölj annotationer' : 'Visa annotationer', icon: <MessageSquare className="h-4 w-4" />, onClick: handleToggleAnnotations, active: showAnnotations });
-          break;
-        case 'objectInfo':
-          items.push({ id: tool.id, label: 'Objektinfo (Asset+)', icon: <Search className="h-4 w-4" />, onClick: handleShowObjectDetails });
-          break;
-        case 'properties':
-          if (onShowProperties) {
-            items.push({ id: tool.id, label: 'Egenskaper (Lovable)', icon: <Info className="h-4 w-4" />, onClick: onShowProperties });
-          }
-          break;
-        case 'addAsset':
-          if (onPickCoordinate) {
-            items.push({ id: tool.id, label: isPickMode ? 'Avbryt registrering' : 'Registrera tillgång', icon: <Plus className="h-4 w-4" />, onClick: onPickCoordinate, active: isPickMode });
-          }
-          break;
-        case 'treeView':
-          if (onToggleTreeView) {
-            items.push({ id: tool.id, label: showTreeView ? 'Dölj modellträd' : 'Visa modellträd', icon: <TreeDeciduous className="h-4 w-4" />, onClick: handleToggleTreeView, active: showTreeView });
-          }
-          break;
-        case 'visualization':
-          if (onToggleVisualization) {
-            items.push({ id: tool.id, label: showVisualization ? 'Dölj visualisering' : 'Rumsvisualisering', icon: <Palette className="h-4 w-4" />, onClick: handleToggleVisualization, active: showVisualization });
-          }
+        case 'viewMode':
+          items.push({ 
+            id: tool.id, 
+            label: viewMode === '3d' ? '2D-vy' : '3D-vy', 
+            icon: viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />, 
+            onClick: () => handleViewModeChange(viewMode === '3d' ? '2d' : '3d'),
+            active: viewMode === '2d'
+          });
           break;
       }
     });
@@ -457,7 +333,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         <DropdownMenuContent align="center" side="top" className="w-52 bg-card border shadow-lg z-50">
           {items.length > 0 && (
             <>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Fler verktyg</DropdownMenuLabel>
               {items.map(item => (
                 <DropdownMenuItem 
                   key={item.id}
@@ -546,7 +421,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     );
   }
 
-  // Desktop: Full toolbar with configurable visibility
+  // Desktop: Navigation-focused toolbar
   return (
     <TooltipProvider delayDuration={300}>
       <div className={cn(
@@ -647,94 +522,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           active={viewMode === '2d'}
           toolId="viewMode"
         />
-
-        <Separator orientation="vertical" className="h-6 mx-1" />
-
-        {/* View Options */}
-        <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={<Eye className="h-4 w-4" />}
-            label="X-ray läge"
-            onClick={handleToggleXray}
-            toolId="xray"
-          />
-          <ToolButton
-            icon={<Layers className="h-4 w-4" />}
-            label="Visa/dölj rum"
-            onClick={handleToggleSpaces}
-            active={showSpaces}
-            toolId="spaces"
-          />
-          <ToolButton
-            icon={<Box className="h-4 w-4" />}
-            label="Visa/dölj navigeringskub"
-            onClick={handleToggleNavCube}
-            active={showNavCube}
-            toolId="navCube"
-          />
-          <ToolButton
-            icon={<Map className="h-4 w-4" />}
-            label="Visa/dölj minimap"
-            onClick={handleToggleMinimap}
-            active={showMinimap}
-            toolId="minimap"
-          />
-          <ToolButton
-            icon={<MessageSquare className="h-4 w-4" />}
-            label="Visa/dölj annotationer"
-            onClick={handleToggleAnnotations}
-            active={showAnnotations}
-            toolId="annotations"
-          />
-          {onToggleTreeView && (
-            <ToolButton
-              icon={<TreeDeciduous className="h-4 w-4" />}
-              label="Visa/dölj modellträd"
-              onClick={handleToggleTreeView}
-              active={showTreeView}
-              toolId="treeView"
-            />
-          )}
-          {onToggleVisualization && (
-            <ToolButton
-              icon={<Palette className="h-4 w-4" />}
-              label="Rumsvisualisering"
-              onClick={handleToggleVisualization}
-              active={showVisualization}
-              toolId="visualization"
-            />
-          )}
-        </div>
-
-        <Separator orientation="vertical" className="h-6 mx-1" />
-
-        {/* Object Info & Properties */}
-        <ToolButton
-          icon={<Search className="h-4 w-4" />}
-          label="Objektinfo (Asset+)"
-          onClick={handleShowObjectDetails}
-          toolId="objectInfo"
-        />
-        
-        {onShowProperties && (
-          <ToolButton
-            icon={<Info className="h-4 w-4" />}
-            label="Egenskaper (Lovable)"
-            onClick={onShowProperties}
-            toolId="properties"
-          />
-        )}
-
-        {/* Add Asset (Pick Coordinate) */}
-        {onPickCoordinate && (
-          <ToolButton
-            icon={<Plus className="h-4 w-4" />}
-            label={isPickMode ? 'Avbryt registrering' : 'Registrera tillgång (klicka i 3D)'}
-            onClick={onPickCoordinate}
-            active={isPickMode}
-            toolId="addAsset"
-          />
-        )}
 
         {/* Overflow menu */}
         <OverflowMenu />
