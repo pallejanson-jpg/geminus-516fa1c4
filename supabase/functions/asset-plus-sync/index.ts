@@ -252,7 +252,8 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
     in_room_fm_guid: item.inRoomFmGuid || null,
     complex_common_name: item.complexCommonName || null,
     gross_area: item.grossArea || null,
-    asset_type: item.ObjectTypeValue || null,
+    // objectTypeValue is the IFC type (e.g., "IfcSpace", "IfcDoor", "Alarm")
+    asset_type: item.objectTypeValue || null,
     // Map createdInModel from Asset+ (defaults to true if not specified)
     created_in_model: item.createdInModel !== undefined ? item.createdInModel : true,
     attributes: item,
