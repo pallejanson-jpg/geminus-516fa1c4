@@ -503,33 +503,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   // The navCubeRef.setVisible() method is NOT used to avoid DOM manipulation crashes
   // Visibility is handled in the canvas element's style: display: showNavCube ? 'block' : 'none'
 
-  // Handle coordinate picking mode - supports both internal and external control
-  const handleTogglePickMode = useCallback(() => {
-    if (isPickMode) {
-      // Disable pick mode
-      setIsPickMode(false);
-      toast.info('Registreringsläge avbrutet');
-      
-      // Remove listener if exists
-      if (pickModeListenerRef.current) {
-        pickModeListenerRef.current();
-        pickModeListenerRef.current = null;
-      }
-    } else {
-      // Enable pick mode
-      setIsPickMode(true);
-      toast.info('Klicka på en yta i 3D-vyn för att välja position', {
-        duration: 5000,
-      });
-
-      setupPickModeListener();
-    }
-  }, [isPickMode]);
-
-  // Setup the pick mode click listener
-  const setupPickModeListener = useCallback(() => {
+  // Setup the pick mode click listener - defined before handleTogglePickMode
+  const setupPickModeListenerInternal = useCallback(() => {
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.scene) return;
+    if (!xeokitViewer?.scene) {
+      console.warn('Pick mode: viewer or scene not ready');
+      toast.error('Viewer ej redo. Försök igen.');
+      return false;
+    }
 
     const handlePick = (pickResult: any) => {
       if (pickResult?.worldPos) {
@@ -565,7 +546,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
               };
             }
           } else if (assetData.levelFmGuid) {
-            // Use the storey/level as parent
             const levelData = allData.find((a: any) => a.fmGuid === assetData.levelFmGuid);
             if (levelData) {
               parentNode = {
@@ -595,7 +575,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           onCoordinatePicked(coords, parentNode);
           setIsPickMode(false);
         } else {
-          // Internal dialog flow
+          // Internal dialog flow - open asset creation dialog
           setAddAssetParentNode(parentNode);
           setAddAssetDialogOpen(true);
           setIsPickMode(false);
@@ -623,7 +603,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       // Use xeokit's pickSurface for accurate 3D coordinates
       const pickResult = xeokitViewer.scene.pick({
         canvasPos,
-        pickSurface: true, // Get exact surface coordinates
+        pickSurface: true,
       });
       
       if (pickResult) {
@@ -639,16 +619,44 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     pickModeListenerRef.current = () => {
       canvas.removeEventListener('click', handleClick);
     };
+
+    return true;
   }, [allData, assetData, fmGuid, onCoordinatePicked]);
+
+  // Handle coordinate picking mode - supports both internal and external control
+  const handleTogglePickMode = useCallback(() => {
+    if (isPickMode) {
+      // Disable pick mode
+      setIsPickMode(false);
+      toast.info('Registreringsläge avbrutet');
+      
+      // Remove listener if exists
+      if (pickModeListenerRef.current) {
+        pickModeListenerRef.current();
+        pickModeListenerRef.current = null;
+      }
+    } else {
+      // Enable pick mode
+      const success = setupPickModeListenerInternal();
+      if (success) {
+        setIsPickMode(true);
+        toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+          duration: 5000,
+        });
+      }
+    }
+  }, [isPickMode, setupPickModeListenerInternal]);
 
   // Respond to external pickModeEnabled prop changes
   useEffect(() => {
     if (pickModeEnabled && !isPickMode && state.isInitialized) {
-      setIsPickMode(true);
-      toast.info('Klicka på en yta i 3D-vyn för att välja position', {
-        duration: 5000,
-      });
-      setupPickModeListener();
+      const success = setupPickModeListenerInternal();
+      if (success) {
+        setIsPickMode(true);
+        toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+          duration: 5000,
+        });
+      }
     } else if (!pickModeEnabled && isPickMode) {
       // External cancelled pick mode
       setIsPickMode(false);
@@ -657,7 +665,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         pickModeListenerRef.current = null;
       }
     }
-  }, [pickModeEnabled, isPickMode, state.isInitialized, setupPickModeListener]);
+  }, [pickModeEnabled, isPickMode, state.isInitialized, setupPickModeListenerInternal]);
 
   // Cleanup pick mode listener on unmount
   useEffect(() => {

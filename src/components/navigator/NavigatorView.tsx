@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { X, List, Network } from "lucide-react";
 import { useSearchResults, SearchResult } from "@/hooks/useSearchResults";
 import { SearchResultsList } from "@/components/common/SearchResultsList";
+import { useXktPreload } from "@/hooks/useXktPreload";
 
 function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   if (!q.trim()) return nodes;
@@ -94,14 +95,32 @@ export default function NavigatorView() {
 
   const visibleTree = useMemo(() => filterTree(navigatorTreeData, query), [navigatorTreeData, query]);
 
-  const onToggle = (fmGuid: string) => {
+  // Track last expanded building for preloading
+  const [lastExpandedBuilding, setLastExpandedBuilding] = useState<string | null>(null);
+  
+  // Preload XKT models when a building is expanded
+  useXktPreload(lastExpandedBuilding);
+
+  const onToggle = useCallback((fmGuid: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(fmGuid)) next.delete(fmGuid);
-      else next.add(fmGuid);
+      const isExpanding = !next.has(fmGuid);
+      
+      if (isExpanding) {
+        next.add(fmGuid);
+        
+        // Check if the toggled node is a building
+        const node = allData.find((a: any) => a.fmGuid === fmGuid);
+        if (node?.category === 'Building') {
+          setLastExpandedBuilding(fmGuid);
+        }
+      } else {
+        next.delete(fmGuid);
+      }
+      
       return next;
     });
-  };
+  }, [allData]);
 
   const handleAddChild = useCallback((parentNode: NavigatorNode) => {
     // Find building fmGuid for the parent node
