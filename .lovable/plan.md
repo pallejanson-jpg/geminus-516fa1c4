@@ -1,261 +1,267 @@
 
-# Plan: UI/UX-förbättringar för 3D-viewer och rumslistor
+# Plan: Egenskap-panel förenkling, 3D-menyfix, och FM ACCESS-integration
 
 ## Sammanfattning
-Denna plan åtgärdar sex separata problem som identifierats i gränssnittet:
-1. Responsivitet i "Anpassa verktygsfält" dialog
-2. Höger meny i 3D-viewern fungerar inte och är felplacerad
-3. Ingen landningssida för rum vid val från rumslista
-4. Två kolumnväljare i rumslistan - ta bort en och förbättra den andra
-5. Mobil responsivitet i rumslistan
-6. 3D-viewern kan maximeras till helskärm
+Denna plan adresserar fem huvudområden:
+1. Förenkla egenskapsdialogen på landningssidor (slå ihop tabbar, mobilvänlig, sökbar)
+2. Fixa höger-meny i 3D-viewer (positionering och funktionalitet)
+3. Integrera xeokit-trädnavigator i höger-menyn
+4. Implementera FM ACCESS API-integration
+5. Utöka API-dokumentationen i Hjälpcentret
 
 ---
 
-## Problem 1: Responsivitet i "Anpassa verktygsfält"
+## Problem 1: UniversalPropertiesDialog - Förenkla och mobilanpassa
 
 ### Nuvarande läge
-`ToolbarSettings.tsx` (rad 271-315) använder en `Dialog` med fast bredd `sm:max-w-lg` och en `ScrollArea` med fast höjd `h-[400px]`. På mobil kan detta orsaka overflow-problem.
+`UniversalPropertiesDialog` (rad 319-329) har två tabbar:
+- **Lovable**: Redigerbara lokala egenskaper
+- **Asset+**: Synkade egenskaper från Asset+
+
+Mobilanvändare har problem med:
+- Horizontal tabbar tar plats
+- Ingen sök/filter-funktion för ~50+ egenskaper
+- Fast bredd `w-[400px]` fungerar inte på mobil
 
 ### Lösning
-Förbättra dialogens responsivitet:
-- Mobil: Fullskärm med flexibel höjd
-- Lägg till mobilanpassade element (större touch-targets)
-- Säkerställ att dra-och-släpp fungerar på touchskärmar
+Slå ihop till en enda sammanslagen vy med sektioner och sökfunktion:
 
-**Fil**: `src/components/viewer/ToolbarSettings.tsx`
+**Fil**: `src/components/common/UniversalPropertiesDialog.tsx`
 
 ```text
-Rad 273: Ändra från:
-className="sm:max-w-lg max-h-[85vh]"
+Förändringar:
+1. Ta bort Tabs-komponenten helt
+2. Lägg till sökfält för att filtrera egenskaper
+3. Gruppera egenskaper i kollapserbara sektioner:
+   - System (fm_guid, category, etc.)
+   - Koordinater (x, y, z)
+   - Lovable (redigerbara)
+   - Asset+ System
+   - Asset+ User Defined Parameters
+4. Mobil layout: Ändra från `w-[400px]` till `w-full max-w-[400px]`
+5. Vertikal layout på mobil med staplad etikett/värde
+6. Markera redigerbara fält tydligt med ikon
+```
 
-Till:
-className="w-full sm:max-w-lg max-h-[90vh] flex flex-col"
-
-Rad 282: Ändra från:
-<ScrollArea className="h-[400px] pr-4">
-
-Till:
-<ScrollArea className="flex-1 max-h-[50vh] sm:max-h-[400px] pr-4">
+**Ny struktur**:
+```text
++--------------------------------+
+| [⠿] Labradorgatan 18    [—][X] |
++--------------------------------+
+| 🔍 Sök egenskaper...           |
++--------------------------------+
+| ▼ System                       |
+|   FM GUID: 42495e64-...        |
+|   Kategori: Building           |
++--------------------------------+
+| ▼ Lokala inställningar    [✏️] |
+|   Namn: Labradorgatan 18       |
+|   Ivion Site ID: —             |
+|   Favorit: Ja                  |
++--------------------------------+
+| ▼ Area & Mått                  |
+|   NTA: 1,234.56 m²             |
+|   BRA: 1,156.78 m²             |
++--------------------------------+
+| ▼ Användardefinierade          |
+|   Hyresobjekt: ABC123          |
+|   Golvmaterial: Klinker        |
++--------------------------------+
 ```
 
 ---
 
-## Problem 2: Höger meny (VisualizationToolbar) fungerar inte
-
-### Nuvarande läge
-`VisualizationToolbar.tsx` (rad 240-241) positionerar knappen:
-```jsx
-<div className="absolute top-1/2 -translate-y-1/2 right-3 z-30">
-```
-
-Knappen är placerad i mitten vertikalt, vilket kan krocka med andra UI-element. Dessutom kan den vara svår att hitta.
+## Problem 2: Höger-meny i 3D fungerar inte
 
 ### Identifierade problem
-1. **Z-index konflikt**: NavCube canvas har `z-index: 25` (rad 1095 i AssetPlusViewer), medan toolbar har `z-30`, men NavCube ligger i `bottom: 70px, right: 12px` och kan överlappa
-2. **Positionering**: Knappen är i mitten av skärmen istället för uppe i hörnet
-3. **Sheet-innehållet**: `SheetContent` har `w-80` vilket kan vara för smalt på vissa skärmar
+1. **Positionering**: `top-4 right-14` kolliderar med AnnotationToggleMenu som renderas i samma rad
+2. **Blockerad**: Headern i AssetPlusViewer har en container som kan blockera klick
+3. **Ej synlig**: Knappen hamnar under/bakom andra element
 
-### Lösning
-Flytta knappen till övre högra hörnet och säkerställ korrekt z-index:
-
-**Fil**: `src/components/viewer/VisualizationToolbar.tsx`
-
+### Nuvarande header-struktur (rad 1054-1092)
 ```text
-Rad 240-241: Ändra från:
-<div className={cn("absolute top-1/2 -translate-y-1/2 right-3 z-30", className)}>
-
-Till:
-<div className={cn("absolute top-4 right-14 z-30", className)}>
-```
-
-Justering: `right-14` för att inte kollidera med AnnotationToggleMenu som redan finns i `top-2 right-2`.
-
----
-
-## Problem 3: Ingen landningssida för rum
-
-### Nuvarande läge
-När användaren väljer ett rum i `RoomsView` anropas `handleOpen3D` (rad 450-454) som direkt öppnar 3D-viewern utan att visa rummets landningssida.
-
-I `PortfolioView.tsx` (rad 209-213):
-```javascript
-const handleOpen3DRoom = (fmGuid: string, levelFmGuid?: string) => {
-  setViewer3dFmGuid(fmGuid);
-  setShowRoomsFor(null);
-  // Ingen setSelectedFacility()!
-};
-```
-
-### Lösning
-Lägg till möjlighet att öppna landningssida för rum via ett klick på raden/kortet, och behåll 3D-knappen för direkt 3D-navigering:
-
-**Fil**: `src/components/portfolio/RoomsView.tsx`
-
-Lägg till ny prop och handler:
-```text
-Rad 76: Lägg till ny prop:
-onSelectRoom?: (fmGuid: string) => void;
-
-Rad 450-454: Lägg till ny handler:
-const handleSelectRoom = (room: RoomData) => {
-  if (onSelectRoom) {
-    onSelectRoom(room.fmGuid);
-  }
-};
-```
-
-**Fil**: `src/components/portfolio/PortfolioView.tsx`
-
-```text
-Rad 209-213: Lägg till handler för rumsvalet:
-const handleSelectRoom = (fmGuid: string) => {
-  const room = allData.find((a: any) => a.fmGuid === fmGuid);
-  if (room) {
-    setSelectedFacility(room);
-    setShowRoomsFor(null);
-  }
-};
-
-Rad 241-246: Lägg till prop:
-<RoomsView
-  ...
-  onSelectRoom={handleSelectRoom}
-/>
-```
-
-**Beteendeändring**:
-- Klick på rad/kort → Öppnar landningssida (FacilityLandingPage för rum)
-- Klick på 3D-ikon → Öppnar 3D-viewer direkt
-
----
-
-## Problem 4: Två kolumnväljare i rumslistan
-
-### Nuvarande läge
-`RoomsView.tsx` har två separata kolumnväljare:
-1. **Sheet-baserad** (rad 526-556): Fullständig trädmeny med kategorier
-2. **DropdownMenu** (rad 559-581): "Snabbval kolumner" med de första 20 kolumnerna
-
-### Lösning
-Ta bort dropdown-menyn och förbättra Sheet-menyn med:
-- Möjlighet att sortera ordningen via drag-and-drop (som ToolbarSettings)
-- Tydligare UI för att välja synliga kolumner
-
-**Fil**: `src/components/portfolio/RoomsView.tsx`
-
-1. **Ta bort** rad 558-581 (DropdownMenu för snabbval)
-
-2. **Förbättra ColumnSelectorTree** (rad 172-252) med drag-and-drop:
-   - Lägg till `useSortable` för varje kolumn-item
-   - Spara ordning i state
-   - Visa synliga kolumner först med drag-handtag
-
-**Ny komponent-struktur**:
-```text
-ColumnSelectorTree:
-├── Synliga kolumner (dragbar ordning)
-│   ├── [⠿] Rumsnummer [✓]
-│   ├── [⠿] Rumsnamn [✓]
-│   └── [⠿] Våning [✓]
-├── ────────────────────
-├── Systemegenskaper (kollapsbar)
-│   ├── Kategori [○]
-│   └── FMGUID [○]
-├── Användardefinierade (kollapsbar)
-│   └── Hyresobjekt [○]
-└── Beräknade (kollapsbar)
-    └── NTA [○]
-```
-
----
-
-## Problem 5: Mobil responsivitet i rumslistan
-
-### Nuvarande läge
-- Verktygsfältet (rad 514-605) är redan responsivt med `flex-col sm:flex-row`
-- Kolumnväljaren visar text "Kolumner" bara på `sm:inline`
-- Men tabellen (rad 611-677) kan ha horisontell scroll-problem
-
-### Lösning
-Flytta kolumnväljaren till en hamburgermeny på mobil:
-
-**Fil**: `src/components/portfolio/RoomsView.tsx`
-
-```text
-Ny import:
-import { Menu } from 'lucide-react';
-
-Rad 524-604: Omstrukturera toolbar för mobil:
-<div className="border-b px-4 py-2 flex gap-2 shrink-0">
-  <div className="relative flex-1">
-    <Search ... />
-    <Input ... />
+<div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-start pointer-events-none">
+  <div className="flex gap-1.5 pointer-events-auto">
+    [Stäng] [Maximera]
   </div>
-  
-  {/* Mobile: Hamburger menu */}
-  <div className="sm:hidden">
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="icon" className="h-9 w-9">
-          <Menu size={16} />
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="right">
-        {/* Kolumnväljare + Vylägesväxlare */}
-      </SheetContent>
-    </Sheet>
-  </div>
-  
-  {/* Desktop: Inline controls */}
-  <div className="hidden sm:flex gap-2">
-    {/* Kolumnväljare */}
-    {/* Vylägesväxlare */}
+  <div className="flex gap-1.5 pointer-events-auto">
+    [AnnotationToggleMenu]
   </div>
 </div>
 ```
 
----
-
-## Problem 6: 3D-viewer kan maximeras till helskärm
-
-### Nuvarande läge
-`AssetPlusViewer.tsx` (rad 1040-1044) har en container med padding:
-```jsx
-<div className="h-full p-2 sm:p-4 md:p-6">
-```
-
-I `Viewer.tsx`:
-```jsx
-<div className="h-full p-2 sm:p-4 md:p-6">
-  <AssetPlusViewer ... />
-</div>
-```
-
 ### Lösning
-Lägg till en "maximera"-knapp som tar bort padding och fyller hela skärmen:
+Integrera VisualizationToolbar-knappen i samma header-rad som övriga knappar:
 
 **Fil**: `src/components/viewer/AssetPlusViewer.tsx`
 
 ```text
-Ny state:
-const [isFullscreen, setIsFullscreen] = useState(false);
+Ändra rad 1054-1092:
+<div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-start pointer-events-none">
+  {/* Vänster: Stäng + Maximera */}
+  <div className="flex gap-1.5 pointer-events-auto">
+    [Stäng] [Maximera]
+  </div>
+  
+  {/* Höger: Visualisering + Annotationer */}
+  <div className="flex gap-1.5 pointer-events-auto">
+    <VisualizationToolbarButton /> {/* NY! */}
+    [AnnotationToggleMenu]
+  </div>
+</div>
+```
 
-Ny knapp i toolbar (nära close-knappen):
-<Button 
-  variant="secondary" 
-  size="icon"
-  onClick={() => setIsFullscreen(!isFullscreen)}
-  className="..."
->
-  {isFullscreen ? <Minimize2 /> : <Maximize2 />}
-</Button>
+**Fil**: `src/components/viewer/VisualizationToolbar.tsx`
 
-Uppdatera container (rad 1040):
-<div className={cn(
-  "h-full",
-  isFullscreen ? "fixed inset-0 z-50" : "p-2 sm:p-4 md:p-6"
-)}>
+```text
+Ändra rad 240-241:
+Ta bort "absolute" positionering helt. 
+Exportera endast knappen och Sheet-innehållet som en inline-komponent.
+```
+
+**Mobil**: Gör knapparna mindre med `h-8 w-8 sm:h-10 sm:w-10`
+
+---
+
+## Problem 3: Xeokit Tree Navigator saknas i höger-menyn
+
+### Nuvarande läge
+`ViewerTreePanel` (src/components/viewer/ViewerTreePanel.tsx) renderas separat som en absolut positionerad panel till vänster (`left-3`). Den aktiveras via en toggle i VisualizationToolbar, men är inte integrerad i menyn själv.
+
+### Lösning
+Lägg till trädnavigatorn som en inbäddad sektion i VisualizationToolbar Sheet:
+
+**Fil**: `src/components/viewer/VisualizationToolbar.tsx`
+
+```text
+Under "Visualisering"-sektionen (rad 315-339), lägg till:
+
+<Separator />
+
+{/* Modellträd inline */}
+<div>
+  <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+    Navigator
+  </Label>
+  <div className="border rounded-lg max-h-[40vh] overflow-hidden">
+    <ViewerTreePanel 
+      viewerRef={viewerRef}
+      isVisible={true}
+      onClose={() => {}}
+      embedded={true}  // Ny prop för inbäddad styling
+    />
+  </div>
+</div>
+```
+
+**Fil**: `src/components/viewer/ViewerTreePanel.tsx`
+
+Lägg till prop `embedded?: boolean`:
+- Om `embedded=true`: Ta bort position absolut, border, shadow
+- Visa trädinnehållet direkt utan header
+
+---
+
+## Problem 4: FM ACCESS API-integration
+
+### Autentiseringsflöde
+Baserat på dokumentationen:
+
+```text
+1. POST https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token
+   Body: grant_type=client_credentials&client_id=HDCAgent+Basic
+   → Returnerar: access_token
+
+2. GET /api/version eller liknande för att hämta aktuell version-id
+   Header: Authorization: Bearer {token}
+   → Returnerar: version_id
+
+3. Alla efterföljande API-anrop:
+   Headers:
+     - Authorization: Bearer {token}
+     - X-Hdc-Version-Id: {version_id}
+```
+
+### Implementation
+
+**Nya Supabase secrets som behövs**:
+- `FM_ACCESS_TOKEN_URL` = "https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
+- `FM_ACCESS_CLIENT_ID` = "HDCAgent Basic"
+- `FM_ACCESS_API_URL` = (användarens FM Access API-URL)
+- `FM_ACCESS_USERNAME` (om password grant flow)
+- `FM_ACCESS_PASSWORD` (om password grant flow)
+
+**Ny edge function**: `supabase/functions/fm-access-query/index.ts`
+
+```text
+Funktioner:
+- POST /fm-access-query
+  Body: { action: 'get-token' } → Hämtar och returnerar token + version
+  Body: { action: 'get-drawings', buildingId: '...' } → Hämtar ritningar
+  Body: { action: 'get-documents', buildingId: '...' } → Hämtar dokument
+  Body: { action: 'test-connection' } → Testar anslutningen
+
+Implementation:
+1. Hämta token via client_credentials grant
+2. Hämta version-id från FM Access API
+3. Gör faktiska API-anrop med båda headers
+4. Returnera data
+```
+
+**Fil**: `src/components/settings/ApiSettingsModal.tsx`
+
+Uppdatera FM Access-sektionen (rad 881-908):
+
+```text
+Aktivera fälten istället för "Kommer snart":
+- Token URL (https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token)
+- Client ID (HDCAgent Basic)
+- API Base URL
+- Username (valfritt)
+- Password (valfritt)
+- Test Connection-knapp
+
+Samma mönster som Asset+-konfigurationen.
+```
+
+---
+
+## Problem 5: API-dokumentation för FM ACCESS i Hjälpcentret
+
+### Nuvarande läge
+`RightSidebar.tsx` (rad 81-114) har `API_CATEGORIES` med dokumentation för Asset+ API.
+
+### Lösning
+Lägg till FM ACCESS API-dokumentation:
+
+**Fil**: `src/components/layout/RightSidebar.tsx`
+
+```text
+Lägg till i API_CATEGORIES (rad 81):
+
+{
+  name: 'FM Access - Ritningar',
+  endpoints: [
+    { method: 'GET', path: '/drawings', description: 'Hämta ritningar för byggnad' },
+    { method: 'GET', path: '/drawings/{id}/pdf', description: 'Hämta ritning som PDF' },
+    { method: 'GET', path: '/drawings/{id}/dwg', description: 'Hämta ritning som DWG' },
+  ],
+},
+{
+  name: 'FM Access - Dokument',
+  endpoints: [
+    { method: 'GET', path: '/documents', description: 'Hämta dokument för byggnad' },
+    { method: 'GET', path: '/documents/{id}', description: 'Hämta specifikt dokument' },
+    { method: 'POST', path: '/documents', description: 'Ladda upp dokument' },
+  ],
+},
+{
+  name: 'FM Access - Version',
+  endpoints: [
+    { method: 'GET', path: '/version', description: 'Hämta aktuell systemversion' },
+    { method: '-', path: 'X-Hdc-Version-Id', description: 'Obligatorisk header för de flesta anrop' },
+  ],
+},
 ```
 
 ---
@@ -264,46 +270,82 @@ Uppdatera container (rad 1040):
 
 | Fil | Typ | Beskrivning |
 |-----|-----|-------------|
-| `src/components/viewer/ToolbarSettings.tsx` | Ändra | Förbättra responsivitet för mobil |
-| `src/components/viewer/VisualizationToolbar.tsx` | Ändra | Flytta till övre högra hörnet |
-| `src/components/portfolio/RoomsView.tsx` | Ändra | Ta bort dubbel kolumnväljare, lägg till drag-drop ordning, mobil hamburgermeny, rumsval-callback |
-| `src/components/portfolio/PortfolioView.tsx` | Ändra | Lägg till handler för att öppna rums-landningssida |
-| `src/components/viewer/AssetPlusViewer.tsx` | Ändra | Lägg till fullscreen-toggle |
+| `src/components/common/UniversalPropertiesDialog.tsx` | Stor ändring | Ta bort tabbar, lägg till sök, mobilvänlig vertikal layout, grupperade sektioner |
+| `src/components/viewer/VisualizationToolbar.tsx` | Ändra | Ta bort absolut positionering, exportera som inline-knapp, integrera trädnavigator |
+| `src/components/viewer/ViewerTreePanel.tsx` | Ändra | Lägg till `embedded` prop för inbäddad styling |
+| `src/components/viewer/AssetPlusViewer.tsx` | Ändra | Integrera VisualizationToolbar-knappen i header-raden, mobila knappstorleker |
+| `src/components/settings/ApiSettingsModal.tsx` | Ändra | Aktivera FM Access-fält, spara till Supabase secrets |
+| `src/components/layout/RightSidebar.tsx` | Ändra | Lägg till FM Access API-dokumentation |
+| `supabase/functions/fm-access-query/index.ts` | Ny | Edge function för FM Access API |
+
+---
+
+## Tekniska detaljer
+
+### UniversalPropertiesDialog - Söklogik
+```text
+const [searchQuery, setSearchQuery] = useState('');
+
+// Filtrera alla egenskaper
+const filteredProperties = useMemo(() => {
+  const all = [...lovableProperties, ...assetPlusProperties];
+  if (!searchQuery.trim()) return all;
+  
+  const q = searchQuery.toLowerCase();
+  return all.filter(p => 
+    p.label.toLowerCase().includes(q) ||
+    String(p.value ?? '').toLowerCase().includes(q)
+  );
+}, [lovableProperties, assetPlusProperties, searchQuery]);
+```
+
+### FM Access Token Flow
+```text
+async function getFmAccessToken(): Promise<{ token: string; versionId: string }> {
+  // 1. Get token
+  const tokenRes = await fetch(FM_ACCESS_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(FM_ACCESS_CLIENT_ID),
+  });
+  const { access_token } = await tokenRes.json();
+  
+  // 2. Get version ID
+  const versionRes = await fetch(`${FM_ACCESS_API_URL}/version`, {
+    headers: { 'Authorization': `Bearer ${access_token}` }
+  });
+  const { versionId } = await versionRes.json();
+  
+  return { token: access_token, versionId };
+}
+```
+
+### NavCube mobilanpassning
+```text
+Rad 1100-1112: Ändra storlek på mobil:
+width: window.innerWidth < 640 ? '60px' : '80px',
+height: window.innerWidth < 640 ? '60px' : '80px',
+```
 
 ---
 
 ## Prioritering
 
-1. **Kritiskt**: Höger meny positionering (5 min)
-2. **Viktigt**: Responsivitet i ToolbarSettings (10 min)
-3. **Viktigt**: Rums-landningssida (15 min)
-4. **Funktion**: Konsolidera kolumnväljare (25 min)
-5. **Funktion**: Mobil hamburgermeny för rumslistor (20 min)
-6. **Funktion**: 3D-viewer fullscreen (10 min)
+1. **Kritiskt**: Fixa höger-meny positionering (15 min)
+2. **Viktigt**: Förenkla UniversalPropertiesDialog (30 min)
+3. **Viktigt**: Integrera trädnavigator i höger-meny (20 min)
+4. **Funktion**: FM Access API-inställningar UI (20 min)
+5. **Funktion**: FM Access edge function (30 min)
+6. **Komplettering**: API-dokumentation i Hjälpcentret (10 min)
+7. **Polish**: Mobila knappstorleker (10 min)
 
-**Total uppskattad tid**: ~1.5 timmar
+**Total uppskattad tid**: ~2.5 timmar
 
 ---
 
-## Teknisk implementation (detaljer)
+## Framtida utbyggnad
 
-### VisualizationToolbar positionering
-
-Nuvarande position kolliderar potentiellt med NavCube. Ny position:
-- `top-4` för att matcha övriga knappar
-- `right-14` (56px) för att ge plats åt AnnotationToggleMenu som redan finns i top-right
-
-### Kolumnväljare med drag-and-drop
-
-Använd samma mönster som `ToolbarSettings.tsx`:
-- `@dnd-kit/core` och `@dnd-kit/sortable`
-- `SortableContext` med `verticalListSortingStrategy`
-- Visa endast synliga kolumner i den dragbara listan
-- Övriga kolumner visas i kategorier (som idag)
-
-### Fullscreen-implementation
-
-Använd `fixed inset-0 z-50` för att täcka hela viewporten:
-- Högre z-index än sidebars och header
-- Escape-tangent för att avsluta (redan hanteras av dialog/sheet)
-- Behåll alla verktyg och paneler funktionella
+- FM Access dokument-viewer integrerad i landningssidor
+- Ritningsöverlägg i 3D-viewern
+- Synkronisering av FM Access-data till lokal databas
+- Sökbar ritningsarkiv-vy i Navigator
