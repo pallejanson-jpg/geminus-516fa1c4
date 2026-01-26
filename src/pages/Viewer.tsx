@@ -1,6 +1,7 @@
 import { useContext } from "react";
 import { AppContext } from "@/context/AppContext";
 import AssetPlusViewer from "@/components/viewer/AssetPlusViewer";
+import BuildingSelector from "@/components/viewer/BuildingSelector";
 
 export default function Viewer() {
   const { viewer3dFmGuid, setViewer3dFmGuid } = useContext(AppContext);
@@ -19,12 +20,10 @@ export default function Viewer() {
     );
   }
 
-  // Empty state - user should navigate from Navigator or Portfolio
+  // Show building selector when no model is selected
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center text-muted-foreground">
-        <p className="text-sm">No model selected</p>
-      </div>
+    <div className="h-full">
+      <BuildingSelector />
     </div>
   );
 }

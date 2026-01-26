@@ -37,7 +37,11 @@ export interface ToolConfig {
   inOverflow: boolean;
 }
 
-const DEFAULT_TOOLS: ToolConfig[] = [
+// Version number - increment when adding new tools to force localStorage update
+const SETTINGS_VERSION = 2;
+
+// Navigation tools - shown in the bottom toolbar
+export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'orbit', label: 'Orbit (rotera)', visible: true, inOverflow: false },
   { id: 'firstPerson', label: 'Första person', visible: true, inOverflow: false },
   { id: 'zoomIn', label: 'Zooma in', visible: true, inOverflow: false },
@@ -48,29 +52,49 @@ const DEFAULT_TOOLS: ToolConfig[] = [
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
   { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
+];
+
+// Visualization tools - shown in the right sidebar toolbar
+export const VISUALIZATION_TOOLS: ToolConfig[] = [
+  { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: false },
+  { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: false },
+  { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
+  { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
+  { id: 'annotations', label: 'Annotationer', visible: true, inOverflow: false },
   { id: 'treeView', label: 'Modellträd', visible: true, inOverflow: false },
   { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
-  { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: true },
-  { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: true },
-  { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: true },
-  { id: 'minimap', label: 'Minimap', visible: true, inOverflow: true },
-  { id: 'annotations', label: 'Annotationer', visible: true, inOverflow: true },
   { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
   { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
   { id: 'addAsset', label: 'Registrera tillgång', visible: true, inOverflow: false },
 ];
 
+// Combined default tools for backward compatibility
+const DEFAULT_TOOLS: ToolConfig[] = [...NAVIGATION_TOOLS, ...VISUALIZATION_TOOLS];
+
 const STORAGE_KEY = 'viewer-toolbar-settings';
+const VERSION_KEY = 'viewer-toolbar-version';
 
 export const getToolbarSettings = (): ToolConfig[] => {
   try {
+    const storedVersion = localStorage.getItem(VERSION_KEY);
     const stored = localStorage.getItem(STORAGE_KEY);
+    
+    // Force reset if version mismatch or no version stored
+    if (!storedVersion || parseInt(storedVersion) < SETTINGS_VERSION) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_TOOLS));
+      localStorage.setItem(VERSION_KEY, String(SETTINGS_VERSION));
+      return DEFAULT_TOOLS;
+    }
+    
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge with defaults to handle new tools - add missing tools at end
+      
+      // Merge with defaults to handle new tools - add missing tools
       const mergedTools = DEFAULT_TOOLS.map(defaultTool => {
         const storedTool = parsed.find((t: ToolConfig) => t.id === defaultTool.id);
-        return storedTool || defaultTool;
+        // CRITICAL: Use stored settings if they exist, otherwise use default
+        // This ensures new tools are always included with their default visibility
+        return storedTool ? { ...defaultTool, ...storedTool } : defaultTool;
       });
       
       // Check if any new tools were added (not in stored settings)
@@ -91,9 +115,28 @@ export const getToolbarSettings = (): ToolConfig[] => {
   return DEFAULT_TOOLS;
 };
 
+// Get only navigation tools
+export const getNavigationToolSettings = (): ToolConfig[] => {
+  const allSettings = getToolbarSettings();
+  return NAVIGATION_TOOLS.map(navTool => {
+    const setting = allSettings.find(t => t.id === navTool.id);
+    return setting || navTool;
+  });
+};
+
+// Get only visualization tools  
+export const getVisualizationToolSettings = (): ToolConfig[] => {
+  const allSettings = getToolbarSettings();
+  return VISUALIZATION_TOOLS.map(vizTool => {
+    const setting = allSettings.find(t => t.id === vizTool.id);
+    return setting || vizTool;
+  });
+};
+
 export const saveToolbarSettings = (tools: ToolConfig[]) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tools));
+    localStorage.setItem(VERSION_KEY, String(SETTINGS_VERSION));
   } catch (e) {
     console.warn('Failed to save toolbar settings:', e);
   }
@@ -218,7 +261,11 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
   };
 
   const handleReset = () => {
+    // Reset to defaults and clear version to force fresh start
+    localStorage.removeItem(VERSION_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setTools(DEFAULT_TOOLS);
+    toast.info('Verktygsfält återställt till standard');
   };
 
   return (
