@@ -23,6 +23,7 @@ import {
   Search,
   Info,
   Settings,
+  TreeDeciduous,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -43,10 +44,12 @@ interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
+  onToggleTreeView?: (visible: boolean) => void;
   onPickCoordinate?: () => void;
   onShowProperties?: () => void;
   onOpenSettings?: () => void;
   isPickMode?: boolean;
+  showTreeView?: boolean;
   className?: string;
 }
 
@@ -62,10 +65,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   viewerRef,
   onToggleNavCube,
   onToggleMinimap,
+  onToggleTreeView,
   onPickCoordinate,
   onShowProperties,
   onOpenSettings,
   isPickMode,
+  showTreeView,
   className
 }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
@@ -208,6 +213,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     setShowMinimap(newValue);
     onToggleMinimap?.(newValue);
   }, [showMinimap, onToggleMinimap]);
+
+  const handleToggleTreeView = useCallback(() => {
+    onToggleTreeView?.(!showTreeView);
+  }, [showTreeView, onToggleTreeView]);
 
   const handleToggleAnnotations = useCallback(() => {
     try {
@@ -406,6 +415,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         case 'addAsset':
           if (onPickCoordinate) {
             items.push({ id: tool.id, label: isPickMode ? 'Avbryt registrering' : 'Registrera tillgång', icon: <Plus className="h-4 w-4" />, onClick: onPickCoordinate, active: isPickMode });
+          }
+          break;
+        case 'treeView':
+          if (onToggleTreeView) {
+            items.push({ id: tool.id, label: showTreeView ? 'Dölj modellträd' : 'Visa modellträd', icon: <TreeDeciduous className="h-4 w-4" />, onClick: handleToggleTreeView, active: showTreeView });
           }
           break;
       }
@@ -658,6 +672,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             active={showAnnotations}
             toolId="annotations"
           />
+          {onToggleTreeView && (
+            <ToolButton
+              icon={<TreeDeciduous className="h-4 w-4" />}
+              label="Visa/dölj modellträd"
+              onClick={handleToggleTreeView}
+              active={showTreeView}
+              toolId="treeView"
+            />
+          )}
         </div>
 
         <Separator orientation="vertical" className="h-6 mx-1" />
