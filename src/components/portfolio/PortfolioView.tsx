@@ -134,8 +134,28 @@ const PortfolioView: React.FC = () => {
   const handleOpenNavigator = (facility: Facility) => setActiveApp('navigation');
   const handleOpen360 = (siteId?: string) => {
     if (siteId) {
-      // Open Ivion 360 viewer in new tab with the site ID
-      window.open(`https://ivion.se/site/${siteId}`, '_blank');
+      // Get app config from localStorage to check openMode
+      // Note: Ivion is stored under 'radar' key in appConfigs
+      const savedConfigs = localStorage.getItem('appConfigs');
+      const appConfigs = savedConfigs ? JSON.parse(savedConfigs) : {};
+      const ivionConfig = appConfigs.radar || { openMode: 'external', url: '' };
+      
+      // Build the full URL - use configured URL or default to ivion.se
+      const baseUrl = ivionConfig.url && ivionConfig.url.trim() !== '' 
+        ? ivionConfig.url.replace(/\/$/, '') // Remove trailing slash
+        : 'https://ivion.se';
+      const fullUrl = `${baseUrl}/site/${siteId}`;
+      
+      console.log('[360+] Opening Ivion:', { siteId, openMode: ivionConfig.openMode, baseUrl, fullUrl });
+      
+      if (ivionConfig.openMode === 'internal') {
+        // Store the URL and switch to internal 360 view
+        localStorage.setItem('ivion360Url', fullUrl);
+        setActiveApp('radar');
+      } else {
+        // Open in new browser tab (external mode)
+        window.open(fullUrl, '_blank');
+      }
     } else {
       // Fallback to internal placeholder if no site ID configured
       setActiveApp('radar');
