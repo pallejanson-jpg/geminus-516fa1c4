@@ -5,6 +5,48 @@ import { xktCacheService } from '@/services/xkt-cache-service';
 // Global cache to persist preloaded buildings across component unmounts
 const globalPreloadedBuildings = new Set<string>();
 
+// In-memory cache for loaded XKT data to avoid re-fetching
+const xktMemoryCache = new Map<string, ArrayBuffer>();
+
+/**
+ * Check if a model is already loaded in memory
+ */
+export function isModelInMemory(modelId: string, buildingFmGuid: string): boolean {
+  const key = `${buildingFmGuid}/${modelId}`;
+  return xktMemoryCache.has(key);
+}
+
+/**
+ * Get model from memory cache
+ */
+export function getModelFromMemory(modelId: string, buildingFmGuid: string): ArrayBuffer | null {
+  const key = `${buildingFmGuid}/${modelId}`;
+  return xktMemoryCache.get(key) || null;
+}
+
+/**
+ * Store model in memory cache
+ */
+export function storeModelInMemory(modelId: string, buildingFmGuid: string, data: ArrayBuffer): void {
+  const key = `${buildingFmGuid}/${modelId}`;
+  xktMemoryCache.set(key, data);
+  console.log(`XKT Memory: Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+}
+
+/**
+ * Clear memory cache for a building (call when switching buildings)
+ */
+export function clearBuildingFromMemory(buildingFmGuid: string): void {
+  const keysToDelete: string[] = [];
+  xktMemoryCache.forEach((_, key) => {
+    if (key.startsWith(`${buildingFmGuid}/`)) {
+      keysToDelete.push(key);
+    }
+  });
+  keysToDelete.forEach(key => xktMemoryCache.delete(key));
+  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}...`);
+}
+
 /**
  * Hook to preload XKT models in the background when a building is selected
  * This significantly reduces load times when the user opens the 3D viewer
@@ -48,8 +90,14 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           return;
         }
 
-        // Fetch available models for the building
-        const modelsUrl = `${apiUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+        // The Asset+ 3D API uses a different base path
+        // Normalize URL: remove /api/v1/AssetDB if present, use base domain
+        const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+        
+        // Fetch available models for the building using correct endpoint
+        const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+        console.log(`XKT Preload: Fetching models from ${modelsUrl}`);
+        
         const modelsResponse = await fetch(modelsUrl, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -57,7 +105,9 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
         });
 
         if (!modelsResponse.ok) {
-          console.log('XKT Preload: Failed to fetch models list');
+          console.log(`XKT Preload: Failed to fetch models list (${modelsResponse.status})`);
+          // Mark as attempted to avoid repeated failures
+          globalPreloadedBuildings.add(buildingFmGuid);
           return;
         }
 
@@ -65,6 +115,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
         
         if (!Array.isArray(models) || models.length === 0) {
           console.log('XKT Preload: No models found for building');
+          globalPreloadedBuildings.add(buildingFmGuid);
           return;
         }
 
@@ -73,22 +124,38 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           (m?.name || "").toLowerCase().startsWith("a")
         );
 
-        console.log(`XKT Preload: Starting background preload for ${aPrefixModels.length} models`);
+        console.log(`XKT Preload: Found ${models.length} models, ${aPrefixModels.length} with 'a' prefix`);
 
         // Preload models one at a time to avoid overwhelming the network
         for (const model of aPrefixModels.slice(0, 5)) { // Limit to first 5 models
           try {
             const modelId = model.id || model.name;
             
-            // Check if already cached
+            // Check if already in memory
+            if (isModelInMemory(modelId, buildingFmGuid)) {
+              console.log(`XKT Preload: ${modelId} already in memory`);
+              continue;
+            }
+            
+            // Check if already cached in storage
             const cacheResult = await xktCacheService.checkCache(modelId, buildingFmGuid);
-            if (cacheResult.cached) {
-              console.log(`XKT Preload: ${modelId} already cached`);
+            if (cacheResult.cached && cacheResult.url) {
+              console.log(`XKT Preload: ${modelId} found in storage cache`);
+              // Load from cache into memory
+              try {
+                const cacheResponse = await fetch(cacheResult.url);
+                if (cacheResponse.ok) {
+                  const data = await cacheResponse.arrayBuffer();
+                  storeModelInMemory(modelId, buildingFmGuid, data);
+                }
+              } catch (e) {
+                console.debug('XKT Preload: Could not load from cache:', e);
+              }
               continue;
             }
 
             // Get the XKT URL for this model
-            const xktUrl = model.xktUrl || `${apiUrl}/api/threed/GetXkt?modelId=${modelId}&apiKey=${apiKey}`;
+            const xktUrl = model.xktUrl || `${baseUrl}/api/threed/GetXkt?modelId=${modelId}&apiKey=${apiKey}`;
             
             // Fetch and cache the model
             console.log(`XKT Preload: Fetching ${modelId}...`);
@@ -100,8 +167,16 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
             if (response.ok) {
               const data = await response.arrayBuffer();
-              await xktCacheService.storeModel(modelId, data, buildingFmGuid);
-              console.log(`XKT Preload: Cached ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+              
+              // Store in memory for immediate use
+              storeModelInMemory(modelId, buildingFmGuid, data);
+              
+              // Store in persistent cache (async, don't wait)
+              xktCacheService.storeModel(modelId, data, buildingFmGuid).then(() => {
+                console.log(`XKT Preload: Cached ${modelId} to storage`);
+              }).catch(e => {
+                console.debug('XKT Preload: Storage cache failed:', e);
+              });
             }
           } catch (modelError) {
             // Don't fail the whole preload for one model
