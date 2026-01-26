@@ -285,18 +285,21 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     );
   }
 
-  // Desktop: Full toolbar
-  // Mobile: 4 primary tools + overflow menu
-  const ToolButton: React.FC<{
-    icon: React.ReactNode;
-    label: string;
-    onClick: () => void;
-    active?: boolean;
-    variant?: 'ghost' | 'secondary';
-  }> = ({ icon, label, onClick, active, variant = 'ghost' }) => (
+  // ToolButton with forwardRef to avoid React warning
+  const ToolButton = React.forwardRef<
+    HTMLButtonElement,
+    {
+      icon: React.ReactNode;
+      label: string;
+      onClick: () => void;
+      active?: boolean;
+      variant?: 'ghost' | 'secondary';
+    }
+  >(({ icon, label, onClick, active, variant = 'ghost' }, ref) => (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          ref={ref}
           variant={active ? 'secondary' : variant}
           size="icon"
           className="h-8 w-8 sm:h-8 sm:w-8"
@@ -307,7 +310,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
       </TooltipTrigger>
       <TooltipContent side="top">{label}</TooltipContent>
     </Tooltip>
-  );
+  ));
+  ToolButton.displayName = 'ToolButton';
 
   // Mobile overflow menu items
   const MobileOverflowMenu = () => (
