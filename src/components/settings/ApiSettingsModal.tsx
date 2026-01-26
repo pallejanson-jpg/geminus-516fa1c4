@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -228,6 +228,55 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setFavoriteBuildings([allBuildings[0]]);
         } catch (error) {
             console.error('Failed to fetch favorite buildings:', error);
+        }
+    };
+
+    // Trigger sync for all buildings (objectType 1 only)
+    const handleSyncAllBuildings = async () => {
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'sync-all-buildings' }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Synkar alla byggnader",
+                description: "Hämtar alla byggnader från Asset+. Detta kan ta en stund.",
+            });
+
+            // Poll for status
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                const latestStatus = syncStatuses.find(s => s.subtree_id === 'buildings');
+                if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
+                    clearInterval(pollInterval);
+                    setIsSyncing(false);
+                    checkSyncStatus();
+                    if (latestStatus.sync_status === 'completed') {
+                        toast({
+                            title: "Synk klar!",
+                            description: `${latestStatus.total_assets} byggnader synkade.`,
+                        });
+                    }
+                }
+            }, 3000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 300000);
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Synk misslyckades",
+                description: error.message,
+            });
+            setIsSyncing(false);
         }
     };
 
@@ -956,7 +1005,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <Button
                                             onClick={checkSyncStatus}
                                             disabled={isCheckingSync}
@@ -972,6 +1021,20 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             Kontrollera
                                         </Button>
                                         <Button 
+                                            onClick={handleSyncAllBuildings}
+                                            disabled={isSyncing}
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            {isSyncing ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <Building2 className="h-3 w-3" />
+                                            )}
+                                            Alla Byggnader
+                                        </Button>
+                                        <Button 
                                             onClick={handleBuildingSync}
                                             disabled={isSyncing || favoriteBuildings.length === 0}
                                             size="sm"
@@ -981,9 +1044,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             {isSyncing ? (
                                                 <Loader2 className="h-3 w-3 animate-spin" />
                                             ) : (
-                                                <Building2 className="h-3 w-3" />
+                                                <Layers className="h-3 w-3" />
                                             )}
-                                            {isSyncing ? 'Synkar...' : 'Synka Byggnad'}
+                                            Synka Plan+Rum
                                         </Button>
                                         <Button 
                                             onClick={syncCheck?.inSync ? handleIncrementalSync : handleTriggerSync}
