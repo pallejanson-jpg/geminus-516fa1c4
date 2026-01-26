@@ -238,7 +238,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
   };
 
   return (
-    <div className={cn("absolute top-1/2 -translate-y-1/2 right-3 z-30", className)}>
+    <div className={cn("absolute top-4 right-14 z-30", className)}>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
           <TooltipProvider delayDuration={300}>

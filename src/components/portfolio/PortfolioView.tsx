@@ -212,6 +212,23 @@ const PortfolioView: React.FC = () => {
     setShowAssetsFor(null);
   };
 
+  // Handle selecting a room to show its landing page
+  const handleSelectRoom = (fmGuid: string) => {
+    const room = allData.find((a: any) => a.fmGuid === fmGuid);
+    if (room) {
+      setSelectedFacility({
+        fmGuid: room.fmGuid,
+        name: room.name,
+        commonName: room.commonName,
+        category: room.category || 'Space',
+        levelFmGuid: room.levelFmGuid,
+        buildingFmGuid: room.buildingFmGuid,
+        attributes: room.attributes,
+      });
+      setShowRoomsFor(null);
+    }
+  };
+
   // Handle placing annotation for an asset (opens 3D viewer in pick mode)
   const handlePlaceAnnotation = (asset: any) => {
     // For now, just open the 3D viewer for the asset's building
@@ -243,6 +260,7 @@ const PortfolioView: React.FC = () => {
         rooms={getRoomsForFacility(showRoomsFor)}
         onClose={() => setShowRoomsFor(null)}
         onOpen3D={handleOpen3DRoom}
+        onSelectRoom={handleSelectRoom}
       />
     );
   }
