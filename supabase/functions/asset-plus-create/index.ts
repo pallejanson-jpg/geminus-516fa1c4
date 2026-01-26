@@ -173,8 +173,8 @@ serve(async (req) => {
     const baseUrl = apiUrl.replace(/\/+$/, "");
     const endpoint = `${baseUrl}/AddObject`;
 
-    // Build the bimObjectWithParent payload
-    const bimObject: BimObjectWithParent = {
+    // Build the bimObject payload - try flat structure without wrapper
+    const bimObject: any = {
       objectType: ObjectType.Instance, // Type 4 for assets
       designation: body.designation,
       inRoomFmGuid: body.parentSpaceFmGuid, // Link to parent Space
@@ -198,16 +198,16 @@ serve(async (req) => {
       }));
     }
 
-    // Build the full request payload with apiKey in body (like sync function)
-    const requestPayload: AddObjectRequest = {
+    // Try alternative payload format - some Asset+ endpoints want flat structure with apiKey
+    const requestPayload = {
       apiKey,
-      bimObjectWithParent: bimObject,
+      ...bimObject, // Spread bimObject properties directly instead of nesting
     };
 
     console.log(`Creating asset in Asset+ API: ${endpoint}`);
     console.log("Payload:", JSON.stringify(requestPayload, null, 2));
 
-    // Call Asset+ API - apiKey in body, not header
+    // Call Asset+ API
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
