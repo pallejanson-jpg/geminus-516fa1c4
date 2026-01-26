@@ -26,6 +26,7 @@ import {
 
 interface AnnotationSymbol {
   id: string;
+  symbol_id: number | null;
   name: string;
   category: string;
   color: string;
@@ -264,6 +265,11 @@ const SymbolSettings: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{symbol.name}</span>
+                      {symbol.symbol_id && (
+                        <Badge variant="outline" className="text-xs font-mono">
+                          #{symbol.symbol_id}
+                        </Badge>
+                      )}
                       {symbol.is_default && (
                         <Badge variant="secondary" className="text-xs">
                           Standard
