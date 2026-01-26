@@ -300,7 +300,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action = 'full-sync' } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const { action = 'full-sync', buildingFmGuid } = body;
     
     console.log(`Action: ${action}`);
 
@@ -413,10 +414,8 @@ serve(async (req) => {
       );
     }
 
-    // ============ FULL SYNC ============
+    // ============ BUILDING SYNC ============
     if (action === 'building-sync') {
-      const { buildingFmGuid } = await req.json().catch(() => ({}));
-      
       if (!buildingFmGuid) {
         return new Response(
           JSON.stringify({ success: false, error: 'buildingFmGuid is required for building-sync' }),
