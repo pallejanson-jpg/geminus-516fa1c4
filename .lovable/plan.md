@@ -1,145 +1,181 @@
 
-# Plan: Omstrukturering av Insights med Flikar
+# Plan: Rumsvisualisering med färgkodning baserad på egenskaper
 
-## Översikt
+## Sammanfattning
+Denna plan åtgärdar problemet med att "View all properties" inte visar data och implementerar en visualiseringsfunktion där rumsobjekt färgkodas baserat på mätvärden som temperatur, CO2 och luftfuktighet.
 
-Insights-vyn ska få en ny flikbaserad struktur med fem kategorier av insikter. Den nuvarande energifokuserade vyn blir "Performance"-fliken, och fyra nya flikar läggs till med mockdata som kopplas till de faktiska byggnaderna i systemet.
+## Problem som identifierats
 
-## Ny Flikstruktur
+### 1. UniversalPropertiesDialog visar ingen data
+**Orsak**: Dialogen söker med `fm_guid.toUpperCase()` men databasen lagrar FM GUIDs i lowercase format.
 
-| Flik | Beskrivning | Innehåll |
-|------|-------------|----------|
-| **Performance** | Befintlig energivy | Energieffektivitet, kWh/m², CO2-utsläpp, trender |
-| **Facility Management** | Fastighetsförvaltning | Underhållsscheman, felanmälningar, serviceavtal |
-| **Space Management** | Ytor och beläggning | Rumsanvändning, beläggningsgrad, optimering |
-| **Asset Management** | Tillgångar och utrustning | Inventarier, livscykel, värdering |
-| **Portfolio Management** | Portföljöversikt | Ägarstruktur, ekonomi, benchmarking |
+**Bevis från databas**:
+- Rum-GUID: `01969f25-5337-737b-9222-0edaef51b54b` (lowercase)
+- Sökningen: `fmGuid.toUpperCase()` = `01969F25-...` (uppercase) - matchar inte!
 
-## Visuell Layout
+### 2. Synkroniseringsprocessen fungerar
+Synkprocessen för rum fungerar korrekt. Databasen innehåller:
+- Rum med 58-59 attribut var
+- NTA-värden (yta)
+- Alla systemegenskaper från Asset+
+- User Defined Parameters (golvmaterial, rumsnamn, etc.)
+
+### 3. Mätdata för visualisering
+Sensor-egenskaper finns i databastrukturen:
+- `sensortemperature...` - Temperatur
+- `sensorhum...` - Luftfuktighet  
+- `sensorco2...` - CO2
+- `sensoroccupancy...` - Beläggning
+
+Dessa kolumner saknar för närvarande värden men strukturen är redo.
+
+---
+
+## Implementeringsplan
+
+### Fas 1: Fixa UniversalPropertiesDialog
+
+**Fil**: `src/components/common/UniversalPropertiesDialog.tsx`
+
+**Ändring**:
+```text
+Rad 92: Ändra från:
+.eq('fm_guid', fmGuid.toUpperCase())
+
+Till case-insensitiv sökning:
+.or(`fm_guid.eq.${fmGuid},fm_guid.eq.${fmGuid.toLowerCase()},fm_guid.eq.${fmGuid.toUpperCase()}`)
+```
+
+**Resultat**: Dialogen hittar data oavsett vilket case som används.
+
+### Fas 2: Förbättra visning av Asset+ egenskaper
+
+**Fil**: `src/components/common/UniversalPropertiesDialog.tsx`
+
+**Ändringar**:
+1. Filtrera bort tekniska attribut (\_id, tenantId, etc.) från Asset+-fliken
+2. Visa "User Defined Parameters" separat med läsbart namn
+3. Extrahera `value` från strukturerade objekt (t.ex. `{name: "NTA", value: 61.7}` → visa `61.7`)
+4. Gruppera egenskaper i kategorier: System, Koordinater, Sensor, User Defined
+
+### Fas 3: Implementera rumsvisualisering i 3D-viewern
+
+**Ny fil**: `src/components/viewer/RoomVisualizationPanel.tsx`
+
+**Funktionalitet**:
+1. Panel med dropdown för att välja visualiseringstyp:
+   - Temperatur (färgskala blå→röd)
+   - CO2 (färgskala grön→röd)
+   - Luftfuktighet (färgskala brun→blå)
+   - Beläggning (grå→grön)
+   - NTA/Area (vit→lila gradient)
+   
+2. Legend som visar färgskala med min/max-värden
+
+3. Knapp i verktygsfältet för att aktivera/inaktivera visualisering
+
+**Integration i AssetPlusViewer.tsx**:
+- Ny toolbar-knapp "Visualisering" med Palette-ikon
+- Toggle för att visa/dölja RoomVisualizationPanel
+- Anropa `colorizeSpace(fmGuid, color)` för varje rum
+
+### Fas 4: Färgberäkningslogik
+
+**Ny fil**: `src/lib/visualization-utils.ts`
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  Insights                                                           │
-│  Analys och insikter för din fastighetsportfölj                    │
-├─────────────────────────────────────────────────────────────────────┤
-│  [Performance] [Facility Mgmt] [Space Mgmt] [Asset Mgmt] [Portfolio]│
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
-│   │ KPI 1   │ │ KPI 2   │ │ KPI 3   │ │ KPI 4   │    <- KPI-kort   │
-│   └─────────┘ └─────────┘ └─────────┘ └─────────┘                  │
-│                                                                     │
-│   ┌────────────────────┐  ┌────────────────────┐                   │
-│   │                    │  │                    │                   │
-│   │    Diagram 1       │  │    Diagram 2       │    <- Charts      │
-│   │                    │  │                    │                   │
-│   └────────────────────┘  └────────────────────┘                   │
-│                                                                     │
-│   ┌──────────────────────────────────────────────┐                 │
-│   │   Byggnadslista/Tabell                       │  <- Data grid   │
-│   └──────────────────────────────────────────────┘                 │
-└─────────────────────────────────────────────────────────────────────┘
+Funktioner:
+- getSensorColor(value, min, max, colorScale): Returnerar RGB baserat på värde
+- getColorScale(type): Returnerar färgpalett för typ (temp/co2/humidity)
+- normalizeValue(value, min, max): Normaliserar till 0-1
+- interpolateColor(color1, color2, t): Interpolerar mellan två färger
 ```
 
-## Teknisk Implementation
+**Färgskalor**:
+```text
+Temperatur: 
+  <18°C = Blå (#3B82F6)
+  22°C = Grön (#22C55E)  
+  >26°C = Röd (#EF4444)
 
-### Steg 1: Skapa komponentstruktur
+CO2:
+  <600 ppm = Grön (#22C55E)
+  1000 ppm = Gul (#EAB308)
+  >1500 ppm = Röd (#EF4444)
 
-Skapa nya komponenter för varje flik:
-
-| Fil | Syfte |
-|-----|-------|
-| `src/components/insights/tabs/PerformanceTab.tsx` | Flytta befintlig energivy hit |
-| `src/components/insights/tabs/FacilityManagementTab.tsx` | FM-insikter med mockdata |
-| `src/components/insights/tabs/SpaceManagementTab.tsx` | Ythantering med mockdata |
-| `src/components/insights/tabs/AssetManagementTab.tsx` | Tillgångsinsikter med mockdata |
-| `src/components/insights/tabs/PortfolioManagementTab.tsx` | Portföljanalys med mockdata |
-
-### Steg 2: Uppdatera InsightsView.tsx
-
-Huvudvyn får fliknavigering med Radix Tabs:
-
-```typescript
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-
-// Flikstruktur
-<Tabs defaultValue="performance">
-  <TabsList className="w-full justify-start overflow-x-auto">
-    <TabsTrigger value="performance">Performance</TabsTrigger>
-    <TabsTrigger value="facility">Facility Management</TabsTrigger>
-    <TabsTrigger value="space">Space Management</TabsTrigger>
-    <TabsTrigger value="asset">Asset Management</TabsTrigger>
-    <TabsTrigger value="portfolio">Portfolio Management</TabsTrigger>
-  </TabsList>
-  
-  <TabsContent value="performance">
-    <PerformanceTab />
-  </TabsContent>
-  {/* ... övriga flikar */}
-</Tabs>
+Luftfuktighet:
+  <30% = Brun/Orange (#F97316)
+  40-60% = Grön (#22C55E)
+  >70% = Blå (#3B82F6)
 ```
 
-### Steg 3: Mockdata per Flik
+### Fas 5: Hämta och visa mätdata
 
-Varje flik använder faktiska byggnader från `navigatorTreeData` med syntetiska värden:
+**Uppdatering**: `src/services/asset-plus-service.ts`
 
-**Facility Management:**
-- Aktiva serviceärenden per byggnad
-- Planerade underhållsåtgärder
-- SLA-efterlevnad
-- Kostnadsfördelning
+Ny funktion `fetchRoomSensorData(buildingFmGuid)`:
+1. Hämta alla rum för en byggnad
+2. Extrahera sensorvärden från `attributes` JSONB
+3. Returnera mappat format: `{ fmGuid, temperature, co2, humidity, occupancy }`
 
-**Space Management:**
-- Beläggningsgrad per rum/våning
-- Kvadratmeter per funktionstyp
-- Vakansgrad
-- Effektivitetsmätningar
+**Mock-data vid avsaknad av riktiga värden**:
+- Generera simulerade värden för demonstration
+- Toggle i panelen: "Visa simulerad data"
 
-**Asset Management:**
-- Antal tillgångar per kategori
-- Genomsnittsålder
-- Återanskaffningsvärde
-- Underhållsstatus
+---
 
-**Portfolio Management:**
-- Totalt portföljvärde
-- Avkastning (ROI mockdata)
-- Geografisk fördelning
-- Riskprofil
+## Teknisk arkitektur
 
-### Steg 4: Responsiv Design
-
-Flikarna blir scrollbara horisontellt på mobil:
-
-```typescript
-<TabsList className="w-full flex-nowrap overflow-x-auto justify-start">
+```text
++------------------+     +------------------------+     +------------------+
+| ViewerToolbar    |---->| RoomVisualizationPanel |---->| visualization-   |
+| (Ny knapp)       |     | (Dropdown + Legend)    |     | utils.ts         |
++------------------+     +------------------------+     +------------------+
+                                    |
+                                    v
+                         +------------------------+
+                         | AssetPlusViewer        |
+                         | - colorizeSpace()      |
+                         | - resetColors()        |
+                         +------------------------+
+                                    |
+                                    v
+                         +------------------------+
+                         | Supabase: assets       |
+                         | (attributes JSONB)     |
+                         +------------------------+
 ```
 
-## Filer att Ändra/Skapa
+---
 
-| Åtgärd | Fil |
-|--------|-----|
-| Skapa | `src/components/insights/tabs/PerformanceTab.tsx` |
-| Skapa | `src/components/insights/tabs/FacilityManagementTab.tsx` |
-| Skapa | `src/components/insights/tabs/SpaceManagementTab.tsx` |
-| Skapa | `src/components/insights/tabs/AssetManagementTab.tsx` |
-| Skapa | `src/components/insights/tabs/PortfolioManagementTab.tsx` |
-| Uppdatera | `src/components/insights/InsightsView.tsx` |
+## Filändringar
 
-## Datakoppling
+| Fil | Typ | Beskrivning |
+|-----|-----|-------------|
+| `src/components/common/UniversalPropertiesDialog.tsx` | Ändra | Case-insensitiv GUID-sökning |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Ny | Visualiseringspanel med dropdown och legend |
+| `src/lib/visualization-utils.ts` | Ny | Färgberäkning och normalisering |
+| `src/components/viewer/AssetPlusViewer.tsx` | Ändra | Lägg till visualiseringsknapp och integration |
+| `src/components/viewer/ViewerToolbar.tsx` | Ändra | Ny knapp för visualisering |
+| `src/services/asset-plus-service.ts` | Ändra | Ny funktion för att hämta sensordata |
 
-Alla flikar använder:
-- `navigatorTreeData` - för byggnadsstruktur
-- `allData` - för utrymmen och tillgångar
+---
 
-Mockdata genereras deterministiskt baserat på `fmGuid` för konsistens mellan sessioner.
+## Prioritering
 
-## Resultat
+1. **Kritiskt**: Fixa UniversalPropertiesDialog (5 min)
+2. **Viktigt**: Förbättra Asset+-egenskapsvisning (15 min)
+3. **Funktion**: Implementera visualiseringspanel (30 min)
+4. **Funktion**: Färgberäkningslogik (15 min)
+5. **Integration**: Koppla till 3D-viewer (20 min)
 
-Efter implementation:
-1. Insights får fem klickbara flikar högst upp
-2. Performance-fliken innehåller befintlig energivy
-3. Fyra nya flikar visar relevanta insikter med mockdata
-4. Alla flikar refererar till faktiska byggnader i systemet
-5. Responsiv design fungerar på mobil med horisontell scroll
+**Total uppskattad tid**: ~1.5 timmar
 
+---
+
+## Framtida utbyggnad
+
+- Integration med realtidsdata från Senslinc
+- Historisk datavisning med tidslinjevy
+- Exportera visualiseringsrapporter
+- Larm-tröskelvärden för sensorer
