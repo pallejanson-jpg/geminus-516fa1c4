@@ -14,7 +14,9 @@ import {
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
+import AnnotationToggleMenu from './AnnotationToggleMenu';
 import { xktCacheService } from '@/services/xkt-cache-service';
+import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 
@@ -1128,8 +1130,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             )}
             {!onClose && <div />}
             
-            {/* Filter - right side */}
+            {/* Filter and annotations - right side */}
             <div className="flex gap-1.5 pointer-events-auto">
+              {state.isInitialized && (
+                <AnnotationToggleMenu 
+                  viewerRef={viewerInstanceRef} 
+                  buildingFmGuid={fmGuid}
+                />
+              )}
               <FilterDropdown />
             </div>
           </div>
