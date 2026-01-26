@@ -22,6 +22,8 @@ interface ViewerTreePanelProps {
   onClose: () => void;
   onNodeSelect?: (nodeId: string, fmGuid?: string) => void;
   onNodeHover?: (nodeId: string | null) => void;
+  // New: embedded mode for inline display in sheets
+  embedded?: boolean;
 }
 
 // Get icon for IFC type
@@ -177,6 +179,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   onClose,
   onNodeSelect,
   onNodeHover,
+  embedded = false,
 }) => {
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -387,6 +390,57 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
 
   if (!isVisible) return null;
 
+  // Embedded mode: render without positioning, header, border
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full max-h-[40vh]">
+        {/* Search */}
+        <div className="p-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Sök objekt..."
+              className="h-7 pl-7 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Tree content */}
+        <ScrollArea className="flex-1">
+          <div className="p-1">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-4 text-muted-foreground text-xs">
+                Laddar modellträd...
+              </div>
+            ) : treeData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-4 text-muted-foreground text-xs gap-1">
+                <TreeDeciduous className="h-6 w-6 opacity-50" />
+                <span>Inget modellträd tillgängligt</span>
+              </div>
+            ) : (
+              treeData.map(node => (
+                <TreeNodeComponent
+                  key={node.id}
+                  node={node}
+                  level={0}
+                  selectedId={selectedId}
+                  expandedIds={expandedIds}
+                  onToggle={handleToggle}
+                  onSelect={handleSelect}
+                  onHover={handleHover}
+                  searchQuery={searchQuery}
+                />
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  }
+
+  // Standard floating panel mode
   return (
     <div 
       className={cn(

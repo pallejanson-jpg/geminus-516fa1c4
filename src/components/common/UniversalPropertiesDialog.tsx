@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
-  MapPin, Building2, Layers, DoorOpen, Box, Database, Settings
+  Building2, Layers, DoorOpen, Box, Database, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -29,6 +28,7 @@ interface PropertyItem {
   editable: boolean;
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
+  section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates';
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -38,24 +38,17 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Instance': <Box className="h-4 w-4" />,
 };
 
-// Properties that are editable in Lovable
-const LOVABLE_EDITABLE_FIELDS = [
-  'common_name',
-  'asset_type', 
-  'symbol_id',
-  'coordinate_x',
-  'coordinate_y', 
-  'coordinate_z',
-  'annotation_placed',
-];
+// Section labels in Swedish
+const SECTION_LABELS: Record<string, string> = {
+  'system': 'System',
+  'local': 'Lokala inställningar',
+  'coordinates': 'Position',
+  'area': 'Area & Mått',
+  'user-defined': 'Användardefinierade',
+};
 
-// Fields to add for buildings (map position)
-const BUILDING_EXTRA_FIELDS = [
-  'ivion_site_id',
-  'is_favorite',
-  'map_latitude',
-  'map_longitude',
-];
+// Fields that belong to Area section
+const AREA_FIELDS = ['nta', 'bra', 'bta', 'area', 'atemp', 'volym', 'omkrets', 'rumshöjd'];
 
 const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   isOpen,
@@ -73,7 +66,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('lovable');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(['system', 'local', 'area']));
   
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -154,80 +148,118 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     };
   }, [isDragging, dragOffset]);
 
-  // Parse Lovable properties
-  const lovableProperties = useMemo((): PropertyItem[] => {
+  // Parse all properties into a unified list
+  const allProperties = useMemo((): PropertyItem[] => {
     if (!asset) return [];
 
     const props: PropertyItem[] = [];
     
     // System properties
-    props.push({ key: 'fm_guid', label: 'FM GUID', value: asset.fm_guid, editable: false, source: 'lovable', type: 'text' });
-    props.push({ key: 'name', label: 'Name', value: asset.name, editable: false, source: 'lovable', type: 'text' });
-    props.push({ key: 'common_name', label: 'Common Name', value: asset.common_name, editable: true, source: 'lovable', type: 'text' });
-    props.push({ key: 'category', label: 'Category', value: asset.category, editable: false, source: 'lovable', type: 'text' });
-    props.push({ key: 'asset_type', label: 'Asset Type', value: asset.asset_type, editable: true, source: 'lovable', type: 'text' });
+    props.push({ key: 'fm_guid', label: 'FM GUID', value: asset.fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    props.push({ key: 'category', label: 'Kategori', value: asset.category, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    if (asset.name) {
+      props.push({ key: 'name', label: 'Namn (IFC)', value: asset.name, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    }
     
-    // Hierarchy
-    if (asset.building_fm_guid) {
-      props.push({ key: 'building_fm_guid', label: 'Building FM GUID', value: asset.building_fm_guid, editable: false, source: 'lovable', type: 'text' });
+    // Local editable properties
+    props.push({ key: 'common_name', label: 'Visningsnamn', value: asset.common_name, editable: true, source: 'lovable', type: 'text', section: 'local' });
+    props.push({ key: 'asset_type', label: 'Tillgångstyp', value: asset.asset_type, editable: true, source: 'lovable', type: 'text', section: 'local' });
+    
+    // Building settings
+    if (buildingSettings || asset.category === 'Building') {
+      props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings?.ivion_site_id, editable: true, source: 'lovable', type: 'text', section: 'local' });
+      props.push({ key: 'is_favorite', label: 'Favorit', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'local' });
     }
-    if (asset.level_fm_guid) {
-      props.push({ key: 'level_fm_guid', label: 'Level FM GUID', value: asset.level_fm_guid, editable: false, source: 'lovable', type: 'text' });
-    }
-    if (asset.in_room_fm_guid) {
-      props.push({ key: 'in_room_fm_guid', label: 'In Room FM GUID', value: asset.in_room_fm_guid, editable: false, source: 'lovable', type: 'text' });
-    }
-
+    
     // Coordinates
-    if (asset.coordinate_x !== null || asset.coordinate_y !== null) {
-      props.push({ key: 'coordinates', label: 'Position (3D)', value: `${asset.coordinate_x?.toFixed(2)}, ${asset.coordinate_y?.toFixed(2)}, ${asset.coordinate_z?.toFixed(2)}`, editable: true, source: 'lovable', type: 'coordinates' });
+    if (asset.coordinate_x !== null || asset.coordinate_y !== null || asset.coordinate_z !== null) {
+      props.push({ key: 'coordinate_x', label: 'X', value: asset.coordinate_x, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
+      props.push({ key: 'coordinate_y', label: 'Y', value: asset.coordinate_y, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
+      props.push({ key: 'coordinate_z', label: 'Z', value: asset.coordinate_z, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
     }
 
     // Status flags
-    props.push({ key: 'is_local', label: 'Is Local', value: asset.is_local, editable: false, source: 'lovable', type: 'boolean' });
-    props.push({ key: 'annotation_placed', label: 'Annotation Placed', value: asset.annotation_placed, editable: false, source: 'lovable', type: 'boolean' });
+    props.push({ key: 'is_local', label: 'Lokalt skapat', value: asset.is_local, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
+    props.push({ key: 'annotation_placed', label: 'Annotation placerad', value: asset.annotation_placed, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
 
-    // Building settings
-    if (buildingSettings) {
-      props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings.ivion_site_id, editable: true, source: 'lovable', type: 'text' });
-      props.push({ key: 'is_favorite', label: 'Favorite', value: buildingSettings.is_favorite, editable: true, source: 'lovable', type: 'boolean' });
+    // Hierarchy references
+    if (asset.building_fm_guid) {
+      props.push({ key: 'building_fm_guid', label: 'Byggnad (GUID)', value: asset.building_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    }
+    if (asset.level_fm_guid) {
+      props.push({ key: 'level_fm_guid', label: 'Våning (GUID)', value: asset.level_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    }
+
+    // Asset+ properties from attributes JSONB
+    if (asset.attributes) {
+      const attrs = asset.attributes as Record<string, any>;
+      
+      Object.entries(attrs).forEach(([key, value]) => {
+        // Skip already-mapped system fields
+        if (['fmGuid', 'category', 'objectType', 'tenantId', '_id'].includes(key)) return;
+        
+        let displayValue = value;
+        let displayLabel = key;
+        
+        // Handle structured Asset+ values
+        if (value && typeof value === 'object' && 'value' in value) {
+          displayValue = value.value;
+          displayLabel = value.name || key;
+        }
+        
+        // Determine section
+        const keyLower = key.toLowerCase();
+        const isArea = AREA_FIELDS.some(f => keyLower.includes(f));
+        
+        props.push({
+          key: `attr_${key}`,
+          label: displayLabel,
+          value: displayValue,
+          editable: false,
+          source: 'asset-plus',
+          type: typeof displayValue === 'number' ? 'number' : 'text',
+          section: isArea ? 'area' : 'user-defined',
+        });
+      });
     }
 
     return props;
   }, [asset, buildingSettings]);
 
-  // Parse Asset+ properties from attributes JSONB
-  const assetPlusProperties = useMemo((): PropertyItem[] => {
-    if (!asset?.attributes) return [];
+  // Filter properties based on search
+  const filteredProperties = useMemo(() => {
+    if (!searchQuery.trim()) return allProperties;
     
-    const attrs = asset.attributes as Record<string, any>;
-    const props: PropertyItem[] = [];
+    const q = searchQuery.toLowerCase();
+    return allProperties.filter(p => 
+      p.label.toLowerCase().includes(q) ||
+      String(p.value ?? '').toLowerCase().includes(q)
+    );
+  }, [allProperties, searchQuery]);
 
-    Object.entries(attrs).forEach(([key, value]) => {
-      // Check if it's a structured Asset+ value
-      if (value && typeof value === 'object' && ('value' in value || '_type' in value)) {
-        props.push({
-          key,
-          label: key,
-          value: value.value ?? value,
-          editable: false,
-          source: 'asset-plus',
-          type: 'text',
-        });
-      } else {
-        props.push({
-          key,
-          label: key,
-          value: value,
-          editable: false,
-          source: 'asset-plus',
-          type: typeof value === 'number' ? 'number' : 'text',
-        });
+  // Group properties by section
+  const groupedProperties = useMemo(() => {
+    const groups: Record<string, PropertyItem[]> = {};
+    filteredProperties.forEach(prop => {
+      if (!groups[prop.section]) {
+        groups[prop.section] = [];
       }
+      groups[prop.section].push(prop);
     });
+    return groups;
+  }, [filteredProperties]);
 
-    return props.sort((a, b) => a.label.localeCompare(b.label));
-  }, [asset]);
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  };
 
   const handleSave = async () => {
     if (!asset) return;
@@ -279,31 +311,77 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
   const displayCategory = asset?.category || category || 'Object';
 
+  const renderPropertyValue = (prop: PropertyItem) => {
+    const isEditingThis = isEditing && prop.editable;
+    
+    if (isEditingThis && prop.type === 'text') {
+      return (
+        <Input
+          value={formData[prop.key] ?? prop.value ?? ''}
+          onChange={(e) => setFormData({ ...formData, [prop.key]: e.target.value })}
+          className="h-8 text-sm"
+        />
+      );
+    }
+    
+    if (isEditingThis && prop.type === 'number') {
+      return (
+        <Input
+          type="number"
+          value={formData[prop.key] ?? prop.value ?? ''}
+          onChange={(e) => setFormData({ ...formData, [prop.key]: parseFloat(e.target.value) || 0 })}
+          className="h-8 text-sm"
+        />
+      );
+    }
+    
+    if (prop.type === 'boolean') {
+      return (
+        <Badge variant={prop.value ? 'default' : 'secondary'} className="text-xs">
+          {prop.value ? 'Ja' : 'Nej'}
+        </Badge>
+      );
+    }
+    
+    // Default text display
+    const displayValue = prop.value;
+    if (displayValue === null || displayValue === undefined || displayValue === '') {
+      return <span className="text-muted-foreground text-sm">—</span>;
+    }
+    
+    if (typeof displayValue === 'number') {
+      return <span className="text-sm font-mono">{displayValue.toLocaleString('sv-SE')}</span>;
+    }
+    
+    return <span className="text-sm break-all">{String(displayValue)}</span>;
+  };
+
   if (!isOpen) return null;
 
   return (
     <div
       className={cn(
         "fixed z-50 bg-card border rounded-lg shadow-xl transition-all",
-        "w-[400px] max-h-[85vh] flex flex-col",
+        "w-full max-w-[400px] max-h-[85vh] flex flex-col",
+        "sm:w-[400px]",
         isDragging && "cursor-grabbing opacity-90"
       )}
       style={{ left: position.x, top: position.y }}
     >
       {/* Header - Draggable */}
       <div
-        className="flex items-center justify-between p-3 border-b cursor-grab select-none bg-muted/30"
+        className="flex items-center justify-between p-3 border-b cursor-grab select-none bg-muted/30 shrink-0"
         onMouseDown={handleMouseDown}
       >
-        <div className="flex items-center gap-2">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-          {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4" />}
-          <span className="font-medium text-sm truncate max-w-[200px]">
+        <div className="flex items-center gap-2 min-w-0">
+          <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+          {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
+          <span className="font-medium text-sm truncate">
             {asset?.common_name || asset?.name || fmGuid.slice(0, 8)}
           </span>
-          <Badge variant="outline" className="text-xs">{displayCategory}</Badge>
+          <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsCollapsed(!isCollapsed)}>
             {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
           </Button>
@@ -315,21 +393,22 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
       {!isCollapsed && (
         <>
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid w-full grid-cols-2 m-2 mb-0 h-8">
-              <TabsTrigger value="lovable" className="text-xs gap-1">
-                <Settings className="h-3 w-3" />
-                Lovable
-              </TabsTrigger>
-              <TabsTrigger value="asset-plus" className="text-xs gap-1">
-                <Database className="h-3 w-3" />
-                Asset+ ({assetPlusProperties.length})
-              </TabsTrigger>
-            </TabsList>
+          {/* Search field */}
+          <div className="p-3 border-b shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök egenskaper..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+          </div>
 
-            {/* Content */}
-            <ScrollArea className="flex-1 p-3">
+          {/* Content */}
+          <ScrollArea className="flex-1">
+            <div className="p-3 space-y-2">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -339,57 +418,69 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   <p>Ingen data hittad</p>
                   <p className="text-xs mt-1 font-mono">{fmGuid}</p>
                 </div>
+              ) : filteredProperties.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  <p>Inga egenskaper matchar sökningen</p>
+                </div>
               ) : (
-                <>
-                  <TabsContent value="lovable" className="mt-0 space-y-2">
-                    {lovableProperties.map((prop) => (
-                      <div key={prop.key} className="space-y-1">
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          {prop.label}
-                          {prop.editable && <span className="text-primary text-[10px]">(redigerbar)</span>}
-                        </Label>
-                        {isEditing && prop.editable && prop.type === 'text' ? (
-                          <Input
-                            value={formData[prop.key] ?? prop.value ?? ''}
-                            onChange={(e) => setFormData({ ...formData, [prop.key]: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                        ) : prop.type === 'boolean' ? (
-                          <Badge variant={prop.value ? 'default' : 'secondary'} className="text-xs">
-                            {prop.value ? 'Ja' : 'Nej'}
-                          </Badge>
-                        ) : (
-                          <p className="text-sm font-mono break-all">{prop.value ?? '-'}</p>
-                        )}
-                      </div>
-                    ))}
-                  </TabsContent>
-
-                  <TabsContent value="asset-plus" className="mt-0 space-y-2">
-                    {assetPlusProperties.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground text-sm">
-                        <p>Inga Asset+ egenskaper</p>
-                        <p className="text-xs mt-1">Synka objektet för att hämta data</p>
-                      </div>
-                    ) : (
-                      assetPlusProperties.map((prop) => (
-                        <div key={prop.key} className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">{prop.label}</Label>
-                          <p className="text-sm break-all">
-                            {typeof prop.value === 'object' ? JSON.stringify(prop.value) : String(prop.value ?? '-')}
-                          </p>
+                // Render sections
+                ['system', 'local', 'coordinates', 'area', 'user-defined'].map(section => {
+                  const sectionProps = groupedProperties[section];
+                  if (!sectionProps || sectionProps.length === 0) return null;
+                  
+                  const isOpen = openSections.has(section);
+                  const hasEditable = sectionProps.some(p => p.editable);
+                  
+                  return (
+                    <Collapsible 
+                      key={section}
+                      open={isOpen}
+                      onOpenChange={() => toggleSection(section)}
+                    >
+                      <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
+                        <div className="flex items-center gap-2">
+                          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                          <span className="text-sm font-medium">{SECTION_LABELS[section]}</span>
+                          <Badge variant="secondary" className="text-[10px]">{sectionProps.length}</Badge>
                         </div>
-                      ))
-                    )}
-                  </TabsContent>
-                </>
+                        {hasEditable && (
+                          <Badge variant="outline" className="text-[10px]">
+                            <Pencil className="h-2.5 w-2.5 mr-1" />
+                            Redigerbar
+                          </Badge>
+                        )}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-2 space-y-2">
+                        {sectionProps.map(prop => (
+                          <div 
+                            key={prop.key} 
+                            className={cn(
+                              "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded",
+                              prop.editable && "bg-accent/20"
+                            )}
+                          >
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                              {prop.label}
+                              {prop.source === 'asset-plus' && (
+                                <Badge variant="outline" className="text-[8px] px-1 py-0">A+</Badge>
+                              )}
+                            </Label>
+                            <div className="flex-1 sm:text-right">
+                              {renderPropertyValue(prop)}
+                            </div>
+                          </div>
+                        ))}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })
               )}
-            </ScrollArea>
-          </Tabs>
+            </div>
+          </ScrollArea>
 
           {/* Footer actions */}
           {asset && (
-            <div className="p-3 border-t flex justify-end gap-2">
+            <div className="p-3 border-t flex justify-end gap-2 shrink-0">
               {isEditing ? (
                 <>
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>

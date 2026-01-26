@@ -1055,7 +1055,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             </div>
           )}
           
-          {/* Top toolbar - contains close, fullscreen and filter */}
+          {/* Top toolbar - contains close, fullscreen, visualization menu and annotations */}
           <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
             {/* Close and fullscreen buttons - left side */}
             <div className="flex gap-1.5 pointer-events-auto">
@@ -1064,46 +1064,61 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                   variant="secondary" 
                   size="icon"
                   onClick={onClose} 
-                  className="h-10 w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                  className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
                   aria-label="Stäng 3D-vy"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
               )}
               <Button 
                 variant="secondary" 
                 size="icon"
                 onClick={() => setIsFullscreen(!isFullscreen)} 
-                className="h-10 w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
                 aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
               >
-                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
               </Button>
             </div>
             
-            {/* Annotations toggle - right side */}
+            {/* Right side: Visualization menu + Annotations */}
             <div className="flex gap-1.5 pointer-events-auto">
               {state.isInitialized && (
-                <AnnotationToggleMenu 
-                  viewerRef={viewerInstanceRef} 
-                  buildingFmGuid={fmGuid}
-                />
+                <>
+                  <VisualizationToolbar
+                    viewerRef={viewerInstanceRef}
+                    onToggleNavCube={(visible) => setShowNavCube(visible)}
+                    onToggleMinimap={(visible) => setShowMinimap(visible)}
+                    onToggleTreeView={(visible) => setShowTreePanel(visible)}
+                    onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
+                    onPickCoordinate={handleTogglePickMode}
+                    onShowProperties={() => setPropertiesDialogOpen(true)}
+                    onOpenSettings={() => setToolbarSettingsOpen(true)}
+                    isPickMode={isPickMode}
+                    showTreeView={showTreePanel}
+                    showVisualization={showVisualizationPanel}
+                    showNavCube={showNavCube}
+                    showMinimap={showMinimap}
+                    inline={true}
+                  />
+                  <AnnotationToggleMenu 
+                    viewerRef={viewerInstanceRef} 
+                    buildingFmGuid={fmGuid}
+                  />
+                </>
               )}
             </div>
           </div>
 
-          {/* NavCube canvas - positioned in bottom-right corner, smaller */}
+          {/* NavCube canvas - positioned in bottom-right corner, responsive size */}
           <canvas 
             id="navCubeCanvas" 
-            width={80}
-            height={80}
+            width={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
+            height={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
+            className="absolute bottom-[70px] right-3 z-[25]"
             style={{
-              position: 'absolute',
-              bottom: '70px',
-              right: '12px',
-              width: '80px',
-              height: '80px',
-              zIndex: 25,
+              width: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
+              height: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               display: showNavCube ? 'block' : 'none',
               background: 'rgba(20, 20, 20, 0.5)',
               borderRadius: '6px',
@@ -1131,42 +1146,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
               />
               
-              {/* Right-side visualization toolbar */}
-              <VisualizationToolbar
-                viewerRef={viewerInstanceRef}
-                onToggleNavCube={(visible) => setShowNavCube(visible)}
-                onToggleMinimap={(visible) => setShowMinimap(visible)}
-                onToggleTreeView={(visible) => setShowTreePanel(visible)}
-                onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
-                onPickCoordinate={handleTogglePickMode}
-                onShowProperties={() => setPropertiesDialogOpen(true)}
-                onOpenSettings={() => setToolbarSettingsOpen(true)}
-                isPickMode={isPickMode}
-                showTreeView={showTreePanel}
-                showVisualization={showVisualizationPanel}
-                showNavCube={showNavCube}
-                showMinimap={showMinimap}
-              />
-              
-              {/* Tree View Panel */}
-              <ViewerTreePanel
-                viewerRef={viewerInstanceRef}
-                isVisible={showTreePanel}
-                onClose={() => setShowTreePanel(false)}
-                onNodeSelect={(nodeId, fmGuid) => {
-                  console.log('TreePanel node selected:', nodeId, fmGuid);
-                  // Flash the selected node
-                  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-                  if (xeokitViewer?.scene) {
-                    flashEntityById(xeokitViewer.scene, nodeId, {
-                      color1: [0.3, 1, 0.3],
-                      color2: [1, 1, 1],
-                      interval: 200,
-                      duration: 2000,
-                    });
-                  }
-                }}
-              />
+              {/* Tree View Panel - standalone mode (not in sheet) */}
+              {showTreePanel && (
+                <ViewerTreePanel
+                  viewerRef={viewerInstanceRef}
+                  isVisible={showTreePanel}
+                  onClose={() => setShowTreePanel(false)}
+                  onNodeSelect={(nodeId, nodeFmGuid) => {
+                    console.log('TreePanel node selected:', nodeId, nodeFmGuid);
+                    // Flash the selected node
+                    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                    if (xeokitViewer?.scene) {
+                      flashEntityById(xeokitViewer.scene, nodeId, {
+                        color1: [0.3, 1, 0.3],
+                        color2: [1, 1, 1],
+                        interval: 200,
+                        duration: 2000,
+                      });
+                    }
+                  }}
+                />
+              )}
               <MinimapPanel
                 viewerRef={viewerInstanceRef}
                 isVisible={showMinimap}
