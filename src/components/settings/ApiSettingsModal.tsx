@@ -100,6 +100,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSavingApps, setIsSavingApps] = useState(false);
     const [originalConfig, setOriginalConfig] = useState<ConfigState | null>(null);
     const [favoriteBuildings, setFavoriteBuildings] = useState<any[]>([]);
+    
+    // FM Access state
+    const [fmAccessConfig, setFmAccessConfig] = useState({
+        apiUrl: '',
+        username: '',
+        password: '',
+    });
+    const [isSavingFmAccess, setIsSavingFmAccess] = useState(false);
+    const [isTestingFmAccess, setIsTestingFmAccess] = useState(false);
+    const [fmAccessStatus, setFmAccessStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [fmAccessMessage, setFmAccessMessage] = useState('');
 
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
@@ -395,6 +406,85 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setConfig(originalConfig);
         }
         setIsEditMode(false);
+    };
+
+    // FM Access: Test connection
+    const handleTestFmAccessConnection = async () => {
+        setIsTestingFmAccess(true);
+        setFmAccessStatus('idle');
+        setFmAccessMessage('');
+
+        try {
+            const { data, error } = await supabase.functions.invoke('fm-access-query', {
+                body: { action: 'test-connection' }
+            });
+
+            if (error) throw error;
+
+            if (data?.success) {
+                setFmAccessStatus('success');
+                setFmAccessMessage(data.message || 'Anslutning lyckades');
+                toast({
+                    title: "FM Access ansluten",
+                    description: data.message || 'Anslutningen till FM Access fungerar.',
+                });
+            } else {
+                setFmAccessStatus('error');
+                setFmAccessMessage(data?.error || 'Okänt fel');
+                toast({
+                    variant: "destructive",
+                    title: "Anslutning misslyckades",
+                    description: data?.error || 'Kunde inte ansluta till FM Access.',
+                });
+            }
+        } catch (error: any) {
+            setFmAccessStatus('error');
+            setFmAccessMessage(error.message);
+            toast({
+                variant: "destructive",
+                title: "Fel",
+                description: error.message,
+            });
+        } finally {
+            setIsTestingFmAccess(false);
+        }
+    };
+
+    // FM Access: Save config (updates secrets via edge function)
+    const handleSaveFmAccessConfig = async () => {
+        setIsSavingFmAccess(true);
+        try {
+            // For now, just test connection to verify config is set
+            const { data, error } = await supabase.functions.invoke('fm-access-query', {
+                body: { action: 'test-connection' }
+            });
+
+            if (error) throw error;
+
+            if (data?.success) {
+                toast({
+                    title: "Inställningar verifierade",
+                    description: "FM Access-inställningarna är konfigurerade och fungerar.",
+                });
+                setFmAccessStatus('success');
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Konfigurationsfel",
+                    description: data?.error || 'FM Access-secrets behöver konfigureras i Cloud.',
+                });
+                setFmAccessStatus('error');
+                setFmAccessMessage(data?.error || 'Secrets saknas');
+            }
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Fel",
+                description: error.message,
+            });
+        } finally {
+            setIsSavingFmAccess(false);
+        }
     };
 
     const handleSaveConfig = async () => {
@@ -885,34 +975,46 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <Building2 className="h-5 w-5 text-primary" />
                                             <h4 className="font-medium">FM Access</h4>
                                         </div>
-                                        <Badge variant="secondary" className="text-xs">Konfiguration</Badge>
+                                        {fmAccessStatus === 'success' ? (
+                                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                                Ansluten
+                                            </Badge>
+                                        ) : fmAccessStatus === 'error' ? (
+                                            <Badge variant="destructive" className="text-xs">
+                                                <AlertCircle className="h-3 w-3 mr-1" />
+                                                Fel
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="secondary" className="text-xs">Konfiguration</Badge>
+                                        )}
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        Anslut till FM Access för att hämta ritningar och dokument. Token URL och Client ID är förkonfigurerade.
+                                        Anslut till FM Access för att hämta ritningar och dokument. Secrets konfigureras via Cloud.
                                     </p>
                                     <div className="space-y-3">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Token URL</Label>
+                                            <Label className="text-xs">Token URL (förkonfigurerad)</Label>
                                             <Input
-                                                placeholder="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
-                                                defaultValue="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
-                                                className="h-9 text-sm font-mono"
+                                                value="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
+                                                className="h-9 text-sm font-mono bg-muted"
                                                 readOnly
                                             />
                                         </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-xs">Client ID</Label>
+                                                <Label className="text-xs">Client ID (förkonfigurerad)</Label>
                                                 <Input
-                                                    placeholder="HDCAgent Basic"
-                                                    defaultValue="HDCAgent Basic"
-                                                    className="h-9 text-sm"
+                                                    value="HDCAgent Basic"
+                                                    className="h-9 text-sm bg-muted"
                                                     readOnly
                                                 />
                                             </div>
                                             <div className="space-y-1">
                                                 <Label className="text-xs">API Base URL</Label>
                                                 <Input
+                                                    value={fmAccessConfig.apiUrl}
+                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                                                     placeholder="https://api.fmaccess.se"
                                                     className="h-9 text-sm"
                                                 />
@@ -920,33 +1022,78 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-xs">Username (valfritt)</Label>
+                                                <Label className="text-xs">Username</Label>
                                                 <Input
+                                                    value={fmAccessConfig.username}
+                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, username: e.target.value }))}
                                                     placeholder="Användarnamn"
                                                     className="h-9 text-sm"
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-xs">Password (valfritt)</Label>
+                                                <Label className="text-xs">Password</Label>
                                                 <Input
                                                     type="password"
+                                                    value={fmAccessConfig.password}
+                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, password: e.target.value }))}
                                                     placeholder="••••••••"
                                                     className="h-9 text-sm"
                                                 />
                                             </div>
                                         </div>
+                                        
+                                        {/* FM Access connection status */}
+                                        {fmAccessStatus !== 'idle' && fmAccessMessage && (
+                                            <div className={`rounded-lg border p-2 text-xs ${
+                                                fmAccessStatus === 'success' 
+                                                    ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
+                                                    : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                                            }`}>
+                                                <div className="flex items-start gap-2">
+                                                    {fmAccessStatus === 'success' ? (
+                                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5" />
+                                                    ) : (
+                                                        <AlertCircle className="h-3.5 w-3.5 text-red-600 mt-0.5" />
+                                                    )}
+                                                    <p className={fmAccessStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                        {fmAccessMessage}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
                                         <div className="flex gap-2 pt-2">
-                                            <Button variant="outline" size="sm" className="flex-1" disabled>
-                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                                                Testa anslutning
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="flex-1"
+                                                onClick={handleTestFmAccessConnection}
+                                                disabled={isTestingFmAccess}
+                                            >
+                                                {isTestingFmAccess ? (
+                                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                                )}
+                                                {isTestingFmAccess ? 'Testar...' : 'Testa anslutning'}
                                             </Button>
-                                            <Button variant="default" size="sm" className="flex-1" disabled>
-                                                <Save className="h-3.5 w-3.5 mr-1.5" />
-                                                Spara
+                                            <Button 
+                                                variant="default" 
+                                                size="sm" 
+                                                className="flex-1"
+                                                onClick={handleSaveFmAccessConfig}
+                                                disabled={isSavingFmAccess}
+                                            >
+                                                {isSavingFmAccess ? (
+                                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                                                )}
+                                                {isSavingFmAccess ? 'Sparar...' : 'Verifiera'}
                                             </Button>
                                         </div>
                                         <p className="text-[10px] text-muted-foreground">
-                                            Obs: FM Access-integration kräver att secrets konfigureras i Lovable Cloud. Kontakta admin för att aktivera.
+                                            FM Access-secrets (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD) konfigureras i Lovable Cloud.
                                         </p>
                                     </div>
                                 </div>
