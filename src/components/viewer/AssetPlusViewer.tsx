@@ -13,6 +13,7 @@ import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
 import RoomVisualizationPanel from './RoomVisualizationPanel';
+import VisualizationToolbar from './VisualizationToolbar';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
@@ -1116,8 +1117,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             <>
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
-                onToggleMinimap={(visible) => setShowMinimap(visible)}
+                onOpenSettings={() => setToolbarSettingsOpen(true)}
+              />
+              
+              {/* Right-side visualization toolbar */}
+              <VisualizationToolbar
+                viewerRef={viewerInstanceRef}
                 onToggleNavCube={(visible) => setShowNavCube(visible)}
+                onToggleMinimap={(visible) => setShowMinimap(visible)}
                 onToggleTreeView={(visible) => setShowTreePanel(visible)}
                 onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
                 onPickCoordinate={handleTogglePickMode}
@@ -1126,6 +1133,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 isPickMode={isPickMode}
                 showTreeView={showTreePanel}
                 showVisualization={showVisualizationPanel}
+                showNavCube={showNavCube}
+                showMinimap={showMinimap}
               />
               
               {/* Tree View Panel */}
