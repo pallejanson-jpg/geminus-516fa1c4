@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Move,
   ZoomIn,
@@ -8,12 +8,10 @@ import {
   Box,
   Eye,
   Ruler,
-  Search,
   Layers,
   Focus,
   Scissors,
-  Crosshair,
-  Grid3X3,
+  MousePointer2,
   ChevronUp,
   ChevronDown,
   Cuboid,
@@ -22,6 +20,9 @@ import {
   MoreHorizontal,
   MessageSquare,
   Plus,
+  Search,
+  Info,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -36,12 +37,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getToolbarSettings, ToolConfig } from './ToolbarSettings';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
   onPickCoordinate?: () => void;
+  onShowProperties?: () => void;
+  onOpenSettings?: () => void;
   isPickMode?: boolean;
   className?: string;
 }
@@ -52,9 +56,18 @@ type ViewMode = '3d' | '2d';
 
 /**
  * Custom toolbar for the Asset+ 3D Viewer
- * Mobile-optimized with 4 primary tools + overflow menu
+ * Configurable with overflow menu and user settings
  */
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCube, onToggleMinimap, onPickCoordinate, isPickMode, className }) => {
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
+  viewerRef,
+  onToggleNavCube,
+  onToggleMinimap,
+  onPickCoordinate,
+  onShowProperties,
+  onOpenSettings,
+  isPickMode,
+  className
+}) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
@@ -63,8 +76,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
   const [showMinimap, setShowMinimap] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getToolbarSettings());
   
   const isMobile = useIsMobile();
+
+  // Reload settings when they change
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setToolSettings(getToolbarSettings());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Get AssetView reference
   const getAssetView = useCallback(() => {
@@ -135,11 +158,20 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     }
   }, [getAssetView]);
 
-  // Tools - with null safety to prevent 'e.nextSibling' errors
+  // Tools - with proper state cleanup to prevent tool "sticking"
   const handleToolChange = useCallback((tool: ViewerTool) => {
     try {
       const assetView = getAssetView();
       if (assetView && typeof assetView.useTool === 'function') {
+        // First deactivate current tool if switching
+        if (activeTool && activeTool !== tool) {
+          try {
+            assetView.useTool(null);
+          } catch (e) {
+            console.debug('Tool deactivation:', e);
+          }
+        }
+        // Then activate new tool
         assetView.useTool(tool);
         setActiveTool(tool);
       } else {
@@ -148,7 +180,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     } catch (error) {
       console.warn('Tool change failed:', error);
     }
-  }, [getAssetView]);
+  }, [getAssetView, activeTool]);
 
   // View modes - with null safety
   const handleToggleSpaces = useCallback(() => {
@@ -164,15 +196,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     }
   }, [viewerRef, showSpaces]);
 
+  // Fixed: Remove direct DOM manipulation to prevent 'nextSibling' crash
   const handleToggleNavCube = useCallback(() => {
     const newValue = !showNavCube;
     setShowNavCube(newValue);
     onToggleNavCube?.(newValue);
-    
-    const navCubeCanvas = document.getElementById('navCubeCanvas');
-    if (navCubeCanvas) {
-      navCubeCanvas.style.display = newValue ? 'block' : 'none';
-    }
   }, [showNavCube, onToggleNavCube]);
 
   const handleToggleMinimap = useCallback(() => {
@@ -268,6 +296,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
     }
   }, [viewerRef]);
 
+  // Tool visibility check based on settings
+  const isToolVisible = useCallback((toolId: string) => {
+    const setting = toolSettings.find(t => t.id === toolId);
+    return setting?.visible ?? true;
+  }, [toolSettings]);
+
+  const isToolInOverflow = useCallback((toolId: string) => {
+    const setting = toolSettings.find(t => t.id === toolId);
+    return setting?.inOverflow ?? false;
+  }, [toolSettings]);
+
   if (!isExpanded) {
     return (
       <div className={cn("absolute bottom-4 left-1/2 -translate-x-1/2 z-20", className)}>
@@ -294,98 +333,137 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
       onClick: () => void;
       active?: boolean;
       variant?: 'ghost' | 'secondary';
+      toolId?: string;
     }
-  >(({ icon, label, onClick, active, variant = 'ghost' }, ref) => (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          ref={ref}
-          variant={active ? 'secondary' : variant}
-          size="icon"
-          className="h-8 w-8 sm:h-8 sm:w-8"
-          onClick={onClick}
-        >
-          {icon}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  ));
+  >(({ icon, label, onClick, active, variant = 'ghost', toolId }, ref) => {
+    // Check visibility if toolId provided
+    if (toolId && !isToolVisible(toolId)) return null;
+    if (toolId && isToolInOverflow(toolId) && !isMobile) return null;
+    
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            ref={ref}
+            variant={active ? 'secondary' : variant}
+            size="icon"
+            className="h-8 w-8 sm:h-8 sm:w-8"
+            onClick={onClick}
+          >
+            {icon}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">{label}</TooltipContent>
+      </Tooltip>
+    );
+  });
   ToolButton.displayName = 'ToolButton';
 
-  // Mobile overflow menu items
-  const MobileOverflowMenu = () => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" side="top" className="w-48 bg-card border shadow-lg z-50">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Navigering</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => handleNavModeChange('orbit')} className={navMode === 'orbit' ? 'bg-accent' : ''}>
-          <RotateCcw className="h-4 w-4 mr-2" /> Orbit (rotera)
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleNavModeChange('firstPerson')} className={navMode === 'firstPerson' ? 'bg-accent' : ''}>
-          <Move className="h-4 w-4 mr-2" /> Första person
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Verktyg</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => handleToolChange('select')} className={activeTool === 'select' ? 'bg-accent' : ''}>
-          <Crosshair className="h-4 w-4 mr-2" /> Välj objekt
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleToolChange('measure')} className={activeTool === 'measure' ? 'bg-accent' : ''}>
-          <Ruler className="h-4 w-4 mr-2" /> Mätverktyg
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleToolChange('slicer')} className={activeTool === 'slicer' ? 'bg-accent' : ''}>
-          <Scissors className="h-4 w-4 mr-2" /> Snittplan
-        </DropdownMenuItem>
-        {activeTool === 'slicer' && (
-          <DropdownMenuItem onClick={handleClearSlices}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Rensa snitt
-          </DropdownMenuItem>
-        )}
-        
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Visning</DropdownMenuLabel>
-        <DropdownMenuItem onClick={handleToggleXray}>
-          <Eye className="h-4 w-4 mr-2" /> X-ray läge
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleToggleSpaces} className={showSpaces ? 'bg-accent' : ''}>
-          <Layers className="h-4 w-4 mr-2" /> {showSpaces ? 'Dölj rum' : 'Visa rum'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleToggleNavCube} className={showNavCube ? 'bg-accent' : ''}>
-          <Box className="h-4 w-4 mr-2" /> {showNavCube ? 'Dölj kub' : 'Visa kub'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleToggleMinimap} className={showMinimap ? 'bg-accent' : ''}>
-          <Map className="h-4 w-4 mr-2" /> {showMinimap ? 'Dölj minimap' : 'Visa minimap'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleToggleAnnotations} className={showAnnotations ? 'bg-accent' : ''}>
-          <MessageSquare className="h-4 w-4 mr-2" /> {showAnnotations ? 'Dölj annotationer' : 'Visa annotationer'}
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleShowObjectDetails}>
-          <Search className="h-4 w-4 mr-2" /> Objektinfo
-        </DropdownMenuItem>
-        {onPickCoordinate && (
-          <DropdownMenuItem onClick={onPickCoordinate} className={isPickMode ? 'bg-accent' : ''}>
-            <Plus className="h-4 w-4 mr-2" /> {isPickMode ? 'Avbryt registrering' : 'Registrera tillgång'}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onClick={() => setIsExpanded(false)}>
-          <ChevronDown className="h-4 w-4 mr-2" /> Dölj verktygsfält
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  // Get overflow items for menu
+  const getOverflowItems = () => {
+    const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
+    
+    toolSettings.filter(t => t.visible && t.inOverflow).forEach(tool => {
+      switch (tool.id) {
+        case 'orbit':
+          items.push({ id: tool.id, label: 'Orbit (rotera)', icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleNavModeChange('orbit'), active: navMode === 'orbit' });
+          break;
+        case 'firstPerson':
+          items.push({ id: tool.id, label: 'Första person', icon: <Move className="h-4 w-4" />, onClick: () => handleNavModeChange('firstPerson'), active: navMode === 'firstPerson' });
+          break;
+        case 'select':
+          items.push({ id: tool.id, label: 'Välj objekt', icon: <MousePointer2 className="h-4 w-4" />, onClick: () => handleToolChange('select'), active: activeTool === 'select' });
+          break;
+        case 'measure':
+          items.push({ id: tool.id, label: 'Mätverktyg', icon: <Ruler className="h-4 w-4" />, onClick: () => handleToolChange('measure'), active: activeTool === 'measure' });
+          break;
+        case 'slicer':
+          items.push({ id: tool.id, label: 'Snittplan', icon: <Scissors className="h-4 w-4" />, onClick: () => handleToolChange('slicer'), active: activeTool === 'slicer' });
+          break;
+        case 'xray':
+          items.push({ id: tool.id, label: 'X-ray läge', icon: <Eye className="h-4 w-4" />, onClick: handleToggleXray });
+          break;
+        case 'spaces':
+          items.push({ id: tool.id, label: showSpaces ? 'Dölj rum' : 'Visa rum', icon: <Layers className="h-4 w-4" />, onClick: handleToggleSpaces, active: showSpaces });
+          break;
+        case 'navCube':
+          items.push({ id: tool.id, label: showNavCube ? 'Dölj kub' : 'Visa kub', icon: <Box className="h-4 w-4" />, onClick: handleToggleNavCube, active: showNavCube });
+          break;
+        case 'minimap':
+          items.push({ id: tool.id, label: showMinimap ? 'Dölj minimap' : 'Visa minimap', icon: <Map className="h-4 w-4" />, onClick: handleToggleMinimap, active: showMinimap });
+          break;
+        case 'annotations':
+          items.push({ id: tool.id, label: showAnnotations ? 'Dölj annotationer' : 'Visa annotationer', icon: <MessageSquare className="h-4 w-4" />, onClick: handleToggleAnnotations, active: showAnnotations });
+          break;
+        case 'objectInfo':
+          items.push({ id: tool.id, label: 'Objektinfo (Asset+)', icon: <Search className="h-4 w-4" />, onClick: handleShowObjectDetails });
+          break;
+        case 'properties':
+          if (onShowProperties) {
+            items.push({ id: tool.id, label: 'Egenskaper (Lovable)', icon: <Info className="h-4 w-4" />, onClick: onShowProperties });
+          }
+          break;
+        case 'addAsset':
+          if (onPickCoordinate) {
+            items.push({ id: tool.id, label: isPickMode ? 'Avbryt registrering' : 'Registrera tillgång', icon: <Plus className="h-4 w-4" />, onClick: onPickCoordinate, active: isPickMode });
+          }
+          break;
+      }
+    });
+    
+    return items;
+  };
 
-  // Mobile toolbar: 4 primary + overflow
+  // Overflow menu
+  const OverflowMenu = () => {
+    const items = getOverflowItems();
+    if (items.length === 0 && !onOpenSettings) return null;
+    
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center" side="top" className="w-52 bg-card border shadow-lg z-50">
+          {items.length > 0 && (
+            <>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Fler verktyg</DropdownMenuLabel>
+              {items.map(item => (
+                <DropdownMenuItem 
+                  key={item.id}
+                  onClick={item.onClick}
+                  className={item.active ? 'bg-accent' : ''}
+                >
+                  {item.icon}
+                  <span className="ml-2">{item.label}</span>
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+          
+          {onOpenSettings && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onOpenSettings}>
+                <Settings className="h-4 w-4" />
+                <span className="ml-2">Anpassa verktygsfält...</span>
+              </DropdownMenuItem>
+            </>
+          )}
+          
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setIsExpanded(false)}>
+            <ChevronDown className="h-4 w-4" />
+            <span className="ml-2">Dölj verktygsfält</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  // Mobile toolbar: compact primary + overflow
   if (isMobile) {
     return (
       <TooltipProvider delayDuration={300}>
@@ -395,41 +473,52 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           "bg-card/95 backdrop-blur-sm border shadow-lg",
           className
         )}>
-          {/* Primary tools: Zoom, Fit, 3D/2D toggle, Overflow */}
           <ToolButton
             icon={<ZoomIn className="h-4 w-4" />}
             label="Zooma in"
             onClick={handleZoomIn}
+            toolId="zoomIn"
           />
           <ToolButton
             icon={<ZoomOut className="h-4 w-4" />}
             label="Zooma ut"
             onClick={handleZoomOut}
+            toolId="zoomOut"
           />
           <ToolButton
             icon={<Focus className="h-4 w-4" />}
             label="Anpassa vy"
             onClick={handleViewFit}
+            toolId="viewFit"
           />
           
           <Separator orientation="vertical" className="h-5 mx-0.5" />
+          
+          <ToolButton
+            icon={<MousePointer2 className="h-4 w-4" />}
+            label="Välj objekt (CTRL för multi-select)"
+            onClick={() => handleToolChange('select')}
+            active={activeTool === 'select'}
+            toolId="select"
+          />
           
           <ToolButton
             icon={viewMode === '3d' ? <Cuboid className="h-4 w-4" /> : <SquareDashed className="h-4 w-4" />}
             label={viewMode === '3d' ? 'Byt till 2D' : 'Byt till 3D'}
             onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
             active={viewMode === '2d'}
+            toolId="viewMode"
           />
           
           <Separator orientation="vertical" className="h-5 mx-0.5" />
           
-          <MobileOverflowMenu />
+          <OverflowMenu />
         </div>
       </TooltipProvider>
     );
   }
 
-  // Desktop: Full toolbar
+  // Desktop: Full toolbar with configurable visibility
   return (
     <TooltipProvider delayDuration={300}>
       <div className={cn(
@@ -445,12 +534,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             label="Orbit (rotera)"
             onClick={() => handleNavModeChange('orbit')}
             active={navMode === 'orbit'}
+            toolId="orbit"
           />
           <ToolButton
             icon={<Move className="h-4 w-4" />}
             label="Första person (gå)"
             onClick={() => handleNavModeChange('firstPerson')}
             active={navMode === 'firstPerson'}
+            toolId="firstPerson"
           />
         </div>
 
@@ -462,21 +553,25 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             icon={<ZoomIn className="h-4 w-4" />}
             label="Zooma in"
             onClick={handleZoomIn}
+            toolId="zoomIn"
           />
           <ToolButton
             icon={<ZoomOut className="h-4 w-4" />}
             label="Zooma ut"
             onClick={handleZoomOut}
+            toolId="zoomOut"
           />
           <ToolButton
             icon={<Focus className="h-4 w-4" />}
             label="Anpassa vy"
             onClick={handleViewFit}
+            toolId="viewFit"
           />
           <ToolButton
             icon={<Maximize className="h-4 w-4" />}
             label="Återställ vy"
             onClick={handleResetView}
+            toolId="resetView"
           />
         </div>
 
@@ -485,22 +580,25 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
         {/* Tools Group */}
         <div className="flex items-center gap-0.5">
           <ToolButton
-            icon={<Crosshair className="h-4 w-4" />}
-            label="Välj objekt"
+            icon={<MousePointer2 className="h-4 w-4" />}
+            label="Välj objekt (CTRL för multi-select)"
             onClick={() => handleToolChange('select')}
             active={activeTool === 'select'}
+            toolId="select"
           />
           <ToolButton
             icon={<Ruler className="h-4 w-4" />}
             label="Mätverktyg"
             onClick={() => handleToolChange('measure')}
             active={activeTool === 'measure'}
+            toolId="measure"
           />
           <ToolButton
             icon={<Scissors className="h-4 w-4" />}
             label="Snittplan"
             onClick={() => handleToolChange('slicer')}
             active={activeTool === 'slicer'}
+            toolId="slicer"
           />
           {activeTool === 'slicer' && (
             <ToolButton
@@ -519,6 +617,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
           label={viewMode === '3d' ? '2D' : '3D'}
           onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
           active={viewMode === '2d'}
+          toolId="viewMode"
         />
 
         <Separator orientation="vertical" className="h-6 mx-1" />
@@ -529,41 +628,56 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             icon={<Eye className="h-4 w-4" />}
             label="X-ray läge"
             onClick={handleToggleXray}
+            toolId="xray"
           />
           <ToolButton
             icon={<Layers className="h-4 w-4" />}
             label="Visa/dölj rum"
             onClick={handleToggleSpaces}
             active={showSpaces}
+            toolId="spaces"
           />
           <ToolButton
             icon={<Box className="h-4 w-4" />}
             label="Visa/dölj navigeringskub"
             onClick={handleToggleNavCube}
             active={showNavCube}
+            toolId="navCube"
           />
           <ToolButton
             icon={<Map className="h-4 w-4" />}
             label="Visa/dölj minimap"
             onClick={handleToggleMinimap}
             active={showMinimap}
+            toolId="minimap"
           />
           <ToolButton
             icon={<MessageSquare className="h-4 w-4" />}
             label="Visa/dölj annotationer"
             onClick={handleToggleAnnotations}
             active={showAnnotations}
+            toolId="annotations"
           />
         </div>
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* Object Info */}
+        {/* Object Info & Properties */}
         <ToolButton
           icon={<Search className="h-4 w-4" />}
-          label="Objektinfo"
+          label="Objektinfo (Asset+)"
           onClick={handleShowObjectDetails}
+          toolId="objectInfo"
         />
+        
+        {onShowProperties && (
+          <ToolButton
+            icon={<Info className="h-4 w-4" />}
+            label="Egenskaper (Lovable)"
+            onClick={onShowProperties}
+            toolId="properties"
+          />
+        )}
 
         {/* Add Asset (Pick Coordinate) */}
         {onPickCoordinate && (
@@ -572,15 +686,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             label={isPickMode ? 'Avbryt registrering' : 'Registrera tillgång (klicka i 3D)'}
             onClick={onPickCoordinate}
             active={isPickMode}
+            toolId="addAsset"
           />
         )}
 
-        {/* Collapse button */}
-        <ToolButton
-          icon={<ChevronDown className="h-4 w-4" />}
-          label="Dölj verktygsfält"
-          onClick={() => setIsExpanded(false)}
-        />
+        {/* Overflow menu */}
+        <OverflowMenu />
       </div>
     </TooltipProvider>
   );
