@@ -68,5 +68,5 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
     iot: { label: 'Sensor Dashboard', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'external', username: '', password: '' },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
-    radar: { label: '360+', url: '', icon: Radar, openMode: 'internal', username: '', password: '' },
+    radar: { label: '360+ (Ivion)', url: 'https://ivion.se', icon: Radar, openMode: 'external', username: '', password: '' },
 };
