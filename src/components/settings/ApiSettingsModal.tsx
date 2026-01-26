@@ -885,26 +885,69 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <Building2 className="h-5 w-5 text-primary" />
                                             <h4 className="font-medium">FM Access</h4>
                                         </div>
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                        <Badge variant="secondary" className="text-xs">Konfiguration</Badge>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <p className="text-xs text-muted-foreground">
+                                        Anslut till FM Access för att hämta ritningar och dokument. Token URL och Client ID är förkonfigurerade.
+                                    </p>
+                                    <div className="space-y-3">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">API URL</Label>
+                                            <Label className="text-xs">Token URL</Label>
                                             <Input
-                                                placeholder="https://fmaccess.example.com/api"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
+                                                placeholder="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
+                                                defaultValue="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
+                                                className="h-9 text-sm font-mono"
+                                                readOnly
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">API Key</Label>
-                                            <Input
-                                                type="password"
-                                                placeholder="••••••••"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Client ID</Label>
+                                                <Input
+                                                    placeholder="HDCAgent Basic"
+                                                    defaultValue="HDCAgent Basic"
+                                                    className="h-9 text-sm"
+                                                    readOnly
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">API Base URL</Label>
+                                                <Input
+                                                    placeholder="https://api.fmaccess.se"
+                                                    className="h-9 text-sm"
+                                                />
+                                            </div>
                                         </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Username (valfritt)</Label>
+                                                <Input
+                                                    placeholder="Användarnamn"
+                                                    className="h-9 text-sm"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Password (valfritt)</Label>
+                                                <Input
+                                                    type="password"
+                                                    placeholder="••••••••"
+                                                    className="h-9 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 pt-2">
+                                            <Button variant="outline" size="sm" className="flex-1" disabled>
+                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                                Testa anslutning
+                                            </Button>
+                                            <Button variant="default" size="sm" className="flex-1" disabled>
+                                                <Save className="h-3.5 w-3.5 mr-1.5" />
+                                                Spara
+                                            </Button>
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Obs: FM Access-integration kräver att secrets konfigureras i Lovable Cloud. Kontakta admin för att aktivera.
+                                        </p>
                                     </div>
                                 </div>
 

@@ -80,7 +80,7 @@ const HELP_ARTICLES: HelpArticle[] = [
 // API Documentation categories
 const API_CATEGORIES = [
   {
-    name: 'Objekthantering',
+    name: 'Asset+ Objekthantering',
     endpoints: [
       { method: 'POST', path: '/AddObject', description: 'Skapa nytt objekt' },
       { method: 'PUT', path: '/EditObject', description: 'Redigera befintligt objekt' },
@@ -89,7 +89,7 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Datainhämtning',
+    name: 'Asset+ Datainhämtning',
     endpoints: [
       { method: 'GET', path: '/GetObjectsByPage', description: 'Hämta objekt paginerat' },
       { method: 'POST', path: '/GetObjectByFmGuid', description: 'Hämta objekt via FMGUID' },
@@ -97,18 +97,42 @@ const API_CATEGORIES = [
     ],
   },
   {
-    name: 'Revisioner',
+    name: 'Asset+ Revisioner',
     endpoints: [
       { method: 'POST', path: '/PublishRevision', description: 'Publicera revision' },
       { method: 'POST', path: '/RestoreRevisionAndXktData', description: 'Återställ revision' },
     ],
   },
   {
-    name: '3D Viewer',
+    name: 'Asset+ 3D Viewer',
     endpoints: [
       { method: '-', path: 'cutOutFloorByFmGuid', description: 'Klipp ut våningsplan' },
       { method: '-', path: 'selectFmGuidAndViewFit', description: 'Välj och zooma till objekt' },
       { method: '-', path: 'useTool', description: 'Aktivera verktyg (measure, slicer)' },
+    ],
+  },
+  {
+    name: 'FM Access - Autentisering',
+    endpoints: [
+      { method: 'POST', path: '/auth/realms/{realm}/protocol/openid-connect/token', description: 'Hämta access token' },
+      { method: '-', path: 'X-Hdc-Version-Id', description: 'Obligatorisk header för de flesta anrop' },
+      { method: 'GET', path: '/api/version', description: 'Hämta aktuell systemversion' },
+    ],
+  },
+  {
+    name: 'FM Access - Ritningar',
+    endpoints: [
+      { method: 'GET', path: '/api/drawings', description: 'Hämta ritningar för byggnad' },
+      { method: 'GET', path: '/api/drawings/{id}/pdf', description: 'Hämta ritning som PDF' },
+      { method: 'GET', path: '/api/drawings/{id}/dwg', description: 'Hämta ritning som DWG' },
+    ],
+  },
+  {
+    name: 'FM Access - Dokument',
+    endpoints: [
+      { method: 'GET', path: '/api/documents', description: 'Hämta dokument för byggnad' },
+      { method: 'GET', path: '/api/documents/{id}', description: 'Hämta specifikt dokument' },
+      { method: 'POST', path: '/api/documents', description: 'Ladda upp dokument' },
     ],
   },
 ];
