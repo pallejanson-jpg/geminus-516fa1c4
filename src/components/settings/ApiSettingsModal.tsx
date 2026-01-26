@@ -649,7 +649,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     className="h-11 text-base"
                                                 />
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 gap-3">
                                                 <div className="space-y-1.5">
                                                     <Label className="text-sm font-medium">Username</Label>
                                                     <Input
@@ -900,7 +900,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 readOnly
                                             />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1">
                                                 <Label className="text-xs">Client ID</Label>
                                                 <Input
@@ -918,7 +918,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 />
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1">
                                                 <Label className="text-xs">Username (valfritt)</Label>
                                                 <Input
@@ -960,7 +960,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                         <Badge variant="outline" className="text-xs">Kommer snart</Badge>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div className="space-y-1">
                                             <Label className="text-xs">API URL</Label>
                                             <Input
@@ -990,7 +990,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                         <Badge variant="outline" className="text-xs">Kommer snart</Badge>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div className="space-y-1">
                                             <Label className="text-xs">Base URL</Label>
                                             <Input
@@ -1035,7 +1035,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 className="h-8 text-sm bg-muted"
                                             />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1">
                                                 <Label className="text-xs">Username</Label>
                                                 <Input
