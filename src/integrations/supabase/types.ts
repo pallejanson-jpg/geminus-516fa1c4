@@ -205,6 +205,123 @@ export type Database = {
         }
         Relationships: []
       }
+      faciliate_sync_state: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          last_sync_completed_at: string | null
+          last_sync_started_at: string | null
+          sync_status: string | null
+          sync_type: string
+          total_items: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_sync_completed_at?: string | null
+          last_sync_started_at?: string | null
+          sync_status?: string | null
+          sync_type?: string
+          total_items?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_sync_completed_at?: string | null
+          last_sync_started_at?: string | null
+          sync_status?: string | null
+          sync_type?: string
+          total_items?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      work_orders: {
+        Row: {
+          actual_cost: number | null
+          assigned_to: string | null
+          attributes: Json | null
+          building_fm_guid: string | null
+          building_name: string | null
+          category: string | null
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          estimated_cost: number | null
+          external_id: string
+          guid: string | null
+          id: string
+          priority: string | null
+          reported_at: string | null
+          reported_by: string | null
+          source_updated_at: string | null
+          space_fm_guid: string | null
+          space_name: string | null
+          status: string
+          synced_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          actual_cost?: number | null
+          assigned_to?: string | null
+          attributes?: Json | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          estimated_cost?: number | null
+          external_id: string
+          guid?: string | null
+          id?: string
+          priority?: string | null
+          reported_at?: string | null
+          reported_by?: string | null
+          source_updated_at?: string | null
+          space_fm_guid?: string | null
+          space_name?: string | null
+          status?: string
+          synced_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          actual_cost?: number | null
+          assigned_to?: string | null
+          attributes?: Json | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          estimated_cost?: number | null
+          external_id?: string
+          guid?: string | null
+          id?: string
+          priority?: string | null
+          reported_at?: string | null
+          reported_by?: string | null
+          source_updated_at?: string | null
+          space_fm_guid?: string | null
+          space_name?: string | null
+          status?: string
+          synced_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

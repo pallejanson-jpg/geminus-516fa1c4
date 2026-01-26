@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ interface TreeNode {
   children?: TreeNode[];
   parent?: TreeNode;
   fmGuid?: string;
+  objectCount?: number;
 }
 
 interface ViewerTreePanelProps {
@@ -26,6 +27,9 @@ interface ViewerTreePanelProps {
 // Get icon for IFC type
 const getTypeIcon = (type: string) => {
   const typeLower = type?.toLowerCase() || '';
+  if (typeLower.includes('site') || typeLower.includes('project')) {
+    return <Building2 className="h-3.5 w-3.5 text-emerald-500" />;
+  }
   if (typeLower.includes('building') && !typeLower.includes('storey')) {
     return <Building2 className="h-3.5 w-3.5 text-blue-500" />;
   }
@@ -44,8 +48,16 @@ const getTypeIcon = (type: string) => {
 // Get short type label
 const getTypeLabel = (type: string) => {
   if (!type) return '';
-  // Remove 'Ifc' prefix and capitalize
+  // Remove 'Ifc' prefix
   return type.replace(/^Ifc/, '');
+};
+
+// Count all descendants recursively
+const countDescendants = (node: TreeNode): number => {
+  if (!node.children || node.children.length === 0) return 0;
+  return node.children.reduce((sum, child) => {
+    return sum + 1 + countDescendants(child);
+  }, 0);
 };
 
 const TreeNodeComponent: React.FC<{
@@ -61,6 +73,7 @@ const TreeNodeComponent: React.FC<{
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
+  const descendantCount = node.objectCount ?? countDescendants(node);
   
   // Check if this node or its children match the search
   const matchesSearch = searchQuery 
@@ -68,11 +81,17 @@ const TreeNodeComponent: React.FC<{
       node.type.toLowerCase().includes(searchQuery.toLowerCase())
     : true;
   
-  // If search is active and this node doesn't match, hide it (unless a child matches)
-  const childrenMatchSearch = node.children?.some(child => 
-    child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    child.type.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Recursive check for matching children
+  const hasMatchingChildren = useCallback((n: TreeNode): boolean => {
+    if (!n.children) return false;
+    return n.children.some(child => {
+      const childMatches = child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        child.type.toLowerCase().includes(searchQuery.toLowerCase());
+      return childMatches || hasMatchingChildren(child);
+    });
+  }, [searchQuery]);
+
+  const childrenMatchSearch = searchQuery ? hasMatchingChildren(node) : false;
 
   if (searchQuery && !matchesSearch && !childrenMatchSearch) {
     return null;
@@ -121,6 +140,13 @@ const TreeNodeComponent: React.FC<{
         <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">
           {getTypeLabel(node.type)}
         </Badge>
+
+        {/* Descendant count for expandable nodes */}
+        {hasChildren && descendantCount > 0 && (
+          <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">
+            {descendantCount}
+          </Badge>
+        )}
       </div>
       
       {/* Children */}
@@ -157,15 +183,24 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const buildAttempts = useRef(0);
 
-  // Build tree from xeokit metaScene
+  // Build tree from xeokit metaScene using storeys hierarchy (like xeokit TreeViewPlugin)
   const buildTree = useCallback(() => {
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     const metaScene = xeokitViewer?.metaScene;
     
     if (!metaScene) {
-      console.debug('ViewerTreePanel: No metaScene available');
+      console.debug('ViewerTreePanel: No metaScene available yet, attempt:', buildAttempts.current);
+      
+      // Retry a few times as scene might still be loading
+      if (buildAttempts.current < 5) {
+        buildAttempts.current++;
+        setTimeout(buildTree, 1000);
+        return;
+      }
+      
       setIsLoading(false);
       return;
     }
@@ -174,8 +209,23 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
       const rootMetaObjects = metaScene.rootMetaObjects || {};
       const tree: TreeNode[] = [];
 
-      // Recursive function to build tree
-      const buildNode = (metaObject: any): TreeNode => {
+      // Sort function for IFC storeys (floor names)
+      const sortByStoreyLevel = (a: TreeNode, b: TreeNode): number => {
+        // Extract floor number from name like "Floor 1", "Våning 2", "Level -1", etc.
+        const extractLevel = (name: string): number => {
+          const match = name.match(/(-?\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        };
+        
+        const levelA = extractLevel(a.name);
+        const levelB = extractLevel(b.name);
+        
+        // Sort descending (higher floors first)
+        return levelB - levelA;
+      };
+
+      // Recursive function to build tree with proper structure
+      const buildNode = (metaObject: any, depth: number = 0): TreeNode => {
         const node: TreeNode = {
           id: metaObject.id,
           name: metaObject.name || metaObject.id,
@@ -187,36 +237,55 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
         };
 
         if (metaObject.children && metaObject.children.length > 0) {
-          node.children = metaObject.children
-            .map((child: any) => buildNode(child))
-            .sort((a: TreeNode, b: TreeNode) => a.name.localeCompare(b.name));
+          // Build children
+          const childNodes = metaObject.children.map((child: any) => buildNode(child, depth + 1));
+          
+          // Sort storeys by level, other children alphabetically
+          if (node.type === 'IfcBuilding') {
+            // Sort storeys by floor level (descending)
+            node.children = childNodes.sort(sortByStoreyLevel);
+          } else {
+            // Sort other nodes alphabetically
+            node.children = childNodes.sort((a: TreeNode, b: TreeNode) => 
+              a.name.localeCompare(b.name, 'sv', { numeric: true })
+            );
+          }
         }
+
+        // Cache object count for display
+        node.objectCount = countDescendants(node);
 
         return node;
       };
 
       // Process all root objects
       Object.values(rootMetaObjects).forEach((rootObj: any) => {
-        tree.push(buildNode(rootObj));
+        const node = buildNode(rootObj);
+        tree.push(node);
       });
 
-      // Sort root level
-      tree.sort((a, b) => a.name.localeCompare(b.name));
+      // Sort root level by name
+      tree.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
 
       setTreeData(tree);
       
-      // Auto-expand first level
-      const firstLevelIds = new Set<string>();
-      tree.forEach(node => {
-        firstLevelIds.add(node.id);
-        // Also expand IfcBuilding and IfcSite
-        if (node.type === 'IfcBuilding' || node.type === 'IfcSite' || node.type === 'IfcProject') {
-          node.children?.forEach(child => firstLevelIds.add(child.id));
-        }
-      });
-      setExpandedIds(firstLevelIds);
+      // Auto-expand first few levels for better UX (like xeokit autoExpandDepth: 2)
+      const autoExpandIds = new Set<string>();
+      const expandToDepth = (nodes: TreeNode[], depth: number, maxDepth: number) => {
+        if (depth >= maxDepth) return;
+        nodes.forEach(node => {
+          autoExpandIds.add(node.id);
+          if (node.children) {
+            expandToDepth(node.children, depth + 1, maxDepth);
+          }
+        });
+      };
+      expandToDepth(tree, 0, 2); // Expand 2 levels deep
+      setExpandedIds(autoExpandIds);
       
-      console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes');
+      // Count total objects for display
+      const totalCount = tree.reduce((sum, node) => sum + 1 + (node.objectCount || 0), 0);
+      console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes,', totalCount, 'total objects');
     } catch (e) {
       console.error('ViewerTreePanel: Error building tree:', e);
     } finally {
@@ -228,6 +297,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   useEffect(() => {
     if (isVisible) {
       setIsLoading(true);
+      buildAttempts.current = 0;
       // Wait a bit for the scene to be fully loaded
       const timer = setTimeout(buildTree, 500);
       return () => clearTimeout(timer);
@@ -330,7 +400,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
         <div className="flex items-center gap-2">
           <TreeDeciduous className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm">Modellträd</span>
-          <Badge variant="secondary" className="text-xs">{nodeCount}</Badge>
+          <Badge variant="secondary" className="text-xs">{nodeCount.toLocaleString('sv-SE')}</Badge>
         </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
           <X className="h-3.5 w-3.5" />
@@ -354,11 +424,13 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
       <ScrollArea className="flex-1 p-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-            Laddar träd...
+            Laddar modellträd...
           </div>
         ) : treeData.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-            Inget träd tillgängligt
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-2">
+            <TreeDeciduous className="h-8 w-8 opacity-50" />
+            <span>Inget modellträd tillgängligt</span>
+            <span className="text-xs">Modellen kanske fortfarande laddas</span>
           </div>
         ) : (
           treeData.map(node => (
