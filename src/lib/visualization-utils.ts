@@ -1,0 +1,266 @@
+/**
+ * Visualization utilities for room color-coding based on sensor data
+ */
+
+export type VisualizationType = 'temperature' | 'co2' | 'humidity' | 'occupancy' | 'area' | 'none';
+
+export interface ColorStop {
+  value: number;
+  color: [number, number, number]; // RGB 0-255
+}
+
+export interface VisualizationConfig {
+  type: VisualizationType;
+  label: string;
+  unit: string;
+  colorStops: ColorStop[];
+  min: number;
+  max: number;
+}
+
+// Color scales for different visualization types
+export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfig> = {
+  temperature: {
+    type: 'temperature',
+    label: 'Temperatur',
+    unit: '°C',
+    colorStops: [
+      { value: 16, color: [59, 130, 246] },   // Blue - cold
+      { value: 18, color: [59, 130, 246] },   // Blue
+      { value: 20, color: [34, 197, 94] },    // Green - ideal
+      { value: 22, color: [34, 197, 94] },    // Green
+      { value: 24, color: [234, 179, 8] },    // Yellow - warm
+      { value: 26, color: [239, 68, 68] },    // Red - hot
+      { value: 30, color: [239, 68, 68] },    // Red
+    ],
+    min: 16,
+    max: 30,
+  },
+  co2: {
+    type: 'co2',
+    label: 'CO₂',
+    unit: 'ppm',
+    colorStops: [
+      { value: 400, color: [34, 197, 94] },   // Green - excellent
+      { value: 600, color: [34, 197, 94] },   // Green
+      { value: 800, color: [234, 179, 8] },   // Yellow - acceptable
+      { value: 1000, color: [234, 179, 8] },  // Yellow
+      { value: 1200, color: [249, 115, 22] }, // Orange - poor
+      { value: 1500, color: [239, 68, 68] },  // Red - bad
+      { value: 2000, color: [239, 68, 68] },  // Red
+    ],
+    min: 400,
+    max: 2000,
+  },
+  humidity: {
+    type: 'humidity',
+    label: 'Luftfuktighet',
+    unit: '%',
+    colorStops: [
+      { value: 20, color: [249, 115, 22] },   // Orange - too dry
+      { value: 30, color: [234, 179, 8] },    // Yellow
+      { value: 40, color: [34, 197, 94] },    // Green - ideal start
+      { value: 60, color: [34, 197, 94] },    // Green - ideal end
+      { value: 70, color: [59, 130, 246] },   // Blue - humid
+      { value: 80, color: [59, 130, 246] },   // Blue - too humid
+    ],
+    min: 20,
+    max: 80,
+  },
+  occupancy: {
+    type: 'occupancy',
+    label: 'Beläggning',
+    unit: '%',
+    colorStops: [
+      { value: 0, color: [156, 163, 175] },   // Gray - empty
+      { value: 25, color: [34, 197, 94] },    // Green - light
+      { value: 50, color: [234, 179, 8] },    // Yellow - moderate
+      { value: 75, color: [249, 115, 22] },   // Orange - busy
+      { value: 100, color: [239, 68, 68] },   // Red - full
+    ],
+    min: 0,
+    max: 100,
+  },
+  area: {
+    type: 'area',
+    label: 'Yta (NTA)',
+    unit: 'm²',
+    colorStops: [
+      { value: 0, color: [255, 255, 255] },   // White - smallest
+      { value: 25, color: [233, 213, 255] },  // Light purple
+      { value: 50, color: [192, 132, 252] },  // Purple
+      { value: 100, color: [147, 51, 234] },  // Darker purple
+      { value: 200, color: [126, 34, 206] },  // Deep purple
+    ],
+    min: 0,
+    max: 200,
+  },
+  none: {
+    type: 'none',
+    label: 'Ingen',
+    unit: '',
+    colorStops: [],
+    min: 0,
+    max: 0,
+  },
+};
+
+/**
+ * Normalize a value to 0-1 range
+ */
+export function normalizeValue(value: number, min: number, max: number): number {
+  if (max === min) return 0.5;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+/**
+ * Interpolate between two colors
+ */
+export function interpolateColor(
+  color1: [number, number, number],
+  color2: [number, number, number],
+  t: number
+): [number, number, number] {
+  return [
+    Math.round(color1[0] + (color2[0] - color1[0]) * t),
+    Math.round(color1[1] + (color2[1] - color1[1]) * t),
+    Math.round(color1[2] + (color2[2] - color1[2]) * t),
+  ];
+}
+
+/**
+ * Get color for a value based on the visualization type
+ */
+export function getVisualizationColor(
+  value: number | null | undefined,
+  type: VisualizationType
+): [number, number, number] | null {
+  if (value === null || value === undefined || type === 'none') {
+    return null;
+  }
+
+  const config = VISUALIZATION_CONFIGS[type];
+  if (!config || config.colorStops.length === 0) {
+    return null;
+  }
+
+  const stops = config.colorStops;
+
+  // Below minimum
+  if (value <= stops[0].value) {
+    return stops[0].color;
+  }
+
+  // Above maximum
+  if (value >= stops[stops.length - 1].value) {
+    return stops[stops.length - 1].color;
+  }
+
+  // Find the two stops we're between
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (value >= stops[i].value && value <= stops[i + 1].value) {
+      const t = (value - stops[i].value) / (stops[i + 1].value - stops[i].value);
+      return interpolateColor(stops[i].color, stops[i + 1].color, t);
+    }
+  }
+
+  return stops[0].color;
+}
+
+/**
+ * Convert RGB to hex color string
+ */
+export function rgbToHex(rgb: [number, number, number]): string {
+  return '#' + rgb.map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Convert RGB (0-255) to normalized float array (0-1) for xeokit
+ */
+export function rgbToFloat(rgb: [number, number, number]): [number, number, number] {
+  return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
+}
+
+/**
+ * Generate mock sensor data for demonstration
+ */
+export function generateMockSensorData(fmGuid: string, type: VisualizationType): number | null {
+  // Use fmGuid hash to generate consistent random values
+  const hash = fmGuid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const random = (hash * 9301 + 49297) % 233280 / 233280;
+
+  const config = VISUALIZATION_CONFIGS[type];
+  if (!config || type === 'none') return null;
+
+  // Generate value within range with some variation
+  const range = config.max - config.min;
+  return config.min + random * range;
+}
+
+export interface RoomSensorData {
+  fmGuid: string;
+  temperature?: number | null;
+  co2?: number | null;
+  humidity?: number | null;
+  occupancy?: number | null;
+  area?: number | null;
+}
+
+/**
+ * Extract sensor value from room attributes based on visualization type
+ */
+export function extractSensorValue(
+  attributes: Record<string, any> | null | undefined,
+  type: VisualizationType
+): number | null {
+  if (!attributes || type === 'none') return null;
+
+  // Find keys that match sensor patterns
+  const keys = Object.keys(attributes);
+  
+  switch (type) {
+    case 'temperature': {
+      const tempKey = keys.find(k => k.toLowerCase().includes('sensortemperature') || k.toLowerCase().includes('temperature'));
+      if (tempKey) {
+        const val = attributes[tempKey];
+        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
+      }
+      return null;
+    }
+    case 'co2': {
+      const co2Key = keys.find(k => k.toLowerCase().includes('sensorco2') || k.toLowerCase().includes('co2'));
+      if (co2Key) {
+        const val = attributes[co2Key];
+        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
+      }
+      return null;
+    }
+    case 'humidity': {
+      const humKey = keys.find(k => k.toLowerCase().includes('sensorhum') || k.toLowerCase().includes('humidity'));
+      if (humKey) {
+        const val = attributes[humKey];
+        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
+      }
+      return null;
+    }
+    case 'occupancy': {
+      const occKey = keys.find(k => k.toLowerCase().includes('sensoroccupancy') || k.toLowerCase().includes('occupancy'));
+      if (occKey) {
+        const val = attributes[occKey];
+        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
+      }
+      return null;
+    }
+    case 'area': {
+      // Look for NTA or area values
+      const areaKey = keys.find(k => k.toLowerCase().includes('nta') || k.toLowerCase() === 'area');
+      if (areaKey) {
+        const val = attributes[areaKey];
+        return typeof val === 'number' ? val : (typeof val?.value === 'number' ? val.value : null);
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
