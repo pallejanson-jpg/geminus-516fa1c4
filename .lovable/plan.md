@@ -1,189 +1,145 @@
 
-# Plan: Fix 3D Viewer Crash and Improve Navigator Hierarchy
+# Plan: Omstrukturering av Insights med Flikar
 
-## Summary
+## Översikt
 
-This plan addresses two critical issues:
-1. **3D Viewer crash during asset creation** - The asset registration flow fails because the viewer reference isn't properly connected
-2. **Navigator hierarchy incomplete** - Spaces are excluded when they lack level GUID and storey linkage needs improvement
+Insights-vyn ska få en ny flikbaserad struktur med fem kategorier av insikter. Den nuvarande energifokuserade vyn blir "Performance"-fliken, och fyra nya flikar läggs till med mockdata som kopplas till de faktiska byggnaderna i systemet.
 
----
+## Ny Flikstruktur
 
-## Problem Analysis
+| Flik | Beskrivning | Innehåll |
+|------|-------------|----------|
+| **Performance** | Befintlig energivy | Energieffektivitet, kWh/m², CO2-utsläpp, trender |
+| **Facility Management** | Fastighetsförvaltning | Underhållsscheman, felanmälningar, serviceavtal |
+| **Space Management** | Ytor och beläggning | Rumsanvändning, beläggningsgrad, optimering |
+| **Asset Management** | Tillgångar och utrustning | Inventarier, livscykel, värdering |
+| **Portfolio Management** | Portföljöversikt | Ägarstruktur, ekonomi, benchmarking |
 
-### Issue 1: 3D Crash at Asset Creation
-
-The `AssetRegistration.tsx` component creates a `viewerRef` that is never connected to the actual `AssetPlusViewer` component:
-
-```text
-AssetRegistration.tsx:
-  viewerRef = useRef(null)  <-- Never connected
-      ↓
-  <AssetPlusViewerComponent fmGuid={...} />  <-- No ref passed
-      ↓
-  Form tries: viewerRef.current?.$refs?.AssetViewer...
-      ↓
-  Returns null → Error: "Kunde inte ansluta till 3D-vyn"
-```
-
-### Issue 2: Navigator Missing Spaces
-
-Current data shows:
-- 1843 total Spaces, 144 missing `level_fm_guid` (7.8%)
-- Current fallback only works if Space has `levelCommonName` attribute
-- The 144 orphan spaces have NO level attributes at all
-
-Additionally, storeys have a `parentCommonName` field (like "B52", "B61") that represents sub-buildings, which the current logic doesn't utilize.
-
----
-
-## Solution
-
-### Part A: Fix Asset Registration Viewer Connection
-
-**File: `src/pages/AssetRegistration.tsx`**
-
-1. Remove the broken `viewerRef` approach entirely
-2. Use a shared communication channel between viewer and form:
-   - Store picked coordinates in React state lifted to parent
-   - Pass a callback to `AssetPlusViewer` that receives picked coordinates
-   - OR use a context/global store for coordinate picking
-
-**Recommended approach:** Create a dedicated prop on `AssetPlusViewer` for pick mode:
-- Add `onCoordinatePicked?: (coords: {x,y,z}, parentNode) => void` prop
-- Add `pickModeEnabled?: boolean` prop
-- When enabled, clicking surfaces triggers the callback instead of internal handling
-
-### Part B: Improve Navigator Fallback Logic
-
-**File: `src/context/AppContext.tsx`**
-
-Enhance the `buildNavigatorTree` function with additional fallback strategies:
-
-1. **Storey fallback for Spaces without level info:**
-   - If Space has `building_fm_guid` but no `level_fm_guid`, and the building has ONLY ONE storey
-   - Automatically assign that Space to the single storey
-
-2. **Create "Unknown Floor" placeholder:**
-   - For Spaces with `building_fm_guid` but no matchable storey
-   - Create a synthetic "Okänd våning" storey under each building
-   - Attach unmatched spaces there so they remain visible
-
-3. **Consider sub-building grouping (future enhancement):**
-   - The `parentCommonName` field ("B52", "B61", etc.) could create an intermediate grouping level
-   - This is optional but would improve organization for complex buildings
-
----
-
-## Implementation Details
-
-### Step 1: Fix AssetRegistration.tsx
+## Visuell Layout
 
 ```text
-Changes:
-1. Remove viewerRef and related code
-2. Add state for picked coordinates: pickedCoords, setPickedCoords
-3. Pass props to AssetPlusViewer:
-   - pickModeEnabled={isPickingCoordinates}
-   - onCoordinatePicked={(coords, node) => {
-       setPickedCoords(coords);
-       setPickingEnabled(false);
-     }}
-4. Remove broken handlePickCoordinates logic from form
-5. Add "Välj position" button that sets pickModeEnabled=true
+┌─────────────────────────────────────────────────────────────────────┐
+│  Insights                                                           │
+│  Analys och insikter för din fastighetsportfölj                    │
+├─────────────────────────────────────────────────────────────────────┤
+│  [Performance] [Facility Mgmt] [Space Mgmt] [Asset Mgmt] [Portfolio]│
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
+│   │ KPI 1   │ │ KPI 2   │ │ KPI 3   │ │ KPI 4   │    <- KPI-kort   │
+│   └─────────┘ └─────────┘ └─────────┘ └─────────┘                  │
+│                                                                     │
+│   ┌────────────────────┐  ┌────────────────────┐                   │
+│   │                    │  │                    │                   │
+│   │    Diagram 1       │  │    Diagram 2       │    <- Charts      │
+│   │                    │  │                    │                   │
+│   └────────────────────┘  └────────────────────┘                   │
+│                                                                     │
+│   ┌──────────────────────────────────────────────┐                 │
+│   │   Byggnadslista/Tabell                       │  <- Data grid   │
+│   └──────────────────────────────────────────────┘                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step 2: Update AssetPlusViewer.tsx
+## Teknisk Implementation
 
-```text
-Changes:
-1. Add new props: pickModeEnabled, onCoordinatePicked
-2. Modify existing pick mode logic to call onCoordinatePicked callback
-3. When pickModeEnabled changes to true, activate pick mode
-4. When coordinate is picked, call callback and deactivate
-```
+### Steg 1: Skapa komponentstruktur
 
-### Step 3: Enhance AppContext.tsx Navigator Logic
+Skapa nya komponenter för varje flik:
 
-```text
-Changes to buildNavigatorTree():
+| Fil | Syfte |
+|-----|-------|
+| `src/components/insights/tabs/PerformanceTab.tsx` | Flytta befintlig energivy hit |
+| `src/components/insights/tabs/FacilityManagementTab.tsx` | FM-insikter med mockdata |
+| `src/components/insights/tabs/SpaceManagementTab.tsx` | Ythantering med mockdata |
+| `src/components/insights/tabs/AssetManagementTab.tsx` | Tillgångsinsikter med mockdata |
+| `src/components/insights/tabs/PortfolioManagementTab.tsx` | Portföljanalys med mockdata |
 
-1. After normal storey-space matching, collect orphan spaces
-2. For each orphan space with building_fm_guid:
-   a. Check if building has exactly 1 storey → assign there
-   b. Else, add to synthetic "Okänd våning" node
+### Steg 2: Uppdatera InsightsView.tsx
 
-3. Create synthetic storeys per building for remaining orphans:
-   const syntheticStoreyMap = new Map<string, NavigatorNode>();
-   
-   orphanSpaces.forEach(space => {
-     const buildingGuid = space.buildingFmGuid;
-     if (!syntheticStoreyMap.has(buildingGuid)) {
-       syntheticStoreyMap.set(buildingGuid, {
-         fmGuid: `unknown-storey-${buildingGuid}`,
-         category: 'Building Storey',
-         commonName: 'Okänd våning',
-         isSynthetic: true,
-         children: [],
-       });
-     }
-     syntheticStoreyMap.get(buildingGuid).children.push(space);
-   });
-```
-
----
-
-## Technical Details
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/pages/AssetRegistration.tsx` | Remove viewerRef, add coordinate state, pass props |
-| `src/components/viewer/AssetPlusViewer.tsx` | Add pickModeEnabled/onCoordinatePicked props |
-| `src/context/AppContext.tsx` | Add synthetic storey fallback for orphan spaces |
-
-### New Props for AssetPlusViewer
+Huvudvyn får fliknavigering med Radix Tabs:
 
 ```typescript
-interface AssetPlusViewerProps {
-  fmGuid: string;
-  onClose?: () => void;
-  // New props for external pick mode control
-  pickModeEnabled?: boolean;
-  onCoordinatePicked?: (
-    coords: { x: number; y: number; z: number },
-    parentNode: NavigatorNode | null
-  ) => void;
-}
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+
+// Flikstruktur
+<Tabs defaultValue="performance">
+  <TabsList className="w-full justify-start overflow-x-auto">
+    <TabsTrigger value="performance">Performance</TabsTrigger>
+    <TabsTrigger value="facility">Facility Management</TabsTrigger>
+    <TabsTrigger value="space">Space Management</TabsTrigger>
+    <TabsTrigger value="asset">Asset Management</TabsTrigger>
+    <TabsTrigger value="portfolio">Portfolio Management</TabsTrigger>
+  </TabsList>
+  
+  <TabsContent value="performance">
+    <PerformanceTab />
+  </TabsContent>
+  {/* ... övriga flikar */}
+</Tabs>
 ```
 
-### Synthetic Storey Structure
+### Steg 3: Mockdata per Flik
+
+Varje flik använder faktiska byggnader från `navigatorTreeData` med syntetiska värden:
+
+**Facility Management:**
+- Aktiva serviceärenden per byggnad
+- Planerade underhållsåtgärder
+- SLA-efterlevnad
+- Kostnadsfördelning
+
+**Space Management:**
+- Beläggningsgrad per rum/våning
+- Kvadratmeter per funktionstyp
+- Vakansgrad
+- Effektivitetsmätningar
+
+**Asset Management:**
+- Antal tillgångar per kategori
+- Genomsnittsålder
+- Återanskaffningsvärde
+- Underhållsstatus
+
+**Portfolio Management:**
+- Totalt portföljvärde
+- Avkastning (ROI mockdata)
+- Geografisk fördelning
+- Riskprofil
+
+### Steg 4: Responsiv Design
+
+Flikarna blir scrollbara horisontellt på mobil:
 
 ```typescript
-{
-  fmGuid: `synthetic-unknown-${buildingFmGuid}`,
-  category: 'Building Storey',
-  commonName: 'Okänd våning',
-  name: 'Unknown Floor',
-  isSynthetic: true,  // Flag for UI styling
-  children: [...orphanSpaces],
-}
+<TabsList className="w-full flex-nowrap overflow-x-auto justify-start">
 ```
 
----
+## Filer att Ändra/Skapa
 
-## Expected Results
+| Åtgärd | Fil |
+|--------|-----|
+| Skapa | `src/components/insights/tabs/PerformanceTab.tsx` |
+| Skapa | `src/components/insights/tabs/FacilityManagementTab.tsx` |
+| Skapa | `src/components/insights/tabs/SpaceManagementTab.tsx` |
+| Skapa | `src/components/insights/tabs/AssetManagementTab.tsx` |
+| Skapa | `src/components/insights/tabs/PortfolioManagementTab.tsx` |
+| Uppdatera | `src/components/insights/InsightsView.tsx` |
 
-After implementation:
-1. **Asset Registration:** Clicking "Välj position" will activate pick mode in the 3D viewer, and coordinates will properly flow to the form
-2. **Navigator:** All 144 orphan spaces will appear under "Okänd våning" storeys in their respective buildings
-3. **No data loss:** Spaces are never excluded from the tree - they're either matched or placed in fallback nodes
+## Datakoppling
 
----
+Alla flikar använder:
+- `navigatorTreeData` - för byggnadsstruktur
+- `allData` - för utrymmen och tillgångar
 
-## Risk Mitigation
+Mockdata genereras deterministiskt baserat på `fmGuid` för konsistens mellan sessioner.
 
-- The synthetic storey approach preserves all data visibility
-- The pick mode changes are additive - existing viewer functionality remains intact
-- Fallback logic only activates for unmatched items, not affecting already-working hierarchy
+## Resultat
+
+Efter implementation:
+1. Insights får fem klickbara flikar högst upp
+2. Performance-fliken innehåller befintlig energivy
+3. Fyra nya flikar visar relevanta insikter med mockdata
+4. Alla flikar refererar till faktiska byggnader i systemet
+5. Responsiv design fungerar på mobil med horisontell scroll
+
