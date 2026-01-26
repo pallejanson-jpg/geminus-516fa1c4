@@ -12,6 +12,7 @@ import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
 import RoomsView from './RoomsView';
+import AssetsView from './AssetsView';
 import {
   Carousel,
   CarouselContent,
@@ -32,6 +33,7 @@ const PortfolioView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRoomsFor, setShowRoomsFor] = useState<Facility | null>(null);
+  const [showAssetsFor, setShowAssetsFor] = useState<Facility | null>(null);
   
   // Add Asset Dialog state
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
@@ -139,7 +141,7 @@ const PortfolioView: React.FC = () => {
       setActiveApp('radar');
     }
   };
-  const handleShowAssets = (facility: Facility) => setActiveApp('asset_plus');
+  const handleShowAssets = (facility: Facility) => setShowAssetsFor(facility);
   const handleShowRooms = (facility: Facility) => setShowRoomsFor(facility);
   const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
@@ -171,11 +173,47 @@ const PortfolioView: React.FC = () => {
     );
   };
 
-  // Handle opening 3D viewer for a room
+  // Get assets (Instance) for a facility
+  const getAssetsForFacility = (facility: Facility) => {
+    if (!allData) return [];
+    const isBuilding = facility.category === 'Building';
+    const isStorey = facility.category === 'Building Storey';
+    
+    return allData.filter((item: any) => 
+      item.category === 'Instance' &&
+      (isBuilding ? item.buildingFmGuid === facility.fmGuid : isStorey ? item.levelFmGuid === facility.fmGuid : false)
+    );
+  };
+
+  // Handle opening 3D viewer for a room/asset
   const handleOpen3DRoom = (fmGuid: string, levelFmGuid?: string) => {
     setViewer3dFmGuid(fmGuid);
     setShowRoomsFor(null);
+    setShowAssetsFor(null);
   };
+
+  // Handle placing annotation for an asset (opens 3D viewer in pick mode)
+  const handlePlaceAnnotation = (asset: any) => {
+    // For now, just open the 3D viewer for the asset's building
+    const buildingFmGuid = asset.building_fm_guid || asset.buildingFmGuid;
+    if (buildingFmGuid) {
+      setViewer3dFmGuid(buildingFmGuid);
+    }
+    setShowAssetsFor(null);
+  };
+
+  // Show assets view if requested
+  if (showAssetsFor) {
+    return (
+      <AssetsView
+        facility={showAssetsFor}
+        assets={getAssetsForFacility(showAssetsFor)}
+        onClose={() => setShowAssetsFor(null)}
+        onOpen3D={handleOpen3DRoom}
+        onPlaceAnnotation={handlePlaceAnnotation}
+      />
+    );
+  }
 
   // Show rooms view if requested
   if (showRoomsFor) {
