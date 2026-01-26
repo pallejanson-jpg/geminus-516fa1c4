@@ -122,6 +122,11 @@ interface BimObjectWithParent {
   }>;
 }
 
+interface AddObjectRequest {
+  apiKey: string;
+  bimObjectWithParent: BimObjectWithParent;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -193,32 +198,43 @@ serve(async (req) => {
       }));
     }
 
-    console.log(`Creating asset in Asset+ API: ${endpoint}`);
-    console.log("Payload:", JSON.stringify(bimObject, null, 2));
+    // Build the full request payload with apiKey in body (like sync function)
+    const requestPayload: AddObjectRequest = {
+      apiKey,
+      bimObjectWithParent: bimObject,
+    };
 
-    // Call Asset+ API
+    console.log(`Creating asset in Asset+ API: ${endpoint}`);
+    console.log("Payload:", JSON.stringify(requestPayload, null, 2));
+
+    // Call Asset+ API - apiKey in body, not header
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${accessToken}`,
-        "X-Api-Key": apiKey,
       },
-      body: JSON.stringify(bimObject),
+      body: JSON.stringify(requestPayload),
     });
 
     const responseText = await response.text();
-    console.log(`Asset+ API response: ${response.status} - ${responseText}`);
+    console.log(`Asset+ API response: ${response.status} - ${responseText || "(empty)"}`);
 
     if (!response.ok) {
       let errorMessage = `Asset+ API error: ${response.status}`;
       try {
-        const errorData = JSON.parse(responseText);
-        if (Array.isArray(errorData)) {
-          // Validation failures array
-          errorMessage = errorData.map((e: any) => e.errorMessage || e.message).join(", ");
-        } else if (errorData.message) {
-          errorMessage = errorData.message;
+        if (responseText) {
+          const errorData = JSON.parse(responseText);
+          if (Array.isArray(errorData)) {
+            // Validation failures array
+            errorMessage = errorData.map((e: any) => e.errorMessage || e.message || JSON.stringify(e)).join(", ");
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          } else {
+            errorMessage = JSON.stringify(errorData);
+          }
         }
       } catch {
         errorMessage = responseText || errorMessage;
