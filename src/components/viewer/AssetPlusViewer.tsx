@@ -17,8 +17,10 @@ import FloorCarousel, { FloorInfo } from './FloorCarousel';
 import AnnotationToggleMenu from './AnnotationToggleMenu';
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
+import ViewerTreePanel from './ViewerTreePanel';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
+import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 
 interface AssetPlusViewerProps {
@@ -118,7 +120,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [propertiesDialogOpen, setPropertiesDialogOpen] = useState(false);
   const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
+  const [showTreePanel, setShowTreePanel] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
+  
+  // Flash highlighting hook
+  const { flashEntityById, stopFlashing } = useFlashHighlight();
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -843,9 +849,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           console.log("getAccessTokenCallback");
           return accessTokenRef.current;
         },
-        // selectionChangedCallback
+        // selectionChangedCallback - flash highlight on selection
         (items: any[], added: any[], removed: any[]) => {
           console.log("selectionChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
+          
+          // Flash highlight newly selected items
+          if (added?.length > 0) {
+            const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+            if (xeokitViewer?.scene) {
+              // Flash the first newly added item
+              added.forEach((item: any) => {
+                if (item?.id) {
+                  flashEntityById(xeokitViewer.scene, item.id, {
+                    color1: [1, 0.3, 0.3],
+                    color2: [1, 1, 1],
+                    interval: 200,
+                    duration: 2000,
+                  });
+                }
+              });
+            }
+          }
         },
         // selectedFmGuidsChangedCallback - Track selection for properties dialog
         (items: string[], added: string[], removed: string[]) => {
@@ -1182,10 +1206,32 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 viewerRef={viewerInstanceRef} 
                 onToggleMinimap={(visible) => setShowMinimap(visible)}
                 onToggleNavCube={(visible) => setShowNavCube(visible)}
+                onToggleTreeView={(visible) => setShowTreePanel(visible)}
                 onPickCoordinate={handleTogglePickMode}
                 onShowProperties={() => setPropertiesDialogOpen(true)}
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
                 isPickMode={isPickMode}
+                showTreeView={showTreePanel}
+              />
+              
+              {/* Tree View Panel */}
+              <ViewerTreePanel
+                viewerRef={viewerInstanceRef}
+                isVisible={showTreePanel}
+                onClose={() => setShowTreePanel(false)}
+                onNodeSelect={(nodeId, fmGuid) => {
+                  console.log('TreePanel node selected:', nodeId, fmGuid);
+                  // Flash the selected node
+                  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                  if (xeokitViewer?.scene) {
+                    flashEntityById(xeokitViewer.scene, nodeId, {
+                      color1: [0.3, 1, 0.3],
+                      color2: [1, 1, 1],
+                      interval: 200,
+                      duration: 2000,
+                    });
+                  }
+                }}
               />
               <MinimapPanel
                 viewerRef={viewerInstanceRef}
