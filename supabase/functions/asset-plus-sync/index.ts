@@ -414,6 +414,96 @@ serve(async (req) => {
     }
 
     // ============ FULL SYNC ============
+    if (action === 'building-sync') {
+      const { buildingFmGuid } = await req.json().catch(() => ({}));
+      
+      if (!buildingFmGuid) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'buildingFmGuid is required for building-sync' }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await updateSyncState(supabase, buildingFmGuid, 'running');
+      const accessToken = await getAccessToken();
+      console.log(`Building sync for: ${buildingFmGuid}`);
+
+      // First, sync the building itself (objectType 1)
+      const buildingFilter = [
+        ["fmGuid", "=", buildingFmGuid],
+        "and",
+        ["objectType", "=", 1]
+      ];
+
+      let totalSynced = 0;
+      const buildingResult = await fetchAssetPlusObjects(accessToken, buildingFilter, 0, 1);
+      if (buildingResult.data.length > 0) {
+        const synced = await upsertAssets(supabase, buildingResult.data);
+        totalSynced += synced;
+        console.log(`Synced building: ${synced} items`);
+      }
+
+      // Then sync Building Storeys (objectType 2) for this building
+      const storeyFilter = [
+        ["buildingFmGuid", "=", buildingFmGuid],
+        "and",
+        ["objectType", "=", 2]
+      ];
+
+      let skip = 0;
+      const take = 500;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`Fetching storeys at skip=${skip}...`);
+        const result = await fetchAssetPlusObjects(accessToken, storeyFilter, skip, take);
+        
+        if (result.data.length > 0) {
+          const synced = await upsertAssets(supabase, result.data);
+          totalSynced += synced;
+          console.log(`Synced ${synced} storeys (total: ${totalSynced})`);
+        }
+
+        hasMore = result.hasMore;
+        skip += take;
+        await updateSyncState(supabase, buildingFmGuid, 'running', totalSynced);
+      }
+
+      // Finally sync Spaces (objectType 3) for this building
+      const spaceFilter = [
+        ["buildingFmGuid", "=", buildingFmGuid],
+        "and",
+        ["objectType", "=", 3]
+      ];
+
+      skip = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        console.log(`Fetching spaces at skip=${skip}...`);
+        const result = await fetchAssetPlusObjects(accessToken, spaceFilter, skip, take);
+        
+        if (result.data.length > 0) {
+          const synced = await upsertAssets(supabase, result.data);
+          totalSynced += synced;
+          console.log(`Synced ${synced} spaces (total: ${totalSynced})`);
+        }
+
+        hasMore = result.hasMore;
+        skip += take;
+        await updateSyncState(supabase, buildingFmGuid, 'running', totalSynced);
+      }
+
+      await updateSyncState(supabase, buildingFmGuid, 'completed', totalSynced);
+      console.log(`Building sync completed: ${totalSynced} assets`);
+
+      return new Response(
+        JSON.stringify({ success: true, message: `Synced ${totalSynced} assets for building`, totalSynced }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============ FULL SYNC ============
     await updateSyncState(supabase, 'full', 'running');
     const accessToken = await getAccessToken();
     console.log('Got access token');
