@@ -167,11 +167,19 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        // Try both uppercase and original case to handle different fmGuid formats
+        const guidsToSearch = [
+          ...selectedFmGuids,
+          ...selectedFmGuids.map(g => g.toUpperCase()),
+          ...selectedFmGuids.map(g => g.toLowerCase()),
+        ];
+        const uniqueGuids = [...new Set(guidsToSearch)];
+        
         const [assetsRes, symbolsRes] = await Promise.all([
           supabase
             .from('assets')
             .select('*')
-            .in('fm_guid', selectedFmGuids.map(g => g.toUpperCase())),
+            .in('fm_guid', uniqueGuids),
           supabase.from('annotation_symbols').select('id, name, category, color, icon_url').order('name'),
         ]);
 
