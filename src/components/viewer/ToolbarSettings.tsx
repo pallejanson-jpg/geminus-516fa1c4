@@ -49,6 +49,7 @@ const DEFAULT_TOOLS: ToolConfig[] = [
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
   { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
   { id: 'treeView', label: 'Modellträd', visible: true, inOverflow: false },
+  { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
   { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: true },
   { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: true },
   { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: true },
