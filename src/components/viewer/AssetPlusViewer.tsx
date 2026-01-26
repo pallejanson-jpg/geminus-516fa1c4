@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
+import FloorCarousel, { FloorInfo } from './FloorCarousel';
+import ModelSelector from './ModelSelector';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
@@ -109,6 +111,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [pickedCoordinates, setPickedCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
+  const [showFloorCarousel, setShowFloorCarousel] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
 
   // Find the asset data for the given fmGuid
@@ -698,6 +702,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     toast.success('Tillgång registrerad med 3D-koordinater!');
   }, []);
 
+  // Handle floor selection from carousel
+  const handleFloorSelect = useCallback((floor: FloorInfo) => {
+    setSelectedFloorId(floor.id);
+    
+    // Navigate to floor with cutout
+    const viewer = viewerInstanceRef.current;
+    if (viewer) {
+      try {
+        // Use the floor's fmGuid for cutout
+        viewer.cutOutFloorsByFmGuid(floor.fmGuid, true, { doViewFit: true });
+        toast.success(`Navigerar till ${floor.name}`);
+      } catch (e) {
+        console.debug('Could not cut out floor:', e);
+      }
+    }
+  }, []);
+
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
   const setupCacheInterceptor = useCallback(() => {
@@ -1108,8 +1129,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             )}
             {!onClose && <div />}
             
-            {/* Filter - right side */}
+            {/* Model selector and filter - right side */}
             <div className="flex gap-1.5 pointer-events-auto">
+              {state.isInitialized && (
+                <ModelSelector viewerRef={viewerInstanceRef} />
+              )}
               <FilterDropdown />
             </div>
           </div>
@@ -1175,6 +1199,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                   executeDisplayAction(displayAction);
                   viewerInstanceRef.current?.selectFmGuid(roomFmGuid);
                 }}
+              />
+              <FloorCarousel
+                viewerRef={viewerInstanceRef}
+                onFloorSelect={handleFloorSelect}
+                selectedFloorId={selectedFloorId || undefined}
               />
             </>
           )}
