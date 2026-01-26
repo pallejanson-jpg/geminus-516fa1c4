@@ -1,5 +1,5 @@
-import React, { useState, useContext, useCallback, useEffect, useMemo } from 'react';
-import Map, { Marker, Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
+import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
+import Map, { Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
 import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,9 +8,17 @@ import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { BUILDING_IMAGES, NORDIC_CITIES } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
+import { ClusterMarker, SingleMarker } from './MapCluster';
+import Supercluster from 'supercluster';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 type MapFacility = Facility & { lat: number; lng: number };
+
+interface ClusterProperties {
+  cluster: boolean;
+  point_count?: number;
+  facility?: MapFacility;
+}
 
 // Collapsible building sidebar component for mobile responsiveness
 const BuildingSidebar: React.FC<{
@@ -88,6 +96,7 @@ const MapView: React.FC = () => {
   });
   const [selectedMarker, setSelectedMarker] = useState<MapFacility | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
+  const mapRef = useRef<any>(null);
 
   // Convert navigatorTreeData to map facilities with coordinates
   const mapFacilities: MapFacility[] = useMemo(() => {
@@ -102,11 +111,9 @@ const MapView: React.FC = () => {
       const totalArea = allData
         .filter((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid)
         .reduce((sum: number, space: any) => {
-          // Try to get area from attributes first (NTA keys)
           const attrs = space.attributes || {};
           let areaValue = 0;
           
-          // Look for NTA keys in attributes
           const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
           if (ntaKey && attrs[ntaKey]) {
             areaValue = Number(attrs[ntaKey]) || 0;
@@ -133,11 +140,46 @@ const MapView: React.FC = () => {
         numberOfSpaces: totalSpaces,
         area: Math.round(totalArea),
         address: building.attributes?.address || city.name,
-        lat: city.lat + (Math.random() - 0.5) * 0.1, // Small offset for visual separation
+        lat: city.lat + (Math.random() - 0.5) * 0.1,
         lng: city.lng + (Math.random() - 0.5) * 0.1,
       };
     });
   }, [navigatorTreeData, allData]);
+
+  // Create supercluster instance
+  const supercluster = useMemo(() => {
+    const cluster = new Supercluster<ClusterProperties>({
+      radius: 60,
+      maxZoom: 16,
+    });
+
+    const points = mapFacilities.map(facility => ({
+      type: 'Feature' as const,
+      properties: {
+        cluster: false,
+        facility,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [facility.lng, facility.lat],
+      },
+    }));
+
+    cluster.load(points);
+    return cluster;
+  }, [mapFacilities]);
+
+  // Get clusters for current viewport
+  const clusters = useMemo(() => {
+    const bounds: [number, number, number, number] = [
+      viewState.longitude - 180 / Math.pow(2, viewState.zoom),
+      viewState.latitude - 90 / Math.pow(2, viewState.zoom),
+      viewState.longitude + 180 / Math.pow(2, viewState.zoom),
+      viewState.latitude + 90 / Math.pow(2, viewState.zoom),
+    ];
+
+    return supercluster.getClusters(bounds, Math.floor(viewState.zoom));
+  }, [supercluster, viewState]);
 
   // Fetch Mapbox token from backend
   useEffect(() => {
@@ -176,6 +218,17 @@ const MapView: React.FC = () => {
       zoom: 12,
     }));
   }, []);
+
+  const handleClusterClick = useCallback((clusterId: number, longitude: number, latitude: number) => {
+    const expansionZoom = Math.min(supercluster.getClusterExpansionZoom(clusterId), 16);
+    setViewState(prev => ({
+      ...prev,
+      longitude,
+      latitude,
+      zoom: expansionZoom,
+    }));
+    setSelectedMarker(null);
+  }, [supercluster]);
 
   const handleOpenFacility = useCallback((facility: Facility) => {
     setSelectedFacility(facility);
@@ -254,6 +307,7 @@ const MapView: React.FC = () => {
 
       {/* Map */}
       <Map
+        ref={mapRef}
         {...viewState}
         onMove={(evt) => setViewState(evt.viewState)}
         style={{ width: '100%', height: '100%' }}
@@ -263,29 +317,36 @@ const MapView: React.FC = () => {
         <NavigationControl position="bottom-right" />
         <GeolocateControl position="bottom-right" />
 
-        {/* Markers */}
-        {mapFacilities.map((facility) => (
-          <Marker
-            key={facility.fmGuid}
-            latitude={facility.lat}
-            longitude={facility.lng}
-            anchor="bottom"
-            onClick={(e) => {
-              e.originalEvent.stopPropagation();
-              handleMarkerClick(facility);
-            }}
-          >
-            <div
-              className={`p-1.5 sm:p-2 rounded-full cursor-pointer transition-all ${
-                selectedMarker?.fmGuid === facility.fmGuid
-                  ? 'bg-primary scale-125 shadow-lg'
-                  : 'bg-primary/80 hover:bg-primary hover:scale-110'
-              }`}
-            >
-              <Building2 size={14} className="sm:w-4 sm:h-4 text-primary-foreground" />
-            </div>
-          </Marker>
-        ))}
+        {/* Render clusters and markers */}
+        {clusters.map((cluster) => {
+          const [longitude, latitude] = cluster.geometry.coordinates;
+          const { cluster: isCluster, point_count: pointCount } = cluster.properties;
+
+          if (isCluster) {
+            return (
+              <ClusterMarker
+                key={`cluster-${cluster.id}`}
+                longitude={longitude}
+                latitude={latitude}
+                pointCount={pointCount || 0}
+                totalPoints={mapFacilities.length}
+                onClick={() => handleClusterClick(cluster.id as number, longitude, latitude)}
+              />
+            );
+          }
+
+          const facility = cluster.properties.facility!;
+          return (
+            <SingleMarker
+              key={facility.fmGuid}
+              longitude={longitude}
+              latitude={latitude}
+              name={facility.commonName || facility.name || ''}
+              onClick={() => handleMarkerClick(facility)}
+              isSelected={selectedMarker?.fmGuid === facility.fmGuid}
+            />
+          );
+        })}
 
         {/* Popup */}
         {selectedMarker && (

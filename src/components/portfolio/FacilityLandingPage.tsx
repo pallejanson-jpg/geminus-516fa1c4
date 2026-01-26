@@ -16,6 +16,7 @@ import { useXktPreload } from '@/hooks/useXktPreload';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import KpiCard from './KpiCard';
 import QuickActions from './QuickActions';
+import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 
 interface FacilityLandingPageProps {
   facility: Facility;
@@ -52,6 +53,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
+  const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
 
   // Use building settings hook
   const { 
@@ -229,7 +231,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   >
                     <Settings2 size={14} className={`sm:w-4 sm:h-4 ${showSettings ? 'text-primary' : ''}`} />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => onEdit(facility)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
+                  <Button variant="ghost" size="icon" onClick={() => setShowPropertiesDialog(true)} title="View all properties" className="h-7 w-7 sm:h-8 sm:w-8">
                     <Table size={14} className="sm:w-4 sm:h-4" />
                   </Button>
                 </div>
@@ -406,6 +408,17 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           />
         </div>
       </ScrollArea>
+
+      {/* Universal Properties Dialog */}
+      <UniversalPropertiesDialog
+        isOpen={showPropertiesDialog}
+        onClose={() => setShowPropertiesDialog(false)}
+        fmGuid={facility.fmGuid || ''}
+        category={facility.category}
+        onUpdate={() => {
+          // Refresh data if needed
+        }}
+      />
     </div>
   );
 };

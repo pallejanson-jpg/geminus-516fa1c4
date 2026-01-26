@@ -502,6 +502,42 @@ serve(async (req) => {
       );
     }
 
+    // ============ SYNC ALL BUILDINGS (only objectType 1) ============
+    if (action === 'sync-all-buildings') {
+      await updateSyncState(supabase, 'buildings', 'running');
+      const accessToken = await getAccessToken();
+      console.log('Starting sync-all-buildings');
+
+      const buildingFilter = [["objectType", "=", 1]];
+      let totalSynced = 0;
+      let skip = 0;
+      const take = 500;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`Fetching buildings at skip=${skip}...`);
+        const result = await fetchAssetPlusObjects(accessToken, buildingFilter, skip, take);
+        
+        if (result.data.length > 0) {
+          const synced = await upsertAssets(supabase, result.data);
+          totalSynced += synced;
+          console.log(`Synced ${synced} buildings (total: ${totalSynced})`);
+        }
+
+        hasMore = result.hasMore;
+        skip += take;
+        await updateSyncState(supabase, 'buildings', 'running', totalSynced);
+      }
+
+      await updateSyncState(supabase, 'buildings', 'completed', totalSynced);
+      console.log(`All buildings sync completed: ${totalSynced} buildings`);
+
+      return new Response(
+        JSON.stringify({ success: true, message: `Synced ${totalSynced} buildings`, totalSynced }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ FULL SYNC ============
     await updateSyncState(supabase, 'full', 'running');
     const accessToken = await getAccessToken();
