@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotation_symbols: {
+        Row: {
+          category: string
+          color: string
+          created_at: string
+          icon_url: string | null
+          id: string
+          is_default: boolean
+          marker_html: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          color?: string
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          is_default?: boolean
+          marker_html?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          color?: string
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          is_default?: boolean
+          marker_html?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       asset_sync_state: {
         Row: {
           created_at: string
@@ -55,6 +91,8 @@ export type Database = {
       }
       assets: {
         Row: {
+          annotation_model_id: string | null
+          annotation_placed: boolean | null
           asset_type: string | null
           attributes: Json | null
           building_fm_guid: string | null
@@ -65,6 +103,7 @@ export type Database = {
           coordinate_y: number | null
           coordinate_z: number | null
           created_at: string
+          created_in_model: boolean | null
           fm_guid: string
           gross_area: number | null
           id: string
@@ -77,6 +116,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          annotation_model_id?: string | null
+          annotation_placed?: boolean | null
           asset_type?: string | null
           attributes?: Json | null
           building_fm_guid?: string | null
@@ -87,6 +128,7 @@ export type Database = {
           coordinate_y?: number | null
           coordinate_z?: number | null
           created_at?: string
+          created_in_model?: boolean | null
           fm_guid: string
           gross_area?: number | null
           id?: string
@@ -99,6 +141,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          annotation_model_id?: string | null
+          annotation_placed?: boolean | null
           asset_type?: string | null
           attributes?: Json | null
           building_fm_guid?: string | null
@@ -109,6 +153,7 @@ export type Database = {
           coordinate_y?: number | null
           coordinate_z?: number | null
           created_at?: string
+          created_in_model?: boolean | null
           fm_guid?: string
           gross_area?: number | null
           id?: string

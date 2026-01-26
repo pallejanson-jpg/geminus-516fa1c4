@@ -233,7 +233,7 @@ function objectTypeToCategory(objectType: number): string {
     1: 'Building',
     2: 'Building Storey',
     3: 'Space',
-    4: 'Door',
+    4: 'Instance', // Assets, Doors, Equipment, etc.
   };
   return categories[objectType] || 'Unknown';
 }
@@ -253,6 +253,8 @@ async function upsertAssets(supabase: any, items: any[]): Promise<number> {
     complex_common_name: item.complexCommonName || null,
     gross_area: item.grossArea || null,
     asset_type: item.ObjectTypeValue || null,
+    // Map createdInModel from Asset+ (defaults to true if not specified)
+    created_in_model: item.createdInModel !== undefined ? item.createdInModel : true,
     attributes: item,
     synced_at: new Date().toISOString(),
   }));

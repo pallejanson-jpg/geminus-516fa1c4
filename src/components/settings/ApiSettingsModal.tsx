@@ -15,12 +15,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AppContext } from '@/context/AppContext';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
+import SymbolSettings from './SymbolSettings';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -330,7 +331,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
+                    <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
                         <TabsTrigger value="apps" className="gap-2">
                             <LayoutGrid className="h-4 w-4" />
                             Apps
@@ -342,6 +343,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         <TabsTrigger value="sync" className="gap-2">
                             <Database className="h-4 w-4" />
                             Sync
+                        </TabsTrigger>
+                        <TabsTrigger value="symbols" className="gap-2">
+                            <Circle className="h-4 w-4" />
+                            Symboler
                         </TabsTrigger>
                     </TabsList>
 
@@ -879,6 +884,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 </div>
                             </div>
                         </div>
+                    </TabsContent>
+
+                    {/* Symbols Settings Tab */}
+                    <TabsContent value="symbols" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <SymbolSettings />
                     </TabsContent>
                 </Tabs>
             </DialogContent>
