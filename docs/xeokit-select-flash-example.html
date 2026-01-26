@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>xeokit Select & Flash Example</title>
+    <script src="https://xeokit.github.io/xeokit-sdk/xeokit-sdk.min.js"></script>
+    <style>
+        html, body { margin: 0; height: 100%; overflow: hidden; }
+        #viewerCanvas { width: 100%; height: 100%; display: block; }
+    </style>
+</head>
+<body>
+<canvas id="viewerCanvas"></canvas>
+<script>
+(async function () {
+    const { Viewer, XKTLoaderPlugin } = xeokit;
+
+    // Create the viewer
+    const viewer = new Viewer({
+        canvasId: "viewerCanvas",
+        transparent: true
+    });
+
+    // Load a sample model
+    const loader = new XKTLoaderPlugin(viewer);
+    await loader.load({
+        id: "sampleModel",
+        src: "https://xeokit.github.io/xeokit-sdk/assets/models/xkt/duplex/duplex.xkt"
+    });
+
+    let selectedEntity = null;
+    let flashInterval = null;
+
+    // Function to start flashing effect
+    function startFlashing(entity) {
+        stopFlashing(); // Stop any previous flashing
+        let visible = true;
+        flashInterval = setInterval(() => {
+            if (!entity) return;
+            entity.colorize = visible ? [1, 0, 0] : [1, 1, 1]; // Red / White
+            visible = !visible;
+        }, 300);
+    }
+
+    // Function to stop flashing
+    function stopFlashing() {
+        if (flashInterval) {
+            clearInterval(flashInterval);
+            flashInterval = null;
+        }
+        if (selectedEntity) {
+            selectedEntity.colorize = [1, 1, 1]; // Reset to white
+        }
+    }
+
+    // Listen for clicks
+    viewer.scene.input.on("mouseclicked", (coords) => {
+        const hit = viewer.scene.pick({
+            canvasPos: coords
+        });
+
+        if (hit && hit.entity) {
+            console.log("Selected object ID:", hit.entity.id);
+            selectedEntity = hit.entity;
+            startFlashing(selectedEntity);
+        } else {
+            stopFlashing();
+            selectedEntity = null;
+        }
+    });
+})();
+</script>
+</body>
+</html>
