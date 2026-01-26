@@ -33,6 +33,7 @@ interface SyncStatus {
     subtree_name: string | null;
     sync_status: string;
     total_assets: number;
+    last_sync_started_at: string | null;
     last_sync_completed_at: string | null;
     error_message: string | null;
 }
@@ -371,9 +372,20 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    const formatDate = (dateStr: string | null) => {
-        if (!dateStr) return 'Never';
-        return new Date(dateStr).toLocaleString('en-US');
+    const formatDate = (dateStr: string | null, fallbackDateStr?: string | null) => {
+        // Use fallback (e.g., last_sync_started_at) if primary is null
+        const dateToUse = dateStr || fallbackDateStr;
+        if (!dateToUse) return 'Aldrig';
+        
+        const date = new Date(dateToUse);
+        // Swedish locale with date and time
+        return date.toLocaleDateString('sv-SE', {
+            year: 'numeric',
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
 
     const getSyncStatusBadge = (status: string) => {
@@ -909,7 +921,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <div className="flex-1">
                                                     <p className="text-sm font-medium">{status.subtree_name || status.subtree_id}</p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {status.total_assets} objekt • Senast: {formatDate(status.last_sync_completed_at)}
+                                                        {status.total_assets.toLocaleString()} objekt • 
+                                                        {status.sync_status === 'running' ? ' Startad: ' : ' Senast: '}
+                                                        {status.sync_status === 'running' 
+                                                            ? formatDate(status.last_sync_started_at)
+                                                            : formatDate(status.last_sync_completed_at, status.last_sync_started_at)}
                                                     </p>
                                                     {status.error_message && (
                                                         <p className="text-xs text-destructive mt-1 line-clamp-2">{status.error_message}</p>
