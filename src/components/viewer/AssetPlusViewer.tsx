@@ -14,7 +14,6 @@ import {
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
-import ModelSelector from './ModelSelector';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
@@ -1129,11 +1128,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             )}
             {!onClose && <div />}
             
-            {/* Model selector and filter - right side */}
+            {/* Filter - right side */}
             <div className="flex gap-1.5 pointer-events-auto">
-              {state.isInitialized && (
-                <ModelSelector viewerRef={viewerInstanceRef} />
-              )}
               <FilterDropdown />
             </div>
           </div>

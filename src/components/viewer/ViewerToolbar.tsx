@@ -333,9 +333,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
         <DropdownMenuItem onClick={() => handleNavModeChange('firstPerson')} className={navMode === 'firstPerson' ? 'bg-accent' : ''}>
           <Move className="h-4 w-4 mr-2" /> Första person
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleNavModeChange('planView')} className={navMode === 'planView' ? 'bg-accent' : ''}>
-          <Grid3X3 className="h-4 w-4 mr-2" /> Planvy
-        </DropdownMenuItem>
         
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Verktyg</DropdownMenuLabel>
@@ -455,12 +452,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
             onClick={() => handleNavModeChange('firstPerson')}
             active={navMode === 'firstPerson'}
           />
-          <ToolButton
-            icon={<Grid3X3 className="h-4 w-4" />}
-            label="Planvy"
-            onClick={() => handleNavModeChange('planView')}
-            active={navMode === 'planView'}
-          />
         </div>
 
         <Separator orientation="vertical" className="h-6 mx-1" />
@@ -522,21 +513,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewerRef, onToggleNavCub
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* View Mode: 3D/2D */}
-        <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={<Cuboid className="h-4 w-4" />}
-            label="3D-vy"
-            onClick={() => handleViewModeChange('3d')}
-            active={viewMode === '3d'}
-          />
-          <ToolButton
-            icon={<SquareDashed className="h-4 w-4" />}
-            label="2D-vy (toppvy)"
-            onClick={() => handleViewModeChange('2d')}
-            active={viewMode === '2d'}
-          />
-        </div>
+        {/* View Mode: 3D/2D toggle */}
+        <ToolButton
+          icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
+          label={viewMode === '3d' ? '2D' : '3D'}
+          onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+          active={viewMode === '2d'}
+        />
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
