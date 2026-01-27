@@ -1189,6 +1189,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                     onToggleMinimap={(visible) => setShowMinimap(visible)}
                     onToggleTreeView={(visible) => setShowTreePanel(visible)}
                     onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
+                    onAddAsset={handleTogglePickMode}
                     onPickCoordinate={handleTogglePickMode}
                     onShowProperties={() => setPropertiesDialogOpen(true)}
                     onOpenSettings={() => setToolbarSettingsOpen(true)}

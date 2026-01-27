@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { Layers, MessageSquare, MoreVertical } from "lucide-react";
+import React, { useCallback, useState, useEffect } from "react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -8,11 +8,13 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  SheetDescription,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -20,6 +22,7 @@ interface VisualizationToolbarProps {
   onToggleMinimap?: (visible: boolean) => void;
   onToggleTreeView?: (visible: boolean) => void;
   onToggleVisualization?: (visible: boolean) => void;
+  onAddAsset?: () => void;
   onPickCoordinate?: () => void;
   onShowProperties?: () => void;
   onOpenSettings?: () => void;
@@ -33,14 +36,41 @@ interface VisualizationToolbarProps {
 }
 
 /**
- * Minimal VisualizationToolbar: only "Visa rum" and "Visa annotationer".
+ * VisualizationToolbar with configurable tools based on ToolbarSettings.
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
-  const { viewerRef, className, inline = false } = props;
+  const { 
+    viewerRef, 
+    className, 
+    inline = false,
+    onToggleVisualization,
+    showVisualization = false,
+    onAddAsset,
+  } = props;
 
   const [isOpen, setIsOpen] = useState(false);
   const [showSpaces, setShowSpaces] = useState(true);
   const [showAnnotations, setShowAnnotations] = useState(true);
+  const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
+
+  // Reload settings when they change
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      setToolSettings(getVisualizationToolSettings());
+    };
+    window.addEventListener('storage', handleSettingsChange);
+    window.addEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    return () => {
+      window.removeEventListener('storage', handleSettingsChange);
+      window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    };
+  }, []);
+
+  // Tool visibility check
+  const isToolVisible = useCallback((toolId: string) => {
+    const setting = toolSettings.find(t => t.id === toolId);
+    return setting?.visible ?? true;
+  }, [toolSettings]);
 
   const handleToggleSpaces = useCallback(() => {
     const newValue = !showSpaces;
@@ -64,6 +94,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }
   }, [viewerRef, showAnnotations]);
 
+  const handleToggleVisualization = useCallback(() => {
+    onToggleVisualization?.(!showVisualization);
+  }, [onToggleVisualization, showVisualization]);
+
+  const handleAddAsset = useCallback(() => {
+    setIsOpen(false);
+    onAddAsset?.();
+  }, [onAddAsset]);
+
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",
     className
@@ -86,54 +125,103 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           </Button>
         </SheetTrigger>
 
-        <SheetContent side="right" className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm z-[60]">
+        <SheetContent side="right" className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm z-[60]" aria-describedby="visualization-description">
           <SheetHeader className="p-4 pb-2">
             <SheetTitle className="text-base">Visning</SheetTitle>
+            <SheetDescription id="visualization-description" className="sr-only">
+              Inställningar för visualisering och verktyg
+            </SheetDescription>
           </SheetHeader>
 
           <ScrollArea className="h-[calc(100vh-80px)]">
-            <div className="p-4 pt-0 space-y-3">
+            <div className="p-4 pt-0 space-y-4">
+              {/* Visibility section */}
               <div>
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
                   Visa
                 </Label>
 
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          "p-1.5 rounded-md",
-                          showSpaces
-                            ? "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <Layers className="h-4 w-4" />
+                  {isToolVisible('spaces') && (
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "p-1.5 rounded-md",
+                            showSpaces
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm">Visa rum</span>
                       </div>
-                      <span className="text-sm">Visa rum</span>
+                      <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                     </div>
-                    <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
-                  </div>
+                  )}
 
-                  <div className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          "p-1.5 rounded-md",
-                          showAnnotations
-                            ? "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <MessageSquare className="h-4 w-4" />
+                  {isToolVisible('annotations') && (
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "p-1.5 rounded-md",
+                            showAnnotations
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm">Visa annotationer</span>
                       </div>
-                      <span className="text-sm">Visa annotationer</span>
+                      <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
                     </div>
-                    <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
-                  </div>
+                  )}
+
+                  {isToolVisible('visualization') && onToggleVisualization && (
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "p-1.5 rounded-md",
+                            showVisualization
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <Palette className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm">Rumsvisualisering</span>
+                      </div>
+                      <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Actions section */}
+              {isToolVisible('addAsset') && onAddAsset && (
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                    Åtgärder
+                  </Label>
+
+                  <div className="space-y-1">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-3"
+                      onClick={handleAddAsset}
+                    >
+                      <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                        <Plus className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Registrera tillgång</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </ScrollArea>
         </SheetContent>
