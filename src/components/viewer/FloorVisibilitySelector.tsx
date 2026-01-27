@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface FloorInfo {
   id: string;  // Representative ID for the group
@@ -16,6 +17,7 @@ export interface FloorInfo {
 
 interface FloorVisibilitySelectorProps {
   viewerRef: React.MutableRefObject<any>;
+  buildingFmGuid?: string;
   isViewerReady?: boolean;
   onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
   className?: string;
@@ -28,12 +30,13 @@ interface FloorVisibilitySelectorProps {
  * Blocks interaction until viewer is ready to prevent UI freezing.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
-  ({ viewerRef, isViewerReady = true, onVisibleFloorsChange, className }, ref) => {
+  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, className }, ref) => {
     const [floors, setFloors] = useState<FloorInfo[]>([]);
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
     const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
+    const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
@@ -43,6 +46,36 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         return null;
       }
     }, [viewerRef]);
+
+    // Fetch floor names from database
+    useEffect(() => {
+      if (!buildingFmGuid) return;
+
+      const fetchFloorNames = async () => {
+        try {
+          const { data: floors, error } = await supabase
+            .from('assets')
+            .select('fm_guid, name, common_name')
+            .eq('building_fm_guid', buildingFmGuid)
+            .eq('category', 'Building Storey');
+
+          if (!error && floors && floors.length > 0) {
+            const nameMap = new Map<string, string>();
+            floors.forEach((f) => {
+              const displayName = f.common_name || f.name || f.fm_guid;
+              nameMap.set(f.fm_guid, displayName);
+              nameMap.set(f.fm_guid.toLowerCase(), displayName);
+              nameMap.set(f.fm_guid.toUpperCase(), displayName);
+            });
+            setFloorNamesMap(nameMap);
+          }
+        } catch (e) {
+          console.debug('Failed to fetch floor names:', e);
+        }
+      };
+
+      fetchFloorNames();
+    }, [buildingFmGuid]);
 
     // Extract floors from metaScene - group by name to deduplicate across models
     const extractFloors = useCallback(() => {
@@ -55,23 +88,38 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       Object.values(metaObjects).forEach((metaObject: any) => {
         const type = metaObject?.type?.toLowerCase();
         if (type === 'ifcbuildingstorey') {
-          const name = metaObject.name || 'Unknown Floor';
-          const shortMatch = name.match(/(\d+)/);
-          const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
+          // Get fmGuid from originalSystemId or use metaObject.id
           const fmGuid = metaObject.originalSystemId || metaObject.id;
           
-          if (floorsByName.has(name)) {
+          // Try to get a nice name from database first, then fall back to metaObject.name
+          const dbName = floorNamesMap.get(fmGuid) || 
+                         floorNamesMap.get(fmGuid.toLowerCase()) ||
+                         floorNamesMap.get(fmGuid.toUpperCase());
+          
+          // Use database name, or clean up the raw name if it looks like a GUID
+          let displayName = metaObject.name || 'Unknown Floor';
+          if (dbName) {
+            displayName = dbName;
+          } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
+            // Name looks like a GUID, try to extract something useful
+            displayName = `Våningsplan ${fmGuid.substring(0, 8)}`;
+          }
+          
+          const shortMatch = displayName.match(/(\d+)/);
+          const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 10);
+          
+          if (floorsByName.has(displayName)) {
             // Add this metaObject to existing group
-            const existing = floorsByName.get(name)!;
+            const existing = floorsByName.get(displayName)!;
             existing.metaObjectIds.push(metaObject.id);
             if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
               existing.databaseLevelFmGuids.push(fmGuid);
             }
           } else {
             // Create new group
-            floorsByName.set(name, {
+            floorsByName.set(displayName, {
               id: metaObject.id,  // First ID as representative
-              name,
+              name: displayName,
               shortName,
               metaObjectIds: [metaObject.id],
               databaseLevelFmGuids: [fmGuid],
@@ -85,7 +133,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedFloors;
-    }, [getXeokitViewer]);
+    }, [getXeokitViewer, floorNamesMap]);
 
     // Load floors once and set all visible by default
     useEffect(() => {
@@ -117,6 +165,16 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
 
       return () => clearInterval(interval);
     }, [extractFloors, isInitialized]);
+
+    // Re-extract floors when floor names map is updated (after DB fetch)
+    useEffect(() => {
+      if (!isInitialized || floorNamesMap.size === 0) return;
+      
+      const updatedFloors = extractFloors();
+      if (updatedFloors.length > 0) {
+        setFloors(updatedFloors);
+      }
+    }, [floorNamesMap, isInitialized, extractFloors]);
 
     // Build parent-to-children map ONCE for fast lookups (O(n) instead of O(n*m))
     const buildChildrenMap = useCallback(() => {
