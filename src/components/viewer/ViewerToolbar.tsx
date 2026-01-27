@@ -35,7 +35,9 @@ import {
   useSectionPlaneClipping, 
   FLOOR_SELECTION_CHANGED_EVENT, 
   VIEW_MODE_CHANGED_EVENT,
-  FloorSelectionEventDetail 
+  CLIP_HEIGHT_CHANGED_EVENT,
+  FloorSelectionEventDetail,
+  ClipHeightEventDetail
 } from '@/hooks/useSectionPlaneClipping';
 
 interface ViewerToolbarProps {
@@ -88,7 +90,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, [viewMode]);
   
   // SectionPlane clipping for 2D floor plan view
-  const { applyFloorPlanClipping, removeSectionPlane, calculateFloorBounds } = useSectionPlaneClipping(
+  const { applyFloorPlanClipping, removeSectionPlane, calculateFloorBounds, updateFloorCutHeight } = useSectionPlaneClipping(
     viewerRef,
     { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
   );
@@ -177,6 +179,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
     };
   }, [applyFloorPlanClipping, removeSectionPlane]);
+
+  // Listen for clip height changes from VisualizationToolbar slider
+  useEffect(() => {
+    const handleClipHeightChange = (e: CustomEvent<ClipHeightEventDetail>) => {
+      const { height } = e.detail;
+      updateFloorCutHeight(height);
+    };
+    
+    window.addEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChange as EventListener);
+    return () => {
+      window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChange as EventListener);
+    };
+  }, [updateFloorCutHeight]);
 
   // Navigation controls with readiness check
   const handleResetView = useCallback(() => {
