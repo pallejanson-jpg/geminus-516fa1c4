@@ -325,6 +325,54 @@ export type Database = {
         }
         Relationships: []
       }
+      xkt_models: {
+        Row: {
+          building_fm_guid: string
+          building_name: string | null
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_url: string | null
+          id: string
+          model_id: string
+          model_name: string | null
+          source_url: string | null
+          storage_path: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          building_name?: string | null
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          model_id: string
+          model_name?: string | null
+          source_url?: string | null
+          storage_path: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          building_name?: string | null
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          model_id?: string
+          model_name?: string | null
+          source_url?: string | null
+          storage_path?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
