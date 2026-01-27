@@ -1,0 +1,265 @@
+import React, { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import { Box, ChevronDown } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  shortName: string;
+}
+
+interface ModelVisibilitySelectorProps {
+  viewerRef: React.MutableRefObject<any>;
+  onVisibleModelsChange?: (visibleModelIds: string[]) => void;
+  className?: string;
+}
+
+/**
+ * Multi-select BIM model visibility selector with switches.
+ * Collapsed by default - expands when user clicks to select models.
+ * Controls which models are visible in the 3D viewer.
+ */
+const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelectorProps>(
+  ({ viewerRef, onVisibleModelsChange, className }, ref) => {
+    const [models, setModels] = useState<ModelInfo[]>([]);
+    const [visibleModelIds, setVisibleModelIds] = useState<Set<string>>(new Set());
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // Get XEOkit viewer
+    const getXeokitViewer = useCallback(() => {
+      try {
+        return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      } catch (e) {
+        return null;
+      }
+    }, [viewerRef]);
+
+    // Extract models from scene
+    const extractModels = useCallback(() => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene?.models) return [];
+
+      const sceneModels = viewer.scene.models;
+      const extractedModels: ModelInfo[] = [];
+
+      Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+        const name = model.id || modelId;
+        // Try to extract a friendly name from the model ID
+        const shortName = name.replace(/\.xkt$/i, '').replace(/-/g, ' ');
+        
+        extractedModels.push({
+          id: modelId,
+          name: shortName,
+          shortName: shortName.length > 20 ? shortName.substring(0, 20) + '...' : shortName,
+        });
+      });
+
+      // Sort alphabetically
+      extractedModels.sort((a, b) => a.name.localeCompare(b.name));
+
+      return extractedModels;
+    }, [getXeokitViewer]);
+
+    // Load models once and set all visible by default
+    useEffect(() => {
+      if (isInitialized) return;
+
+      const checkModels = () => {
+        const newModels = extractModels();
+        if (newModels.length > 0) {
+          setModels(newModels);
+          const allIds = new Set(newModels.map(m => m.id));
+          setVisibleModelIds(allIds);
+          setIsInitialized(true);
+        }
+      };
+
+      checkModels();
+      
+      // Only retry a few times, not forever
+      let attempts = 0;
+      const maxAttempts = 10;
+      const interval = setInterval(() => {
+        if (isInitialized || attempts >= maxAttempts) {
+          clearInterval(interval);
+          return;
+        }
+        checkModels();
+        attempts++;
+      }, 500);
+
+      return () => clearInterval(interval);
+    }, [extractModels, isInitialized]);
+
+    // Apply visibility changes to 3D viewer
+    const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
+      const viewer = getXeokitViewer();
+      if (!viewer?.scene?.models) return;
+
+      const sceneModels = viewer.scene.models;
+
+      Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+        const isVisible = visibleIds.has(modelId);
+        
+        // Set visibility on all objects in this model
+        if (model.objects) {
+          Object.values(model.objects).forEach((obj: any) => {
+            if (obj && typeof obj.visible !== 'undefined') {
+              obj.visible = isVisible;
+            }
+          });
+        }
+        
+        // Also try setting on the model itself if it supports it
+        if (typeof model.visible !== 'undefined') {
+          model.visible = isVisible;
+        }
+      });
+    }, [getXeokitViewer]);
+
+    const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
+      setVisibleModelIds(prev => {
+        const newSet = new Set(prev);
+        if (checked) {
+          newSet.add(modelId);
+        } else {
+          newSet.delete(modelId);
+        }
+        
+        applyModelVisibility(newSet);
+        
+        if (onVisibleModelsChange) {
+          onVisibleModelsChange(Array.from(newSet));
+        }
+        
+        return newSet;
+      });
+    }, [applyModelVisibility, onVisibleModelsChange]);
+
+    const handleShowOnlyModel = useCallback((modelId: string) => {
+      const newSet = new Set([modelId]);
+      setVisibleModelIds(newSet);
+      applyModelVisibility(newSet);
+      
+      if (onVisibleModelsChange) {
+        onVisibleModelsChange([modelId]);
+      }
+    }, [applyModelVisibility, onVisibleModelsChange]);
+
+    const handleShowAll = useCallback(() => {
+      const allIds = new Set(models.map(m => m.id));
+      setVisibleModelIds(allIds);
+      applyModelVisibility(allIds);
+      
+      if (onVisibleModelsChange) {
+        onVisibleModelsChange(models.map(m => m.id));
+      }
+    }, [applyModelVisibility, models, onVisibleModelsChange]);
+
+    const allVisible = useMemo(() => 
+      models.length > 0 && visibleModelIds.size === models.length,
+      [models, visibleModelIds]
+    );
+
+    const visibleCount = visibleModelIds.size;
+    const totalCount = models.length;
+
+    // Don't show if only one model or no models
+    if (models.length <= 1) {
+      return null;
+    }
+
+    return (
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className={cn("space-y-2", className)}>
+        <div className="flex items-center justify-between" ref={ref}>
+          <CollapsibleTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto p-0 hover:bg-transparent justify-start gap-1.5"
+            >
+              <Box className="h-3.5 w-3.5 text-muted-foreground" />
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider cursor-pointer">
+                BIM-modeller
+              </Label>
+              <span className="text-xs text-muted-foreground ml-1">
+                ({visibleCount}/{totalCount})
+              </span>
+              <ChevronDown className={cn(
+                "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                isExpanded && "rotate-180"
+              )} />
+            </Button>
+          </CollapsibleTrigger>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={handleShowAll}
+            disabled={allVisible}
+          >
+            Visa alla
+          </Button>
+        </div>
+
+        <CollapsibleContent className="space-y-1">
+          <div className="space-y-1 max-h-[200px] overflow-y-auto">
+            {models.map((model) => {
+              const isVisible = visibleModelIds.has(model.id);
+              const isSolo = visibleModelIds.size === 1 && isVisible;
+              
+              return (
+                <div
+                  key={model.id}
+                  className={cn(
+                    "flex items-center justify-between py-1.5 px-2 rounded-md transition-colors",
+                    isVisible ? "bg-primary/5" : "bg-muted/30"
+                  )}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => handleModelToggle(model.id, checked)}
+                      className="scale-90"
+                    />
+                    <span 
+                      className={cn(
+                        "text-sm truncate",
+                        isVisible ? "text-foreground" : "text-muted-foreground"
+                      )}
+                      title={model.name}
+                    >
+                      {model.shortName}
+                    </span>
+                  </div>
+                  
+                  {!isSolo && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
+                      onClick={() => handleShowOnlyModel(model.id)}
+                      title="Visa endast denna modell"
+                    >
+                      Solo
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
+);
+
+ModelVisibilitySelector.displayName = 'ModelVisibilitySelector';
+
+export default ModelVisibilitySelector;
