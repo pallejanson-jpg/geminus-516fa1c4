@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Move,
   ZoomIn,
@@ -15,6 +15,9 @@ import {
   SquareDashed,
   MoreHorizontal,
   Settings,
+  MessageSquare,
+  Sparkles,
+  Hand,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -28,11 +31,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { getNavigationToolSettings, ToolConfig } from './ToolbarSettings';
+import { getNavigationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from './ToolbarSettings';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onOpenSettings?: () => void;
+  onToggleAnnotations?: () => void;
+  showAnnotations?: boolean;
+  flashOnSelectEnabled?: boolean;
+  onToggleFlashOnSelect?: (enabled: boolean) => void;
+  hoverHighlightEnabled?: boolean;
+  onToggleHoverHighlight?: (enabled: boolean) => void;
   className?: string;
 }
 
@@ -48,6 +57,12 @@ type ViewMode = '3d' | '2d';
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   viewerRef,
   onOpenSettings,
+  onToggleAnnotations,
+  showAnnotations = true,
+  flashOnSelectEnabled = true,
+  onToggleFlashOnSelect,
+  hoverHighlightEnabled = false,
+  onToggleHoverHighlight,
   className
 }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>('select');
@@ -58,13 +73,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   
   const isMobile = useIsMobile();
 
-  // Reload settings when they change
+  // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handleSettingsChange = () => {
       setToolSettings(getNavigationToolSettings());
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    // Listen for storage events (cross-tab)
+    window.addEventListener('storage', handleSettingsChange);
+    // Listen for custom event (same-tab)
+    window.addEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    return () => {
+      window.removeEventListener('storage', handleSettingsChange);
+      window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    };
   }, []);
 
   // Get AssetView reference
@@ -270,7 +291,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   });
   ToolButton.displayName = 'ToolButton';
 
-  // Get overflow items for menu (only navigation tools)
+  // Get overflow items for menu (navigation tools + new features)
   const getOverflowItems = () => {
     const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
     
@@ -311,6 +332,39 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             onClick: () => handleViewModeChange(viewMode === '3d' ? '2d' : '3d'),
             active: viewMode === '2d'
           });
+          break;
+        case 'annotations':
+          if (onToggleAnnotations) {
+            items.push({ 
+              id: tool.id, 
+              label: 'Annotationer', 
+              icon: <MessageSquare className="h-4 w-4" />, 
+              onClick: onToggleAnnotations,
+              active: showAnnotations
+            });
+          }
+          break;
+        case 'flashOnSelect':
+          if (onToggleFlashOnSelect) {
+            items.push({ 
+              id: tool.id, 
+              label: 'Flash vid markering', 
+              icon: <Sparkles className="h-4 w-4" />, 
+              onClick: () => onToggleFlashOnSelect(!flashOnSelectEnabled),
+              active: flashOnSelectEnabled
+            });
+          }
+          break;
+        case 'hoverHighlight':
+          if (onToggleHoverHighlight) {
+            items.push({ 
+              id: tool.id, 
+              label: 'Hover-highlight', 
+              icon: <Hand className="h-4 w-4" />, 
+              onClick: () => onToggleHoverHighlight(!hoverHighlightEnabled),
+              active: hoverHighlightEnabled
+            });
+          }
           break;
       }
     });
@@ -514,14 +568,25 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* View Mode: 3D/2D toggle */}
-        <ToolButton
-          icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
-          label={viewMode === '3d' ? '2D' : '3D'}
-          onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
-          active={viewMode === '2d'}
-          toolId="viewMode"
-        />
+        {/* View & Annotations Group */}
+        <div className="flex items-center gap-0.5">
+          <ToolButton
+            icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
+            label={viewMode === '3d' ? '2D' : '3D'}
+            onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+            active={viewMode === '2d'}
+            toolId="viewMode"
+          />
+          {onToggleAnnotations && (
+            <ToolButton
+              icon={<MessageSquare className="h-4 w-4" />}
+              label={showAnnotations ? 'Dölj annotationer' : 'Visa annotationer'}
+              onClick={onToggleAnnotations}
+              active={showAnnotations}
+              toolId="annotations"
+            />
+          )}
+        </div>
 
         {/* Overflow menu */}
         <OverflowMenu />
