@@ -65,6 +65,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isExpanded, setIsExpanded] = useState(true);
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getNavigationToolSettings());
+  const [isViewerReady, setIsViewerReady] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const isMobile = useIsMobile();
 
@@ -83,24 +85,67 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     };
   }, []);
 
-  // Get AssetView reference
+  // Get AssetView reference with safety checks
   const getAssetView = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+    try {
+      const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+      if (!assetView) {
+        console.debug('AssetView not available');
+      }
+      return assetView;
+    } catch (e) {
+      console.debug('getAssetView error:', e);
+      return null;
+    }
   }, [viewerRef]);
 
   const getXeokitViewer = useCallback(() => {
-    return getAssetView()?.viewer;
+    try {
+      return getAssetView()?.viewer;
+    } catch (e) {
+      console.debug('getXeokitViewer error:', e);
+      return null;
+    }
   }, [getAssetView]);
 
-  // Navigation controls
+  // Track viewer readiness
+  useEffect(() => {
+    const checkReady = () => {
+      const viewer = getXeokitViewer();
+      const ready = !!viewer?.scene;
+      setIsViewerReady(ready);
+      if (!ready) {
+        // Reset tool state if viewer becomes unavailable
+        setActiveTool('select');
+      }
+    };
+    
+    // Check immediately and after delays
+    checkReady();
+    const t1 = setTimeout(checkReady, 200);
+    const t2 = setTimeout(checkReady, 500);
+    const t3 = setTimeout(checkReady, 1000);
+    
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [getXeokitViewer]);
+
+  // Navigation controls with readiness check
   const handleResetView = useCallback(() => {
+    if (!isViewerReady || isProcessing) return;
+    
     const assetView = getAssetView();
     if (assetView) {
       assetView.viewFit(undefined, true);
     }
-  }, [getAssetView]);
+  }, [getAssetView, isViewerReady, isProcessing]);
 
   const handleZoomIn = useCallback(() => {
+    if (!isViewerReady || isProcessing) return;
+    
     const viewer = getXeokitViewer();
     if (viewer?.cameraFlight) {
       const camera = viewer.camera;
@@ -113,9 +158,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       ];
       viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
     }
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, isViewerReady, isProcessing]);
 
   const handleZoomOut = useCallback(() => {
+    if (!isViewerReady || isProcessing) return;
+    
     const viewer = getXeokitViewer();
     if (viewer?.cameraFlight) {
       const camera = viewer.camera;
@@ -128,9 +175,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       ];
       viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
     }
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, isViewerReady, isProcessing]);
 
   const handleViewFit = useCallback(() => {
+    if (!isViewerReady || isProcessing) return;
+    
     const viewer = viewerRef.current;
     if (viewer?.assetViewer?.$refs?.assetView) {
       const assetView = viewer.assetViewer.$refs.assetView;
@@ -141,19 +190,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         assetView.viewFit(undefined, true);
       }
     }
-  }, [viewerRef]);
+  }, [viewerRef, isViewerReady, isProcessing]);
 
-  // Navigation mode
+  // Navigation mode with debounce
   const handleNavModeChange = useCallback((mode: NavMode) => {
+    if (!isViewerReady || isProcessing) return;
+    
     const assetView = getAssetView();
     if (assetView) {
       assetView.setNavMode(mode);
       setNavMode(mode);
     }
-  }, [getAssetView]);
+  }, [getAssetView, isViewerReady, isProcessing]);
 
-  // Tools - with proper state cleanup to prevent tool "sticking"
+  // Tools - with proper state cleanup and debounce to prevent tool "sticking"
   const handleToolChange = useCallback((tool: ViewerTool) => {
+    if (!isViewerReady || isProcessing) {
+      console.debug('Viewer not ready for tool change');
+      return;
+    }
+    
+    setIsProcessing(true);
+    
     try {
       const assetView = getAssetView();
       if (assetView && typeof assetView.useTool === 'function') {
@@ -173,8 +231,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       }
     } catch (error) {
       console.warn('Tool change failed:', error);
+      // Reset to safe state
+      setActiveTool('select');
+    } finally {
+      // Debounce - prevent rapid clicks
+      setTimeout(() => setIsProcessing(false), 100);
     }
-  }, [getAssetView, activeTool]);
+  }, [getAssetView, activeTool, isViewerReady, isProcessing]);
 
   // Switch between 3D and 2D (top-down) view
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -251,7 +314,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     );
   }
 
-  // ToolButton with forwardRef to avoid React warning
+  // ToolButton with forwardRef to avoid React warning and viewer readiness check
   const ToolButton = React.forwardRef<
     HTMLButtonElement,
     {
@@ -261,11 +324,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       active?: boolean;
       variant?: 'ghost' | 'secondary';
       toolId?: string;
+      disabled?: boolean;
     }
-  >(({ icon, label, onClick, active, variant = 'ghost', toolId }, ref) => {
+  >(({ icon, label, onClick, active, variant = 'ghost', toolId, disabled }, ref) => {
     // Check visibility if toolId provided
     if (toolId && !isToolVisible(toolId)) return null;
     if (toolId && isToolInOverflow(toolId) && !isMobile) return null;
+    
+    const isDisabled = disabled || !isViewerReady || isProcessing;
     
     return (
       <Tooltip>
@@ -274,13 +340,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             ref={ref}
             variant={active ? 'secondary' : variant}
             size="icon"
-            className="h-8 w-8 sm:h-8 sm:w-8"
-            onClick={onClick}
+            className={cn(
+              "h-8 w-8 sm:h-8 sm:w-8",
+              isDisabled && "opacity-50 cursor-not-allowed"
+            )}
+            onClick={isDisabled ? undefined : onClick}
+            disabled={isDisabled}
           >
             {icon}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top">{label}</TooltipContent>
+        <TooltipContent side="top">
+          {isDisabled && !isViewerReady ? 'Väntar på viewer...' : label}
+        </TooltipContent>
       </Tooltip>
     );
   });
