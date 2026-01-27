@@ -109,6 +109,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const [showTreePanel, setShowTreePanel] = useState(false);
   const [showVisualizationPanel, setShowVisualizationPanel] = useState(false);
+  const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [flashOnSelectEnabled, setFlashOnSelectEnabledState] = useState(true);
@@ -1249,6 +1250,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                         }
                       }
                     }}
+                    onVisibleFloorsChange={(floorIds) => setVisibleFloorFmGuids(floorIds)}
                     onAddAsset={handleTogglePickMode}
                     onPickCoordinate={handleTogglePickMode}
                     onShowProperties={() => setPropertiesDialogOpen(true)}
@@ -1363,6 +1365,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                   viewerRef={viewerInstanceRef}
                   buildingFmGuid={buildingFmGuid}
                   onClose={() => setShowVisualizationPanel(false)}
+                  visibleFloorFmGuids={visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
                 />
               )}
             </>
