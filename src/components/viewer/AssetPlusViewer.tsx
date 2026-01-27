@@ -527,6 +527,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       return false;
     }
 
+    console.log('Pick mode: Setting up click listener...');
+
     const handlePick = (pickResult: any) => {
       if (pickResult?.worldPos) {
         const [x, y, z] = pickResult.worldPos;
@@ -536,11 +538,42 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         const coords = { x, y, z };
         setPickedCoordinates(coords);
         
-        // Get current room from picked entity or use current space context
+        // Try to find the parent space from the picked entity
         let parentNode: NavigatorNode | null = null;
         
+        // Try to find parent IfcSpace from the picked entity
+        if (pickResult.entity?.id) {
+          const pickedEntityId = pickResult.entity.id;
+          const assetView = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+          let metaObject = assetView?.viewer?.metaScene?.metaObjects?.[pickedEntityId];
+          
+          // Walk up the hierarchy to find IfcSpace
+          while (metaObject?.id) {
+            if (metaObject.type?.toLowerCase() === 'ifcspace') {
+              // Found a space - get its fmGuid
+              const spaceFmGuid = metaObject.originalSystemId || metaObject.id;
+              const spaceData = allData.find((a: any) => 
+                a.fmGuid?.toUpperCase() === spaceFmGuid?.toUpperCase() ||
+                a.fmGuid === spaceFmGuid
+              );
+              if (spaceData) {
+                parentNode = {
+                  fmGuid: spaceData.fmGuid,
+                  name: spaceData.name || '',
+                  commonName: spaceData.commonName || spaceData.name || '',
+                  category: 'Space',
+                  children: [],
+                };
+                console.log('Found parent space from pick:', parentNode);
+                break;
+              }
+            }
+            metaObject = metaObject.parent;
+          }
+        }
+        
         // Fallback: use current asset's room if it's a Space, or building storey
-        if (assetData) {
+        if (!parentNode && assetData) {
           if (assetData.category === 'Space') {
             parentNode = {
               fmGuid: assetData.fmGuid,
@@ -585,35 +618,46 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           };
         }
 
+        // Cleanup listener BEFORE opening dialog
+        if (pickModeListenerRef.current) {
+          pickModeListenerRef.current();
+          pickModeListenerRef.current = null;
+        }
+
         // If external callback is provided, use it (asset registration flow)
         if (onCoordinatePicked) {
+          console.log('Calling external onCoordinatePicked callback');
           onCoordinatePicked(coords, parentNode);
           setIsPickMode(false);
         } else {
           // Internal dialog flow - open asset creation dialog
+          console.log('Opening internal AddAssetDialog with parent:', parentNode);
           setAddAssetParentNode(parentNode);
-          setAddAssetDialogOpen(true);
           setIsPickMode(false);
-        }
-        
-        // Cleanup listener
-        if (pickModeListenerRef.current) {
-          pickModeListenerRef.current();
-          pickModeListenerRef.current = null;
+          // Use setTimeout to ensure state updates before opening dialog
+          setTimeout(() => {
+            setAddAssetDialogOpen(true);
+          }, 50);
         }
         
         toast.success(`Position vald: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
       }
     };
 
-    // Use xeokit's pick on click
+    // Use xeokit's pick on click - continuous listener until successful pick
     const canvas = xeokitViewer.scene.canvas.canvas;
+    
     const handleClick = (e: MouseEvent) => {
+      // Prevent default to avoid triggering other handlers
+      e.stopPropagation();
+      
       const rect = canvas.getBoundingClientRect();
       const canvasPos = [
         e.clientX - rect.left,
         e.clientY - rect.top
       ];
+      
+      console.log('Pick mode click at canvas position:', canvasPos);
       
       // Use xeokit's pickSurface for accurate 3D coordinates
       const pickResult = xeokitViewer.scene.pick({
@@ -622,17 +666,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       });
       
       if (pickResult) {
+        console.log('Pick result:', pickResult);
         handlePick(pickResult);
       } else {
-        toast.error('Ingen yta hittades. Klicka på ett synligt objekt.');
+        toast.warning('Ingen yta hittades. Försök klicka på ett synligt objekt.', {
+          duration: 3000,
+        });
+        // Don't remove listener - let user try again
       }
     };
 
-    canvas.addEventListener('click', handleClick, { once: true });
+    // Use capture phase to get events before other handlers
+    canvas.addEventListener('click', handleClick, { capture: true });
     
     // Store cleanup function
     pickModeListenerRef.current = () => {
-      canvas.removeEventListener('click', handleClick);
+      canvas.removeEventListener('click', handleClick, { capture: true });
+      console.log('Pick mode listener cleaned up');
     };
 
     return true;
