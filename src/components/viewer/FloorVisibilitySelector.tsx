@@ -7,12 +7,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 
 export interface FloorInfo {
-  id: string;
-  fmGuid: string;
+  id: string;  // Representative ID for the group
   name: string;
   shortName: string;
-  viewerMetaObjectId: string;
-  databaseLevelFmGuid?: string;
+  metaObjectIds: string[];  // All metaObject IDs with this name (from all models)
+  databaseLevelFmGuids: string[];  // All database fmGuids for this floor
 }
 
 interface FloorVisibilitySelectorProps {
@@ -45,13 +44,13 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       }
     }, [viewerRef]);
 
-    // Extract floors from metaScene - only once
+    // Extract floors from metaScene - group by name to deduplicate across models
     const extractFloors = useCallback(() => {
       const viewer = getXeokitViewer();
       if (!viewer?.metaScene?.metaObjects) return [];
 
       const metaObjects = viewer.metaScene.metaObjects;
-      const extractedFloors: FloorInfo[] = [];
+      const floorsByName = new Map<string, FloorInfo>();
 
       Object.values(metaObjects).forEach((metaObject: any) => {
         const type = metaObject?.type?.toLowerCase();
@@ -59,18 +58,30 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           const name = metaObject.name || 'Unknown Floor';
           const shortMatch = name.match(/(\d+)/);
           const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
+          const fmGuid = metaObject.originalSystemId || metaObject.id;
           
-          extractedFloors.push({
-            id: metaObject.id,
-            fmGuid: metaObject.originalSystemId || metaObject.id,
-            name,
-            shortName,
-            viewerMetaObjectId: metaObject.id,
-            databaseLevelFmGuid: metaObject.originalSystemId || metaObject.id,
-          });
+          if (floorsByName.has(name)) {
+            // Add this metaObject to existing group
+            const existing = floorsByName.get(name)!;
+            existing.metaObjectIds.push(metaObject.id);
+            if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
+              existing.databaseLevelFmGuids.push(fmGuid);
+            }
+          } else {
+            // Create new group
+            floorsByName.set(name, {
+              id: metaObject.id,  // First ID as representative
+              name,
+              shortName,
+              metaObjectIds: [metaObject.id],
+              databaseLevelFmGuids: [fmGuid],
+            });
+          }
         }
       });
 
+      // Convert to array and sort
+      const extractedFloors = Array.from(floorsByName.values());
       extractedFloors.sort((a, b) => {
         const numA = parseInt(a.shortName) || 0;
         const numB = parseInt(b.shortName) || 0;
@@ -146,7 +157,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       return ids;
     }, []);
 
-    // Apply visibility changes to 3D viewer (optimized)
+    // Apply visibility changes to 3D viewer (optimized, handles grouped floors)
     const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
@@ -156,13 +167,16 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
 
       floors.forEach(floor => {
         const isVisible = visibleIds.has(floor.id);
-        const objectIds = getChildIdsOptimized(floor.viewerMetaObjectId, childrenMap);
-
-        objectIds.forEach(id => {
-          const entity = scene.objects?.[id];
-          if (entity) {
-            entity.visible = isVisible;
-          }
+        
+        // Iterate through ALL metaObjects for this floor (from all models)
+        floor.metaObjectIds.forEach(metaObjId => {
+          const objectIds = getChildIdsOptimized(metaObjId, childrenMap);
+          objectIds.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) {
+              entity.visible = isVisible;
+            }
+          });
         });
       });
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
@@ -180,7 +194,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         
         if (onVisibleFloorsChange) {
           const visibleFloors = floors.filter(f => newSet.has(f.id));
-          onVisibleFloorsChange(visibleFloors.map(f => f.databaseLevelFmGuid || f.id));
+          // Collect all fmGuids from all visible floors
+          const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+          onVisibleFloorsChange(allFmGuids);
         }
         
         return newSet;
@@ -195,7 +211,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       if (onVisibleFloorsChange) {
         const floor = floors.find(f => f.id === floorId);
         if (floor) {
-          onVisibleFloorsChange([floor.databaseLevelFmGuid || floor.id]);
+          onVisibleFloorsChange(floor.databaseLevelFmGuids);
         }
       }
     }, [applyFloorVisibility, floors, onVisibleFloorsChange]);
@@ -206,7 +222,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       applyFloorVisibility(allIds);
       
       if (onVisibleFloorsChange) {
-        onVisibleFloorsChange(floors.map(f => f.databaseLevelFmGuid || f.id));
+        // Collect all fmGuids from all floors
+        const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
+        onVisibleFloorsChange(allFmGuids);
       }
     }, [applyFloorVisibility, floors, onVisibleFloorsChange]);
 
