@@ -31,10 +31,37 @@ export class XktCacheService {
   }
 
   /**
-   * Check if a model is cached and get its URL if available
+   * Check if a model is cached - first checks database, then edge function
    */
   async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult> {
     try {
+      // First check the xkt_models database table
+      if (buildingFmGuid) {
+        const { data: dbModel } = await supabase
+          .from('xkt_models')
+          .select('file_url, storage_path')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('model_id', modelId)
+          .maybeSingle();
+
+        if (dbModel?.file_url) {
+          console.log('XKT found in database:', modelId);
+          return { cached: true, url: dbModel.file_url };
+        }
+
+        // If we have storage_path but no file_url, generate a new signed URL
+        if (dbModel?.storage_path) {
+          const { data: urlData } = await supabase.storage
+            .from('xkt-models')
+            .createSignedUrl(dbModel.storage_path, 3600);
+          
+          if (urlData?.signedUrl) {
+            return { cached: true, url: urlData.signedUrl };
+          }
+        }
+      }
+
+      // Fallback to edge function
       const { data, error } = await supabase.functions.invoke('xkt-cache', {
         body: {
           action: 'check',
@@ -59,10 +86,37 @@ export class XktCacheService {
   }
 
   /**
-   * Get a cached model URL
+   * Get a cached model URL - first checks database, then edge function
    */
   async getCachedModel(modelId: string, buildingFmGuid?: string): Promise<string | null> {
     try {
+      // First check the xkt_models database table
+      if (buildingFmGuid) {
+        const { data: dbModel } = await supabase
+          .from('xkt_models')
+          .select('file_url, storage_path')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('model_id', modelId)
+          .maybeSingle();
+
+        if (dbModel?.file_url) {
+          console.log('XKT model loaded from database:', modelId);
+          return dbModel.file_url;
+        }
+
+        // If we have storage_path but no file_url, generate a new signed URL
+        if (dbModel?.storage_path) {
+          const { data: urlData } = await supabase.storage
+            .from('xkt-models')
+            .createSignedUrl(dbModel.storage_path, 3600);
+          
+          if (urlData?.signedUrl) {
+            return urlData.signedUrl;
+          }
+        }
+      }
+
+      // Fallback to edge function
       const { data, error } = await supabase.functions.invoke('xkt-cache', {
         body: {
           action: 'get',
