@@ -1236,6 +1236,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 <>
                   <VisualizationToolbar
                     viewerRef={viewerInstanceRef}
+                    buildingFmGuid={buildingFmGuid}
+                    isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
                     onToggleNavCube={(visible) => setShowNavCube(visible)}
                     onToggleMinimap={(visible) => setShowMinimap(visible)}
                     onToggleTreeView={(visible) => setShowTreePanel(visible)}
