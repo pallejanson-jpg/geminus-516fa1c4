@@ -38,12 +38,19 @@ interface SyncStatus {
     error_message: string | null;
 }
 
-interface SyncCheckResult {
-    inSync: boolean;
+interface SyncCategoryState {
     localCount: number;
     remoteCount: number;
-    modifiedSinceLastSync: number;
-    lastSyncAt: string | null;
+    inSync: boolean;
+    syncState?: SyncStatus;
+}
+
+interface NewSyncCheckResult {
+    success: boolean;
+    structure: SyncCategoryState;
+    assets: SyncCategoryState;
+    xkt: { syncState?: SyncStatus };
+    total: { localCount: number; remoteCount: number };
 }
 
 interface ConfigState {
@@ -76,7 +83,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
-    const [syncCheck, setSyncCheck] = useState<SyncCheckResult | null>(null);
+    const [syncCheck, setSyncCheck] = useState<NewSyncCheckResult | null>(null);
     const [isCheckingSync, setIsCheckingSync] = useState(false);
     
     // Config form state
@@ -192,12 +199,123 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             if (error) throw error;
             if (data?.success) {
-                setSyncCheck(data as SyncCheckResult);
+                setSyncCheck(data as NewSyncCheckResult);
             }
         } catch (error) {
             console.error('Failed to check sync status:', error);
         } finally {
             setIsCheckingSync(false);
+        }
+    };
+
+    // Sync structure (buildings, storeys, spaces)
+    const handleSyncStructure = async () => {
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'sync-structure' }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Synkar struktur",
+                description: "Hämtar byggnader, våningsplan och rum från Asset+.",
+            });
+
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                await checkSyncStatus();
+            }, 3000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 300000);
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Synk misslyckades",
+                description: error.message,
+            });
+            setIsSyncing(false);
+        }
+    };
+
+    // Sync all assets (chunked by building)
+    const handleSyncAssetsChunked = async () => {
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'sync-assets-chunked' }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Synkar tillgångar",
+                description: "Hämtar alla tillgångar byggnad för byggnad. Detta kan ta lång tid.",
+            });
+
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                await checkSyncStatus();
+            }, 5000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 600000); // 10 minutes for large datasets
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Synk misslyckades",
+                description: error.message,
+            });
+            setIsSyncing(false);
+        }
+    };
+
+    // Cache all XKT models
+    const handleCacheAllXkt = async () => {
+        setIsSyncing(true);
+        try {
+            supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'cache-all-xkt' }
+            }).catch((err) => {
+                console.log('Edge function call ended:', err?.message);
+            });
+
+            toast({
+                title: "Cachar XKT-filer",
+                description: "Hämtar och sparar 3D-modeller för snabbare laddning.",
+            });
+
+            const pollInterval = setInterval(async () => {
+                await fetchSyncStatus();
+                await checkSyncStatus();
+            }, 5000);
+
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setIsSyncing(false);
+                fetchSyncStatus();
+                checkSyncStatus();
+            }, 600000);
+
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Cache misslyckades",
+                description: error.message,
+            });
+            setIsSyncing(false);
         }
     };
 
@@ -1212,145 +1330,233 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                     <TabsContent value="sync" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <div className="space-y-6">
-                            {/* Asset+ Sync Section */}
-                            <div className="border rounded-lg p-4 space-y-4">
+                            {/* Asset+ Sync Header */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Box className="h-5 w-5 text-primary" />
+                                    <h4 className="font-medium">Asset+ Synkronisering</h4>
+                                </div>
+                                <Button
+                                    onClick={checkSyncStatus}
+                                    disabled={isCheckingSync}
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1 h-8 text-xs"
+                                >
+                                    {isCheckingSync ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-3 w-3" />
+                                    )}
+                                    Kontrollera status
+                                </Button>
+                            </div>
+
+                            {/* 1. Structure Sync Card */}
+                            <div className="border rounded-lg p-4 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <Box className="h-5 w-5 text-primary" />
+                                        <Building2 className="h-5 w-5 text-blue-600" />
                                         <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-medium">Asset+</h4>
-                                                {/* Sync status indicator */}
-                                                {isCheckingSync ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                                ) : syncCheck ? (
-                                                    syncCheck.inSync ? (
-                                                        <Badge variant="default" className="bg-green-600 text-xs gap-1">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            I synk
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="destructive" className="text-xs gap-1">
-                                                            <AlertCircle className="h-3 w-3" />
-                                                            {syncCheck.modifiedSinceLastSync > 0 
-                                                                ? `${syncCheck.modifiedSinceLastSync} ändringar` 
-                                                                : 'Ej synkad'}
-                                                        </Badge>
-                                                    )
-                                                ) : null}
-                                            </div>
+                                            <h4 className="font-medium">Byggnad/Plan/Rum</h4>
                                             <p className="text-xs text-muted-foreground">
-                                                {assetCount.toLocaleString()} lokala • {syncCheck?.remoteCount?.toLocaleString() || '?'} i Asset+
+                                                Byggnader, våningsplan och rum
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Button
-                                            onClick={checkSyncStatus}
-                                            disabled={isCheckingSync}
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            {isCheckingSync ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                    <div className="flex items-center gap-2">
+                                        {isCheckingSync ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        ) : syncCheck?.structure ? (
+                                            syncCheck.structure.inSync ? (
+                                                <Badge variant="default" className="bg-green-600 text-xs gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    I synk
+                                                </Badge>
                                             ) : (
-                                                <CheckCircle2 className="h-3 w-3" />
-                                            )}
-                                            Kontrollera
-                                        </Button>
-                                        <Button 
-                                            onClick={handleSyncAllBuildings}
-                                            disabled={isSyncing}
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            {isSyncing ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <Building2 className="h-3 w-3" />
-                                            )}
-                                            Alla Byggnader
-                                        </Button>
-                                        <Button 
-                                            onClick={handleBuildingSync}
-                                            disabled={isSyncing || favoriteBuildings.length === 0}
-                                            size="sm"
-                                            variant="secondary"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            {isSyncing ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <Layers className="h-3 w-3" />
-                                            )}
-                                            Synka Plan+Rum
-                                        </Button>
-                                        <Button 
-                                            onClick={syncCheck?.inSync ? handleIncrementalSync : handleTriggerSync}
-                                            disabled={isSyncing}
-                                            size="sm"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            {isSyncing ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="h-3 w-3" />
-                                            )}
-                                            {isSyncing ? 'Synkar...' : (syncCheck?.inSync ? 'Uppdatera' : 'Full synk')}
-                                        </Button>
+                                                <Badge variant="destructive" className="text-xs gap-1">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    Ej synkad
+                                                </Badge>
+                                            )
+                                        ) : null}
                                     </div>
                                 </div>
-
-                                {/* Sync info card */}
-                                {syncCheck && !syncCheck.inSync && (
-                                    <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 p-3">
-                                        <div className="flex items-start gap-2">
-                                            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
-                                            <div className="text-sm">
-                                                <p className="font-medium text-amber-800 dark:text-amber-200">Synkronisering rekommenderas</p>
-                                                <p className="text-xs text-amber-700 dark:text-amber-300">
-                                                    {syncCheck.modifiedSinceLastSync > 0 
-                                                        ? `${syncCheck.modifiedSinceLastSync} objekt har ändrats i Asset+ sedan ${formatDate(syncCheck.lastSyncAt)}`
-                                                        : `Lokal databas (${syncCheck.localCount}) matchar inte Asset+ (${syncCheck.remoteCount})`}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {syncStatuses.length === 0 ? (
-                                    <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
-                                        <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                        <p className="text-sm">Ingen synkronisering har körts ännu</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {syncStatuses.map((status) => (
-                                            <div 
-                                                key={status.subtree_id} 
-                                                className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
-                                            >
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium">{status.subtree_name || status.subtree_id}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {status.total_assets.toLocaleString()} objekt • 
-                                                        {status.sync_status === 'running' ? ' Startad: ' : ' Senast: '}
-                                                        {status.sync_status === 'running' 
-                                                            ? formatDate(status.last_sync_started_at)
-                                                            : formatDate(status.last_sync_completed_at, status.last_sync_started_at)}
-                                                    </p>
-                                                    {status.error_message && (
-                                                        <p className="text-xs text-destructive mt-1 line-clamp-2">{status.error_message}</p>
-                                                    )}
-                                                </div>
-                                                {getSyncStatusBadge(status.sync_status)}
-                                            </div>
-                                        ))}
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">
+                                        {syncCheck?.structure?.localCount?.toLocaleString() || '0'} lokala • {syncCheck?.structure?.remoteCount?.toLocaleString() || '?'} i Asset+
+                                    </p>
+                                    <Button 
+                                        onClick={handleSyncStructure}
+                                        disabled={isSyncing}
+                                        size="sm"
+                                        className="gap-1 h-8"
+                                    >
+                                        {isSyncing && syncCheck?.structure?.syncState?.sync_status === 'running' ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-3 w-3" />
+                                        )}
+                                        Synka
+                                    </Button>
+                                </div>
+                                {syncCheck?.structure?.syncState && (
+                                    <div className="text-xs text-muted-foreground border-t pt-2">
+                                        {syncCheck.structure.syncState.sync_status === 'running' ? 'Synkar...' : 'Senast: '}
+                                        {formatDate(syncCheck.structure.syncState.last_sync_completed_at, syncCheck.structure.syncState.last_sync_started_at)}
+                                        {syncCheck.structure.syncState.error_message && (
+                                            <span className="text-destructive ml-2">{syncCheck.structure.syncState.error_message}</span>
+                                        )}
                                     </div>
                                 )}
                             </div>
+
+                            {/* 2. Assets Sync Card */}
+                            <div className="border rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Layers className="h-5 w-5 text-purple-600" />
+                                        <div>
+                                            <h4 className="font-medium">Alla Tillgångar</h4>
+                                            <p className="text-xs text-muted-foreground">
+                                                Installationer och inventarier (per byggnad)
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {isCheckingSync ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        ) : syncCheck?.assets ? (
+                                            syncCheck.assets.inSync ? (
+                                                <Badge variant="default" className="bg-green-600 text-xs gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    I synk
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="destructive" className="text-xs gap-1">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    Ej synkad
+                                                </Badge>
+                                            )
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">
+                                        {syncCheck?.assets?.localCount?.toLocaleString() || '0'} lokala • {syncCheck?.assets?.remoteCount?.toLocaleString() || '?'} i Asset+
+                                    </p>
+                                    <Button 
+                                        onClick={handleSyncAssetsChunked}
+                                        disabled={isSyncing}
+                                        size="sm"
+                                        className="gap-1 h-8"
+                                    >
+                                        {isSyncing && syncCheck?.assets?.syncState?.sync_status === 'running' ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-3 w-3" />
+                                        )}
+                                        Synka
+                                    </Button>
+                                </div>
+                                {syncCheck?.assets?.syncState && (
+                                    <div className="text-xs text-muted-foreground border-t pt-2">
+                                        {syncCheck.assets.syncState.sync_status === 'running' 
+                                            ? `Synkar... ${syncCheck.assets.syncState.subtree_name || ''}`
+                                            : 'Senast: '}
+                                        {syncCheck.assets.syncState.sync_status !== 'running' && 
+                                            formatDate(syncCheck.assets.syncState.last_sync_completed_at, syncCheck.assets.syncState.last_sync_started_at)}
+                                        {syncCheck.assets.syncState.error_message && (
+                                            <span className="text-destructive ml-2">{syncCheck.assets.syncState.error_message}</span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 3. XKT Cache Card */}
+                            <div className="border rounded-lg p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Box className="h-5 w-5 text-orange-600" />
+                                        <div>
+                                            <h4 className="font-medium">XKT-filer</h4>
+                                            <p className="text-xs text-muted-foreground">
+                                                3D-modellfiler för snabbare laddning
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {syncCheck?.xkt?.syncState ? (
+                                            syncCheck.xkt.syncState.sync_status === 'completed' ? (
+                                                <Badge variant="default" className="bg-green-600 text-xs gap-1">
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    Cachad
+                                                </Badge>
+                                            ) : syncCheck.xkt.syncState.sync_status === 'running' ? (
+                                                <Badge variant="secondary" className="text-xs gap-1">
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                    Cachar...
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-xs gap-1">
+                                                    <Clock className="h-3 w-3" />
+                                                    Ej cachad
+                                                </Badge>
+                                            )
+                                        ) : (
+                                            <Badge variant="outline" className="text-xs gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                Ej cachad
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">
+                                        {syncCheck?.xkt?.syncState?.total_assets || 0} modeller cachade
+                                    </p>
+                                    <Button 
+                                        onClick={handleCacheAllXkt}
+                                        disabled={isSyncing}
+                                        size="sm"
+                                        variant="secondary"
+                                        className="gap-1 h-8"
+                                    >
+                                        {isSyncing && syncCheck?.xkt?.syncState?.sync_status === 'running' ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                            <Database className="h-3 w-3" />
+                                        )}
+                                        Cacha
+                                    </Button>
+                                </div>
+                                {syncCheck?.xkt?.syncState && (
+                                    <div className="text-xs text-muted-foreground border-t pt-2">
+                                        {syncCheck.xkt.syncState.sync_status === 'running' 
+                                            ? `Cachar... ${syncCheck.xkt.syncState.subtree_name || ''}`
+                                            : 'Senast: '}
+                                        {syncCheck.xkt.syncState.sync_status !== 'running' && 
+                                            formatDate(syncCheck.xkt.syncState.last_sync_completed_at, syncCheck.xkt.syncState.last_sync_started_at)}
+                                        {syncCheck.xkt.syncState.error_message && (
+                                            <span className="text-destructive ml-2 line-clamp-1">{syncCheck.xkt.syncState.error_message}</span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Total Summary */}
+                            {syncCheck && (
+                                <div className="rounded-lg border bg-muted/30 p-3">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">Totalt i lokal databas:</span>
+                                        <span className="font-medium">{syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objekt</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm mt-1">
+                                        <span className="text-muted-foreground">Totalt i Asset+:</span>
+                                        <span className="font-medium">{syncCheck.total?.remoteCount?.toLocaleString() || '?'} objekt</span>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* FM Access Sync Section */}
                             <div className="border rounded-lg p-4 space-y-4">
