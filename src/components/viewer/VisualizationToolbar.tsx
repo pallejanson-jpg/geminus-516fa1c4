@@ -85,6 +85,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
   // BIM models and floors state
   const [availableModels, setAvailableModels] = useState<{ id: string; name: string; visible: boolean }[]>([]);
   const [availableFloors, setAvailableFloors] = useState<{ id: string; name: string; visible: boolean }[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isViewerReady, setIsViewerReady] = useState(false);
 
   // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
@@ -116,9 +118,36 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
     setLocalVisualization(showVisualization || false);
   }, [showVisualization]);
 
+  // Fixed: Use correct ref chain for XEOKit access
   const getXeokitViewer = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    try {
+      const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+      return assetViewer?.$refs?.assetView?.viewer;
+    } catch (e) {
+      console.debug('getXeokitViewer error:', e);
+      return null;
+    }
   }, [viewerRef]);
+
+  // Check viewer readiness
+  useEffect(() => {
+    const checkReady = () => {
+      const viewer = getXeokitViewer();
+      setIsViewerReady(!!viewer?.scene);
+    };
+    
+    // Check immediately and after delays to catch async initialization
+    checkReady();
+    const t1 = setTimeout(checkReady, 200);
+    const t2 = setTimeout(checkReady, 500);
+    const t3 = setTimeout(checkReady, 1000);
+    
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [getXeokitViewer, isOpen]);
 
   const isToolVisible = useCallback((toolId: string) => {
     const setting = toolSettings.find(t => t.id === toolId);
@@ -200,45 +229,58 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     
-    try {
-      const viewer = viewerRef.current;
-      const assetViewer = viewer?.$refs?.AssetViewer;
-      
-      // Get available models from Asset+ viewer
-      if (assetViewer?.availableModels) {
-        const models = assetViewer.availableModels.map((m: any) => ({
-          id: m.id || m.name,
-          name: m.name || m.id,
-          visible: m.visible !== false,
-        }));
-        setAvailableModels(models);
-      }
-      
-      // Get floors from metaScene
-      const xeokitViewer = getXeokitViewer();
-      if (xeokitViewer?.metaScene) {
-        const metaObjects = xeokitViewer.metaScene.metaObjects || {};
-        const floors: { id: string; name: string; visible: boolean }[] = [];
+    setIsLoadingData(true);
+    
+    // Use timeout to ensure viewer is fully ready
+    const timer = setTimeout(() => {
+      try {
+        const xeokitViewer = getXeokitViewer();
         
-        Object.values(metaObjects).forEach((obj: any) => {
-          if (obj.type === 'IfcBuildingStorey') {
-            const sceneObject = xeokitViewer.scene?.objects?.[obj.id];
-            floors.push({
-              id: obj.id,
-              name: obj.name || obj.id,
-              visible: sceneObject?.visible !== false,
-            });
-          }
-        });
+        // Get models from XEOKit metaScene (more reliable than Asset+ API)
+        if (xeokitViewer?.metaScene?.metaModels) {
+          const metaModels = xeokitViewer.metaScene.metaModels;
+          const models = Object.values(metaModels).map((m: any) => {
+            // Check if model objects are visible
+            const modelId = m.id;
+            const sceneModel = xeokitViewer.scene?.models?.[modelId];
+            return {
+              id: modelId,
+              name: m.id || 'Model',
+              visible: sceneModel?.visible !== false,
+            };
+          });
+          setAvailableModels(models);
+        }
         
-        // Sort floors by name (often includes floor number)
-        floors.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-        setAvailableFloors(floors);
+        // Get floors from metaScene
+        if (xeokitViewer?.metaScene) {
+          const metaObjects = xeokitViewer.metaScene.metaObjects || {};
+          const floors: { id: string; name: string; visible: boolean }[] = [];
+          
+          Object.values(metaObjects).forEach((obj: any) => {
+            if (obj.type === 'IfcBuildingStorey') {
+              const sceneObject = xeokitViewer.scene?.objects?.[obj.id];
+              floors.push({
+                id: obj.id,
+                name: obj.name || obj.id,
+                visible: sceneObject?.visible !== false,
+              });
+            }
+          });
+          
+          // Sort floors by name (often includes floor number)
+          floors.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
+          setAvailableFloors(floors);
+        }
+      } catch (e) {
+        console.debug('Failed to fetch models/floors:', e);
+      } finally {
+        setIsLoadingData(false);
       }
-    } catch (e) {
-      console.debug('Failed to fetch models/floors:', e);
-    }
-  }, [isOpen, viewerRef, getXeokitViewer]);
+    }, 150);
+    
+    return () => clearTimeout(timer);
+  }, [isOpen, getXeokitViewer]);
 
   // Toggle model visibility
   const handleToggleModel = useCallback((modelId: string) => {
@@ -398,7 +440,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
       
       <SheetContent 
         side="right" 
-        className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm"
+        className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm z-[60]"
       >
         <SheetHeader className="p-4 pb-2">
           <SheetTitle className="text-base">Vy-alternativ</SheetTitle>
@@ -406,7 +448,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
         
         <ScrollArea className="h-[calc(100vh-80px)]">
           <div className="p-4 pt-0 space-y-4">
-            {/* View Options Section */}
+            {/* Loading indicator */}
+            {isLoadingData && (
+              <div className="text-xs text-muted-foreground italic py-2 flex items-center gap-2">
+                <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                Laddar modelldata...
+              </div>
+            )}
+            
+            {/* View Options Section - Always visible */}
             <div>
               <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
                 Vyalternativ
