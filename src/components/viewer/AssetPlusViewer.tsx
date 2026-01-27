@@ -928,14 +928,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           if (added?.length > 0 && flashOnSelectEnabledRef.current) {
             const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
             if (xeokitViewer?.scene) {
-              // Flash the first newly added item
+              // Log the item structure for debugging
+              console.log("itemIds", added.map((item: any) => item?.id || item));
+              
+              // Flash each newly added item
               added.forEach((item: any) => {
-                if (item?.id) {
-                  flashEntityById(xeokitViewer.scene, item.id, {
-                    color1: [1, 0.3, 0.3],
-                    color2: [1, 1, 1],
-                    interval: 200,
-                    duration: 2000,
+                // The item can be an object with .id or just a string ID
+                const entityId = typeof item === 'string' ? item : item?.id;
+                if (entityId) {
+                  // Flash the entity - using xeokit pattern from docs
+                  flashEntityById(xeokitViewer.scene, entityId, {
+                    color1: [1, 0.3, 0.3],  // Highlight red
+                    color2: [1, 1, 1],       // White/original
+                    interval: 200,          // Flash faster for better visibility
+                    duration: 2000,         // 2 seconds
                   });
                 }
               });
