@@ -22,19 +22,13 @@ import {
 } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
 
-export interface FloorInfo {
-  id: string;
-  fmGuid: string;
-  name: string;
-  shortName: string;
-}
-
 interface RoomVisualizationPanelProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid: string;
   onClose: () => void;
   onShowSpaces?: (show: boolean) => void;
-  selectedFloorFmGuid?: string | null;
+  /** Array of visible floor GUIDs from floor selector - filters which rooms to visualize */
+  visibleFloorFmGuids?: string[];
   className?: string;
 }
 
@@ -54,14 +48,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   buildingFmGuid,
   onClose,
   onShowSpaces,
-  selectedFloorFmGuid,
+  visibleFloorFmGuids,
   className,
 }) => {
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('none');
   const [useMockData, setUseMockData] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
-  const [floors, setFloors] = useState<FloorInfo[]>([]);
-  const [selectedFloor, setSelectedFloor] = useState<string | null>(selectedFloorFmGuid || null);
   const [isLoading, setIsLoading] = useState(false);
   const [colorizedCount, setColorizedCount] = useState(0);
   const [hasRealData, setHasRealData] = useState(false);
@@ -123,53 +115,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, [isDragging, dragOffset]);
 
-  // Fetch floors for the building from viewer metaScene
-  const fetchFloorsFromViewer = useCallback(() => {
-    try {
-      const viewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (!viewer?.metaScene?.metaObjects) return;
-
-      const metaObjects = viewer.metaScene.metaObjects;
-      const extractedFloors: FloorInfo[] = [];
-
-      Object.values(metaObjects).forEach((metaObject: any) => {
-        const type = metaObject?.type?.toLowerCase();
-        if (type === 'ifcbuildingstorey') {
-          const name = metaObject.name || 'Unknown Floor';
-          const shortMatch = name.match(/(\d+)/);
-          const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
-          
-          extractedFloors.push({
-            id: metaObject.id,
-            fmGuid: metaObject.id,
-            name,
-            shortName,
-          });
-        }
-      });
-
-      extractedFloors.sort((a, b) => {
-        const numA = parseInt(a.shortName) || 0;
-        const numB = parseInt(b.shortName) || 0;
-        return numA - numB;
-      });
-
-      if (extractedFloors.length > 0) {
-        setFloors(extractedFloors);
-      }
-    } catch (e) {
-      console.debug('Could not extract floors from viewer:', e);
-    }
-  }, [viewerRef]);
-
-  useEffect(() => {
-    fetchFloorsFromViewer();
-    // Try again after a short delay in case viewer wasn't ready
-    const timer = setTimeout(fetchFloorsFromViewer, 1000);
-    return () => clearTimeout(timer);
-  }, [fetchFloorsFromViewer]);
-
-  // Fetch rooms for the building, optionally filtered by floor
+  // Fetch rooms for the building, optionally filtered by visible floors
   const fetchRooms = useCallback(async () => {
     if (!buildingFmGuid) return;
     
@@ -181,21 +127,25 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         .eq('category', 'Space')
         .or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`);
 
-      // Apply floor filter if selected
-      if (selectedFloor) {
-        query = query.or(`level_fm_guid.eq.${selectedFloor},level_fm_guid.eq.${selectedFloor.toLowerCase()},level_fm_guid.eq.${selectedFloor.toUpperCase()}`);
-      }
-
       const { data, error } = await query;
 
       if (error) throw error;
 
-      const roomData: RoomData[] = (data || []).map((r) => ({
+      let roomData: RoomData[] = (data || []).map((r) => ({
         fmGuid: r.fm_guid,
         name: r.name,
         levelFmGuid: r.level_fm_guid,
         attributes: r.attributes as Record<string, any> | null,
       }));
+
+      // Filter by visible floors if specified (case-insensitive matching)
+      if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
+        const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
+        roomData = roomData.filter(room => {
+          if (!room.levelFmGuid) return false;
+          return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
+        });
+      }
 
       setRooms(roomData);
 
@@ -214,13 +164,16 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       });
       setHasRealData(hasReal);
 
-      console.log(`Fetched ${roomData.length} rooms for visualization (floor: ${selectedFloor || 'all'})`);
+      const floorInfo = visibleFloorFmGuids && visibleFloorFmGuids.length > 0 
+        ? `${visibleFloorFmGuids.length} floors selected` 
+        : 'all';
+      console.log(`Fetched ${roomData.length} rooms for visualization (floor: ${floorInfo})`);
     } catch (error) {
       console.error('Failed to fetch rooms:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [buildingFmGuid, selectedFloor]);
+  }, [buildingFmGuid, visibleFloorFmGuids]);
 
   useEffect(() => {
     fetchRooms();
@@ -358,28 +311,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Content */}
       <div className="p-3 space-y-4">
-        {/* Floor filter selector */}
-        {floors.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Våningsplan</Label>
-            <Select
-              value={selectedFloor || 'all'}
-              onValueChange={(v) => setSelectedFloor(v === 'all' ? null : v)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Välj våning..." />
-              </SelectTrigger>
-              <SelectContent className="bg-card border shadow-lg z-[60]">
-                <SelectItem value="all">Alla våningar</SelectItem>
-                {floors.map((floor) => (
-                  <SelectItem key={floor.id} value={floor.fmGuid}>
-                    {floor.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        {/* Floor selector is now in VisualizationToolbar */}
 
         {/* Visualization type selector */}
         <div className="space-y-2">
