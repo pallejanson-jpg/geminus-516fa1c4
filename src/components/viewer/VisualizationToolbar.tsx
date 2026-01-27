@@ -180,7 +180,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <div
           className={cn(
             "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-            "w-72 max-h-[500px] flex flex-col",
+            "w-80 min-w-[320px] max-h-[80vh] flex flex-col",
             isDragging && "cursor-grabbing opacity-90"
           )}
           style={{ left: position.x, top: position.y }}
@@ -204,8 +204,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </Button>
           </div>
 
-          {/* Content */}
-          <ScrollArea className="flex-1 p-3">
+          {/* Content - grows vertically with content */}
+          <ScrollArea className="flex-1 min-h-0 p-3">
             <div className="space-y-4">
               {/* Model visibility section */}
               <ModelVisibilitySelector
