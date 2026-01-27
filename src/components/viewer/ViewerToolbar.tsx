@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Move,
   ZoomIn,
@@ -15,7 +15,6 @@ import {
   SquareDashed,
   MoreHorizontal,
   Settings,
-  MessageSquare,
   Sparkles,
   Hand,
 } from 'lucide-react';
@@ -36,8 +35,6 @@ import { getNavigationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT }
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   onOpenSettings?: () => void;
-  onToggleAnnotations?: () => void;
-  showAnnotations?: boolean;
   flashOnSelectEnabled?: boolean;
   onToggleFlashOnSelect?: (enabled: boolean) => void;
   hoverHighlightEnabled?: boolean;
@@ -57,8 +54,6 @@ type ViewMode = '3d' | '2d';
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   viewerRef,
   onOpenSettings,
-  onToggleAnnotations,
-  showAnnotations = true,
   flashOnSelectEnabled = true,
   onToggleFlashOnSelect,
   hoverHighlightEnabled = false,
@@ -291,7 +286,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   });
   ToolButton.displayName = 'ToolButton';
 
-  // Get overflow items for menu (navigation tools + new features)
+  // Get overflow items for menu (navigation tools only - flash/hover shown as direct buttons)
   const getOverflowItems = () => {
     const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
     
@@ -332,39 +327,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             onClick: () => handleViewModeChange(viewMode === '3d' ? '2d' : '3d'),
             active: viewMode === '2d'
           });
-          break;
-        case 'annotations':
-          if (onToggleAnnotations) {
-            items.push({ 
-              id: tool.id, 
-              label: 'Annotationer', 
-              icon: <MessageSquare className="h-4 w-4" />, 
-              onClick: onToggleAnnotations,
-              active: showAnnotations
-            });
-          }
-          break;
-        case 'flashOnSelect':
-          if (onToggleFlashOnSelect) {
-            items.push({ 
-              id: tool.id, 
-              label: 'Flash vid markering', 
-              icon: <Sparkles className="h-4 w-4" />, 
-              onClick: () => onToggleFlashOnSelect(!flashOnSelectEnabled),
-              active: flashOnSelectEnabled
-            });
-          }
-          break;
-        case 'hoverHighlight':
-          if (onToggleHoverHighlight) {
-            items.push({ 
-              id: tool.id, 
-              label: 'Hover-highlight', 
-              icon: <Hand className="h-4 w-4" />, 
-              onClick: () => onToggleHoverHighlight(!hoverHighlightEnabled),
-              active: hoverHighlightEnabled
-            });
-          }
           break;
       }
     });
@@ -577,13 +539,21 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             active={viewMode === '2d'}
             toolId="viewMode"
           />
-          {onToggleAnnotations && (
+          {/* Flash and Hover toggles as buttons in main toolbar */}
+          {isToolVisible('flashOnSelect') && !isToolInOverflow('flashOnSelect') && onToggleFlashOnSelect && (
             <ToolButton
-              icon={<MessageSquare className="h-4 w-4" />}
-              label={showAnnotations ? 'Dölj annotationer' : 'Visa annotationer'}
-              onClick={onToggleAnnotations}
-              active={showAnnotations}
-              toolId="annotations"
+              icon={<Sparkles className="h-4 w-4" />}
+              label={flashOnSelectEnabled ? 'Flash vid markering (på)' : 'Flash vid markering (av)'}
+              onClick={() => onToggleFlashOnSelect(!flashOnSelectEnabled)}
+              active={flashOnSelectEnabled}
+            />
+          )}
+          {isToolVisible('hoverHighlight') && !isToolInOverflow('hoverHighlight') && onToggleHoverHighlight && (
+            <ToolButton
+              icon={<Hand className="h-4 w-4" />}
+              label={hoverHighlightEnabled ? 'Hover-highlight (på)' : 'Hover-highlight (av)'}
+              onClick={() => onToggleHoverHighlight(!hoverHighlightEnabled)}
+              active={hoverHighlightEnabled}
             />
           )}
         </div>
