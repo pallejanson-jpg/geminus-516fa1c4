@@ -72,20 +72,30 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         if (response.ok) {
           const apiModels = await response.json();
           const nameMap = new Map<string, string>();
+          console.debug("Asset+ GetModels response:", apiModels);
+          
           apiModels.forEach((m: any) => {
             // Primary: map model.id to name
             if (m.id && m.name) {
               nameMap.set(m.id, m.name);
+              // Also try lowercase version
+              nameMap.set(m.id.toLowerCase(), m.name);
             }
             // Secondary: extract filename from xktFileUrl and map to name
             if (m.xktFileUrl && m.name) {
               const fileId = extractModelIdFromUrl(m.xktFileUrl);
               nameMap.set(fileId, m.name);
+              nameMap.set(fileId.toLowerCase(), m.name);
               // Also with .xkt extension
               nameMap.set(fileId + '.xkt', m.name);
+              nameMap.set(fileId.toLowerCase() + '.xkt', m.name);
             }
           });
+          
+          console.debug("Model names map:", Object.fromEntries(nameMap));
           setModelNamesMap(nameMap);
+        } else {
+          console.debug("Asset+ GetModels failed:", response.status);
         }
       } catch (e) {
         console.debug("Failed to fetch model names from Asset+:", e);
@@ -116,9 +126,20 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
 
       Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
         const rawName = model.id || modelId;
-        // Use API name if available, otherwise fall back to formatted raw name
-        const friendlyName = modelNamesMap.get(modelId) || rawName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
-        const shortName = friendlyName.length > 25 ? friendlyName.substring(0, 25) + '...' : friendlyName;
+        // Try multiple matching strategies for model names
+        const matchedName = modelNamesMap.get(modelId) 
+          || modelNamesMap.get(modelId.toLowerCase())
+          || modelNamesMap.get(rawName)
+          || modelNamesMap.get(rawName.toLowerCase())
+          || modelNamesMap.get(rawName.replace(/\.xkt$/i, ''))
+          || modelNamesMap.get(rawName.replace(/\.xkt$/i, '').toLowerCase());
+        
+        const friendlyName = matchedName || rawName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
+        const shortName = friendlyName.length > 30 ? friendlyName.substring(0, 30) + '...' : friendlyName;
+
+        if (!matchedName && modelNamesMap.size > 0) {
+          console.debug("No API name match for model:", modelId, "rawName:", rawName);
+        }
 
         extractedModels.push({
           id: modelId,
@@ -128,7 +149,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       });
 
       // Sort alphabetically
-      extractedModels.sort((a, b) => a.name.localeCompare(b.name));
+      extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
     }, [getXeokitViewer, modelNamesMap]);
@@ -160,8 +181,9 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     }, [getXeokitViewer]);
 
     // Load models once and set only A-models visible by default
+    // Wait for model names to be loaded before initializing
     useEffect(() => {
-      if (isInitialized) return;
+      if (isInitialized || isLoadingNames) return;
 
       const checkModels = () => {
         const newModels = extractModels();
@@ -203,7 +225,17 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       }, 500);
 
       return () => clearInterval(interval);
-    }, [extractModels, isInitialized, applyModelVisibility]);
+    }, [extractModels, isInitialized, applyModelVisibility, isLoadingNames]);
+
+    // Re-extract models with updated names when modelNamesMap changes (after API fetch)
+    useEffect(() => {
+      if (!isInitialized || modelNamesMap.size === 0) return;
+      
+      const updatedModels = extractModels();
+      if (updatedModels.length > 0) {
+        setModels(updatedModels);
+      }
+    }, [modelNamesMap, isInitialized, extractModels]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
       setVisibleModelIds(prev => {
@@ -292,7 +324,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         </div>
 
         <CollapsibleContent className="space-y-1">
-          <div className="space-y-1 max-h-[200px] overflow-y-auto">
+          <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
             {models.map((model) => {
               const isVisible = visibleModelIds.has(model.id);
               const isSolo = visibleModelIds.size === 1 && isVisible;
