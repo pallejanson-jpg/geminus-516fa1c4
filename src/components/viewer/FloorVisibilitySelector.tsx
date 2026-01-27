@@ -80,13 +80,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         }
       });
 
-      // Convert to array and sort
+      // Convert to array and sort alphabetically by name
       const extractedFloors = Array.from(floorsByName.values());
-      extractedFloors.sort((a, b) => {
-        const numA = parseInt(a.shortName) || 0;
-        const numB = parseInt(b.shortName) || 0;
-        return numA - numB;
-      });
+      extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedFloors;
     }, [getXeokitViewer]);
@@ -292,7 +288,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         </div>
 
         <CollapsibleContent className="space-y-1">
-          <div className="space-y-1 max-h-[200px] overflow-y-auto">
+          <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
             {floors.map((floor) => {
               const isVisible = visibleFloorIds.has(floor.id);
               const isSolo = visibleFloorIds.size === 1 && isVisible;
