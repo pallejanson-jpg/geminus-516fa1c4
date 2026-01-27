@@ -1,438 +1,257 @@
 
-# Plan: Röststyrning för appen
+# Plan: Förbättra BIM-modellnamn och XKT-hämtning
 
 ## Sammanfattning
 
-Implementera röststyrning som låter användare navigera och styra appen genom talkommandon. Systemet ska:
-1. Lyssna på röstkommandon och konvertera till text (Speech-to-Text)
-2. Tolka kommandon och matcha mot app-åtgärder
-3. Utföra åtgärder automatiskt (navigera, söka, öppna 3D, etc.)
+Implementera en robust lösning för att hämta korrekta BIM-modellnamn från Asset+ och optimera XKT-filhämtning för bättre prestanda.
 
----
+## Del 1: Korrigera BIM-modellnamn-flödet
 
-## Arkitektur
+### Grundorsak
+- `xkt_models`-tabellen är tom - XKT-synk har aldrig körts
+- Matchningen mellan XEOkit-modell-ID:n och Asset+ modell-ID:n fungerar inte
 
-```text
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Mikrofon      │────>│  Speech-to-Text  │────>│  Kommandotolk   │
-│   (Browser)     │     │  (ElevenLabs)    │     │  (Lokal logik)  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                                                         │
-                              ┌───────────────────────────┘
-                              ▼
-                    ┌─────────────────┐
-                    │  App Actions    │
-                    │  (AppContext)   │
-                    └─────────────────┘
-```
+### Lösning
 
-### Två alternativa implementationer
+#### Steg 1: Kör XKT-synk för att populera xkt_models-tabellen
 
-**Alternativ A: ElevenLabs Realtime STT (Rekommenderat)**
-- Ultra-låg latens för streaming tal-till-text
-- Kräver ELEVENLABS_API_KEY via connector
-- Professionellt och snabbt
+Befintlig `sync-xkt`-action i `asset-plus-sync` sparar redan:
+- `model_id` (från Asset+ API)
+- `model_name` (t.ex. "A-modell", "E-modell")
+- `file_name` (XKT-filnamnet)
+- `building_fm_guid`
 
-**Alternativ B: Web Speech API (Inbyggt i webbläsaren)**
-- Gratis, ingen API-nyckel behövs
-- Fungerar direkt i Chrome/Edge/Safari
-- Enklare att komma igång men mindre precis
+Detta skapar rätt mappning mellan XKT-filnamn och modellnamn.
 
----
+#### Steg 2: Förbättra matchningslogik i ModelVisibilitySelector
 
-## Del 1: Kommandon som stöds
-
-### Navigationskommandon
-| Röstkommando (svenska) | Åtgärd |
-|------------------------|--------|
-| "Öppna hem" / "Gå till hem" | `setActiveApp('home')` |
-| "Öppna portfolio" / "Visa portfolio" | `setActiveApp('portfolio')` |
-| "Öppna navigator" / "Starta navigator" | `setActiveApp('navigation')` |
-| "Öppna karta" / "Visa karta" | `setActiveApp('map')` |
-| "Öppna insights" | `setActiveApp('insights')` |
-| "Öppna 3D-visaren" | `setActiveApp('assetplus_viewer')` |
-
-### Sökkommandon
-| Röstkommando | Åtgärd |
-|--------------|--------|
-| "Sök [byggnad/rum]" | Öppnar sökning med termen |
-| "Hitta [namn]" | Söker och visar resultat |
-
-### 3D-kommandon
-| Röstkommando | Åtgärd |
-|--------------|--------|
-| "Visa [byggnad] i 3D" | `setViewer3dFmGuid(matchedBuilding.fmGuid)` |
-| "Stäng 3D" | `setViewer3dFmGuid(null)` |
-
-### Assistentkommandon
-| Röstkommando | Åtgärd |
-|--------------|--------|
-| "Prata med Gunnar" / "Öppna Gunnar" | Öppnar AI-chatten |
-| "Fråga Gunnar: [fråga]" | Skickar fråga direkt till Gunnar |
-
-### Hjälpkommando
-| Röstkommando | Åtgärd |
-|--------------|--------|
-| "Hjälp" / "Vilka kommandon finns?" | Visar lista över kommandon |
-
----
-
-## Del 2: Kommandotolk (Command Parser)
-
-**Ny fil:** `src/hooks/useVoiceCommands.ts`
-
-### Logik
-```typescript
-interface VoiceCommand {
-  patterns: RegExp[];  // Mönster att matcha mot
-  action: (ctx: AppContext, match: RegExpMatchArray) => void;
-  description: string;
-}
-
-const VOICE_COMMANDS: VoiceCommand[] = [
-  {
-    patterns: [
-      /^(öppna|gå till|visa) (hem|home|startsidan)$/i,
-      /^start$/i,
-    ],
-    action: (ctx) => ctx.setActiveApp('home'),
-    description: "Öppna hem",
-  },
-  {
-    patterns: [
-      /^(öppna|gå till|visa) (portfolio|portfölj|fastigheter)$/i,
-    ],
-    action: (ctx) => ctx.setActiveApp('portfolio'),
-    description: "Öppna portfolio",
-  },
-  {
-    patterns: [
-      /^(öppna|starta|visa) (navigator|navigatorn|träd|trädvy)$/i,
-    ],
-    action: (ctx) => ctx.setActiveApp('navigation'),
-    description: "Öppna navigator",
-  },
-  {
-    patterns: [
-      /^(öppna|visa) (karta|kartan|map)$/i,
-    ],
-    action: (ctx) => ctx.setActiveApp('map'),
-    description: "Öppna karta",
-  },
-  {
-    patterns: [
-      /^(öppna|visa) (3d|tre-d|viewer|visare)$/i,
-    ],
-    action: (ctx) => ctx.setActiveApp('assetplus_viewer'),
-    description: "Öppna 3D-visare",
-  },
-  {
-    patterns: [
-      /^visa (.+) i 3d$/i,
-      /^öppna (.+) i 3d$/i,
-    ],
-    action: (ctx, match) => {
-      const searchTerm = match[1];
-      // Sök i navigatorTreeData efter matchande byggnad
-      const building = findBuilding(ctx.navigatorTreeData, searchTerm);
-      if (building) {
-        ctx.setViewer3dFmGuid(building.fmGuid);
-      }
-    },
-    description: "Visa byggnad i 3D",
-  },
-  {
-    patterns: [
-      /^(stäng|avsluta) 3d$/i,
-    ],
-    action: (ctx) => ctx.setViewer3dFmGuid(null),
-    description: "Stäng 3D-visare",
-  },
-  {
-    patterns: [
-      /^(sök|hitta|leta efter) (.+)$/i,
-    ],
-    action: (ctx, match) => {
-      const searchTerm = match[2];
-      // Trigger global search
-      // Öppna sökfält och sätt sökterm
-    },
-    description: "Sök efter objekt",
-  },
-];
-```
-
----
-
-## Del 3: Voice Control Button/Panel
-
-**Ny fil:** `src/components/voice/VoiceControlButton.tsx`
-
-### UI-komponenten
-- Flytande mikrofon-knapp i hörnet (på mobil)
-- Pulserar när den lyssnar
-- Visar transkriberad text i en liten popup
-- Visar feedback för utförda kommandon
+Uppdatera `extractModels()` för att matcha XEOkit-modeller mot xkt_models:
 
 ```typescript
-interface VoiceControlButtonProps {
-  onCommand: (command: string) => void;
-}
+// Nuvarande problem:
+// XEOkit scene.models key: "abc123.xkt" eller "abc123"
+// Asset+ GetModels id: "xyz789" 
+// xkt_models.file_name: "abc123.xkt"
+// xkt_models.model_name: "A-modell"
 
-export default function VoiceControlButton({ onCommand }: VoiceControlButtonProps) {
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [feedback, setFeedback] = useState("");
-  
-  // ElevenLabs useScribe hook ELLER Web Speech API
-  
-  return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2">
-      {/* Transkription-popup */}
-      {transcript && (
-        <div className="bg-card border rounded-lg px-3 py-2 text-sm shadow-lg">
-          "{transcript}"
-        </div>
-      )}
-      
-      {/* Feedback-popup */}
-      {feedback && (
-        <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm">
-          ✓ {feedback}
-        </div>
-      )}
-      
-      {/* Mikrofon-knapp */}
-      <Button
-        onClick={toggleListening}
-        size="lg"
-        className={cn(
-          "h-14 w-14 rounded-full shadow-lg",
-          isListening && "animate-pulse bg-red-500"
-        )}
-      >
-        {isListening ? <MicOff /> : <Mic />}
-      </Button>
-    </div>
-  );
-}
-```
+// Lösning: Matcha på file_name istället för model_id
+const extractModels = useCallback(() => {
+  const viewer = getXeokitViewer();
+  if (!viewer?.scene?.models) return [];
 
----
+  const sceneModels = viewer.scene.models;
+  const extractedModels: ModelInfo[] = [];
 
-## Del 4: ElevenLabs Integration (Alternativ A)
-
-### Steg 1: Anslut ElevenLabs connector
-
-Använda `connect` tool med `connector_id: elevenlabs` för att konfigurera API-nyckeln.
-
-### Steg 2: Skapa Edge Function för token
-
-**Ny fil:** `supabase/functions/elevenlabs-scribe-token/index.ts`
-
-```typescript
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-  if (!ELEVENLABS_API_KEY) {
-    return new Response(JSON.stringify({ error: "ElevenLabs not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+  Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+    // modelId är typiskt filnamnet från XKT-laddaren
+    const fileName = (model.id || modelId).replace(/\.xkt$/i, '') + '.xkt';
+    const fileNameWithoutExt = fileName.replace(/\.xkt$/i, '');
+    
+    // Sök matchning baserat på filnamn
+    let matchedName = 
+      modelNamesMap.get(fileName) ||
+      modelNamesMap.get(fileName.toLowerCase()) ||
+      modelNamesMap.get(fileNameWithoutExt) ||
+      modelNamesMap.get(fileNameWithoutExt.toLowerCase());
+    
+    const friendlyName = matchedName || fileNameWithoutExt;
+    
+    extractedModels.push({
+      id: modelId,
+      name: friendlyName,
+      shortName: friendlyName.length > 25 ? friendlyName.substring(0, 25) + '...' : friendlyName,
     });
-  }
-
-  const response = await fetch(
-    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
-    {
-      method: "POST",
-      headers: { "xi-api-key": ELEVENLABS_API_KEY },
-    }
-  );
-
-  const { token } = await response.json();
-
-  return new Response(JSON.stringify({ token }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+
+  return extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+}, [getXeokitViewer, modelNamesMap]);
+```
+
+#### Steg 3: Uppdatera fetchModelNames för att bygga map korrekt
+
+```typescript
+// I fetchModelNames()
+if (dbModels && dbModels.length > 0) {
+  const nameMap = new Map<string, string>();
+  
+  dbModels.forEach((m) => {
+    // Mappa file_name -> model_name (primär matchning)
+    if (m.file_name && m.model_name) {
+      nameMap.set(m.file_name, m.model_name);
+      nameMap.set(m.file_name.toLowerCase(), m.model_name);
+      nameMap.set(m.file_name.replace('.xkt', ''), m.model_name);
+      nameMap.set(m.file_name.replace('.xkt', '').toLowerCase(), m.model_name);
+    }
+  });
+  
+  setModelNamesMap(nameMap);
+}
+```
+
+---
+
+## Del 2: Optimera XKT-filhämtning
+
+### Nuvarande problem
+XKT-filer hämtas direkt från Asset+ API vid varje sidladdning, vilket:
+- Tar lång tid (varje fil kan vara flera MB)
+- Belastar Asset+ servern
+- Kräver autentisering varje gång
+
+### Lösning: Använd synkade XKT-filer från Supabase Storage
+
+#### Steg 1: Verifiera att XKT-filer är synkade
+
+Kör `sync-xkt` action som laddar ner XKT-filer till Supabase Storage och sparar metadata i `xkt_models`.
+
+#### Steg 2: Uppdatera 3D-viewern att använda cachade filer
+
+Modifiera XKT-laddningslogiken i `AssetPlusViewer.tsx` eller `xkt-cache-service.ts`:
+
+```typescript
+// xkt-cache-service.ts - uppdatera checkCache
+async checkCache(modelId: string, buildingFmGuid: string): Promise<{cached: boolean, url?: string}> {
+  // Försök hitta i xkt_models-tabellen
+  const { data: model } = await supabase
+    .from('xkt_models')
+    .select('file_url, storage_path')
+    .eq('building_fm_guid', buildingFmGuid)
+    .or(`model_id.eq.${modelId},file_name.eq.${modelId},file_name.eq.${modelId}.xkt`)
+    .maybeSingle();
+  
+  if (model?.file_url) {
+    return { cached: true, url: model.file_url };
+  }
+  
+  // Fallback: hämta signerad URL från storage
+  if (model?.storage_path) {
+    const { data } = await supabase.storage
+      .from('xkt-models')
+      .createSignedUrl(model.storage_path, 3600);
+    
+    return { cached: true, url: data?.signedUrl };
+  }
+  
+  return { cached: false };
+}
+```
+
+---
+
+## Del 3: Optimera våningsplans-prestanda
+
+### Nuvarande problem
+`applyFloorVisibility()` itererar över varje objekt individuellt:
+```typescript
+objectIds.forEach(id => {
+  const entity = scene.objects?.[id];
+  if (entity) {
+    entity.visible = isVisible;
+  }
 });
 ```
 
-### Steg 3: React-komponent med useScribe
+Med 10,000+ objekt blir detta långsamt och blockerar UI.
+
+### Lösning: Använd XEOkit batch-API
 
 ```typescript
-import { useScribe } from "@elevenlabs/react";
+const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
+  const viewer = getXeokitViewer();
+  if (!viewer?.scene) return;
 
-function VoiceControlWithElevenLabs({ onCommand }) {
-  const scribe = useScribe({
-    modelId: "scribe_v2_realtime",
-    commitStrategy: "vad",
-    onCommittedTranscript: (data) => {
-      const command = data.text.toLowerCase().trim();
-      onCommand(command);
-    },
+  const scene = viewer.scene;
+  const childrenMap = buildChildrenMap();
+  
+  // Samla alla objekt-IDs att visa
+  const idsToShow: string[] = [];
+  
+  floors.forEach(floor => {
+    if (visibleIds.has(floor.id)) {
+      floor.metaObjectIds.forEach(metaObjId => {
+        idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
+      });
+    }
   });
   
-  const start = async () => {
-    const { data } = await supabase.functions.invoke("elevenlabs-scribe-token");
-    if (data?.token) {
-      await scribe.connect({ token: data.token, microphone: { noiseSuppression: true } });
-    }
-  };
+  // Batch-uppdatering - mycket snabbare!
+  if (scene.setObjectsVisible) {
+    // Dölj allt först
+    scene.setObjectsVisible(scene.objectIds, false);
+    // Visa valda
+    scene.setObjectsVisible(idsToShow, true);
+  } else {
+    // Fallback för äldre XEOkit
+    requestIdleCallback(() => {
+      const idSet = new Set(idsToShow);
+      Object.entries(scene.objects).forEach(([id, entity]: [string, any]) => {
+        if (entity) entity.visible = idSet.has(id);
+      });
+    }, { timeout: 50 });
+  }
+}, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
+```
+
+---
+
+## Del 4: Alternativ - Hämta modellnamn från Asset+ objektdata
+
+### Bakgrund
+Varje objekt i Asset+ har `parentBimObjectId` som pekar på BIM-modellen. Vi kan använda detta för att:
+1. Extrahera unika BIM-modell-IDs från synkade assets
+2. Mappa dessa till modellnamn via GetModels API
+3. Spara mappningen i `xkt_models`
+
+### Implementation i sync-funktionen
+
+```typescript
+// I asset-plus-sync/index.ts - ny action
+if (action === 'sync-bim-models-metadata') {
+  // Hämta unika parentBimObjectId från assets
+  const { data: bimObjectIds } = await supabase
+    .from('assets')
+    .select('attributes->parentBimObjectId')
+    .eq('building_fm_guid', buildingFmGuid)
+    .not('attributes->parentBimObjectId', 'is', null);
   
-  // ...
+  // Anropa Asset+ GetModels för att få modellnamn
+  // Uppdatera xkt_models med mappning
 }
 ```
 
 ---
 
-## Del 5: Web Speech API (Alternativ B - Gratis)
+## Teknisk sammanfattning
 
-**Fallback utan API-nyckel:**
-
-```typescript
-function useWebSpeechRecognition() {
-  const [transcript, setTranscript] = useState("");
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-
-  const start = useCallback(() => {
-    const SpeechRecognition = 
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      toast.error("Röststyrning stöds inte i denna webbläsare");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "sv-SE";  // Svenska
-    recognition.continuous = false;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event) => {
-      const result = event.results[event.results.length - 1];
-      setTranscript(result[0].transcript);
-      
-      if (result.isFinal) {
-        // Skicka till kommandotolk
-        onCommand(result[0].transcript);
-      }
-    };
-
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (e) => console.error("Speech error:", e);
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-  }, [onCommand]);
-
-  return { start, stop, isListening, transcript };
-}
-```
-
----
-
-## Del 6: Integration i AppLayout
-
-**Ändra:** `src/components/layout/AppLayout.tsx`
-
-```typescript
-import VoiceControlButton from '@/components/voice/VoiceControlButton';
-import { useVoiceCommands } from '@/hooks/useVoiceCommands';
-
-const AppLayout: React.FC = () => {
-  const appContext = useContext(AppContext);
-  const { executeCommand } = useVoiceCommands(appContext);
-  const isMobile = useIsMobile();
-
-  return (
-    <AppProvider>
-      <div className="flex h-screen ...">
-        {/* Existing layout */}
-        
-        {/* Voice control button - show on mobile or optionally desktop */}
-        {isMobile && (
-          <VoiceControlButton onCommand={executeCommand} />
-        )}
-      </div>
-    </AppProvider>
-  );
-};
-```
-
----
-
-## Nya filer att skapa
-
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/hooks/useVoiceCommands.ts` | Kommandotolk med alla stödda kommandon |
-| `src/hooks/useWebSpeechRecognition.ts` | Web Speech API-implementation |
-| `src/components/voice/VoiceControlButton.tsx` | Flytande mikrofon-knapp |
-| `supabase/functions/elevenlabs-scribe-token/index.ts` | Token-endpoint för ElevenLabs |
-
-## Filer att ändra
+### Filer att ändra
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/layout/AppLayout.tsx` | Lägg till VoiceControlButton |
-| `package.json` | Lägg till @elevenlabs/react (om ElevenLabs används) |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Förbättra matchningslogik för filnamn mot modellnamn |
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Implementera batch-visibility för bättre prestanda |
+| `src/services/xkt-cache-service.ts` | Prioritera databashämtning för XKT-filer |
 
----
+### Åtgärder att utföra
 
-## Implementationsordning
-
-1. **Fas 1: Web Speech API (snabbstart)**
-   - Implementera useWebSpeechRecognition hook
-   - Skapa VoiceControlButton med grundläggande UI
-   - Implementera kommandotolk med navigationskommandon
-
-2. **Fas 2: Kommandoexpansion**
-   - Lägg till sökkommandon
-   - Lägg till 3D-kommandon med byggnadsmatchning
-   - Integrera med Gunnar för avancerade frågor
-
-3. **Fas 3: ElevenLabs-uppgradering (valfritt)**
-   - Anslut ElevenLabs connector
-   - Skapa token-endpoint
-   - Byt till useScribe för bättre kvalitet
+1. **Kör XKT-synk** via API Settings för att populera `xkt_models`-tabellen
+2. **Uppdatera ModelVisibilitySelector** med bättre matchningslogik
+3. **Optimera FloorVisibilitySelector** med batch-uppdateringar
+4. **Uppdatera xkt-cache-service** att använda databas-först
 
 ---
 
 ## Förväntade resultat
 
-1. **Mikrofon-knapp** visas på mobila enheter
-2. **Tryck och prata** - användaren trycker på knappen och säger ett kommando
-3. **Transkription visas** i realtid medan användaren pratar
-4. **Kommando tolkas** och utförs automatiskt
-5. **Feedback visas** som bekräftelse ("Öppnade Portfolio")
-
-### Exempel på användarflöde:
-```
-Användare: [trycker på mikrofon-knappen]
-Användare: "Öppna portfolio"
-App: [visar "Öppna portfolio" i transkriptions-popup]
-App: [navigerar till Portfolio-vyn]
-App: [visar "✓ Öppnade Portfolio" som feedback]
-```
+1. **BIM-modellnamn** visas korrekt som "A-modell", "E-modell" etc.
+2. **XKT-filer** laddas från Supabase Storage istället för Asset+ (snabbare)
+3. **Våningsfiltrering** blir snabbare med batch-uppdateringar
+4. **Matchning** fungerar korrekt mellan XEOkit-modell-IDs och databas
 
 ---
 
-## Alternativ för att börja
+## Steg för användaren
 
-Vill du att jag:
-
-**A) Börjar med Web Speech API** (gratis, funkar direkt i de flesta webbläsare)?
-
-**B) Sätter upp ElevenLabs först** (bättre kvalitet, kräver API-nyckel)?
+1. Gå till API-inställningar
+2. Klicka på "Synka" för XKT-filer
+3. Vänta tills synkroniseringen är klar
+4. Öppna 3D-visaren - modellnamn ska nu visas korrekt
