@@ -42,6 +42,19 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
     const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
     const [clippingEnabled, setClippingEnabled] = useState(false);
+    
+    // Stable refs to preserve selection across re-renders
+    const visibleFloorIdsRef = React.useRef<Set<string>>(new Set());
+    const floorsRef = React.useRef<FloorInfo[]>([]);
+    
+    // Sync refs with state
+    React.useEffect(() => {
+      visibleFloorIdsRef.current = visibleFloorIds;
+    }, [visibleFloorIds]);
+    
+    React.useEffect(() => {
+      floorsRef.current = floors;
+    }, [floors]);
 
     // SectionPlane clipping hook (uses ceiling mode for 3D solo)
     const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
@@ -179,11 +192,29 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     }, [extractFloors, isInitialized]);
 
     // Re-extract floors when floor names map is updated (after DB fetch)
+    // IMPORTANT: Preserve existing selection when updating floor list
     useEffect(() => {
       if (!isInitialized || floorNamesMap.size === 0) return;
       
       const updatedFloors = extractFloors();
       if (updatedFloors.length > 0) {
+        // Preserve existing selection by matching IDs
+        const currentSelection = visibleFloorIdsRef.current;
+        const updatedIds = new Set(updatedFloors.map(f => f.id));
+        
+        // Keep selections that still exist in updated list
+        const preservedSelection = new Set(
+          Array.from(currentSelection).filter(id => updatedIds.has(id))
+        );
+        
+        // If no selections preserved, keep all visible (default state)
+        if (preservedSelection.size === 0 && currentSelection.size > 0) {
+          // All previous selections were lost - this shouldn't happen normally
+          console.debug("Floor selection reset - all floors now visible");
+        } else if (preservedSelection.size > 0) {
+          setVisibleFloorIds(preservedSelection);
+        }
+        
         setFloors(updatedFloors);
       }
     }, [floorNamesMap, isInitialized, extractFloors]);
