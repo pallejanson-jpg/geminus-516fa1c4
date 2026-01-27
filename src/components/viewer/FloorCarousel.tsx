@@ -168,8 +168,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
     }
   }, [getXeokitViewer, getAssetView]);
 
-  // Generate simple colored placeholder thumbnails instead of real renders
-  // (Real renders would require complex camera manipulation)
+  // Generate floor plan style placeholder thumbnails
   const generatePlaceholderThumbnails = useCallback((floors: FloorInfo[]): FloorInfo[] => {
     return floors.map((floor, index) => {
       const canvas = document.createElement('canvas');
@@ -178,33 +177,67 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
       const ctx = canvas.getContext('2d');
       
       if (ctx) {
-        // Create a simple floor plan placeholder
-        const hue = (index * 40) % 360;
-        ctx.fillStyle = `hsl(${hue}, 20%, 25%)`;
+        // Light blueprint background
+        ctx.fillStyle = '#f0f4f8';
         ctx.fillRect(0, 0, 120, 80);
         
-        // Draw grid pattern
-        ctx.strokeStyle = `hsl(${hue}, 30%, 35%)`;
-        ctx.lineWidth = 1;
-        for (let x = 15; x < 120; x += 20) {
-          ctx.beginPath();
-          ctx.moveTo(x, 10);
-          ctx.lineTo(x, 70);
-          ctx.stroke();
-        }
-        for (let y = 15; y < 80; y += 15) {
-          ctx.beginPath();
-          ctx.moveTo(10, y);
-          ctx.lineTo(110, y);
-          ctx.stroke();
-        }
+        // Draw architectural floor plan style
+        ctx.strokeStyle = '#1e3a5f';
+        ctx.lineWidth = 1.5;
         
-        // Draw floor number
+        // Outer walls
+        ctx.strokeRect(10, 8, 100, 64);
+        
+        // Interior walls - varied based on floor index
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#3b5998';
+        
+        // Horizontal dividers
+        const hDividers = [25, 45, 60];
+        hDividers.forEach((y, i) => {
+          if ((index + i) % 2 === 0) {
+            ctx.beginPath();
+            ctx.moveTo(10, y);
+            ctx.lineTo(110, y);
+            ctx.stroke();
+          }
+        });
+        
+        // Vertical dividers - create rooms
+        const vDividers = [35, 55, 75, 90];
+        vDividers.forEach((x, i) => {
+          if ((index + i) % 3 !== 0) {
+            ctx.beginPath();
+            ctx.moveTo(x, 8);
+            ctx.lineTo(x, 72);
+            ctx.stroke();
+          }
+        });
+        
+        // Door openings (gaps in walls)
+        ctx.fillStyle = '#f0f4f8';
+        ctx.fillRect(45, 7, 12, 3);
+        ctx.fillRect(70, 70, 12, 3);
+        ctx.fillRect(34, 30, 3, 10);
+        
+        // Small room details (furniture placeholders)
+        ctx.fillStyle = '#c8d6e5';
+        ctx.fillRect(15, 12, 8, 8);
+        ctx.fillRect(85, 55, 12, 10);
+        ctx.fillRect(60, 28, 6, 6);
+        
+        // Floor label background
+        ctx.fillStyle = 'rgba(30, 58, 95, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(35, 32, 50, 18, 3);
+        ctx.fill();
+        
+        // Floor label text
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 24px system-ui';
+        ctx.font = 'bold 11px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(floor.shortName, 60, 40);
+        ctx.fillText(`Plan ${floor.shortName}`, 60, 41);
       }
       
       return {
