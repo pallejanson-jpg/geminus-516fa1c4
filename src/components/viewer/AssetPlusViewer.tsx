@@ -82,6 +82,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const deferredDisplayActionRef = useRef<any>(undefined);
   const deferredFmGuidForDisplayRef = useRef<string | undefined>(undefined);
   const deferredDisplayActionForDisplayRef = useRef<any>(undefined);
+  const flashOnSelectEnabledRef = useRef(true);
   
   const [state, setState] = useState<ViewerState>({
     isLoading: true,
@@ -109,7 +110,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [showTreePanel, setShowTreePanel] = useState(false);
   const [showVisualizationPanel, setShowVisualizationPanel] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(true);
+  const [flashOnSelectEnabled, setFlashOnSelectEnabledState] = useState(true);
+  const [hoverHighlightEnabled, setHoverHighlightEnabled] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
+  const hoverListenerRef = useRef<(() => void) | null>(null);
+  
+  // Keep ref in sync with state for callback access
+  const setFlashOnSelectEnabled = useCallback((enabled: boolean) => {
+    flashOnSelectEnabledRef.current = enabled;
+    setFlashOnSelectEnabledState(enabled);
+  }, []);
   
   // Flash highlighting hook
   const { flashEntityById, stopFlashing } = useFlashHighlight();
@@ -706,6 +717,87 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, []);
 
+  // Toggle annotations visibility
+  const handleToggleAnnotations = useCallback(() => {
+    try {
+      const viewer = viewerInstanceRef.current?.assetViewer;
+      if (viewer && typeof viewer.onToggleAnnotation === 'function') {
+        const newValue = !showAnnotations;
+        viewer.onToggleAnnotation(newValue);
+        setShowAnnotations(newValue);
+      }
+    } catch (error) {
+      console.warn('Toggle annotations failed:', error);
+    }
+  }, [showAnnotations]);
+
+  // Setup hover highlight listener
+  const setupHoverHighlight = useCallback(() => {
+    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) return;
+
+    let lastHighlightedEntity: any = null;
+
+    const handleMouseMove = (coords: number[]) => {
+      // Reset previous highlight
+      if (lastHighlightedEntity) {
+        try {
+          lastHighlightedEntity.highlighted = false;
+        } catch (e) {
+          // Entity may have been disposed
+        }
+        lastHighlightedEntity = null;
+      }
+
+      // Pick entity under mouse
+      const hit = xeokitViewer.scene.pick({
+        canvasPos: coords,
+        pickSurface: false,
+      });
+
+      if (hit?.entity) {
+        hit.entity.highlighted = true;
+        lastHighlightedEntity = hit.entity;
+      }
+    };
+
+    // Subscribe to mouse move events
+    const cameraControl = xeokitViewer.cameraControl;
+    if (cameraControl) {
+      cameraControl.on('hover', handleMouseMove);
+      
+      // Store cleanup function
+      hoverListenerRef.current = () => {
+        cameraControl.off('hover', handleMouseMove);
+        if (lastHighlightedEntity) {
+          try {
+            lastHighlightedEntity.highlighted = false;
+          } catch (e) {
+            // Ignore
+          }
+        }
+      };
+    }
+  }, []);
+
+  // Cleanup hover highlight listener
+  const cleanupHoverHighlight = useCallback(() => {
+    if (hoverListenerRef.current) {
+      hoverListenerRef.current();
+      hoverListenerRef.current = null;
+    }
+  }, []);
+
+  // Toggle hover highlight
+  useEffect(() => {
+    if (hoverHighlightEnabled && state.isInitialized) {
+      setupHoverHighlight();
+    } else {
+      cleanupHoverHighlight();
+    }
+    return cleanupHoverHighlight;
+  }, [hoverHighlightEnabled, state.isInitialized, setupHoverHighlight, cleanupHoverHighlight]);
+
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
   const setupCacheInterceptor = useCallback(() => {
@@ -828,12 +920,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           console.log("getAccessTokenCallback");
           return accessTokenRef.current;
         },
-        // selectionChangedCallback - flash highlight on selection
+        // selectionChangedCallback - flash highlight on selection (if enabled)
         (items: any[], added: any[], removed: any[]) => {
           console.log("selectionChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
           
-          // Flash highlight newly selected items
-          if (added?.length > 0) {
+          // Flash highlight newly selected items only if enabled
+          if (added?.length > 0 && flashOnSelectEnabledRef.current) {
             const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
             if (xeokitViewer?.scene) {
               // Flash the first newly added item
@@ -1144,6 +1236,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
+                onToggleAnnotations={handleToggleAnnotations}
+                showAnnotations={showAnnotations}
+                flashOnSelectEnabled={flashOnSelectEnabled}
+                onToggleFlashOnSelect={setFlashOnSelectEnabled}
+                hoverHighlightEnabled={hoverHighlightEnabled}
+                onToggleHoverHighlight={setHoverHighlightEnabled}
               />
               
               {/* Tree View Panel - standalone mode (not in sheet) */}

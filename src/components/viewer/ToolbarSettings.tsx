@@ -38,7 +38,10 @@ export interface ToolConfig {
 }
 
 // Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 3;
+
+// Custom event name for same-tab settings updates
+export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
 
 // Navigation tools - shown in the bottom toolbar
 export const NAVIGATION_TOOLS: ToolConfig[] = [
@@ -52,6 +55,9 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
   { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
+  { id: 'annotations', label: 'Annotationer', visible: true, inOverflow: false },
+  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: true },
+  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: true },
 ];
 
 // Visualization tools - shown in the right sidebar toolbar
@@ -137,6 +143,8 @@ export const saveToolbarSettings = (tools: ToolConfig[]) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tools));
     localStorage.setItem(VERSION_KEY, String(SETTINGS_VERSION));
+    // Dispatch custom event for same-tab updates (storage event only fires for cross-tab)
+    window.dispatchEvent(new CustomEvent(TOOLBAR_SETTINGS_CHANGED_EVENT, { detail: tools }));
   } catch (e) {
     console.warn('Failed to save toolbar settings:', e);
   }
