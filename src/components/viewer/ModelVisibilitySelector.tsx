@@ -349,23 +349,23 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     }
 
     return (
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className={cn("space-y-2", className)}>
-        <div className="flex items-center justify-between" ref={ref}>
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className={cn("space-y-1.5 sm:space-y-2", className)}>
+        <div className="flex items-center justify-between gap-1" ref={ref}>
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="h-auto p-0 hover:bg-transparent justify-start gap-1.5"
+              className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1"
             >
-              <Box className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label className="text-xs text-muted-foreground uppercase tracking-wider cursor-pointer">
+              <Box className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
+              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">
                 BIM-modeller
               </Label>
-              <span className="text-xs text-muted-foreground ml-1">
+              <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
                 ({visibleCount}/{totalCount})
               </span>
               <ChevronDown className={cn(
-                "h-3.5 w-3.5 text-muted-foreground transition-transform",
+                "h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0",
                 isExpanded && "rotate-180"
               )} />
             </Button>
@@ -374,16 +374,16 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-2 text-xs"
+            className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs flex-shrink-0"
             onClick={handleShowAll}
             disabled={allVisible}
           >
-            Visa alla
+            Alla
           </Button>
         </div>
 
-        <CollapsibleContent className="space-y-1">
-          <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+        <CollapsibleContent className="space-y-0.5 sm:space-y-1">
+          <div className="space-y-0.5 sm:space-y-1 max-h-[200px] sm:max-h-[300px] overflow-y-auto pr-0.5 sm:pr-1">
             {models.map((model) => {
               const isVisible = visibleModelIds.has(model.id);
               const isSolo = visibleModelIds.size === 1 && isVisible;
@@ -392,19 +392,19 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
                 <div
                   key={model.id}
                   className={cn(
-                    "flex items-center justify-between py-1.5 px-2 rounded-md transition-colors",
+                    "flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1",
                     isVisible ? "bg-primary/5" : "bg-muted/30"
                   )}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                     <Switch
                       checked={isVisible}
                       onCheckedChange={(checked) => handleModelToggle(model.id, checked)}
-                      className="scale-90"
+                      className="scale-75 sm:scale-90"
                     />
                     <span 
                       className={cn(
-                        "text-sm truncate",
+                        "text-xs sm:text-sm truncate",
                         isVisible ? "text-foreground" : "text-muted-foreground"
                       )}
                       title={model.name}
@@ -417,7 +417,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
+                      className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0"
                       onClick={() => handleShowOnlyModel(model.id)}
                       title="Visa endast denna modell"
                     >

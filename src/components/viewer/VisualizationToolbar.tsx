@@ -204,39 +204,47 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
       </Button>
 
-      {/* Floating draggable panel */}
+      {/* Floating draggable panel - responsive positioning */}
       {isOpen && (
         <TooltipProvider delayDuration={300}>
           <div
             className={cn(
               "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-              "w-96 min-w-[380px] max-h-[80vh] flex flex-col",
+              "max-h-[80vh] flex flex-col",
+              // Mobile: full-width bottom sheet style
+              "inset-x-2 bottom-20 top-auto sm:inset-auto",
+              // Desktop: fixed-width draggable panel
+              "sm:w-80 md:w-96 sm:min-w-[320px]",
               isDragging && "cursor-grabbing opacity-90"
             )}
-            style={{ left: position.x, top: position.y }}
+            style={{ 
+              // Only apply position on desktop
+              left: typeof window !== 'undefined' && window.innerWidth >= 640 ? position.x : undefined,
+              top: typeof window !== 'undefined' && window.innerWidth >= 640 ? position.y : undefined
+            }}
           >
-          {/* Header - Draggable */}
+          {/* Header - Draggable on desktop */}
           <div
-            className="flex items-center justify-between p-3 border-b cursor-grab select-none"
+            className="flex items-center justify-between p-2.5 sm:p-3 border-b cursor-grab select-none"
             onMouseDown={handleMouseDown}
           >
             <div className="flex items-center gap-2">
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <GripVertical className="h-4 w-4 text-muted-foreground hidden sm:block" />
               <span className="font-medium text-sm">Visning</span>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-7 w-7 sm:h-6 sm:w-6"
               onClick={() => setIsOpen(false)}
             >
-              <X className="h-3 w-3" />
+              <X className="h-4 w-4 sm:h-3 sm:w-3" />
             </Button>
           </div>
 
           {/* Content - grows vertically with content */}
-          <ScrollArea className="flex-1 min-h-0 p-3">
-            <div className="space-y-4">
+          <ScrollArea className="flex-1 min-h-0 p-2.5 sm:p-3">
+            <div className="space-y-3 sm:space-y-4">
               {/* Model visibility section */}
               <ModelVisibilitySelector
                 viewerRef={viewerRef}
@@ -254,14 +262,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
               {/* Clipping height slider - visible when 2D mode is active */}
               {is2DMode && (
-                <div className="space-y-3">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wider block">
+                <div className="space-y-2 sm:space-y-3">
+                  <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider block">
                     Klipphöjd (2D-vy)
                   </Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                        <Scissors className="h-4 w-4" />
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+                        <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                       <div className="flex-1">
                         <Slider
@@ -273,12 +281,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                           className="w-full"
                         />
                       </div>
-                      <span className="text-sm font-medium w-12 text-right">
+                      <span className="text-xs sm:text-sm font-medium w-10 sm:w-12 text-right">
                         {clipHeight.toFixed(1)}m
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Höjd ovanför golv för planritningsklippning
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      Höjd ovanför golv
                     </p>
                   </div>
                 </div>
@@ -288,63 +296,63 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
               {/* Visibility section */}
               <div>
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
                   Visa
                 </Label>
 
-                <div className="space-y-1">
+                <div className="space-y-0.5 sm:space-y-1">
                   {isToolVisible('spaces') && (
-                    <div className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between py-1.5 sm:py-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         <div
                           className={cn(
-                            "p-1.5 rounded-md",
+                            "p-1 sm:p-1.5 rounded-md",
                             showSpaces
                               ? "bg-primary/10 text-primary"
                               : "bg-muted text-muted-foreground"
                           )}
                         >
-                          <Layers className="h-4 w-4" />
+                          <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-sm">Visa rum</span>
+                        <span className="text-xs sm:text-sm">Visa rum</span>
                       </div>
                       <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                     </div>
                   )}
 
                   {isToolVisible('annotations') && (
-                    <div className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between py-1.5 sm:py-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         <div
                           className={cn(
-                            "p-1.5 rounded-md",
+                            "p-1 sm:p-1.5 rounded-md",
                             showAnnotations
                               ? "bg-primary/10 text-primary"
                               : "bg-muted text-muted-foreground"
                           )}
                         >
-                          <MessageSquare className="h-4 w-4" />
+                          <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-sm">Visa annotationer</span>
+                        <span className="text-xs sm:text-sm">Visa annotationer</span>
                       </div>
                       <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
                     </div>
                   )}
 
                   {isToolVisible('visualization') && onToggleVisualization && (
-                    <div className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between py-1.5 sm:py-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         <div
                           className={cn(
-                            "p-1.5 rounded-md",
+                            "p-1 sm:p-1.5 rounded-md",
                             showVisualization
                               ? "bg-primary/10 text-primary"
                               : "bg-muted text-muted-foreground"
                           )}
                         >
-                          <Palette className="h-4 w-4" />
+                          <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-sm">Rumsvisualisering</span>
+                        <span className="text-xs sm:text-sm">Rumsvisualisering</span>
                       </div>
                       <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
                     </div>
@@ -355,20 +363,20 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               {/* Actions section */}
               {isToolVisible('addAsset') && onAddAsset && (
                 <div>
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                  <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
                     Åtgärder
                   </Label>
 
                   <div className="space-y-1">
                     <Button
                       variant="outline"
-                      className="w-full justify-start gap-3"
+                      className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
                       onClick={handleAddAsset}
                     >
-                      <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                        <Plus className="h-4 w-4" />
+                      <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+                        <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-sm">Registrera tillgång</span>
+                      <span className="text-xs sm:text-sm">Registrera tillgång</span>
                     </Button>
                   </div>
                 </div>
