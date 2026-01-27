@@ -1,15 +1,7 @@
 import React, { useCallback, useState, useEffect } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -37,6 +29,7 @@ interface VisualizationToolbarProps {
 
 /**
  * VisualizationToolbar with configurable tools based on ToolbarSettings.
+ * Renders as a floating, draggable panel when opened.
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { 
@@ -52,6 +45,20 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [showSpaces, setShowSpaces] = useState(true);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
+  
+  // Draggable panel state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Initialize position when panel opens
+  useEffect(() => {
+    if (isOpen && position.x === 0 && position.y === 0) {
+      // Position to the left of the trigger button (top-right area)
+      const initialX = typeof window !== 'undefined' ? window.innerWidth - 340 : 200;
+      setPosition({ x: initialX, y: 60 });
+    }
+  }, [isOpen, position.x, position.y]);
 
   // Reload settings when they change
   useEffect(() => {
@@ -71,6 +78,33 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     const setting = toolSettings.find(t => t.id === toolId);
     return setting?.visible ?? true;
   }, [toolSettings]);
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, select, [role="switch"]')) return;
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - 280, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
+      });
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
 
   const handleToggleSpaces = useCallback(() => {
     const newValue = !showSpaces;
@@ -110,31 +144,53 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   return (
     <div className={containerClassName}>
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="secondary"
-            size="icon"
-            title="Visning"
-            className={cn(
-              "shadow-lg bg-card/95 backdrop-blur-sm border",
-              "h-8 w-8 sm:h-10 sm:w-10"
-            )}
+      {/* Trigger button */}
+      <Button
+        variant="secondary"
+        size="icon"
+        title="Visning"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "shadow-lg bg-card/95 backdrop-blur-sm border",
+          "h-8 w-8 sm:h-10 sm:w-10",
+          isOpen && "ring-2 ring-primary"
+        )}
+      >
+        <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
+      </Button>
+
+      {/* Floating draggable panel */}
+      {isOpen && (
+        <div
+          className={cn(
+            "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
+            "w-72 max-h-[400px] flex flex-col",
+            isDragging && "cursor-grabbing opacity-90"
+          )}
+          style={{ left: position.x, top: position.y }}
+        >
+          {/* Header - Draggable */}
+          <div
+            className="flex items-center justify-between p-3 border-b cursor-grab select-none"
+            onMouseDown={handleMouseDown}
           >
-            <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
-        </SheetTrigger>
+            <div className="flex items-center gap-2">
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium text-sm">Visning</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setIsOpen(false)}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
 
-        <SheetContent side="right" className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm z-[60]" aria-describedby="visualization-description">
-          <SheetHeader className="p-4 pb-2">
-            <SheetTitle className="text-base">Visning</SheetTitle>
-            <SheetDescription id="visualization-description" className="sr-only">
-              Inställningar för visualisering och verktyg
-            </SheetDescription>
-          </SheetHeader>
-
-          <ScrollArea className="h-[calc(100vh-80px)]">
-            <div className="p-4 pt-0 space-y-4">
+          {/* Content */}
+          <ScrollArea className="flex-1 p-3">
+            <div className="space-y-4">
               {/* Visibility section */}
               <div>
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
@@ -224,8 +280,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               )}
             </div>
           </ScrollArea>
-        </SheetContent>
-      </Sheet>
+        </div>
+      )}
     </div>
   );
 };
