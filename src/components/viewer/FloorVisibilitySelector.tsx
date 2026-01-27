@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
-import { Layers, ChevronDown } from 'lucide-react';
+import { Layers, ChevronDown, Scissors } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { useSectionPlaneClipping } from '@/hooks/useSectionPlaneClipping';
 
 export interface FloorInfo {
   id: string;  // Representative ID for the group
@@ -20,6 +22,7 @@ interface FloorVisibilitySelectorProps {
   buildingFmGuid?: string;
   isViewerReady?: boolean;
   onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
+  enableClipping?: boolean;  // Enable SectionPlane clipping for single floor
   className?: string;
 }
 
@@ -30,13 +33,20 @@ interface FloorVisibilitySelectorProps {
  * Blocks interaction until viewer is ready to prevent UI freezing.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
-  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, className }, ref) => {
+  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className }, ref) => {
     const [floors, setFloors] = useState<FloorInfo[]>([]);
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
     const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
     const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
+    const [clippingEnabled, setClippingEnabled] = useState(false);
+
+    // SectionPlane clipping hook
+    const { updateClipping, isClippingActive } = useSectionPlaneClipping(viewerRef, {
+      enabled: enableClipping && clippingEnabled,
+      offset: 0.1, // 10cm above ceiling
+    });
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
@@ -261,6 +271,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         
         applyFloorVisibility(newSet);
         
+        // Update section plane clipping based on visible floors
+        updateClipping(Array.from(newSet));
+        
         if (onVisibleFloorsChange) {
           const visibleFloors = floors.filter(f => newSet.has(f.id));
           // Collect all fmGuids from all visible floors
@@ -270,12 +283,15 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         
         return newSet;
       });
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);
       setVisibleFloorIds(newSet);
       applyFloorVisibility(newSet);
+      
+      // Apply clipping when showing single floor
+      updateClipping([floorId]);
       
       if (onVisibleFloorsChange) {
         const floor = floors.find(f => f.id === floorId);
@@ -283,19 +299,22 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           onVisibleFloorsChange(floor.databaseLevelFmGuids);
         }
       }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
       setVisibleFloorIds(allIds);
       applyFloorVisibility(allIds);
       
+      // Remove clipping when showing all floors
+      updateClipping(Array.from(allIds));
+      
       if (onVisibleFloorsChange) {
         // Collect all fmGuids from all floors
         const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
         onVisibleFloorsChange(allFmGuids);
       }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
 
     const allVisible = useMemo(() => 
       floors.length > 0 && visibleFloorIds.size === floors.length,
@@ -349,15 +368,44 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             </Button>
           </CollapsibleTrigger>
           
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={handleShowAll}
-            disabled={allVisible}
-          >
-            Visa alla
-          </Button>
+          <div className="flex items-center gap-1">
+            {/* Clipping toggle */}
+            {enableClipping && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={clippingEnabled ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "h-6 px-1.5",
+                      clippingEnabled && "text-primary",
+                      isClippingActive && "ring-1 ring-primary"
+                    )}
+                    onClick={() => setClippingEnabled(!clippingEnabled)}
+                  >
+                    <Scissors className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">
+                    {clippingEnabled 
+                      ? 'Klippning aktiverad - objekt som sticker upp klipps vid taknivå' 
+                      : 'Aktivera klippning för att klippa bort fel ritade objekt'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={handleShowAll}
+              disabled={allVisible}
+            >
+              Visa alla
+            </Button>
+          </div>
         </div>
 
         <CollapsibleContent className="space-y-1">
