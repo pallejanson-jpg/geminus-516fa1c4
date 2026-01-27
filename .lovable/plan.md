@@ -1,236 +1,216 @@
 
-# Plan: Fixa BIM-modellnamn och våningsplansfrysning
+# Plan: Fixa BIM-modell och våningsplansfiltrering i 3D-viewer
 
 ## Sammanfattning
 
-1. **BIM-modellnamn**: Hämta riktiga modellnamn från Asset+ API (GetModels) istället för att parsa filnamn
-2. **Våningsplansfrysning**: Blockera våningsväljaren tills modellen är fullt laddad och visa "Laddar..." placeholder
+Fyra problem ska åtgärdas:
+
+1. BIM-modellnamn visar tekniska ID:n istället för läsbara namn från Asset+
+2. Alla modeller visas som standard (ska endast visa A-modeller)
+3. Våningsplan listas med dupliceringar från olika modeller
+4. Våningsfiltrering släcker inte allt på andra våningsplan
 
 ---
 
-## Del 1: Hämta korrekta modellnamn från Asset+
+## Del 1: Fixa BIM-modellnamn
 
 **Fil:** `src/components/viewer/ModelVisibilitySelector.tsx`
 
-### Problem
-Nuvarande kod (rad 50-59):
+### Problemanalys
+
+Nuvarande kod försöker matcha `viewer.scene.models[modelId]` mot `model.id` från Asset+ API. Men modelId i viewer kan vara ett XKT-filnamn (t.ex. `755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt`) medan Asset+ API returnerar ett annat format.
+
+### Lösning
+
+1. **Hämta modellnamn från databasen istället för API:** Använd `xkt_models`-tabellen som redan har `model_name` synkat från Asset+, eller alternativt hämta direkt från Asset+ API och matcha på filnamn/modell-ID
+
+2. **Förbättra matchningslogik:** Asset+ GetModels-svaret inkluderar ofta `xktFileUrl` som innehåller filnamnet. Matcha scene model ID mot den sista delen av URL:en
+
 ```typescript
-Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
-  const name = model.id || modelId;
-  const shortName = name.replace(/\.xkt$/i, '').replace(/-/g, ' ');
-  // Resultat: tekniska namn som "755950d9 f235 4d64 a38d b7fc15a0cad9"
+// Ny matchningslogik
+const extractModelIdFromUrl = (xktFileUrl: string): string => {
+  const fileName = xktFileUrl.split('/').pop() || '';
+  return fileName.replace('.xkt', '');
+};
+
+// I API-anropet, bygg en map från alla möjliga identifierare
+apiModels.forEach((m: any) => {
+  // Primär: model.id
+  if (m.id && m.name) nameMap.set(m.id, m.name);
+  // Sekundär: extraherat från xktFileUrl  
+  if (m.xktFileUrl && m.name) {
+    const fileId = extractModelIdFromUrl(m.xktFileUrl);
+    nameMap.set(fileId, m.name);
+    // Även med .xkt extension
+    nameMap.set(fileId + '.xkt', m.name);
+  }
 });
 ```
 
-### Lösning
-1. Lägg till API-anrop till Asset+ `GetModels` endpoint
-2. Matcha `modelId` från scenen mot `model.id` från API:et
-3. Använd `model.name` som visningsnamn (t.ex. "A-modell", "E-modell")
-
-### Ny logik
+3. **Sätt endast A-modeller synliga som standard:**
 
 ```typescript
-// Ny state för API-hämtade namn
-const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
-
-// Hämta modellnamn från Asset+ vid mount
-useEffect(() => {
-  const fetchModelNames = async () => {
-    try {
-      const [tokenResult, configResult] = await Promise.all([
-        supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
-        supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
-      ]);
-      
-      const accessToken = tokenResult.data?.accessToken;
-      const apiUrl = configResult.data?.apiUrl;
-      const apiKey = configResult.data?.apiKey;
-      
-      if (!accessToken || !apiUrl) return;
-      
-      // Hämta modeller för byggnaden
-      const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-      const response = await fetch(
-        `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-      
-      if (response.ok) {
-        const models = await response.json();
-        const nameMap = new Map();
-        models.forEach((m: any) => {
-          // Mappa modelId -> name (t.ex. "A-modell")
-          nameMap.set(m.id, m.name || m.id);
-        });
-        setModelNamesMap(nameMap);
-      }
-    } catch (e) {
-      console.debug("Failed to fetch model names:", e);
-    }
-  };
-  
-  fetchModelNames();
-}, [buildingFmGuid]);
-
-// I extractModels, använd namn från API:et
-const friendlyName = modelNamesMap.get(modelId) || name;
-```
-
-### Props-ändring
-Lägg till `buildingFmGuid` prop för att kunna anropa rätt API:
-
-```typescript
-interface ModelVisibilitySelectorProps {
-  viewerRef: React.MutableRefObject<any>;
-  buildingFmGuid: string;  // NY
-  onVisibleModelsChange?: (visibleModelIds: string[]) => void;
-  className?: string;
-}
+// I checkModels(), ändra från allIds till endast A-modeller
+const checkModels = () => {
+  const newModels = extractModels();
+  if (newModels.length > 0) {
+    setModels(newModels);
+    // Filtrera till endast A-modeller som standard
+    const aModelIds = new Set(
+      newModels
+        .filter(m => m.name.toLowerCase().startsWith('a') || m.name.toLowerCase().includes('a-modell'))
+        .map(m => m.id)
+    );
+    // Om inga A-modeller hittas, visa alla
+    setVisibleModelIds(aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id)));
+    // Applicera synligheten direkt
+    applyModelVisibility(aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id)));
+    setIsInitialized(true);
+  }
+};
 ```
 
 ---
 
-## Del 2: Blockera våningsväljare tills modell är laddad
+## Del 2: Fixa våningsplan - deduplicering och korrekt filtrering
 
 **Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
 
-### Problem
-Den rekursiva `getChildIds` funktionen (rad 124-132) itererar genom alla metaObjects för varje våning. Med tusentals objekt blir detta extremt långsamt.
+### Problemanalys
+
+Varje BIM-modell har sina egna `IfcBuildingStorey`-objekt. "Plan 1" i A-modellen och "Plan 1" i E-modellen är tekniskt två olika metaObjects med olika ID:n. Nuvarande kod:
+- Listar varje storey separat (dupliceringar)
+- Vid filtrering döljs endast objekt under det specifika storey-objektet, inte alla med samma namn
+
+### Lösning: Gruppera våningar efter namn
 
 ```typescript
-// PROBLEMATISK KOD - O(n*m) komplexitet
-const getChildIds = (metaObj: any): string[] => {
-  const ids: string[] = [metaObj.id];
-  const children = Object.values(metaObjects).filter(
-    (m: any) => m.parent?.id === metaObj.id  // Skannar ALLA objekt
-  );
-  children.forEach((child: any) => {
-    ids.push(...getChildIds(child));  // Rekursivt för varje barn
-  });
-  return ids;
-};
-```
-
-### Lösning
-
-1. **Lägg till "isViewerReady" prop** - Blockera komponentens rendering tills modellen är laddad
-2. **Visa placeholder** - "Laddar våningar..." medan modellen laddas
-3. **Lazy-beräkning** - Beräkna endast child IDs när användaren faktiskt expanderar och togglar
-
-### Props-ändring
-
-```typescript
-interface FloorVisibilitySelectorProps {
-  viewerRef: React.MutableRefObject<any>;
-  isViewerReady?: boolean;  // NY - blockera tills true
-  onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
-  className?: string;
+// Ny FloorInfo-typ som grupperar alla metaObjects med samma namn
+export interface FloorInfo {
+  id: string;  // Primärt ID (första metaObject)
+  name: string;  // Våningsnamn (t.ex. "Plan 1")
+  shortName: string;
+  metaObjectIds: string[];  // ALLA metaObjects med detta namn (från alla modeller)
+  databaseLevelFmGuids: string[];  // Alla fmGuids för denna våning
 }
-```
 
-### Ny UI-logik
-
-```typescript
-// Om viewer inte är redo, visa placeholder
-if (!isViewerReady) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-        <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-          Våningsplan
-        </Label>
-        <span className="text-xs text-muted-foreground ml-1 italic">
-          (Laddar...)
-        </span>
-      </div>
-    </div>
-  );
-}
-```
-
-### Optimering av applyFloorVisibility
-
-```typescript
-// OPTIMERAD - Förbered en parent-to-children map en gång
-const buildChildrenMap = useCallback(() => {
+// Ny extractFloors som grupperar
+const extractFloors = useCallback(() => {
   const viewer = getXeokitViewer();
-  if (!viewer?.metaScene?.metaObjects) return new Map();
-  
+  if (!viewer?.metaScene?.metaObjects) return [];
+
   const metaObjects = viewer.metaScene.metaObjects;
-  const childrenMap = new Map<string, string[]>();
-  
-  // En genomgång av alla objekt
-  Object.values(metaObjects).forEach((metaObj: any) => {
-    const parentId = metaObj.parent?.id;
-    if (parentId) {
-      if (!childrenMap.has(parentId)) {
-        childrenMap.set(parentId, []);
+  const floorsByName = new Map<string, FloorInfo>();
+
+  Object.values(metaObjects).forEach((metaObject: any) => {
+    const type = metaObject?.type?.toLowerCase();
+    if (type === 'ifcbuildingstorey') {
+      const name = metaObject.name || 'Unknown Floor';
+      const shortMatch = name.match(/(\d+)/);
+      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
+      
+      if (floorsByName.has(name)) {
+        // Lägg till detta metaObject till befintlig grupp
+        const existing = floorsByName.get(name)!;
+        existing.metaObjectIds.push(metaObject.id);
+        const fmGuid = metaObject.originalSystemId || metaObject.id;
+        if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
+          existing.databaseLevelFmGuids.push(fmGuid);
+        }
+      } else {
+        // Skapa ny grupp
+        floorsByName.set(name, {
+          id: metaObject.id,  // Första ID som representant
+          name,
+          shortName,
+          metaObjectIds: [metaObject.id],
+          databaseLevelFmGuids: [metaObject.originalSystemId || metaObject.id],
+        });
       }
-      childrenMap.get(parentId)!.push(metaObj.id);
     }
   });
-  
-  return childrenMap;
-}, [getXeokitViewer]);
 
-// Använd cached map istället för att skanna alla objekt varje gång
-const getChildIds = (metaObjId: string, childrenMap: Map<string, string[]>): string[] => {
-  const ids: string[] = [metaObjId];
-  const children = childrenMap.get(metaObjId) || [];
-  children.forEach(childId => {
-    ids.push(...getChildIds(childId, childrenMap));
+  // Konvertera till array och sortera
+  const extractedFloors = Array.from(floorsByName.values());
+  extractedFloors.sort((a, b) => {
+    const numA = parseInt(a.shortName) || 0;
+    const numB = parseInt(b.shortName) || 0;
+    return numA - numB;
   });
-  return ids;
-};
+
+  return extractedFloors;
+}, [getXeokitViewer]);
+```
+
+### Lösning: Uppdatera applyFloorVisibility för grupperad logik
+
+```typescript
+const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
+  const viewer = getXeokitViewer();
+  if (!viewer?.scene) return;
+
+  const scene = viewer.scene;
+  const childrenMap = buildChildrenMap();
+
+  floors.forEach(floor => {
+    const isVisible = visibleIds.has(floor.id);
+    
+    // Iterera genom ALLA metaObjects för denna våning (från alla modeller)
+    floor.metaObjectIds.forEach(metaObjId => {
+      const objectIds = getChildIdsOptimized(metaObjId, childrenMap);
+      objectIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) {
+          entity.visible = isVisible;
+        }
+      });
+    });
+  });
+}, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 ```
 
 ---
 
-## Del 3: Uppdatera AssetPlusViewer och VisualizationToolbar
+## Del 3: Uppdatera FloorInfo-gränssnittet
 
-**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+**Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
 
-### Ändringar
-1. Exponera `isViewerReady` state till child-komponenter
-2. Skicka `buildingFmGuid` till `ModelVisibilitySelector`
+Befintligt interface behöver uppdateras:
 
 ```typescript
-// I AssetPlusViewer
-const isViewerReady = modelLoadState === 'loaded' && initStep === 'ready';
-
-// I VisualizationToolbar props
-<VisualizationToolbar
-  viewerRef={viewerInstanceRef}
-  buildingFmGuid={buildingFmGuid}
-  isViewerReady={isViewerReady}
-  ...
-/>
-```
-
-**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
-
-### Ändringar
-Skicka nya props vidare till child-komponenter:
-
-```typescript
-interface VisualizationToolbarProps {
-  ...
-  buildingFmGuid?: string;  // NY
-  isViewerReady?: boolean;  // NY
+// FRÅN:
+export interface FloorInfo {
+  id: string;
+  fmGuid: string;
+  name: string;
+  shortName: string;
+  viewerMetaObjectId: string;
+  databaseLevelFmGuid?: string;
 }
 
-// I komponenten
-<ModelVisibilitySelector
-  viewerRef={viewerRef}
-  buildingFmGuid={buildingFmGuid || ''}
-/>
+// TILL:
+export interface FloorInfo {
+  id: string;  // Representativt ID för gruppen
+  name: string;
+  shortName: string;
+  metaObjectIds: string[];  // Alla metaObject-ID med detta namn
+  databaseLevelFmGuids: string[];  // Alla databas-fmGuids
+}
+```
 
-<FloorVisibilitySelector
-  viewerRef={viewerRef}
-  isViewerReady={isViewerReady}
-  onVisibleFloorsChange={handleVisibleFloorsChange}
-/>
+---
+
+## Del 4: Synkronisera med onVisibleFloorsChange callback
+
+När callback anropas, skicka alla relevanta fmGuids:
+
+```typescript
+if (onVisibleFloorsChange) {
+  const visibleFloors = floors.filter(f => newSet.has(f.id));
+  // Samla alla fmGuids från alla synliga våningar
+  const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+  onVisibleFloorsChange(allFmGuids);
+}
 ```
 
 ---
@@ -239,15 +219,44 @@ interface VisualizationToolbarProps {
 
 | Fil | Ändringar |
 |-----|-----------|
-| `ModelVisibilitySelector.tsx` | Lägg till API-anrop för modellnamn, ny prop `buildingFmGuid` |
-| `FloorVisibilitySelector.tsx` | Ny prop `isViewerReady`, placeholder vid laddning, optimerad child-beräkning |
-| `VisualizationToolbar.tsx` | Nya props `buildingFmGuid`, `isViewerReady` som skickas vidare |
-| `AssetPlusViewer.tsx` | Exponera `isViewerReady`, skicka `buildingFmGuid` till toolbar |
+| `ModelVisibilitySelector.tsx` | Förbättrad modellnamn-matchning via xktFileUrl, A-modeller synliga som standard |
+| `FloorVisibilitySelector.tsx` | Gruppera våningar efter namn, applicera synlighet på alla metaObjects med samma namn |
+
+---
+
+## Teknisk referens
+
+### Asset+ GetModels API-respons (exempel)
+```json
+[
+  {
+    "id": "model-guid-123",
+    "name": "A-modell",
+    "xktFileUrl": "https://.../.../755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt"
+  },
+  {
+    "id": "model-guid-456", 
+    "name": "E-modell",
+    "xktFileUrl": "https://.../.../abc123-def456.xkt"
+  }
+]
+```
+
+### XEOkit scene.models (exempel)
+```javascript
+viewer.scene.models = {
+  "755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt": { ... },
+  "abc123-def456.xkt": { ... }
+}
+```
+
+Matchning sker genom att extrahera filnamnet från `xktFileUrl` och jämföra med scene model keys.
 
 ---
 
 ## Förväntade resultat
 
-1. **Modellnamn**: Visas som "A-modell", "E-modell" etc. istället för GUID-baserade namn
-2. **Ingen frysning**: Våningsväljaren visar "Laddar..." tills modellen är redo
-3. **Snabbare toggle**: Optimerad beräkning när användaren togglar våningar
+1. **Modellnamn:** Visas som "A-modell", "E-modell" etc.
+2. **Standardsynlighet:** Endast A-modeller synliga vid start
+3. **Våningsplan:** Varje unikt våningsnamn listas endast EN gång
+4. **Våningsfiltrering:** När "Plan 1" väljs släcks ALLA objekt på andra våningar i alla modeller
