@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
@@ -177,14 +178,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       {/* Floating draggable panel */}
       {isOpen && (
-        <div
-          className={cn(
-            "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-            "w-96 min-w-[380px] max-h-[80vh] flex flex-col",
-            isDragging && "cursor-grabbing opacity-90"
-          )}
-          style={{ left: position.x, top: position.y }}
-        >
+        <TooltipProvider delayDuration={300}>
+          <div
+            className={cn(
+              "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
+              "w-96 min-w-[380px] max-h-[80vh] flex flex-col",
+              isDragging && "cursor-grabbing opacity-90"
+            )}
+            style={{ left: position.x, top: position.y }}
+          >
           {/* Header - Draggable */}
           <div
             className="flex items-center justify-between p-3 border-b cursor-grab select-none"
@@ -213,12 +215,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 buildingFmGuid={buildingFmGuid}
               />
 
-              {/* Floor visibility section */}
+              {/* Floor visibility section with clipping support */}
               <FloorVisibilitySelector
                 viewerRef={viewerRef}
                 buildingFmGuid={buildingFmGuid}
                 isViewerReady={isViewerReady}
                 onVisibleFloorsChange={handleVisibleFloorsChange}
+                enableClipping={true}
               />
 
               <Separator />
@@ -312,7 +315,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               )}
             </div>
           </ScrollArea>
-        </div>
+          </div>
+        </TooltipProvider>
       )}
     </div>
   );
