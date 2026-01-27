@@ -38,7 +38,7 @@ export interface ToolConfig {
 }
 
 // Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
 
 // Custom event name for same-tab settings updates
 export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
@@ -55,8 +55,8 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
   { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
-  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: true },
-  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: true },
+  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: false },
+  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: false },
 ];
 
 // Visualization tools - shown in the right sidebar toolbar (view options & toggles)
@@ -68,6 +68,8 @@ export const VISUALIZATION_TOOLS: ToolConfig[] = [
   { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
   { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
   { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
+  { id: 'bimModels', label: 'BIM-modeller', visible: true, inOverflow: false },
+  { id: 'floors', label: 'Våningsplan', visible: true, inOverflow: false },
   { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
   { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
   { id: 'addAsset', label: 'Registrera tillgång', visible: true, inOverflow: false },
