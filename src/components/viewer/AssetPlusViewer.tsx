@@ -1236,8 +1236,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
-                onToggleAnnotations={handleToggleAnnotations}
-                showAnnotations={showAnnotations}
                 flashOnSelectEnabled={flashOnSelectEnabled}
                 onToggleFlashOnSelect={setFlashOnSelectEnabled}
                 hoverHighlightEnabled={hoverHighlightEnabled}

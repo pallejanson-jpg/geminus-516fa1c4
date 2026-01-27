@@ -501,7 +501,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
             )}
 
             {/* BIM Models Section */}
-            {availableModels.length > 0 && (
+            {isToolVisible('bimModels') && availableModels.length > 0 && (
               <>
                 <div>
                   <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
@@ -537,7 +537,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
             )}
 
             {/* Floors Section */}
-            {availableFloors.length > 0 && (
+            {isToolVisible('floors') && availableFloors.length > 0 && (
               <>
                 <div>
                   <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
