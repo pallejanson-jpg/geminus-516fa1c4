@@ -84,11 +84,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const { toast } = useToast();
     const { appConfigs, setAppConfigs } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState('apps');
-    const [isSyncing, setIsSyncing] = useState(false);
+    // Separate syncing states for each sync type
+    const [isSyncingStructure, setIsSyncingStructure] = useState(false);
+    const [isSyncingAssets, setIsSyncingAssets] = useState(false);
+    const [isSyncingXkt, setIsSyncingXkt] = useState(false);
     const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
     const [assetCount, setAssetCount] = useState<number>(0);
     const [syncCheck, setSyncCheck] = useState<NewSyncCheckResult | null>(null);
     const [isCheckingSync, setIsCheckingSync] = useState(false);
+    const [hasCheckedSync, setHasCheckedSync] = useState(false);
     
     // Config form state
     const [config, setConfig] = useState<ConfigState>({
@@ -214,7 +218,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Sync structure (buildings, storeys, spaces)
     const handleSyncStructure = async () => {
-        setIsSyncing(true);
+        setIsSyncingStructure(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'sync-structure' }
@@ -227,16 +231,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: "Hämtar byggnader, våningsplan och rum från Asset+.",
             });
 
+            // Poll only fetchSyncStatus, not checkSyncStatus continuously
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
-                await checkSyncStatus();
             }, 3000);
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingStructure(false);
                 fetchSyncStatus();
-                checkSyncStatus();
+                checkSyncStatus(); // Only check once when done
             }, 300000);
 
         } catch (error: any) {
@@ -245,13 +249,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Synk misslyckades",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingStructure(false);
         }
     };
 
     // Sync all assets (chunked by building)
     const handleSyncAssetsChunked = async () => {
-        setIsSyncing(true);
+        setIsSyncingAssets(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'sync-assets-chunked' }
@@ -264,17 +268,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: "Hämtar alla tillgångar byggnad för byggnad. Detta kan ta lång tid.",
             });
 
+            // Poll only fetchSyncStatus, not checkSyncStatus continuously
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
-                await checkSyncStatus();
             }, 5000);
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingAssets(false);
                 fetchSyncStatus();
-                checkSyncStatus();
-            }, 600000); // 10 minutes for large datasets
+                checkSyncStatus(); // Only check once when done
+            }, 600000);
 
         } catch (error: any) {
             toast({
@@ -282,13 +286,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Synk misslyckades",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingAssets(false);
         }
     };
 
     // Sync all XKT models to database
     const handleSyncXkt = async () => {
-        setIsSyncing(true);
+        setIsSyncingXkt(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'sync-xkt' }
@@ -301,16 +305,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: "Hämtar och sparar 3D-modeller till databasen för snabbare laddning.",
             });
 
+            // Poll only fetchSyncStatus, not checkSyncStatus continuously
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
-                await checkSyncStatus();
             }, 5000);
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingXkt(false);
                 fetchSyncStatus();
-                checkSyncStatus();
+                checkSyncStatus(); // Only check once when done
             }, 600000);
 
         } catch (error: any) {
@@ -319,7 +323,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Synk misslyckades",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingXkt(false);
         }
     };
 
@@ -364,9 +368,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Trigger sync for all buildings (objectType 1 only)
+    // Trigger sync for all buildings (objectType 1 only) - Legacy, uses structure sync state
     const handleSyncAllBuildings = async () => {
-        setIsSyncing(true);
+        setIsSyncingStructure(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'sync-all-buildings' }
@@ -379,13 +383,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: "Hämtar alla byggnader från Asset+. Detta kan ta en stund.",
             });
 
-            // Poll for status
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
                 const latestStatus = syncStatuses.find(s => s.subtree_id === 'buildings');
                 if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
                     clearInterval(pollInterval);
-                    setIsSyncing(false);
+                    setIsSyncingStructure(false);
                     checkSyncStatus();
                     if (latestStatus.sync_status === 'completed') {
                         toast({
@@ -398,7 +401,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingStructure(false);
                 fetchSyncStatus();
                 checkSyncStatus();
             }, 300000);
@@ -409,11 +412,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Synk misslyckades",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingStructure(false);
         }
     };
 
-    // Trigger building sync
+    // Trigger building sync - Legacy, uses structure sync state
     const handleBuildingSync = async () => {
         if (favoriteBuildings.length === 0) {
             toast({
@@ -427,7 +430,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         const buildingFmGuid = favoriteBuildings[0].fm_guid;
         const buildingName = favoriteBuildings[0].common_name || favoriteBuildings[0].name;
 
-        setIsSyncing(true);
+        setIsSyncingStructure(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'building-sync', buildingFmGuid }
@@ -440,20 +443,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: `Synkar ${buildingName} med byggnadsplan och rum.`,
             });
 
-            // Poll for status
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
                 const latestStatus = syncStatuses.find(s => s.subtree_id === buildingFmGuid);
                 if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
                     clearInterval(pollInterval);
-                    setIsSyncing(false);
+                    setIsSyncingStructure(false);
                     checkSyncStatus();
                 }
             }, 3000);
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingStructure(false);
                 fetchSyncStatus();
                 checkSyncStatus();
             }, 300000);
@@ -464,13 +466,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Synk misslyckades",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingStructure(false);
         }
     };
 
-    // Trigger incremental sync
+    // Trigger incremental sync - Legacy, uses assets sync state
     const handleIncrementalSync = async () => {
-        setIsSyncing(true);
+        setIsSyncingAssets(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'incremental-sync' }
@@ -483,20 +485,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: "Synkar endast ändrade objekt sedan senaste synk.",
             });
 
-            // Poll for status
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
                 const latestStatus = syncStatuses.find(s => s.subtree_id === 'full');
                 if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
                     clearInterval(pollInterval);
-                    setIsSyncing(false);
-                    checkSyncStatus(); // Refresh sync check
+                    setIsSyncingAssets(false);
+                    checkSyncStatus();
                 }
             }, 3000);
 
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingAssets(false);
                 fetchSyncStatus();
                 checkSyncStatus();
             }, 300000);
@@ -507,12 +508,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Sync Failed",
                 description: error.message,
             });
-            setIsSyncing(false);
+            setIsSyncingAssets(false);
         }
     };
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && !hasCheckedSync) {
             fetchSyncStatus();
             fetchConfig();
             checkSyncStatus();
@@ -520,8 +521,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setConnectionStatus('idle');
             setConnectionMessage('');
             setIsEditMode(false);
+            setHasCheckedSync(true);
         }
-    }, [isOpen]);
+        // Reset when modal closes
+        if (!isOpen) {
+            setHasCheckedSync(false);
+        }
+    }, [isOpen, hasCheckedSync]);
 
     const handleCancelEdit = () => {
         if (originalConfig) {
@@ -685,15 +691,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Legacy full sync - uses assets sync state
     const handleTriggerSync = async () => {
-        setIsSyncing(true);
+        setIsSyncingAssets(true);
         try {
-            // Fire and forget - the edge function may timeout for large datasets
-            // but continues syncing in batches. We track progress via polling.
             supabase.functions.invoke('asset-plus-sync', {
                 body: { action: 'full-sync' }
             }).catch((err) => {
-                // Edge function timeout is expected for large datasets
                 console.log('Edge function call ended (may be timeout):', err?.message);
             });
 
@@ -702,21 +706,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: `Syncing data from Asset+. This may take a few minutes for large datasets.`,
             });
 
-            // Poll for status updates - longer duration for large datasets
             const pollInterval = setInterval(async () => {
                 await fetchSyncStatus();
-                // Check if sync completed or failed
                 const latestStatus = syncStatuses.find(s => s.subtree_id === 'full');
                 if (latestStatus?.sync_status === 'completed' || latestStatus?.sync_status === 'failed') {
                     clearInterval(pollInterval);
-                    setIsSyncing(false);
+                    setIsSyncingAssets(false);
                 }
             }, 3000);
 
-            // Stop polling after 5 minutes max
             setTimeout(() => {
                 clearInterval(pollInterval);
-                setIsSyncing(false);
+                setIsSyncingAssets(false);
                 fetchSyncStatus();
             }, 300000);
 
@@ -727,7 +728,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 title: "Sync Failed",
                 description: error.message || "Could not start synchronization",
             });
-            setIsSyncing(false);
+            setIsSyncingAssets(false);
         }
     };
 
@@ -1392,11 +1393,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </p>
                                     <Button 
                                         onClick={handleSyncStructure}
-                                        disabled={isSyncing}
+                                        disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
                                         size="sm"
                                         className="gap-1 h-8"
                                     >
-                                        {isSyncing && syncCheck?.structure?.syncState?.sync_status === 'running' ? (
+                                        {isSyncingStructure ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                         ) : (
                                             <RefreshCw className="h-3 w-3" />
@@ -1451,11 +1452,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </p>
                                     <Button 
                                         onClick={handleSyncAssetsChunked}
-                                        disabled={isSyncing}
+                                        disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
                                         size="sm"
                                         className="gap-1 h-8"
                                     >
-                                        {isSyncing && syncCheck?.assets?.syncState?.sync_status === 'running' ? (
+                                        {isSyncingAssets ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                         ) : (
                                             <RefreshCw className="h-3 w-3" />
@@ -1490,18 +1491,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? (
+                                        {isCheckingSync ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        ) : syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? (
                                             <Badge variant="default" className="bg-green-600 text-xs gap-1">
                                                 <CheckCircle2 className="h-3 w-3" />
                                                 I synk
                                             </Badge>
-                                        ) : syncCheck?.xkt?.syncState?.sync_status === 'running' ? (
-                                            <Badge variant="secondary" className="text-xs gap-1">
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                                Synkar...
-                                            </Badge>
                                         ) : (
-                                            <Badge variant="outline" className="text-xs gap-1 text-red-600 border-red-400">
+                                            <Badge variant="destructive" className="text-xs gap-1">
                                                 <AlertCircle className="h-3 w-3" />
                                                 Ej synkad
                                             </Badge>
@@ -1515,12 +1513,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </p>
                                     <Button 
                                         onClick={handleSyncXkt}
-                                        disabled={isSyncing}
+                                        disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
                                         size="sm"
                                         variant="secondary"
                                         className="gap-1 h-8"
                                     >
-                                        {isSyncing && syncCheck?.xkt?.syncState?.sync_status === 'running' ? (
+                                        {isSyncingXkt ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                         ) : (
                                             <RefreshCw className="h-3 w-3" />
