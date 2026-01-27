@@ -211,28 +211,43 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       return ids;
     }, []);
 
-    // Apply visibility changes to 3D viewer (optimized, handles grouped floors)
+    // Apply visibility changes to 3D viewer (optimized batch approach)
     const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
 
       const scene = viewer.scene;
       const childrenMap = buildChildrenMap();
-
+      
+      // Collect ALL object IDs to show (batch approach for performance)
+      const idsToShow: string[] = [];
+      
       floors.forEach(floor => {
-        const isVisible = visibleIds.has(floor.id);
-        
-        // Iterate through ALL metaObjects for this floor (from all models)
-        floor.metaObjectIds.forEach(metaObjId => {
-          const objectIds = getChildIdsOptimized(metaObjId, childrenMap);
-          objectIds.forEach(id => {
-            const entity = scene.objects?.[id];
-            if (entity) {
-              entity.visible = isVisible;
+        if (visibleIds.has(floor.id)) {
+          // Collect all child IDs for visible floors
+          floor.metaObjectIds.forEach(metaObjId => {
+            idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
+          });
+        }
+      });
+      
+      const idsToShowSet = new Set(idsToShow);
+      
+      // Use XEOkit batch API if available, otherwise use requestIdleCallback
+      if (scene.setObjectsVisible && scene.objectIds) {
+        // Native batch update - much faster!
+        scene.setObjectsVisible(scene.objectIds, false);
+        scene.setObjectsVisible(idsToShow, true);
+      } else {
+        // Fallback with requestIdleCallback to avoid blocking UI
+        requestIdleCallback(() => {
+          Object.entries(scene.objects || {}).forEach(([id, entity]: [string, any]) => {
+            if (entity && typeof entity.visible !== 'undefined') {
+              entity.visible = idsToShowSet.has(id);
             }
           });
-        });
-      });
+        }, { timeout: 100 });
+      }
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
     const handleFloorToggle = useCallback((floorId: string, checked: boolean) => {

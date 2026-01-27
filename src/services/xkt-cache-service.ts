@@ -31,32 +31,57 @@ export class XktCacheService {
   }
 
   /**
-   * Check if a model is cached - first checks database, then edge function
+   * Check if a model is cached - first checks database with multiple matching strategies
    */
   async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult> {
     try {
-      // First check the xkt_models database table
+      // First check the xkt_models database table with multiple matching strategies
       if (buildingFmGuid) {
-        const { data: dbModel } = await supabase
+        // Clean up modelId for matching
+        const cleanModelId = modelId.replace(/\.xkt$/i, '');
+        const modelIdWithExt = cleanModelId + '.xkt';
+        
+        // Try matching on model_id or file_name
+        const { data: dbModels } = await supabase
           .from('xkt_models')
-          .select('file_url, storage_path')
-          .eq('building_fm_guid', buildingFmGuid)
-          .eq('model_id', modelId)
-          .maybeSingle();
+          .select('file_url, storage_path, file_name, model_id')
+          .eq('building_fm_guid', buildingFmGuid);
 
-        if (dbModel?.file_url) {
-          console.log('XKT found in database:', modelId);
-          return { cached: true, url: dbModel.file_url };
-        }
+        if (dbModels && dbModels.length > 0) {
+          // Find matching model using multiple strategies
+          const match = dbModels.find(m => {
+            const fileName = m.file_name?.toLowerCase() || '';
+            const dbModelId = m.model_id?.toLowerCase() || '';
+            const searchId = cleanModelId.toLowerCase();
+            const searchIdWithExt = modelIdWithExt.toLowerCase();
+            
+            return (
+              fileName === searchIdWithExt ||
+              fileName === searchId ||
+              fileName.includes(searchId) ||
+              dbModelId === searchId ||
+              dbModelId.includes(searchId) ||
+              searchId.includes(dbModelId)
+            );
+          });
 
-        // If we have storage_path but no file_url, generate a new signed URL
-        if (dbModel?.storage_path) {
-          const { data: urlData } = await supabase.storage
-            .from('xkt-models')
-            .createSignedUrl(dbModel.storage_path, 3600);
-          
-          if (urlData?.signedUrl) {
-            return { cached: true, url: urlData.signedUrl };
+          if (match) {
+            if (match.file_url) {
+              console.log('XKT found in database:', modelId);
+              return { cached: true, url: match.file_url };
+            }
+
+            // If we have storage_path but no file_url, generate a new signed URL
+            if (match.storage_path) {
+              const { data: urlData } = await supabase.storage
+                .from('xkt-models')
+                .createSignedUrl(match.storage_path, 3600);
+              
+              if (urlData?.signedUrl) {
+                console.log('XKT signed URL generated:', modelId);
+                return { cached: true, url: urlData.signedUrl };
+              }
+            }
           }
         }
       }
@@ -86,34 +111,14 @@ export class XktCacheService {
   }
 
   /**
-   * Get a cached model URL - first checks database, then edge function
+   * Get a cached model URL - first checks database with flexible matching
    */
   async getCachedModel(modelId: string, buildingFmGuid?: string): Promise<string | null> {
     try {
-      // First check the xkt_models database table
-      if (buildingFmGuid) {
-        const { data: dbModel } = await supabase
-          .from('xkt_models')
-          .select('file_url, storage_path')
-          .eq('building_fm_guid', buildingFmGuid)
-          .eq('model_id', modelId)
-          .maybeSingle();
-
-        if (dbModel?.file_url) {
-          console.log('XKT model loaded from database:', modelId);
-          return dbModel.file_url;
-        }
-
-        // If we have storage_path but no file_url, generate a new signed URL
-        if (dbModel?.storage_path) {
-          const { data: urlData } = await supabase.storage
-            .from('xkt-models')
-            .createSignedUrl(dbModel.storage_path, 3600);
-          
-          if (urlData?.signedUrl) {
-            return urlData.signedUrl;
-          }
-        }
+      // Use the improved checkCache which has flexible matching
+      const result = await this.checkCache(modelId, buildingFmGuid);
+      if (result.cached && result.url) {
+        return result.url;
       }
 
       // Fallback to edge function
