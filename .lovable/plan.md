@@ -1,185 +1,245 @@
 
-# Plan: Fix Asset+ Sync System and 3D Viewer Toolbars
+# Plan: Fix 3D Viewer Toolbars - Right Overflow Menu and Bottom Navigation
 
-## Overview
+## Problem Summary
 
-This plan addresses two main areas:
-1. **Restructure Asset+ synchronization** with 3 clear sync types replacing the current confusing setup
-2. **Fix 3D viewer toolbar issues** in both the right overflow menu and bottom navigation bar
+Two critical toolbar issues in the 3D viewer:
 
----
+1. **Right Overflow Menu (VisualizationToolbar)**: Opens but shows no content - only "Vy-alternativ" heading visible
+2. **Bottom Navigation Toolbar (ViewerToolbar)**: All buttons work sporadically/unreliably
 
-## Part 1: Asset+ Synchronization Restructure
+## Root Cause Analysis
 
-### Current Problem
+### Issue 1: VisualizationToolbar Content Not Rendering
 
-The current sync UI shows confusing entries like individual building GUIDs (e.g., `42495e64-b484-4303-9a9d-5aa8f200ed03`) alongside `buildings` and `full`. The difference:
-- `buildings` = Only Building records (ObjectType 1)
-- `{buildingFmGuid}` = Specific building's full hierarchy (Building + Storeys + Spaces)
-- `full` = All object types (stops around 40,000 due to API/memory limits)
+The Sheet component opens correctly, but content sections are conditionally rendered based on data that fails to load:
 
-### New Sync Structure
+| Section | Condition | Data Source | Status |
+|---------|-----------|-------------|--------|
+| BIM Models | `availableModels.length > 0` | `viewerRef.current?.$refs?.AssetViewer?.availableModels` | Fails - wrong ref path |
+| Floors | `availableFloors.length > 0` | XEOKit metaScene `IfcBuildingStorey` objects | May not be ready |
+| Tree View | `onToggleTreeView && localTreeView` | Parent prop | Works if prop passed |
+| Visualization | `onToggleVisualization && localVisualization` | Parent prop | Works if prop passed |
 
-Replace current sync buttons with 3 clear categories:
+The core problem: The ref access pattern `viewerRef.current?.$refs?.AssetViewer` is incorrect. The Asset+ viewer instance is stored directly in `viewerInstanceRef.current`, not nested under `$refs.AssetViewer`.
 
-| Sync Type | Description | Action | Technical Notes |
-|-----------|-------------|--------|-----------------|
-| **1. Byggnad/Plan/Rum** | Building hierarchy only | `sync-structure` | ObjectTypes 1, 2, 3 (Buildings, Storeys, Spaces) |
-| **2. Alla Tillgangar** | All assets including instances | `sync-assets-chunked` | ObjectType 4 only, chunked by building to avoid 40k limit |
-| **3. XKT-filer** | 3D model file caching | `cache-xkt-models` | Preload XKT files to Supabase storage |
+**Correct patterns:**
+- Direct API: `viewerRef.current?.assetViewer` (for high-level methods)
+- XEOKit access: `viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer` (for XEOKit engine)
 
-### Technical Implementation
+### Issue 2: ViewerToolbar Buttons Sporadic
 
-#### A. Backend Changes (asset-plus-sync edge function)
+The `getAssetView()` helper returns `undefined` intermittently because:
+1. The Vue `$refs` chain isn't stable during viewer state transitions
+2. No readiness checks before executing tool commands
+3. Tool state can get "stuck" when commands fail silently
 
-1. **New action: `sync-structure`**
-   - Syncs only ObjectTypes 1, 2, 3 (Buildings, Building Storeys, Spaces)
-   - Uses `subtree_id: 'structure'`
-   - Estimated ~5,000-10,000 records (fast sync)
+## Technical Solution
 
-2. **New action: `sync-assets-chunked`**
-   - Syncs ObjectType 4 (Instances/Assets) in chunks
-   - Strategy: Loop through all buildings, sync assets per building
-   - Uses `subtree_id: 'assets'`
-   - Avoids memory issues by processing in building-sized batches
+### Part A: Fix VisualizationToolbar Content Loading
 
-3. **New action: `cache-all-xkt`**
-   - Iterates through buildings with XKT models
-   - Calls existing xkt-cache service to prefetch/store models
-   - Uses `subtree_id: 'xkt'`
+**File: `src/components/viewer/VisualizationToolbar.tsx`**
 
-#### B. Frontend Changes (ApiSettingsModal.tsx)
+1. **Fix BIM models data source** (lines 204-215):
+   - Change from `viewer?.$refs?.AssetViewer?.availableModels` 
+   - To: Query XEOKit `metaScene.metaModels` for loaded model IDs
+   
+2. **Add fallback content when no models/floors found**:
+   - Show informative message instead of empty space
+   - Ensure basic view toggles always render
 
-1. **Replace current sync section with 3 cards:**
+3. **Improve viewer readiness check**:
+   - Add `isViewerReady` derived state
+   - Show loading indicator until viewer is fully initialized
+
+4. **Fix inconsistent ref access patterns**:
+   - Standardize on documented patterns from AssetPlusViewer
+
+### Part B: Fix ViewerToolbar Reliability
+
+**File: `src/components/viewer/ViewerToolbar.tsx`**
+
+1. **Add viewer readiness guard**:
+   - Create `isViewerReady` state that tracks when viewer is operational
+   - Disable buttons when viewer not ready (visual feedback)
+
+2. **Improve getAssetView helper**:
+   - Add null checks with console warnings
+   - Return early if viewer not ready
+
+3. **Add tool state reset**:
+   - Reset `activeTool` when viewer becomes unavailable
+   - Clear tool state on errors
+
+4. **Debounce rapid clicks**:
+   - Prevent multiple rapid tool activations
+
+### Part C: Ensure Content Sections Always Visible
+
+Update VisualizationToolbar to show key sections regardless of dynamic data:
 
 ```text
 +------------------------------------------+
-| Byggnad/Plan/Rum                    [Synka]|
-| Byggnader, våningsplan och rum            |
-| Status: Grön/Röd badge | 1,234 objekt     |
+| Vy-alternativ (Header)                   |
 +------------------------------------------+
-| Alla Tillgangar                     [Synka]|
-| Installationer och inventarier            |
-| Status: Grön/Röd badge | 38,500 objekt    |
+| Vyalternativ                             |
+|   X-ray läge                    [Switch] |
+|   Visa rum                      [Switch] |
+|   Navigationskub                [Switch] |
+|   Minimap                       [Switch] |
+|   Annotationer                  [Switch] |
 +------------------------------------------+
-| XKT-filer                          [Cacha]|
-| 3D-modellfiler för snabbare laddning      |
-| Status: Grön/Röd badge | 14/14 modeller   |
+| Visualisering                            |
+|   Modellträd                    [Switch] |
+|   Rumsvisualisering             [Switch] |
++------------------------------------------+
+| BIM-modeller (if available)              |
+|   Model A                       [Switch] |
+|   Model B                       [Switch] |
++------------------------------------------+
+| Våningsplan (if available)               |
+|   Plan 1                        [Switch] |
+|   Plan 2                        [Switch] |
++------------------------------------------+
+| Objektdata                               |
+|   Objektinfo (Asset+)           [Button] |
+|   Egenskaper                    [Button] |
+|   Registrera tillgång           [Button] |
++------------------------------------------+
+| Inställningar                            |
+|   Anpassa verktygsfält          [Button] |
 +------------------------------------------+
 ```
 
-2. **Status indicators:**
-   - Green badge when sync completed successfully
-   - Red badge when out of sync or failed
-   - Spinning loader during sync
-
----
-
-## Part 2: 3D Viewer Toolbar Fixes
-
-### Issue A: Right Overflow Menu Not Working
-
-**Root Cause Analysis:**
-The VisualizationToolbar uses a Sheet component. The issue is likely that:
-1. The `viewerRef` might not be properly populated when the component renders
-2. The Sheet trigger button renders but the Sheet content doesn't show
-
-**Fix:**
-1. Verify Sheet opens correctly by checking `isOpen` state
-2. Ensure `viewerRef.current` is accessible
-3. Debug the Sheet component's mounting/unmounting behavior
-
-### Issue B: Move Items to Right Overflow Menu
-
-Items to relocate from bottom toolbar to right menu:
-- **Annotations toggle** (currently in bottom toolbar)
-- **Show Rooms toggle** (add to right menu)
-- **Room Visualization panel** (already in right menu, verify it works)
-
-**Implementation:**
-1. Remove `annotations` from `NAVIGATION_TOOLS` in ToolbarSettings.tsx
-2. Add `annotations` to `VISUALIZATION_TOOLS`
-3. Ensure all view toggles are in the right menu
-4. Keep only navigation/interaction tools in bottom toolbar
-
-### Issue C: Bottom Navigation Buttons Sporadic
-
-**Likely Causes:**
-1. `getAssetView()` returns undefined intermittently
-2. Tool state not properly reset between interactions
-3. Event handlers attached to elements that get recreated
-
-**Fix:**
-1. Add null checks before all viewer operations
-2. Debounce rapid button clicks
-3. Ensure viewer reference is stable
-4. Add console logging for debugging
-
----
-
-## File Changes Summary
-
-### Backend Files
+## File Changes
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/asset-plus-sync/index.ts` | Add `sync-structure`, `sync-assets-chunked`, `cache-all-xkt` actions |
+| `src/components/viewer/VisualizationToolbar.tsx` | Fix ref access, add fallbacks, improve data loading |
+| `src/components/viewer/ViewerToolbar.tsx` | Add readiness guards, debounce, improve reliability |
 
-### Frontend Files
+## Detailed Implementation
 
-| File | Changes |
-|------|---------|
-| `src/components/settings/ApiSettingsModal.tsx` | New sync UI with 3 cards, remove old confusing structure |
-| `src/components/viewer/VisualizationToolbar.tsx` | Debug Sheet, add annotations toggle, verify all toggles work |
-| `src/components/viewer/ViewerToolbar.tsx` | Remove annotations, add better null checks, improve reliability |
-| `src/components/viewer/ToolbarSettings.tsx` | Move `annotations` to VISUALIZATION_TOOLS, update defaults |
+### VisualizationToolbar.tsx Changes
 
----
-
-## Technical Details
-
-### Edge Function: sync-assets-chunked Strategy
-
-```text
-1. Get list of all buildings from local DB
-2. For each building:
-   a. Fetch assets (ObjectType 4) with filter: buildingFmGuid = building.fm_guid
-   b. Batch insert (500 at a time)
-   c. Update progress in asset_sync_state
-3. Mark sync complete when all buildings processed
+1. **Line 119-121** - Fix `getXeokitViewer`:
+```typescript
+const getXeokitViewer = useCallback(() => {
+  // Use the correct ref chain for XEOKit access
+  const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+  return assetViewer?.$refs?.assetView?.viewer;
+}, [viewerRef]);
 ```
 
-This avoids the 40,000 object limit by never requesting more than one building's assets at a time.
-
-### XKT Cache Sync Strategy
-
-```text
-1. Query buildings from local DB
-2. For each building with models:
-   a. Check if XKT already cached in Supabase storage
-   b. If not, fetch from Asset+ API and store
-   c. Track progress in asset_sync_state with subtree_id='xkt'
+2. **Lines 200-240** - Fix models/floors data fetching:
+```typescript
+useEffect(() => {
+  if (!isOpen) return;
+  
+  // Add small delay to ensure viewer is ready
+  const timer = setTimeout(() => {
+    try {
+      const xeokitViewer = getXeokitViewer();
+      
+      // Get models from XEOKit metaScene (not Asset+ API)
+      if (xeokitViewer?.metaScene?.metaModels) {
+        const models = Object.values(xeokitViewer.metaScene.metaModels).map((m: any) => ({
+          id: m.id,
+          name: m.id, // Model ID as name
+          visible: true,
+        }));
+        setAvailableModels(models);
+      }
+      
+      // Floors logic remains similar but with better error handling
+      // ...
+    } catch (e) {
+      console.debug('Models/floors fetch:', e);
+    }
+  }, 100);
+  
+  return () => clearTimeout(timer);
+}, [isOpen, getXeokitViewer]);
 ```
 
----
+3. **Add loading/empty state UI** after line 406:
+```typescript
+{/* Show message if no dynamic content loaded */}
+{availableModels.length === 0 && availableFloors.length === 0 && (
+  <div className="text-xs text-muted-foreground italic py-2">
+    Laddar modelldata...
+  </div>
+)}
+```
+
+### ViewerToolbar.tsx Changes
+
+1. **Add viewer readiness state** after line 67:
+```typescript
+const [isViewerReady, setIsViewerReady] = useState(false);
+
+useEffect(() => {
+  const checkReady = () => {
+    const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+    setIsViewerReady(!!assetView?.viewer);
+  };
+  
+  // Check on mount and after short delay
+  checkReady();
+  const timer = setTimeout(checkReady, 500);
+  return () => clearTimeout(timer);
+}, [viewerRef]);
+```
+
+2. **Update getAssetView** (lines 87-89):
+```typescript
+const getAssetView = useCallback(() => {
+  const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+  if (!assetView) {
+    console.debug('AssetView not ready');
+  }
+  return assetView;
+}, [viewerRef]);
+```
+
+3. **Disable buttons when not ready** - Update ToolButton:
+```typescript
+const ToolButton = React.forwardRef<...>(({ ..., disabled }, ref) => {
+  // Add disabled prop handling
+  return (
+    <Button
+      ref={ref}
+      disabled={disabled || !isViewerReady}
+      // ...
+    />
+  );
+});
+```
+
+4. **Add click debouncing** to tool handlers:
+```typescript
+const handleToolChange = useCallback((tool: ViewerTool) => {
+  if (!isViewerReady) {
+    console.debug('Viewer not ready for tool change');
+    return;
+  }
+  // ... rest of existing logic
+}, [getAssetView, activeTool, isViewerReady]);
+```
 
 ## Testing Checklist
 
-- [ ] Byggnad/Plan/Rum sync completes and shows green status
-- [ ] Alla Tillgangar sync handles 40,000+ objects without timeout
-- [ ] XKT cache prefetches all available models
-- [ ] Right overflow menu opens and shows all options
-- [ ] Annotations toggle works from right menu
-- [ ] Room visualization activates from right menu
-- [ ] Bottom navigation buttons respond consistently
-- [ ] Tool settings changes apply immediately
-
----
-
-## Priority Order
-
-1. Fix VisualizationToolbar Sheet (blocking issue)
-2. Move annotations to right menu
-3. Implement 3 new sync types in backend
-4. Update sync UI in ApiSettingsModal
-5. Improve bottom toolbar reliability
+After implementation:
+- [ ] Open 3D viewer with a building
+- [ ] Click right overflow menu (three dots) - Sheet should open with all sections visible
+- [ ] Verify X-ray, Spaces, NavCube, Minimap, Annotations toggles work
+- [ ] Verify Modellträd and Rumsvisualisering toggles work
+- [ ] Verify BIM models section shows loaded models (if any)
+- [ ] Verify Floors section shows building floors
+- [ ] Verify Objektdata buttons work (Objektinfo, Egenskaper, Registrera tillgång)
+- [ ] Test bottom toolbar: Orbit/First Person toggle
+- [ ] Test bottom toolbar: Zoom in/out/fit
+- [ ] Test bottom toolbar: Select/Measure/Slicer tools
+- [ ] Test bottom toolbar: 2D/3D toggle
+- [ ] Test Flash and Hover toggles
+- [ ] Verify rapid clicking doesn't break tool state
