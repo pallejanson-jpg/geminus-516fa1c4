@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
+import ModelVisibilitySelector from "./ModelVisibilitySelector";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -202,7 +203,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           {/* Content */}
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-4">
-              {/* Floor visibility section - NEW */}
+              {/* Model visibility section */}
+              <ModelVisibilitySelector
+                viewerRef={viewerRef}
+              />
+
+              {/* Floor visibility section */}
               <FloorVisibilitySelector
                 viewerRef={viewerRef}
                 onVisibleFloorsChange={handleVisibleFloorsChange}
