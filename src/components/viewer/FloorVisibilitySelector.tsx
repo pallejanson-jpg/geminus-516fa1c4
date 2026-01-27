@@ -17,6 +17,7 @@ export interface FloorInfo {
 
 interface FloorVisibilitySelectorProps {
   viewerRef: React.MutableRefObject<any>;
+  isViewerReady?: boolean;
   onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
   className?: string;
 }
@@ -25,13 +26,15 @@ interface FloorVisibilitySelectorProps {
  * Multi-select floor visibility selector with switches.
  * Collapsed by default - expands when user clicks to select floors.
  * Controls which floors are visible in the 3D viewer.
+ * Blocks interaction until viewer is ready to prevent UI freezing.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
-  ({ viewerRef, onVisibleFloorsChange, className }, ref) => {
+  ({ viewerRef, isViewerReady = true, onVisibleFloorsChange, className }, ref) => {
     const [floors, setFloors] = useState<FloorInfo[]>([]);
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
+    const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
@@ -108,32 +111,53 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       return () => clearInterval(interval);
     }, [extractFloors, isInitialized]);
 
-    // Apply visibility changes to 3D viewer
+    // Build parent-to-children map ONCE for fast lookups (O(n) instead of O(n*m))
+    const buildChildrenMap = useCallback(() => {
+      if (childrenMapCache) return childrenMapCache;
+      
+      const viewer = getXeokitViewer();
+      if (!viewer?.metaScene?.metaObjects) return new Map<string, string[]>();
+
+      const metaObjects = viewer.metaScene.metaObjects;
+      const childrenMap = new Map<string, string[]>();
+
+      // Single pass through all objects to build parent->children map
+      Object.values(metaObjects).forEach((metaObj: any) => {
+        const parentId = metaObj.parent?.id;
+        if (parentId) {
+          if (!childrenMap.has(parentId)) {
+            childrenMap.set(parentId, []);
+          }
+          childrenMap.get(parentId)!.push(metaObj.id);
+        }
+      });
+
+      setChildrenMapCache(childrenMap);
+      return childrenMap;
+    }, [getXeokitViewer, childrenMapCache]);
+
+    // Optimized recursive function using cached children map
+    const getChildIdsOptimized = useCallback((metaObjId: string, childrenMap: Map<string, string[]>): string[] => {
+      const ids: string[] = [metaObjId];
+      const children = childrenMap.get(metaObjId) || [];
+      children.forEach(childId => {
+        ids.push(...getChildIdsOptimized(childId, childrenMap));
+      });
+      return ids;
+    }, []);
+
+    // Apply visibility changes to 3D viewer (optimized)
     const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
 
       const scene = viewer.scene;
-      const metaObjects = viewer.metaScene?.metaObjects || {};
+      const childrenMap = buildChildrenMap();
 
       floors.forEach(floor => {
         const isVisible = visibleIds.has(floor.id);
-        const floorMetaObject = metaObjects[floor.viewerMetaObjectId];
-        if (!floorMetaObject) return;
+        const objectIds = getChildIdsOptimized(floor.viewerMetaObjectId, childrenMap);
 
-        const getChildIds = (metaObj: any): string[] => {
-          const ids: string[] = [metaObj.id];
-          const children = Object.values(metaObjects).filter(
-            (m: any) => m.parent?.id === metaObj.id
-          );
-          children.forEach((child: any) => {
-            ids.push(...getChildIds(child));
-          });
-          return ids;
-        };
-
-        const objectIds = getChildIds(floorMetaObject);
-        
         objectIds.forEach(id => {
           const entity = scene.objects?.[id];
           if (entity) {
@@ -141,7 +165,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           }
         });
       });
-    }, [getXeokitViewer, floors]);
+    }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
     const handleFloorToggle = useCallback((floorId: string, checked: boolean) => {
       setVisibleFloorIds(prev => {
@@ -193,6 +217,23 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
 
     const visibleCount = visibleFloorIds.size;
     const totalCount = floors.length;
+
+    // Show loading placeholder if viewer is not ready
+    if (!isViewerReady) {
+      return (
+        <div className={cn("space-y-2", className)} ref={ref}>
+          <div className="flex items-center gap-1.5">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Våningsplan
+            </Label>
+            <span className="text-xs text-muted-foreground/70 ml-1 italic">
+              (Laddar...)
+            </span>
+          </div>
+        </div>
+      );
+    }
 
     if (floors.length === 0) {
       return null;

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
-import { Box, ChevronDown } from 'lucide-react';
+import { Box, ChevronDown, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface ModelInfo {
   id: string;
@@ -14,6 +15,7 @@ export interface ModelInfo {
 
 interface ModelVisibilitySelectorProps {
   viewerRef: React.MutableRefObject<any>;
+  buildingFmGuid?: string;
   onVisibleModelsChange?: (visibleModelIds: string[]) => void;
   className?: string;
 }
@@ -22,13 +24,65 @@ interface ModelVisibilitySelectorProps {
  * Multi-select BIM model visibility selector with switches.
  * Collapsed by default - expands when user clicks to select models.
  * Controls which models are visible in the 3D viewer.
+ * Fetches model names from Asset+ API for user-friendly display.
  */
 const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelectorProps>(
-  ({ viewerRef, onVisibleModelsChange, className }, ref) => {
+  ({ viewerRef, buildingFmGuid, onVisibleModelsChange, className }, ref) => {
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [visibleModelIds, setVisibleModelIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
+    const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
+    const [isLoadingNames, setIsLoadingNames] = useState(false);
+
+    // Fetch model names from Asset+ API
+    useEffect(() => {
+      if (!buildingFmGuid) return;
+
+      const fetchModelNames = async () => {
+        setIsLoadingNames(true);
+        try {
+          const [tokenResult, configResult] = await Promise.all([
+            supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
+            supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
+          ]);
+
+          const accessToken = tokenResult.data?.accessToken;
+          const apiUrl = configResult.data?.apiUrl;
+          const apiKey = configResult.data?.apiKey;
+
+          if (!accessToken || !apiUrl) {
+            setIsLoadingNames(false);
+            return;
+          }
+
+          // Build base URL for 3D API
+          const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+          const response = await fetch(
+            `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+
+          if (response.ok) {
+            const apiModels = await response.json();
+            const nameMap = new Map<string, string>();
+            apiModels.forEach((m: any) => {
+              // Map model ID to friendly name (e.g., "A-modell")
+              if (m.id && m.name) {
+                nameMap.set(m.id, m.name);
+              }
+            });
+            setModelNamesMap(nameMap);
+          }
+        } catch (e) {
+          console.debug("Failed to fetch model names from Asset+:", e);
+        } finally {
+          setIsLoadingNames(false);
+        }
+      };
+
+      fetchModelNames();
+    }, [buildingFmGuid]);
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
@@ -39,7 +93,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       }
     }, [viewerRef]);
 
-    // Extract models from scene
+    // Extract models from scene with friendly names from API
     const extractModels = useCallback(() => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene?.models) return [];
@@ -48,14 +102,15 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       const extractedModels: ModelInfo[] = [];
 
       Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
-        const name = model.id || modelId;
-        // Try to extract a friendly name from the model ID
-        const shortName = name.replace(/\.xkt$/i, '').replace(/-/g, ' ');
-        
+        const rawName = model.id || modelId;
+        // Use API name if available, otherwise fall back to formatted raw name
+        const friendlyName = modelNamesMap.get(modelId) || rawName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
+        const shortName = friendlyName.length > 25 ? friendlyName.substring(0, 25) + '...' : friendlyName;
+
         extractedModels.push({
           id: modelId,
-          name: shortName,
-          shortName: shortName.length > 20 ? shortName.substring(0, 20) + '...' : shortName,
+          name: friendlyName,
+          shortName,
         });
       });
 
@@ -63,7 +118,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       extractedModels.sort((a, b) => a.name.localeCompare(b.name));
 
       return extractedModels;
-    }, [getXeokitViewer]);
+    }, [getXeokitViewer, modelNamesMap]);
 
     // Load models once and set all visible by default
     useEffect(() => {
