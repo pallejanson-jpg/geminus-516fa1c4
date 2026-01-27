@@ -1,262 +1,438 @@
 
-# Plan: Fixa BIM-modell och våningsplansfiltrering i 3D-viewer
+# Plan: Röststyrning för appen
 
 ## Sammanfattning
 
-Fyra problem ska åtgärdas:
-
-1. BIM-modellnamn visar tekniska ID:n istället för läsbara namn från Asset+
-2. Alla modeller visas som standard (ska endast visa A-modeller)
-3. Våningsplan listas med dupliceringar från olika modeller
-4. Våningsfiltrering släcker inte allt på andra våningsplan
+Implementera röststyrning som låter användare navigera och styra appen genom talkommandon. Systemet ska:
+1. Lyssna på röstkommandon och konvertera till text (Speech-to-Text)
+2. Tolka kommandon och matcha mot app-åtgärder
+3. Utföra åtgärder automatiskt (navigera, söka, öppna 3D, etc.)
 
 ---
 
-## Del 1: Fixa BIM-modellnamn
+## Arkitektur
 
-**Fil:** `src/components/viewer/ModelVisibilitySelector.tsx`
+```text
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Mikrofon      │────>│  Speech-to-Text  │────>│  Kommandotolk   │
+│   (Browser)     │     │  (ElevenLabs)    │     │  (Lokal logik)  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                                                         │
+                              ┌───────────────────────────┘
+                              ▼
+                    ┌─────────────────┐
+                    │  App Actions    │
+                    │  (AppContext)   │
+                    └─────────────────┘
+```
 
-### Problemanalys
+### Två alternativa implementationer
 
-Nuvarande kod försöker matcha `viewer.scene.models[modelId]` mot `model.id` från Asset+ API. Men modelId i viewer kan vara ett XKT-filnamn (t.ex. `755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt`) medan Asset+ API returnerar ett annat format.
+**Alternativ A: ElevenLabs Realtime STT (Rekommenderat)**
+- Ultra-låg latens för streaming tal-till-text
+- Kräver ELEVENLABS_API_KEY via connector
+- Professionellt och snabbt
 
-### Lösning
+**Alternativ B: Web Speech API (Inbyggt i webbläsaren)**
+- Gratis, ingen API-nyckel behövs
+- Fungerar direkt i Chrome/Edge/Safari
+- Enklare att komma igång men mindre precis
 
-1. **Hämta modellnamn från databasen istället för API:** Använd `xkt_models`-tabellen som redan har `model_name` synkat från Asset+, eller alternativt hämta direkt från Asset+ API och matcha på filnamn/modell-ID
+---
 
-2. **Förbättra matchningslogik:** Asset+ GetModels-svaret inkluderar ofta `xktFileUrl` som innehåller filnamnet. Matcha scene model ID mot den sista delen av URL:en
+## Del 1: Kommandon som stöds
+
+### Navigationskommandon
+| Röstkommando (svenska) | Åtgärd |
+|------------------------|--------|
+| "Öppna hem" / "Gå till hem" | `setActiveApp('home')` |
+| "Öppna portfolio" / "Visa portfolio" | `setActiveApp('portfolio')` |
+| "Öppna navigator" / "Starta navigator" | `setActiveApp('navigation')` |
+| "Öppna karta" / "Visa karta" | `setActiveApp('map')` |
+| "Öppna insights" | `setActiveApp('insights')` |
+| "Öppna 3D-visaren" | `setActiveApp('assetplus_viewer')` |
+
+### Sökkommandon
+| Röstkommando | Åtgärd |
+|--------------|--------|
+| "Sök [byggnad/rum]" | Öppnar sökning med termen |
+| "Hitta [namn]" | Söker och visar resultat |
+
+### 3D-kommandon
+| Röstkommando | Åtgärd |
+|--------------|--------|
+| "Visa [byggnad] i 3D" | `setViewer3dFmGuid(matchedBuilding.fmGuid)` |
+| "Stäng 3D" | `setViewer3dFmGuid(null)` |
+
+### Assistentkommandon
+| Röstkommando | Åtgärd |
+|--------------|--------|
+| "Prata med Gunnar" / "Öppna Gunnar" | Öppnar AI-chatten |
+| "Fråga Gunnar: [fråga]" | Skickar fråga direkt till Gunnar |
+
+### Hjälpkommando
+| Röstkommando | Åtgärd |
+|--------------|--------|
+| "Hjälp" / "Vilka kommandon finns?" | Visar lista över kommandon |
+
+---
+
+## Del 2: Kommandotolk (Command Parser)
+
+**Ny fil:** `src/hooks/useVoiceCommands.ts`
+
+### Logik
+```typescript
+interface VoiceCommand {
+  patterns: RegExp[];  // Mönster att matcha mot
+  action: (ctx: AppContext, match: RegExpMatchArray) => void;
+  description: string;
+}
+
+const VOICE_COMMANDS: VoiceCommand[] = [
+  {
+    patterns: [
+      /^(öppna|gå till|visa) (hem|home|startsidan)$/i,
+      /^start$/i,
+    ],
+    action: (ctx) => ctx.setActiveApp('home'),
+    description: "Öppna hem",
+  },
+  {
+    patterns: [
+      /^(öppna|gå till|visa) (portfolio|portfölj|fastigheter)$/i,
+    ],
+    action: (ctx) => ctx.setActiveApp('portfolio'),
+    description: "Öppna portfolio",
+  },
+  {
+    patterns: [
+      /^(öppna|starta|visa) (navigator|navigatorn|träd|trädvy)$/i,
+    ],
+    action: (ctx) => ctx.setActiveApp('navigation'),
+    description: "Öppna navigator",
+  },
+  {
+    patterns: [
+      /^(öppna|visa) (karta|kartan|map)$/i,
+    ],
+    action: (ctx) => ctx.setActiveApp('map'),
+    description: "Öppna karta",
+  },
+  {
+    patterns: [
+      /^(öppna|visa) (3d|tre-d|viewer|visare)$/i,
+    ],
+    action: (ctx) => ctx.setActiveApp('assetplus_viewer'),
+    description: "Öppna 3D-visare",
+  },
+  {
+    patterns: [
+      /^visa (.+) i 3d$/i,
+      /^öppna (.+) i 3d$/i,
+    ],
+    action: (ctx, match) => {
+      const searchTerm = match[1];
+      // Sök i navigatorTreeData efter matchande byggnad
+      const building = findBuilding(ctx.navigatorTreeData, searchTerm);
+      if (building) {
+        ctx.setViewer3dFmGuid(building.fmGuid);
+      }
+    },
+    description: "Visa byggnad i 3D",
+  },
+  {
+    patterns: [
+      /^(stäng|avsluta) 3d$/i,
+    ],
+    action: (ctx) => ctx.setViewer3dFmGuid(null),
+    description: "Stäng 3D-visare",
+  },
+  {
+    patterns: [
+      /^(sök|hitta|leta efter) (.+)$/i,
+    ],
+    action: (ctx, match) => {
+      const searchTerm = match[2];
+      // Trigger global search
+      // Öppna sökfält och sätt sökterm
+    },
+    description: "Sök efter objekt",
+  },
+];
+```
+
+---
+
+## Del 3: Voice Control Button/Panel
+
+**Ny fil:** `src/components/voice/VoiceControlButton.tsx`
+
+### UI-komponenten
+- Flytande mikrofon-knapp i hörnet (på mobil)
+- Pulserar när den lyssnar
+- Visar transkriberad text i en liten popup
+- Visar feedback för utförda kommandon
 
 ```typescript
-// Ny matchningslogik
-const extractModelIdFromUrl = (xktFileUrl: string): string => {
-  const fileName = xktFileUrl.split('/').pop() || '';
-  return fileName.replace('.xkt', '');
+interface VoiceControlButtonProps {
+  onCommand: (command: string) => void;
+}
+
+export default function VoiceControlButton({ onCommand }: VoiceControlButtonProps) {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [feedback, setFeedback] = useState("");
+  
+  // ElevenLabs useScribe hook ELLER Web Speech API
+  
+  return (
+    <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2">
+      {/* Transkription-popup */}
+      {transcript && (
+        <div className="bg-card border rounded-lg px-3 py-2 text-sm shadow-lg">
+          "{transcript}"
+        </div>
+      )}
+      
+      {/* Feedback-popup */}
+      {feedback && (
+        <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm">
+          ✓ {feedback}
+        </div>
+      )}
+      
+      {/* Mikrofon-knapp */}
+      <Button
+        onClick={toggleListening}
+        size="lg"
+        className={cn(
+          "h-14 w-14 rounded-full shadow-lg",
+          isListening && "animate-pulse bg-red-500"
+        )}
+      >
+        {isListening ? <MicOff /> : <Mic />}
+      </Button>
+    </div>
+  );
+}
+```
+
+---
+
+## Del 4: ElevenLabs Integration (Alternativ A)
+
+### Steg 1: Anslut ElevenLabs connector
+
+Använda `connect` tool med `connector_id: elevenlabs` för att konfigurera API-nyckeln.
+
+### Steg 2: Skapa Edge Function för token
+
+**Ny fil:** `supabase/functions/elevenlabs-scribe-token/index.ts`
+
+```typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// I API-anropet, bygg en map från alla möjliga identifierare
-apiModels.forEach((m: any) => {
-  // Primär: model.id
-  if (m.id && m.name) nameMap.set(m.id, m.name);
-  // Sekundär: extraherat från xktFileUrl  
-  if (m.xktFileUrl && m.name) {
-    const fileId = extractModelIdFromUrl(m.xktFileUrl);
-    nameMap.set(fileId, m.name);
-    // Även med .xkt extension
-    nameMap.set(fileId + '.xkt', m.name);
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
+
+  const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!ELEVENLABS_API_KEY) {
+    return new Response(JSON.stringify({ error: "ElevenLabs not configured" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const response = await fetch(
+    "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
+    {
+      method: "POST",
+      headers: { "xi-api-key": ELEVENLABS_API_KEY },
+    }
+  );
+
+  const { token } = await response.json();
+
+  return new Response(JSON.stringify({ token }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
 ```
 
-3. **Sätt endast A-modeller synliga som standard:**
+### Steg 3: React-komponent med useScribe
 
 ```typescript
-// I checkModels(), ändra från allIds till endast A-modeller
-const checkModels = () => {
-  const newModels = extractModels();
-  if (newModels.length > 0) {
-    setModels(newModels);
-    // Filtrera till endast A-modeller som standard
-    const aModelIds = new Set(
-      newModels
-        .filter(m => m.name.toLowerCase().startsWith('a') || m.name.toLowerCase().includes('a-modell'))
-        .map(m => m.id)
-    );
-    // Om inga A-modeller hittas, visa alla
-    setVisibleModelIds(aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id)));
-    // Applicera synligheten direkt
-    applyModelVisibility(aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id)));
-    setIsInitialized(true);
-  }
+import { useScribe } from "@elevenlabs/react";
+
+function VoiceControlWithElevenLabs({ onCommand }) {
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    commitStrategy: "vad",
+    onCommittedTranscript: (data) => {
+      const command = data.text.toLowerCase().trim();
+      onCommand(command);
+    },
+  });
+  
+  const start = async () => {
+    const { data } = await supabase.functions.invoke("elevenlabs-scribe-token");
+    if (data?.token) {
+      await scribe.connect({ token: data.token, microphone: { noiseSuppression: true } });
+    }
+  };
+  
+  // ...
+}
+```
+
+---
+
+## Del 5: Web Speech API (Alternativ B - Gratis)
+
+**Fallback utan API-nyckel:**
+
+```typescript
+function useWebSpeechRecognition() {
+  const [transcript, setTranscript] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const start = useCallback(() => {
+    const SpeechRecognition = 
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      toast.error("Röststyrning stöds inte i denna webbläsare");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "sv-SE";  // Svenska
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      const result = event.results[event.results.length - 1];
+      setTranscript(result[0].transcript);
+      
+      if (result.isFinal) {
+        // Skicka till kommandotolk
+        onCommand(result[0].transcript);
+      }
+    };
+
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (e) => console.error("Speech error:", e);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [onCommand]);
+
+  return { start, stop, isListening, transcript };
+}
+```
+
+---
+
+## Del 6: Integration i AppLayout
+
+**Ändra:** `src/components/layout/AppLayout.tsx`
+
+```typescript
+import VoiceControlButton from '@/components/voice/VoiceControlButton';
+import { useVoiceCommands } from '@/hooks/useVoiceCommands';
+
+const AppLayout: React.FC = () => {
+  const appContext = useContext(AppContext);
+  const { executeCommand } = useVoiceCommands(appContext);
+  const isMobile = useIsMobile();
+
+  return (
+    <AppProvider>
+      <div className="flex h-screen ...">
+        {/* Existing layout */}
+        
+        {/* Voice control button - show on mobile or optionally desktop */}
+        {isMobile && (
+          <VoiceControlButton onCommand={executeCommand} />
+        )}
+      </div>
+    </AppProvider>
+  );
 };
 ```
 
 ---
 
-## Del 2: Fixa våningsplan - deduplicering och korrekt filtrering
+## Nya filer att skapa
 
-**Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
+| Fil | Beskrivning |
+|-----|-------------|
+| `src/hooks/useVoiceCommands.ts` | Kommandotolk med alla stödda kommandon |
+| `src/hooks/useWebSpeechRecognition.ts` | Web Speech API-implementation |
+| `src/components/voice/VoiceControlButton.tsx` | Flytande mikrofon-knapp |
+| `supabase/functions/elevenlabs-scribe-token/index.ts` | Token-endpoint för ElevenLabs |
 
-### Problemanalys
-
-Varje BIM-modell har sina egna `IfcBuildingStorey`-objekt. "Plan 1" i A-modellen och "Plan 1" i E-modellen är tekniskt två olika metaObjects med olika ID:n. Nuvarande kod:
-- Listar varje storey separat (dupliceringar)
-- Vid filtrering döljs endast objekt under det specifika storey-objektet, inte alla med samma namn
-
-### Lösning: Gruppera våningar efter namn
-
-```typescript
-// Ny FloorInfo-typ som grupperar alla metaObjects med samma namn
-export interface FloorInfo {
-  id: string;  // Primärt ID (första metaObject)
-  name: string;  // Våningsnamn (t.ex. "Plan 1")
-  shortName: string;
-  metaObjectIds: string[];  // ALLA metaObjects med detta namn (från alla modeller)
-  databaseLevelFmGuids: string[];  // Alla fmGuids för denna våning
-}
-
-// Ny extractFloors som grupperar
-const extractFloors = useCallback(() => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.metaScene?.metaObjects) return [];
-
-  const metaObjects = viewer.metaScene.metaObjects;
-  const floorsByName = new Map<string, FloorInfo>();
-
-  Object.values(metaObjects).forEach((metaObject: any) => {
-    const type = metaObject?.type?.toLowerCase();
-    if (type === 'ifcbuildingstorey') {
-      const name = metaObject.name || 'Unknown Floor';
-      const shortMatch = name.match(/(\d+)/);
-      const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
-      
-      if (floorsByName.has(name)) {
-        // Lägg till detta metaObject till befintlig grupp
-        const existing = floorsByName.get(name)!;
-        existing.metaObjectIds.push(metaObject.id);
-        const fmGuid = metaObject.originalSystemId || metaObject.id;
-        if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
-          existing.databaseLevelFmGuids.push(fmGuid);
-        }
-      } else {
-        // Skapa ny grupp
-        floorsByName.set(name, {
-          id: metaObject.id,  // Första ID som representant
-          name,
-          shortName,
-          metaObjectIds: [metaObject.id],
-          databaseLevelFmGuids: [metaObject.originalSystemId || metaObject.id],
-        });
-      }
-    }
-  });
-
-  // Konvertera till array och sortera
-  const extractedFloors = Array.from(floorsByName.values());
-  extractedFloors.sort((a, b) => {
-    const numA = parseInt(a.shortName) || 0;
-    const numB = parseInt(b.shortName) || 0;
-    return numA - numB;
-  });
-
-  return extractedFloors;
-}, [getXeokitViewer]);
-```
-
-### Lösning: Uppdatera applyFloorVisibility för grupperad logik
-
-```typescript
-const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene) return;
-
-  const scene = viewer.scene;
-  const childrenMap = buildChildrenMap();
-
-  floors.forEach(floor => {
-    const isVisible = visibleIds.has(floor.id);
-    
-    // Iterera genom ALLA metaObjects för denna våning (från alla modeller)
-    floor.metaObjectIds.forEach(metaObjId => {
-      const objectIds = getChildIdsOptimized(metaObjId, childrenMap);
-      objectIds.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) {
-          entity.visible = isVisible;
-        }
-      });
-    });
-  });
-}, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
-```
-
----
-
-## Del 3: Uppdatera FloorInfo-gränssnittet
-
-**Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
-
-Befintligt interface behöver uppdateras:
-
-```typescript
-// FRÅN:
-export interface FloorInfo {
-  id: string;
-  fmGuid: string;
-  name: string;
-  shortName: string;
-  viewerMetaObjectId: string;
-  databaseLevelFmGuid?: string;
-}
-
-// TILL:
-export interface FloorInfo {
-  id: string;  // Representativt ID för gruppen
-  name: string;
-  shortName: string;
-  metaObjectIds: string[];  // Alla metaObject-ID med detta namn
-  databaseLevelFmGuids: string[];  // Alla databas-fmGuids
-}
-```
-
----
-
-## Del 4: Synkronisera med onVisibleFloorsChange callback
-
-När callback anropas, skicka alla relevanta fmGuids:
-
-```typescript
-if (onVisibleFloorsChange) {
-  const visibleFloors = floors.filter(f => newSet.has(f.id));
-  // Samla alla fmGuids från alla synliga våningar
-  const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
-  onVisibleFloorsChange(allFmGuids);
-}
-```
-
----
-
-## Sammanfattning av ändringar
+## Filer att ändra
 
 | Fil | Ändringar |
 |-----|-----------|
-| `ModelVisibilitySelector.tsx` | Förbättrad modellnamn-matchning via xktFileUrl, A-modeller synliga som standard |
-| `FloorVisibilitySelector.tsx` | Gruppera våningar efter namn, applicera synlighet på alla metaObjects med samma namn |
+| `src/components/layout/AppLayout.tsx` | Lägg till VoiceControlButton |
+| `package.json` | Lägg till @elevenlabs/react (om ElevenLabs används) |
 
 ---
 
-## Teknisk referens
+## Implementationsordning
 
-### Asset+ GetModels API-respons (exempel)
-```json
-[
-  {
-    "id": "model-guid-123",
-    "name": "A-modell",
-    "xktFileUrl": "https://.../.../755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt"
-  },
-  {
-    "id": "model-guid-456", 
-    "name": "E-modell",
-    "xktFileUrl": "https://.../.../abc123-def456.xkt"
-  }
-]
-```
+1. **Fas 1: Web Speech API (snabbstart)**
+   - Implementera useWebSpeechRecognition hook
+   - Skapa VoiceControlButton med grundläggande UI
+   - Implementera kommandotolk med navigationskommandon
 
-### XEOkit scene.models (exempel)
-```javascript
-viewer.scene.models = {
-  "755950d9-f235-4d64-a38d-b7fc15a0cad9.xkt": { ... },
-  "abc123-def456.xkt": { ... }
-}
-```
+2. **Fas 2: Kommandoexpansion**
+   - Lägg till sökkommandon
+   - Lägg till 3D-kommandon med byggnadsmatchning
+   - Integrera med Gunnar för avancerade frågor
 
-Matchning sker genom att extrahera filnamnet från `xktFileUrl` och jämföra med scene model keys.
+3. **Fas 3: ElevenLabs-uppgradering (valfritt)**
+   - Anslut ElevenLabs connector
+   - Skapa token-endpoint
+   - Byt till useScribe för bättre kvalitet
 
 ---
 
 ## Förväntade resultat
 
-1. **Modellnamn:** Visas som "A-modell", "E-modell" etc.
-2. **Standardsynlighet:** Endast A-modeller synliga vid start
-3. **Våningsplan:** Varje unikt våningsnamn listas endast EN gång
-4. **Våningsfiltrering:** När "Plan 1" väljs släcks ALLA objekt på andra våningar i alla modeller
+1. **Mikrofon-knapp** visas på mobila enheter
+2. **Tryck och prata** - användaren trycker på knappen och säger ett kommando
+3. **Transkription visas** i realtid medan användaren pratar
+4. **Kommando tolkas** och utförs automatiskt
+5. **Feedback visas** som bekräftelse ("Öppnade Portfolio")
+
+### Exempel på användarflöde:
+```
+Användare: [trycker på mikrofon-knappen]
+Användare: "Öppna portfolio"
+App: [visar "Öppna portfolio" i transkriptions-popup]
+App: [navigerar till Portfolio-vyn]
+App: [visar "✓ Öppnade Portfolio" som feedback]
+```
+
+---
+
+## Alternativ för att börja
+
+Vill du att jag:
+
+**A) Börjar med Web Speech API** (gratis, funkar direkt i de flesta webbläsare)?
+
+**B) Sätter upp ElevenLabs först** (bättre kvalitet, kräver API-nyckel)?
