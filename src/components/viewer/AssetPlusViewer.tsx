@@ -1238,7 +1238,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                     onToggleNavCube={(visible) => setShowNavCube(visible)}
                     onToggleMinimap={(visible) => setShowMinimap(visible)}
                     onToggleTreeView={(visible) => setShowTreePanel(visible)}
-                    onToggleVisualization={(visible) => setShowVisualizationPanel(visible)}
+                    onToggleVisualization={(visible) => {
+                      setShowVisualizationPanel(visible);
+                      // Auto-activate "Visa rum" when opening visualization panel
+                      if (visible) {
+                        try {
+                          viewerInstanceRef.current?.assetViewer?.onShowSpacesChanged?.(true);
+                        } catch (e) {
+                          console.debug('Could not auto-activate spaces:', e);
+                        }
+                      }
+                    }}
                     onAddAsset={handleTogglePickMode}
                     onPickCoordinate={handleTogglePickMode}
                     onShowProperties={() => setPropertiesDialogOpen(true)}
