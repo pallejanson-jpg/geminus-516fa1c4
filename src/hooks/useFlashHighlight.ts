@@ -95,6 +95,7 @@ export const useFlashHighlight = () => {
 
   /**
    * Flash an entity by ID in a scene
+   * Supports both direct scene.objects lookup and metaScene lookup
    */
   const flashEntityById = useCallback((
     scene: any,
@@ -103,9 +104,25 @@ export const useFlashHighlight = () => {
   ) => {
     if (!scene || !entityId) return;
 
-    const entity = scene.objects?.[entityId];
+    // Try direct lookup first (most common case)
+    let entity = scene.objects?.[entityId];
+    
+    // If not found, the ID might be uppercase or have different casing
+    if (!entity) {
+      // Try case-insensitive lookup
+      const objectIds = Object.keys(scene.objects || {});
+      const matchingId = objectIds.find(
+        id => id.toLowerCase() === entityId.toLowerCase()
+      );
+      if (matchingId) {
+        entity = scene.objects[matchingId];
+      }
+    }
+    
     if (entity) {
       startFlashing(entity, options);
+    } else {
+      console.debug('Flash: Entity not found in scene:', entityId);
     }
   }, [startFlashing]);
 

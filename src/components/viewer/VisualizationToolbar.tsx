@@ -448,8 +448,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
         
         <ScrollArea className="h-[calc(100vh-80px)]">
           <div className="p-4 pt-0 space-y-4">
+            {/* Viewer status indicator */}
+            {!isViewerReady && (
+              <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-md px-3 py-2 flex items-center gap-2">
+                <div className="h-3 w-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                Väntar på viewer...
+              </div>
+            )}
+            
             {/* Loading indicator */}
-            {isLoadingData && (
+            {isLoadingData && isViewerReady && (
               <div className="text-xs text-muted-foreground italic py-2 flex items-center gap-2">
                 <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 Laddar modelldata...
@@ -501,30 +509,26 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
 
             <Separator />
 
-            {/* Visualization Section */}
+            {/* Visualization Section - Always show both items */}
             <div>
               <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
                 Visualisering
               </Label>
               <div className="space-y-1">
-                {onToggleTreeView && (
-                  <ToolItem
-                    id="treeView"
-                    icon={<TreeDeciduous className="h-4 w-4" />}
-                    label="Modellträd"
-                    active={localTreeView}
-                    onClick={handleToggleTreeView}
-                  />
-                )}
-                {onToggleVisualization && (
-                  <ToolItem
-                    id="visualization"
-                    icon={<Palette className="h-4 w-4" />}
-                    label="Rumsvisualisering"
-                    active={localVisualization}
-                    onClick={handleToggleVisualization}
-                  />
-                )}
+                <ToolItem
+                  id="treeView"
+                  icon={<TreeDeciduous className="h-4 w-4" />}
+                  label="Modellträd"
+                  active={localTreeView}
+                  onClick={handleToggleTreeView}
+                />
+                <ToolItem
+                  id="visualization"
+                  icon={<Palette className="h-4 w-4" />}
+                  label="Rumsvisualisering"
+                  active={localVisualization}
+                  onClick={handleToggleVisualization}
+                />
               </div>
             </div>
 
