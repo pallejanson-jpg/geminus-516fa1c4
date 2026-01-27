@@ -59,16 +59,20 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           const nameMap = new Map<string, string>();
           
           dbModels.forEach((m) => {
+            // Primary: Map file_name -> model_name (most reliable for XEOkit matching)
+            if (m.file_name && m.model_name) {
+              nameMap.set(m.file_name, m.model_name);
+              nameMap.set(m.file_name.toLowerCase(), m.model_name);
+              
+              // Also without extension
+              const fileId = m.file_name.replace(/\.xkt$/i, '');
+              nameMap.set(fileId, m.model_name);
+              nameMap.set(fileId.toLowerCase(), m.model_name);
+            }
+            // Secondary: Map model_id -> model_name
             if (m.model_id && m.model_name) {
               nameMap.set(m.model_id, m.model_name);
               nameMap.set(m.model_id.toLowerCase(), m.model_name);
-            }
-            if (m.file_name && m.model_name) {
-              const fileId = m.file_name.replace('.xkt', '');
-              nameMap.set(fileId, m.model_name);
-              nameMap.set(fileId.toLowerCase(), m.model_name);
-              nameMap.set(m.file_name, m.model_name);
-              nameMap.set(m.file_name.toLowerCase(), m.model_name);
             }
           });
           
@@ -145,7 +149,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       }
     }, [viewerRef]);
 
-    // Extract models from scene with friendly names from API
+    // Extract models from scene with friendly names from API/database
     const extractModels = useCallback(() => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene?.models) return [];
@@ -154,20 +158,46 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       const extractedModels: ModelInfo[] = [];
 
       Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+        // modelId is typically the filename from XKT loader (e.g., "abc123.xkt" or "abc123")
         const rawName = model.id || modelId;
-        // Try multiple matching strategies for model names
-        const matchedName = modelNamesMap.get(modelId) 
-          || modelNamesMap.get(modelId.toLowerCase())
-          || modelNamesMap.get(rawName)
-          || modelNamesMap.get(rawName.toLowerCase())
-          || modelNamesMap.get(rawName.replace(/\.xkt$/i, ''))
-          || modelNamesMap.get(rawName.replace(/\.xkt$/i, '').toLowerCase());
+        const fileName = rawName.endsWith('.xkt') ? rawName : rawName + '.xkt';
+        const fileNameWithoutExt = fileName.replace(/\.xkt$/i, '');
         
-        const friendlyName = matchedName || rawName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
+        // Try multiple matching strategies - prioritize file_name matching from xkt_models
+        let matchedName: string | undefined;
+        
+        // Strategy 1: Exact file_name match (primary for synced XKT models)
+        matchedName = modelNamesMap.get(fileName);
+        
+        // Strategy 2: File name without extension
+        if (!matchedName) matchedName = modelNamesMap.get(fileNameWithoutExt);
+        
+        // Strategy 3: Case-insensitive file name
+        if (!matchedName) matchedName = modelNamesMap.get(fileName.toLowerCase());
+        if (!matchedName) matchedName = modelNamesMap.get(fileNameWithoutExt.toLowerCase());
+        
+        // Strategy 4: Try modelId directly (for API-based names)
+        if (!matchedName) matchedName = modelNamesMap.get(modelId);
+        if (!matchedName) matchedName = modelNamesMap.get(modelId.toLowerCase());
+        
+        // Strategy 5: Partial match search for complex URLs
+        if (!matchedName && modelNamesMap.size > 0) {
+          for (const [key, value] of modelNamesMap.entries()) {
+            const keyClean = key.replace(/\.xkt$/i, '').toLowerCase();
+            const idClean = fileNameWithoutExt.toLowerCase();
+            if (keyClean.includes(idClean) || idClean.includes(keyClean)) {
+              matchedName = value;
+              break;
+            }
+          }
+        }
+        
+        // Fallback: Format raw name for display (remove .xkt, replace dashes)
+        const friendlyName = matchedName || fileNameWithoutExt.replace(/-/g, ' ');
         const shortName = friendlyName.length > 30 ? friendlyName.substring(0, 30) + '...' : friendlyName;
 
         if (!matchedName && modelNamesMap.size > 0) {
-          console.debug("No API name match for model:", modelId, "rawName:", rawName);
+          console.debug("No name match for model:", modelId, "tried:", fileName, fileNameWithoutExt);
         }
 
         extractedModels.push({
