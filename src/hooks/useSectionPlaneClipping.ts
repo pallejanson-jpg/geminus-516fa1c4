@@ -8,26 +8,46 @@ interface FloorBounds {
   metaObjectIds: string[];
 }
 
+export type ClipMode = 'ceiling' | 'floor';
+
 interface SectionPlaneClippingOptions {
   enabled?: boolean;
   offset?: number; // Extra height above floor ceiling for clipping
+  clipMode?: ClipMode; // 'ceiling' for 3D solo, 'floor' for 2D plan view
+  floorCutHeight?: number; // Height above floor for 2D clipping (default 1.2m)
+}
+
+// Custom event for floor selection changes
+export const FLOOR_SELECTION_CHANGED_EVENT = 'FLOOR_SELECTION_CHANGED';
+export const VIEW_MODE_CHANGED_EVENT = 'VIEW_MODE_CHANGED';
+
+export interface FloorSelectionEventDetail {
+  floorId: string | null;
+  floorName?: string | null;
+  bounds?: { minY: number; maxY: number } | null;
+}
+
+export interface ViewModeEventDetail {
+  mode: '2d' | '3d';
+  floorId?: string | null;
 }
 
 /**
  * Hook for managing horizontal SectionPlane clipping at floor boundaries.
  * 
- * When a single floor is selected, this creates a horizontal clipping plane
- * at the floor's ceiling height to cut off any objects that incorrectly
- * extend beyond the floor boundaries.
+ * Supports two clipping modes:
+ * - 'ceiling': Clips at floor's ceiling height (for 3D single-floor view)
+ * - 'floor': Clips ~1.2m above floor level (for 2D floor plan view)
  */
 export function useSectionPlaneClipping(
   viewerRef: React.MutableRefObject<any>,
   options: SectionPlaneClippingOptions = {}
 ) {
-  const { enabled = true, offset = 0.05 } = options;
+  const { enabled = true, offset = 0.05, clipMode = 'ceiling', floorCutHeight = 1.2 } = options;
   const sectionPlaneRef = useRef<any>(null);
   const sectionPlanesPluginRef = useRef<any>(null);
   const currentFloorIdRef = useRef<string | null>(null);
+  const currentClipModeRef = useRef<ClipMode | null>(null);
 
   // Get XEOkit viewer instance
   const getXeokitViewer = useCallback(() => {
@@ -118,8 +138,8 @@ export function useSectionPlaneClipping(
     };
   }, [getXeokitViewer]);
 
-  // Create or update horizontal section plane at floor ceiling
-  const applySectionPlane = useCallback((floorId: string) => {
+  // Create or update horizontal section plane
+  const applySectionPlane = useCallback((floorId: string, mode?: ClipMode) => {
     if (!enabled) return;
 
     const viewer = getXeokitViewer();
@@ -131,7 +151,14 @@ export function useSectionPlaneClipping(
       return;
     }
 
-    const ceilingHeight = bounds.maxY + offset;
+    const effectiveMode = mode || clipMode;
+    
+    // Calculate clip height based on mode
+    // 'ceiling': clips at ceiling level (hides objects above floor ceiling)
+    // 'floor': clips ~1.2m above floor (creates floor plan view)
+    const clipHeight = effectiveMode === 'floor' 
+      ? bounds.minY + floorCutHeight  // Floor plan: 1.2m above floor
+      : bounds.maxY + offset;          // Ceiling: at ceiling level + offset
     
     // Remove existing section plane
     if (sectionPlaneRef.current) {
@@ -150,14 +177,16 @@ export function useSectionPlaneClipping(
       try {
         // Create horizontal section plane pointing downward (clips everything above)
         sectionPlaneRef.current = plugin.createSectionPlane({
-          id: `floor-clip-${floorId}`,
-          pos: [0, ceilingHeight, 0],
+          id: `floor-clip-${floorId}-${effectiveMode}`,
+          pos: [0, clipHeight, 0],
           dir: [0, -1, 0], // Points down, clips above
           active: true,
         });
         
-        console.log(`Section plane created at Y=${ceilingHeight.toFixed(2)} for floor: ${bounds.name}`);
+        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå';
+        console.log(`Section plane created at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${bounds.name}`);
         currentFloorIdRef.current = floorId;
+        currentClipModeRef.current = effectiveMode;
         return;
       } catch (e) {
         console.debug('Failed to create section plane via plugin:', e);
@@ -170,37 +199,50 @@ export function useSectionPlaneClipping(
       
       if (SectionPlane) {
         sectionPlaneRef.current = new SectionPlane(viewer.scene, {
-          id: `floor-clip-${floorId}`,
-          pos: [0, ceilingHeight, 0],
+          id: `floor-clip-${floorId}-${effectiveMode}`,
+          pos: [0, clipHeight, 0],
           dir: [0, -1, 0],
           active: true,
         });
         
-        console.log(`Section plane created (direct) at Y=${ceilingHeight.toFixed(2)} for floor: ${bounds.name}`);
+        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå';
+        console.log(`Section plane created (direct) at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${bounds.name}`);
         currentFloorIdRef.current = floorId;
+        currentClipModeRef.current = effectiveMode;
       } else {
         // Ultimate fallback: Use xeokit scene's sectionPlanes directly
         const sectionPlanes = viewer.scene.sectionPlanes;
         if (sectionPlanes) {
-          const planeId = `floor-clip-${floorId}`;
+          const planeId = `floor-clip-${floorId}-${effectiveMode}`;
           
           // Create a new section plane using scene API
           viewer.scene.createSectionPlane?.({
             id: planeId,
-            pos: [0, ceilingHeight, 0],
+            pos: [0, clipHeight, 0],
             dir: [0, -1, 0],
             active: true,
           });
           
           sectionPlaneRef.current = { id: planeId, scene: viewer.scene };
-          console.log(`Section plane created (scene API) at Y=${ceilingHeight.toFixed(2)}`);
+          console.log(`Section plane created (scene API) at Y=${clipHeight.toFixed(2)}`);
           currentFloorIdRef.current = floorId;
+          currentClipModeRef.current = effectiveMode;
         }
       }
     } catch (e) {
       console.debug('Failed to create section plane directly:', e);
     }
-  }, [enabled, offset, getXeokitViewer, calculateFloorBounds, initializeSectionPlanesPlugin]);
+  }, [enabled, offset, clipMode, floorCutHeight, getXeokitViewer, calculateFloorBounds, initializeSectionPlanesPlugin]);
+
+  // Apply floor plan clipping (2D mode) - convenience function
+  const applyFloorPlanClipping = useCallback((floorId: string) => {
+    applySectionPlane(floorId, 'floor');
+  }, [applySectionPlane]);
+
+  // Apply ceiling clipping (3D solo mode) - convenience function  
+  const applyCeilingClipping = useCallback((floorId: string) => {
+    applySectionPlane(floorId, 'ceiling');
+  }, [applySectionPlane]);
 
   // Remove section plane
   const removeSectionPlane = useCallback(() => {
@@ -217,10 +259,11 @@ export function useSectionPlaneClipping(
       }
       sectionPlaneRef.current = null;
       currentFloorIdRef.current = null;
+      currentClipModeRef.current = null;
     }
   }, []);
 
-  // Update clipping based on visible floors
+  // Update clipping based on visible floors (for 3D ceiling clipping)
   const updateClipping = useCallback((visibleFloorIds: string[]) => {
     // Only apply clipping when exactly one floor is visible
     if (visibleFloorIds.length === 1) {
@@ -237,6 +280,12 @@ export function useSectionPlaneClipping(
       }
     }
   }, [applySectionPlane, removeSectionPlane]);
+
+  // Get current floor bounds (for external use)
+  const getCurrentFloorBounds = useCallback(() => {
+    if (!currentFloorIdRef.current) return null;
+    return calculateFloorBounds(currentFloorIdRef.current);
+  }, [calculateFloorBounds]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -256,9 +305,14 @@ export function useSectionPlaneClipping(
   return {
     updateClipping,
     applySectionPlane,
+    applyFloorPlanClipping,
+    applyCeilingClipping,
     removeSectionPlane,
+    calculateFloorBounds,
+    getCurrentFloorBounds,
     isClippingActive: currentFloorIdRef.current !== null,
     currentFloorId: currentFloorIdRef.current,
+    currentClipMode: currentClipModeRef.current,
   };
 }
 
