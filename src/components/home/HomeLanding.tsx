@@ -108,13 +108,13 @@ export default function HomeLanding() {
       {/* Overlay for readability (uses design tokens) */}
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
-      <div className="relative z-10 px-4 sm:px-6 py-6 space-y-6">
-        <header className="space-y-2 text-center">
+      <div className="relative z-10 min-h-full flex flex-col items-center px-4 sm:px-6 py-6">
+        <header className="space-y-2 text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Welcome to My SWG</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Your digital backbone for digital twins and property data</p>
         </header>
 
-      <section className="space-y-3">
+      <section className="space-y-3 w-full max-w-4xl mb-6">
         <div className="text-center">
           <h2 className="text-lg font-semibold">AI Assistants</h2>
           <p className="text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
@@ -145,7 +145,7 @@ export default function HomeLanding() {
         </div>
       </section>
 
-      <section>
+      <section className="w-full max-w-4xl flex-1">
         <Card className="bg-card/60">
           <CardHeader>
             <CardTitle className="text-lg">My Favorites</CardTitle>
