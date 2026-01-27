@@ -13,6 +13,8 @@ import ModelVisibilitySelector from "./ModelVisibilitySelector";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
+  buildingFmGuid?: string;
+  isViewerReady?: boolean;
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
   onToggleTreeView?: (visible: boolean) => void;
@@ -38,7 +40,9 @@ interface VisualizationToolbarProps {
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { 
-    viewerRef, 
+    viewerRef,
+    buildingFmGuid,
+    isViewerReady = true,
     className, 
     inline = false,
     onToggleVisualization,
@@ -206,11 +210,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               {/* Model visibility section */}
               <ModelVisibilitySelector
                 viewerRef={viewerRef}
+                buildingFmGuid={buildingFmGuid}
               />
 
               {/* Floor visibility section */}
               <FloorVisibilitySelector
                 viewerRef={viewerRef}
+                isViewerReady={isViewerReady}
                 onVisibleFloorsChange={handleVisibleFloorsChange}
               />
 
