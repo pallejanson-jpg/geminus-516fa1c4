@@ -65,7 +65,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   useEffect(() => {
     if (isOpen && position.x === 0 && position.y === 0) {
       // Position to the left of the trigger button (top-right area)
-      const initialX = typeof window !== 'undefined' ? window.innerWidth - 340 : 200;
+      const initialX = typeof window !== 'undefined' ? window.innerWidth - 420 : 200;
       setPosition({ x: initialX, y: 60 });
     }
   }, [isOpen, position.x, position.y]);
@@ -101,7 +101,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
     const handleMouseMove = (e: MouseEvent) => {
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 280, e.clientX - dragOffset.x)),
+        x: Math.max(0, Math.min(window.innerWidth - 400, e.clientX - dragOffset.x)),
         y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
       });
     };
@@ -180,7 +180,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <div
           className={cn(
             "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-            "w-80 min-w-[320px] max-h-[80vh] flex flex-col",
+            "w-96 min-w-[380px] max-h-[80vh] flex flex-col",
             isDragging && "cursor-grabbing opacity-90"
           )}
           style={{ left: position.x, top: position.y }}
@@ -216,6 +216,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               {/* Floor visibility section */}
               <FloorVisibilitySelector
                 viewerRef={viewerRef}
+                buildingFmGuid={buildingFmGuid}
                 isViewerReady={isViewerReady}
                 onVisibleFloorsChange={handleVisibleFloorsChange}
               />
