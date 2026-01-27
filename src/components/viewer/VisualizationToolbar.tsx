@@ -209,18 +209,23 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <TooltipProvider delayDuration={300}>
           <div
             className={cn(
-              "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-              "max-h-[80vh] flex flex-col",
-              // Mobile: full-width bottom sheet style
-              "inset-x-2 bottom-20 top-auto sm:inset-auto",
+              "fixed z-[60] bg-card border rounded-lg shadow-xl",
+              "max-h-[70vh] sm:max-h-[80vh] flex flex-col",
+              "transition-opacity duration-150",
+              // Mobile: bottom sheet style with safe area
+              "left-2 right-2 bottom-16 sm:inset-auto",
               // Desktop: fixed-width draggable panel
-              "sm:w-80 md:w-96 sm:min-w-[320px]",
+              "sm:w-80 md:w-96",
               isDragging && "cursor-grabbing opacity-90"
             )}
             style={{ 
-              // Only apply position on desktop
-              left: typeof window !== 'undefined' && window.innerWidth >= 640 ? position.x : undefined,
-              top: typeof window !== 'undefined' && window.innerWidth >= 640 ? position.y : undefined
+              // Only apply position on desktop (>= 640px)
+              ...(typeof window !== 'undefined' && window.innerWidth >= 640 ? {
+                left: position.x,
+                top: position.y,
+                right: 'auto',
+                bottom: 'auto'
+              } : {})
             }}
           >
           {/* Header - Draggable on desktop */}

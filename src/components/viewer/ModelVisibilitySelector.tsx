@@ -34,6 +34,19 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const [isInitialized, setIsInitialized] = useState(false);
     const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
     const [isLoadingNames, setIsLoadingNames] = useState(false);
+    
+    // Stable refs to preserve selection across re-renders
+    const visibleModelIdsRef = React.useRef<Set<string>>(new Set());
+    const modelsRef = React.useRef<ModelInfo[]>([]);
+    
+    // Sync refs with state
+    React.useEffect(() => {
+      visibleModelIdsRef.current = visibleModelIds;
+    }, [visibleModelIds]);
+    
+    React.useEffect(() => {
+      modelsRef.current = models;
+    }, [models]);
 
   // Helper to extract model ID from xktFileUrl
   const extractModelIdFromUrl = (xktFileUrl: string): string => {
@@ -287,14 +300,30 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     }, [extractModels, isInitialized, applyModelVisibility, isLoadingNames]);
 
     // Re-extract models with updated names when modelNamesMap changes (after API fetch)
+    // IMPORTANT: Preserve existing selection when updating model list
     useEffect(() => {
       if (!isInitialized || modelNamesMap.size === 0) return;
       
       const updatedModels = extractModels();
       if (updatedModels.length > 0) {
+        // Preserve existing selection by matching IDs
+        const currentSelection = visibleModelIdsRef.current;
+        const updatedIds = new Set(updatedModels.map(m => m.id));
+        
+        // Keep selections that still exist in updated list
+        const preservedSelection = new Set(
+          Array.from(currentSelection).filter(id => updatedIds.has(id))
+        );
+        
+        // If selections were preserved, update state with them
+        if (preservedSelection.size > 0 && preservedSelection.size !== currentSelection.size) {
+          setVisibleModelIds(preservedSelection);
+          applyModelVisibility(preservedSelection);
+        }
+        
         setModels(updatedModels);
       }
-    }, [modelNamesMap, isInitialized, extractModels]);
+    }, [modelNamesMap, isInitialized, extractModels, applyModelVisibility]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
       setVisibleModelIds(prev => {
