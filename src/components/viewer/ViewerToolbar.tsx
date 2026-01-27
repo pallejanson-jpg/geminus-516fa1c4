@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Move,
   ZoomIn,
@@ -31,6 +31,12 @@ import {
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getNavigationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from './ToolbarSettings';
+import { 
+  useSectionPlaneClipping, 
+  FLOOR_SELECTION_CHANGED_EVENT, 
+  VIEW_MODE_CHANGED_EVENT,
+  FloorSelectionEventDetail 
+} from '@/hooks/useSectionPlaneClipping';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -50,6 +56,9 @@ type ViewMode = '3d' | '2d';
  * Navigation-focused toolbar for the Asset+ 3D Viewer
  * Contains only navigation, zoom, and basic interaction tools
  * Visualization tools are in VisualizationToolbar (right side)
+ * 
+ * 2D mode now includes SectionPlane clipping at floor level (~1.2m above floor)
+ * to create a clean floor plan view.
  */
 const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   viewerRef,
@@ -67,8 +76,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getNavigationToolSettings());
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+  const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
   
   const isMobile = useIsMobile();
+  
+  // Track viewMode in a ref for event handlers
+  const viewModeRef = useRef<ViewMode>(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+  
+  // SectionPlane clipping for 2D floor plan view
+  const { applyFloorPlanClipping, removeSectionPlane, calculateFloorBounds } = useSectionPlaneClipping(
+    viewerRef,
+    { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
+  );
 
   // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
@@ -132,6 +155,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       clearTimeout(t3);
     };
   }, [getXeokitViewer]);
+
+  // Listen for floor selection changes from FloorVisibilitySelector
+  useEffect(() => {
+    const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { floorId, bounds } = e.detail;
+      setCurrentFloorId(floorId);
+      setCurrentFloorBounds(bounds || null);
+      
+      // If 2D mode is active and a floor is selected, apply floor plan clipping
+      if (viewModeRef.current === '2d' && floorId) {
+        applyFloorPlanClipping(floorId);
+      } else if (viewModeRef.current === '2d' && !floorId) {
+        // No specific floor selected in 2D mode - remove clipping
+        removeSectionPlane();
+      }
+    };
+    
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    return () => {
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    };
+  }, [applyFloorPlanClipping, removeSectionPlane]);
 
   // Navigation controls with readiness check
   const handleResetView = useCallback(() => {
@@ -244,23 +289,70 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     }
   }, [getAssetView, activeTool, isViewerReady, isProcessing]);
 
-  // Switch between 3D and 2D (top-down) view
+  // Switch between 3D and 2D (top-down) view with SectionPlane clipping
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     const viewer = getXeokitViewer();
     if (!viewer) return;
 
     setViewMode(mode);
     
+    // Emit view mode change event for other components
+    window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { 
+      detail: { mode, floorId: currentFloorId } 
+    }));
+    
     if (mode === '2d') {
       const camera = viewer.camera;
       const scene = viewer.scene;
-      const aabb = scene?.getAABB?.();
       
-      if (camera && aabb) {
-        const centerX = (aabb[0] + aabb[3]) / 2;
-        const centerY = (aabb[1] + aabb[4]) / 2;
-        const centerZ = (aabb[2] + aabb[5]) / 2;
-        const height = Math.max(aabb[3] - aabb[0], aabb[5] - aabb[2]) * 1.5;
+      // Use floor bounds if a floor is selected, otherwise use scene bounds
+      let targetBounds: number[] | null = null;
+      let lookHeight: number;
+      
+      if (currentFloorId && currentFloorBounds) {
+        // Calculate floor-specific bounds from metaScene
+        const floorBounds = calculateFloorBounds(currentFloorId);
+        if (floorBounds) {
+          const floorChildIds = floorBounds.metaObjectIds;
+          let minX = Infinity, maxX = -Infinity;
+          let minZ = Infinity, maxZ = -Infinity;
+          
+          floorChildIds.forEach(id => {
+            const entity = scene?.objects?.[id];
+            if (entity?.aabb) {
+              minX = Math.min(minX, entity.aabb[0]);
+              maxX = Math.max(maxX, entity.aabb[3]);
+              minZ = Math.min(minZ, entity.aabb[2]);
+              maxZ = Math.max(maxZ, entity.aabb[5]);
+            }
+          });
+          
+          if (minX !== Infinity) {
+            targetBounds = [minX, floorBounds.minY, minZ, maxX, floorBounds.maxY, maxZ];
+          }
+          lookHeight = floorBounds.minY + 1.2; // 1.2m above floor
+        }
+        
+        // Apply floor plan clipping for 2D view
+        applyFloorPlanClipping(currentFloorId);
+      } else {
+        // No specific floor - use scene bounds
+        targetBounds = scene?.getAABB?.();
+        lookHeight = targetBounds ? (targetBounds[1] + targetBounds[4]) / 2 : 0;
+      }
+      
+      if (!targetBounds) {
+        targetBounds = scene?.getAABB?.();
+      }
+      
+      if (camera && targetBounds) {
+        const centerX = (targetBounds[0] + targetBounds[3]) / 2;
+        const centerY = lookHeight || (targetBounds[1] + targetBounds[4]) / 2;
+        const centerZ = (targetBounds[2] + targetBounds[5]) / 2;
+        const height = Math.max(
+          targetBounds[3] - targetBounds[0], 
+          targetBounds[5] - targetBounds[2]
+        ) * 1.5;
         
         viewer.cameraFlight.flyTo({
           eye: [centerX, centerY + height, centerZ],
@@ -273,6 +365,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         camera.projection = 'ortho';
       }
     } else {
+      // Switching to 3D mode - remove 2D clipping
+      removeSectionPlane();
+      
       const camera = viewer.camera;
       if (camera) {
         camera.projection = 'perspective';
@@ -282,7 +377,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         }
       }
     }
-  }, [getXeokitViewer, viewerRef]);
+  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, removeSectionPlane]);
 
   const handleClearSlices = useCallback(() => {
     const assetView = getAssetView();
