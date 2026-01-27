@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Palette, X, RefreshCw, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Palette, X, RefreshCw, AlertCircle, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -22,54 +22,178 @@ import {
 } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
 
+export interface FloorInfo {
+  id: string;
+  fmGuid: string;
+  name: string;
+  shortName: string;
+}
+
 interface RoomVisualizationPanelProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid: string;
   onClose: () => void;
+  onShowSpaces?: (show: boolean) => void;
+  selectedFloorFmGuid?: string | null;
   className?: string;
 }
 
 interface RoomData {
   fmGuid: string;
   name: string | null;
+  levelFmGuid: string | null;
   attributes: Record<string, any> | null;
 }
 
 /**
- * Panel for visualizing rooms with color-coding based on sensor data
+ * Floating, draggable panel for visualizing rooms with color-coding based on sensor data.
+ * Auto-activates "Visa Rum" on mount and supports floor filtering for performance.
  */
 const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   viewerRef,
   buildingFmGuid,
   onClose,
+  onShowSpaces,
+  selectedFloorFmGuid,
   className,
 }) => {
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('none');
   const [useMockData, setUseMockData] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
+  const [floors, setFloors] = useState<FloorInfo[]>([]);
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(selectedFloorFmGuid || null);
   const [isLoading, setIsLoading] = useState(false);
   const [colorizedCount, setColorizedCount] = useState(0);
   const [hasRealData, setHasRealData] = useState(false);
 
+  // Draggable panel state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const panelRef = useRef<HTMLDivElement>(null);
+
   const config = VISUALIZATION_CONFIGS[visualizationType];
 
-  // Fetch rooms for the building
+  // Initialize position when panel opens
+  useEffect(() => {
+    if (position.x === 0 && position.y === 0) {
+      const initialX = typeof window !== 'undefined' ? window.innerWidth - 320 : 200;
+      setPosition({ x: initialX, y: 80 });
+    }
+  }, [position.x, position.y]);
+
+  // Auto-activate "Visa Rum" on mount
+  useEffect(() => {
+    if (onShowSpaces) {
+      onShowSpaces(true);
+    }
+    // Also try to set directly on the viewer
+    try {
+      const assetViewer = viewerRef.current?.assetViewer;
+      assetViewer?.onShowSpacesChanged?.(true);
+    } catch (e) {
+      console.debug('Could not auto-activate spaces:', e);
+    }
+  }, [onShowSpaces, viewerRef]);
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, select, [role="switch"], [role="combobox"]')) return;
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - 300, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 300, e.clientY - dragOffset.y)),
+      });
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  // Fetch floors for the building from viewer metaScene
+  const fetchFloorsFromViewer = useCallback(() => {
+    try {
+      const viewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!viewer?.metaScene?.metaObjects) return;
+
+      const metaObjects = viewer.metaScene.metaObjects;
+      const extractedFloors: FloorInfo[] = [];
+
+      Object.values(metaObjects).forEach((metaObject: any) => {
+        const type = metaObject?.type?.toLowerCase();
+        if (type === 'ifcbuildingstorey') {
+          const name = metaObject.name || 'Unknown Floor';
+          const shortMatch = name.match(/(\d+)/);
+          const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
+          
+          extractedFloors.push({
+            id: metaObject.id,
+            fmGuid: metaObject.id,
+            name,
+            shortName,
+          });
+        }
+      });
+
+      extractedFloors.sort((a, b) => {
+        const numA = parseInt(a.shortName) || 0;
+        const numB = parseInt(b.shortName) || 0;
+        return numA - numB;
+      });
+
+      if (extractedFloors.length > 0) {
+        setFloors(extractedFloors);
+      }
+    } catch (e) {
+      console.debug('Could not extract floors from viewer:', e);
+    }
+  }, [viewerRef]);
+
+  useEffect(() => {
+    fetchFloorsFromViewer();
+    // Try again after a short delay in case viewer wasn't ready
+    const timer = setTimeout(fetchFloorsFromViewer, 1000);
+    return () => clearTimeout(timer);
+  }, [fetchFloorsFromViewer]);
+
+  // Fetch rooms for the building, optionally filtered by floor
   const fetchRooms = useCallback(async () => {
     if (!buildingFmGuid) return;
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('assets')
-        .select('fm_guid, name, attributes')
+        .select('fm_guid, name, level_fm_guid, attributes')
         .eq('category', 'Space')
         .or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`);
+
+      // Apply floor filter if selected
+      if (selectedFloor) {
+        query = query.or(`level_fm_guid.eq.${selectedFloor},level_fm_guid.eq.${selectedFloor.toLowerCase()},level_fm_guid.eq.${selectedFloor.toUpperCase()}`);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       const roomData: RoomData[] = (data || []).map((r) => ({
         fmGuid: r.fm_guid,
         name: r.name,
+        levelFmGuid: r.level_fm_guid,
         attributes: r.attributes as Record<string, any> | null,
       }));
 
@@ -90,13 +214,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       });
       setHasRealData(hasReal);
 
-      console.log(`Fetched ${roomData.length} rooms for visualization`);
+      console.log(`Fetched ${roomData.length} rooms for visualization (floor: ${selectedFloor || 'all'})`);
     } catch (error) {
       console.error('Failed to fetch rooms:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [buildingFmGuid]);
+  }, [buildingFmGuid, selectedFloor]);
 
   useEffect(() => {
     fetchRooms();
@@ -198,7 +322,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const legendGradient = useMemo(() => {
     if (!config || config.colorStops.length === 0) return '';
 
-    const stops = config.colorStops.map((stop, index) => {
+    const stops = config.colorStops.map((stop) => {
       const percent = ((stop.value - config.min) / (config.max - config.min)) * 100;
       return `${rgbToHex(stop.color)} ${percent}%`;
     });
@@ -208,15 +332,22 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
   return (
     <div
+      ref={panelRef}
       className={cn(
-        'absolute top-4 right-4 z-30 w-72',
-        'bg-card/95 backdrop-blur-sm border rounded-lg shadow-lg',
+        'fixed z-[55] w-72',
+        'bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl',
+        isDragging && 'cursor-grabbing opacity-90',
         className
       )}
+      style={{ left: position.x, top: position.y }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b">
+      {/* Header - Draggable */}
+      <div
+        className="flex items-center justify-between p-3 border-b cursor-grab select-none"
+        onMouseDown={handleMouseDown}
+      >
         <div className="flex items-center gap-2">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
           <Palette className="h-4 w-4 text-primary" />
           <span className="font-medium text-sm">Rumsvisualisering</span>
         </div>
@@ -227,6 +358,29 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Content */}
       <div className="p-3 space-y-4">
+        {/* Floor filter selector */}
+        {floors.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Våningsplan</Label>
+            <Select
+              value={selectedFloor || 'all'}
+              onValueChange={(v) => setSelectedFloor(v === 'all' ? null : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Välj våning..." />
+              </SelectTrigger>
+              <SelectContent className="bg-card border shadow-lg z-[60]">
+                <SelectItem value="all">Alla våningar</SelectItem>
+                {floors.map((floor) => (
+                  <SelectItem key={floor.id} value={floor.fmGuid}>
+                    {floor.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Visualization type selector */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
@@ -237,7 +391,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Välj typ..." />
             </SelectTrigger>
-            <SelectContent className="bg-card border shadow-lg z-50">
+            <SelectContent className="bg-card border shadow-lg z-[60]">
               <SelectItem value="none">Ingen</SelectItem>
               <SelectItem value="temperature">🌡️ Temperatur</SelectItem>
               <SelectItem value="co2">💨 CO₂</SelectItem>
