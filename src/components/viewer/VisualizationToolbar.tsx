@@ -12,12 +12,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface VisualizationToolbarProps {
@@ -79,23 +73,17 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     <div className={containerClassName}>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className={cn(
-                    "shadow-lg bg-card/95 backdrop-blur-sm border",
-                    "h-8 w-8 sm:h-10 sm:w-10"
-                  )}
-                >
-                  <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">Visning</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="secondary"
+            size="icon"
+            title="Visning"
+            className={cn(
+              "shadow-lg bg-card/95 backdrop-blur-sm border",
+              "h-8 w-8 sm:h-10 sm:w-10"
+            )}
+          >
+            <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
         </SheetTrigger>
 
         <SheetContent side="right" className="w-80 sm:w-96 p-0 bg-card/95 backdrop-blur-sm z-[60]">
