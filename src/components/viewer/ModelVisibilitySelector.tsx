@@ -313,8 +313,8 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const visibleCount = visibleModelIds.size;
     const totalCount = models.length;
 
-    // Don't show if only one model or no models
-    if (models.length <= 1) {
+    // Don't render if no models found
+    if (models.length === 0) {
       return null;
     }
 
