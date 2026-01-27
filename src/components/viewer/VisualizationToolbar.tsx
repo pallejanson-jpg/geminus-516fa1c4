@@ -1,16 +1,18 @@
 import React, { useCallback, useState, useEffect } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
+import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -57,6 +59,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
   
+  // Clipping height state (for 2D floor plan view)
+  const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
+  const [is2DMode, setIs2DMode] = useState(false);
+  
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -82,6 +88,28 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       window.removeEventListener('storage', handleSettingsChange);
       window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
     };
+  }, []);
+
+  // Listen for view mode changes to show/hide clipping slider
+  useEffect(() => {
+    const handleViewModeChange = (e: CustomEvent) => {
+      setIs2DMode(e.detail?.mode === '2d');
+    };
+    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    return () => {
+      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    };
+  }, []);
+
+  // Handle clip height change
+  const handleClipHeightChange = useCallback((value: number[]) => {
+    const newHeight = value[0];
+    setClipHeight(newHeight);
+    
+    // Emit event to update clipping in real-time
+    window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, {
+      detail: { height: newHeight }
+    }));
   }, []);
 
   // Tool visibility check
@@ -223,6 +251,38 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 onVisibleFloorsChange={handleVisibleFloorsChange}
                 enableClipping={true}
               />
+
+              {/* Clipping height slider - visible when 2D mode is active */}
+              {is2DMode && (
+                <div className="space-y-3">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider block">
+                    Klipphöjd (2D-vy)
+                  </Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                        <Scissors className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1">
+                        <Slider
+                          value={[clipHeight]}
+                          onValueChange={handleClipHeightChange}
+                          min={0.5}
+                          max={2.5}
+                          step={0.1}
+                          className="w-full"
+                        />
+                      </div>
+                      <span className="text-sm font-medium w-12 text-right">
+                        {clipHeight.toFixed(1)}m
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Höjd ovanför golv för planritningsklippning
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <Separator />
 
