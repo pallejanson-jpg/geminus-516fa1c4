@@ -7,7 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { useSectionPlaneClipping } from '@/hooks/useSectionPlaneClipping';
+import { useSectionPlaneClipping, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 
 export interface FloorInfo {
   id: string;  // Representative ID for the group
@@ -31,6 +31,7 @@ interface FloorVisibilitySelectorProps {
  * Collapsed by default - expands when user clicks to select floors.
  * Controls which floors are visible in the 3D viewer.
  * Blocks interaction until viewer is ready to prevent UI freezing.
+ * Emits FLOOR_SELECTION_CHANGED_EVENT when floor selection changes.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
   ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className }, ref) => {
@@ -42,10 +43,11 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
     const [clippingEnabled, setClippingEnabled] = useState(false);
 
-    // SectionPlane clipping hook
-    const { updateClipping, isClippingActive } = useSectionPlaneClipping(viewerRef, {
+    // SectionPlane clipping hook (uses ceiling mode for 3D solo)
+    const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
       enabled: enableClipping && clippingEnabled,
       offset: 0.1, // 10cm above ceiling
+      clipMode: 'ceiling', // 3D solo mode uses ceiling clipping
     });
 
     // Get XEOkit viewer
@@ -293,13 +295,22 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       // Apply clipping when showing single floor
       updateClipping([floorId]);
       
+      // Emit event for other components (e.g., ViewerToolbar 2D mode)
+      const floor = floors.find(f => f.id === floorId);
+      const bounds = calculateFloorBounds(floorId);
+      const eventDetail: FloorSelectionEventDetail = {
+        floorId,
+        floorName: floor?.name || null,
+        bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+      };
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+      
       if (onVisibleFloorsChange) {
-        const floor = floors.find(f => f.id === floorId);
         if (floor) {
           onVisibleFloorsChange(floor.databaseLevelFmGuids);
         }
       }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
@@ -308,6 +319,14 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       
       // Remove clipping when showing all floors
       updateClipping(Array.from(allIds));
+      
+      // Emit event to signal no specific floor is selected
+      const eventDetail: FloorSelectionEventDetail = {
+        floorId: null,
+        floorName: null,
+        bounds: null,
+      };
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
       
       if (onVisibleFloorsChange) {
         // Collect all fmGuids from all floors
