@@ -12,6 +12,8 @@ import {
   TreeDeciduous,
   Palette,
   Settings,
+  Building2,
+  Layers3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -27,7 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { getVisualizationToolSettings, ToolConfig } from './ToolbarSettings';
+import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
 
 interface VisualizationToolbarProps {
@@ -79,14 +81,22 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
   const [localTreeView, setLocalTreeView] = useState(showTreeView || false);
   const [localVisualization, setLocalVisualization] = useState(showVisualization || false);
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
+  
+  // BIM models and floors state
+  const [availableModels, setAvailableModels] = useState<{ id: string; name: string; visible: boolean }[]>([]);
+  const [availableFloors, setAvailableFloors] = useState<{ id: string; name: string; visible: boolean }[]>([]);
 
-  // Reload settings when they change
+  // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handleSettingsChange = () => {
       setToolSettings(getVisualizationToolSettings());
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('storage', handleSettingsChange);
+    window.addEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    return () => {
+      window.removeEventListener('storage', handleSettingsChange);
+      window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+    };
   }, []);
 
   // Sync with parent props
@@ -185,6 +195,101 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
       console.warn('Toggle annotations failed:', error);
     }
   }, [viewerRef, showAnnotations]);
+
+  // Fetch available models and floors when sheet opens
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    try {
+      const viewer = viewerRef.current;
+      const assetViewer = viewer?.$refs?.AssetViewer;
+      
+      // Get available models from Asset+ viewer
+      if (assetViewer?.availableModels) {
+        const models = assetViewer.availableModels.map((m: any) => ({
+          id: m.id || m.name,
+          name: m.name || m.id,
+          visible: m.visible !== false,
+        }));
+        setAvailableModels(models);
+      }
+      
+      // Get floors from metaScene
+      const xeokitViewer = getXeokitViewer();
+      if (xeokitViewer?.metaScene) {
+        const metaObjects = xeokitViewer.metaScene.metaObjects || {};
+        const floors: { id: string; name: string; visible: boolean }[] = [];
+        
+        Object.values(metaObjects).forEach((obj: any) => {
+          if (obj.type === 'IfcBuildingStorey') {
+            const sceneObject = xeokitViewer.scene?.objects?.[obj.id];
+            floors.push({
+              id: obj.id,
+              name: obj.name || obj.id,
+              visible: sceneObject?.visible !== false,
+            });
+          }
+        });
+        
+        // Sort floors by name (often includes floor number)
+        floors.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
+        setAvailableFloors(floors);
+      }
+    } catch (e) {
+      console.debug('Failed to fetch models/floors:', e);
+    }
+  }, [isOpen, viewerRef, getXeokitViewer]);
+
+  // Toggle model visibility
+  const handleToggleModel = useCallback((modelId: string) => {
+    try {
+      const viewer = viewerRef.current;
+      const assetViewer = viewer?.$refs?.AssetViewer;
+      
+      if (assetViewer && typeof assetViewer.setModelVisibility === 'function') {
+        const model = availableModels.find(m => m.id === modelId);
+        if (model) {
+          assetViewer.setModelVisibility(modelId, !model.visible);
+          setAvailableModels(prev => prev.map(m => 
+            m.id === modelId ? { ...m, visible: !m.visible } : m
+          ));
+        }
+      }
+    } catch (e) {
+      console.debug('Toggle model failed:', e);
+    }
+  }, [viewerRef, availableModels]);
+
+  // Toggle floor visibility
+  const handleToggleFloor = useCallback((floorId: string) => {
+    try {
+      const xeokitViewer = getXeokitViewer();
+      if (!xeokitViewer?.metaScene) return;
+      
+      const floor = availableFloors.find(f => f.id === floorId);
+      if (!floor) return;
+      
+      const newVisible = !floor.visible;
+      
+      // Get all objects that belong to this floor (children of the storey)
+      const metaObject = xeokitViewer.metaScene.metaObjects[floorId];
+      if (metaObject) {
+        const objectIds = metaObject.getObjectIDsInSubtree?.() || [floorId];
+        objectIds.forEach((id: string) => {
+          const sceneObj = xeokitViewer.scene?.objects?.[id];
+          if (sceneObj) {
+            sceneObj.visible = newVisible;
+          }
+        });
+      }
+      
+      setAvailableFloors(prev => prev.map(f => 
+        f.id === floorId ? { ...f, visible: newVisible } : f
+      ));
+    } catch (e) {
+      console.debug('Toggle floor failed:', e);
+    }
+  }, [getXeokitViewer, availableFloors]);
 
   const handleShowObjectDetails = useCallback(() => {
     const viewer = viewerRef.current;
@@ -389,6 +494,78 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = ({
                       onClose={() => handleToggleTreeView()}
                       embedded={true}
                     />
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            {/* BIM Models Section */}
+            {availableModels.length > 0 && (
+              <>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-3.5 w-3.5" />
+                      BIM-modeller
+                    </div>
+                  </Label>
+                  <div className="space-y-1">
+                    {availableModels.map(model => (
+                      <div key={model.id} className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-1.5 rounded-md",
+                            model.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          )}>
+                            <Building2 className="h-4 w-4" />
+                          </div>
+                          <span className="text-sm truncate max-w-[180px]" title={model.name}>
+                            {model.name}
+                          </span>
+                        </div>
+                        <Switch 
+                          checked={model.visible} 
+                          onCheckedChange={() => handleToggleModel(model.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            {/* Floors Section */}
+            {availableFloors.length > 0 && (
+              <>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                    <div className="flex items-center gap-2">
+                      <Layers3 className="h-3.5 w-3.5" />
+                      Våningsplan
+                    </div>
+                  </Label>
+                  <div className="space-y-1">
+                    {availableFloors.map(floor => (
+                      <div key={floor.id} className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-1.5 rounded-md",
+                            floor.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          )}>
+                            <Layers3 className="h-4 w-4" />
+                          </div>
+                          <span className="text-sm truncate max-w-[180px]" title={floor.name}>
+                            {floor.name}
+                          </span>
+                        </div>
+                        <Switch 
+                          checked={floor.visible} 
+                          onCheckedChange={() => handleToggleFloor(floor.id)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <Separator />
