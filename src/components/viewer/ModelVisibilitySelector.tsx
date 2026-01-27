@@ -35,54 +35,67 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
     const [isLoadingNames, setIsLoadingNames] = useState(false);
 
-    // Fetch model names from Asset+ API
-    useEffect(() => {
-      if (!buildingFmGuid) return;
+  // Helper to extract model ID from xktFileUrl
+  const extractModelIdFromUrl = (xktFileUrl: string): string => {
+    const fileName = xktFileUrl.split('/').pop() || '';
+    return fileName.replace('.xkt', '');
+  };
 
-      const fetchModelNames = async () => {
-        setIsLoadingNames(true);
-        try {
-          const [tokenResult, configResult] = await Promise.all([
-            supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
-            supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
-          ]);
+  // Fetch model names from Asset+ API
+  useEffect(() => {
+    if (!buildingFmGuid) return;
 
-          const accessToken = tokenResult.data?.accessToken;
-          const apiUrl = configResult.data?.apiUrl;
-          const apiKey = configResult.data?.apiKey;
+    const fetchModelNames = async () => {
+      setIsLoadingNames(true);
+      try {
+        const [tokenResult, configResult] = await Promise.all([
+          supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
+          supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
+        ]);
 
-          if (!accessToken || !apiUrl) {
-            setIsLoadingNames(false);
-            return;
-          }
+        const accessToken = tokenResult.data?.accessToken;
+        const apiUrl = configResult.data?.apiUrl;
+        const apiKey = configResult.data?.apiKey;
 
-          // Build base URL for 3D API
-          const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-          const response = await fetch(
-            `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-          );
-
-          if (response.ok) {
-            const apiModels = await response.json();
-            const nameMap = new Map<string, string>();
-            apiModels.forEach((m: any) => {
-              // Map model ID to friendly name (e.g., "A-modell")
-              if (m.id && m.name) {
-                nameMap.set(m.id, m.name);
-              }
-            });
-            setModelNamesMap(nameMap);
-          }
-        } catch (e) {
-          console.debug("Failed to fetch model names from Asset+:", e);
-        } finally {
+        if (!accessToken || !apiUrl) {
           setIsLoadingNames(false);
+          return;
         }
-      };
 
-      fetchModelNames();
-    }, [buildingFmGuid]);
+        // Build base URL for 3D API
+        const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+        const response = await fetch(
+          `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+
+        if (response.ok) {
+          const apiModels = await response.json();
+          const nameMap = new Map<string, string>();
+          apiModels.forEach((m: any) => {
+            // Primary: map model.id to name
+            if (m.id && m.name) {
+              nameMap.set(m.id, m.name);
+            }
+            // Secondary: extract filename from xktFileUrl and map to name
+            if (m.xktFileUrl && m.name) {
+              const fileId = extractModelIdFromUrl(m.xktFileUrl);
+              nameMap.set(fileId, m.name);
+              // Also with .xkt extension
+              nameMap.set(fileId + '.xkt', m.name);
+            }
+          });
+          setModelNamesMap(nameMap);
+        }
+      } catch (e) {
+        console.debug("Failed to fetch model names from Asset+:", e);
+      } finally {
+        setIsLoadingNames(false);
+      }
+    };
+
+    fetchModelNames();
+  }, [buildingFmGuid]);
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
@@ -120,37 +133,6 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       return extractedModels;
     }, [getXeokitViewer, modelNamesMap]);
 
-    // Load models once and set all visible by default
-    useEffect(() => {
-      if (isInitialized) return;
-
-      const checkModels = () => {
-        const newModels = extractModels();
-        if (newModels.length > 0) {
-          setModels(newModels);
-          const allIds = new Set(newModels.map(m => m.id));
-          setVisibleModelIds(allIds);
-          setIsInitialized(true);
-        }
-      };
-
-      checkModels();
-      
-      // Only retry a few times, not forever
-      let attempts = 0;
-      const maxAttempts = 10;
-      const interval = setInterval(() => {
-        if (isInitialized || attempts >= maxAttempts) {
-          clearInterval(interval);
-          return;
-        }
-        checkModels();
-        attempts++;
-      }, 500);
-
-      return () => clearInterval(interval);
-    }, [extractModels, isInitialized]);
-
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
@@ -176,6 +158,52 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         }
       });
     }, [getXeokitViewer]);
+
+    // Load models once and set only A-models visible by default
+    useEffect(() => {
+      if (isInitialized) return;
+
+      const checkModels = () => {
+        const newModels = extractModels();
+        if (newModels.length > 0) {
+          setModels(newModels);
+          
+          // Filter to only A-models as default
+          const aModelIds = new Set(
+            newModels
+              .filter(m => {
+                const nameLower = m.name.toLowerCase();
+                return nameLower.startsWith('a') || nameLower.includes('a-modell') || nameLower.includes('arkitekt');
+              })
+              .map(m => m.id)
+          );
+          
+          // If no A-models found, show all
+          const idsToShow = aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id));
+          setVisibleModelIds(idsToShow);
+          
+          // Apply visibility immediately
+          applyModelVisibility(idsToShow);
+          setIsInitialized(true);
+        }
+      };
+
+      checkModels();
+      
+      // Only retry a few times, not forever
+      let attempts = 0;
+      const maxAttempts = 10;
+      const interval = setInterval(() => {
+        if (isInitialized || attempts >= maxAttempts) {
+          clearInterval(interval);
+          return;
+        }
+        checkModels();
+        attempts++;
+      }, 500);
+
+      return () => clearInterval(interval);
+    }, [extractModels, isInitialized, applyModelVisibility]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
       setVisibleModelIds(prev => {
