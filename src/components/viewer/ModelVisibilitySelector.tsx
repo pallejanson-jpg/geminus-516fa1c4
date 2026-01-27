@@ -41,13 +41,44 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     return fileName.replace('.xkt', '');
   };
 
-  // Fetch model names from Asset+ API
+  // Fetch model names - first try database, then fall back to Asset+ API
   useEffect(() => {
     if (!buildingFmGuid) return;
 
     const fetchModelNames = async () => {
       setIsLoadingNames(true);
       try {
+        // First, try to get model names from local database (xkt_models table)
+        const { data: dbModels, error: dbError } = await supabase
+          .from('xkt_models')
+          .select('model_id, model_name, file_name')
+          .eq('building_fm_guid', buildingFmGuid);
+
+        if (!dbError && dbModels && dbModels.length > 0) {
+          console.debug("Using model names from database:", dbModels);
+          const nameMap = new Map<string, string>();
+          
+          dbModels.forEach((m) => {
+            if (m.model_id && m.model_name) {
+              nameMap.set(m.model_id, m.model_name);
+              nameMap.set(m.model_id.toLowerCase(), m.model_name);
+            }
+            if (m.file_name && m.model_name) {
+              const fileId = m.file_name.replace('.xkt', '');
+              nameMap.set(fileId, m.model_name);
+              nameMap.set(fileId.toLowerCase(), m.model_name);
+              nameMap.set(m.file_name, m.model_name);
+              nameMap.set(m.file_name.toLowerCase(), m.model_name);
+            }
+          });
+          
+          setModelNamesMap(nameMap);
+          setIsLoadingNames(false);
+          return;
+        }
+
+        // Fall back to Asset+ API if database has no data
+        console.debug("No models in database, falling back to Asset+ API");
         const [tokenResult, configResult] = await Promise.all([
           supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
           supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
@@ -78,7 +109,6 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             // Primary: map model.id to name
             if (m.id && m.name) {
               nameMap.set(m.id, m.name);
-              // Also try lowercase version
               nameMap.set(m.id.toLowerCase(), m.name);
             }
             // Secondary: extract filename from xktFileUrl and map to name
@@ -86,7 +116,6 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
               const fileId = extractModelIdFromUrl(m.xktFileUrl);
               nameMap.set(fileId, m.name);
               nameMap.set(fileId.toLowerCase(), m.name);
-              // Also with .xkt extension
               nameMap.set(fileId + '.xkt', m.name);
               nameMap.set(fileId.toLowerCase() + '.xkt', m.name);
             }
@@ -98,7 +127,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           console.debug("Asset+ GetModels failed:", response.status);
         }
       } catch (e) {
-        console.debug("Failed to fetch model names from Asset+:", e);
+        console.debug("Failed to fetch model names:", e);
       } finally {
         setIsLoadingNames(false);
       }
