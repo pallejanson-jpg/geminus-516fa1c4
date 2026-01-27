@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
+import FloorVisibilitySelector from "./FloorVisibilitySelector";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -18,6 +20,7 @@ interface VisualizationToolbarProps {
   onPickCoordinate?: () => void;
   onShowProperties?: () => void;
   onOpenSettings?: () => void;
+  onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
   isPickMode?: boolean;
   showTreeView?: boolean;
   showVisualization?: boolean;
@@ -30,6 +33,7 @@ interface VisualizationToolbarProps {
 /**
  * VisualizationToolbar with configurable tools based on ToolbarSettings.
  * Renders as a floating, draggable panel when opened.
+ * Includes floor visibility selector with multi-select switches.
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { 
@@ -39,6 +43,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     onToggleVisualization,
     showVisualization = false,
     onAddAsset,
+    onVisibleFloorsChange,
   } = props;
 
   const [isOpen, setIsOpen] = useState(false);
@@ -137,6 +142,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     onAddAsset?.();
   }, [onAddAsset]);
 
+  // Handle visible floors change from floor selector
+  const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
+    console.log("Visible floors changed:", visibleFloorIds);
+    onVisibleFloorsChange?.(visibleFloorIds);
+  }, [onVisibleFloorsChange]);
+
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",
     className
@@ -164,7 +175,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <div
           className={cn(
             "fixed z-[60] bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl",
-            "w-72 max-h-[400px] flex flex-col",
+            "w-72 max-h-[500px] flex flex-col",
             isDragging && "cursor-grabbing opacity-90"
           )}
           style={{ left: position.x, top: position.y }}
@@ -191,6 +202,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           {/* Content */}
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-4">
+              {/* Floor visibility section - NEW */}
+              <FloorVisibilitySelector
+                viewerRef={viewerRef}
+                onVisibleFloorsChange={handleVisibleFloorsChange}
+              />
+
+              <Separator />
+
               {/* Visibility section */}
               <div>
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
