@@ -1,257 +1,292 @@
 
-# Plan: Förbättra BIM-modellnamn och XKT-hämtning
+# Plan: Implementera 2D-planritningsklippning med SectionPlane
 
 ## Sammanfattning
 
-Implementera en robust lösning för att hämta korrekta BIM-modellnamn från Asset+ och optimera XKT-filhämtning för bättre prestanda.
+Utöka befintlig SectionPlane-klippning för att stödja 2D-planritningsvy där klippningen sker ~1.2m ovanför golvet istället för vid taket. Detta ger en ren planritningsvy där väggar ses som linjer och tak/höga objekt klipps bort.
 
-## Del 1: Korrigera BIM-modellnamn-flödet
+## Teknisk analys
 
-### Grundorsak
-- `xkt_models`-tabellen är tom - XKT-synk har aldrig körts
-- Matchningen mellan XEOkit-modell-ID:n och Asset+ modell-ID:n fungerar inte
+### Nuvarande implementation
+- `useSectionPlaneClipping.ts` - Klipper vid `bounds.maxY + offset` (taknivå)
+- `ViewerToolbar.tsx` - 2D-läge byter endast kameraprojektion till ortografisk
+- `FloorVisibilitySelector.tsx` - Använder hooken för taknivå-klippning vid "Solo"
 
-### Lösning
+### Önskad implementation
+- **3D Solo-läge:** Klippning vid taknivå (nuvarande beteende)
+- **2D-läge:** Klippning ~1.2m ovanför golvet (nytt)
+- **Rumsvisualisering:** Ska fungera korrekt med båda klipplägena
 
-#### Steg 1: Kör XKT-synk för att populera xkt_models-tabellen
+## Ändringar
 
-Befintlig `sync-xkt`-action i `asset-plus-sync` sparar redan:
-- `model_id` (från Asset+ API)
-- `model_name` (t.ex. "A-modell", "E-modell")
-- `file_name` (XKT-filnamnet)
-- `building_fm_guid`
+### 1. useSectionPlaneClipping.ts - Lägg till stöd för `clipMode`
 
-Detta skapar rätt mappning mellan XKT-filnamn och modellnamn.
-
-#### Steg 2: Förbättra matchningslogik i ModelVisibilitySelector
-
-Uppdatera `extractModels()` för att matcha XEOkit-modeller mot xkt_models:
+Utöka hooken med:
+- `clipMode: 'ceiling' | 'floor'` parameter
+- `floorCutHeight: number` parameter (default 1.2m)
+- Ny funktion `applyFloorPlanClipping(floorId)` för 2D-läge
 
 ```typescript
-// Nuvarande problem:
-// XEOkit scene.models key: "abc123.xkt" eller "abc123"
-// Asset+ GetModels id: "xyz789" 
-// xkt_models.file_name: "abc123.xkt"
-// xkt_models.model_name: "A-modell"
+interface SectionPlaneClippingOptions {
+  enabled?: boolean;
+  offset?: number;
+  clipMode?: 'ceiling' | 'floor';  // NY
+  floorCutHeight?: number;         // NY - höjd ovanför golv för 2D (default 1.2m)
+}
 
-// Lösning: Matcha på file_name istället för model_id
-const extractModels = useCallback(() => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene?.models) return [];
-
-  const sceneModels = viewer.scene.models;
-  const extractedModels: ModelInfo[] = [];
-
-  Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
-    // modelId är typiskt filnamnet från XKT-laddaren
-    const fileName = (model.id || modelId).replace(/\.xkt$/i, '') + '.xkt';
-    const fileNameWithoutExt = fileName.replace(/\.xkt$/i, '');
-    
-    // Sök matchning baserat på filnamn
-    let matchedName = 
-      modelNamesMap.get(fileName) ||
-      modelNamesMap.get(fileName.toLowerCase()) ||
-      modelNamesMap.get(fileNameWithoutExt) ||
-      modelNamesMap.get(fileNameWithoutExt.toLowerCase());
-    
-    const friendlyName = matchedName || fileNameWithoutExt;
-    
-    extractedModels.push({
-      id: modelId,
-      name: friendlyName,
-      shortName: friendlyName.length > 25 ? friendlyName.substring(0, 25) + '...' : friendlyName,
-    });
-  });
-
-  return extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-}, [getXeokitViewer, modelNamesMap]);
+// I applySectionPlane:
+const clipHeight = options.clipMode === 'floor' 
+  ? bounds.minY + (options.floorCutHeight || 1.2)  // Planritningsvy
+  : bounds.maxY + offset;                           // Taknivå
 ```
 
-#### Steg 3: Uppdatera fetchModelNames för att bygga map korrekt
+### 2. ViewerToolbar.tsx - Koppla 2D-knappen till SectionPlane
+
+Lägg till:
+- Import av `useSectionPlaneClipping`
+- Hålla reda på valt våningsplan via custom event
+- Aktivera planritningsklippning när 2D-läge aktiveras
 
 ```typescript
-// I fetchModelNames()
-if (dbModels && dbModels.length > 0) {
-  const nameMap = new Map<string, string>();
+// State för att spåra valt floor
+const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+
+// Lyssna på floor-ändringar
+useEffect(() => {
+  const handleFloorChange = (e: CustomEvent) => {
+    setCurrentFloorId(e.detail.floorId);
+  };
+  window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange);
+  return () => window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange);
+}, []);
+
+// I handleViewModeChange:
+if (mode === '2d' && currentFloorId) {
+  apply2DFloorClipping(currentFloorId);
+}
+```
+
+### 3. FloorVisibilitySelector.tsx - Emittera floor-ändringar
+
+Lägg till custom event när våning ändras så ViewerToolbar kan lyssna:
+
+```typescript
+const handleShowOnlyFloor = useCallback((floorId: string) => {
+  // ... befintlig logik ...
   
-  dbModels.forEach((m) => {
-    // Mappa file_name -> model_name (primär matchning)
-    if (m.file_name && m.model_name) {
-      nameMap.set(m.file_name, m.model_name);
-      nameMap.set(m.file_name.toLowerCase(), m.model_name);
-      nameMap.set(m.file_name.replace('.xkt', ''), m.model_name);
-      nameMap.set(m.file_name.replace('.xkt', '').toLowerCase(), m.model_name);
+  // Emittera event för andra komponenter (t.ex. ViewerToolbar 2D-läge)
+  window.dispatchEvent(new CustomEvent('FLOOR_SELECTION_CHANGED', { 
+    detail: { floorId, floorBounds: calculateFloorBounds(floorId) }
+  }));
+}, []);
+```
+
+### 4. Synkronisering mellan komponenter
+
+Skapa ett enkelt event-baserat kommunikationsmönster:
+
+```text
+FloorVisibilitySelector                    ViewerToolbar
+       │                                        │
+       │ -- FLOOR_SELECTION_CHANGED ──────────► │
+       │    (floorId, bounds)                   │
+       │                                        │
+       │ ◄───── VIEW_MODE_CHANGED ───────────── │
+       │        (mode: '2d' | '3d')             │
+       │                                        │
+       ▼                                        ▼
+   useSectionPlaneClipping              useSectionPlaneClipping
+   (clipMode: 'ceiling')                (clipMode: 'floor')
+```
+
+## Detaljerade filändringar
+
+### useSectionPlaneClipping.ts
+
+```typescript
+// Nya options
+interface SectionPlaneClippingOptions {
+  enabled?: boolean;
+  offset?: number;
+  clipMode?: 'ceiling' | 'floor';
+  floorCutHeight?: number;  // Default 1.2m
+}
+
+// Uppdaterad applySectionPlane
+const applySectionPlane = useCallback((floorId: string, mode?: 'ceiling' | 'floor') => {
+  const clipMode = mode || options.clipMode || 'ceiling';
+  const bounds = calculateFloorBounds(floorId);
+  
+  // Beräkna klipphöjd baserat på läge
+  const clipHeight = clipMode === 'floor' 
+    ? bounds.minY + (options.floorCutHeight || 1.2)
+    : bounds.maxY + offset;
+  
+  // Skapa SectionPlane vid rätt höjd
+  sectionPlaneRef.current = plugin.createSectionPlane({
+    id: `floor-clip-${floorId}-${clipMode}`,
+    pos: [0, clipHeight, 0],
+    dir: [0, -1, 0],
+    active: true,
+  });
+}, [/* deps */]);
+
+// Ny funktion för 2D-läge
+const applyFloorPlanClipping = useCallback((floorId: string) => {
+  applySectionPlane(floorId, 'floor');
+}, [applySectionPlane]);
+
+return {
+  updateClipping,
+  applySectionPlane,
+  applyFloorPlanClipping,  // NY
+  removeSectionPlane,
+  isClippingActive,
+  currentFloorId,
+  currentClipMode,  // NY
+};
+```
+
+### ViewerToolbar.tsx
+
+```typescript
+// Importera hooken
+import { useSectionPlaneClipping } from '@/hooks/useSectionPlaneClipping';
+
+// I komponenten:
+const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+
+const { applyFloorPlanClipping, removeSectionPlane } = useSectionPlaneClipping(
+  viewerRef, 
+  { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
+);
+
+// Lyssna på floor-ändringar
+useEffect(() => {
+  const handleFloorChange = (e: CustomEvent) => {
+    setCurrentFloorId(e.detail.floorId);
+    // Om 2D-läge är aktivt, uppdatera klippningen
+    if (viewMode === '2d' && e.detail.floorId) {
+      applyFloorPlanClipping(e.detail.floorId);
     }
-  });
+  };
+  window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+  return () => window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+}, [viewMode, applyFloorPlanClipping]);
+
+// Uppdaterad handleViewModeChange
+const handleViewModeChange = useCallback((mode: ViewMode) => {
+  setViewMode(mode);
   
-  setModelNamesMap(nameMap);
-}
-```
-
----
-
-## Del 2: Optimera XKT-filhämtning
-
-### Nuvarande problem
-XKT-filer hämtas direkt från Asset+ API vid varje sidladdning, vilket:
-- Tar lång tid (varje fil kan vara flera MB)
-- Belastar Asset+ servern
-- Kräver autentisering varje gång
-
-### Lösning: Använd synkade XKT-filer från Supabase Storage
-
-#### Steg 1: Verifiera att XKT-filer är synkade
-
-Kör `sync-xkt` action som laddar ner XKT-filer till Supabase Storage och sparar metadata i `xkt_models`.
-
-#### Steg 2: Uppdatera 3D-viewern att använda cachade filer
-
-Modifiera XKT-laddningslogiken i `AssetPlusViewer.tsx` eller `xkt-cache-service.ts`:
-
-```typescript
-// xkt-cache-service.ts - uppdatera checkCache
-async checkCache(modelId: string, buildingFmGuid: string): Promise<{cached: boolean, url?: string}> {
-  // Försök hitta i xkt_models-tabellen
-  const { data: model } = await supabase
-    .from('xkt_models')
-    .select('file_url, storage_path')
-    .eq('building_fm_guid', buildingFmGuid)
-    .or(`model_id.eq.${modelId},file_name.eq.${modelId},file_name.eq.${modelId}.xkt`)
-    .maybeSingle();
-  
-  if (model?.file_url) {
-    return { cached: true, url: model.file_url };
-  }
-  
-  // Fallback: hämta signerad URL från storage
-  if (model?.storage_path) {
-    const { data } = await supabase.storage
-      .from('xkt-models')
-      .createSignedUrl(model.storage_path, 3600);
+  if (mode === '2d') {
+    // Applicera planritningsklippning om ett våningsplan är valt
+    if (currentFloorId) {
+      applyFloorPlanClipping(currentFloorId);
+    }
     
-    return { cached: true, url: data?.signedUrl };
+    // Flytta kamera ovanifrån (befintlig logik)
+    // ...
+  } else {
+    // Ta bort 2D-klippningen
+    removeSectionPlane();
+    // Återställ kamera (befintlig logik)
+    // ...
   }
+}, [currentFloorId, applyFloorPlanClipping, removeSectionPlane]);
+```
+
+### FloorVisibilitySelector.tsx
+
+```typescript
+// I handleShowOnlyFloor - emittera event
+const handleShowOnlyFloor = useCallback((floorId: string) => {
+  const newSet = new Set([floorId]);
+  setVisibleFloorIds(newSet);
+  applyFloorVisibility(newSet);
+  updateClipping([floorId]);
   
-  return { cached: false };
-}
-```
+  // Emittera event för ViewerToolbar och andra lyssnare
+  const bounds = calculateFloorBounds(floorId);
+  window.dispatchEvent(new CustomEvent('FLOOR_SELECTION_CHANGED', { 
+    detail: { 
+      floorId, 
+      floorName: floors.find(f => f.id === floorId)?.name,
+      bounds 
+    }
+  }));
+  
+  // ... resten av befintlig logik
+}, [/* deps */]);
 
----
+// I handleShowAll - emittera att ingen specifik våning är vald
+const handleShowAll = useCallback(() => {
+  // ... befintlig logik ...
+  
+  window.dispatchEvent(new CustomEvent('FLOOR_SELECTION_CHANGED', { 
+    detail: { floorId: null, floorName: null, bounds: null }
+  }));
+}, [/* deps */]);
 
-## Del 3: Optimera våningsplans-prestanda
-
-### Nuvarande problem
-`applyFloorVisibility()` itererar över varje objekt individuellt:
-```typescript
-objectIds.forEach(id => {
-  const entity = scene.objects?.[id];
-  if (entity) {
-    entity.visible = isVisible;
-  }
-});
-```
-
-Med 10,000+ objekt blir detta långsamt och blockerar UI.
-
-### Lösning: Använd XEOkit batch-API
-
-```typescript
-const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
+// Lägg till beräkningsfunktion
+const calculateFloorBounds = useCallback((floorId: string) => {
   const viewer = getXeokitViewer();
-  if (!viewer?.scene) return;
-
-  const scene = viewer.scene;
+  if (!viewer?.metaScene?.metaObjects || !viewer?.scene?.objects) return null;
+  
+  const floor = floors.find(f => f.id === floorId);
+  if (!floor) return null;
+  
+  let minY = Infinity, maxY = -Infinity;
   const childrenMap = buildChildrenMap();
   
-  // Samla alla objekt-IDs att visa
-  const idsToShow: string[] = [];
-  
-  floors.forEach(floor => {
-    if (visibleIds.has(floor.id)) {
-      floor.metaObjectIds.forEach(metaObjId => {
-        idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
-      });
-    }
+  floor.metaObjectIds.forEach(metaObjId => {
+    const ids = getChildIdsOptimized(metaObjId, childrenMap);
+    ids.forEach(id => {
+      const entity = viewer.scene.objects?.[id];
+      if (entity?.aabb) {
+        if (entity.aabb[1] < minY) minY = entity.aabb[1];
+        if (entity.aabb[4] > maxY) maxY = entity.aabb[4];
+      }
+    });
   });
   
-  // Batch-uppdatering - mycket snabbare!
-  if (scene.setObjectsVisible) {
-    // Dölj allt först
-    scene.setObjectsVisible(scene.objectIds, false);
-    // Visa valda
-    scene.setObjectsVisible(idsToShow, true);
-  } else {
-    // Fallback för äldre XEOkit
-    requestIdleCallback(() => {
-      const idSet = new Set(idsToShow);
-      Object.entries(scene.objects).forEach(([id, entity]: [string, any]) => {
-        if (entity) entity.visible = idSet.has(id);
-      });
-    }, { timeout: 50 });
-  }
+  return { minY, maxY };
 }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 ```
 
----
+## Rumsvisualisering
 
-## Del 4: Alternativ - Hämta modellnamn från Asset+ objektdata
+Rumsvisualiseringen (`RoomVisualizationPanel`) fungerar genom att sätta `entity.colorize` på rum-objekt (IfcSpace). Dessa rum är 3D-volymer i modellen.
 
-### Bakgrund
-Varje objekt i Asset+ har `parentBimObjectId` som pekar på BIM-modellen. Vi kan använda detta för att:
-1. Extrahera unika BIM-modell-IDs från synkade assets
-2. Mappa dessa till modellnamn via GetModels API
-3. Spara mappningen i `xkt_models`
+**Varför det fungerar med klippning:**
+- När SectionPlane klipper vid 1.2m höjd, visas fortfarande den nedre delen av rummen
+- Rummens golv och nedre väggar behåller sin färgkodning
+- Resultatet blir en färglagd planritningsvy
 
-### Implementation i sync-funktionen
+**Ingen ändring behövs** i `RoomVisualizationPanel.tsx` - den fungerar automatiskt.
 
-```typescript
-// I asset-plus-sync/index.ts - ny action
-if (action === 'sync-bim-models-metadata') {
-  // Hämta unika parentBimObjectId från assets
-  const { data: bimObjectIds } = await supabase
-    .from('assets')
-    .select('attributes->parentBimObjectId')
-    .eq('building_fm_guid', buildingFmGuid)
-    .not('attributes->parentBimObjectId', 'is', null);
-  
-  // Anropa Asset+ GetModels för att få modellnamn
-  // Uppdatera xkt_models med mappning
-}
-```
+## Testscenario
 
----
+1. Öppna 3D-visaren för en byggnad
+2. Aktivera rumsvisualisering (t.ex. temperatur)
+3. Välj "Solo" för ett våningsplan
+4. Klicka på 2D-knappen i verktygsfältet
+5. **Förväntat resultat:**
+   - Kameran visar ovanifrån (ortografisk)
+   - Väggar syns som linjer (klippta vid 1.2m)
+   - Rummen behåller sin färgkodning
+   - Tak och höga objekt är borta
 
-## Teknisk sammanfattning
+## Filer att ändra
 
-### Filer att ändra
+| Fil | Ändring |
+|-----|---------|
+| `src/hooks/useSectionPlaneClipping.ts` | Lägg till `clipMode` och `applyFloorPlanClipping` |
+| `src/components/viewer/ViewerToolbar.tsx` | Koppla 2D-knappen till planritningsklippning |
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Emittera `FLOOR_SELECTION_CHANGED` event |
 
-| Fil | Ändringar |
-|-----|-----------|
-| `src/components/viewer/ModelVisibilitySelector.tsx` | Förbättra matchningslogik för filnamn mot modellnamn |
-| `src/components/viewer/FloorVisibilitySelector.tsx` | Implementera batch-visibility för bättre prestanda |
-| `src/services/xkt-cache-service.ts` | Prioritera databashämtning för XKT-filer |
+## Förväntat resultat
 
-### Åtgärder att utföra
-
-1. **Kör XKT-synk** via API Settings för att populera `xkt_models`-tabellen
-2. **Uppdatera ModelVisibilitySelector** med bättre matchningslogik
-3. **Optimera FloorVisibilitySelector** med batch-uppdateringar
-4. **Uppdatera xkt-cache-service** att använda databas-först
-
----
-
-## Förväntade resultat
-
-1. **BIM-modellnamn** visas korrekt som "A-modell", "E-modell" etc.
-2. **XKT-filer** laddas från Supabase Storage istället för Asset+ (snabbare)
-3. **Våningsfiltrering** blir snabbare med batch-uppdateringar
-4. **Matchning** fungerar korrekt mellan XEOkit-modell-IDs och databas
-
----
-
-## Steg för användaren
-
-1. Gå till API-inställningar
-2. Klicka på "Synka" för XKT-filer
-3. Vänta tills synkroniseringen är klar
-4. Öppna 3D-visaren - modellnamn ska nu visas korrekt
+- **2D-vy** ger ren planritning med klippning nära golvet
+- **Rumsvisualisering** fungerar korrekt i både 2D och 3D
+- **Sax-knappen** fortsätter att ge taknivå-klippning i 3D
+- **Synkronisering** mellan våningsval och 2D-läge fungerar automatiskt
