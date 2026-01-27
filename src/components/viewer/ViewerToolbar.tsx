@@ -203,7 +203,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     }
   }, [getAssetView, isViewerReady, isProcessing]);
 
-  // Tools - with proper state cleanup and debounce to prevent tool "sticking"
+  // Tools - with proper state cleanup, mutual exclusivity, and debounce
   const handleToolChange = useCallback((tool: ViewerTool) => {
     if (!isViewerReady || isProcessing) {
       console.debug('Viewer not ready for tool change');
@@ -215,17 +215,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     try {
       const assetView = getAssetView();
       if (assetView && typeof assetView.useTool === 'function') {
-        // First deactivate current tool if switching
-        if (activeTool && activeTool !== tool) {
-          try {
-            assetView.useTool(null);
-          } catch (e) {
-            console.debug('Tool deactivation:', e);
-          }
+        // Always deactivate current tool first for clean state
+        try {
+          assetView.useTool(null);
+        } catch (e) {
+          console.debug('Tool deactivation:', e);
         }
-        // Then activate new tool
-        assetView.useTool(tool);
-        setActiveTool(tool);
+        
+        // Toggle behavior: if clicking the same tool, switch to select
+        if (tool === activeTool) {
+          assetView.useTool('select');
+          setActiveTool('select');
+        } else {
+          // Activate new tool
+          assetView.useTool(tool);
+          setActiveTool(tool);
+        }
       } else {
         console.warn('AssetView not ready for tool change');
       }
@@ -355,7 +360,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             size="icon"
             className={cn(
               "h-8 w-8 sm:h-8 sm:w-8",
-              isDisabled && "opacity-50 cursor-not-allowed"
+              isDisabled && "opacity-50 cursor-not-allowed",
+              active && "ring-2 ring-primary bg-primary/10 text-primary"
             )}
             onClick={isDisabled ? undefined : onClick}
             disabled={isDisabled}
