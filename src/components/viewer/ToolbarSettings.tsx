@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { GripVertical, Save, RotateCcw } from 'lucide-react';
 import {
   Dialog,
@@ -279,7 +278,7 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full sm:max-w-lg max-h-[90vh] flex flex-col">
+      <DialogContent className="w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Anpassa verktygsfält</DialogTitle>
         </DialogHeader>
@@ -288,14 +287,14 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
           Dra för att ändra ordning. Välj vilka verktyg som ska vara synliga och vilka som ska ligga i övermenyn.
         </p>
 
-        <ScrollArea className="flex-1 max-h-[50vh] sm:max-h-[400px] pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2" style={{ maxHeight: 'calc(90vh - 200px)' }}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={tools.map(t => t.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
+              <div className="space-y-2 pb-2">
                 {tools.map((tool) => (
                   <SortableToolItem
                     key={tool.id}
@@ -307,7 +306,7 @@ const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSe
               </div>
             </SortableContext>
           </DndContext>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
           <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">

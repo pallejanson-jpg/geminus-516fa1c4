@@ -297,6 +297,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     return setting?.inOverflow ?? false;
   }, [toolSettings]);
 
+  // Get tool order index from settings
+  const getToolOrder = useCallback((toolId: string) => {
+    const index = toolSettings.findIndex(t => t.id === toolId);
+    return index === -1 ? 999 : index;
+  }, [toolSettings]);
+
+  // Get visible main toolbar tools in correct order
+  const getOrderedMainTools = useCallback(() => {
+    return toolSettings
+      .filter(t => t.visible && !t.inOverflow)
+      .map(t => t.id);
+  }, [toolSettings]);
+
   if (!isExpanded) {
     return (
       <div className={cn("absolute bottom-4 left-1/2 -translate-x-1/2 z-20", className)}>
@@ -509,7 +522,153 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     );
   }
 
-  // Desktop: Navigation-focused toolbar
+  // Desktop: Navigation-focused toolbar - render tools in order from settings
+  const orderedTools = getOrderedMainTools();
+  
+  // Tool rendering functions
+  const renderTool = (toolId: string) => {
+    switch (toolId) {
+      case 'orbit':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<RotateCcw className="h-4 w-4" />}
+            label="Orbit (rotera)"
+            onClick={() => handleNavModeChange('orbit')}
+            active={navMode === 'orbit'}
+            toolId="orbit"
+          />
+        );
+      case 'firstPerson':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<Move className="h-4 w-4" />}
+            label="Första person (gå)"
+            onClick={() => handleNavModeChange('firstPerson')}
+            active={navMode === 'firstPerson'}
+            toolId="firstPerson"
+          />
+        );
+      case 'zoomIn':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<ZoomIn className="h-4 w-4" />}
+            label="Zooma in"
+            onClick={handleZoomIn}
+            toolId="zoomIn"
+          />
+        );
+      case 'zoomOut':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<ZoomOut className="h-4 w-4" />}
+            label="Zooma ut"
+            onClick={handleZoomOut}
+            toolId="zoomOut"
+          />
+        );
+      case 'viewFit':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<Focus className="h-4 w-4" />}
+            label="Anpassa vy"
+            onClick={handleViewFit}
+            toolId="viewFit"
+          />
+        );
+      case 'resetView':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<Maximize className="h-4 w-4" />}
+            label="Återställ vy"
+            onClick={handleResetView}
+            toolId="resetView"
+          />
+        );
+      case 'select':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<MousePointer2 className="h-4 w-4" />}
+            label="Välj objekt (CTRL för multi-select)"
+            onClick={() => handleToolChange('select')}
+            active={activeTool === 'select'}
+            toolId="select"
+          />
+        );
+      case 'measure':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={<Ruler className="h-4 w-4" />}
+            label="Mätverktyg"
+            onClick={() => handleToolChange('measure')}
+            active={activeTool === 'measure'}
+            toolId="measure"
+          />
+        );
+      case 'slicer':
+        return (
+          <React.Fragment key={toolId}>
+            <ToolButton
+              icon={<Scissors className="h-4 w-4" />}
+              label="Snittplan"
+              onClick={() => handleToolChange('slicer')}
+              active={activeTool === 'slicer'}
+              toolId="slicer"
+            />
+            {activeTool === 'slicer' && (
+              <ToolButton
+                icon={<RotateCcw className="h-3 w-3" />}
+                label="Rensa snitt"
+                onClick={handleClearSlices}
+              />
+            )}
+          </React.Fragment>
+        );
+      case 'viewMode':
+        return (
+          <ToolButton
+            key={toolId}
+            icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
+            label={viewMode === '3d' ? '2D' : '3D'}
+            onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+            active={viewMode === '2d'}
+            toolId="viewMode"
+          />
+        );
+      case 'flashOnSelect':
+        return onToggleFlashOnSelect ? (
+          <ToolButton
+            key={toolId}
+            icon={<Sparkles className="h-4 w-4" />}
+            label={flashOnSelectEnabled ? 'Flash vid markering (på)' : 'Flash vid markering (av)'}
+            onClick={() => onToggleFlashOnSelect(!flashOnSelectEnabled)}
+            active={flashOnSelectEnabled}
+            toolId="flashOnSelect"
+          />
+        ) : null;
+      case 'hoverHighlight':
+        return onToggleHoverHighlight ? (
+          <ToolButton
+            key={toolId}
+            icon={<Hand className="h-4 w-4" />}
+            label={hoverHighlightEnabled ? 'Hover-highlight (på)' : 'Hover-highlight (av)'}
+            onClick={() => onToggleHoverHighlight(!hoverHighlightEnabled)}
+            active={hoverHighlightEnabled}
+            toolId="hoverHighlight"
+          />
+        ) : null;
+      default:
+        return null;
+    }
+  };
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className={cn(
@@ -518,116 +677,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         "bg-card/95 backdrop-blur-sm border shadow-lg",
         className
       )}>
-        {/* Navigation Group */}
+        {/* Render tools in user-defined order */}
         <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={<RotateCcw className="h-4 w-4" />}
-            label="Orbit (rotera)"
-            onClick={() => handleNavModeChange('orbit')}
-            active={navMode === 'orbit'}
-            toolId="orbit"
-          />
-          <ToolButton
-            icon={<Move className="h-4 w-4" />}
-            label="Första person (gå)"
-            onClick={() => handleNavModeChange('firstPerson')}
-            active={navMode === 'firstPerson'}
-            toolId="firstPerson"
-          />
-        </div>
-
-        <Separator orientation="vertical" className="h-6 mx-1" />
-
-        {/* Zoom Group */}
-        <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={<ZoomIn className="h-4 w-4" />}
-            label="Zooma in"
-            onClick={handleZoomIn}
-            toolId="zoomIn"
-          />
-          <ToolButton
-            icon={<ZoomOut className="h-4 w-4" />}
-            label="Zooma ut"
-            onClick={handleZoomOut}
-            toolId="zoomOut"
-          />
-          <ToolButton
-            icon={<Focus className="h-4 w-4" />}
-            label="Anpassa vy"
-            onClick={handleViewFit}
-            toolId="viewFit"
-          />
-          <ToolButton
-            icon={<Maximize className="h-4 w-4" />}
-            label="Återställ vy"
-            onClick={handleResetView}
-            toolId="resetView"
-          />
-        </div>
-
-        <Separator orientation="vertical" className="h-6 mx-1" />
-
-        {/* Tools Group */}
-        <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={<MousePointer2 className="h-4 w-4" />}
-            label="Välj objekt (CTRL för multi-select)"
-            onClick={() => handleToolChange('select')}
-            active={activeTool === 'select'}
-            toolId="select"
-          />
-          <ToolButton
-            icon={<Ruler className="h-4 w-4" />}
-            label="Mätverktyg"
-            onClick={() => handleToolChange('measure')}
-            active={activeTool === 'measure'}
-            toolId="measure"
-          />
-          <ToolButton
-            icon={<Scissors className="h-4 w-4" />}
-            label="Snittplan"
-            onClick={() => handleToolChange('slicer')}
-            active={activeTool === 'slicer'}
-            toolId="slicer"
-          />
-          {activeTool === 'slicer' && (
-            <ToolButton
-              icon={<RotateCcw className="h-3 w-3" />}
-              label="Rensa snitt"
-              onClick={handleClearSlices}
-            />
-          )}
-        </div>
-
-        <Separator orientation="vertical" className="h-6 mx-1" />
-
-        {/* View & Annotations Group */}
-        <div className="flex items-center gap-0.5">
-          <ToolButton
-            icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
-            label={viewMode === '3d' ? '2D' : '3D'}
-            onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
-            active={viewMode === '2d'}
-            toolId="viewMode"
-          />
-          {/* Flash and Hover toggles as buttons in main toolbar */}
-          {isToolVisible('flashOnSelect') && !isToolInOverflow('flashOnSelect') && onToggleFlashOnSelect && (
-            <ToolButton
-              icon={<Sparkles className="h-4 w-4" />}
-              label={flashOnSelectEnabled ? 'Flash vid markering (på)' : 'Flash vid markering (av)'}
-              onClick={() => onToggleFlashOnSelect(!flashOnSelectEnabled)}
-              active={flashOnSelectEnabled}
-            />
-          )}
-          {isToolVisible('hoverHighlight') && !isToolInOverflow('hoverHighlight') && onToggleHoverHighlight && (
-            <ToolButton
-              icon={<Hand className="h-4 w-4" />}
-              label={hoverHighlightEnabled ? 'Hover-highlight (på)' : 'Hover-highlight (av)'}
-              onClick={() => onToggleHoverHighlight(!hoverHighlightEnabled)}
-              active={hoverHighlightEnabled}
-            />
-          )}
+          {orderedTools.map((toolId, index) => (
+            <React.Fragment key={toolId}>
+              {renderTool(toolId)}
+              {/* Add separator after every 4th visible tool */}
+              {(index + 1) % 4 === 0 && index < orderedTools.length - 1 && (
+                <Separator orientation="vertical" className="h-6 mx-1" />
+              )}
+            </React.Fragment>
+          ))}
         </div>
 
         {/* Overflow menu */}
