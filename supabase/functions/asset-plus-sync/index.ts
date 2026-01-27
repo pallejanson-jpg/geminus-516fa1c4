@@ -290,6 +290,17 @@ serve(async (req) => {
         .from('assets')
         .select('*', { count: 'exact', head: true });
 
+      // Get XKT models count from database
+      const { count: xktCount } = await supabase
+        .from('xkt_models')
+        .select('*', { count: 'exact', head: true });
+
+      // Get building count for XKT reference
+      const { count: buildingCount } = await supabase
+        .from('assets')
+        .select('*', { count: 'exact', head: true })
+        .eq('category', 'Building');
+
       // Get sync states
       const { data: syncStates } = await supabase
         .from('asset_sync_state')
@@ -316,6 +327,8 @@ serve(async (req) => {
             syncState: syncStates?.find((s: any) => s.subtree_id === 'assets'),
           },
           xkt: {
+            localCount: xktCount || 0,
+            buildingCount: buildingCount || 0,
             syncState: syncStates?.find((s: any) => s.subtree_id === 'xkt'),
           },
           total: {
@@ -438,14 +451,14 @@ serve(async (req) => {
       );
     }
 
-    // ============ CACHE ALL XKT MODELS ============
-    if (action === 'cache-all-xkt') {
+    // ============ SYNC XKT MODELS (stores in database + storage) ============
+    if (action === 'sync-xkt' || action === 'cache-all-xkt') {
       await updateSyncState(supabase, 'xkt', 'running');
       const accessToken = await getAccessToken();
       const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
       const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
       
-      console.log('Starting cache-all-xkt');
+      console.log('Starting sync-xkt (syncing to database + storage)');
 
       // Get all buildings from local DB
       const { data: buildings, error: buildingsError } = await supabase
@@ -463,7 +476,7 @@ serve(async (req) => {
         );
       }
 
-      let cached = 0;
+      let synced = 0;
       let skipped = 0;
       const totalBuildings = buildings.length;
       const errors: string[] = [];
@@ -471,21 +484,10 @@ serve(async (req) => {
       for (let i = 0; i < buildings.length; i++) {
         const building = buildings[i];
         const buildingFmGuid = building.fm_guid;
+        const buildingName = building.common_name || buildingFmGuid;
 
         try {
-          // Check if already cached
-          const { data: existingFiles } = await supabase
-            .storage
-            .from('xkt-models')
-            .list(buildingFmGuid);
-
-          if (existingFiles && existingFiles.length > 0) {
-            console.log(`Building ${building.common_name}: Already cached (${existingFiles.length} files)`);
-            skipped++;
-            continue;
-          }
-
-          // Try to fetch and cache models via GetModels endpoint
+          // Try to fetch models via GetModels endpoint
           const modelsUrl = `${apiUrl?.replace(/\/+$/, "")}/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
           
           const modelsRes = await fetch(modelsUrl, {
@@ -493,69 +495,122 @@ serve(async (req) => {
           });
 
           if (!modelsRes.ok) {
-            const errText = await modelsRes.text();
-            console.log(`Building ${building.common_name}: No models (${modelsRes.status})`);
+            console.log(`Building ${buildingName}: No models endpoint (${modelsRes.status})`);
             continue;
           }
 
           const models = await modelsRes.json();
           
           if (!Array.isArray(models) || models.length === 0) {
-            console.log(`Building ${building.common_name}: No XKT models available`);
+            console.log(`Building ${buildingName}: No XKT models available`);
             continue;
           }
 
-          // Cache each model
+          // Process each model
           for (const model of models) {
             if (!model.xktFileUrl) continue;
 
+            const modelId = model.id || model.modelId || model.xktFileUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
+            const fileName = model.xktFileUrl.split('/').pop() || `${modelId}.xkt`;
+            const storagePath = `${buildingFmGuid}/${fileName}`;
+
+            // Check if already synced in database
+            const { data: existingModel } = await supabase
+              .from('xkt_models')
+              .select('id')
+              .eq('building_fm_guid', buildingFmGuid)
+              .eq('model_id', modelId)
+              .maybeSingle();
+
+            if (existingModel) {
+              console.log(`Model ${modelId} already synced`);
+              skipped++;
+              continue;
+            }
+
             try {
+              // Fetch XKT file
               const xktRes = await fetch(model.xktFileUrl, {
                 headers: { "Authorization": `Bearer ${accessToken}` }
               });
 
-              if (!xktRes.ok) continue;
+              if (!xktRes.ok) {
+                console.log(`Failed to fetch model ${modelId}: ${xktRes.status}`);
+                continue;
+              }
 
               const xktData = await xktRes.arrayBuffer();
-              const fileName = model.xktFileUrl.split('/').pop() || `${model.id}.xkt`;
+              const fileSize = xktData.byteLength;
 
-              await supabase.storage
+              // Upload to storage
+              const { error: uploadError } = await supabase.storage
                 .from('xkt-models')
-                .upload(`${buildingFmGuid}/${fileName}`, new Uint8Array(xktData), {
+                .upload(storagePath, new Uint8Array(xktData), {
                   contentType: 'application/octet-stream',
                   upsert: true
                 });
 
-              cached++;
+              if (uploadError) {
+                console.log(`Storage upload failed for ${modelId}:`, uploadError);
+                // Continue anyway to save the record
+              }
+
+              // Get signed URL for storage
+              const { data: urlData } = await supabase.storage
+                .from('xkt-models')
+                .createSignedUrl(storagePath, 86400 * 365); // 1 year
+
+              // Insert into database
+              const { error: dbError } = await supabase
+                .from('xkt_models')
+                .upsert({
+                  building_fm_guid: buildingFmGuid,
+                  building_name: buildingName,
+                  model_id: modelId,
+                  model_name: model.name || model.modelName || fileName,
+                  file_name: fileName,
+                  file_url: urlData?.signedUrl || null,
+                  file_size: fileSize,
+                  storage_path: storagePath,
+                  source_url: model.xktFileUrl,
+                  synced_at: new Date().toISOString(),
+                }, { onConflict: 'building_fm_guid,model_id' });
+
+              if (dbError) {
+                console.log(`Database insert failed for ${modelId}:`, dbError);
+                errors.push(`${buildingName}/${modelId}: DB error`);
+                continue;
+              }
+
+              synced++;
+              console.log(`Synced model ${modelId} for ${buildingName}`);
             } catch (e) {
-              console.log(`Failed to cache model ${model.id}:`, e);
+              console.log(`Failed to sync model ${modelId}:`, e);
             }
           }
-
-          console.log(`Building ${building.common_name}: Cached`);
           
-          await updateSyncState(supabase, 'xkt', 'running', cached, undefined, {
+          await updateSyncState(supabase, 'xkt', 'running', synced, undefined, {
             subtree_name: `XKT-filer (${i + 1}/${totalBuildings})`
           });
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
-          console.error(`Error caching building ${building.common_name}:`, errMsg);
-          errors.push(`${building.common_name}: ${errMsg}`);
+          console.error(`Error syncing building ${buildingName}:`, errMsg);
+          errors.push(`${buildingName}: ${errMsg}`);
         }
       }
 
-      const status = errors.length > 0 ? 'completed' : 'completed';
-      await updateSyncState(supabase, 'xkt', status, cached, errors.length > 0 ? errors.join('; ') : undefined, {
+      const status = errors.length > 0 && synced === 0 ? 'failed' : 'completed';
+      await updateSyncState(supabase, 'xkt', status, synced, errors.length > 0 ? errors.slice(0, 5).join('; ') : undefined, {
         subtree_name: 'XKT-filer'
       });
       
-      console.log(`XKT cache completed: ${cached} models cached, ${skipped} already cached`);
+      console.log(`XKT sync completed: ${synced} models synced, ${skipped} already synced`);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `Cached ${cached} models, ${skipped} already cached`, 
-          cached,
+          message: `Synkade ${synced} modeller, ${skipped} redan synkade`, 
+          synced,
           skipped,
           errors: errors.length > 0 ? errors : undefined 
         }),

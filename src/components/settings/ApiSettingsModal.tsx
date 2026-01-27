@@ -49,7 +49,11 @@ interface NewSyncCheckResult {
     success: boolean;
     structure: SyncCategoryState;
     assets: SyncCategoryState;
-    xkt: { syncState?: SyncStatus };
+    xkt: { 
+        localCount: number;
+        buildingCount: number;
+        syncState?: SyncStatus;
+    };
     total: { localCount: number; remoteCount: number };
 }
 
@@ -282,19 +286,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Cache all XKT models
-    const handleCacheAllXkt = async () => {
+    // Sync all XKT models to database
+    const handleSyncXkt = async () => {
         setIsSyncing(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
-                body: { action: 'cache-all-xkt' }
+                body: { action: 'sync-xkt' }
             }).catch((err) => {
                 console.log('Edge function call ended:', err?.message);
             });
 
             toast({
-                title: "Cachar XKT-filer",
-                description: "Hämtar och sparar 3D-modeller för snabbare laddning.",
+                title: "Synkar XKT-filer",
+                description: "Hämtar och sparar 3D-modeller till databasen för snabbare laddning.",
             });
 
             const pollInterval = setInterval(async () => {
@@ -312,7 +316,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         } catch (error: any) {
             toast({
                 variant: "destructive",
-                title: "Cache misslyckades",
+                title: "Synk misslyckades",
                 description: error.message,
             });
             setIsSyncing(false);
@@ -1473,7 +1477,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 )}
                             </div>
 
-                            {/* 3. XKT Cache Card */}
+                            {/* 3. XKT Sync Card */}
                             <div className="border rounded-lg p-4 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -1486,37 +1490,31 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {syncCheck?.xkt?.syncState ? (
-                                            syncCheck.xkt.syncState.sync_status === 'completed' ? (
-                                                <Badge variant="default" className="bg-green-600 text-xs gap-1">
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                    Cachad
-                                                </Badge>
-                                            ) : syncCheck.xkt.syncState.sync_status === 'running' ? (
-                                                <Badge variant="secondary" className="text-xs gap-1">
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                    Cachar...
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="outline" className="text-xs gap-1">
-                                                    <Clock className="h-3 w-3" />
-                                                    Ej cachad
-                                                </Badge>
-                                            )
+                                        {syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? (
+                                            <Badge variant="default" className="bg-green-600 text-xs gap-1">
+                                                <CheckCircle2 className="h-3 w-3" />
+                                                I synk
+                                            </Badge>
+                                        ) : syncCheck?.xkt?.syncState?.sync_status === 'running' ? (
+                                            <Badge variant="secondary" className="text-xs gap-1">
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                Synkar...
+                                            </Badge>
                                         ) : (
-                                            <Badge variant="outline" className="text-xs gap-1">
-                                                <Clock className="h-3 w-3" />
-                                                Ej cachad
+                                            <Badge variant="outline" className="text-xs gap-1 text-red-600 border-red-400">
+                                                <AlertCircle className="h-3 w-3" />
+                                                Ej synkad
                                             </Badge>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <p className="text-sm text-muted-foreground">
-                                        {syncCheck?.xkt?.syncState?.total_assets || 0} modeller cachade
+                                        {syncCheck?.xkt?.localCount || 0} modeller synkade 
+                                        {syncCheck?.xkt?.buildingCount ? ` (${syncCheck.xkt.buildingCount} byggnader)` : ''}
                                     </p>
                                     <Button 
-                                        onClick={handleCacheAllXkt}
+                                        onClick={handleSyncXkt}
                                         disabled={isSyncing}
                                         size="sm"
                                         variant="secondary"
@@ -1525,9 +1523,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         {isSyncing && syncCheck?.xkt?.syncState?.sync_status === 'running' ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                         ) : (
-                                            <Database className="h-3 w-3" />
+                                            <RefreshCw className="h-3 w-3" />
                                         )}
-                                        Cacha
+                                        Synka
                                     </Button>
                                 </div>
                                 {syncCheck?.xkt?.syncState && (
