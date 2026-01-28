@@ -26,6 +26,12 @@ export interface InventoryPrefill {
     roomFmGuid?: string;
 }
 
+// Annotation placement context for placing orphan assets in 3D
+export interface AnnotationPlacementContext {
+    asset: any; // The asset to place annotation for
+    buildingFmGuid: string;
+}
+
 export type ThemeType = 'dark' | 'light' | 'swg';
 
 interface AppContextType {
@@ -69,6 +75,12 @@ interface AppContextType {
     inventoryPrefill: InventoryPrefill | null;
     startInventory: (prefill: InventoryPrefill) => void;
     clearInventoryPrefill: () => void;
+
+    // Annotation placement for orphan assets
+    annotationPlacementContext: AnnotationPlacementContext | null;
+    startAnnotationPlacement: (asset: any, buildingFmGuid: string) => void;
+    completeAnnotationPlacement: (coordinates: { x: number; y: number; z: number }) => void;
+    cancelAnnotationPlacement: () => void;
 
     // Entity insights - for viewing insights at any hierarchy level
     insightsFacility: any | null;
@@ -133,6 +145,11 @@ export const AppContext = createContext<AppContextType>({
     inventoryPrefill: null,
     startInventory: () => {},
     clearInventoryPrefill: () => {},
+
+    annotationPlacementContext: null,
+    startAnnotationPlacement: () => {},
+    completeAnnotationPlacement: () => {},
+    cancelAnnotationPlacement: () => {},
 
     insightsFacility: null,
     setInsightsFacility: () => {},
@@ -228,6 +245,27 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const clearInventoryPrefill = useCallback(() => {
         setInventoryPrefill(null);
     }, []);
+
+    // Annotation placement state and actions
+    const [annotationPlacementContext, setAnnotationPlacementContext] = useState<AnnotationPlacementContext | null>(null);
+
+    const startAnnotationPlacement = useCallback((asset: any, buildingFmGuid: string) => {
+        setAnnotationPlacementContext({ asset, buildingFmGuid });
+        // Save current app and open 3D viewer for this building
+        setPreviousAppBeforeViewer(activeApp);
+        setViewer3dFmGuidInternal(buildingFmGuid);
+        setActiveApp('assetplus_viewer');
+    }, [activeApp]);
+
+    const completeAnnotationPlacement = useCallback((coordinates: { x: number; y: number; z: number }) => {
+        setAnnotationPlacementContext(null);
+    }, []);
+
+    const cancelAnnotationPlacement = useCallback(() => {
+        setAnnotationPlacementContext(null);
+        setViewer3dFmGuidInternal(null);
+        setActiveApp(previousAppBeforeViewer);
+    }, [previousAppBeforeViewer]);
 
     // Entity insights state and actions
     const [insightsFacility, setInsightsFacility] = useState<any | null>(null);
@@ -474,6 +512,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 inventoryPrefill,
                 startInventory,
                 clearInventoryPrefill,
+
+                annotationPlacementContext,
+                startAnnotationPlacement,
+                completeAnnotationPlacement,
+                cancelAnnotationPlacement,
 
                 insightsFacility,
                 setInsightsFacility,

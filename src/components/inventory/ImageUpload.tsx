@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Camera, Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface ImageUploadProps {
   value: string | null;
@@ -12,9 +13,26 @@ interface ImageUploadProps {
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) => {
+  const isMobile = useIsMobile();
   const [isUploading, setIsUploading] = useState(false);
+  const [hasCamera, setHasCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if device has a camera
+  useEffect(() => {
+    if (isMobile) {
+      // On mobile, assume camera is available
+      setHasCamera(true);
+    } else {
+      // On desktop, check for camera devices
+      navigator.mediaDevices?.enumerateDevices?.()
+        .then(devices => {
+          setHasCamera(devices.some(d => d.kind === 'videoinput'));
+        })
+        .catch(() => setHasCamera(false));
+    }
+  }, [isMobile]);
 
   const uploadImage = async (file: File) => {
     if (!file) return;
@@ -100,23 +118,25 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
         </div>
       ) : (
         <div className="flex gap-2">
-          {/* Camera button (for mobile) */}
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 h-20 flex-col gap-2"
-            onClick={() => cameraInputRef.current?.click()}
-            disabled={disabled || isUploading}
-          >
-            {isUploading ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <>
-                <Camera className="h-6 w-6" />
-                <span className="text-xs">Ta foto</span>
-              </>
-            )}
-          </Button>
+          {/* Camera button - only show on mobile or if device has camera */}
+          {(isMobile || hasCamera) && (
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 h-20 flex-col gap-2"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={disabled || isUploading}
+            >
+              {isUploading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <>
+                  <Camera className="h-6 w-6" />
+                  <span className="text-xs">Ta foto</span>
+                </>
+              )}
+            </Button>
+          )}
           
           {/* Upload button */}
           <Button
@@ -131,14 +151,14 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
             ) : (
               <>
                 <Upload className="h-6 w-6" />
-                <span className="text-xs">Ladda upp</span>
+                <span className="text-xs">{isMobile ? 'Ladda upp' : 'Välj bild'}</span>
               </>
             )}
           </Button>
         </div>
       )}
 
-      {/* Hidden file inputs */}
+      {/* Hidden file input for gallery */}
       <input
         ref={fileInputRef}
         type="file"
@@ -146,11 +166,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
         className="hidden"
         onChange={handleFileSelect}
       />
+      
+      {/* Hidden camera input - only with capture on mobile */}
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        capture={isMobile ? "environment" : undefined}
         className="hidden"
         onChange={handleFileSelect}
       />

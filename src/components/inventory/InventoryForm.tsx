@@ -102,8 +102,12 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     setIsLoading(true);
 
     try {
+      const inventoryDate = new Date().toISOString();
+      const newFmGuid = crypto.randomUUID();
+      
+      // Structure attributes to be compatible with Asset+ sync format
       const newAsset = {
-        fm_guid: crypto.randomUUID(),
+        fm_guid: newFmGuid,
         name: name.trim(),
         common_name: name.trim(),
         category: 'Instance',
@@ -116,9 +120,24 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         is_local: true,
         annotation_placed: false,
         attributes: {
+          // Asset+ compatible fields
+          objectType: 4, // Instance type
+          designation: name.trim(),
+          commonName: name.trim(),
+          inRoomFmGuid: roomFmGuid || null,
+          levelFmGuid: levelFmGuid || null,
+          buildingFmGuid: buildingFmGuid,
+          // Custom fields
+          assetCategory: category,
           description: description.trim() || null,
-          inventoryDate: new Date().toISOString(),
+          inventoryDate: inventoryDate,
           imageUrl: imageUrl || null,
+          // Properties array for future Asset+ sync
+          syncProperties: [
+            { name: 'Description', value: description.trim() || '', dataType: 0 },
+            { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
+            { name: 'AssetCategory', value: category, dataType: 0 },
+          ],
         },
       };
 
@@ -135,7 +154,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         building_fm_guid: newAsset.building_fm_guid,
         level_fm_guid: newAsset.level_fm_guid,
         in_room_fm_guid: newAsset.in_room_fm_guid,
-        attributes: newAsset.attributes as InventoryItem['attributes'],
+        attributes: {
+          description: description.trim() || undefined,
+          inventoryDate: inventoryDate,
+        },
       });
     } catch (error: any) {
       toast.error('Kunde inte spara', {
