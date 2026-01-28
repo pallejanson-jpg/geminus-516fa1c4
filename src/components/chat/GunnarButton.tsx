@@ -177,22 +177,24 @@ export default function GunnarButton() {
       <div className="fixed bottom-20 right-4 z-50 sm:bottom-6">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              onClick={() => setIsOpen(true)}
-              size="lg"
-              className={cn(
-                "h-12 w-12 rounded-full shadow-lg",
-                "bg-gradient-to-br from-primary to-accent hover:from-primary/90 hover:to-accent/90",
-                "transition-all duration-300 hover:scale-105 hover:shadow-xl",
-                "sm:h-14 sm:w-14",
-                isOpen && "opacity-0 pointer-events-none"
-              )}
-            >
-              <div className="relative">
-                <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />
-                <Sparkles className="absolute -top-1 -right-1 h-3 w-3 text-yellow-300 animate-pulse" />
-              </div>
-            </Button>
+            <span>
+              <Button
+                onClick={() => setIsOpen(true)}
+                size="lg"
+                className={cn(
+                  "h-12 w-12 rounded-full shadow-lg",
+                  "bg-gradient-to-br from-primary to-accent hover:from-primary/90 hover:to-accent/90",
+                  "transition-all duration-300 hover:scale-105 hover:shadow-xl",
+                  "sm:h-14 sm:w-14",
+                  isOpen && "opacity-0 pointer-events-none"
+                )}
+              >
+                <div className="relative">
+                  <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <Sparkles className="absolute -top-1 -right-1 h-3 w-3 text-yellow-300 animate-pulse" />
+                </div>
+              </Button>
+            </span>
           </TooltipTrigger>
           <TooltipContent side="left" className="font-medium">
             Fråga Gunnar

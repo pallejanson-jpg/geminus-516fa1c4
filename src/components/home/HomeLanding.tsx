@@ -110,19 +110,19 @@ export default function HomeLanding() {
       {/* Overlay for readability (uses design tokens) */}
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
-      <div className="relative z-10 min-h-full flex flex-col items-center px-4 sm:px-6 py-6">
-        <header className="space-y-2 text-center mb-6">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Welcome to My SWG</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Your digital backbone for digital twins and property data</p>
+      <div className="relative z-10 min-h-full flex flex-col items-center px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+        <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight">Welcome to My SWG</h1>
+          <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Your digital backbone for digital twins</p>
         </header>
 
-      <section className="space-y-3 w-full max-w-4xl mb-6">
+      <section className="space-y-2 sm:space-y-3 w-full max-w-4xl mb-4 sm:mb-6">
         <div className="text-center">
-          <h2 className="text-lg font-semibold">AI Assistants</h2>
-          <p className="text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
+          <h2 className="text-base sm:text-lg font-semibold">AI Assistants</h2>
+          <p className="text-[11px] sm:text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {ASSISTANTS.map((a) => {
             const Icon = a.icon;
             return (
@@ -131,22 +131,22 @@ export default function HomeLanding() {
                 type="button"
                 onClick={() => openAssistant(a.id)}
                 disabled={!a.available}
-                className={`rounded-xl border border-border bg-card/60 p-4 text-left transition-colors ${
-                  a.available ? 'hover:bg-muted hover:border-primary/50' : 'opacity-60 cursor-not-allowed'
+                className={`rounded-lg sm:rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors ${
+                  a.available ? 'hover:bg-muted hover:border-primary/50 active:bg-muted/80' : 'opacity-60 cursor-not-allowed'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${a.available ? 'bg-primary/10' : 'bg-muted'}`}>
-                    <Icon className={`h-5 w-5 ${a.available ? 'text-primary' : 'text-muted-foreground'}`} />
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg shrink-0 ${a.available ? 'bg-primary/10' : 'bg-muted'}`}>
+                    <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${a.available ? 'text-primary' : 'text-muted-foreground'}`} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold leading-none">{a.title}</span>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="font-semibold text-sm sm:text-base leading-none">{a.title}</span>
                       {!a.available && (
-                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Kommer snart</span>
+                        <span className="text-[9px] sm:text-[10px] bg-muted px-1 sm:px-1.5 py-0.5 rounded">Snart</span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">{a.description}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
                   </div>
                 </div>
               </button>
@@ -157,52 +157,52 @@ export default function HomeLanding() {
 
       <section className="w-full max-w-4xl flex-1">
         <Card className="bg-card/60">
-          <CardHeader>
-            <CardTitle className="text-lg">My Favorites</CardTitle>
-            <CardDescription>Quick access to your most used buildings</CardDescription>
+          <CardHeader className="pb-2 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">My Favorites</CardTitle>
+            <CardDescription className="text-[11px] sm:text-sm">Quick access to your most used buildings</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             {isLoadingFavorites ? (
-              <div className="text-center py-4 text-sm text-muted-foreground">
+              <div className="text-center py-3 sm:py-4 text-xs sm:text-sm text-muted-foreground">
                 Loading favorites...
               </div>
             ) : favoriteBuildings.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {favoriteBuildings.map((building) => (
                   <button
                     key={building.fmGuid}
                     type="button"
                     onClick={() => handleBuildingClick(building)}
-                    className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg group"
+                    className="rounded-lg sm:rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
                   >
-                    <div className="h-24 relative overflow-hidden">
+                    <div className="h-20 sm:h-24 relative overflow-hidden">
                       <img 
                         src={building.image} 
                         alt={building.commonName || building.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      <div className="absolute bottom-2 left-3 right-3">
-                        <h3 className="font-semibold text-white text-sm truncate">
+                      <div className="absolute bottom-1.5 sm:bottom-2 left-2 sm:left-3 right-2 sm:right-3">
+                        <h3 className="font-semibold text-white text-xs sm:text-sm truncate">
                           {building.commonName || building.name}
                         </h3>
                       </div>
                     </div>
-                    <div className="p-3 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{building.numberOfLevels || 0} floors</span>
-                      <span>{building.numberOfSpaces || 0} rooms</span>
+                    <div className="p-2 sm:p-3 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground">
+                      <span>{building.numberOfLevels || 0} fl</span>
+                      <span>{building.numberOfSpaces || 0} rm</span>
                       <span>{building.area?.toLocaleString() || 0} m²</span>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border p-4">
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <Building2 className="h-8 w-8 opacity-50" />
+              <div className="rounded-lg border border-dashed border-border p-3 sm:p-4">
+                <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
+                  <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">No favorites yet</p>
-                    <p className="text-xs">Mark buildings as favorites from the Portfolio to see them here.</p>
+                    <p className="text-xs sm:text-sm font-medium">No favorites yet</p>
+                    <p className="text-[10px] sm:text-xs">Mark buildings as favorites from Portfolio.</p>
                   </div>
                 </div>
               </div>

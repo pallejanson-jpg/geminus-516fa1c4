@@ -51,47 +51,48 @@ const LeftSidebar: React.FC = () => {
             className={`
                 fixed md:static inset-y-0 left-0 z-40 
                 transition-all duration-300 
-                ${isSidebarExpanded ? 'translate-x-0 w-48' : '-translate-x-full md:translate-x-0 md:w-16'} 
+                ${isSidebarExpanded ? 'translate-x-0 w-44 sm:w-48' : '-translate-x-full md:translate-x-0 md:w-14 lg:w-16'} 
                 ${t.bgSec} border-r ${t.border} 
                 flex flex-col shadow-lg md:shadow-none
             `}
         >
-            <div className={`p-2 flex h-16 border-b ${t.border} items-center justify-center`}>
+            <div className={`p-1.5 sm:p-2 flex h-14 sm:h-16 border-b ${t.border} items-center justify-center`}>
                 <AppButton 
                     onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
                     variant="ghost" 
-                    className="h-10 w-10"
+                    className="h-8 w-8 sm:h-10 sm:w-10"
                 >
-                    <MenuIcon size={20} />
+                    <MenuIcon size={18} className="sm:hidden" />
+                    <MenuIcon size={20} className="hidden sm:block" />
                 </AppButton>
             </div>
             
             <div className={`transition-opacity duration-200 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0 md:opacity-100'}`}>
-                <nav className="flex-1 p-2 space-y-1">
+                <nav className="flex-1 p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
                     {/* Inventory - primary action at top */}
                     <AppButton 
                         onClick={() => setActiveApp('inventory')} 
                         variant={activeApp === 'inventory' ? 'default' : 'ghost'} 
-                        className="w-full !justify-start gap-3" 
+                        className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
                         title={isSidebarExpanded ? "" : "Inventering"}
                     >
-                        <ClipboardList size={18} className={getIconColor('inventory')} />
-                        <span className={`${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
+                        <ClipboardList size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor('inventory')}`} />
+                        <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
                     </AppButton>
                     
-                    <div className={`h-px bg-border my-2 mx-1`} />
+                    <div className={`h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1`} />
                     
                     <AppButton 
                         onClick={() => { setActiveApp('home'); setSelectedFacility(null); }} 
                         variant={activeApp === 'home' ? 'default' : 'ghost'} 
-                        className="w-full !justify-start gap-3" 
+                        className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
                         title={isSidebarExpanded ? "" : "Home"}
                     >
-                        <Home size={18} className={getIconColor('home')} />
-                        <span className={`${!isSidebarExpanded && 'hidden'}`}>Home</span>
+                        <Home size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor('home')}`} />
+                        <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>Home</span>
                     </AppButton>
                     
-                    <div className={`h-px bg-border my-2 mx-1`} />
+                    <div className={`h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1`} />
                     
                     {Object.entries(DEFAULT_APP_CONFIGS).map(([key, cfg]: [string, any]) => {
                         const IconComp = cfg.icon || Box;
@@ -101,11 +102,11 @@ const LeftSidebar: React.FC = () => {
                                 key={key} 
                                 onClick={() => handleAppClick(key, currentAppConfig)}
                                 variant={activeApp === key ? 'default' : 'ghost'} 
-                                className="w-full !justify-start gap-3" 
+                                className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
                                 title={isSidebarExpanded ? "" : String(cfg.label)} 
                             >
-                                <IconComp size={18} className={getIconColor(key)} /> 
-                                <span className={`${!isSidebarExpanded && 'hidden'}`}>{String(cfg.label)}</span>
+                                <IconComp size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor(key)}`} /> 
+                                <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>{String(cfg.label)}</span>
                             </AppButton>
                         );
                     })}
