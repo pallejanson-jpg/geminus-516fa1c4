@@ -18,6 +18,8 @@ interface ModelVisibilitySelectorProps {
   buildingFmGuid?: string;
   onVisibleModelsChange?: (visibleModelIds: string[]) => void;
   className?: string;
+  /** When true, renders only the toggle list without header/collapsible wrapper */
+  listOnly?: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface ModelVisibilitySelectorProps {
  * Fetches model names from Asset+ API for user-friendly display.
  */
 const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelectorProps>(
-  ({ viewerRef, buildingFmGuid, onVisibleModelsChange, className }, ref) => {
+  ({ viewerRef, buildingFmGuid, onVisibleModelsChange, className, listOnly = false }, ref) => {
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [visibleModelIds, setVisibleModelIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
@@ -421,6 +423,72 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     // Don't render if no models found
     if (models.length === 0) {
       return null;
+    }
+
+    // listOnly mode: render just the toggle list without header/collapsible
+    if (listOnly) {
+      return (
+        <div className={cn("space-y-0.5 sm:space-y-1", className)} ref={ref}>
+          <div className="space-y-0.5 sm:space-y-1 max-h-[40vh] overflow-y-auto pr-0.5 sm:pr-1">
+            {models.map((model) => {
+              const isVisible = visibleModelIds.has(model.id);
+              const isSolo = visibleModelIds.size === 1 && isVisible;
+              
+              return (
+                <div
+                  key={model.id}
+                  className={cn(
+                    "flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1",
+                    isVisible ? "bg-primary/10" : "bg-muted/20"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => handleModelToggle(model.id, checked)}
+                      className="scale-75 sm:scale-90"
+                    />
+                    <span 
+                      className={cn(
+                        "text-xs sm:text-sm truncate",
+                        isVisible ? "text-foreground" : "text-muted-foreground"
+                      )}
+                      title={model.name}
+                    >
+                      {model.shortName}
+                    </span>
+                  </div>
+                  
+                  {!isSolo && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0"
+                      onClick={() => handleShowOnlyModel(model.id)}
+                      title="Visa endast denna modell"
+                    >
+                      Solo
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Show All button at bottom */}
+          <div className="pt-1 border-t border-border/30">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full h-6 text-[10px] sm:text-xs"
+              onClick={handleShowAll}
+              disabled={allVisible}
+            >
+              Visa alla modeller
+            </Button>
+          </div>
+        </div>
+      );
     }
 
     return (
