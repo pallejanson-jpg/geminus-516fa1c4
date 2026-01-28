@@ -1,11 +1,17 @@
 import React from 'react';
 import { 
   Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View, Square, Plus 
+  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Facility } from '@/lib/types';
+
+export interface InventoryPrefill {
+  buildingFmGuid?: string;
+  levelFmGuid?: string;
+  roomFmGuid?: string;
+}
 
 interface QuickActionsProps {
   facility: Facility;
@@ -21,6 +27,7 @@ interface QuickActionsProps {
   onShowInsights: (facility: Facility) => void;
   onOpenIoT: (facility: Facility) => void;
   onAddAsset?: (facility: Facility) => void;
+  onInventory?: (prefill: InventoryPrefill) => void;
 }
 
 const QuickActions: React.FC<QuickActionsProps> = ({ 
@@ -36,7 +43,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onShowDocs, 
   onShowInsights, 
   onOpenIoT,
-  onAddAsset
+  onAddAsset,
+  onInventory
 }) => {
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -122,6 +130,22 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             >
               <Plus size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
               <span className="text-[10px] sm:text-xs">Add Asset</span>
+            </Button>
+          )}
+          {/* Inventory action - available on all levels */}
+          {onInventory && (
+            <Button 
+              variant="ghost" 
+              onClick={() => onInventory({
+                buildingFmGuid: isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid,
+                levelFmGuid: isStorey ? facility.fmGuid : (facility as any).levelFmGuid,
+                roomFmGuid: isSpace ? facility.fmGuid : undefined,
+              })} 
+              className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+              title="Inventera tillgångar här"
+            >
+              <ClipboardList size={12} className="sm:w-3.5 sm:h-3.5 text-orange-500" />
+              <span className="text-[10px] sm:text-xs">Inventering</span>
             </Button>
           )}
         </div>

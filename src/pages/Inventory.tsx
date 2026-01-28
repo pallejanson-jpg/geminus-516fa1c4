@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Plus, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import InventoryForm from '@/components/inventory/InventoryForm';
 import InventoryList from '@/components/inventory/InventoryList';
 import { supabase } from '@/integrations/supabase/client';
+import { AppContext } from '@/context/AppContext';
 
 export interface InventoryItem {
   fm_guid: string;
@@ -25,9 +26,17 @@ export interface InventoryItem {
 
 const Inventory: React.FC = () => {
   const isMobile = useIsMobile();
+  const { inventoryPrefill, clearInventoryPrefill } = useContext(AppContext);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Auto-open form if we have prefill data
+  useEffect(() => {
+    if (inventoryPrefill) {
+      setIsFormOpen(true);
+    }
+  }, [inventoryPrefill]);
 
   // Load recently created local assets on mount
   useEffect(() => {
@@ -56,6 +65,12 @@ const Inventory: React.FC = () => {
   const handleSaved = (item: InventoryItem) => {
     setSavedItems(prev => [item, ...prev]);
     setIsFormOpen(false);
+    clearInventoryPrefill();
+  };
+
+  const handleCloseForm = () => {
+    setIsFormOpen(false);
+    clearInventoryPrefill();
   };
 
   return (
@@ -85,7 +100,7 @@ const Inventory: React.FC = () => {
       <InventoryList items={savedItems} isLoading={isLoading} />
 
       {/* Form as sheet/drawer on mobile */}
-      <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Sheet open={isFormOpen} onOpenChange={(open) => { if (!open) handleCloseForm(); else setIsFormOpen(true); }}>
         <SheetContent 
           side={isMobile ? "bottom" : "right"} 
           className={`${isMobile ? 'h-[90vh] rounded-t-2xl' : 'w-[450px]'} overflow-y-auto`}
@@ -95,7 +110,8 @@ const Inventory: React.FC = () => {
           </SheetHeader>
           <InventoryForm
             onSaved={handleSaved}
-            onCancel={() => setIsFormOpen(false)}
+            onCancel={handleCloseForm}
+            prefill={inventoryPrefill || undefined}
           />
         </SheetContent>
       </Sheet>

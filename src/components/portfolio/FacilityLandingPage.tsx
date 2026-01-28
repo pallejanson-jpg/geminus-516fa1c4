@@ -49,7 +49,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onAddAsset,
   setSelectedFacility
 }) => {
-  const { allData, setActiveApp, setViewer3dFmGuid } = useContext(AppContext);
+  const { allData, setActiveApp, setViewer3dFmGuid, startInventory } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
@@ -149,6 +149,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       };
       onAddAsset(parentNode);
     }
+  };
+
+  // Handler for Inventory button with prefill
+  const handleInventory = (prefill: { buildingFmGuid?: string; levelFmGuid?: string; roomFmGuid?: string }) => {
+    startInventory(prefill);
   };
 
   // Handler for saving Ivion Site ID
@@ -405,6 +410,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onShowInsights={onShowInsights}
             onOpenIoT={onOpenIoT}
             onAddAsset={handleAddAsset}
+            onInventory={handleInventory}
           />
         </div>
       </ScrollArea>

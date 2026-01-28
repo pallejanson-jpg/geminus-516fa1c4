@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { AppProvider } from '@/context/AppContext';
 import LeftSidebar from './LeftSidebar';
 import AppHeader from './AppHeader';
@@ -7,19 +7,28 @@ import MobileNav from './MobileNav';
 import MainContent from './MainContent';
 import VoiceControlButton from '@/components/voice/VoiceControlButton';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
     const isMobile = useIsMobile();
+
+    // Listen for voice settings changes
+    useEffect(() => {
+        const handleSettingsChange = (e: CustomEvent) => {
+            setVoiceEnabled(e.detail?.enabled ?? false);
+        };
+        window.addEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
+        return () => window.removeEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
+    }, []);
 
     // Voice command callbacks
     const voiceCallbacks = useCallback(() => ({
         onSearch: (term: string) => {
-            // Could trigger search in header - for now just log
             console.log('Voice search:', term);
         },
         onOpenGunnar: () => {
-            // Could open Gunnar chat panel
             console.log('Voice: Open Gunnar');
         },
         onAskGunnar: (question: string) => {
@@ -46,8 +55,8 @@ const AppLayoutInner: React.FC = () => {
                 setIsMobileMenuOpen={setIsMobileMenuOpen}
             />
 
-            {/* Voice Control - visible on all devices for testing, primarily for mobile */}
-            <VoiceControlButton callbacks={voiceCallbacks()} />
+            {/* Voice Control - only visible when enabled in Settings */}
+            {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
         </div>
     );
 };

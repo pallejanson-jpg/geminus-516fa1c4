@@ -29,6 +29,11 @@ interface AnnotationSymbol {
 interface InventoryFormProps {
   onSaved: (item: InventoryItem) => void;
   onCancel: () => void;
+  prefill?: {
+    buildingFmGuid?: string;
+    levelFmGuid?: string;
+    roomFmGuid?: string;
+  };
 }
 
 export const INVENTORY_CATEGORIES = [
@@ -45,18 +50,18 @@ export const INVENTORY_CATEGORIES = [
   { value: 'other', label: 'Övrigt', icon: '📦' },
 ];
 
-const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel }) => {
+const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
 
-  // Form state
+  // Form state - initialized with prefill values
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [symbolId, setSymbolId] = useState('');
-  const [buildingFmGuid, setBuildingFmGuid] = useState('');
-  const [levelFmGuid, setLevelFmGuid] = useState('');
-  const [roomFmGuid, setRoomFmGuid] = useState('');
+  const [buildingFmGuid, setBuildingFmGuid] = useState(prefill?.buildingFmGuid || '');
+  const [levelFmGuid, setLevelFmGuid] = useState(prefill?.levelFmGuid || '');
+  const [roomFmGuid, setRoomFmGuid] = useState(prefill?.roomFmGuid || '');
 
   // Fetch symbols on mount
   useEffect(() => {

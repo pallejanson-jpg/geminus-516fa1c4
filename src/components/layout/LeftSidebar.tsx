@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Box, Menu as MenuIcon, Home } from 'lucide-react';
+import { Box, Menu as MenuIcon, Home, ClipboardList } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
@@ -14,6 +14,7 @@ const ICON_COLORS: Record<string, string> = {
     iot: 'text-yellow-500',
     original_archive: 'text-indigo-500',
     radar: 'text-pink-500',
+    inventory: 'text-orange-500',
 };
 
 const LeftSidebar: React.FC = () => {
@@ -67,6 +68,19 @@ const LeftSidebar: React.FC = () => {
             
             <div className={`transition-opacity duration-200 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0 md:opacity-100'}`}>
                 <nav className="flex-1 p-2 space-y-1">
+                    {/* Inventory - primary action at top */}
+                    <AppButton 
+                        onClick={() => setActiveApp('inventory')} 
+                        variant={activeApp === 'inventory' ? 'default' : 'ghost'} 
+                        className="w-full !justify-start gap-3" 
+                        title={isSidebarExpanded ? "" : "Inventering"}
+                    >
+                        <ClipboardList size={18} className={getIconColor('inventory')} />
+                        <span className={`${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
+                    </AppButton>
+                    
+                    <div className={`h-px bg-border my-2 mx-1`} />
+                    
                     <AppButton 
                         onClick={() => { setActiveApp('home'); setSelectedFacility(null); }} 
                         variant={activeApp === 'home' ? 'default' : 'ghost'} 
