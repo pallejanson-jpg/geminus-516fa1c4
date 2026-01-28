@@ -250,6 +250,75 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_views: {
+        Row: {
+          building_fm_guid: string
+          building_name: string | null
+          camera_eye: number[] | null
+          camera_look: number[] | null
+          camera_projection: string | null
+          camera_up: number[] | null
+          clip_height: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          screenshot_url: string | null
+          show_annotations: boolean | null
+          show_spaces: boolean | null
+          updated_at: string | null
+          view_mode: string | null
+          visible_floor_ids: string[] | null
+          visible_model_ids: string[] | null
+          visualization_mock_data: boolean | null
+          visualization_type: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          building_name?: string | null
+          camera_eye?: number[] | null
+          camera_look?: number[] | null
+          camera_projection?: string | null
+          camera_up?: number[] | null
+          clip_height?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          screenshot_url?: string | null
+          show_annotations?: boolean | null
+          show_spaces?: boolean | null
+          updated_at?: string | null
+          view_mode?: string | null
+          visible_floor_ids?: string[] | null
+          visible_model_ids?: string[] | null
+          visualization_mock_data?: boolean | null
+          visualization_type?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          building_name?: string | null
+          camera_eye?: number[] | null
+          camera_look?: number[] | null
+          camera_projection?: string | null
+          camera_up?: number[] | null
+          clip_height?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          screenshot_url?: string | null
+          show_annotations?: boolean | null
+          show_spaces?: boolean | null
+          updated_at?: string | null
+          view_mode?: string | null
+          visible_floor_ids?: string[] | null
+          visible_model_ids?: string[] | null
+          visualization_mock_data?: boolean | null
+          visualization_type?: string | null
+        }
+        Relationships: []
+      }
       work_orders: {
         Row: {
           actual_cost: number | null

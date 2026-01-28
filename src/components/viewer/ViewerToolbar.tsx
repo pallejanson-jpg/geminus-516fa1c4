@@ -39,6 +39,7 @@ import {
   FloorSelectionEventDetail,
   ClipHeightEventDetail
 } from '@/hooks/useSectionPlaneClipping';
+import { VIEW_MODE_REQUESTED_EVENT, ViewModeRequestedDetail } from '@/lib/viewer-events';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -192,6 +193,21 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChange as EventListener);
     };
   }, [updateFloorCutHeight]);
+
+  // Listen for view mode requests from VisualizationToolbar (2D/3D switch)
+  useEffect(() => {
+    const handleViewModeRequest = (e: CustomEvent<ViewModeRequestedDetail>) => {
+      const { mode } = e.detail;
+      if (mode === '2d' || mode === '3d') {
+        handleViewModeChange(mode);
+      }
+    };
+    
+    window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handleViewModeRequest as EventListener);
+    return () => {
+      window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handleViewModeRequest as EventListener);
+    };
+  }, []);
 
   // Navigation controls with readiness check
   const handleResetView = useCallback(() => {
