@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useContext } from 'react';
 import {
   X,
   Search,
@@ -18,6 +18,7 @@ import {
   MapPin,
   Filter,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { AppContext } from '@/context/AppContext';
+import { syncBuildingAssetsIfNeeded } from '@/services/asset-plus-service';
 import {
   DndContext,
   closestCenter,
@@ -256,6 +259,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   onPlaceAnnotation,
 }) => {
   const { toast } = useToast();
+  const { startAnnotationPlacement } = useContext(AppContext);
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('designation');
@@ -263,6 +267,39 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [isSyncingAssets, setIsSyncingAssets] = useState(false);
+
+  // Check if we need to sync assets on mount (if zero assets for this building)
+  useEffect(() => {
+    const checkAndSyncAssets = async () => {
+      if (assets.length > 0 || !facility.fmGuid) return;
+      
+      // Only for buildings - check if we need to sync
+      if (facility.category !== 'Building') return;
+      
+      setIsSyncingAssets(true);
+      try {
+        const result = await syncBuildingAssetsIfNeeded(facility.fmGuid);
+        if (result.synced && result.count > 0) {
+          toast({
+            title: 'Assets synkade',
+            description: `Hämtade ${result.count} assets för denna byggnad`,
+          });
+        }
+      } catch (error: any) {
+        console.error('Failed to sync assets:', error);
+        toast({
+          title: 'Kunde inte synka assets',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSyncingAssets(false);
+      }
+    };
+    
+    checkAndSyncAssets();
+  }, [facility.fmGuid, facility.category, assets.length, toast]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -378,7 +415,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   };
 
   const handlePlaceAnnotation = (asset: AssetData) => {
-    if (onPlaceAnnotation) {
+    // Use context to start annotation placement flow
+    const buildingGuid = asset.buildingFmGuid || facility.fmGuid;
+    if (buildingGuid) {
+      startAnnotationPlacement(asset.raw, buildingGuid);
+    } else if (onPlaceAnnotation) {
       onPlaceAnnotation(asset.raw);
     } else {
       toast({
@@ -417,6 +458,19 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     facility.category === 'Building'
       ? `Assets i ${facility.commonName || facility.name}`
       : `Assets på ${facility.commonName || facility.name}`;
+
+  // Show loading spinner if syncing assets
+  if (isSyncingAssets) {
+    return (
+      <div className="absolute inset-0 z-40 bg-background flex flex-col items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg font-medium">Synkar assets...</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Hämtar assets för denna byggnad från Asset+
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300">
