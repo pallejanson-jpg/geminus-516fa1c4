@@ -1,258 +1,192 @@
 
-# Plan: Fixa formulärbredd och förbättra 3D-positionsval
+# Plan: Fixa rum-synlighet, våningsplan-filtrering och verktygsfält-inställningar
 
-## Problem identifierade
+## Identifierade problem
 
-1. **Formuläret har blivit för brett på desktop** - defaultSize är för stor (75% utan Ivion, 35% med Ivion)
-2. **3D-positionen fångas under navigering** - Varje klick (även navigeringsklick) registreras som position
-3. **Dialogen stängs direkt efter klick** - Användaren får ingen chans att verifiera positionen
-4. **Ingen visuell markör** - Ingen annotation/symbol visas där man valt position
-5. **3D-viewern behöver ligga kvar längre** - Samma mönster som Ivion (side-by-side)
+Baserat på analys av skärmbilder och kod har jag identifierat tre huvudproblem:
 
----
+### Problem 1: Rum visas vid första våningsklipp trots att "Visa rum" är avstängt
+- **Orsak**: Viewer-komponenten anropar `assetViewer.onToggleAnnotation(true)` vid modell-laddning (rad 467), men kan inte hitta någon explicit kod som aktiverar rum. Problemet kan ligga i Asset+ viewer-paketet som visar spaces som standard när man kör "cutOutFloorsByFmGuid".
+- **Lösning**: Explicit deaktivera rum (`onShowSpacesChanged(false)`) efter modelladdning och efter varje floor cutout operation.
 
-## Lösning
+### Problem 2: Flera våningsplans rum visas vid Solo-val
+- **Orsak**: `FloorVisibilitySelector.applyFloorVisibility()` döljer endast geometriobjekt (solida objekt) baserat på floor-hierarkin, men `RoomVisualizationPanel` filtrerar bara rum när visualiseringen är aktiv. Spaces-synlighet i själva xeokit/Asset+ viewer styrs separat och påverkas inte av floor filtering.
+- **Lösning**: När "Solo" klickas måste vi även anropa `onShowSpacesChanged(false)` som standard, och endast aktivera rum för det valda våningsplanet om "Visa rum" är aktivt.
 
-### Del 1: Justera layoutbredderna
+### Problem 3: Fel verktyg i "Anpassa verktygsfält"-dialogen
+**Verktyg att ta bort** (dessa finns redan i VisualizationToolbar/Visning-menyn):
+- `viewMode` (2D/3D växla)
+- `annotations` (Annotationer)
+- `addAsset` (Registrera tillgång)
+- `bimModels` (BIM-modeller)
+- `floors` (Våningsplan)
 
-Ändra panelstorlekar i `Inventory.tsx`:
-
-| Panel | Nuvarande | Nytt |
-|-------|-----------|------|
-| Lista (vänster) | defaultSize=25, minSize=15 | defaultSize=20, minSize=15, maxSize=30 |
-| Formulär (mitten) | defaultSize=75/35, minSize=30 | defaultSize=30, minSize=25, maxSize=40 |
-| 3D/360 (höger) | defaultSize=40, minSize=25 | Fyller resten (ca 50%) |
-
-Formuläret får en smalare, fast bredd medan 3D-viewern fyller ut resten.
-
-### Del 2: Ersätt dialog med side-panel för 3D
-
-Istället för att öppna 3D i en modal dialog som stänger direkt efter klick:
-
-1. **Öppna 3D-viewern som en resizable panel** (precis som Ivion)
-2. **Använd "Bekräfta position" knapp** - Klick i 3D väljer position, men stänger inte
-3. **Visa temporär markör** - Visuell feedback för vald position
-4. **Behåll viewern öppen** tills användaren aktivt stänger eller bekräftar
-
-### Del 3: Tvåstegsflöde för 3D-positionsval
-
-1. **Navigera fritt** - Användaren navigerar i 3D utan att registrera position
-2. **Aktivera "Välj position"** - Klicka på en knapp för att börja välja
-3. **Klicka för att markera** - Position visas med markör
-4. **Bekräfta eller ändra** - Möjlighet att klicka igen för att ändra
-5. **Stäng viewern** - Position sparas till formuläret
+**Övermenyn kanske fungerar men har UI-problem**:
+- Scroll-area kan vara för liten vertikalt
+- Verktyg med "inOverflow: true" kanske inte renderas korrekt
 
 ---
 
-## Detaljerade ändringar
+## Detaljerad implementation
 
-### Inventory.tsx - Layout och 3D-panel
+### Del 1: Ta bort dubbletter från ToolbarSettings
+
+**Fil: `src/components/viewer/ToolbarSettings.tsx`**
+
+Ta bort följande från `NAVIGATION_TOOLS`:
+- `viewMode` (rad 56)
+
+Ta bort följande från `VISUALIZATION_TOOLS`:
+- `annotations` (rad 65)
+- `bimModels` (rad 70)
+- `floors` (rad 71)
+- `addAsset` (rad 74)
+
+Öka `SETTINGS_VERSION` till 5 för att tvinga en reset av localStorage.
 
 ```typescript
-// Ny state för 3D-position picker (inline)
-const [viewer3dOpen, setViewer3dOpen] = useState(false);
-const [viewer3dBuildingFmGuid, setViewer3dBuildingFmGuid] = useState<string | null>(null);
-const [viewer3dRoomFmGuid, setViewer3dRoomFmGuid] = useState<string | null>(null);
+// Version number - increment when adding new tools to force localStorage update
+const SETTINGS_VERSION = 5;
 
-// Handler från InventoryForm för att öppna 3D inline
-const handleOpen3d = (buildingFmGuid: string, roomFmGuid?: string) => {
-  setViewer3dBuildingFmGuid(buildingFmGuid);
-  setViewer3dRoomFmGuid(roomFmGuid || null);
-  setViewer3dOpen(true);
-  // Stäng Ivion om den är öppen
-  setIvion360Url(null);
-};
+// Navigation tools - shown in the bottom toolbar (interaction & navigation only)
+export const NAVIGATION_TOOLS: ToolConfig[] = [
+  { id: 'orbit', label: 'Orbit (rotera)', visible: true, inOverflow: false },
+  { id: 'firstPerson', label: 'Första person', visible: true, inOverflow: false },
+  { id: 'zoomIn', label: 'Zooma in', visible: true, inOverflow: false },
+  { id: 'zoomOut', label: 'Zooma ut', visible: true, inOverflow: false },
+  { id: 'viewFit', label: 'Anpassa vy', visible: true, inOverflow: false },
+  { id: 'resetView', label: 'Återställ vy', visible: true, inOverflow: false },
+  { id: 'select', label: 'Välj objekt', visible: true, inOverflow: false },
+  { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
+  { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
+  // REMOVED: viewMode - exists in VisualizationToolbar
+  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: false },
+  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: false },
+];
 
-// Desktop layout - justerade storlekar
-<ResizablePanelGroup direction="horizontal" className="h-full">
-  {/* Lista - smalare */}
-  <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-    <InventoryList ... />
-  </ResizablePanel>
-  
-  <ResizableHandle withHandle />
-  
-  {/* Formulär - fast bredd */}
-  <ResizablePanel defaultSize={30} minSize={25} maxSize={40}>
-    <InventoryForm
-      onOpen3d={handleOpen3d}
-      onOpen360={handleOpen360}
-      onPositionPicked={handlePositionPicked}
-      ...
-    />
-  </ResizablePanel>
-  
-  {/* 3D eller 360 - fyller resten */}
-  {(viewer3dOpen || ivion360Url) && (
-    <>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={50} minSize={30}>
-        {viewer3dOpen ? (
-          <Inline3dViewer
-            buildingFmGuid={viewer3dBuildingFmGuid}
-            roomFmGuid={viewer3dRoomFmGuid}
-            onPositionConfirmed={handlePositionConfirmed}
-            onClose={() => setViewer3dOpen(false)}
-          />
-        ) : (
-          <Ivion360View url={ivion360Url} onClose={handleClose360} />
-        )}
-      </ResizablePanel>
-    </>
-  )}
-</ResizablePanelGroup>
+// Visualization tools - shown in the right sidebar toolbar (view options & toggles)
+export const VISUALIZATION_TOOLS: ToolConfig[] = [
+  { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: false },
+  { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: false },
+  // REMOVED: annotations - exists in VisualizationToolbar (Visa annotationer)
+  { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
+  { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
+  { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
+  { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
+  // REMOVED: bimModels - exists in VisualizationToolbar
+  // REMOVED: floors - exists in VisualizationToolbar
+  { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
+  { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
+  // REMOVED: addAsset - exists in VisualizationToolbar (Registrera tillgång)
+];
 ```
 
-### Ny komponent: Inline3dPositionPicker.tsx
+### Del 2: Säkerställ att rum är dolda som standard
 
-Skapar en wrapper-komponent för AssetPlusViewer med bekräfta-flöde:
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
 
-```typescript
-interface Inline3dPositionPickerProps {
-  buildingFmGuid: string;
-  roomFmGuid?: string;
-  onPositionConfirmed: (coords: { x: number; y: number; z: number }) => void;
-  onClose: () => void;
-}
-
-const Inline3dPositionPicker: React.FC<...> = ({
-  buildingFmGuid,
-  roomFmGuid,
-  onPositionConfirmed,
-  onClose,
-}) => {
-  const [pendingCoords, setPendingCoords] = useState<{x,y,z} | null>(null);
-  const [pickModeActive, setPickModeActive] = useState(false);
-
-  const handleCoordinatePicked = (coords) => {
-    // Spara koordinater men stäng INTE viewern
-    setPendingCoords(coords);
-    toast.success(`Position markerad: (${coords.x.toFixed(2)}, ${coords.y.toFixed(2)}, ${coords.z.toFixed(2)})`);
-  };
-
-  const handleConfirm = () => {
-    if (pendingCoords) {
-      onPositionConfirmed(pendingCoords);
-      onClose();
-    }
-  };
-
-  return (
-    <div className="h-full flex flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between p-2 border-b bg-background/95">
-        <div className="flex items-center gap-2">
-          <Crosshair className="h-4 w-4" />
-          <span className="text-sm font-medium">Välj 3D-position</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {!pickModeActive && (
-            <Button size="sm" onClick={() => setPickModeActive(true)}>
-              Börja välja position
-            </Button>
-          )}
-          {pendingCoords && (
-            <Button size="sm" onClick={handleConfirm}>
-              Bekräfta position
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Instructions */}
-      {pickModeActive && !pendingCoords && (
-        <div className="bg-primary/10 px-3 py-2 text-sm">
-          Klicka på en yta för att markera position
-        </div>
-      )}
-      {pendingCoords && (
-        <div className="bg-green-500/10 px-3 py-2 text-sm flex items-center justify-between">
-          <span>Position: X:{pendingCoords.x.toFixed(2)} Y:{pendingCoords.y.toFixed(2)} Z:{pendingCoords.z.toFixed(2)}</span>
-          <Button size="sm" variant="ghost" onClick={() => setPendingCoords(null)}>
-            Välj ny position
-          </Button>
-        </div>
-      )}
-
-      {/* 3D Viewer */}
-      <div className="flex-1 min-h-0">
-        <AssetPlusViewer
-          fmGuid={roomFmGuid || buildingFmGuid}
-          pickModeEnabled={pickModeActive && !pendingCoords}
-          onCoordinatePicked={handleCoordinatePicked}
-          onClose={onClose}
-        />
-      </div>
-    </div>
-  );
-};
-```
-
-### InventoryForm.tsx - Uppdaterad props
+I `handleAllModelsLoaded` callback (runt rad 449-530), lägg till explicit deaktivering av spaces:
 
 ```typescript
-interface InventoryFormProps {
-  // ... befintliga
-  onOpen3d?: (buildingFmGuid: string, roomFmGuid?: string) => void;
-  onPositionPicked?: (coords: { x: number; y: number; z: number }) => void;
-}
-
-// Ersätt dialog-öppning med inline callback
-const handleOpen3dPosition = () => {
-  if (onOpen3d) {
-    onOpen3d(buildingFmGuid, roomFmGuid);
-  } else {
-    // Fallback till dialog för mobil
-    setPositionDialogOpen(true);
+// Efter models laddats - säkerställ att rum är dolda som standard
+try {
+  const assetViewer = viewer?.assetViewer;
+  if (assetViewer?.onShowSpacesChanged) {
+    assetViewer.onShowSpacesChanged(false);
+    console.log("Spaces hidden by default");
   }
-};
+} catch (e) {
+  console.debug("Could not hide spaces:", e);
+}
 ```
 
-### Ta bort PositionPickerDialog på desktop
+### Del 3: Synkronisera rum-synlighet med våningsfiltrering
 
-Dialog används endast som fallback på mobil. Desktop använder inline-panel.
+**Fil: `src/components/viewer/FloorVisibilitySelector.tsx`**
+
+Problemet är att `applyFloorVisibility` bara hanterar objektsynlighet, inte IfcSpace-synlighet. Spaces styrs av `onShowSpacesChanged` på Asset+ viewer-nivå, inte per-floor.
+
+Lösningen är att:
+1. Skicka med information om vilka floors som är synliga till VisualizationToolbar
+2. VisualizationToolbar anropar `onShowSpacesChanged(true/false)` baserat på selection
+3. RoomVisualizationPanel redan filtrerar rätt via `visibleFloorFmGuids` prop
+
+Lägg till en callback i `handleShowOnlyFloor`:
+```typescript
+const handleShowOnlyFloor = useCallback((floorId: string) => {
+  const newSet = new Set([floorId]);
+  setVisibleFloorIds(newSet);
+  applyFloorVisibility(newSet);
+  
+  // Apply clipping when showing single floor
+  updateClipping([floorId]);
+  
+  // Emit event for other components (e.g., ViewerToolbar 2D mode)
+  const floor = floors.find(f => f.id === floorId);
+  const bounds = calculateFloorBounds(floorId);
+  const eventDetail: FloorSelectionEventDetail = {
+    floorId,
+    floorName: floor?.name || null,
+    bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+  };
+  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+  
+  if (onVisibleFloorsChange) {
+    if (floor) {
+      onVisibleFloorsChange(floor.databaseLevelFmGuids);
+    }
+  }
+}, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
+```
+
+Detta fungerar redan. Det verkliga problemet är att Asset+ viewer visar IfcSpace-geometri som standard vid floor cutout. Vi behöver anropa `onShowSpacesChanged(false)` för att dölja dem.
+
+### Del 4: Koppla spaces-synlighet till floor filtering
+
+**Fil: `src/components/viewer/VisualizationToolbar.tsx`**
+
+Modifiera `handleVisibleFloorsChange` för att återinitiera spaces-visibility baserat på `showSpaces` state:
+
+```typescript
+// Handle visible floors change from floor selector
+const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
+  console.log("Visible floors changed:", visibleFloorIds);
+  onVisibleFloorsChange?.(visibleFloorIds);
+  
+  // Re-apply spaces visibility to ensure correct floor-filtered state
+  // This ensures only the visible floors' spaces are shown if showSpaces is enabled
+  try {
+    const assetViewer = viewerRef.current?.assetViewer;
+    if (assetViewer?.onShowSpacesChanged) {
+      // First hide all spaces, then re-enable if showSpaces is on
+      assetViewer.onShowSpacesChanged(false);
+      if (showSpaces) {
+        // Small delay to allow floor filtering to complete
+        setTimeout(() => {
+          assetViewer.onShowSpacesChanged(true);
+        }, 100);
+      }
+    }
+  } catch (e) {
+    console.debug("Could not sync spaces visibility:", e);
+  }
+}, [onVisibleFloorsChange, viewerRef, showSpaces]);
+```
 
 ---
 
-## Visuell översikt (Desktop)
-
-```text
-+---------------+------------------+--------------------------------+
-|    Lista      |    Formulär      |           3D Viewer            |
-|   (20%)       |     (30%)        |            (50%)               |
-|               |                  |                                |
-| > Asset 1     |  Namn: [___]     |   +-- Toolbar --+              |
-| > Asset 2     |  Kategori: [v]   |   | [Börja välja] [Bekräfta X] |
-|               |                  |   +--------------+              |
-|               |  Position:       |   | Position: X:... Y:... Z:...|
-|               |  [3D] [360+]     |   +--------------+              |
-|               |                  |                                |
-|               |  [Spara]         |   [ 3D-modell visas här ]      |
-|               |                  |                                |
-+---------------+------------------+--------------------------------+
-```
-
----
-
-## Filändringar
+## Sammanfattning av filändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `src/pages/Inventory.tsx` | Justera panelstorlekar, lägg till 3D-panel state och handlers |
-| `src/components/inventory/Inline3dPositionPicker.tsx` | NY - Wrapper för AssetPlusViewer med bekräfta-flöde |
-| `src/components/inventory/InventoryForm.tsx` | Lägg till `onOpen3d` prop, använd inline istället för dialog |
-| `src/components/inventory/PositionPickerDialog.tsx` | Behåll som fallback för mobil |
+| `src/components/viewer/ToolbarSettings.tsx` | Ta bort dubblettverktyg: viewMode, annotations, bimModels, floors, addAsset. Öka VERSION till 5. |
+| `src/components/viewer/AssetPlusViewer.tsx` | Explicit dölja spaces i `handleAllModelsLoaded` |
+| `src/components/viewer/VisualizationToolbar.tsx` | Synkronisera spaces-synlighet vid floor-ändring |
 
 ---
 
-## Fördelar
+## Förväntade resultat
 
-1. **Konsistent layout** - 3D och 360 hanteras likadant (inline panel)
-2. **Användaren styr flödet** - Navigera först, sedan aktivt välja position
-3. **Visuell feedback** - Koordinater visas i toolbaren
-4. **Möjlighet att ändra** - Klicka igen för ny position innan bekräfta
-5. **Formuläret behåller smal bredd** - 3D-viewern får det utrymme den behöver
-
+1. **Rum dolda som standard**: Vid initial laddning och floor cutout kommer rum att vara dolda om inte "Visa rum" är aktiverat
+2. **Korrekt floor filtering**: När man väljer Solo på ett våningsplan visas endast det våningsplanets rum (om aktiverat)
+3. **Ren verktygslista**: "Anpassa verktygsfält" visar endast verktyg som faktiskt finns i navigations-toolbaren (botten), utan dubbletter av VisualizationToolbar-verktyg
