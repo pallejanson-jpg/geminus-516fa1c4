@@ -6,13 +6,130 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validate that query is read-only (SELECT only)
+function validateReadOnlyQuery(sql: string): boolean {
+  const normalized = sql.toLowerCase().trim();
+  if (!normalized.startsWith('select')) return false;
+  const forbidden = ['drop', 'delete', 'update', 'insert', 'alter', 'create', 'truncate', 'grant', 'revoke'];
+  for (const word of forbidden) {
+    // Check for word boundaries to avoid false positives
+    const regex = new RegExp(`\\b${word}\\b`, 'i');
+    if (regex.test(normalized)) return false;
+  }
+  return true;
+}
+
+// Extract SQL query from AI response
+function extractSqlQuery(content: string): string | null {
+  const sqlMatch = content.match(/```sql\s*([\s\S]*?)\s*```/i);
+  if (sqlMatch) {
+    const sql = sqlMatch[1].trim();
+    if (validateReadOnlyQuery(sql)) {
+      return sql;
+    }
+  }
+  return null;
+}
+
+// Execute raw SQL query (read-only)
+async function executeQuery(supabase: any, sql: string): Promise<any> {
+  // Use the Supabase client to execute raw SQL via rpc or direct query
+  // For safety, we'll use the assets table with filters parsed from the SQL
+  // This is a simplified approach - for complex queries, consider using pg directly
+  
+  try {
+    // For simple COUNT queries
+    if (sql.toLowerCase().includes('count(*)')) {
+      const tableName = sql.match(/from\s+(\w+)/i)?.[1] || 'assets';
+      const whereMatch = sql.match(/where\s+(.+?)(?:\s+(?:order|group|limit|$))/i);
+      
+      let query = supabase.from(tableName).select('*', { count: 'exact', head: true });
+      
+      // Parse simple WHERE conditions
+      if (whereMatch) {
+        const conditions = whereMatch[1];
+        // Handle category = 'X'
+        const categoryMatch = conditions.match(/category\s*=\s*'([^']+)'/i);
+        if (categoryMatch) {
+          query = query.eq('category', categoryMatch[1]);
+        }
+        // Handle building_fm_guid = 'X'
+        const buildingMatch = conditions.match(/building_fm_guid\s*=\s*'([^']+)'/i);
+        if (buildingMatch) {
+          query = query.eq('building_fm_guid', buildingMatch[1]);
+        }
+        // Handle level_fm_guid = 'X'
+        const levelMatch = conditions.match(/level_fm_guid\s*=\s*'([^']+)'/i);
+        if (levelMatch) {
+          query = query.eq('level_fm_guid', levelMatch[1]);
+        }
+      }
+      
+      const { count, error } = await query;
+      if (error) throw error;
+      return { count };
+    }
+    
+    // For SELECT queries with specific columns
+    const selectMatch = sql.match(/select\s+(.+?)\s+from/i);
+    const tableName = sql.match(/from\s+(\w+)/i)?.[1] || 'assets';
+    const limitMatch = sql.match(/limit\s+(\d+)/i);
+    const orderMatch = sql.match(/order\s+by\s+(\w+)(?:\s+(asc|desc))?/i);
+    const whereMatch = sql.match(/where\s+(.+?)(?:\s+(?:order|group|limit|$))/i);
+    
+    let query = supabase.from(tableName).select('*');
+    
+    // Apply WHERE conditions
+    if (whereMatch) {
+      const conditions = whereMatch[1];
+      const categoryMatch = conditions.match(/category\s*=\s*'([^']+)'/i);
+      if (categoryMatch) {
+        query = query.eq('category', categoryMatch[1]);
+      }
+      const buildingMatch = conditions.match(/building_fm_guid\s*=\s*'([^']+)'/i);
+      if (buildingMatch) {
+        query = query.eq('building_fm_guid', buildingMatch[1]);
+      }
+      const levelMatch = conditions.match(/level_fm_guid\s*=\s*'([^']+)'/i);
+      if (levelMatch) {
+        query = query.eq('level_fm_guid', levelMatch[1]);
+      }
+      const inRoomMatch = conditions.match(/in_room_fm_guid\s*=\s*'([^']+)'/i);
+      if (inRoomMatch) {
+        query = query.eq('in_room_fm_guid', inRoomMatch[1]);
+      }
+    }
+    
+    // Apply ORDER BY
+    if (orderMatch) {
+      const column = orderMatch[1];
+      const ascending = orderMatch[2]?.toLowerCase() !== 'desc';
+      query = query.order(column, { ascending });
+    }
+    
+    // Apply LIMIT
+    if (limitMatch) {
+      query = query.limit(parseInt(limitMatch[1]));
+    } else {
+      query = query.limit(100); // Default limit for safety
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Query execution error:', error);
+    throw error;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, context } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -24,8 +141,13 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get asset statistics for context
-    const [categoryCounts, sampleSpaces, sampleDoors] = await Promise.all([
+    // Get comprehensive asset statistics for context
+    const [
+      categoryCounts,
+      totalAssets,
+      buildingsList,
+    ] = await Promise.all([
+      // Category counts
       supabase.from("assets").select("category").then(({ data }) => {
         const counts: Record<string, number> = {};
         data?.forEach((item) => {
@@ -33,109 +155,130 @@ serve(async (req) => {
         });
         return counts;
       }),
-      supabase.from("assets").select("fm_guid, common_name, name, attributes").eq("category", "Space").limit(50),
-      supabase.from("assets").select("fm_guid, common_name, name, attributes").eq("category", "Door").limit(50),
+      // Total count
+      supabase.from("assets").select("*", { count: "exact", head: true }).then(({ count }) => count || 0),
+      // Buildings list for context
+      supabase.from("assets").select("fm_guid, common_name, name").eq("category", "Building").limit(50),
     ]);
 
-    // Extract unique attribute keys from spaces to understand the data model
-    const spaceAttributes = new Set<string>();
-    sampleSpaces.data?.forEach((space) => {
-      if (space.attributes && typeof space.attributes === "object") {
-        Object.keys(space.attributes).forEach((key) => {
-          // Filter out internal keys and get human-readable names
-          const attr = (space.attributes as Record<string, any>)[key];
-          if (attr && typeof attr === "object" && attr.name) {
-            spaceAttributes.add(attr.name);
-          }
-        });
+    // Build current context section
+    let currentContextSection = "";
+    if (context) {
+      currentContextSection = `
+NUVARANDE KONTEXT (var användaren befinner sig):
+- Aktiv vy: ${context.activeApp || 'Okänd'}`;
+      
+      if (context.currentBuilding) {
+        currentContextSection += `
+- Aktiv byggnad: ${context.currentBuilding.name} (fmGuid: ${context.currentBuilding.fmGuid})`;
       }
-    });
+      if (context.currentStorey) {
+        currentContextSection += `
+- Aktivt våningsplan: ${context.currentStorey.name} (fmGuid: ${context.currentStorey.fmGuid})`;
+      }
+      if (context.currentSpace) {
+        currentContextSection += `
+- Aktivt rum: ${context.currentSpace.name} (fmGuid: ${context.currentSpace.fmGuid})`;
+      }
+      if (context.viewerState) {
+        currentContextSection += `
+- 3D Viewer: ${context.viewerState.viewMode} läge, ${context.viewerState.visibleFloorFmGuids?.length || 0} våningsplan synliga`;
+      }
+    }
+
+    // Build buildings list for reference
+    const buildingsInfo = buildingsList.data?.map(b => 
+      `  - ${b.common_name || b.name || 'Okänd'}: ${b.fm_guid}`
+    ).join('\n') || '  (Inga byggnader synkade)';
 
     // Build context about the data
     const dataContext = `
-You are Gunnar, a helpful AI data assistant for a facilities management system. You have access to building asset data.
+Du är Gunnar, en intelligent AI-assistent för ett fastighetssystem. Du hjälper användare att utforska och förstå sina byggnader och tillgångar.
 
-CURRENT DATA SUMMARY:
-- Categories and counts: ${JSON.stringify(categoryCounts)}
-- Total assets: ${Object.values(categoryCounts).reduce((a, b) => a + b, 0)}
+TILLGÄNGLIG DATA I DATABASEN (tabell: assets):
+- Totalt: ${totalAssets} objekt
+  - Byggnader (Building): ${categoryCounts['Building'] || 0}
+  - Våningsplan (Building Storey): ${categoryCounts['Building Storey'] || 0}
+  - Rum (Space): ${categoryCounts['Space'] || 0}
+  - Inventarier/Tillgångar (Instance): ${categoryCounts['Instance'] || 0}
+  - Dörrar (Door): ${categoryCounts['Door'] || 0}
 
-SPACE ATTRIBUTES AVAILABLE (for querying rooms/spaces):
-${Array.from(spaceAttributes).slice(0, 30).join(", ")}
+BYGGNADER I SYSTEMET:
+${buildingsInfo}
 
-Common attributes include:
-- "Floor Covering" or "Golvmaterial" - floor material (codes like G01, G02, etc.)
-- "Ceiling Covering" - ceiling material
-- "Wall Covering" - wall material  
-- "NTA" - net area in square meters
-- "Rumsnamn" / "Long Name" - room name
-- "Rumsnummer" - room number
-- "Hyresobjekt" - rental object
+${currentContextSection}
 
-SAMPLE SPACE DATA (first few rooms):
-${JSON.stringify(sampleSpaces.data?.slice(0, 5).map(s => ({
-  fmGuid: s.fm_guid,
-  name: s.common_name || s.name,
-  floorCovering: s.attributes?.floorcoveringFD9E593FE947F821E0E39C1A31A684FF78E0A23A?.value,
-  area: s.attributes?.nta51780ACD4DD0DA970F071C4F197E361479BC375A?.value,
-})), null, 2)}
+DATABASKOLUMNER I ASSETS-TABELLEN:
+- fm_guid: Unik identifierare (UUID)
+- common_name: Beskrivande namn
+- name: Tekniskt namn
+- category: 'Building' | 'Building Storey' | 'Space' | 'Instance' | 'Door'
+- building_fm_guid: Referens till byggnad
+- level_fm_guid: Referens till våningsplan
+- in_room_fm_guid: Referens till rum (för Instance/tillgångar)
+- gross_area: Yta i m²
+- asset_type: Typ av tillgång (t.ex. brandsläckare)
+- attributes: JSONB med utökade egenskaper (golvmaterial, tak, etc.)
 
-INSTRUCTIONS:
-1. Answer questions about the building data accurately based on the available information
-2. When users ask about counts or statistics, provide specific numbers
-3. When users ask to find specific items (e.g., "rooms with concrete floors"), you can indicate that you found matching items
-4. If asked to show items in the navigator tree, respond with a JSON block containing fmGuids like this:
-   \`\`\`json
-   {"action": "selectInTree", "fmGuids": ["guid1", "guid2", ...]}
-   \`\`\`
-5. Be helpful, concise, and professional
-6. If you don't have enough data to answer, say so clearly
+FRÅGEEXEMPEL DU KAN BESVARA DIREKT:
+- "Hur många rum finns i [byggnad]?" → Räkna Space med rätt building_fm_guid
+- "Vilka våningsplan har [byggnad]?" → Lista Building Storey för byggnaden
+- "Hur många tillgångar finns på [plan]?" → Räkna Instance på level_fm_guid
+- "Hur stor area har [byggnad/rum]?" → Summera gross_area
 
-The user's question might be in Swedish or English - respond in the same language.
+OM DU BEHÖVER DATA FÖR ATT SVARA:
+Generera en SQL-fråga i detta format:
+\`\`\`sql
+SELECT ... FROM assets WHERE ...
+\`\`\`
+
+Jag kommer köra frågan och ge dig resultatet. Använd ENDAST SELECT-satser!
+
+ACTIONS DU KAN RETURNERA:
+Om användaren vill SE objekt i systemet, returnera en JSON-block:
+
+1. Visa objekt i Navigatorn:
+\`\`\`json
+{"action": "selectInTree", "fmGuids": ["guid1", "guid2"]}
+\`\`\`
+
+2. Visa ett våningsplan i 3D (om i viewer):
+\`\`\`json
+{"action": "showFloor", "floorFmGuid": "guid"}
+\`\`\`
+
+3. Markera objekt i 3D:
+\`\`\`json
+{"action": "highlight", "fmGuids": ["guid1", "guid2"]}
+\`\`\`
+
+4. Växla vy-läge:
+\`\`\`json
+{"action": "switchTo2D"}
+\`\`\`
+eller
+\`\`\`json
+{"action": "switchTo3D"}
+\`\`\`
+
+5. Flyga till ett objekt:
+\`\`\`json
+{"action": "flyTo", "fmGuid": "guid"}
+\`\`\`
+
+VIKTIGA REGLER:
+1. Svara på samma språk som frågan (svenska/engelska)
+2. Var koncis och tydlig
+3. Om du refererar till en specifik byggnad som finns i kontexten, använd dess fmGuid i queries
+4. Om användaren inte specificerar byggnad men är på en byggnadssida, anta den byggnaden
+5. Ge alltid konkreta siffror när du har data
+6. Om du inte kan svara, förklara varför och föreslå alternativ
+
+Svara nu på användarens fråga:
 `;
 
-    // Check if the user wants to query specific data
-    const lastUserMessage = messages[messages.length - 1]?.content || "";
-    
-    // Detect if we need to do a specific query
-    let additionalContext = "";
-    
-    // Check for floor covering queries
-    if (lastUserMessage.toLowerCase().includes("golv") || 
-        lastUserMessage.toLowerCase().includes("floor") ||
-        lastUserMessage.toLowerCase().includes("betong") ||
-        lastUserMessage.toLowerCase().includes("concrete")) {
-      
-      // Query all spaces with their floor covering
-      const { data: allSpaces } = await supabase
-        .from("assets")
-        .select("fm_guid, common_name, name, attributes")
-        .eq("category", "Space");
-      
-      // Filter spaces by floor covering if needed
-      const spacesWithFloors = allSpaces?.map((s) => ({
-        fmGuid: s.fm_guid,
-        name: s.common_name || s.name,
-        floorCovering: (s.attributes as any)?.floorcoveringFD9E593FE947F821E0E39C1A31A684FF78E0A23A?.value ||
-                       (s.attributes as any)?.golvmaterial54D5F51909E146BD7A9089F8FDE5C7C8265E5B0F?.value,
-      })).filter(s => s.floorCovering);
-
-      additionalContext = `\n\nFLOOR COVERING DATA FOR ALL SPACES:\n${JSON.stringify(spacesWithFloors, null, 2)}`;
-    }
-
-    // Check for fire extinguisher queries
-    if (lastUserMessage.toLowerCase().includes("brandsläckare") || 
-        lastUserMessage.toLowerCase().includes("fire extinguisher") ||
-        lastUserMessage.toLowerCase().includes("brand")) {
-      
-      const { data: fireEquipment, count } = await supabase
-        .from("assets")
-        .select("fm_guid, common_name, name, category, attributes", { count: "exact" })
-        .or("common_name.ilike.%brand%,name.ilike.%brand%,common_name.ilike.%fire%,name.ilike.%fire%");
-      
-      additionalContext += `\n\nFIRE-RELATED EQUIPMENT SEARCH RESULTS (${count || 0} items):\n${JSON.stringify(fireEquipment?.slice(0, 20), null, 2)}`;
-    }
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // First AI call to understand the question and potentially generate SQL
+    const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -144,35 +287,110 @@ The user's question might be in Swedish or English - respond in the same languag
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: dataContext + additionalContext },
+          { role: "system", content: dataContext },
+          ...messages,
+        ],
+        stream: false,
+      }),
+    });
+
+    if (!firstResponse.ok) {
+      const errorText = await firstResponse.text();
+      console.error("First AI call error:", firstResponse.status, errorText);
+      
+      if (firstResponse.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (firstResponse.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw new Error("AI gateway error");
+    }
+
+    const firstResult = await firstResponse.json();
+    const firstContent = firstResult.choices?.[0]?.message?.content || "";
+
+    // Check if AI generated a SQL query
+    const sqlQuery = extractSqlQuery(firstContent);
+    
+    if (sqlQuery) {
+      console.log("Executing SQL query:", sqlQuery);
+      
+      try {
+        const queryResult = await executeQuery(supabase, sqlQuery);
+        
+        // Second AI call with query results
+        const secondResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              { role: "system", content: dataContext },
+              ...messages,
+              { role: "assistant", content: firstContent },
+              { role: "user", content: `Här är resultatet av din SQL-fråga:\n\n${JSON.stringify(queryResult, null, 2)}\n\nFormulera nu ett tydligt och koncist svar till användaren baserat på detta resultat. INKLUDERA INTE SQL-koden i ditt svar.` },
+            ],
+            stream: true,
+          }),
+        });
+
+        if (!secondResponse.ok) {
+          throw new Error("Second AI call failed");
+        }
+
+        return new Response(secondResponse.body, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+        });
+      } catch (queryError) {
+        console.error("Query execution failed:", queryError);
+        // Fall back to streaming the original response without query
+      }
+    }
+
+    // If no SQL query or query failed, stream the first response
+    const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: dataContext },
           ...messages,
         ],
         stream: true,
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (!streamResponse.ok) {
+      if (streamResponse.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
+      if (streamResponse.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      throw new Error("AI gateway error");
     }
 
-    return new Response(response.body, {
+    return new Response(streamResponse.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
