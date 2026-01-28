@@ -9,6 +9,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import InventoryForm from '@/components/inventory/InventoryForm';
 import InventoryList from '@/components/inventory/InventoryList';
 import Ivion360View from '@/components/viewer/Ivion360View';
+import Inline3dPositionPicker from '@/components/inventory/Inline3dPositionPicker';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 
@@ -38,6 +39,12 @@ const Inventory: React.FC = () => {
   
   // Ivion 360 side panel state (desktop only)
   const [ivion360Url, setIvion360Url] = useState<string | null>(null);
+  
+  // 3D position picker side panel state (desktop only)
+  const [viewer3dOpen, setViewer3dOpen] = useState(false);
+  const [viewer3dBuildingFmGuid, setViewer3dBuildingFmGuid] = useState<string | null>(null);
+  const [viewer3dRoomFmGuid, setViewer3dRoomFmGuid] = useState<string | null>(null);
+  const [pendingPositionForEdit, setPendingPositionForEdit] = useState<{ x: number; y: number; z: number } | null>(null);
 
   // Auto-open form if we have prefill data
   useEffect(() => {
@@ -103,6 +110,8 @@ const Inventory: React.FC = () => {
 
   // Handler for opening 360 inline (desktop)
   const handleOpen360 = (url: string) => {
+    // Close 3D if open
+    setViewer3dOpen(false);
     setIvion360Url(url);
   };
 
@@ -110,13 +119,34 @@ const Inventory: React.FC = () => {
     setIvion360Url(null);
   };
 
+  // Handler for opening 3D inline (desktop)
+  const handleOpen3d = (buildingFmGuid: string, roomFmGuid?: string) => {
+    // Close 360 if open
+    setIvion360Url(null);
+    setViewer3dBuildingFmGuid(buildingFmGuid);
+    setViewer3dRoomFmGuid(roomFmGuid || null);
+    setViewer3dOpen(true);
+  };
+
+  const handlePositionConfirmed = (coords: { x: number; y: number; z: number }) => {
+    setPendingPositionForEdit(coords);
+    setViewer3dOpen(false);
+  };
+
+  const handleClose3d = () => {
+    setViewer3dOpen(false);
+  };
+
+  // Check if viewer panel should be visible
+  const showViewerPanel = viewer3dOpen || ivion360Url;
+
   // Desktop layout: side-by-side with resizable panels
   if (!isMobile) {
     return (
       <div className="h-full bg-background">
         <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Left column: Recently saved items */}
-          <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
+          {/* Left column: Recently saved items - narrower */}
+          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
             <div className="h-full flex flex-col p-4">
               <div className="flex items-center gap-3 mb-4">
                 <ClipboardList className="h-6 w-6 text-primary" />
@@ -136,8 +166,8 @@ const Inventory: React.FC = () => {
 
           <ResizableHandle withHandle />
 
-          {/* Middle column: Registration form */}
-          <ResizablePanel defaultSize={ivion360Url ? 35 : 75} minSize={30}>
+          {/* Middle column: Registration form - fixed width */}
+          <ResizablePanel defaultSize={showViewerPanel ? 30 : 80} minSize={25} maxSize={showViewerPanel ? 40 : 85}>
             <div className="h-full p-4">
               <Card className="p-6 h-full overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">
@@ -150,18 +180,30 @@ const Inventory: React.FC = () => {
                   editItem={editItem}
                   onClearEdit={handleClearEdit}
                   onOpen360={handleOpen360}
+                  onOpen3d={handleOpen3d}
+                  pendingPosition={pendingPositionForEdit}
+                  onPendingPositionConsumed={() => setPendingPositionForEdit(null)}
                 />
               </Card>
             </div>
           </ResizablePanel>
 
-          {/* Right column: Ivion 360 (conditional) */}
-          {ivion360Url && (
+          {/* Right column: 3D Viewer or Ivion 360 (conditional) */}
+          {showViewerPanel && (
             <>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={40} minSize={25}>
+              <ResizablePanel defaultSize={50} minSize={30}>
                 <div className="h-full">
-                  <Ivion360View url={ivion360Url} onClose={handleClose360} />
+                  {viewer3dOpen && viewer3dBuildingFmGuid ? (
+                    <Inline3dPositionPicker
+                      buildingFmGuid={viewer3dBuildingFmGuid}
+                      roomFmGuid={viewer3dRoomFmGuid || undefined}
+                      onPositionConfirmed={handlePositionConfirmed}
+                      onClose={handleClose3d}
+                    />
+                  ) : ivion360Url ? (
+                    <Ivion360View url={ivion360Url} onClose={handleClose360} />
+                  ) : null}
                 </div>
               </ResizablePanel>
             </>
