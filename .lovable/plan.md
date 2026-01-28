@@ -1,470 +1,260 @@
 
-# Plan: Mobil Inventeringsfunktion
+# Plan: Åtgärda Rumsvisualisering, Dölja Röststyrning & Förbättra Inventeringens Tillgänglighet
 
 ## Sammanfattning
 
-Skapa en ny mobilvänlig "Inventering"-funktion som låter användare gå runt i en byggnad och enkelt registrera tillgångar (assets). Formuläret sparar direkt till Supabase `assets`-tabellen med `created_in_model = false`.
+Tre huvudproblem att lösa:
 
-## Funktionsöversikt
+1. **Rumsvisualisering hittar 0 rum** - Felsökning visar att `category` i databasen är `'Space'` (inte `'IfcSpace'`), så det borde fungera. Problemet kan vara att `buildingFmGuid` matchning kräver exakt case-matchning. Dessutom ska transparens på färger matcha BIM-modeller.
 
-### Användarflöde:
-1. Användaren öppnar appen på mobilen
-2. Väljer "Inventering" i navigationsmenyn
-3. Får upp ett snyggt, mobilvänligt formulär
-4. Fyller i grundläggande egenskaper via dropdowns och fritext
-5. Klickar "Spara" → data sparas till `assets`-tabellen
+2. **Röststyrning visas alltid** - Ska döljas som standard och endast visas när aktiverad i Settings.
 
-### Nyckelprinciper:
-- **Mobil-först**: Stora touch-vänliga knappar och inputs
-- **Enkelt**: Minimalt antal fält, alla viktiga har dropdowns
-- **Snabbt**: Spara direkt till databasen, ingen 3D-vy behövs
-- **`created_in_model = false`**: Alla inventerade objekt markeras automatiskt som EJ modellerade
+3. **Inventeringsfunktionen svår att hitta** - Ska läggas i vänster sidomeny, Quick Actions på alla nivåer, och i Navigator med förifylla baserat på navigationskontext.
 
-## Formulärfält
+---
 
-| Fält | Typ | Obligatoriskt | Källa |
-|------|-----|---------------|-------|
-| Namn/Beteckning | Fritext | Ja | `name` |
-| Beskrivning | Textarea | Nej | `attributes.description` |
-| Kategori | Dropdown | Ja | `asset_type` |
-| Symbol | Dropdown med bilder | Ja | `symbol_id` |
-| Byggnad | Dropdown | Ja | `building_fm_guid` |
-| Våningsplan | Dropdown (filtreras) | Nej | `level_fm_guid` |
-| Rum | Dropdown (filtreras) | Nej | `in_room_fm_guid` |
+## Problem 1: Rumsvisualisering - Inga Rum Hittas
 
-### Kategori-dropdown (asset_type)
-Svenska kategorier som mappar till engelska värden:
+### Analys
+Databasen har 3,933 rum med `category = 'Space'`. RoomVisualizationPanel söker korrekt med `category = 'Space'`, men problemet kan vara:
+
+1. **buildingFmGuid matchar inte** - Frågan söker med OR för olika case-varianter, men kanske blir buildingFmGuid aldrig rätt skickat
+2. **buildingFmGuid skickas som uppercase/lowercase fel** - databasen har lowercase GUIDs
+
+### Lösning
 ```typescript
-const INVENTORY_CATEGORIES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: '🔥' },
-  { value: 'fire_blanket', label: 'Brandfilt', icon: '🧯' },
-  { value: 'fire_hose', label: 'Brandslang', icon: '🚒' },
-  { value: 'emergency_exit', label: 'Nödutgång', icon: '🚪' },
-  { value: 'sensor', label: 'Sensor', icon: '📡' },
-  { value: 'sprinkler', label: 'Sprinkler', icon: '💧' },
-  { value: 'hvac_unit', label: 'Luftbehandlingsaggregat', icon: '🌀' },
-  { value: 'lamp', label: 'Lampa', icon: '💡' },
-  { value: 'furniture', label: 'Möbel', icon: '🪑' },
-  { value: 'it_equipment', label: 'IT-utrustning', icon: '💻' },
-  { value: 'other', label: 'Övrigt', icon: '📦' },
-];
+// RoomVisualizationPanel.tsx rad 124-128
+// Nuvarande kod:
+.or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`)
+
+// Förbättrad: Använd ilike för case-insensitiv matchning
+.ilike('building_fm_guid', buildingFmGuid)
 ```
 
-### Symbol-dropdown
-Hämtas dynamiskt från `annotation_symbols`-tabellen:
-- Visar ikon/färg + namn
-- Grupperas efter kategori (Fire, Sensor, etc.)
+### Transparens för Rumsvisualisering
+```typescript
+// RoomVisualizationPanel.tsx rad 289-294
+// FÖRE:
+className="bg-card/95 backdrop-blur-sm"
 
-## Teknisk Implementation
+// EFTER (samma som VisualizationToolbar):
+className="bg-card/60 backdrop-blur-md"
+```
 
-### 1. Ny sida: `src/pages/Inventory.tsx`
+### Rumsvisualisering - Transparenta Färger
+För att färgerna ska ha samma transparens som BIM-modeller måste vi använda opacity:
+```typescript
+// visualization-utils.ts - colorizeSpace funktion
+// Lägg till opacity på entity:
+entity.opacity = 0.6; // Samma transparens som BIM-modeller
+```
 
-Huvudkomponent för inventeringsvyn:
+---
+
+## Problem 2: Röststyrning - Ska Vara Dold Som Standard
+
+### Nuvarande Implementation
+`VoiceControlButton` renderas alltid i `AppLayout.tsx` (rad 50).
+
+### Lösning
+Läs `enabled`-inställningen från `VoiceSettings` och villkorsrendera:
 
 ```typescript
-// Mobil-optimerad layout
-export default function Inventory() {
-  const { navigatorTreeData } = useContext(AppContext);
-  const isMobile = useIsMobile();
+// AppLayout.tsx
+import { useState, useEffect } from 'react';
+import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
+
+const AppLayoutInner: React.FC = () => {
+  const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
   
-  // State för aktiv inventering
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [savedItems, setSavedItems] = useState<any[]>([]);
-  
+  // Lyssna på ändringar i röstinställningar
+  useEffect(() => {
+    const handleSettingsChange = (e: CustomEvent) => {
+      setVoiceEnabled(e.detail?.enabled ?? false);
+    };
+    window.addEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
+    return () => window.removeEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
+  }, []);
+
   return (
-    <div className="h-full flex flex-col p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Inventering</h1>
-        <Badge>{savedItems.length} sparade</Badge>
-      </div>
+    <div>
+      {/* ... existing code ... */}
       
-      {/* Stor "Ny tillgång" knapp */}
-      <Button 
-        size="lg" 
-        className="w-full h-16 text-lg gap-3"
-        onClick={() => setIsFormOpen(true)}
-      >
-        <Plus className="h-6 w-6" />
-        Ny tillgång
-      </Button>
-      
-      {/* Lista över senast registrerade */}
-      <RecentInventoryList items={savedItems} />
-      
-      {/* Formulär som drawer/sheet på mobil */}
-      <InventoryFormSheet 
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        onSaved={(item) => {
-          setSavedItems(prev => [item, ...prev]);
-          setIsFormOpen(false);
-        }}
-      />
+      {/* Voice Control - endast synlig när aktiverad i Settings */}
+      {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
     </div>
   );
-}
+};
 ```
 
-### 2. Formulärkomponent: `src/components/inventory/InventoryForm.tsx`
+---
+
+## Problem 3: Inventering - Bättre Tillgänglighet
+
+### A. Lägg till i Vänster Sidomeny
 
 ```typescript
-interface InventoryFormProps {
-  onSaved: (item: any) => void;
-  onCancel: () => void;
-}
+// LeftSidebar.tsx - Lägg till "Inventering" före Home-knappen
+import { ClipboardList } from 'lucide-react';
 
-function InventoryForm({ onSaved, onCancel }: InventoryFormProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
-  
-  // Form state
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [symbolId, setSymbolId] = useState('');
-  const [buildingFmGuid, setBuildingFmGuid] = useState('');
-  const [levelFmGuid, setLevelFmGuid] = useState('');
-  const [roomFmGuid, setRoomFmGuid] = useState('');
-  
-  // Hämta symboler vid mount
-  useEffect(() => {
-    supabase
-      .from('annotation_symbols')
-      .select('*')
-      .order('category, name')
-      .then(({ data }) => setSymbols(data || []));
-  }, []);
-  
-  const handleSubmit = async () => {
-    // Validering
-    if (!name.trim()) {
-      toast.error('Namn är obligatoriskt');
-      return;
-    }
-    if (!category) {
-      toast.error('Välj en kategori');
-      return;
-    }
-    if (!symbolId) {
-      toast.error('Välj en symbol');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const newAsset = {
-        fm_guid: crypto.randomUUID(),
-        name: name.trim(),
-        common_name: name.trim(),
-        category: 'Instance', // Alltid Instance för inventerade objekt
-        asset_type: category,
-        symbol_id: symbolId,
-        building_fm_guid: buildingFmGuid || null,
-        level_fm_guid: levelFmGuid || null,
-        in_room_fm_guid: roomFmGuid || null,
-        created_in_model: false, // ALLTID false för inventering
-        is_local: true,
-        annotation_placed: false,
-        attributes: {
-          description: description.trim() || null,
-          inventoryDate: new Date().toISOString(),
-        },
-      };
-      
-      const { error } = await supabase
-        .from('assets')
-        .insert(newAsset);
-      
-      if (error) throw error;
-      
-      toast.success('Tillgång sparad!');
-      onSaved(newAsset);
-    } catch (error) {
-      toast.error('Kunde inte spara', {
-        description: error.message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  return (
-    <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
-      {/* Namn - stort input */}
-      <div className="space-y-2">
-        <Label className="text-base">Namn / Beteckning *</Label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="t.ex. Brandsläckare BS-001"
-          className="h-12 text-base"
-          autoFocus
-        />
-      </div>
-      
-      {/* Kategori dropdown */}
-      <div className="space-y-2">
-        <Label className="text-base">Kategori *</Label>
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj kategori..." />
-          </SelectTrigger>
-          <SelectContent className="bg-card">
-            {INVENTORY_CATEGORIES.map((cat) => (
-              <SelectItem key={cat.value} value={cat.value}>
-                <span className="flex items-center gap-2">
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      {/* Symbol dropdown med bilder */}
-      <div className="space-y-2">
-        <Label className="text-base">Symbol *</Label>
-        <Select value={symbolId} onValueChange={setSymbolId}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Välj symbol..." />
-          </SelectTrigger>
-          <SelectContent className="bg-card">
-            {symbols.map((sym) => (
-              <SelectItem key={sym.id} value={sym.id}>
-                <span className="flex items-center gap-2">
-                  {sym.icon_url ? (
-                    <img src={sym.icon_url} alt="" className="w-5 h-5" />
-                  ) : (
-                    <div 
-                      className="w-5 h-5 rounded-full" 
-                      style={{ backgroundColor: sym.color }} 
-                    />
-                  )}
-                  <span>{sym.name}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      {/* Byggnad dropdown */}
-      <BuildingSelector 
-        value={buildingFmGuid}
-        onChange={(v) => {
-          setBuildingFmGuid(v);
-          setLevelFmGuid('');
-          setRoomFmGuid('');
-        }}
-      />
-      
-      {/* Våningsplan - filtreras efter byggnad */}
-      {buildingFmGuid && (
-        <FloorSelector
-          buildingFmGuid={buildingFmGuid}
-          value={levelFmGuid}
-          onChange={(v) => {
-            setLevelFmGuid(v);
-            setRoomFmGuid('');
-          }}
-        />
-      )}
-      
-      {/* Rum - filtreras efter våningsplan */}
-      {levelFmGuid && (
-        <RoomSelector
-          levelFmGuid={levelFmGuid}
-          value={roomFmGuid}
-          onChange={setRoomFmGuid}
-        />
-      )}
-      
-      {/* Beskrivning - expanderbar */}
-      <div className="space-y-2">
-        <Label className="text-base">Beskrivning (valfritt)</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Fritext beskrivning..."
-          className="min-h-[80px]"
-        />
-      </div>
-      
-      {/* Knappar */}
-      <div className="flex gap-3 pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          className="flex-1 h-12"
-          disabled={isLoading}
-        >
-          Avbryt
-        </Button>
-        <Button
-          type="submit"
-          className="flex-1 h-12"
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            'Spara'
-          )}
-        </Button>
-      </div>
-    </form>
-  );
-}
-```
+// I ICON_COLORS (rad 8-17):
+inventory: 'text-orange-500',
 
-### 3. Navigeringsintegration
-
-**MobileNav.tsx** - Lägg till Inventering-knapp:
-```typescript
+// I nav-sektionen (före Home-knappen, rad 69):
 <AppButton 
-  onClick={() => handleAppClick('inventory')} 
-  variant="ghost" 
-  className={`flex-col !h-auto !w-auto !p-2 ${activeApp === 'inventory' ? 'text-primary' : t.textSec}`}
+  onClick={() => setActiveApp('inventory')} 
+  variant={activeApp === 'inventory' ? 'default' : 'ghost'} 
+  className="w-full !justify-start gap-3" 
+  title={isSidebarExpanded ? "" : "Inventering"}
 >
-  <ClipboardList size={22} />
-  <span className="text-[10px] mt-1">Inventering</span>
+  <ClipboardList size={18} className={getIconColor('inventory')} />
+  <span className={`${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
 </AppButton>
 ```
 
-**MainContent.tsx** - Lägg till case:
-```typescript
-case 'inventory':
-  return (
-    <Suspense fallback={<Loader2 />}>
-      <Inventory />
-    </Suspense>
-  );
-```
+### B. Lägg till i Quick Actions
 
-### 4. Hjälpkomponenter
-
-**BuildingSelector** - Hämtar byggnader från navigatorTreeData:
 ```typescript
-function BuildingSelector({ value, onChange }) {
-  const { navigatorTreeData } = useContext(AppContext);
-  const buildings = navigatorTreeData; // Top level = buildings
-  
-  return (
-    <div className="space-y-2">
-      <Label className="text-base">Byggnad</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-12">
-          <SelectValue placeholder="Välj byggnad..." />
-        </SelectTrigger>
-        <SelectContent className="bg-card">
-          {buildings.map((b) => (
-            <SelectItem key={b.fmGuid} value={b.fmGuid}>
-              {b.commonName || b.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
+// QuickActions.tsx - Lägg till "Inventering" för alla nivåer
+interface QuickActionsProps {
+  // ... existing props
+  onInventory?: (facility: Facility, prefill: InventoryPrefill) => void;
 }
-```
 
-**FloorSelector** - Filtrerar våningar efter byggnad:
-```typescript
-function FloorSelector({ buildingFmGuid, value, onChange }) {
-  const { navigatorTreeData } = useContext(AppContext);
-  const building = navigatorTreeData.find(b => b.fmGuid === buildingFmGuid);
-  const floors = building?.children?.filter(c => c.category === 'Building Storey') || [];
-  
-  return (
-    <div className="space-y-2">
-      <Label className="text-base">Våningsplan</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-12">
-          <SelectValue placeholder="Välj våning..." />
-        </SelectTrigger>
-        <SelectContent className="bg-card">
-          {floors.map((f) => (
-            <SelectItem key={f.fmGuid} value={f.fmGuid}>
-              {f.commonName || f.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
+interface InventoryPrefill {
+  buildingFmGuid?: string;
+  levelFmGuid?: string;
+  roomFmGuid?: string;
 }
+
+// I komponenten:
+{onInventory && (
+  <Button 
+    variant="ghost" 
+    onClick={() => onInventory(facility, {
+      buildingFmGuid: isBuilding ? facility.fmGuid : facility.buildingFmGuid,
+      levelFmGuid: isStorey ? facility.fmGuid : facility.levelFmGuid,
+      roomFmGuid: isSpace ? facility.fmGuid : undefined,
+    })} 
+    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+  >
+    <ClipboardList size={12} className="sm:w-3.5 sm:h-3.5 text-orange-500" />
+    <span className="text-[10px] sm:text-xs">Inventering</span>
+  </Button>
+)}
 ```
 
-## Databaskolumner som används
+### C. Förifylla i InventoryForm
 
-Befintliga kolumner i `assets`-tabellen:
+```typescript
+// InventoryForm.tsx - Acceptera prefill-props
+interface InventoryFormProps {
+  onSaved: (item: any) => void;
+  onCancel: () => void;
+  prefill?: {
+    buildingFmGuid?: string;
+    levelFmGuid?: string;
+    roomFmGuid?: string;
+  };
+}
 
-| Kolumn | Typ | Värde |
-|--------|-----|-------|
-| `fm_guid` | text | Genererat UUID |
-| `name` | text | Användarinput |
-| `common_name` | text | Samma som name |
-| `category` | text | `'Instance'` |
-| `asset_type` | text | Vald kategori |
-| `symbol_id` | uuid | Vald symbol |
-| `building_fm_guid` | text | Vald byggnad |
-| `level_fm_guid` | text | Valt våningsplan |
-| `in_room_fm_guid` | text | Valt rum |
-| `created_in_model` | boolean | `false` (ALLTID) |
-| `is_local` | boolean | `true` |
-| `annotation_placed` | boolean | `false` |
-| `attributes` | jsonb | `{ description, inventoryDate }` |
+// I komponenten - initialisera state med prefill:
+const [buildingFmGuid, setBuildingFmGuid] = useState(prefill?.buildingFmGuid || '');
+const [levelFmGuid, setLevelFmGuid] = useState(prefill?.levelFmGuid || '');
+const [roomFmGuid, setRoomFmGuid] = useState(prefill?.roomFmGuid || '');
+```
+
+### D. Lägg till i Navigator (TreeNode)
+
+```typescript
+// TreeNode.tsx - Lägg till Inventering-ikon vid hover
+interface TreeNodeProps {
+  // ... existing props
+  onInventory?: (node: NavigatorNode) => void;
+}
+
+// I hover-actions:
+{onInventory && (node.category === 'Building' || node.category === 'Building Storey' || node.category === 'Space') && (
+  <Button
+    variant="ghost"
+    size="icon"
+    className="h-5 w-5"
+    onClick={(e) => { e.stopPropagation(); onInventory(node); }}
+    title="Inventera här"
+  >
+    <ClipboardList className="h-3 w-3 text-orange-500" />
+  </Button>
+)}
+```
+
+### E. AppContext - Ny Inventering-kontext
+
+```typescript
+// AppContext.tsx - Lägg till inventering-prefill state
+interface InventoryPrefillContext {
+  buildingFmGuid?: string;
+  levelFmGuid?: string;
+  roomFmGuid?: string;
+}
+
+// I context:
+inventoryPrefill: InventoryPrefillContext | null;
+startInventory: (prefill: InventoryPrefillContext) => void;
+
+// Implementation:
+const startInventory = useCallback((prefill: InventoryPrefillContext) => {
+  setInventoryPrefill(prefill);
+  setActiveApp('inventory');
+}, []);
+```
+
+---
 
 ## Filändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `src/pages/Inventory.tsx` | **NY** - Huvudsida för inventering |
-| `src/components/inventory/InventoryForm.tsx` | **NY** - Formulärkomponent |
-| `src/components/inventory/InventoryList.tsx` | **NY** - Lista över registrerade objekt |
-| `src/components/inventory/selectors/BuildingSelector.tsx` | **NY** - Byggnad-dropdown |
-| `src/components/inventory/selectors/FloorSelector.tsx` | **NY** - Våningsplan-dropdown |
-| `src/components/inventory/selectors/RoomSelector.tsx` | **NY** - Rum-dropdown |
-| `src/components/layout/MobileNav.tsx` | Lägg till Inventering-knapp |
-| `src/components/layout/MainContent.tsx` | Lägg till `'inventory'` case |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Fixa query (ilike), öka transparens till bg-card/60 |
+| `src/lib/visualization-utils.ts` | Lägg till opacity på entity.colorize |
+| `src/components/layout/AppLayout.tsx` | Villkorsrendera VoiceControlButton baserat på settings |
+| `src/components/layout/LeftSidebar.tsx` | Lägg till Inventering-knapp i sidomeny |
+| `src/components/portfolio/QuickActions.tsx` | Lägg till Inventering i Quick Actions med prefill |
+| `src/components/navigator/TreeNode.tsx` | Lägg till Inventering-ikon vid hover |
+| `src/components/navigator/NavigatorView.tsx` | Hantera onInventory callback |
+| `src/components/inventory/InventoryForm.tsx` | Acceptera och använd prefill-props |
+| `src/pages/Inventory.tsx` | Läs prefill från context |
+| `src/context/AppContext.tsx` | Lägg till inventoryPrefill och startInventory |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Koppla onInventory till Quick Actions |
 
-## Visuell Design
+---
 
-```text
-┌─────────────────────────────────────┐
-│  ← Inventering          📋 5 sparade │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────────┐│
-│  │     ➕ Ny tillgång              ││
-│  │     Stor touch-vänlig knapp    ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  Senast registrerade:               │
-│  ┌──────────────────────────────┐  │
-│  │ 🔥 Brandsläckare BS-001      │  │
-│  │    Plan 2, Rum 201           │  │
-│  │    Just nu                   │  │
-│  └──────────────────────────────┘  │
-│  ┌──────────────────────────────┐  │
-│  │ 💧 Sprinkler SP-045          │  │
-│  │    Plan 1, Korridor          │  │
-│  │    2 min sedan               │  │
-│  └──────────────────────────────┘  │
-│                                     │
-└─────────────────────────────────────┘
+## Tekniska Detaljer
+
+### Rum-query förbättring
+```sql
+-- Nuvarande (problematisk OR):
+building_fm_guid.eq.XXX OR building_fm_guid.eq.xxx OR building_fm_guid.eq.XXX
+
+-- Förbättrad (case-insensitive):
+building_fm_guid ILIKE 'xxx'
 ```
 
-## Förväntade Resultat
+### Förifylla-logik
+```
+Användaren är på:        Förifylla-värden:
+─────────────────────────────────────────
+Byggnad (B1)             building=B1
+Våningsplan (F2 i B1)    building=B1, level=F2
+Rum (R3 i F2 i B1)       building=B1, level=F2, room=R3
+Asset (A4 i R3)          building=B1, level=F2, room=R3
+```
 
-- Mobilvänlig inventering utan 3D-vy
-- Snabb registrering med dropdowns
-- Alla objekt sparas med `created_in_model = false`
-- Symbol-val med ikoner/färger från databasen
-- Hierarkisk filtrering: Byggnad → Våning → Rum
-- Data sparas direkt till Supabase `assets`-tabellen
+### Transparens-nivåer
+```
+Komponent                  Transparens
+─────────────────────────────────────────
+VisualizationToolbar       bg-card/60 backdrop-blur-md
+SidePopPanel              bg-card/65 backdrop-blur-md
+RoomVisualizationPanel    bg-card/60 backdrop-blur-md (uppdaterad)
+Rum-färger                opacity: 0.6 (ny)
+```
