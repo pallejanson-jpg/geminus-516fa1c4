@@ -70,6 +70,7 @@ export default function NavigatorView() {
     aiSelectedFmGuids,
     clearAiSelection,
     startAssetRegistration,
+    startInventory,
     allData,
   } = useContext(AppContext);
   const [query, setQuery] = useState("");
@@ -182,6 +183,30 @@ export default function NavigatorView() {
     });
   }, [setViewer3dFmGuid, setActiveApp]);
 
+  const handleInventory = useCallback((node: NavigatorNode) => {
+    // Build prefill based on node category
+    const assetData = allData.find((a: any) => a.fmGuid === node.fmGuid);
+    
+    let prefill = {
+      buildingFmGuid: undefined as string | undefined,
+      levelFmGuid: undefined as string | undefined,
+      roomFmGuid: undefined as string | undefined,
+    };
+
+    if (node.category === 'Building') {
+      prefill.buildingFmGuid = node.fmGuid;
+    } else if (node.category === 'Building Storey') {
+      prefill.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
+      prefill.levelFmGuid = node.fmGuid;
+    } else if (node.category === 'Space') {
+      prefill.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
+      prefill.levelFmGuid = assetData?.levelFmGuid || node.levelFmGuid;
+      prefill.roomFmGuid = node.fmGuid;
+    }
+
+    startInventory(prefill);
+  }, [allData, startInventory]);
+
   const handleSearchResultSelect = useCallback((result: SearchResult) => {
     // Navigate based on category
     if (result.category === 'Building') {
@@ -264,17 +289,18 @@ export default function NavigatorView() {
           ) : (
             <div className="space-y-0.5">
               {visibleTree.map((node) => (
-                <TreeNode
-                  key={node.fmGuid}
-                  node={node}
-                  expanded={expanded}
-                  onToggle={onToggle}
-                  onAddChild={handleAddChild}
-                  onView={handleView}
-                  onOpen3D={handleOpen3D}
-                  onOpen2D={handleOpen2D}
-                  selectedFmGuids={selectedFmGuidSet}
-                />
+                  <TreeNode
+                    key={node.fmGuid}
+                    node={node}
+                    expanded={expanded}
+                    onToggle={onToggle}
+                    onAddChild={handleAddChild}
+                    onView={handleView}
+                    onOpen3D={handleOpen3D}
+                    onOpen2D={handleOpen2D}
+                    onInventory={handleInventory}
+                    selectedFmGuids={selectedFmGuidSet}
+                  />
               ))}
             </div>
           )}

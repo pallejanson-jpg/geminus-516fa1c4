@@ -19,6 +19,13 @@ export interface AssetRegistrationContext {
     spaceFmGuid?: string;
 }
 
+// Inventory prefill context for contextual registration
+export interface InventoryPrefill {
+    buildingFmGuid?: string;
+    levelFmGuid?: string;
+    roomFmGuid?: string;
+}
+
 export type ThemeType = 'dark' | 'light' | 'swg';
 
 interface AppContextType {
@@ -57,6 +64,11 @@ interface AppContextType {
     assetRegistrationContext: AssetRegistrationContext | null;
     startAssetRegistration: (context: AssetRegistrationContext) => void;
     cancelAssetRegistration: () => void;
+
+    // Inventory prefill for contextual registration
+    inventoryPrefill: InventoryPrefill | null;
+    startInventory: (prefill: InventoryPrefill) => void;
+    clearInventoryPrefill: () => void;
 
     // 3D Viewer diagnostics (for RightSidebar)
     viewerDiagnostics: {
@@ -112,6 +124,10 @@ export const AppContext = createContext<AppContextType>({
     assetRegistrationContext: null,
     startAssetRegistration: () => {},
     cancelAssetRegistration: () => {},
+
+    inventoryPrefill: null,
+    startInventory: () => {},
+    clearInventoryPrefill: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -191,6 +207,18 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setViewer3dFmGuidInternal(null);
         setActiveApp(previousAppBeforeViewer);
     }, [previousAppBeforeViewer]);
+
+    // Inventory prefill state and actions
+    const [inventoryPrefill, setInventoryPrefill] = useState<InventoryPrefill | null>(null);
+
+    const startInventory = useCallback((prefill: InventoryPrefill) => {
+        setInventoryPrefill(prefill);
+        setActiveApp('inventory');
+    }, []);
+
+    const clearInventoryPrefill = useCallback(() => {
+        setInventoryPrefill(null);
+    }, []);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         // STRICT HIERARCHY: Building → Building Storey → Space
@@ -425,6 +453,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 assetRegistrationContext,
                 startAssetRegistration,
                 cancelAssetRegistration,
+
+                inventoryPrefill,
+                startInventory,
+                clearInventoryPrefill,
 
                 viewerDiagnostics,
                 setViewerDiagnostics,
