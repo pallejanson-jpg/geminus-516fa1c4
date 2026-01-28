@@ -235,10 +235,16 @@ export class XktCacheService {
   }
 
   /**
-   * Extract model ID from XKT URL
+   * Extract model ID from XKT URL (public for use by cache interceptor)
    */
-  private extractModelId(url: string): string | null {
+  extractModelIdFromUrl(url: string): string | null {
     try {
+      // Check for modelid parameter in GetXktData URLs
+      const modelIdMatch = url.match(/modelid=([^&]+)/i);
+      if (modelIdMatch) {
+        return modelIdMatch[1];
+      }
+      
       const urlObj = new URL(url);
       const pathParts = urlObj.pathname.split('/');
       const xktFile = pathParts.find(part => part.endsWith('.xkt'));
@@ -258,6 +264,13 @@ export class XktCacheService {
       }
     }
     return null;
+  }
+
+  /**
+   * @deprecated Use extractModelIdFromUrl instead
+   */
+  private extractModelId(url: string): string | null {
+    return this.extractModelIdFromUrl(url);
   }
 
   /**
