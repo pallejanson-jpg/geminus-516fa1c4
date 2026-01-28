@@ -130,7 +130,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const { flashEntityById, stopFlashing } = useFlashHighlight();
   
   // Architect view mode hook
-  const { toggleArchitectMode, isActive: isArchitectModeActive } = useArchitectViewMode();
+  const { toggleArchitectMode, isActive: isArchitectModeActive, setBackgroundPreset, applyBackgroundPreset } = useArchitectViewMode();
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -1051,18 +1051,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   }, [toggleArchitectMode]);
 
   // Listen for architect background color changes
-  const { setBackgroundPreset } = useArchitectViewMode();
   useEffect(() => {
     const handleBackgroundChange = (e: CustomEvent<{ presetId: BackgroundPresetId }>) => {
       console.log('ARCHITECT_BACKGROUND_CHANGED:', e.detail.presetId);
-      setBackgroundPreset(viewerInstanceRef, e.detail.presetId);
+      // Directly apply background since we know architect mode is active (palette is visible)
+      applyBackgroundPreset(e.detail.presetId);
     };
     
     window.addEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
     return () => {
       window.removeEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
     };
-  }, [setBackgroundPreset]);
+  }, [applyBackgroundPreset]);
   // Setup XKT fetch interceptor for caching
   const setupCacheInterceptor = useCallback(() => {
     // Store original fetch if not already stored
