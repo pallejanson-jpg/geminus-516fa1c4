@@ -92,6 +92,52 @@ serve(async (req) => {
       );
     }
 
+    // Action: Test 3D API endpoint
+    if (action === "test3DApi") {
+      try {
+        const accessToken = await getAccessToken();
+        const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
+        const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+        
+        // Test with Småviken building
+        const testBuildingGuid = body.buildingFmGuid || "a8fe5835-e293-4ba3-92c6-c7e36f675f23";
+        
+        // Normalize URL for 3D API
+        const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+        const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${testBuildingGuid}&apiKey=${apiKey}`;
+        
+        console.log(`Testing 3D API: ${modelsUrl}`);
+        
+        const modelsRes = await fetch(modelsUrl, {
+          headers: { "Authorization": `Bearer ${accessToken}` }
+        });
+        
+        const responseText = await modelsRes.text();
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = responseText;
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            success: modelsRes.ok,
+            status: modelsRes.status,
+            url: modelsUrl,
+            data: responseData
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (error) {
+        console.error("3D API test error:", error);
+        return new Response(
+          JSON.stringify({ error: String(error) }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Default: Query assets from database
     let query = supabase.from("assets").select("*");
 

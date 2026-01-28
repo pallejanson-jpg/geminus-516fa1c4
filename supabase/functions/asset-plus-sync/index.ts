@@ -566,8 +566,16 @@ serve(async (req) => {
         const buildingName = building.common_name || buildingFmGuid;
 
         try {
-          // Try to fetch models via GetModels endpoint
-          const modelsUrl = `${apiUrl?.replace(/\/+$/, "")}/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+          // Normalize URL: remove /api/v1/AssetDB if present, use base domain with /api/threed
+          const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
+          const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+          
+          // Debug logging
+          if (i === 0) {
+            console.log(`DEBUG: apiUrl = ${apiUrl}`);
+            console.log(`DEBUG: baseUrl = ${baseUrl}`);
+            console.log(`DEBUG: modelsUrl = ${modelsUrl}`);
+          }
           
           const modelsRes = await fetch(modelsUrl, {
             headers: { "Authorization": `Bearer ${accessToken}` }
