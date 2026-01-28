@@ -91,7 +91,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, [viewMode]);
   
   // SectionPlane clipping for 2D floor plan view
-  const { applyFloorPlanClipping, removeSectionPlane, calculateFloorBounds, updateFloorCutHeight } = useSectionPlaneClipping(
+  const { applyFloorPlanClipping, applyGlobalFloorPlanClipping, removeSectionPlane, calculateFloorBounds, updateFloorCutHeight } = useSectionPlaneClipping(
     viewerRef,
     { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
   );
@@ -99,7 +99,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
     const handleSettingsChange = () => {
-      setToolSettings(getNavigationToolSettings());
+      // Create new array reference to force re-render
+      const newSettings = getNavigationToolSettings();
+      setToolSettings([...newSettings]);
     };
     // Listen for storage events (cross-tab)
     window.addEventListener('storage', handleSettingsChange);
@@ -166,12 +168,19 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       setCurrentFloorId(floorId);
       setCurrentFloorBounds(bounds || null);
       
-      // If 2D mode is active and a floor is selected, apply floor plan clipping
-      if (viewModeRef.current === '2d' && floorId) {
-        applyFloorPlanClipping(floorId);
-      } else if (viewModeRef.current === '2d' && !floorId) {
-        // No specific floor selected in 2D mode - remove clipping
-        removeSectionPlane();
+      // If 2D mode is active, apply clipping
+      if (viewModeRef.current === '2d') {
+        if (floorId) {
+          applyFloorPlanClipping(floorId);
+        } else {
+          // No specific floor selected - apply global clipping at scene base
+          const viewer = getXeokitViewer();
+          const sceneAABB = viewer?.scene?.getAABB?.();
+          if (sceneAABB) {
+            const baseHeight = sceneAABB[1]; // minY
+            applyGlobalFloorPlanClipping(baseHeight);
+          }
+        }
       }
     };
     
@@ -179,7 +188,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     return () => {
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
     };
-  }, [applyFloorPlanClipping, removeSectionPlane]);
+  }, [applyFloorPlanClipping, getXeokitViewer]);
 
   // Listen for clip height changes from VisualizationToolbar slider
   useEffect(() => {
@@ -367,9 +376,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         // Apply floor plan clipping for 2D view
         applyFloorPlanClipping(currentFloorId);
       } else {
-        // No specific floor - use scene bounds
+        // No specific floor - use scene bounds and apply global clipping
         targetBounds = scene?.getAABB?.();
         lookHeight = targetBounds ? (targetBounds[1] + targetBounds[4]) / 2 : 0;
+        
+        // Apply global clipping at scene base height
+        if (targetBounds) {
+          applyGlobalFloorPlanClipping(targetBounds[1]); // minY = base height
+        }
       }
       
       if (!targetBounds) {
@@ -408,7 +422,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         }
       }
     }
-  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, removeSectionPlane]);
+  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, removeSectionPlane]);
 
   const handleClearSlices = useCallback(() => {
     const assetView = getAssetView();

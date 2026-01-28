@@ -184,12 +184,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }
 
     try {
-      // Get screenshot
-      const screenshotDataUrl = xeokitViewer.getImage({
-        format: "png",
-        width: 400,
-        height: 300
-      });
+      // Get screenshot from canvas directly (xeokit doesn't have getImage method)
+      const canvas = xeokitViewer.scene?.canvas?.canvas;
+      if (!canvas) {
+        toast({ title: "Kan inte skapa vy", description: "Canvas inte tillgängligt", variant: "destructive" });
+        return;
+      }
+      
+      // Force a render before capturing
+      xeokitViewer.scene?.render?.(true);
+      const screenshotDataUrl = canvas.toDataURL('image/png');
 
       // Get camera state
       const camera = xeokitViewer.camera;
@@ -567,7 +571,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       >
                         <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">2D planvy</span>
+                      <span className="text-xs sm:text-sm">2D/3D</span>
                     </div>
                     <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
                   </div>

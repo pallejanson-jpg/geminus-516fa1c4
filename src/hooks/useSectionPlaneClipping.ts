@@ -249,15 +249,86 @@ export function useSectionPlaneClipping(
     applySectionPlane(floorId, 'floor');
   }, [applySectionPlane]);
 
+  // Apply global floor plan clipping without specific floor ID (uses scene base height)
+  const applyGlobalFloorPlanClipping = useCallback((baseHeight: number) => {
+    if (!enabled) return;
+
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+
+    const floorCutHeight = floorCutHeightRef.current;
+    const clipHeight = baseHeight + floorCutHeight;
+    
+    // Remove existing section plane
+    if (sectionPlaneRef.current) {
+      try {
+        sectionPlaneRef.current.destroy();
+      } catch (e) {
+        console.debug('Error destroying old section plane:', e);
+      }
+      sectionPlaneRef.current = null;
+    }
+
+    // Try using SectionPlanesPlugin first
+    const plugin = initializeSectionPlanesPlugin();
+    
+    if (plugin) {
+      try {
+        sectionPlaneRef.current = plugin.createSectionPlane({
+          id: 'global-floor-clip',
+          pos: [0, clipHeight, 0],
+          dir: [0, -1, 0],
+          active: true,
+        });
+        
+        console.log(`Global section plane created at Y=${clipHeight.toFixed(2)} (2D planritning)`);
+        currentFloorIdRef.current = null;
+        currentClipModeRef.current = 'floor';
+        return;
+      } catch (e) {
+        console.debug('Failed to create global section plane via plugin:', e);
+      }
+    }
+
+    // Fallback: Create section plane directly on scene
+    try {
+      const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
+      
+      if (SectionPlane) {
+        sectionPlaneRef.current = new SectionPlane(viewer.scene, {
+          id: 'global-floor-clip',
+          pos: [0, clipHeight, 0],
+          dir: [0, -1, 0],
+          active: true,
+        });
+        
+        console.log(`Global section plane created (direct) at Y=${clipHeight.toFixed(2)}`);
+        currentFloorIdRef.current = null;
+        currentClipModeRef.current = 'floor';
+      }
+    } catch (e) {
+      console.debug('Failed to create global section plane directly:', e);
+    }
+  }, [enabled, getXeokitViewer, initializeSectionPlanesPlugin]);
+
   // Update floor cut height dynamically
   const updateFloorCutHeight = useCallback((newHeight: number) => {
     floorCutHeightRef.current = newHeight;
     
-    // Re-apply clipping if currently in floor mode
-    if (currentFloorIdRef.current && currentClipModeRef.current === 'floor') {
-      applySectionPlane(currentFloorIdRef.current, 'floor');
+    // Re-apply clipping if currently in floor mode (works for both specific floor and global)
+    if (currentClipModeRef.current === 'floor') {
+      if (currentFloorIdRef.current) {
+        applySectionPlane(currentFloorIdRef.current, 'floor');
+      } else {
+        // Global clipping - get scene base and re-apply
+        const viewer = getXeokitViewer();
+        const sceneAABB = viewer?.scene?.getAABB?.();
+        if (sceneAABB) {
+          applyGlobalFloorPlanClipping(sceneAABB[1]);
+        }
+      }
     }
-  }, [applySectionPlane]);
+  }, [applySectionPlane, getXeokitViewer, applyGlobalFloorPlanClipping]);
 
   // Apply ceiling clipping (3D solo mode) - convenience function  
   const applyCeilingClipping = useCallback((floorId: string) => {
@@ -326,12 +397,13 @@ export function useSectionPlaneClipping(
     updateClipping,
     applySectionPlane,
     applyFloorPlanClipping,
+    applyGlobalFloorPlanClipping,
     applyCeilingClipping,
     removeSectionPlane,
     updateFloorCutHeight,
     calculateFloorBounds,
     getCurrentFloorBounds,
-    isClippingActive: currentFloorIdRef.current !== null,
+    isClippingActive: currentFloorIdRef.current !== null || currentClipModeRef.current !== null,
     currentFloorId: currentFloorIdRef.current,
     currentClipMode: currentClipModeRef.current,
     currentFloorCutHeight: floorCutHeightRef.current,
