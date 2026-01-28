@@ -1150,9 +1150,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     setState(prev => ({ ...prev, isLoading: true, error: null, isInitialized: false }));
 
     // Wait for DOM with retry logic (handles React Strict Mode timing issues)
-    // Retry up to 6 times with increasing delays
+    // IMPORTANT: Do not show an error too quickly.
+    // In practice, React StrictMode + async data can cause the container to be temporarily
+    // unavailable for a short moment; showing an error here creates the “flash” the user sees.
+    const maxDomWaitMs = 3000;
+    const domStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
     let containerReady = false;
-    for (let attempt = 0; attempt < 6; attempt++) {
+
+    while (true) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       if (viewerContainerRef.current && document.getElementById('AssetPlusViewer')) {
@@ -1160,8 +1165,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         break;
       }
 
-      // Wait a bit longer each attempt
-      await new Promise<void>((resolve) => setTimeout(resolve, 60 * (attempt + 1)));
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - domStart >= maxDomWaitMs) {
+        break;
+      }
+
+      // Small delay to avoid a tight loop while waiting for DOM.
+      await new Promise<void>((resolve) => setTimeout(resolve, 75));
     }
 
     if (!containerReady || !viewerContainerRef.current) {
