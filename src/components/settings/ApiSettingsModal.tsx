@@ -1266,29 +1266,70 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Zap className="h-5 w-5 text-primary" />
-                                            <h4 className="font-medium">Ivion</h4>
+                                            <h4 className="font-medium">Ivion (360+)</h4>
                                         </div>
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
+                                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                            Aktiv
+                                        </Badge>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <p className="text-xs text-muted-foreground">
+                                        Integration med NavVis Ivion för 360°-panorama och Point of Interest (POI) synkronisering.
+                                        Assets kan skapas direkt från Ivion via <code className="bg-muted px-1 rounded">/ivion-create</code>.
+                                    </p>
+                                    <div className="space-y-3">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Base URL</Label>
-                                            <Input
-                                                placeholder="https://ivion.se"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
+                                            <Label className="text-xs">Embed URL</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    value={`${window.location.origin}/ivion-create`}
+                                                    readOnly
+                                                    className="h-8 text-sm font-mono bg-muted"
+                                                />
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 px-2"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(`${window.location.origin}/ivion-create`);
+                                                        toast({ title: 'Kopierat!', description: 'URL kopierad till urklipp.' });
+                                                    }}
+                                                >
+                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Använd denna URL i Ivion för att skapa assets. Lägg till ?siteId=X&imageId=Y&x=...&y=...&z=...
+                                            </p>
                                         </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">API Token</Label>
-                                            <Input
-                                                type="password"
-                                                placeholder="••••••••"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="flex-1"
+                                                onClick={async () => {
+                                                    try {
+                                                        const { data, error } = await supabase.functions.invoke('ivion-poi', {
+                                                            body: { action: 'test-connection' }
+                                                        });
+                                                        if (error) throw error;
+                                                        if (data?.success) {
+                                                            toast({ title: 'Anslutning OK', description: data.message });
+                                                        } else {
+                                                            toast({ variant: 'destructive', title: 'Anslutning misslyckades', description: data?.message || 'Okänt fel' });
+                                                        }
+                                                    } catch (err: any) {
+                                                        toast({ variant: 'destructive', title: 'Fel', description: err.message });
+                                                    }
+                                                }}
+                                            >
+                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                                Testa anslutning
+                                            </Button>
                                         </div>
                                     </div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Ivion-secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.
+                                    </p>
                                 </div>
 
                                 {/* Faciliate API Section */}
