@@ -1,179 +1,41 @@
 
-# Plan: Viewer Themes och Scrollbar-fix
+# Plan: Fixa XKT-synkronisering till Lovable Cloud
 
-## Sammanfattning
-Implementera en funktion för "Viewer themes" (visnings-teman) där användaren kan välja mellan fördefinierade färgteman för 3D-viewern. Temana ska konfigureras i en ny sektion under Settings och visas som en dropdown-lista i Visnings-menyn. Dessutom åtgärdas scrollbarens synlighet i mobilt läge.
+## Problem identifierat
+XKT-synkroniseringen misslyckas eftersom edge-funktionen `asset-plus-sync` använder fel URL för 3D API:n.
 
----
+**Nuvarande (felaktig) URL i sync-funktionen:**
+```
+https://stage-demo-asset-plus.serviceworksglobal.cloud/api/v1/AssetDB/GetModels?fmGuid=...
+```
 
-## Problem att lösa
-1. **Scrollbar i mobilt läge**: Visningsmenyn är inte scrollbar på mobila enheter, vilket gör att användare inte kan nå verktygen längst ner.
-2. **Viewer themes**: Användaren vill kunna skapa och välja egna färgteman (likt Arkitektvy) för 3D-viewern.
-
----
+**Korrekt URL (som används i useXktPreload):**
+```
+https://stage-demo-asset-plus.serviceworksglobal.cloud/api/threed/GetModels?fmGuid=...
+```
 
 ## Lösning
+Uppdatera `asset-plus-sync/index.ts` för att normalisera API-URL:en på samma sätt som görs i frontend-koden.
 
-### Del 1: Fix för mobil scroll i VisualizationToolbar
-- Ändra panelens höjdlogik för mobila enheter
-- Säkerställ att `max-height` och `overflow` tillåter scroll på mobil
-- Justera panelens position för att ge mer utrymme på mobil
+## Ändringar
 
-### Del 2: Viewer Themes-system
+### Fil: `supabase/functions/asset-plus-sync/index.ts`
 
-#### A. Databasstruktur
-Skapa en ny tabell `viewer_themes` för att lagra användardefinierade teman:
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│ viewer_themes                                               │
-├────────────────────────────────────────────────────────────┤
-│ id              (uuid, PK)                                  │
-│ name            (text, NOT NULL) - Temanamn                │
-│ is_system       (boolean) - Sant för inbyggda teman        │
-│ color_mappings  (jsonb) - IFC-typ till färg-mappningar     │
-│ edge_settings   (jsonb) - Kantinställningar                │
-│ space_opacity   (numeric) - Transparens för rum            │
-│ created_at      (timestamp)                                 │
-│ updated_at      (timestamp)                                 │
-└────────────────────────────────────────────────────────────┘
+Ändra rad 568-570 från:
+```javascript
+// Try to fetch models via GetModels endpoint
+const modelsUrl = `${apiUrl?.replace(/\/+$/, "")}/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
 ```
 
-#### B. Nya komponenter
-1. **ViewerThemeSettings.tsx** - Inställningssida i Settings-modalen
-   - Lista alla sparade teman
-   - Skapa/redigera/ta bort teman
-   - Färgväljare för varje IFC-kategori
-   - Förhandsvisning av temafärger
-
-2. **ViewerThemeSelector.tsx** - Dropdown i VisualizationToolbar
-   - Listar tillgängliga teman
-   - "Arkitektvy" och "Standard" som fördefinierade val
-   - Applicerar valt tema direkt på modellen
-
-#### C. Hook-uppdateringar
-Utöka `useArchitectViewMode.ts` till ett generellt `useViewerTheme.ts`:
-- Läs tema-konfiguration från databas eller fördefinierade presets
-- Applicera färger baserat på valt tema
-- Återställ till standard när "Standard" väljs
-
----
-
-## Tekniska detaljer
-
-### Datastruktur för color_mappings (JSON)
-```json
-{
-  "ifcwall": { "color": "#AFAA87", "edges": true },
-  "ifcwallstandardcase": { "color": "#C2BEA2", "edges": true },
-  "ifcdoor": { "color": "#5B776B", "edges": true },
-  "ifcwindow": { "color": "#647D8A", "edges": true },
-  "ifcslab": { "color": "#999B97", "edges": false },
-  "ifcspace": { "color": "#E5E4E3", "opacity": 0.25 },
-  "default": { "color": "#EEEEEE", "edges": false }
-}
+Till:
+```javascript
+// Normalize URL: remove /api/v1/AssetDB if present, use base domain with /api/threed
+const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
+const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
 ```
 
-### Fördefinierade teman
-1. **Standard** - Återställer till systemets originalfärger (ingen tema-applicering)
-2. **Arkitektvy** - Befintliga arkitekt-färger (migreras till nytt system)
+## Validering
+Efter ändringen kan vi testa synkroniseringen på nytt för att verifiera att XKT-filerna laddas ner och sparas korrekt.
 
-### RLS-policy
-Publik läs- och skrivåtkomst (samma mönster som annotation_symbols).
-
----
-
-## Filer som skapas
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/components/settings/ViewerThemeSettings.tsx` | Settings-komponent för att hantera teman |
-| `src/components/viewer/ViewerThemeSelector.tsx` | Dropdown-komponent för att välja tema |
-| `src/hooks/useViewerTheme.ts` | Hook för att applicera teman på 3D-modellen |
-
-## Filer som ändras
-| Fil | Ändring |
-|-----|---------|
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till ViewerThemeSelector, fixa mobil scroll |
-| `src/components/settings/ApiSettingsModal.tsx` | Lägg till "Viewer themes"-flik |
-
----
-
-## UI-flöde
-
-### I Visningsmenyn (VisualizationToolbar)
-```text
-┌─────────────────────────────┐
-│ Visning                  ✕ │
-├─────────────────────────────┤
-│ BIM-modeller            ›  │
-│ Våningsplan             ›  │
-├─────────────────────────────┤
-│ VISA                        │
-│ ┌─────────────────────────┐ │
-│ │ 🎨 Viewer-tema    [▼]   │ │  <-- NY DROPDOWN
-│ │    ┌─────────────────┐  │ │
-│ │    │ Standard ✓      │  │ │
-│ │    │ Arkitektvy      │  │ │
-│ │    │ Mitt tema 1     │  │ │
-│ │    │ Mitt tema 2     │  │ │
-│ │    └─────────────────┘  │ │
-│ └─────────────────────────┘ │
-│ 🏛 Arkitektvy        [  ]   │  <-- BEHÅLLS FÖR SNABBÅTKOMST
-│ 🎨 Bakgrundsfärg            │
-│   [○][○][○][○][○]           │
-│ ...                         │
-└─────────────────────────────┘
-```
-
-### I Settings (ny flik)
-```text
-┌─────────────────────────────────────────────────────────┐
-│ Inställningar                                        ✕ │
-├─────────────────────────────────────────────────────────┤
-│ [Apps] [API:s] [Synk] [Symboler] [Röst] [Viewer themes]│
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│ Konfigurera färgteman för 3D-viewern     [+ Nytt tema] │
-│                                                         │
-│ ┌─────────────────────────────────────────────────────┐ │
-│ │ 🎨 Arkitektvy                          [System]     │ │
-│ │    12 färgmappningar                    [✏️] [🗑️]  │ │
-│ ├─────────────────────────────────────────────────────┤ │
-│ │ 🎨 Mitt tema                                        │ │
-│ │    8 färgmappningar                     [✏️] [🗑️]  │ │
-│ └─────────────────────────────────────────────────────┘ │
-│                                                         │
-│ ─────────────────────────────────────────────────────── │
-│                                                         │
-│ [Redigera tema]                                         │
-│ Namn: [Mitt tema                        ]               │
-│                                                         │
-│ Färgmappningar:                                         │
-│ ┌──────────────────┬──────────┬────────┐               │
-│ │ IFC-typ          │ Färg     │ Kanter │               │
-│ ├──────────────────┼──────────┼────────┤               │
-│ │ Väggar (Fasad)   │ [🔴]     │ [✓]    │               │
-│ │ Väggar (Invändiga)│ [🟠]    │ [✓]    │               │
-│ │ Dörrar           │ [🟢]     │ [✓]    │               │
-│ │ Fönster          │ [🔵]     │ [✓]    │               │
-│ │ Tak/Golv         │ [⚪]     │ [ ]    │               │
-│ │ Rum              │ [⬜] 25% │ [ ]    │               │
-│ │ ...              │          │        │               │
-│ └──────────────────┴──────────┴────────┘               │
-│                                                         │
-│                              [Avbryt] [Spara tema]      │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## Implementeringsordning
-1. Fixa mobil scroll i VisualizationToolbar
-2. Skapa databas-tabell `viewer_themes`
-3. Skapa `useViewerTheme.ts` hook
-4. Skapa `ViewerThemeSettings.tsx` komponent
-5. Lägg till "Viewer themes"-flik i ApiSettingsModal
-6. Skapa `ViewerThemeSelector.tsx` dropdown
-7. Integrera dropdown i VisualizationToolbar
-8. Migrera Arkitektvy till nytt system
-9. Lägg till "Standard" tema som återställer originalfärger
+## Sammanfattning
+En enkel URL-fix i edge-funktionen som säkerställer att rätt 3D API-endpoint används för att hämta modellistan.
