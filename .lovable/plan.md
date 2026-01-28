@@ -1,219 +1,278 @@
 
-# Plan: Konsolidera annotation-kontroller till en enda flyout-panel
 
-## Problem
+# Plan: Byt "Registrera tillgång" till Inventeringsformulär med inline-positionsval
 
-Det finns två separata UI-element för att hantera annotationssynlighet:
-1. **Röda dropdownen** (AnnotationToggleMenu) - i övre högra hörnet, visar kategorier som "fire_blanket" med individuella switchar
-2. **"Visa annotationer" switch** - i Visning-menyn, slår på/av alla annotationer globalt
+## Sammanfattning
 
-Detta är redundant och förvirrande. Användaren vill ha EN plats för att hantera annotationer.
+Ändra funktionen "Registrera tillgång" i Visning-menyn så att den öppnar inventeringsformuläret (InventoryForm) istället för den nuvarande AssetPropertiesDialog. Formuläret ska visas som en draggbar dialog/Sheet på sidan av 3D-viewern medan den redan laddade 3D-vyn används för positionsval.
 
 ---
 
-## Lösning
+## Nuvarande flöde
 
-Konsolidera all annotation-funktionalitet till Visning-menyn genom att:
-1. **Ta bort** `AnnotationToggleMenu` från `AssetPlusViewer.tsx`
-2. **Ändra** "Visa annotationer"-raden i `VisualizationToolbar.tsx` från en enkel switch till en klickbar rad som öppnar en flyout-panel (SidePopPanel)
-3. **Flytta** kategorilogiken från `AnnotationToggleMenu` till den nya flyout-panelen
-
----
-
-## Visuell jämförelse
-
-### Före
 ```text
-+-- Övre högra hörnet --+
-| [Visning-knapp] [Annotationer (1/1) ▼] |  <- Två knappar, redundant
-+------------------------+
-
-I Visning-menyn:
-VISA
-[ ] 2D/3D
-[ ] Visa rum
-[x] Visa annotationer  <- Bara on/off
-[ ] Rumsvisualisering
+1. Användare klickar "Registrera tillgång" i Visning-menyn
+2. handleAddAsset() kallas → onAddAsset() → handleTogglePickMode()
+3. Pickläge aktiveras - användaren klickar i 3D
+4. AssetPropertiesDialog öppnas med koordinater
+5. Förenklad form med begränsade fält
 ```
 
-### Efter
+## Nytt flöde
+
 ```text
-+-- Övre högra hörnet --+
-| [Visning-knapp]                        |  <- Bara en knapp
-+------------------------+
-
-I Visning-menyn:
-VISA
-[ ] 2D/3D
-[ ] Visa rum
-[x] Visa annotationer  [>]  <- Klickbar för att öppna kategori-panel
-[ ] Rumsvisualisering
-
-+-- Flyout-panel (SidePopPanel) --+
-| Annotationstyper                |
-| [Visa alla] [Dölj alla]         |
-| ● fire_blanket (1)      [x]     |
-| ● other_type (3)        [ ]     |
-+---------------------------------+
+1. Användare klickar "Registrera tillgång" i Visning-menyn
+2. InventoryFormSheet öppnas direkt (Sheet med InventoryForm)
+3. Byggnaden förfylls baserat på aktuell byggnad i viewern
+4. Användaren kan klicka "Välj 3D-position" i formuläret
+5. Pickläge aktiveras i samma viewer som redan är öppen
+6. Koordinater skickas till formuläret via callback
+7. Användaren fyller i resten av formuläret och sparar
 ```
 
 ---
 
-## Detaljerade ändringar
+## Tekniska ändringar
 
-### 1. AssetPlusViewer.tsx - Ta bort redundant komponent
+### 1. Ny komponent: `InventoryFormSheet.tsx`
 
-**Radera rad 1582-1585:**
+Skapa en ny Sheet-komponent som:
+- Visar InventoryForm i en Sheet/drawer
+- Stödjer positionsval via callback
+- Förfyller byggnads-fmGuid från viewer-kontexten
+- Är draggbar på desktop
+
 ```typescript
-// REMOVE this:
-<AnnotationToggleMenu 
-  viewerRef={viewerInstanceRef} 
-  buildingFmGuid={fmGuid}
-/>
+interface InventoryFormSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  buildingFmGuid: string;
+  levelFmGuid?: string | null;
+  roomFmGuid?: string | null;
+  pendingPosition?: { x: number; y: number; z: number } | null;
+  onPickPositionRequest?: () => void;  // Triggers pick mode in viewer
+  isPickingPosition?: boolean;
+}
+
+// Sheet-variant som positioneras till höger/botten beroende på skärmstorlek
+// Innehåller InventoryForm med anpassade callbacks
 ```
 
-**Skicka buildingFmGuid till VisualizationToolbar:**
+### 2. Ändra AssetPlusViewer.tsx
+
+**Ta bort:** Logik som öppnar `AssetPropertiesDialog` i createMode
+
+**Lägg till:**
+- State för `inventorySheetOpen`
+- Callback `handleOpenInventoryForm` som öppnar sheeten
+- Skicka `buildingFmGuid` och `levelFmGuid` som prefill
+- När användaren klickar "Välj 3D-position" i formuläret, aktivera pickläge
+- När position väljs, skicka tillbaka till sheeten via `pendingPosition`
+
+```typescript
+// Ny state
+const [inventorySheetOpen, setInventorySheetOpen] = useState(false);
+const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x:number,y:number,z:number}|null>(null);
+
+// Modifiera handleTogglePickMode till att stödja inventory flow
+const handleInventoryPickRequest = useCallback(() => {
+  // Aktivera pick mode, men skicka resultat till inventoryPendingPosition
+  // istället för att öppna AssetPropertiesDialog
+  setupPickModeListenerForInventory();
+  setIsPickMode(true);
+}, []);
+```
+
+### 3. Ändra VisualizationToolbar.tsx
+
+**Ersätt:** `onAddAsset` callback
+
+**Med:** `onOpenInventoryForm` callback som öppnar inventeringsformuläret
+
+Eller behåll samma callback-namn men ändra beteendet i AssetPlusViewer.
+
+### 4. Uppdatera InventoryForm.tsx
+
+InventoryForm stödjer redan:
+- `prefill` prop för att förfylla byggnad/våning/rum
+- `pendingPosition` prop för att ta emot koordinater
+- `onOpen3d` callback för att begära 3D-picker
+
+**Anpassa:** När `onOpen3d` kallas och vi redan är i 3D-viewern, skicka `onPickPositionRequest()` istället för att öppna en ny dialog.
+
+---
+
+## Komponentstruktur efter ändring
+
+```text
+AssetPlusViewer
+├── ViewerToolbar (bottom)
+├── VisualizationToolbar (top-right)
+│   └── "Registrera tillgång" → setInventorySheetOpen(true)
+├── [Viewer Canvas]
+├── InventoryFormSheet (right side sheet) ← NY
+│   └── InventoryForm
+│       ├── Byggnadsväljare (förfylld)
+│       ├── Våningsväljare
+│       ├── Rumsväljare
+│       ├── "Välj 3D-position" → onPickPositionRequest()
+│       └── Symbolväljare, Bild, etc.
+└── (AssetPropertiesDialog behålls för view/edit mode, tas bort för createMode)
+```
+
+---
+
+## Detaljerade kodändringar
+
+### Fil 1: `src/components/inventory/InventoryFormSheet.tsx` (NY)
+
+```typescript
+import React from 'react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import InventoryForm from './InventoryForm';
+import type { InventoryItem } from '@/pages/Inventory';
+
+interface InventoryFormSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  buildingFmGuid: string;
+  levelFmGuid?: string | null;
+  roomFmGuid?: string | null;
+  pendingPosition?: { x: number; y: number; z: number } | null;
+  onPickPositionRequest?: () => void;
+  isPickingPosition?: boolean;
+  onPendingPositionConsumed?: () => void;
+}
+
+const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
+  isOpen,
+  onClose,
+  buildingFmGuid,
+  levelFmGuid,
+  roomFmGuid,
+  pendingPosition,
+  onPickPositionRequest,
+  isPickingPosition,
+  onPendingPositionConsumed,
+}) => {
+  const handleSaved = (item: InventoryItem) => {
+    onClose();
+  };
+
+  return (
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Registrera tillgång</SheetTitle>
+        </SheetHeader>
+        <div className="mt-4">
+          <InventoryForm
+            onSaved={handleSaved}
+            onCancel={onClose}
+            prefill={{
+              buildingFmGuid,
+              levelFmGuid: levelFmGuid || undefined,
+              roomFmGuid: roomFmGuid || undefined,
+            }}
+            // Use the inline pick mode, don't open separate 3D picker dialog
+            onOpen3d={onPickPositionRequest ? () => onPickPositionRequest() : undefined}
+            pendingPosition={pendingPosition}
+            onPendingPositionConsumed={onPendingPositionConsumed}
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+export default InventoryFormSheet;
+```
+
+### Fil 2: `src/components/viewer/AssetPlusViewer.tsx`
+
+**Lägg till state:**
+```typescript
+const [inventorySheetOpen, setInventorySheetOpen] = useState(false);
+const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x:number,y:number,z:number}|null>(null);
+const inventoryPickModeRef = useRef(false); // Track if pick is for inventory
+```
+
+**Modifiera setupPickModeListenerInternal:**
+```typescript
+// I handlePick-funktionen:
+if (inventoryPickModeRef.current) {
+  // Send to inventory form
+  setInventoryPendingPosition(coords);
+  inventoryPickModeRef.current = false;
+  setIsPickMode(false);
+} else if (onCoordinatePicked) {
+  // External callback
+  onCoordinatePicked(coords, parentNode);
+  setIsPickMode(false);
+} else {
+  // Old dialog flow - kan tas bort eller behållas som fallback
+}
+```
+
+**Lägg till callback för inventory:**
+```typescript
+const handleInventoryPickRequest = useCallback(() => {
+  inventoryPickModeRef.current = true;
+  const success = setupPickModeListenerInternal();
+  if (success) {
+    setIsPickMode(true);
+    toast.info('Klicka på en yta i 3D-vyn för att välja position');
+  }
+}, [setupPickModeListenerInternal]);
+
+const handleOpenInventorySheet = useCallback(() => {
+  setInventorySheetOpen(true);
+}, []);
+```
+
+**Uppdatera VisualizationToolbar prop:**
 ```typescript
 <VisualizationToolbar
-  viewerRef={viewerInstanceRef}
-  buildingFmGuid={fmGuid}  // <- Lägg till denna
+  ...
+  onAddAsset={handleOpenInventorySheet}  // Ändrad från handleTogglePickMode
   ...
 />
 ```
 
-### 2. VisualizationToolbar.tsx - Lägg till annotation flyout
-
-**Lägg till nytt state för submeny:**
+**Lägg till InventoryFormSheet i render:**
 ```typescript
-const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
-```
-
-**Ändra "Visa annotationer"-raden (rad 658-674) från en enkel switch till klickbar rad:**
-
-```typescript
-{/* Annotations - click to open side panel, switch for global toggle */}
-<div className="flex items-center justify-between py-1.5 sm:py-2">
-  <div className="flex items-center gap-2 sm:gap-3">
-    <div className={cn(
-      "p-1 sm:p-1.5 rounded-md",
-      showAnnotations
-        ? "bg-primary/10 text-primary"
-        : "bg-muted text-muted-foreground"
-    )}>
-      <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-    </div>
-    <span className="text-xs sm:text-sm">Visa annotationer</span>
-  </div>
-  <div className="flex items-center gap-1">
-    <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
-    <Button
-      variant={activeSubMenu === 'annotations' ? "secondary" : "ghost"}
-      size="sm"
-      className="h-6 w-6 p-0"
-      onClick={() => setActiveSubMenu(activeSubMenu === 'annotations' ? null : 'annotations')}
-    >
-      <ChevronRight className={cn(
-        "h-3 w-3 transition-transform",
-        activeSubMenu === 'annotations' && "rotate-180"
-      )} />
-    </Button>
-  </div>
-</div>
-```
-
-**Lägg till ny SidePopPanel för annotationstyper (efter floors-panelen):**
-
-```typescript
-{/* Side-pop panel for Annotation Categories */}
-<SidePopPanel
-  isOpen={activeSubMenu === 'annotations'}
-  onClose={() => setActiveSubMenu(null)}
-  title="Annotationstyper"
-  parentPosition={position}
-  parentWidth={panelWidth}
->
-  <AnnotationCategoryList
-    viewerRef={viewerRef}
-    buildingFmGuid={buildingFmGuid}
-  />
-</SidePopPanel>
-```
-
-### 3. Skapa ny komponent: AnnotationCategoryList.tsx
-
-Extraherar kategorilogiken från `AnnotationToggleMenu` till en listkomponent för användning i flyout-panelen:
-
-```typescript
-interface AnnotationCategoryListProps {
-  viewerRef: React.MutableRefObject<any>;
-  buildingFmGuid?: string;
-}
-
-const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
-  viewerRef,
-  buildingFmGuid,
-}) => {
-  const [categories, setCategories] = useState<AnnotationCategory[]>([]);
-  const [allVisible, setAllVisible] = useState(true);
-  
-  // Fetch categories (same logic as AnnotationToggleMenu)
-  // ...
-  
-  return (
-    <div className="space-y-2">
-      {/* Show/Hide All button */}
-      <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={handleToggleAll}>
-          {allVisible ? 'Dölj alla' : 'Visa alla'}
-        </Button>
-      </div>
-      
-      {/* Category list */}
-      {categories.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-2">
-          Inga annotationer i denna byggnad
-        </p>
-      ) : (
-        categories.map((cat) => (
-          <div key={cat.category} className="flex items-center justify-between py-1">
-            <div className="flex items-center gap-2">
-              <div 
-                className="w-2.5 h-2.5 rounded-full" 
-                style={{ backgroundColor: cat.color }}
-              />
-              <span className="text-xs">{cat.category}</span>
-              <span className="text-[10px] text-muted-foreground">({cat.count})</span>
-            </div>
-            <Switch
-              checked={cat.visible}
-              onCheckedChange={() => handleToggleCategory(cat.category)}
-              className="scale-75"
-            />
-          </div>
-        ))
-      )}
-    </div>
-  );
-};
+<InventoryFormSheet
+  isOpen={inventorySheetOpen}
+  onClose={() => {
+    setInventorySheetOpen(false);
+    setInventoryPendingPosition(null);
+  }}
+  buildingFmGuid={buildingFmGuid || ''}
+  levelFmGuid={assetData?.levelFmGuid}
+  roomFmGuid={assetData?.inRoomFmGuid || assetData?.fmGuid}
+  pendingPosition={inventoryPendingPosition}
+  onPickPositionRequest={handleInventoryPickRequest}
+  isPickingPosition={isPickMode && inventoryPickModeRef.current}
+  onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
+/>
 ```
 
 ---
 
-## Filändringar
+## Sammanfattning av filändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Ta bort `<AnnotationToggleMenu>`, skicka `buildingFmGuid` till VisualizationToolbar |
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till `activeSubMenu: 'annotations'`, ändra annotation-raden till att inkludera flyout-knapp, lägg till ny SidePopPanel |
-| `src/components/viewer/AnnotationCategoryList.tsx` | NY FIL - Extraherad kategorilogik för användning i flyout |
-| `src/components/viewer/AnnotationToggleMenu.tsx` | KAN RADERAS efter implementation (eller behållas som referens) |
+| `src/components/inventory/InventoryFormSheet.tsx` | NY - Sheet-wrapper för InventoryForm |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till inventory sheet state, modifiera pick-logik, byt onAddAsset till att öppna sheet |
 
 ---
 
 ## Förväntade resultat
 
-1. **En enda plats** för annotation-kontroll i Visning-menyn
-2. **Huvudswitch** slår på/av alla annotationer (snabb åtkomst)
-3. **Flyout-panel** ger detaljerad kontroll per kategori
-4. **Konsistent UI** - samma mönster som BIM-modeller och Våningsplan använder
-5. **Renare gränssnitt** - en knapp mindre i övre högra hörnet
+1. **"Registrera tillgång"** öppnar det fullständiga inventeringsformuläret
+2. **Sheet på sidan** - formuläret visas till höger om 3D-vyn
+3. **Inline positionsval** - "Välj 3D-position" aktiverar pickläge i befintlig viewer
+4. **Alla fält** - namn, kategori, symbol, byggnad, våning, rum, bild, beskrivning
+5. **Förfylld byggnad** - baserat på aktuell viewer-kontext
+
