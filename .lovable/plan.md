@@ -1,52 +1,137 @@
 
-# Plan: Fixa Ivion URL-format och visa 360+ bredvid formuläret
+# Plan: Implementera Ivion 360+ Position-picking Workflow
 
-## Problem identifierade
+## Problemanalys
 
-1. **Fel URL-format för Ivion**: Koden genererar `/site/3045176558137335` men korrekt format är `/?site=3045176558137335`
-2. **360+ öppnas i ny flik istället för side-by-side**: På desktop finns plats för att visa Ivion-vyn bredvid inventeringsformuläret
+NavVis Ivion stöder **inte** direkt kommunikation via postMessage till inbäddade iframes. Deras API är designat för:
+1. **REST API** - Server-to-server kommunikation för CRUD av POIs
+2. **Frontend NPM-paket** - Fullständig JavaScript-integration (kräver att Ivion hostas i din app, inte tvärtom)
+3. **Standalone webläsare** - Ivion som egen applikation
+
+## Rekommenderad lösning: Tvåstegs-workflow
+
+Eftersom direkt klick-till-koordinat-callback inte är möjligt, föreslår jag en **asynkron workflow**:
+
+### Steg 1: Skapa POI i Ivion
+- Användaren klickar "360+" i inventeringsformuläret
+- Ivion öppnas (inline eller ny flik)
+- Användaren **long-press** på positionen i panoramat → Ivion skapar POI
+- Användaren anger namn i Ivion (kan vara samma som i Lovable)
+- Ivion sparar POI till sin databas
+
+### Steg 2: Importera/synka POI till Lovable
+- Användaren klickar "Synka från 360+" knapp i inventeringsformuläret
+- Lovable anropar `ivion-poi` edge function med action `import-pois`
+- Edge function hämtar alla POIs från Ivion site och importerar till `assets` tabellen
+- Nya POIs matchas med assets baserat på namn eller skapas som nya assets
+
+### Alternativ: Manuell POI-ID input
+- Efter att användaren skapat POI i Ivion, kopierar de POI-ID:t
+- I Lovable klistrar de in POI-ID
+- Lovable hämtar POI-data och uppdaterar asset med koordinater
 
 ---
 
-## Del 1: Fixa URL-formatet
+## Detaljerad implementation
 
-### Orsak
-URL:en byggs fel på två ställen:
-- `src/components/inventory/InventoryForm.tsx` rad 197: `` `${baseUrl}/site/${siteId}` ``
-- `src/components/portfolio/PortfolioView.tsx` rad 147: `` `${baseUrl}/site/${siteId}` ``
+### Del 1: Uppdatera InventoryForm med "Synka från 360+"
 
-### Lösning
-Ändra till korrekt query parameter-format: `` `${baseUrl}/?site=${siteId}` ``
+Lägg till en knapp som triggar import av POIs:
 
----
+```typescript
+// I InventoryForm.tsx
+const [isSyncing360, setIsSyncing360] = useState(false);
 
-## Del 2: Visa Ivion side-by-side med formuläret (Desktop)
+const handleSync360 = async () => {
+  if (!buildingSettings?.ivion_site_id || !buildingFmGuid) {
+    toast.error('Ivion ej konfigurerat för denna byggnad');
+    return;
+  }
+  
+  setIsSyncing360(true);
+  try {
+    const { data, error } = await supabase.functions.invoke('ivion-poi', {
+      body: {
+        action: 'import-pois',
+        siteId: buildingSettings.ivion_site_id,
+        buildingFmGuid: buildingFmGuid,
+      }
+    });
+    
+    if (error) throw error;
+    toast.success(`Synkade ${data.imported} nya POIs från Ivion`);
+  } catch (err: any) {
+    toast.error('Kunde inte synka', { description: err.message });
+  } finally {
+    setIsSyncing360(false);
+  }
+};
+```
 
-### Nuvarande beteende
-- 360+ knappen anropar `handleOpen360()` som öppnar Ivion i ny flik via `window.open()`
+### Del 2: Förbättra UI för 360+ flödet
 
-### Nytt beteende
-- På desktop: Visa Ivion i en resizable panel bredvid formuläret
-- På mobil: Behåll Sheet/modal-beteende
+Visa tydlig instruktion för användaren:
 
-### Implementation
+```jsx
+{/* 360+ Position section */}
+<div className="space-y-3">
+  <Label className="flex items-center gap-2">
+    <Eye size={14} />
+    360+ Position
+  </Label>
+  
+  <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+    <p className="font-medium mb-1">Så här sätter du position i 360+:</p>
+    <ol className="list-decimal list-inside space-y-1">
+      <li>Klicka "Öppna 360+" för att starta Ivion</li>
+      <li>Navigera till rätt plats i panoramat</li>
+      <li>Long-press för att skapa en POI</li>
+      <li>Klicka "Synka från 360+" för att importera</li>
+    </ol>
+  </div>
+  
+  <div className="flex gap-2">
+    <Button variant="outline" onClick={handleOpen360} className="flex-1">
+      <Eye className="h-4 w-4 mr-2" />
+      Öppna 360+
+    </Button>
+    <Button 
+      variant="outline" 
+      onClick={handleSync360} 
+      disabled={isSyncing360}
+      className="flex-1"
+    >
+      {isSyncing360 ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+      Synka från 360+
+    </Button>
+  </div>
+</div>
+```
 
-1. **Lägg till state i `Inventory.tsx`**:
-   - `ivion360Open: boolean` - styr om Ivion-panelen visas
-   - `ivion360Url: string | null` - URL att ladda i iframe
+### Del 3: Förbättra edge function för smartare import
 
-2. **Uppdatera `InventoryForm` props**:
-   - Lägg till `onOpen360: (url: string) => void` callback
-   - Istället för `window.open()`, anropa denna callback
+Uppdatera `ivion-poi/index.ts` för att stödja import av enskilda POIs:
 
-3. **Modifiera desktop-layouten i `Inventory.tsx`**:
-   - Använd `ResizablePanelGroup` från befintlig `@/components/ui/resizable`
-   - Tre paneler: Lista | Formulär | Ivion 360 (conditionally visible)
-   - Ivion-panelen visar `Ivion360View` component med den URL som skickades
+```typescript
+// Ny action: get-poi för att hämta specifik POI
+case 'get-poi':
+  if (!params.siteId || !params.poiId) throw new Error('siteId and poiId required');
+  result = await getPoi(params.siteId, params.poiId);
+  break;
 
-4. **Mobil-läge**:
-   - Behåll nuvarande Sheet-modal för formuläret
-   - 360+ öppnar i extern flik (svårt att visa side-by-side på mobil)
+// Funktion för att hämta enskild POI
+async function getPoi(siteId: string, poiId: number): Promise<IvionPoi> {
+  const token = await getIvionToken();
+  const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois/${poiId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+  if (!response.ok) throw new Error(`Failed to get POI: ${response.status}`);
+  return response.json();
+}
+```
 
 ---
 
@@ -54,161 +139,47 @@ URL:en byggs fel på två ställen:
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/inventory/InventoryForm.tsx` | Fixa URL-format (`/?site=`), lägg till `onOpen360` prop |
-| `src/components/portfolio/PortfolioView.tsx` | Fixa URL-format (`/?site=`) |
-| `src/pages/Inventory.tsx` | Lägg till Ivion-panel med resizable layout |
-| `src/components/viewer/Ivion360View.tsx` | Acceptera URL som prop istället för localStorage |
+| `src/components/inventory/InventoryForm.tsx` | Lägg till "Synka från 360+" knapp och instruktioner |
+| `supabase/functions/ivion-poi/index.ts` | Lägg till `get-poi` action för enskilda POIs |
+| `src/pages/Inventory.tsx` | Uppdatera UI för att visa synk-status |
 
 ---
 
-## Detaljerade kodändringar
+## Alternativ förbättring: POI-ID input
 
-### InventoryForm.tsx - Fixa URL och lägg till callback
+Om användaren vill koppla till en specifik POI manuellt:
 
-```typescript
-// Nya props
-interface InventoryFormProps {
-  // ... befintliga
-  onOpen360?: (url: string) => void; // Callback för att visa 360 inline
-}
-
-// I handleOpen360:
-const handleOpen360 = () => {
-  const ivionApiUrl = localStorage.getItem('ivionApiUrl');
-  const siteId = buildingSettings?.ivion_site_id;
-
-  if (!siteId) {
-    toast.error('Ingen Ivion-site kopplad', {
-      description: 'Koppla byggnaden till en Ivion-site i byggnadsinställningar',
-    });
-    return;
-  }
-
-  // FIXA: Använd /?site= istället för /site/
-  const baseUrl = ivionApiUrl || 'https://swg.iv.navvis.com';
-  const fullUrl = `${baseUrl}/?site=${siteId}`;
-
-  // Om callback finns (desktop), visa inline. Annars öppna i ny flik
-  if (onOpen360) {
-    onOpen360(fullUrl);
-  } else {
-    window.open(fullUrl, '_blank');
-    toast.info('Ivion öppnat i ny flik');
-  }
-};
-```
-
-### PortfolioView.tsx - Fixa URL
-
-```typescript
-// Rad 147: Ändra från
-const fullUrl = `${baseUrl}/site/${siteId}`;
-// Till
-const fullUrl = `${baseUrl}/?site=${siteId}`;
-```
-
-### Inventory.tsx - Desktop layout med Ivion-panel
-
-```typescript
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import Ivion360View from '@/components/viewer/Ivion360View';
-
-// Lägg till state
-const [ivion360Url, setIvion360Url] = useState<string | null>(null);
-
-// Handler för 360-knappen
-const handleOpen360 = (url: string) => {
-  setIvion360Url(url);
-};
-
-const handleClose360 = () => {
-  setIvion360Url(null);
-};
-
-// Desktop layout med resizable panels
-return (
-  <div className="h-full p-6 bg-background">
-    <ResizablePanelGroup direction="horizontal" className="h-full">
-      {/* Left: List */}
-      <ResizablePanel defaultSize={25} minSize={20}>
-        <div className="h-full pr-4">
-          <div className="flex items-center gap-3 mb-4">
-            <ClipboardList className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">Inventering</h1>
-          </div>
-          <InventoryList items={savedItems} isLoading={isLoading} onEdit={handleEdit} />
-        </div>
-      </ResizablePanel>
-      
-      <ResizableHandle withHandle />
-      
-      {/* Middle: Form */}
-      <ResizablePanel defaultSize={ivion360Url ? 35 : 75} minSize={30}>
-        <Card className="p-6 h-full overflow-y-auto mx-4">
-          <InventoryForm
-            onSaved={handleSaved}
-            onCancel={handleClearEdit}
-            prefill={inventoryPrefill || undefined}
-            editItem={editItem}
-            onClearEdit={handleClearEdit}
-            onOpen360={handleOpen360}
-          />
-        </Card>
-      </ResizablePanel>
-      
-      {/* Right: Ivion 360 (conditional) */}
-      {ivion360Url && (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={40} minSize={25}>
-            <div className="h-full pl-4">
-              <Ivion360View url={ivion360Url} onClose={handleClose360} />
-            </div>
-          </ResizablePanel>
-        </>
-      )}
-    </ResizablePanelGroup>
-  </div>
-);
-```
-
-### Ivion360View.tsx - Acceptera URL som prop
-
-```typescript
-interface Ivion360ViewProps {
-  url?: string;          // URL direkt som prop
-  onClose?: () => void;
-}
-
-export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
-  // Använd prop-URL eller fallback till localStorage
-  const ivionUrl = url || localStorage.getItem('ivion360Url');
-  // ... resten av komponenten
-}
+```jsx
+<div className="flex gap-2">
+  <Input
+    placeholder="POI-ID från Ivion"
+    value={manualPoiId}
+    onChange={(e) => setManualPoiId(e.target.value)}
+    className="flex-1"
+  />
+  <Button onClick={handleLinkPoi} disabled={!manualPoiId}>
+    Koppla
+  </Button>
+</div>
 ```
 
 ---
 
-## Visuell översikt (Desktop)
+## Framtida förbättringar
 
-```text
-+------------------+------------------------+------------------------+
-|    Lista         |      Formulär          |     Ivion 360          |
-|  (senaste)       |                        |                        |
-|                  |  Namn: [___________]   |   [iframe med          |
-|  > Asset 1       |  Kategori: [v]         |    360-panorama]       |
-|  > Asset 2       |  ...                   |                        |
-|  > Asset 3       |  Position:             |   [Stäng X]            |
-|                  |  [3D] [360+]           |                        |
-|                  |                        |                        |
-+------------------+------------------------+------------------------+
-```
+Om NavVis lägger till webhook-stöd eller postMessage-API i framtiden kan vi implementera:
+
+1. **Webhook callback**: Ivion → Lovable edge function när POI skapas
+2. **Real-time sync**: Supabase Realtime för att visa nya POIs direkt
+3. **Embed med SDK**: Använda NavVis NPM-paket för fullständig kontroll
 
 ---
 
 ## Sammanfattning
 
-1. **URL-fix**: Ändra från `/site/` till `/?site=` på två ställen
-2. **Desktop side-by-side**: Använd ResizablePanelGroup för att visa Ivion bredvid formuläret
-3. **Mobil**: Behåll extern flik-beteende (begränsat utrymme)
-4. **Ivion360View**: Stöd för URL som prop för flexibilitet
+Eftersom Ivion inte stöder direkt iframe-kommunikation, implementerar vi en asynkron workflow där:
+1. Användaren skapar POI i Ivion
+2. Lovable importerar POIs on-demand via befintlig edge function
+3. Assets kopplas till POIs baserat på matchning eller manuell koppling
+
+Detta är en pragmatisk lösning som fungerar med Ivions nuvarande arkitektur.
