@@ -1,105 +1,214 @@
 
-# Plan: Fixa 3D Viewer och XKT-cachning
+# Plan: Fixa Ivion URL-format och visa 360+ bredvid formuläret
 
-## Problem
+## Problem identifierade
 
-3D-viewern kraschar med felet "Cannot read properties of null (reading 'nextSibling')" och XKT-cachningen skickar tom data (0.00 MB).
+1. **Fel URL-format för Ivion**: Koden genererar `/site/3045176558137335` men korrekt format är `/?site=3045176558137335`
+2. **360+ öppnas i ny flik istället för side-by-side**: På desktop finns plats för att visa Ivion-vyn bredvid inventeringsformuläret
 
-## Orsaksanalys
+---
 
-1. **DOM-rensning saknas**: Memory-dokumentet kräver att `innerHTML` rensas innan initialization, men denna kod saknas
-2. **XKT cache interceptor-problem**: `response.clone().arrayBuffer()` returnerar tom data för Asset+ GetXktData-anrop
-3. **Race conditions**: React Strict Mode dubbelmontering orsakar konflikter
+## Del 1: Fixa URL-formatet
 
-## Lösning
+### Orsak
+URL:en byggs fel på två ställen:
+- `src/components/inventory/InventoryForm.tsx` rad 197: `` `${baseUrl}/site/${siteId}` ``
+- `src/components/portfolio/PortfolioView.tsx` rad 147: `` `${baseUrl}/site/${siteId}` ``
 
-### Del 1: Fixa DOM-rensning i AssetPlusViewer
+### Lösning
+Ändra till korrekt query parameter-format: `` `${baseUrl}/?site=${siteId}` ``
 
-Lägg till explicit rensning av viewer-containern innan varje initieringsförsök:
+---
 
-```typescript
-// I initializeViewer, efter DOM wait-loopen:
-if (viewerContainerRef.current) {
-  // CRITICAL: Clear container before initialization to prevent 'nextSibling' errors
-  viewerContainerRef.current.innerHTML = '';
-}
-```
+## Del 2: Visa Ivion side-by-side med formuläret (Desktop)
 
-### Del 2: Inaktivera XKT fetch-interceptorn
+### Nuvarande beteende
+- 360+ knappen anropar `handleOpen360()` som öppnar Ivion i ny flik via `window.open()`
 
-Eftersom interceptorn orsakar problem och skickar tom data, kommer vi temporärt inaktivera den tills vi kan felsöka ordentligt:
+### Nytt beteende
+- På desktop: Visa Ivion i en resizable panel bredvid formuläret
+- På mobil: Behåll Sheet/modal-beteende
 
-```typescript
-// Ändra setupCacheInterceptor till att vara en no-op:
-const setupCacheInterceptor = useCallback(() => {
-  // XKT cache interceptor disabled temporarily - causing initialization issues
-  // Models will be loaded directly from Asset+ API without caching
-  console.log('XKT cache: Interceptor disabled (using direct load)');
-}, []);
-```
+### Implementation
 
-### Del 3: Behåll memory-cache för preload
+1. **Lägg till state i `Inventory.tsx`**:
+   - `ivion360Open: boolean` - styr om Ivion-panelen visas
+   - `ivion360Url: string | null` - URL att ladda i iframe
 
-Preload-systemet kan fortfarande fungera, men ska inte störa viewer-initieringen. Modeller som förhandsladdas kan användas som fallback.
+2. **Uppdatera `InventoryForm` props**:
+   - Lägg till `onOpen360: (url: string) => void` callback
+   - Istället för `window.open()`, anropa denna callback
+
+3. **Modifiera desktop-layouten i `Inventory.tsx`**:
+   - Använd `ResizablePanelGroup` från befintlig `@/components/ui/resizable`
+   - Tre paneler: Lista | Formulär | Ivion 360 (conditionally visible)
+   - Ivion-panelen visar `Ivion360View` component med den URL som skickades
+
+4. **Mobil-läge**:
+   - Behåll nuvarande Sheet-modal för formuläret
+   - 360+ öppnar i extern flik (svårt att visa side-by-side på mobil)
+
+---
 
 ## Filändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till `innerHTML = ''` rensning före init, inaktivera fetch interceptor |
+| `src/components/inventory/InventoryForm.tsx` | Fixa URL-format (`/?site=`), lägg till `onOpen360` prop |
+| `src/components/portfolio/PortfolioView.tsx` | Fixa URL-format (`/?site=`) |
+| `src/pages/Inventory.tsx` | Lägg till Ivion-panel med resizable layout |
+| `src/components/viewer/Ivion360View.tsx` | Acceptera URL som prop istället för localStorage |
+
+---
 
 ## Detaljerade kodändringar
 
-### AssetPlusViewer.tsx - initializeViewer
-
-Runt rad 1180-1195, efter DOM-vänteloopen:
+### InventoryForm.tsx - Fixa URL och lägg till callback
 
 ```typescript
-if (!containerReady || !viewerContainerRef.current) {
-  setInitStep('error');
-  setState(prev => ({
-    ...prev,
-    isLoading: false,
-    error: '3D container missing in DOM. Try again or reload the page.',
-  }));
-  return;
+// Nya props
+interface InventoryFormProps {
+  // ... befintliga
+  onOpen360?: (url: string) => void; // Callback för att visa 360 inline
 }
 
-// CRITICAL FIX: Clear container innerHTML before initialization
-// This prevents 'nextSibling' null errors during React mount/unmount cycles
-viewerContainerRef.current.innerHTML = '';
+// I handleOpen360:
+const handleOpen360 = () => {
+  const ivionApiUrl = localStorage.getItem('ivionApiUrl');
+  const siteId = buildingSettings?.ivion_site_id;
 
-setModelLoadState('idle');
-setCacheStatus(null);
+  if (!siteId) {
+    toast.error('Ingen Ivion-site kopplad', {
+      description: 'Koppla byggnaden till en Ivion-site i byggnadsinställningar',
+    });
+    return;
+  }
+
+  // FIXA: Använd /?site= istället för /site/
+  const baseUrl = ivionApiUrl || 'https://swg.iv.navvis.com';
+  const fullUrl = `${baseUrl}/?site=${siteId}`;
+
+  // Om callback finns (desktop), visa inline. Annars öppna i ny flik
+  if (onOpen360) {
+    onOpen360(fullUrl);
+  } else {
+    window.open(fullUrl, '_blank');
+    toast.info('Ivion öppnat i ny flik');
+  }
+};
 ```
 
-### AssetPlusViewer.tsx - setupCacheInterceptor
-
-Ersätt hela funktionen (runt rad 1073-1142):
+### PortfolioView.tsx - Fixa URL
 
 ```typescript
-// XKT cache interceptor - DISABLED due to initialization conflicts
-// The interceptor was causing 'nextSibling' errors and sending empty data to cache
-// Models will load directly from Asset+ API for now
-const setupCacheInterceptor = useCallback(() => {
-  console.log('XKT cache: Interceptor disabled (direct loading mode)');
-  // No-op - don't override fetch
-}, []);
+// Rad 147: Ändra från
+const fullUrl = `${baseUrl}/site/${siteId}`;
+// Till
+const fullUrl = `${baseUrl}/?site=${siteId}`;
 ```
 
-Ta även bort anropet till `restoreFetch()` i cleanup om det inte längre behövs.
+### Inventory.tsx - Desktop layout med Ivion-panel
 
-## Framtida förbättringar (ej i denna fix)
+```typescript
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import Ivion360View from '@/components/viewer/Ivion360View';
 
-När viewern fungerar stabilt kan XKT-cachningen återimplementeras genom att:
-1. Använda service worker istället för fetch-interceptor
-2. Eller: Haka in i Asset+ viewer callbacks för modelladdning
-3. Eller: Proaktiv cachning via `asset-plus-sync` edge function
+// Lägg till state
+const [ivion360Url, setIvion360Url] = useState<string | null>(null);
 
-## Testning
+// Handler för 360-knappen
+const handleOpen360 = (url: string) => {
+  setIvion360Url(url);
+};
 
-Efter implementation:
-1. Öppna 3D viewer för en byggnad
-2. Verifiera att modellen laddas utan fel
-3. Testa "Välj position i 3D" i inventeringsformuläret
-4. Verifiera att koordinaterna sparas korrekt
+const handleClose360 = () => {
+  setIvion360Url(null);
+};
+
+// Desktop layout med resizable panels
+return (
+  <div className="h-full p-6 bg-background">
+    <ResizablePanelGroup direction="horizontal" className="h-full">
+      {/* Left: List */}
+      <ResizablePanel defaultSize={25} minSize={20}>
+        <div className="h-full pr-4">
+          <div className="flex items-center gap-3 mb-4">
+            <ClipboardList className="h-6 w-6 text-primary" />
+            <h1 className="text-xl font-semibold">Inventering</h1>
+          </div>
+          <InventoryList items={savedItems} isLoading={isLoading} onEdit={handleEdit} />
+        </div>
+      </ResizablePanel>
+      
+      <ResizableHandle withHandle />
+      
+      {/* Middle: Form */}
+      <ResizablePanel defaultSize={ivion360Url ? 35 : 75} minSize={30}>
+        <Card className="p-6 h-full overflow-y-auto mx-4">
+          <InventoryForm
+            onSaved={handleSaved}
+            onCancel={handleClearEdit}
+            prefill={inventoryPrefill || undefined}
+            editItem={editItem}
+            onClearEdit={handleClearEdit}
+            onOpen360={handleOpen360}
+          />
+        </Card>
+      </ResizablePanel>
+      
+      {/* Right: Ivion 360 (conditional) */}
+      {ivion360Url && (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={40} minSize={25}>
+            <div className="h-full pl-4">
+              <Ivion360View url={ivion360Url} onClose={handleClose360} />
+            </div>
+          </ResizablePanel>
+        </>
+      )}
+    </ResizablePanelGroup>
+  </div>
+);
+```
+
+### Ivion360View.tsx - Acceptera URL som prop
+
+```typescript
+interface Ivion360ViewProps {
+  url?: string;          // URL direkt som prop
+  onClose?: () => void;
+}
+
+export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
+  // Använd prop-URL eller fallback till localStorage
+  const ivionUrl = url || localStorage.getItem('ivion360Url');
+  // ... resten av komponenten
+}
+```
+
+---
+
+## Visuell översikt (Desktop)
+
+```text
++------------------+------------------------+------------------------+
+|    Lista         |      Formulär          |     Ivion 360          |
+|  (senaste)       |                        |                        |
+|                  |  Namn: [___________]   |   [iframe med          |
+|  > Asset 1       |  Kategori: [v]         |    360-panorama]       |
+|  > Asset 2       |  ...                   |                        |
+|  > Asset 3       |  Position:             |   [Stäng X]            |
+|                  |  [3D] [360+]           |                        |
+|                  |                        |                        |
++------------------+------------------------+------------------------+
+```
+
+---
+
+## Sammanfattning
+
+1. **URL-fix**: Ändra från `/site/` till `/?site=` på två ställen
+2. **Desktop side-by-side**: Använd ResizablePanelGroup för att visa Ivion bredvid formuläret
+3. **Mobil**: Behåll extern flik-beteende (begränsat utrymme)
+4. **Ivion360View**: Stöd för URL som prop för flexibilitet
