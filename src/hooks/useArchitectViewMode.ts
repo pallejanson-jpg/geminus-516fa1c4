@@ -65,6 +65,8 @@ const IFC_TYPE_COLORS: Record<string, number[]> = {
   'ifcrailing': ARCHITECT_COLORS.railing,
   'ifcfurnishingelement': ARCHITECT_COLORS.furniture,
   'ifcfurniture': ARCHITECT_COLORS.furniture,
+  'ifcbuildingelementproxy': ARCHITECT_COLORS.furniture, // Entourage (people, trees, etc.)
+  'ifccasework': ARCHITECT_COLORS.furniture,             // Casework (cabinets, etc.)
 };
 
 // Background color presets - all gradients from white to color
