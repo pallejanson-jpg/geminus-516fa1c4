@@ -1,276 +1,206 @@
 
-
-# Plan: Swipe-stängning, localStorage och Transparenta Dialoger
+# Plan: Förbättrad Menyarkitektur för 3D-visaren
 
 ## Sammanfattning
 
-Förbättra 3D-visarens menyer med tre förbättringar:
-1. Swipe-gest för att stänga panelen på mobil
-2. Spara BIM-modell och våningsplansval i localStorage
-3. Semi-transparenta dialoger så man ser 3D-modellen bakom
+Förbättra VisualizationToolbar så att:
+1. Submenyerna (BIM-modeller, Våningsplan) öppnas som separata "pop-out" paneler till sidan
+2. Huvudmenyn förblir smal och transparent
+3. "Visa rum" och "Visa annotationer" är avstängda som standard
+
+## Problemanalys
+
+### Nuvarande problem:
+- Huvudpanelen har `bg-card/75` men Collapsible-innehållet expanderar panelen vertikalt
+- När användaren öppnar BIM-modeller eller Våningsplan täcker hela panelen 3D-modellen
+- Användaren kan inte se effekten av sina ändringar i realtid
+- `showSpaces` och `showAnnotations` är `true` som standard
+
+### Lösning: "Side-pop" Submenyer
+
+Istället för att BIM-modeller/Våningsplan expanderar i huvudpanelen:
+1. Klick på "BIM-modeller" öppnar en smal panel **bredvid** huvudmenyn
+2. Panelen positioneras automatiskt till vänster eller höger beroende på var huvudmenyn är
+3. Submenyerna har också transparens så användaren ser 3D-modellen
+4. Endast en submeny kan vara öppen åt gången
 
 ## Teknisk Implementation
 
-### 1. Swipe-stängning (VisualizationToolbar)
-
-Lägg till touch-events för att upptäcka nedåt-svep och stänga panelen.
-
-**Logik:**
-- `onTouchStart`: Spara startposition
-- `onTouchMove`: Beräkna delta-Y
-- `onTouchEnd`: Om delta > 80px nedåt, stäng panelen
+### 1. Ändra standardvärden i VisualizationToolbar.tsx
 
 ```typescript
-// Touch swipe state
-const [touchStart, setTouchStart] = useState<number | null>(null);
-const [touchDelta, setTouchDelta] = useState(0);
+// Rad 59-60 i VisualizationToolbar.tsx
+// FÖRE:
+const [showSpaces, setShowSpaces] = useState(true);
+const [showAnnotations, setShowAnnotations] = useState(true);
 
-const handleTouchStart = (e: React.TouchEvent) => {
-  setTouchStart(e.touches[0].clientY);
-};
-
-const handleTouchMove = (e: React.TouchEvent) => {
-  if (!touchStart) return;
-  const delta = e.touches[0].clientY - touchStart;
-  setTouchDelta(Math.max(0, delta)); // Endast nedåt
-};
-
-const handleTouchEnd = () => {
-  if (touchDelta > 80) {
-    setIsOpen(false); // Stäng vid tillräckligt långt svep
-  }
-  setTouchStart(null);
-  setTouchDelta(0);
-};
+// EFTER:
+const [showSpaces, setShowSpaces] = useState(false);
+const [showAnnotations, setShowAnnotations] = useState(false);
 ```
 
-**Visuell feedback:**
-- Panelen rör sig nedåt med svepet (transform: translateY)
-- Opacity minskar vid svep
-- "Drag-handle" bar överst för att indikera att man kan svepa
+### 2. Skapa ny komponent: SidePopPanel.tsx
 
-### 2. localStorage för val
+Generisk komponent för side-pop menyer:
 
-**Nyckelstruktur:**
-- `viewer-visible-floors-{buildingFmGuid}`: Array av floor IDs
-- `viewer-visible-models-{buildingFmGuid}`: Array av model IDs
-
-**FloorVisibilitySelector.tsx:**
 ```typescript
-// Ladda sparade val vid mount
-useEffect(() => {
-  if (!buildingFmGuid) return;
-  const saved = localStorage.getItem(`viewer-visible-floors-${buildingFmGuid}`);
-  if (saved) {
-    try {
-      const savedIds = JSON.parse(saved);
-      setVisibleFloorIds(new Set(savedIds));
-    } catch (e) {}
-  }
-}, [buildingFmGuid]);
+interface SidePopPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  parentPosition: { x: number; y: number };
+  parentWidth: number;
+  children: React.ReactNode;
+}
 
-// Spara vid ändring
-useEffect(() => {
-  if (!buildingFmGuid || !isInitialized) return;
-  localStorage.setItem(
-    `viewer-visible-floors-${buildingFmGuid}`,
-    JSON.stringify(Array.from(visibleFloorIds))
+const SidePopPanel: React.FC<SidePopPanelProps> = ({
+  isOpen,
+  onClose,
+  title,
+  parentPosition,
+  parentWidth,
+  children,
+}) => {
+  // Beräkna om panelen ska visas till vänster eller höger
+  const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const panelWidth = 220; // Smal bredd
+  
+  // Om huvudmenyn är till höger på skärmen -> visa till vänster
+  // Om huvudmenyn är till vänster -> visa till höger
+  const showOnLeft = parentPosition.x + parentWidth > screenWidth / 2;
+  
+  const position = showOnLeft
+    ? { left: parentPosition.x - panelWidth - 8, top: parentPosition.y }
+    : { left: parentPosition.x + parentWidth + 8, top: parentPosition.y };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed z-[61] w-[220px] bg-card/70 backdrop-blur-md border rounded-lg shadow-lg"
+      style={{ left: position.left, top: position.top }}
+    >
+      <div className="flex items-center justify-between p-2 border-b">
+        <span className="text-xs font-medium">{title}</span>
+        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onClose}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+      <div className="p-2 max-h-[50vh] overflow-y-auto">
+        {children}
+      </div>
+    </div>
   );
-}, [visibleFloorIds, buildingFmGuid, isInitialized]);
+};
 ```
 
-**ModelVisibilitySelector.tsx:**
-- Samma mönster med `viewer-visible-models-{buildingFmGuid}`
+### 3. Uppdatera VisualizationToolbar.tsx
 
-### 3. Transparenta Dialoger
-
-**Ändra VisualizationToolbar-panelens styling:**
+Ersätt Collapsible med click-to-open side panels:
 
 ```typescript
-// Från:
-"fixed z-[60] bg-card border rounded-lg shadow-xl"
+// Ny state för submenyer
+const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | null>(null);
 
-// Till:
-"fixed z-[60] bg-card/80 backdrop-blur-md border rounded-lg shadow-xl"
+// I JSX - ersätt ModelVisibilitySelector Collapsible med en knapp:
+<div className="flex items-center justify-between py-1.5">
+  <div className="flex items-center gap-2">
+    <Box className="h-3.5 w-3.5 text-muted-foreground" />
+    <span className="text-xs">BIM-modeller</span>
+    <span className="text-[10px] text-muted-foreground">(2/3)</span>
+  </div>
+  <Button
+    variant="ghost"
+    size="sm"
+    className="h-6 px-2"
+    onClick={() => setActiveSubMenu(activeSubMenu === 'models' ? null : 'models')}
+  >
+    <ChevronRight className="h-3 w-3" />
+  </Button>
+</div>
+
+// Rendera side-pop panels utanför huvudpanelen:
+<SidePopPanel
+  isOpen={activeSubMenu === 'models'}
+  onClose={() => setActiveSubMenu(null)}
+  title="BIM-modeller"
+  parentPosition={position}
+  parentWidth={320}
+>
+  <ModelVisibilitySelector ... listOnly={true} />
+</SidePopPanel>
 ```
 
-**Fördelar:**
-- 80% opacitet visar 3D-modellen bakom
-- `backdrop-blur-md` ger en "frosted glass" effekt
-- Fortfarande läsbart men man ser vad som händer
+### 4. Modifiera ModelVisibilitySelector och FloorVisibilitySelector
 
-**Alternativ nivå för bättre synlighet av 3D:**
+Lägg till en `listOnly` prop som renderar endast listan (inga Collapsible-headers):
+
 ```typescript
-"bg-card/70 backdrop-blur-sm"  // 70% + mindre blur = mer synlig 3D
+interface ModelVisibilitySelectorProps {
+  // ... existing props
+  listOnly?: boolean;  // Renderar endast listan, ingen header/collapsible
+}
+
+// I komponenten:
+if (listOnly) {
+  return (
+    <div className="space-y-1">
+      {models.map((model) => (
+        // Render switches directly
+      ))}
+    </div>
+  );
+}
+
+// Annars rendera som vanligt med Collapsible
+```
+
+### 5. Uppdatera transparens i huvudpanelen
+
+```typescript
+// VisualizationToolbar.tsx - panelens styling
+className={cn(
+  "fixed z-[60] border rounded-lg shadow-xl",
+  // Ökad transparens för huvudpanelen
+  "bg-card/60 backdrop-blur-md",
+  // ...
+)}
+```
+
+## Visuell Arkitektur
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    3D Viewer (bakgrund)                      │
+│                                                             │
+│   ┌──────────────┐  ┌───────────────┐                       │
+│   │ Side-pop     │  │ Huvudmeny     │                       │
+│   │ BIM-modeller │←→│               │                       │
+│   │              │  │ [BIM-modeller]│                       │
+│   │ □ A-modell   │  │ [Våningsplan] │                       │
+│   │ ☑ E-modell   │  │ ────────────  │                       │
+│   │ □ V-modell   │  │ □ Visa rum    │                       │
+│   │              │  │ □ Annotationer│                       │
+│   │ [Solo] [Alla]│  │               │                       │
+│   └──────────────┘  └───────────────┘                       │
+│                                                             │
+│   Användaren ser 3D-modellen genom båda panelerna           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Filändringar
 
-### VisualizationToolbar.tsx
-
-1. **Touch swipe-handlers:**
-   ```typescript
-   // Nya state-variabler
-   const [touchStart, setTouchStart] = useState<number | null>(null);
-   const [touchDelta, setTouchDelta] = useState(0);
-   
-   // Touch event handlers för swipe-stängning
-   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-     setTouchStart(e.touches[0].clientY);
-   }, []);
-   
-   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-     if (!touchStart) return;
-     const delta = e.touches[0].clientY - touchStart;
-     setTouchDelta(Math.max(0, delta));
-   }, [touchStart]);
-   
-   const handleTouchEnd = useCallback(() => {
-     if (touchDelta > 80) {
-       setIsOpen(false);
-     }
-     setTouchStart(null);
-     setTouchDelta(0);
-   }, [touchDelta]);
-   ```
-
-2. **Panel med transparens och swipe:**
-   ```tsx
-   <div
-     className={cn(
-       "fixed z-[60] border rounded-lg shadow-xl",
-       // Transparens för att se 3D-modellen
-       "bg-card/75 backdrop-blur-md",
-       // Responsiv positionering
-       "left-2 right-2 bottom-16 sm:inset-auto",
-       "sm:w-80 md:w-96",
-       isDragging && "cursor-grabbing opacity-90"
-     )}
-     style={{
-       // Swipe transform på mobil
-       transform: touchDelta > 0 ? `translateY(${touchDelta}px)` : undefined,
-       opacity: touchDelta > 0 ? 1 - (touchDelta / 200) : undefined,
-       // Desktop position
-       ...(window.innerWidth >= 640 ? { left: position.x, top: position.y } : {})
-     }}
-     onTouchStart={handleTouchStart}
-     onTouchMove={handleTouchMove}
-     onTouchEnd={handleTouchEnd}
-   >
-     {/* Swipe-indikator bar (mobil) */}
-     <div className="sm:hidden flex justify-center pt-2 pb-1">
-       <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-     </div>
-     
-     {/* Header... */}
-   </div>
-   ```
-
-### FloorVisibilitySelector.tsx
-
-1. **localStorage-hook för att ladda sparade val:**
-   ```typescript
-   // Ladda sparade val från localStorage
-   useEffect(() => {
-     if (!buildingFmGuid) return;
-     
-     const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
-     const saved = localStorage.getItem(storageKey);
-     
-     if (saved) {
-       try {
-         const savedIds = JSON.parse(saved) as string[];
-         if (Array.isArray(savedIds) && savedIds.length > 0) {
-           console.debug("Restoring saved floor selection:", savedIds);
-           setVisibleFloorIds(new Set(savedIds));
-         }
-       } catch (e) {
-         console.debug("Failed to parse saved floor selection:", e);
-       }
-     }
-   }, [buildingFmGuid]);
-   ```
-
-2. **Spara till localStorage vid ändring:**
-   ```typescript
-   // Spara val till localStorage
-   useEffect(() => {
-     if (!buildingFmGuid || !isInitialized || visibleFloorIds.size === 0) return;
-     
-     const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
-     localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
-   }, [visibleFloorIds, buildingFmGuid, isInitialized]);
-   ```
-
-### ModelVisibilitySelector.tsx
-
-Samma mönster som FloorVisibilitySelector:
-
-1. **Ladda sparade val:**
-   ```typescript
-   useEffect(() => {
-     if (!buildingFmGuid) return;
-     
-     const storageKey = `viewer-visible-models-${buildingFmGuid}`;
-     const saved = localStorage.getItem(storageKey);
-     
-     if (saved) {
-       try {
-         const savedIds = JSON.parse(saved) as string[];
-         if (Array.isArray(savedIds) && savedIds.length > 0) {
-           setVisibleModelIds(new Set(savedIds));
-         }
-       } catch (e) {}
-     }
-   }, [buildingFmGuid]);
-   ```
-
-2. **Spara vid ändring:**
-   ```typescript
-   useEffect(() => {
-     if (!buildingFmGuid || !isInitialized || visibleModelIds.size === 0) return;
-     
-     localStorage.setItem(
-       `viewer-visible-models-${buildingFmGuid}`,
-       JSON.stringify(Array.from(visibleModelIds))
-     );
-   }, [visibleModelIds, buildingFmGuid, isInitialized]);
-   ```
-
-## Visuellt Resultat
-
-### Före vs Efter
-
-**Före:**
-- Solid bakgrund blockerar vyn
-- Ingen swipe-stängning
-- Val försvinner vid sidladdning
-
-**Efter:**
-- Semi-transparent: ser 3D-modellen genom panelen
-- Svep nedåt för snabb stängning
-- Val bevaras mellan sessioner
-
-### Transparens-nivåer (kan justeras)
-
-| Nivå | CSS | Effekt |
-|------|-----|--------|
-| Lätt | `bg-card/85 backdrop-blur-sm` | Mest läsbart, lite genomskinlig |
-| Medium | `bg-card/75 backdrop-blur-md` | Bra balans (rekommenderas) |
-| Stark | `bg-card/60 backdrop-blur-lg` | Mest genomskinlig, kan vara svårläst |
-
-## Filer att ändra
-
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/VisualizationToolbar.tsx` | Swipe-stängning + transparens |
-| `src/components/viewer/FloorVisibilitySelector.tsx` | localStorage för våningsval |
-| `src/components/viewer/ModelVisibilitySelector.tsx` | localStorage för modellval |
+| `src/components/viewer/VisualizationToolbar.tsx` | Standardvärden till false, side-pop arkitektur, ökad transparens |
+| `src/components/viewer/SidePopPanel.tsx` | **NY FIL** - Generisk side-pop panel komponent |
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Lägg till `listOnly` prop |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Lägg till `listOnly` prop |
 
-## Förväntat Resultat
+## Förväntade Resultat
 
-- Panelen är semi-transparent så man ser BIM-modellen bakom
-- Svep nedåt på mobil stänger panelen snabbt
-- Val av modeller och våningar sparas automatiskt per byggnad
-- Frosted glass-effekt ger modern, snygg look
-
+- **Smalare submenyer:** BIM-modeller/Våningsplan öppnas i smala (220px) sidopaneler
+- **Bättre synlighet:** Användaren ser 3D-modellen bakom transparenta paneler
+- **Realtidsfeedback:** Direkt visuell feedback när modeller/våningar togglas
+- **Korrekta standardinställningar:** Visa rum och annotationer avstängda som standard
+- **Smart positionering:** Sidomenyer anpassar sig efter var huvudmenyn är placerad
