@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +23,7 @@ import { AppContext } from '@/context/AppContext';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
+import ViewerThemeSettings from './ViewerThemeSettings';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -776,24 +777,28 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
-                        <TabsTrigger value="apps" className="gap-1 px-2 text-xs sm:text-sm sm:gap-2 sm:px-3">
+                    <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
+                        <TabsTrigger value="apps" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Apps</span>
                         </TabsTrigger>
-                        <TabsTrigger value="apis" className="gap-1 px-2 text-xs sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="apis" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Settings2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">API's</span>
                         </TabsTrigger>
-                        <TabsTrigger value="sync" className="gap-1 px-2 text-xs sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="sync" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Database className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Sync</span>
                         </TabsTrigger>
-                        <TabsTrigger value="symbols" className="gap-1 px-2 text-xs sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="symbols" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Symboler</span>
                         </TabsTrigger>
-                        <TabsTrigger value="voice" className="gap-1 px-2 text-xs sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="themes" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                            <Palette className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Teman</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="voice" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Röst</span>
                         </TabsTrigger>
@@ -1651,6 +1656,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* Symbols Settings Tab */}
                     <TabsContent value="symbols" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <SymbolSettings />
+                    </TabsContent>
+
+                    {/* Viewer Themes Settings Tab */}
+                    <TabsContent value="themes" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <ViewerThemeSettings />
                     </TabsContent>
 
                     {/* Voice Settings Tab */}
