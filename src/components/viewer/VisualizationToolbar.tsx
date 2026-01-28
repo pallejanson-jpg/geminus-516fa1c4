@@ -14,6 +14,7 @@ import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
+import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -112,6 +113,25 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
     };
   }, []);
+
+  // Listen for force show spaces from RoomVisualizationPanel
+  useEffect(() => {
+    const handleForceShowSpaces = (e: CustomEvent) => {
+      if (e.detail?.show && !showSpaces) {
+        setShowSpaces(true);
+        try {
+          const assetViewer = viewerRef.current?.assetViewer;
+          assetViewer?.onShowSpacesChanged?.(true);
+        } catch (err) {
+          console.debug("Force show spaces failed:", err);
+        }
+      }
+    };
+    window.addEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
+    return () => {
+      window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
+    };
+  }, [showSpaces, viewerRef]);
 
   // Handle clip height change
   const handleClipHeightChange = useCallback((value: number[]) => {
