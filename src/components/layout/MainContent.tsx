@@ -15,6 +15,7 @@ import Ivion360View from "@/components/viewer/Ivion360View";
 const MapView = lazy(() => import("@/components/map/MapView"));
 const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 const Inventory = lazy(() => import("@/pages/Inventory"));
+const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp } = useContext(AppContext);
@@ -94,6 +95,16 @@ const MainContent: React.FC = () => {
                         </div>
                     }>
                         <Inventory />
+                    </Suspense>
+                );
+            case 'ivion_create':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <IvionCreate />
                     </Suspense>
                 );
             default:
