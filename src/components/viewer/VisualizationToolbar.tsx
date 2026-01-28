@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useContext } from "react";
+import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
 import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, PaintBucket, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import LightingControlsPanel from "./LightingControlsPanel";
+import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -94,6 +95,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Architect view mode state
   const [isArchitectMode, setIsArchitectMode] = useState(false);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
+
+  // Scroll indicator (external, on panel edge)
+  const scrollWrapRef = useRef<HTMLDivElement | null>(null);
+  const [scrollViewportEl, setScrollViewportEl] = useState<HTMLElement | null>(null);
   
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -115,6 +120,23 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setPosition({ x: initialX, y: 60 });
     }
   }, [isOpen, position.x, position.y]);
+
+  // Grab Radix ScrollArea viewport so we can render a visible edge indicator (like in the reference screenshot)
+  useEffect(() => {
+    if (!isOpen) {
+      setScrollViewportEl(null);
+      return;
+    }
+
+    const t = window.setTimeout(() => {
+      const vp = scrollWrapRef.current?.querySelector(
+        "[data-radix-scroll-area-viewport]",
+      ) as HTMLElement | null;
+      setScrollViewportEl(vp);
+    }, 0);
+
+    return () => window.clearTimeout(t);
+  }, [isOpen]);
 
   // Reload settings when they change
   useEffect(() => {
@@ -505,9 +527,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </Button>
           </div>
 
-          {/* Content - compact height for side-pop architecture */}
-          <ScrollArea className="flex-1 min-h-0 p-2.5 sm:p-3">
-            <div className="space-y-2 sm:space-y-3">
+           {/* Content - compact height for side-pop architecture */}
+           <div ref={scrollWrapRef} className="relative flex-1 min-h-0">
+             <ScrollArea className="h-full p-2.5 pr-4 sm:p-3">
+               <div className="space-y-2 sm:space-y-3">
               {/* BIM Models - click to open side panel */}
               <div className="flex items-center justify-between py-1.5">
                 <div className="flex items-center gap-2">
@@ -764,8 +787,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   )}
                 </div>
               </div>
-            </div>
-          </ScrollArea>
+               </div>
+             </ScrollArea>
+
+             {/* Always-visible edge indicator on the panel's right edge */}
+             <EdgeScrollIndicator viewport={scrollViewportEl} />
+           </div>
           </div>
           
           {/* Side-pop panel for BIM Models */}
