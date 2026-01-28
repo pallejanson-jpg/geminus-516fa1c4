@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Crosshair, Eye, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ import BuildingSelector from './selectors/BuildingSelector';
 import FloorSelector from './selectors/FloorSelector';
 import RoomSelector from './selectors/RoomSelector';
 import ImageUpload from './ImageUpload';
+import PositionPickerDialog from './PositionPickerDialog';
 import type { InventoryItem } from '@/pages/Inventory';
 
 interface AnnotationSymbol {
@@ -65,6 +66,13 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   const [roomFmGuid, setRoomFmGuid] = useState(prefill?.roomFmGuid || '');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
+  // 3D position state
+  const [positionDialogOpen, setPositionDialogOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
+
+  // Building settings for Ivion
+  const [buildingSettings, setBuildingSettings] = useState<{ ivion_site_id: string | null } | null>(null);
+
   // Fetch symbols on mount
   useEffect(() => {
     const fetchSymbols = async () => {
@@ -79,6 +87,57 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     };
     fetchSymbols();
   }, []);
+
+  // Fetch building settings when building changes (for Ivion site ID)
+  useEffect(() => {
+    if (!buildingFmGuid) {
+      setBuildingSettings(null);
+      return;
+    }
+
+    const fetchBuildingSettings = async () => {
+      const { data } = await supabase
+        .from('building_settings')
+        .select('ivion_site_id')
+        .eq('fm_guid', buildingFmGuid)
+        .maybeSingle();
+
+      setBuildingSettings(data);
+    };
+    fetchBuildingSettings();
+  }, [buildingFmGuid]);
+
+  // Handler for 3D position picking
+  const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
+    setCoordinates(coords);
+    toast.success('Position vald!', {
+      description: `X: ${coords.x.toFixed(2)}, Y: ${coords.y.toFixed(2)}, Z: ${coords.z.toFixed(2)}`,
+    });
+  };
+
+  // Handler for opening Ivion 360
+  const handleOpen360 = () => {
+    const ivionUrl = localStorage.getItem('ivionApiUrl');
+    const siteId = buildingSettings?.ivion_site_id;
+
+    if (!ivionUrl) {
+      toast.error('Ivion ej konfigurerad', {
+        description: 'Konfigurera Ivion-URL i API-inställningar',
+      });
+      return;
+    }
+
+    if (!siteId) {
+      toast.error('Ingen Ivion-site kopplad', {
+        description: 'Koppla byggnaden till en Ivion-site i byggnadsinställningar',
+      });
+      return;
+    }
+
+    // Open Ivion - user will have to manually select position
+    window.open(`${ivionUrl}/site/${siteId}`, '_blank');
+    toast.info('Ivion öppnat i ny flik');
+  };
 
   const handleSubmit = async () => {
     // Validation
@@ -118,7 +177,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         in_room_fm_guid: roomFmGuid || null,
         created_in_model: false,
         is_local: true,
-        annotation_placed: false,
+        annotation_placed: !!coordinates,
+        coordinate_x: coordinates?.x ?? null,
+        coordinate_y: coordinates?.y ?? null,
+        coordinate_z: coordinates?.z ?? null,
         attributes: {
           // Asset+ compatible fields
           objectType: 4, // Instance type
@@ -285,6 +347,54 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         />
       )}
 
+      {/* 3D Position & 360+ Section */}
+      {buildingFmGuid && (
+        <div className="space-y-2">
+          <Label className="text-base">Position (valfritt)</Label>
+          {coordinates ? (
+            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Crosshair className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-mono text-xs sm:text-sm">
+                  X: {coordinates.x.toFixed(2)} Y: {coordinates.y.toFixed(2)} Z: {coordinates.z.toFixed(2)}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => setCoordinates(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPositionDialogOpen(true)}
+                className="h-12"
+              >
+                <Crosshair className="h-4 w-4 mr-2" />
+                <span className="text-xs sm:text-sm">3D-position</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleOpen360}
+                className="h-12"
+                disabled={!buildingSettings?.ivion_site_id}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                <span className="text-xs sm:text-sm">360+</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Image upload */}
       <ImageUpload
         value={imageUrl}
@@ -319,6 +429,15 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Spara'}
         </Button>
       </div>
+
+      {/* 3D Position Picker Dialog */}
+      <PositionPickerDialog
+        open={positionDialogOpen}
+        onOpenChange={setPositionDialogOpen}
+        buildingFmGuid={buildingFmGuid}
+        roomFmGuid={roomFmGuid}
+        onPositionPicked={handlePositionPicked}
+      />
     </form>
   );
 };
