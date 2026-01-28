@@ -40,6 +40,7 @@ interface VisualizationToolbarProps {
  * VisualizationToolbar with configurable tools based on ToolbarSettings.
  * Renders as a floating, draggable panel when opened.
  * Includes floor visibility selector with multi-select switches.
+ * Features swipe-to-close on mobile and semi-transparent frosted glass effect.
  */
 const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { 
@@ -67,6 +68,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  
+  // Touch swipe state for mobile close gesture
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchDelta, setTouchDelta] = useState(0);
 
   // Initialize position when panel opens
   useEffect(() => {
@@ -118,7 +123,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     return setting?.visible ?? true;
   }, [toolSettings]);
 
-  // Drag handlers
+  // Drag handlers (desktop)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, input, select, [role="switch"]')) return;
     setIsDragging(true);
@@ -144,6 +149,25 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, dragOffset]);
+
+  // Touch swipe handlers (mobile close gesture)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientY);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const delta = e.touches[0].clientY - touchStart;
+    setTouchDelta(Math.max(0, delta)); // Only track downward swipes
+  }, [touchStart]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (touchDelta > 80) {
+      setIsOpen(false); // Close panel on sufficient swipe
+    }
+    setTouchStart(null);
+    setTouchDelta(0);
+  }, [touchDelta]);
 
   const handleToggleSpaces = useCallback(() => {
     const newValue = !showSpaces;
@@ -204,14 +228,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
       </Button>
 
-      {/* Floating draggable panel - responsive positioning */}
+      {/* Floating draggable panel - responsive positioning with transparency */}
       {isOpen && (
         <TooltipProvider delayDuration={300}>
           <div
             className={cn(
-              "fixed z-[60] bg-card border rounded-lg shadow-xl",
+              "fixed z-[60] border rounded-lg shadow-xl",
+              // Semi-transparent frosted glass effect
+              "bg-card/75 backdrop-blur-md",
               "max-h-[70vh] sm:max-h-[80vh] flex flex-col",
-              "transition-opacity duration-150",
+              "transition-all duration-150",
               // Mobile: bottom sheet style with safe area
               "left-2 right-2 bottom-16 sm:inset-auto",
               // Desktop: fixed-width draggable panel
@@ -219,6 +245,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               isDragging && "cursor-grabbing opacity-90"
             )}
             style={{ 
+              // Swipe transform on mobile
+              transform: touchDelta > 0 ? `translateY(${touchDelta}px)` : undefined,
+              opacity: touchDelta > 0 ? Math.max(0.3, 1 - (touchDelta / 200)) : undefined,
               // Only apply position on desktop (>= 640px)
               ...(typeof window !== 'undefined' && window.innerWidth >= 640 ? {
                 left: position.x,
@@ -227,10 +256,18 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 bottom: 'auto'
               } : {})
             }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
+          {/* Swipe indicator bar (mobile only) */}
+          <div className="sm:hidden flex justify-center pt-2 pb-1">
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+          </div>
+          
           {/* Header - Draggable on desktop */}
           <div
-            className="flex items-center justify-between p-2.5 sm:p-3 border-b cursor-grab select-none"
+            className="flex items-center justify-between px-2.5 pb-2.5 sm:p-3 border-b cursor-grab select-none"
             onMouseDown={handleMouseDown}
           >
             <div className="flex items-center gap-2">
