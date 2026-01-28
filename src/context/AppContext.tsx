@@ -70,6 +70,11 @@ interface AppContextType {
     startInventory: (prefill: InventoryPrefill) => void;
     clearInventoryPrefill: () => void;
 
+    // Entity insights - for viewing insights at any hierarchy level
+    insightsFacility: any | null;
+    setInsightsFacility: (facility: any | null) => void;
+    openEntityInsights: (facility: any) => void;
+
     // 3D Viewer diagnostics (for RightSidebar)
     viewerDiagnostics: {
         fmGuid: string;
@@ -128,6 +133,10 @@ export const AppContext = createContext<AppContextType>({
     inventoryPrefill: null,
     startInventory: () => {},
     clearInventoryPrefill: () => {},
+
+    insightsFacility: null,
+    setInsightsFacility: () => {},
+    openEntityInsights: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -218,6 +227,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const clearInventoryPrefill = useCallback(() => {
         setInventoryPrefill(null);
+    }, []);
+
+    // Entity insights state and actions
+    const [insightsFacility, setInsightsFacility] = useState<any | null>(null);
+
+    const openEntityInsights = useCallback((facility: any) => {
+        setInsightsFacility(facility);
+        setActiveApp('entity_insights');
     }, []);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
@@ -457,6 +474,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 inventoryPrefill,
                 startInventory,
                 clearInventoryPrefill,
+
+                insightsFacility,
+                setInsightsFacility,
+                openEntityInsights,
 
                 viewerDiagnostics,
                 setViewerDiagnostics,
