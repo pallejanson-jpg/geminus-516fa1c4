@@ -67,11 +67,19 @@ const IFC_TYPE_COLORS: Record<string, number[]> = {
   'ifcfurniture': ARCHITECT_COLORS.furniture,
 };
 
-// Background gradient colors
-const BACKGROUND_GRADIENT = {
-  top: 'rgb(255, 255, 255)',           // White
-  bottom: 'rgb(223, 236, 220)',        // #DFECDC
-};
+// Background color presets
+export const ARCHITECT_BACKGROUND_PRESETS = [
+  { id: 'green-gradient', name: 'Grön gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(223, 236, 220)' }, // Default #DFECDC
+  { id: 'blue-gradient', name: 'Blå gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(220, 232, 243)' }, // #DCE8F3
+  { id: 'warm-gradient', name: 'Varm gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(243, 236, 220)' }, // #F3ECDC
+  { id: 'gray-gradient', name: 'Grå gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(235, 235, 235)' }, // #EBEBEB
+  { id: 'pure-white', name: 'Vit', top: 'rgb(255, 255, 255)', bottom: 'rgb(255, 255, 255)' },
+  { id: 'light-beige', name: 'Beige', top: 'rgb(250, 248, 245)', bottom: 'rgb(240, 235, 225)' }, // #F0EBE1
+  { id: 'cool-gray', name: 'Kall grå', top: 'rgb(245, 247, 250)', bottom: 'rgb(225, 230, 238)' }, // #E1E6EE
+  { id: 'soft-pink', name: 'Rosa', top: 'rgb(255, 255, 255)', bottom: 'rgb(245, 230, 235)' }, // #F5E6EB
+];
+
+export type BackgroundPresetId = typeof ARCHITECT_BACKGROUND_PRESETS[number]['id'];
 
 export interface ArchitectViewModeState {
   isActive: boolean;
@@ -79,6 +87,7 @@ export interface ArchitectViewModeState {
   originalBackground: string;
   originalEdgeColor: number[];
   originalEdgeAlpha: number;
+  currentBackgroundPreset: BackgroundPresetId;
 }
 
 export function useArchitectViewMode() {
@@ -88,12 +97,27 @@ export function useArchitectViewMode() {
     originalBackground: '',
     originalEdgeColor: [0, 0, 0],
     originalEdgeAlpha: 1,
+    currentBackgroundPreset: 'green-gradient',
   });
+
+  /**
+   * Apply background preset
+   */
+  const applyBackgroundPreset = useCallback((presetId: BackgroundPresetId) => {
+    const preset = ARCHITECT_BACKGROUND_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const container = document.getElementById('AssetPlusViewer');
+    if (container) {
+      container.style.background = `linear-gradient(180deg, ${preset.top} 0%, ${preset.bottom} 100%)`;
+    }
+    stateRef.current.currentBackgroundPreset = presetId;
+  }, []);
 
   /**
    * Apply architect view mode to the scene
    */
-  const applyArchitectMode = useCallback((viewerRef: React.MutableRefObject<any>) => {
+  const applyArchitectMode = useCallback((viewerRef: React.MutableRefObject<any>, backgroundPreset?: BackgroundPresetId) => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     const scene = xeokitViewer?.scene;
     
@@ -103,6 +127,8 @@ export function useArchitectViewMode() {
     }
 
     const state = stateRef.current;
+    const presetId = backgroundPreset || state.currentBackgroundPreset;
+    const preset = ARCHITECT_BACKGROUND_PRESETS.find(p => p.id === presetId) || ARCHITECT_BACKGROUND_PRESETS[0];
     
     // Already active
     if (state.isActive) {
@@ -116,7 +142,8 @@ export function useArchitectViewMode() {
     if (container) {
       state.originalBackground = container.style.background || '';
       // Apply gradient background
-      container.style.background = `linear-gradient(180deg, ${BACKGROUND_GRADIENT.top} 0%, ${BACKGROUND_GRADIENT.bottom} 100%)`;
+      container.style.background = `linear-gradient(180deg, ${preset.top} 0%, ${preset.bottom} 100%)`;
+      state.currentBackgroundPreset = presetId;
     }
 
     // Store and modify edge rendering for smoother lines
@@ -225,14 +252,29 @@ export function useArchitectViewMode() {
     }
   }, [applyArchitectMode, removeArchitectMode]);
 
+  /**
+   * Change background preset while in architect mode
+   */
+  const setBackgroundPreset = useCallback((viewerRef: React.MutableRefObject<any>, presetId: BackgroundPresetId) => {
+    const state = stateRef.current;
+    if (state.isActive) {
+      applyBackgroundPreset(presetId);
+    }
+    state.currentBackgroundPreset = presetId;
+  }, [applyBackgroundPreset]);
+
   return {
     isActive: () => stateRef.current.isActive,
+    getCurrentBackgroundPreset: () => stateRef.current.currentBackgroundPreset,
     applyArchitectMode,
     removeArchitectMode,
     toggleArchitectMode,
+    setBackgroundPreset,
+    applyBackgroundPreset,
   };
 }
 
-// Event for requesting architect mode change
+// Events for architect mode
 export const ARCHITECT_MODE_REQUESTED_EVENT = 'ARCHITECT_MODE_REQUESTED';
 export const ARCHITECT_MODE_CHANGED_EVENT = 'ARCHITECT_MODE_CHANGED';
+export const ARCHITECT_BACKGROUND_CHANGED_EVENT = 'ARCHITECT_BACKGROUND_CHANGED';
