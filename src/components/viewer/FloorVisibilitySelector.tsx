@@ -24,6 +24,8 @@ interface FloorVisibilitySelectorProps {
   onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
   enableClipping?: boolean;  // Enable SectionPlane clipping for single floor
   className?: string;
+  /** When true, renders only the toggle list without header/collapsible wrapper */
+  listOnly?: boolean;
 }
 
 /**
@@ -34,7 +36,7 @@ interface FloorVisibilitySelectorProps {
  * Emits FLOOR_SELECTION_CHANGED_EVENT when floor selection changes.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
-  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className }, ref) => {
+  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className, listOnly = false }, ref) => {
     const [floors, setFloors] = useState<FloorInfo[]>([]);
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
@@ -437,6 +439,69 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
 
     if (floors.length === 0) {
       return null;
+    }
+
+    // listOnly mode: render just the toggle list without header/collapsible
+    if (listOnly) {
+      return (
+        <div className={cn("space-y-0.5 sm:space-y-1", className)} ref={ref}>
+          <div className="space-y-0.5 sm:space-y-1 max-h-[40vh] overflow-y-auto pr-0.5 sm:pr-1">
+            {floors.map((floor) => {
+              const isVisible = visibleFloorIds.has(floor.id);
+              const isSolo = visibleFloorIds.size === 1 && isVisible;
+              
+              return (
+                <div
+                  key={floor.id}
+                  className={cn(
+                    "flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1",
+                    isVisible ? "bg-primary/10" : "bg-muted/20"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)}
+                      className="scale-75 sm:scale-90"
+                    />
+                    <span className={cn(
+                      "text-xs sm:text-sm truncate",
+                      isVisible ? "text-foreground" : "text-muted-foreground"
+                    )}>
+                      {floor.name}
+                    </span>
+                  </div>
+                  
+                  {!isSolo && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0"
+                      onClick={() => handleShowOnlyFloor(floor.id)}
+                      title="Visa endast detta våningsplan"
+                    >
+                      Solo
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Show All button at bottom */}
+          <div className="pt-1 border-t border-border/30">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full h-6 text-[10px] sm:text-xs"
+              onClick={handleShowAll}
+              disabled={allVisible}
+            >
+              Visa alla våningsplan
+            </Button>
+          </div>
+        </div>
+      );
     }
 
     return (

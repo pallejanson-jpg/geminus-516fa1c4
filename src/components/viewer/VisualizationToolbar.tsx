@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
+import SidePopPanel from "./SidePopPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 
 interface VisualizationToolbarProps {
@@ -56,9 +57,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   } = props;
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showSpaces, setShowSpaces] = useState(true);
-  const [showAnnotations, setShowAnnotations] = useState(true);
+  const [showSpaces, setShowSpaces] = useState(false); // Default OFF per requirements
+  const [showAnnotations, setShowAnnotations] = useState(false); // Default OFF per requirements
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
+  
+  // Active side-pop submenu state
+  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | null>(null);
   
   // Clipping height state (for 2D floor plan view)
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
@@ -72,6 +76,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Touch swipe state for mobile close gesture
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchDelta, setTouchDelta] = useState(0);
+  
+  // Panel dimensions for side-pop positioning
+  const panelWidth = typeof window !== 'undefined' && window.innerWidth >= 640 ? 320 : 280;
 
   // Initialize position when panel opens
   useEffect(() => {
@@ -234,14 +241,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <div
             className={cn(
               "fixed z-[60] border rounded-lg shadow-xl",
-              // Semi-transparent frosted glass effect
-              "bg-card/75 backdrop-blur-md",
+              // Enhanced semi-transparent frosted glass effect
+              "bg-card/60 backdrop-blur-md",
               "max-h-[70vh] sm:max-h-[80vh] flex flex-col",
               "transition-all duration-150",
               // Mobile: bottom sheet style with safe area
               "left-2 right-2 bottom-16 sm:inset-auto",
-              // Desktop: fixed-width draggable panel
-              "sm:w-80 md:w-96",
+              // Desktop: fixed-width draggable panel (narrower for side-pop architecture)
+              "sm:w-72 md:w-80",
               isDragging && "cursor-grabbing opacity-90"
             )}
             style={{ 
@@ -284,23 +291,51 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </Button>
           </div>
 
-          {/* Content - grows vertically with content */}
+          {/* Content - compact height for side-pop architecture */}
           <ScrollArea className="flex-1 min-h-0 p-2.5 sm:p-3">
-            <div className="space-y-3 sm:space-y-4">
-              {/* Model visibility section */}
-              <ModelVisibilitySelector
-                viewerRef={viewerRef}
-                buildingFmGuid={buildingFmGuid}
-              />
+            <div className="space-y-2 sm:space-y-3">
+              {/* BIM Models - click to open side panel */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                    <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </div>
+                  <span className="text-xs sm:text-sm">BIM-modeller</span>
+                </div>
+                <Button
+                  variant={activeSubMenu === 'models' ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2"
+                  onClick={() => setActiveSubMenu(activeSubMenu === 'models' ? null : 'models')}
+                >
+                  <ChevronRight className={cn(
+                    "h-3 w-3 transition-transform",
+                    activeSubMenu === 'models' && "rotate-180"
+                  )} />
+                </Button>
+              </div>
 
-              {/* Floor visibility section with clipping support */}
-              <FloorVisibilitySelector
-                viewerRef={viewerRef}
-                buildingFmGuid={buildingFmGuid}
-                isViewerReady={isViewerReady}
-                onVisibleFloorsChange={handleVisibleFloorsChange}
-                enableClipping={true}
-              />
+              {/* Floors - click to open side panel */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                    <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </div>
+                  <span className="text-xs sm:text-sm">Våningsplan</span>
+                </div>
+                <Button
+                  variant={activeSubMenu === 'floors' ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2"
+                  onClick={() => setActiveSubMenu(activeSubMenu === 'floors' ? null : 'floors')}
+                  disabled={!isViewerReady}
+                >
+                  <ChevronRight className={cn(
+                    "h-3 w-3 transition-transform",
+                    activeSubMenu === 'floors' && "rotate-180"
+                  )} />
+                </Button>
+              </div>
 
               {/* Clipping height slider - visible when 2D mode is active */}
               {is2DMode && (
@@ -426,6 +461,39 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </div>
           </ScrollArea>
           </div>
+          
+          {/* Side-pop panel for BIM Models */}
+          <SidePopPanel
+            isOpen={activeSubMenu === 'models'}
+            onClose={() => setActiveSubMenu(null)}
+            title="BIM-modeller"
+            parentPosition={position}
+            parentWidth={panelWidth}
+          >
+            <ModelVisibilitySelector
+              viewerRef={viewerRef}
+              buildingFmGuid={buildingFmGuid}
+              listOnly={true}
+            />
+          </SidePopPanel>
+          
+          {/* Side-pop panel for Floors */}
+          <SidePopPanel
+            isOpen={activeSubMenu === 'floors'}
+            onClose={() => setActiveSubMenu(null)}
+            title="Våningsplan"
+            parentPosition={position}
+            parentWidth={panelWidth}
+          >
+            <FloorVisibilitySelector
+              viewerRef={viewerRef}
+              buildingFmGuid={buildingFmGuid}
+              isViewerReady={isViewerReady}
+              onVisibleFloorsChange={handleVisibleFloorsChange}
+              enableClipping={true}
+              listOnly={true}
+            />
+          </SidePopPanel>
         </TooltipProvider>
       )}
     </div>
