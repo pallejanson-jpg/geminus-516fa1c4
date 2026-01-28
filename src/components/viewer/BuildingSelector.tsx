@@ -1,18 +1,36 @@
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useContext, useState, useMemo, useEffect } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Building2, Search, Layers, MapPin, Box } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Building2, Search, Layers, MapPin, Box, Camera, Trash2, Calendar } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+
+interface SavedView {
+  id: string;
+  name: string;
+  description: string | null;
+  building_fm_guid: string;
+  building_name: string | null;
+  screenshot_url: string | null;
+  view_mode: string;
+  created_at: string;
+}
 
 /**
  * Building Selector component shown when 3D viewer is opened without a selected building
- * Allows users to select a building to view in 3D
+ * Now includes tabs for Buildings and Saved Views
  */
 const BuildingSelector: React.FC = () => {
   const { allData, setViewer3dFmGuid, isLoadingData } = useContext(AppContext);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('buildings');
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [isLoadingViews, setIsLoadingViews] = useState(false);
 
   // Extract buildings from allData
   const buildings = useMemo(() => {
@@ -29,6 +47,40 @@ const BuildingSelector: React.FC = () => {
       return name.includes(query) || complex.includes(query);
     });
   }, [buildings, searchQuery]);
+
+  // Filter saved views by search query
+  const filteredViews = useMemo(() => {
+    if (!searchQuery.trim()) return savedViews;
+    const query = searchQuery.toLowerCase();
+    return savedViews.filter((view) => {
+      const name = (view.name || '').toLowerCase();
+      const building = (view.building_name || '').toLowerCase();
+      const desc = (view.description || '').toLowerCase();
+      return name.includes(query) || building.includes(query) || desc.includes(query);
+    });
+  }, [savedViews, searchQuery]);
+
+  // Fetch saved views
+  useEffect(() => {
+    const fetchSavedViews = async () => {
+      setIsLoadingViews(true);
+      try {
+        const { data, error } = await supabase
+          .from('saved_views')
+          .select('id, name, description, building_fm_guid, building_name, screenshot_url, view_mode, created_at')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setSavedViews(data || []);
+      } catch (err) {
+        console.error('Failed to fetch saved views:', err);
+      } finally {
+        setIsLoadingViews(false);
+      }
+    };
+
+    fetchSavedViews();
+  }, []);
 
   // Calculate metrics for a building
   const getBuildingMetrics = (buildingFmGuid: string) => {
@@ -65,6 +117,50 @@ const BuildingSelector: React.FC = () => {
     setViewer3dFmGuid(fmGuid);
   };
 
+  const handleSelectView = (view: SavedView) => {
+    // For now, just navigate to the building
+    // TODO: Pass saved view settings to restore camera position and settings
+    setViewer3dFmGuid(view.building_fm_guid);
+    toast({ title: "Laddar vy", description: `Öppnar "${view.name}"` });
+  };
+
+  const handleDeleteView = async (viewId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!confirm('Är du säker på att du vill ta bort denna sparade vy?')) return;
+    
+    try {
+      // Delete from database
+      const { error } = await supabase
+        .from('saved_views')
+        .delete()
+        .eq('id', viewId);
+
+      if (error) throw error;
+
+      // Delete screenshot from storage (ignore errors)
+      await supabase.storage
+        .from('saved-view-screenshots')
+        .remove([`${viewId}.png`]);
+
+      // Update local state
+      setSavedViews(prev => prev.filter(v => v.id !== viewId));
+      toast({ title: "Vy borttagen" });
+    } catch (err) {
+      console.error('Failed to delete view:', err);
+      toast({ title: "Fel", description: "Kunde inte ta bort vyn", variant: "destructive" });
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('sv-SE', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
   if (isLoadingData) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -76,106 +172,233 @@ const BuildingSelector: React.FC = () => {
     );
   }
 
-  if (buildings.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p className="text-sm">Inga byggnader tillgängliga</p>
-          <p className="text-xs mt-1">Synkronisera data från Asset+ för att komma igång</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col p-4 md:p-6">
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <Box className="h-5 w-5 text-primary" />
-          Välj byggnad för 3D-visning
+          3D-visning
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Välj en byggnad nedan för att öppna dess 3D-modell
+          Välj en byggnad eller en sparad vy
         </p>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Sök byggnad..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="buildings" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Byggnader
+            <Badge variant="secondary" className="text-xs ml-1">
+              {buildings.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="views" className="flex items-center gap-2">
+            <Camera className="h-4 w-4" />
+            Sparade vyer
+            <Badge variant="secondary" className="text-xs ml-1">
+              {savedViews.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Building Grid */}
-      <ScrollArea className="flex-1">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-          {filteredBuildings.map((building: any) => {
-            const metrics = getBuildingMetrics(building.fmGuid);
-            
-            return (
-              <Card
-                key={building.fmGuid}
-                className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]"
-                onClick={() => handleSelectBuilding(building.fmGuid)}
-              >
-                <CardContent className="p-4">
-                  {/* Building Icon */}
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-                    <Building2 className="h-6 w-6 text-primary" />
-                  </div>
-
-                  {/* Building Name */}
-                  <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">
-                    {building.commonName || building.name || 'Namnlös byggnad'}
-                  </h3>
-
-                  {/* Complex Name */}
-                  {building.complexCommonName && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <MapPin className="h-3 w-3" />
-                      <span className="line-clamp-1">{building.complexCommonName}</span>
-                    </div>
-                  )}
-
-                  {/* Metrics */}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {metrics.floors > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        <Layers className="h-3 w-3 mr-1" />
-                        {metrics.floors} vån
-                      </Badge>
-                    )}
-                    {metrics.rooms > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {metrics.rooms} rum
-                      </Badge>
-                    )}
-                    {metrics.area > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {metrics.area.toLocaleString('sv-SE')} m²
-                      </Badge>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={activeTab === 'buildings' ? 'Sök byggnad...' : 'Sök sparade vyer...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
         </div>
 
-        {/* No results */}
-        {filteredBuildings.length === 0 && searchQuery && (
-          <div className="text-center py-8 text-muted-foreground">
-            <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Inga byggnader matchade "{searchQuery}"</p>
-          </div>
-        )}
-      </ScrollArea>
+        {/* Buildings Tab */}
+        <TabsContent value="buildings" className="flex-1 min-h-0 mt-0">
+          {buildings.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Inga byggnader tillgängliga</p>
+                <p className="text-xs mt-1">Synkronisera data från Asset+ för att komma igång</p>
+              </div>
+            </div>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
+                {filteredBuildings.map((building: any) => {
+                  const metrics = getBuildingMetrics(building.fmGuid);
+                  
+                  return (
+                    <Card
+                      key={building.fmGuid}
+                      className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]"
+                      onClick={() => handleSelectBuilding(building.fmGuid)}
+                    >
+                      <CardContent className="p-4">
+                        {/* Building Icon */}
+                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                          <Building2 className="h-6 w-6 text-primary" />
+                        </div>
+
+                        {/* Building Name */}
+                        <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">
+                          {building.commonName || building.name || 'Namnlös byggnad'}
+                        </h3>
+
+                        {/* Complex Name */}
+                        {building.complexCommonName && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <MapPin className="h-3 w-3" />
+                            <span className="line-clamp-1">{building.complexCommonName}</span>
+                          </div>
+                        )}
+
+                        {/* Metrics */}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {metrics.floors > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              <Layers className="h-3 w-3 mr-1" />
+                              {metrics.floors} vån
+                            </Badge>
+                          )}
+                          {metrics.rooms > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {metrics.rooms} rum
+                            </Badge>
+                          )}
+                          {metrics.area > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {metrics.area.toLocaleString('sv-SE')} m²
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* No results */}
+              {filteredBuildings.length === 0 && searchQuery && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Inga byggnader matchade "{searchQuery}"</p>
+                </div>
+              )}
+            </ScrollArea>
+          )}
+        </TabsContent>
+
+        {/* Saved Views Tab */}
+        <TabsContent value="views" className="flex-1 min-h-0 mt-0">
+          {isLoadingViews ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3" />
+                <p className="text-sm">Laddar sparade vyer...</p>
+              </div>
+            </div>
+          ) : savedViews.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <Camera className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Inga sparade vyer</p>
+                <p className="text-xs mt-1">Öppna en byggnad och klicka på "Skapa vy" i Visningsmenyn</p>
+              </div>
+            </div>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
+                {filteredViews.map((view) => (
+                  <Card
+                    key={view.id}
+                    className="cursor-pointer transition-all hover:shadow-lg hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98] overflow-hidden group"
+                    onClick={() => handleSelectView(view)}
+                  >
+                    {/* Screenshot */}
+                    {view.screenshot_url ? (
+                      <div className="h-32 bg-muted relative">
+                        <img
+                          src={view.screenshot_url}
+                          alt={view.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleDeleteView(view.id, e)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="h-32 bg-muted flex items-center justify-center relative">
+                        <Camera className="h-8 w-8 text-muted-foreground/30" />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleDeleteView(view.id, e)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+
+                    <CardContent className="p-4">
+                      {/* View Name */}
+                      <h3 className="font-medium text-sm line-clamp-1">
+                        {view.name}
+                      </h3>
+
+                      {/* Building Name */}
+                      {view.building_name && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                          <Building2 className="h-3 w-3" />
+                          <span className="line-clamp-1">{view.building_name}</span>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {view.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {view.description}
+                        </p>
+                      )}
+
+                      {/* Metadata */}
+                      <div className="flex items-center gap-2 mt-3">
+                        <Badge variant={view.view_mode === '2d' ? 'default' : 'secondary'} className="text-xs">
+                          {view.view_mode === '2d' ? '2D' : '3D'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(view.created_at)}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* No results */}
+              {filteredViews.length === 0 && searchQuery && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Inga vyer matchade "{searchQuery}"</p>
+                </div>
+              )}
+            </ScrollArea>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

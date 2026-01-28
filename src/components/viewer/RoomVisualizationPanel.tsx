@@ -42,10 +42,16 @@ interface RoomData {
 // Custom event for forcing spaces visibility
 export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 
+// Floor selection changed event (for cache invalidation)
+const FLOOR_SELECTION_CHANGED_EVENT = 'FLOOR_SELECTION_CHANGED';
+
+// LocalStorage key for persisting visualization settings
+const STORAGE_KEY = 'roomVisualizationSettings';
 /**
  * Floating, draggable panel for visualizing rooms with color-coding based on sensor data.
  * OPTIMIZED: Uses in-memory allData instead of DB queries for performance.
  * Auto-activates "Visa Rum" on mount and supports floor filtering.
+ * Settings are persisted to localStorage across sessions.
  */
 const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   viewerRef,
@@ -57,16 +63,37 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 }) => {
   const { allData } = useContext(AppContext);
   
-  const [visualizationType, setVisualizationType] = useState<VisualizationType>('none');
-  const [useMockData, setUseMockData] = useState(false);
+  // Load initial state from localStorage
+  const [visualizationType, setVisualizationType] = useState<VisualizationType>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.type || 'none';
+      }
+    } catch (e) { /* ignore */ }
+    return 'none';
+  });
+  
+  const [useMockData, setUseMockData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.mock ?? false;
+      }
+    } catch (e) { /* ignore */ }
+    return false;
+  });
+  
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [colorizedCount, setColorizedCount] = useState(0);
   const [hasRealData, setHasRealData] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Cache for space entity IDs - built once from metaScene
+  // Cache for space entity IDs - built from metaScene, invalidated on floor changes
   const [entityIdCache, setEntityIdCache] = useState<Map<string, string[]>>(new Map());
-  const [isCacheBuilt, setIsCacheBuilt] = useState(false);
+  const [cacheKey, setCacheKey] = useState<string>(''); // For cache invalidation
 
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -128,6 +155,29 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, [isDragging, dragOffset]);
 
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        type: visualizationType,
+        mock: useMockData
+      }));
+    } catch (e) { /* ignore */ }
+  }, [visualizationType, useMockData]);
+
+  // Listen for floor selection changes to invalidate cache and re-apply visualization
+  useEffect(() => {
+    const handleFloorChange = () => {
+      // Invalidate cache by updating the cache key
+      setCacheKey(`${buildingFmGuid}-${Date.now()}`);
+    };
+    
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
+    return () => {
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
+    };
+  }, [buildingFmGuid]);
+
   // Get rooms from in-memory allData (FAST - no DB queries)
   const filteredRooms = useMemo(() => {
     if (!buildingFmGuid || !allData.length) return [];
@@ -184,10 +234,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     console.log(`Room visualization: ${filteredRooms.length} rooms (floor: ${floorInfo})`);
   }, [filteredRooms, visibleFloorFmGuids]);
 
-  // Build entity ID cache from metaScene (one-time, indexed for O(1) lookup)
+  // Build entity ID cache from metaScene (rebuild when cacheKey changes)
   useEffect(() => {
-    if (isCacheBuilt) return;
-    
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.metaScene?.metaObjects) return;
@@ -229,9 +277,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     });
     
     setEntityIdCache(cache);
-    setIsCacheBuilt(true);
     console.log(`Built entity ID cache for ${cache.size} spaces`);
-  }, [viewerRef, isCacheBuilt]);
+  }, [viewerRef, cacheKey, buildingFmGuid]);
 
   // Get item IDs by FmGuid using cache (fast O(1) lookup)
   const getItemIdsByFmGuid = useCallback((fmGuidToFind: string): string[] => {
@@ -338,19 +385,19 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     processChunk(0);
   }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors, isProcessing]);
 
-  // Apply visualization when type or mock data changes
+  // Apply visualization when type or mock data changes (AUTO-APPLY, no button needed)
   useEffect(() => {
-    if (rooms.length > 0 && isCacheBuilt) {
+    if (rooms.length > 0 && entityIdCache.size > 0) {
       applyVisualization();
     }
-  }, [visualizationType, useMockData, isCacheBuilt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visualizationType, useMockData, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-apply when rooms change (floor filter)
+  // Re-apply when rooms change (floor filter) - only if visualization is active
   useEffect(() => {
-    if (visualizationType !== 'none' && rooms.length > 0 && isCacheBuilt) {
+    if (visualizationType !== 'none' && rooms.length > 0 && entityIdCache.size > 0) {
       applyVisualization();
     }
-  }, [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rooms, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
@@ -466,7 +513,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions - only Reset, no Update button needed (auto-apply) */}
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -476,16 +523,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             disabled={colorizedCount === 0 || isProcessing}
           >
             <RefreshCw className="h-3 w-3 mr-1" />
-            Återställ
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            className="flex-1"
-            onClick={applyVisualization}
-            disabled={visualizationType === 'none' || isProcessing}
-          >
-            Uppdatera
+            Rensa färger
           </Button>
         </div>
       </div>
