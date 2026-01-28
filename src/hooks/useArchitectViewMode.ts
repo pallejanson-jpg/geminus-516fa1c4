@@ -15,13 +15,13 @@ import { useCallback, useRef } from 'react';
 
 // Color definitions (hex to RGB 0-1)
 const ARCHITECT_COLORS = {
-  facadeWall: [0.851, 0.847, 0.757],    // #D9D8C1
-  interiorWall: [0.973, 0.973, 0.965],   // #F8F8F6
-  door: [0.831, 0.894, 0.875],           // #D4E4DF
-  roof: [0.714, 0.698, 0.643],           // #B6B2A4
-  slab: [0.714, 0.698, 0.643],           // #B6B2A4
+  facadeWall: [0.686, 0.667, 0.529],     // #AFAA87
+  interiorWall: [0.761, 0.745, 0.635],   // #C2BEA2
+  door: [0.357, 0.467, 0.420],           // #5B776B
+  roof: [0.600, 0.608, 0.592],           // #999B97
+  slab: [0.600, 0.608, 0.592],           // #999B97
   space: [0.898, 0.894, 0.890],          // #E5E4E3
-  window: [0.753, 0.871, 0.929],         // #C0DEE
+  window: [0.392, 0.490, 0.541],         // #647D8A
   beam: [0.800, 0.788, 0.729],           // #CCC9BA
   column: [0.820, 0.808, 0.749],         // #D1CEBF
   stair: [0.780, 0.769, 0.710],          // #C7C4B5
