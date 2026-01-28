@@ -18,6 +18,8 @@ import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { CLIP_HEIGHT_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -848,6 +850,103 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
     return cleanupHoverHighlight;
   }, [hoverHighlightEnabled, state.isInitialized, setupHoverHighlight, cleanupHoverHighlight]);
+
+  // Listen for saved view loading events
+  useEffect(() => {
+    const handleLoadSavedView = (e: CustomEvent<LoadSavedViewDetail>) => {
+      const viewData = e.detail;
+      console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
+      
+      // Wait for viewer to be initialized and model loaded
+      if (!state.isInitialized || modelLoadState !== 'loaded') {
+        console.log('Viewer not ready yet, will retry after model loads');
+        // Store the pending view data and apply after model loads
+        const retryHandler = () => {
+          setTimeout(() => {
+            applyViewSettings(viewData);
+          }, 500);
+        };
+        // Retry after a delay
+        setTimeout(retryHandler, 1000);
+        return;
+      }
+      
+      applyViewSettings(viewData);
+    };
+    
+    const applyViewSettings = (viewData: LoadSavedViewDetail) => {
+      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xeokitViewer) {
+        console.warn('Could not get xeokit viewer for saved view');
+        return;
+      }
+      
+      console.log('Applying saved view settings:', viewData);
+      
+      // 1. Set camera position
+      if (viewData.cameraEye && viewData.cameraLook && viewData.cameraUp) {
+        const camera = xeokitViewer.camera;
+        if (camera) {
+          // Set projection first
+          camera.projection = viewData.cameraProjection || 'perspective';
+          
+          // Fly to saved position
+          xeokitViewer.cameraFlight?.flyTo({
+            eye: viewData.cameraEye,
+            look: viewData.cameraLook,
+            up: viewData.cameraUp,
+            duration: 0.8,
+          });
+        }
+      }
+      
+      // 2. Set 2D/3D mode
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
+          detail: { mode: viewData.viewMode }
+        }));
+        
+        // 3. Set clip height if in 2D mode
+        if (viewData.viewMode === '2d' && viewData.clipHeight) {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, {
+              detail: { height: viewData.clipHeight }
+            }));
+          }, 300);
+        }
+      }, 100);
+      
+      // 4. Set show spaces
+      if (viewData.showSpaces) {
+        try {
+          const assetViewer = viewerInstanceRef.current?.assetViewer;
+          assetViewer?.onShowSpacesChanged?.(true);
+        } catch (e) {
+          console.debug('Could not set show spaces:', e);
+        }
+      }
+      
+      // 5. Set show annotations
+      if (viewData.showAnnotations) {
+        try {
+          const viewer = viewerInstanceRef.current?.assetViewer;
+          if (viewer && typeof viewer.onToggleAnnotation === 'function') {
+            viewer.onToggleAnnotation(true);
+            setShowAnnotations(true);
+          }
+        } catch (e) {
+          console.debug('Could not set show annotations:', e);
+        }
+      }
+      
+      toast.success('Vy laddad', { duration: 2000 });
+    };
+    
+    window.addEventListener(LOAD_SAVED_VIEW_EVENT, handleLoadSavedView as EventListener);
+    return () => {
+      window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handleLoadSavedView as EventListener);
+    };
+  }, [state.isInitialized, modelLoadState]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
