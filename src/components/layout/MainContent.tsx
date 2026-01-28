@@ -8,6 +8,7 @@ import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
 import Viewer from "@/pages/Viewer";
 import InsightsView from "@/components/insights/InsightsView";
+import EntityInsightsView from "@/components/insights/EntityInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
 
 // Lazy load heavy views
@@ -16,7 +17,7 @@ const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 const Inventory = lazy(() => import("@/pages/Inventory"));
 
 const MainContent: React.FC = () => {
-    const { theme, activeApp } = useContext(AppContext);
+    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp } = useContext(AppContext);
     const t = THEMES[theme];
 
     const renderContent = () => {
@@ -53,6 +54,19 @@ const MainContent: React.FC = () => {
                     </Suspense>
                 );
             case 'insights':
+                return <InsightsView />;
+            case 'entity_insights':
+                if (insightsFacility) {
+                    return (
+                        <EntityInsightsView 
+                            facility={insightsFacility} 
+                            onBack={() => {
+                                setInsightsFacility(null);
+                                setActiveApp('portfolio');
+                            }} 
+                        />
+                    );
+                }
                 return <InsightsView />;
             case 'asset_plus':
                 return (

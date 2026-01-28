@@ -6,6 +6,8 @@ interface BuildingSettings {
     fmGuid: string;
     isFavorite: boolean;
     ivionSiteId: string | null;
+    latitude: number | null;
+    longitude: number | null;
 }
 
 export function useBuildingSettings(fmGuid: string | null) {
@@ -33,6 +35,8 @@ export function useBuildingSettings(fmGuid: string | null) {
                     fmGuid: data.fm_guid,
                     isFavorite: data.is_favorite,
                     ivionSiteId: data.ivion_site_id,
+                    latitude: data.latitude ?? null,
+                    longitude: data.longitude ?? null,
                 });
             } else {
                 // No settings yet, use defaults
@@ -40,6 +44,8 @@ export function useBuildingSettings(fmGuid: string | null) {
                     fmGuid,
                     isFavorite: false,
                     ivionSiteId: null,
+                    latitude: null,
+                    longitude: null,
                 });
             }
         } catch (error) {
@@ -67,6 +73,12 @@ export function useBuildingSettings(fmGuid: string | null) {
                     ivion_site_id: updates.ivionSiteId !== undefined 
                         ? updates.ivionSiteId 
                         : settings?.ivionSiteId ?? null,
+                    latitude: updates.latitude !== undefined
+                        ? updates.latitude
+                        : settings?.latitude ?? null,
+                    longitude: updates.longitude !== undefined
+                        ? updates.longitude
+                        : settings?.longitude ?? null,
                 }, { 
                     onConflict: 'fm_guid' 
                 });
@@ -103,12 +115,18 @@ export function useBuildingSettings(fmGuid: string | null) {
         await saveSettings({ ivionSiteId: siteId });
     }, [saveSettings]);
 
+    // Update map position
+    const updateMapPosition = useCallback(async (lat: number | null, lng: number | null) => {
+        await saveSettings({ latitude: lat, longitude: lng });
+    }, [saveSettings]);
+
     return {
         settings,
         isLoading,
         isSaving,
         toggleFavorite,
         updateIvionSiteId,
+        updateMapPosition,
         refetch: fetchSettings,
     };
 }
