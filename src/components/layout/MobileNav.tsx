@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Box, LayoutGrid, Globe, Network, Cuboid, Home, X } from 'lucide-react';
+import { Box, LayoutGrid, Globe, Network, Cuboid, Home, X, ClipboardList } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -92,7 +92,16 @@ const MobileNav: React.FC<MobileNavProps> = ({
                                 <span className="text-[10px] mt-1">3D Viewer</span>
                             </AppButton>
                             
-                            {Object.entries(DEFAULT_APP_CONFIGS).slice(0, 3).map(([key, cfg]: [string, any]) => {
+                            <AppButton 
+                                onClick={() => handleAppClick('inventory')} 
+                                variant="ghost" 
+                                className={`flex-col !h-auto !w-auto !p-2 ${activeApp === 'inventory' ? 'text-primary' : t.textSec}`}
+                            >
+                                <ClipboardList size={22} />
+                                <span className="text-[10px] mt-1">Inventering</span>
+                            </AppButton>
+                            
+                            {Object.entries(DEFAULT_APP_CONFIGS).slice(0, 2).map(([key, cfg]: [string, any]) => {
                                 const IconComp = cfg.icon || Box;
                                 return (
                                     <AppButton 

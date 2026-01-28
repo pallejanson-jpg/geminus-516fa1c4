@@ -13,6 +13,7 @@ import Ivion360View from "@/components/viewer/Ivion360View";
 // Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
 const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
+const Inventory = lazy(() => import("@/pages/Inventory"));
 
 const MainContent: React.FC = () => {
     const { theme, activeApp } = useContext(AppContext);
@@ -71,6 +72,16 @@ const MainContent: React.FC = () => {
                 );
             case 'radar':
                 return <Ivion360View onClose={() => {}} />;
+            case 'inventory':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <Inventory />
+                    </Suspense>
+                );
             default:
                 return <HomeLanding />;
         }
