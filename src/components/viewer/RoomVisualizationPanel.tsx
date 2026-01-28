@@ -125,7 +125,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         .from('assets')
         .select('fm_guid, name, level_fm_guid, attributes')
         .eq('category', 'Space')
-        .or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`);
+        .ilike('building_fm_guid', buildingFmGuid);
 
       const { data, error } = await query;
 
@@ -209,8 +209,10 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (entity) {
           if (color) {
             entity.colorize = rgbToFloat(color);
+            entity.opacity = 0.6; // Match BIM model transparency
           } else {
             entity.colorize = null; // Reset to default
+            entity.opacity = 1.0; // Reset opacity
           }
         }
       });
@@ -288,7 +290,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       ref={panelRef}
       className={cn(
         'fixed z-[55] w-72',
-        'bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl',
+        'bg-card/60 backdrop-blur-md border rounded-lg shadow-xl',
         isDragging && 'cursor-grabbing opacity-90',
         className
       )}

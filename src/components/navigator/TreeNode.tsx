@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Plus, Eye, Box, Square } from "lucide-react";
+import { ChevronRight, Plus, Eye, Box, Square, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,8 @@ export type NavigatorNode = {
   commonName?: string;
   name?: string;
   children?: NavigatorNode[];
+  buildingFmGuid?: string;
+  levelFmGuid?: string;
   [key: string]: any;
 };
 
@@ -26,10 +28,11 @@ type Props = {
   onView?: (node: NavigatorNode) => void;
   onOpen3D?: (node: NavigatorNode) => void;
   onOpen2D?: (node: NavigatorNode) => void;
+  onInventory?: (node: NavigatorNode) => void;
   selectedFmGuids?: Set<string>;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, selectedFmGuids }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, onInventory, selectedFmGuids }: Props) {
   const label = node.commonName || node.name || "(unnamed)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
@@ -41,6 +44,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const canView = true; // All nodes can be viewed
   const canOpen3D = true; // All nodes can potentially have 3D models
   const canOpen2D = node.category === 'Building Storey'; // 2D view only for floors
+  const canInventory = node.category === 'Building' || node.category === 'Building Storey' || node.category === 'Space';
 
   // Get child count and appropriate label
   const childCount = node.children?.length || 0;
@@ -102,6 +106,26 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
 
         {/* Action buttons - visible on hover */}
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {canInventory && onInventory && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInventory(node);
+                  }}
+                  className="h-6 w-6"
+                  aria-label="Inventera"
+                >
+                  <ClipboardList className="h-3.5 w-3.5 text-orange-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Inventera här</TooltipContent>
+            </Tooltip>
+          )}
           {canOpen2D && onOpen2D && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -198,6 +222,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               onView={onView}
               onOpen3D={onOpen3D}
               onOpen2D={onOpen2D}
+              onInventory={onInventory}
               selectedFmGuids={selectedFmGuids}
             />
           ))}
