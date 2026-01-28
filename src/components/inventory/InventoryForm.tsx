@@ -38,6 +38,7 @@ interface InventoryFormProps {
   };
   editItem?: InventoryItem | null;
   onClearEdit?: () => void;
+  onOpen360?: (url: string) => void; // Callback for inline 360 view on desktop
 }
 
 export const INVENTORY_CATEGORIES = [
@@ -54,7 +55,7 @@ export const INVENTORY_CATEGORIES = [
   { value: 'other', label: 'Övrigt', icon: '📦' },
 ];
 
-const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit }) => {
+const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -174,7 +175,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   };
 
   // Handler for opening Ivion 360
-  const handleOpen360 = () => {
+  const handleOpen360Internal = () => {
     const ivionUrl = localStorage.getItem('ivionApiUrl');
     const siteId = buildingSettings?.ivion_site_id;
 
@@ -193,9 +194,17 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     }
 
     // Use configured URL or default to swg.iv.navvis.com
+    // FIX: Use /?site= query parameter format instead of /site/
     const baseUrl = ivionUrl || 'https://swg.iv.navvis.com';
-    window.open(`${baseUrl}/site/${siteId}`, '_blank');
-    toast.info('Ivion öppnat i ny flik');
+    const fullUrl = `${baseUrl}/?site=${siteId}`;
+
+    // If callback exists (desktop inline view), use it. Otherwise open in new tab.
+    if (onOpen360) {
+      onOpen360(fullUrl);
+    } else {
+      window.open(fullUrl, '_blank');
+      toast.info('Ivion öppnat i ny flik');
+    }
   };
 
   const handleSubmit = async () => {
@@ -528,7 +537,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             <Button
               type="button"
               variant="outline"
-              onClick={handleOpen360}
+              onClick={handleOpen360Internal}
               className="h-12"
             >
               <Eye className="h-4 w-4 mr-2" />

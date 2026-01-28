@@ -3,19 +3,16 @@ import { Loader2, ExternalLink, X, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Ivion360ViewProps {
+  url?: string; // Direct URL prop for inline usage
   onClose?: () => void;
 }
 
-export default function Ivion360View({ onClose }: Ivion360ViewProps) {
-  const [ivionUrl, setIvionUrl] = useState<string | null>(null);
+export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  useEffect(() => {
-    // Get the stored Ivion URL
-    const storedUrl = localStorage.getItem('ivion360Url');
-    setIvionUrl(storedUrl);
-  }, []);
+  // Use prop URL or fall back to localStorage
+  const ivionUrl = url || localStorage.getItem('ivion360Url');
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
