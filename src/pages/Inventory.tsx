@@ -22,6 +22,7 @@ export interface InventoryItem {
   attributes?: {
     description?: string;
     inventoryDate?: string;
+    imageUrl?: string;
   };
 }
 
@@ -31,6 +32,7 @@ const Inventory: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
 
   // Auto-open form if we have prefill data
   useEffect(() => {
@@ -40,38 +42,58 @@ const Inventory: React.FC = () => {
   }, [inventoryPrefill]);
 
   // Load recently created local assets on mount
+  const loadRecentItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('fm_guid, name, asset_type, symbol_id, building_fm_guid, level_fm_guid, in_room_fm_guid, created_at, attributes')
+        .eq('is_local', true)
+        .eq('created_in_model', false)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setSavedItems((data as InventoryItem[]) || []);
+    } catch (err) {
+      console.error('Failed to load inventory items:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadRecentItems = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('assets')
-          .select('fm_guid, name, asset_type, symbol_id, building_fm_guid, level_fm_guid, in_room_fm_guid, created_at, attributes')
-          .eq('is_local', true)
-          .eq('created_in_model', false)
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (error) throw error;
-        setSavedItems((data as InventoryItem[]) || []);
-      } catch (err) {
-        console.error('Failed to load inventory items:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadRecentItems();
   }, []);
 
   const handleSaved = (item: InventoryItem) => {
-    setSavedItems(prev => [item, ...prev]);
+    // If editing, update the item in the list
+    if (editItem) {
+      setSavedItems(prev => prev.map(i => i.fm_guid === item.fm_guid ? item : i));
+    } else {
+      setSavedItems(prev => [item, ...prev]);
+    }
     setIsFormOpen(false);
+    setEditItem(null);
     clearInventoryPrefill();
+    // Reload to get fresh data
+    loadRecentItems();
   };
 
   const handleCloseForm = () => {
     setIsFormOpen(false);
+    setEditItem(null);
     clearInventoryPrefill();
+  };
+
+  const handleEdit = (item: InventoryItem) => {
+    setEditItem(item);
+    if (isMobile) {
+      setIsFormOpen(true);
+    }
+  };
+
+  const handleClearEdit = () => {
+    setEditItem(null);
   };
 
   // Desktop layout: side-by-side with form always visible
@@ -87,17 +109,26 @@ const Inventory: React.FC = () => {
               {savedItems.length} sparade
             </Badge>
           </div>
-          <InventoryList items={savedItems} isLoading={isLoading} />
+          <InventoryList 
+            items={savedItems} 
+            isLoading={isLoading} 
+            onEdit={handleEdit}
+            selectedFmGuid={editItem?.fm_guid}
+          />
         </div>
 
         {/* Right column: Registration form - always visible */}
         <div className="flex-1 max-w-xl">
           <Card className="p-6 h-full overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">Registrera ny tillgång</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
+            </h2>
             <InventoryForm
               onSaved={handleSaved}
-              onCancel={() => {}}
+              onCancel={handleClearEdit}
               prefill={inventoryPrefill || undefined}
+              editItem={editItem}
+              onClearEdit={handleClearEdit}
             />
           </Card>
         </div>
@@ -123,14 +154,22 @@ const Inventory: React.FC = () => {
       <Button
         size="lg"
         className="w-full h-16 text-lg gap-3"
-        onClick={() => setIsFormOpen(true)}
+        onClick={() => {
+          setEditItem(null);
+          setIsFormOpen(true);
+        }}
       >
         <Plus className="h-6 w-6" />
         Ny tillgång
       </Button>
 
       {/* Recently registered list */}
-      <InventoryList items={savedItems} isLoading={isLoading} />
+      <InventoryList 
+        items={savedItems} 
+        isLoading={isLoading} 
+        onEdit={handleEdit}
+        selectedFmGuid={editItem?.fm_guid}
+      />
 
       {/* Form as sheet/drawer on mobile */}
       <Sheet open={isFormOpen} onOpenChange={(open) => { if (!open) handleCloseForm(); else setIsFormOpen(true); }}>
@@ -139,12 +178,16 @@ const Inventory: React.FC = () => {
           className="h-[90vh] rounded-t-2xl overflow-y-auto"
         >
           <SheetHeader className="mb-4">
-            <SheetTitle className="text-xl">Registrera tillgång</SheetTitle>
+            <SheetTitle className="text-xl">
+              {editItem ? 'Redigera tillgång' : 'Registrera tillgång'}
+            </SheetTitle>
           </SheetHeader>
           <InventoryForm
             onSaved={handleSaved}
             onCancel={handleCloseForm}
             prefill={inventoryPrefill || undefined}
+            editItem={editItem}
+            onClearEdit={handleClearEdit}
           />
         </SheetContent>
       </Sheet>

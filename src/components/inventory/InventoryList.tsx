@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { Package, Loader2, AlertCircle } from 'lucide-react';
+import { Package, Loader2, AlertCircle, Pencil } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,9 +12,11 @@ import type { InventoryItem } from '@/pages/Inventory';
 interface InventoryListProps {
   items: InventoryItem[];
   isLoading: boolean;
+  onEdit?: (item: InventoryItem) => void;
+  selectedFmGuid?: string | null;
 }
 
-const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading }) => {
+const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit, selectedFmGuid }) => {
   const { navigatorTreeData } = useContext(AppContext);
 
   // Helper to find names from tree data
@@ -71,7 +73,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading }) => {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <h2 className="text-sm font-medium text-muted-foreground mb-2">
-        Senast registrerade
+        Senast registrerade {onEdit && <span className="text-xs">(klicka för att redigera)</span>}
       </h2>
       <ScrollArea className="flex-1">
         <div className="space-y-2 pr-2">
@@ -100,10 +102,17 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading }) => {
                 })
               : 'Just nu';
 
+            const isSelected = selectedFmGuid === item.fm_guid;
+
             return (
               <Card
                 key={item.fm_guid}
-                className="p-3 hover:bg-accent/50 transition-colors cursor-pointer"
+                className={`p-3 transition-colors cursor-pointer ${
+                  isSelected 
+                    ? 'bg-primary/10 border-primary' 
+                    : 'hover:bg-accent/50'
+                }`}
+                onClick={() => onEdit?.(item)}
               >
                 <div className="flex items-start gap-3">
                   <span className="text-xl">{cat.icon}</span>
@@ -124,6 +133,9 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading }) => {
                     )}
                     <p className="text-xs text-muted-foreground mt-0.5">{timeAgo}</p>
                   </div>
+                  {onEdit && (
+                    <Pencil className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                  )}
                 </div>
               </Card>
             );
