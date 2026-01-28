@@ -426,10 +426,29 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   }, [onAddAsset]);
 
   // Handle visible floors change from floor selector
+  // Re-apply spaces visibility to ensure only selected floors' spaces are shown
   const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
     console.log("Visible floors changed:", visibleFloorIds);
     onVisibleFloorsChange?.(visibleFloorIds);
-  }, [onVisibleFloorsChange]);
+    
+    // Re-sync spaces visibility with floor filtering
+    // This ensures only visible floors' spaces are shown if showSpaces is enabled
+    try {
+      const assetViewer = viewerRef.current?.assetViewer;
+      if (assetViewer?.onShowSpacesChanged) {
+        // First hide all spaces
+        assetViewer.onShowSpacesChanged(false);
+        // Then re-enable only if showSpaces is on (with small delay for floor filtering to complete)
+        if (showSpaces) {
+          setTimeout(() => {
+            assetViewer.onShowSpacesChanged(true);
+          }, 100);
+        }
+      }
+    } catch (e) {
+      console.debug("Could not sync spaces visibility:", e);
+    }
+  }, [onVisibleFloorsChange, viewerRef, showSpaces]);
 
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",

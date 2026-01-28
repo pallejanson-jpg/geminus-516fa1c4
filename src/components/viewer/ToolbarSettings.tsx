@@ -37,12 +37,13 @@ export interface ToolConfig {
 }
 
 // Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 4;
+const SETTINGS_VERSION = 5;
 
 // Custom event name for same-tab settings updates
 export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
 
 // Navigation tools - shown in the bottom toolbar (interaction & navigation only)
+// NOTE: viewMode removed - exists in VisualizationToolbar (2D/3D toggle)
 export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'orbit', label: 'Orbit (rotera)', visible: true, inOverflow: false },
   { id: 'firstPerson', label: 'Första person', visible: true, inOverflow: false },
@@ -53,25 +54,25 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'select', label: 'Välj objekt', visible: true, inOverflow: false },
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
-  { id: 'viewMode', label: '2D/3D växla', visible: true, inOverflow: false },
   { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: false },
   { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: false },
 ];
 
 // Visualization tools - shown in the right sidebar toolbar (view options & toggles)
+// NOTE: Removed duplicates that exist in VisualizationToolbar:
+// - annotations (Visa annotationer)
+// - bimModels (BIM-modeller)
+// - floors (Våningsplan)
+// - addAsset (Registrera tillgång)
 export const VISUALIZATION_TOOLS: ToolConfig[] = [
   { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: false },
   { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: false },
-  { id: 'annotations', label: 'Annotationer', visible: true, inOverflow: false },
   { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
   { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
   { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
   { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
-  { id: 'bimModels', label: 'BIM-modeller', visible: true, inOverflow: false },
-  { id: 'floors', label: 'Våningsplan', visible: true, inOverflow: false },
   { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
   { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
-  { id: 'addAsset', label: 'Registrera tillgång', visible: true, inOverflow: false },
 ];
 
 // Combined default tools for backward compatibility

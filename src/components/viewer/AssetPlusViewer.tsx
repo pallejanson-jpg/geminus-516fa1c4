@@ -476,6 +476,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       console.debug("Could not enable annotations:", e);
     }
 
+    // CRITICAL: Ensure spaces (rooms) are hidden by default
+    // This prevents rooms from showing when floor cutout is applied
+    try {
+      const viewer = viewerInstanceRef.current;
+      const assetViewer = viewer?.assetViewer;
+      if (assetViewer?.onShowSpacesChanged) {
+        assetViewer.onShowSpacesChanged(false);
+        console.log("Spaces hidden by default");
+      }
+    } catch (e) {
+      console.debug("Could not hide spaces:", e);
+    }
+
     // Initialize NavCube using custom plugin
     try {
       const viewer = viewerInstanceRef.current;
