@@ -1077,24 +1077,55 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       
-      // Only intercept XKT file requests
-      if (url.includes('.xkt')) {
+      // Intercept both .xkt files AND GetXktData API calls
+      const isXktRequest = url.includes('.xkt') || url.includes('/GetXktData');
+      
+      if (isXktRequest) {
         console.log('XKT request intercepted:', url);
         setCacheStatus('checking');
         
-        try {
-          // Try to get cached version
-          const cachedData = await xktCacheService.fetchWithCache(url, currentBuildingFmGuid, init);
-          setCacheStatus('hit');
-          
-          // Return as a Response object
-          return new Response(cachedData, {
-            status: 200,
-            headers: { 'Content-Type': 'application/octet-stream' }
-          });
-        } catch (e) {
-          console.warn('Cache fetch failed, using original:', e);
-          setCacheStatus('miss');
+        // Extract model ID from GetXktData URL if present
+        const modelIdMatch = url.match(/modelid=([^&]+)/i);
+        const modelId = modelIdMatch ? modelIdMatch[1] : xktCacheService.extractModelIdFromUrl(url);
+        
+        if (modelId && currentBuildingFmGuid) {
+          try {
+            // Check cache first
+            const cachedUrl = await xktCacheService.getCachedModel(modelId, currentBuildingFmGuid);
+            
+            if (cachedUrl) {
+              console.log('XKT cache hit for:', modelId);
+              setCacheStatus('hit');
+              const cachedResponse = await originalFetch(cachedUrl);
+              if (cachedResponse.ok) {
+                return cachedResponse;
+              }
+            }
+            
+            console.log('XKT cache miss, fetching from source:', modelId);
+            setCacheStatus('miss');
+            
+            // Fetch from original source
+            const response = await originalFetch(input, init);
+            
+            if (response.ok) {
+              // Clone response to read body and still return it
+              const clonedResponse = response.clone();
+              
+              // Store in cache in background (don't await)
+              clonedResponse.arrayBuffer().then(async (data) => {
+                console.log('XKT storing to cache:', modelId, `(${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                await xktCacheService.storeModel(modelId, data, currentBuildingFmGuid);
+                setCacheStatus('stored');
+              }).catch(e => {
+                console.warn('XKT cache store failed:', e);
+              });
+            }
+            
+            return response;
+          } catch (e) {
+            console.warn('XKT cache error, using original fetch:', e);
+          }
         }
       }
       
