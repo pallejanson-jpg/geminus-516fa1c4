@@ -315,17 +315,32 @@ export function useSectionPlaneClipping(
   const updateFloorCutHeight = useCallback((newHeight: number) => {
     floorCutHeightRef.current = newHeight;
     
-    // Re-apply clipping if currently in floor mode (works for both specific floor and global)
+    // Get viewer and scene info
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) {
+      console.debug('No viewer available for clip height update');
+      return;
+    }
+    
+    // Re-apply clipping if currently in floor mode OR if we should be in floor mode
+    // This allows the slider to work even if the mode wasn't set properly
     if (currentClipModeRef.current === 'floor') {
       if (currentFloorIdRef.current) {
         applySectionPlane(currentFloorIdRef.current, 'floor');
       } else {
         // Global clipping - get scene base and re-apply
-        const viewer = getXeokitViewer();
-        const sceneAABB = viewer?.scene?.getAABB?.();
+        const sceneAABB = viewer.scene?.getAABB?.();
         if (sceneAABB) {
           applyGlobalFloorPlanClipping(sceneAABB[1]);
         }
+      }
+    } else {
+      // Even if mode isn't set to 'floor', if we're adjusting clip height,
+      // the user probably wants floor clipping. Apply global clipping.
+      console.log('Clip height changed but mode was not floor, applying global clipping');
+      const sceneAABB = viewer.scene?.getAABB?.();
+      if (sceneAABB) {
+        applyGlobalFloorPlanClipping(sceneAABB[1]);
       }
     }
   }, [applySectionPlane, getXeokitViewer, applyGlobalFloorPlanClipping]);
