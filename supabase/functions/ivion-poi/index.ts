@@ -45,10 +45,14 @@ async function getIvionToken(): Promise<string> {
     throw new Error('Ivion API credentials not configured');
   }
 
-  const response = await fetch(`${IVION_API_URL}/api/auth/token`, {
+  // NavVis IVION uses /api/auth/login with JSON body
+  const response = await fetch(`${IVION_API_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `username=${encodeURIComponent(IVION_USERNAME)}&password=${encodeURIComponent(IVION_PASSWORD)}`,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: IVION_USERNAME,
+      password: IVION_PASSWORD,
+    }),
   });
 
   if (!response.ok) {
