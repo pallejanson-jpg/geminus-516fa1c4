@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X } from 'lucide-react';
+import { Loader2, Crosshair, Eye, X, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +36,8 @@ interface InventoryFormProps {
     levelFmGuid?: string;
     roomFmGuid?: string;
   };
+  editItem?: InventoryItem | null;
+  onClearEdit?: () => void;
 }
 
 export const INVENTORY_CATEGORIES = [
@@ -52,9 +54,10 @@ export const INVENTORY_CATEGORIES = [
   { value: 'other', label: 'Övrigt', icon: '📦' },
 ];
 
-const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill }) => {
+const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Form state - initialized with prefill values
   const [name, setName] = useState('');
@@ -72,6 +75,61 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
   // Building settings for Ivion
   const [buildingSettings, setBuildingSettings] = useState<{ ivion_site_id: string | null } | null>(null);
+
+  // Track the fm_guid when editing
+  const [editingFmGuid, setEditingFmGuid] = useState<string | null>(null);
+
+  // Load edit item data
+  useEffect(() => {
+    if (editItem) {
+      setIsEditing(true);
+      setEditingFmGuid(editItem.fm_guid);
+      setName(editItem.name || '');
+      setCategory(editItem.asset_type || '');
+      setSymbolId(editItem.symbol_id || '');
+      setBuildingFmGuid(editItem.building_fm_guid || '');
+      setLevelFmGuid(editItem.level_fm_guid || '');
+      setRoomFmGuid(editItem.in_room_fm_guid || '');
+      setDescription(editItem.attributes?.description || '');
+      setImageUrl((editItem.attributes as any)?.imageUrl || null);
+      
+      // Load coordinates if they exist
+      loadCoordinates(editItem.fm_guid);
+    } else {
+      // Reset form for new item
+      resetForm();
+    }
+  }, [editItem]);
+
+  const loadCoordinates = async (fmGuid: string) => {
+    const { data } = await supabase
+      .from('assets')
+      .select('coordinate_x, coordinate_y, coordinate_z')
+      .eq('fm_guid', fmGuid)
+      .maybeSingle();
+    
+    if (data && data.coordinate_x !== null && data.coordinate_y !== null && data.coordinate_z !== null) {
+      setCoordinates({
+        x: Number(data.coordinate_x),
+        y: Number(data.coordinate_y),
+        z: Number(data.coordinate_z),
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setIsEditing(false);
+    setEditingFmGuid(null);
+    setName('');
+    setDescription('');
+    setCategory('');
+    setSymbolId('');
+    setBuildingFmGuid(prefill?.buildingFmGuid || '');
+    setLevelFmGuid(prefill?.levelFmGuid || '');
+    setRoomFmGuid(prefill?.roomFmGuid || '');
+    setImageUrl(null);
+    setCoordinates(null);
+  };
 
   // Fetch symbols on mount
   useEffect(() => {
@@ -120,9 +178,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     const ivionUrl = localStorage.getItem('ivionApiUrl');
     const siteId = buildingSettings?.ivion_site_id;
 
-    if (!ivionUrl) {
+    if (!ivionUrl && !siteId) {
       toast.error('Ivion ej konfigurerad', {
-        description: 'Konfigurera Ivion-URL i API-inställningar',
+        description: 'Ange Ivion Site ID för byggnaden under byggnadsinställningar, och konfigurera IVION_API_URL i Cloud-secrets.',
       });
       return;
     }
@@ -134,8 +192,9 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       return;
     }
 
-    // Open Ivion - user will have to manually select position
-    window.open(`${ivionUrl}/site/${siteId}`, '_blank');
+    // Use configured URL or default to swg.iv.navvis.com
+    const baseUrl = ivionUrl || 'https://swg.iv.navvis.com';
+    window.open(`${baseUrl}/site/${siteId}`, '_blank');
     toast.info('Ivion öppnat i ny flik');
   };
 
@@ -162,66 +221,128 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
     try {
       const inventoryDate = new Date().toISOString();
-      const newFmGuid = crypto.randomUUID();
       
-      // Structure attributes to be compatible with Asset+ sync format
-      const newAsset = {
-        fm_guid: newFmGuid,
-        name: name.trim(),
-        common_name: name.trim(),
-        category: 'Instance',
-        asset_type: category,
-        symbol_id: symbolId,
-        building_fm_guid: buildingFmGuid,
-        level_fm_guid: levelFmGuid || null,
-        in_room_fm_guid: roomFmGuid || null,
-        created_in_model: false,
-        is_local: true,
-        annotation_placed: !!coordinates,
-        coordinate_x: coordinates?.x ?? null,
-        coordinate_y: coordinates?.y ?? null,
-        coordinate_z: coordinates?.z ?? null,
-        attributes: {
-          // Asset+ compatible fields
-          objectType: 4, // Instance type
-          designation: name.trim(),
-          commonName: name.trim(),
-          inRoomFmGuid: roomFmGuid || null,
-          levelFmGuid: levelFmGuid || null,
-          buildingFmGuid: buildingFmGuid,
-          // Custom fields
-          assetCategory: category,
-          description: description.trim() || null,
-          inventoryDate: inventoryDate,
-          imageUrl: imageUrl || null,
-          // Properties array for future Asset+ sync
-          syncProperties: [
-            { name: 'Description', value: description.trim() || '', dataType: 0 },
-            { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
-            { name: 'AssetCategory', value: category, dataType: 0 },
-          ],
-        },
-      };
+      if (isEditing && editingFmGuid) {
+        // Update existing asset
+        const updateData = {
+          name: name.trim(),
+          common_name: name.trim(),
+          asset_type: category,
+          symbol_id: symbolId,
+          building_fm_guid: buildingFmGuid,
+          level_fm_guid: levelFmGuid || null,
+          in_room_fm_guid: roomFmGuid || null,
+          annotation_placed: !!coordinates,
+          coordinate_x: coordinates?.x ?? null,
+          coordinate_y: coordinates?.y ?? null,
+          coordinate_z: coordinates?.z ?? null,
+          attributes: {
+            objectType: 4,
+            designation: name.trim(),
+            commonName: name.trim(),
+            inRoomFmGuid: roomFmGuid || null,
+            levelFmGuid: levelFmGuid || null,
+            buildingFmGuid: buildingFmGuid,
+            assetCategory: category,
+            description: description.trim() || null,
+            inventoryDate: inventoryDate,
+            imageUrl: imageUrl || null,
+            syncProperties: [
+              { name: 'Description', value: description.trim() || '', dataType: 0 },
+              { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
+              { name: 'AssetCategory', value: category, dataType: 0 },
+            ],
+          },
+          updated_at: new Date().toISOString(),
+        };
 
-      const { error } = await supabase.from('assets').insert([newAsset]);
+        const { error } = await supabase
+          .from('assets')
+          .update(updateData)
+          .eq('fm_guid', editingFmGuid);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success('Tillgång sparad!');
-      onSaved({
-        fm_guid: newAsset.fm_guid,
-        name: newAsset.name,
-        asset_type: newAsset.asset_type,
-        symbol_id: newAsset.symbol_id,
-        building_fm_guid: newAsset.building_fm_guid,
-        level_fm_guid: newAsset.level_fm_guid,
-        in_room_fm_guid: newAsset.in_room_fm_guid,
-        attributes: {
-          description: description.trim() || undefined,
-          inventoryDate: inventoryDate,
-        },
-      });
+        toast.success('Tillgång uppdaterad!');
+        onSaved({
+          fm_guid: editingFmGuid,
+          name: name.trim(),
+          asset_type: category,
+          symbol_id: symbolId,
+          building_fm_guid: buildingFmGuid,
+          level_fm_guid: levelFmGuid || null,
+          in_room_fm_guid: roomFmGuid || null,
+          attributes: {
+            description: description.trim() || undefined,
+            inventoryDate: inventoryDate,
+          },
+        });
+        
+        // Clear edit mode
+        if (onClearEdit) onClearEdit();
+        resetForm();
+      } else {
+        // Create new asset
+        const newFmGuid = crypto.randomUUID();
+        
+        const newAsset = {
+          fm_guid: newFmGuid,
+          name: name.trim(),
+          common_name: name.trim(),
+          category: 'Instance',
+          asset_type: category,
+          symbol_id: symbolId,
+          building_fm_guid: buildingFmGuid,
+          level_fm_guid: levelFmGuid || null,
+          in_room_fm_guid: roomFmGuid || null,
+          created_in_model: false,
+          is_local: true,
+          annotation_placed: !!coordinates,
+          coordinate_x: coordinates?.x ?? null,
+          coordinate_y: coordinates?.y ?? null,
+          coordinate_z: coordinates?.z ?? null,
+          attributes: {
+            objectType: 4,
+            designation: name.trim(),
+            commonName: name.trim(),
+            inRoomFmGuid: roomFmGuid || null,
+            levelFmGuid: levelFmGuid || null,
+            buildingFmGuid: buildingFmGuid,
+            assetCategory: category,
+            description: description.trim() || null,
+            inventoryDate: inventoryDate,
+            imageUrl: imageUrl || null,
+            syncProperties: [
+              { name: 'Description', value: description.trim() || '', dataType: 0 },
+              { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
+              { name: 'AssetCategory', value: category, dataType: 0 },
+            ],
+          },
+        };
+
+        const { error } = await supabase.from('assets').insert([newAsset]);
+
+        if (error) throw error;
+
+        toast.success('Tillgång sparad!');
+        onSaved({
+          fm_guid: newAsset.fm_guid,
+          name: newAsset.name,
+          asset_type: newAsset.asset_type,
+          symbol_id: newAsset.symbol_id,
+          building_fm_guid: newAsset.building_fm_guid,
+          level_fm_guid: newAsset.level_fm_guid,
+          in_room_fm_guid: newAsset.in_room_fm_guid,
+          attributes: {
+            description: description.trim() || undefined,
+            inventoryDate: inventoryDate,
+          },
+        });
+        
+        resetForm();
+      }
     } catch (error: any) {
+      console.error('Save error:', error);
       toast.error('Kunde inte spara', {
         description: error.message,
       });
@@ -245,6 +366,27 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         handleSubmit();
       }}
     >
+      {/* Edit mode indicator */}
+      {isEditing && (
+        <div className="flex items-center justify-between bg-primary/10 border border-primary/30 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">Redigerar: {name || 'Tillgång'}</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (onClearEdit) onClearEdit();
+              resetForm();
+            }}
+          >
+            Avbryt redigering
+          </Button>
+        </div>
+      )}
+
       {/* Name - large input */}
       <div className="space-y-2">
         <Label className="text-base">Namn / Beteckning *</Label>
@@ -351,8 +493,8 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       {buildingFmGuid && (
         <div className="space-y-2">
           <Label className="text-base">Position (valfritt)</Label>
-          {coordinates ? (
-            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+          {coordinates && (
+            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Crosshair className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-mono text-xs sm:text-sm">
@@ -369,28 +511,34 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
                 <X className="h-4 w-4" />
               </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPositionDialogOpen(true)}
-                className="h-12"
-              >
-                <Crosshair className="h-4 w-4 mr-2" />
-                <span className="text-xs sm:text-sm">3D-position</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleOpen360}
-                className="h-12"
-                disabled={!buildingSettings?.ivion_site_id}
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                <span className="text-xs sm:text-sm">360+</span>
-              </Button>
-            </div>
+          )}
+          {/* Always show both buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPositionDialogOpen(true)}
+              className="h-12"
+            >
+              <Crosshair className="h-4 w-4 mr-2" />
+              <span className="text-xs sm:text-sm">
+                {coordinates ? 'Ändra 3D' : '3D-position'}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpen360}
+              className="h-12"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              <span className="text-xs sm:text-sm">360+</span>
+            </Button>
+          </div>
+          {!buildingSettings?.ivion_site_id && (
+            <p className="text-xs text-muted-foreground">
+              360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.
+            </p>
           )}
         </div>
       )}
@@ -419,14 +567,21 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Button
           type="button"
           variant="outline"
-          onClick={onCancel}
+          onClick={() => {
+            if (isEditing && onClearEdit) {
+              onClearEdit();
+              resetForm();
+            } else {
+              onCancel();
+            }
+          }}
           className="flex-1 h-12"
           disabled={isLoading}
         >
-          Avbryt
+          {isEditing ? 'Avbryt' : 'Rensa'}
         </Button>
         <Button type="submit" className="flex-1 h-12" disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Spara'}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isEditing ? 'Uppdatera' : 'Spara')}
         </Button>
       </div>
 

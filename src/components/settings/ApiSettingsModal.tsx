@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -916,15 +917,20 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : (
-                            <div className="space-y-6">
+                            <div className="space-y-4">
+                                <p className="text-sm text-muted-foreground">
+                                    API-secrets konfigureras via Lovable Cloud. Klicka på sektionerna nedan för att se detaljer.
+                                </p>
+                                
                                 {/* Asset+ API Section */}
-                                <div className="border rounded-lg p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Box className="h-5 w-5 text-primary" />
-                                            <h4 className="font-medium">Asset+</h4>
-                                        </div>
-                                        <div className="flex items-center gap-2">
+                                <details className="border rounded-lg group">
+                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
+                                        <Box className="h-5 w-5 text-primary" />
+                                        <span>Asset+</span>
+                                        <Badge variant="outline" className="ml-auto text-xs">Konfigurerad</Badge>
+                                    </summary>
+                                    <div className="px-4 pb-4 space-y-4 border-t pt-4">
+                                        <div className="flex items-center gap-2 mb-3">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -932,454 +938,143 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 className="gap-1 h-7 text-xs"
                                             >
                                                 {showSecrets ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                                {showSecrets ? 'Hide' : 'Show'}
+                                                {showSecrets ? 'Dölj' : 'Visa'}
                                             </Button>
                                             {!isEditMode ? (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => setIsEditMode(true)}
-                                                    className="gap-1 h-7 text-xs"
-                                                >
-                                                    <Edit2 className="h-3 w-3" />
-                                                    Edit
+                                                <Button variant="outline" size="sm" onClick={() => setIsEditMode(true)} className="gap-1 h-7 text-xs">
+                                                    <Edit2 className="h-3 w-3" /> Redigera
                                                 </Button>
                                             ) : (
                                                 <>
-                                                    <Button
-                                                        onClick={handleSaveConfig}
-                                                        disabled={isSaving}
-                                                        size="sm"
-                                                        className="gap-1 h-7 text-xs"
-                                                    >
-                                                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                                                        Save
+                                                    <Button onClick={handleSaveConfig} disabled={isSaving} size="sm" className="gap-1 h-7 text-xs">
+                                                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Spara
                                                     </Button>
-                                                    <Button
-                                                        onClick={handleCancelEdit}
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        disabled={isSaving}
-                                                        className="h-7 text-xs"
-                                                    >
-                                                        Cancel
-                                                    </Button>
+                                                    <Button onClick={handleCancelEdit} variant="ghost" size="sm" disabled={isSaving} className="h-7 text-xs">Avbryt</Button>
                                                 </>
                                             )}
                                         </div>
-                                    </div>
-
-                                    <div className="grid gap-4">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">OpenID Token Endpoint</Label>
-                                                <Input
-                                                    value={config.keycloakUrl}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))}
-                                                    placeholder="https://sso.example.com/realms/xxx/..."
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">OpenID Token Endpoint</Label>
+                                                <Input value={config.keycloakUrl} onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))} placeholder="https://sso.example.com/..." disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">API URL</Label>
-                                                <Input
-                                                    value={config.apiUrl}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
-                                                    placeholder="https://api.example.com"
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">API URL</Label>
+                                                <Input value={config.apiUrl} onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))} placeholder="https://api.example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">Client ID</Label>
-                                                <Input
-                                                    value={config.clientId}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))}
-                                                    placeholder="asset-api"
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">Client ID</Label>
+                                                <Input value={config.clientId} onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))} placeholder="asset-api" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">Client Secret</Label>
-                                                <Input
-                                                    type={showSecrets ? "text" : "password"}
-                                                    value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
-                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">Client Secret</Label>
+                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret} onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">Username</Label>
-                                                <Input
-                                                    value={config.username}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
-                                                    placeholder="service-user@example.com"
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">Username</Label>
+                                                <Input value={config.username} onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))} placeholder="service-user@example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">Password</Label>
-                                                <Input
-                                                    type={showSecrets ? "text" : "password"}
-                                                    value={isEditMode && config.password === '••••••••' ? '' : config.password}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                                <Label className="text-sm">Password</Label>
+                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.password === '••••••••' ? '' : config.password} onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
                                         </div>
-
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">API Key</Label>
-                                                <Input
-                                                    type={showSecrets ? "text" : "password"}
-                                                    value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                                                    placeholder={isEditMode ? "Enter new value..." : "••••••••"}
-                                                    disabled={!isEditMode}
-                                                    className={`h-11 text-base ${!isEditMode ? "bg-muted" : ""}`}
-                                                />
+                                        <div className="flex items-end gap-3">
+                                            <div className="flex-1 space-y-1.5">
+                                                <Label className="text-sm">API Key</Label>
+                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey} onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                             </div>
-                                            <div className="space-y-1.5 flex items-end">
-                                                <Button
-                                                    onClick={handleTestConnection}
-                                                    disabled={isTestingConnection || isEditMode}
-                                                    variant="outline"
-                                                    className="gap-2 h-11"
-                                                >
-                                                    {isTestingConnection ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        <Zap className="h-4 w-4" />
-                                                    )}
-                                                    {isTestingConnection ? 'Testing...' : 'Test Connection'}
-                                                </Button>
-                                            </div>
+                                            <Button onClick={handleTestConnection} disabled={isTestingConnection || isEditMode} variant="outline" className="gap-2 h-10">
+                                                {isTestingConnection ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                                                {isTestingConnection ? 'Testar...' : 'Testa'}
+                                            </Button>
                                         </div>
-                                    </div>
-
-                                    {/* Connection test result */}
-                                    {connectionStatus !== 'idle' && (
-                                        <div className={`rounded-lg border p-3 text-sm ${
-                                            connectionStatus === 'success' 
-                                                ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
-                                                : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-                                        }`}>
-                                            <div className="flex items-start gap-2">
-                                                {connectionStatus === 'success' ? (
-                                                    <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
-                                                ) : (
-                                                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
-                                                )}
-                                                <div>
-                                                    <p className={`font-medium ${
-                                                        connectionStatus === 'success' ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
-                                                    }`}>
-                                                        {connectionStatus === 'success' ? 'Connection Successful' : 'Connection Failed'}
-                                                    </p>
-                                                    <p className={`text-xs ${
-                                                        connectionStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
-                                                    }`}>
-                                                        {connectionMessage}
-                                                    </p>
+                                        {connectionStatus !== 'idle' && (
+                                            <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
+                                                <div className="flex items-start gap-2">
+                                                    {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+                                                    <div><p className="font-medium">{connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p><p className="text-xs">{connectionMessage}</p></div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                </details>
 
                                 {/* FM Access API Section */}
-                                <div className="border rounded-lg p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Building2 className="h-5 w-5 text-primary" />
-                                            <h4 className="font-medium">FM Access</h4>
-                                        </div>
-                                        {fmAccessStatus === 'success' ? (
-                                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                                Ansluten
-                                            </Badge>
-                                        ) : fmAccessStatus === 'error' ? (
-                                            <Badge variant="destructive" className="text-xs">
-                                                <AlertCircle className="h-3 w-3 mr-1" />
-                                                Fel
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="secondary" className="text-xs">Konfiguration</Badge>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Anslut till FM Access för att hämta ritningar och dokument. Secrets konfigureras via Cloud.
-                                    </p>
-                                    <div className="space-y-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Token URL (förkonfigurerad)</Label>
-                                            <Input
-                                                value="https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token"
-                                                className="h-9 text-sm font-mono bg-muted"
-                                                readOnly
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Client ID (förkonfigurerad)</Label>
-                                                <Input
-                                                    value="HDCAgent Basic"
-                                                    className="h-9 text-sm bg-muted"
-                                                    readOnly
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">API Base URL</Label>
-                                                <Input
-                                                    value={fmAccessConfig.apiUrl}
-                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
-                                                    placeholder="https://api.fmaccess.se"
-                                                    className="h-9 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Username</Label>
-                                                <Input
-                                                    value={fmAccessConfig.username}
-                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, username: e.target.value }))}
-                                                    placeholder="Användarnamn"
-                                                    className="h-9 text-sm"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Password</Label>
-                                                <Input
-                                                    type="password"
-                                                    value={fmAccessConfig.password}
-                                                    onChange={(e) => setFmAccessConfig(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder="••••••••"
-                                                    className="h-9 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                        
-                                        {/* FM Access connection status */}
-                                        {fmAccessStatus !== 'idle' && fmAccessMessage && (
-                                            <div className={`rounded-lg border p-2 text-xs ${
-                                                fmAccessStatus === 'success' 
-                                                    ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' 
-                                                    : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-                                            }`}>
-                                                <div className="flex items-start gap-2">
-                                                    {fmAccessStatus === 'success' ? (
-                                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5" />
-                                                    ) : (
-                                                        <AlertCircle className="h-3.5 w-3.5 text-red-600 mt-0.5" />
-                                                    )}
-                                                    <p className={fmAccessStatus === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
-                                                        {fmAccessMessage}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-                                        
-                                        <div className="flex gap-2 pt-2">
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="flex-1"
-                                                onClick={handleTestFmAccessConnection}
-                                                disabled={isTestingFmAccess}
-                                            >
-                                                {isTestingFmAccess ? (
-                                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                                                ) : (
-                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                                                )}
-                                                {isTestingFmAccess ? 'Testar...' : 'Testa anslutning'}
-                                            </Button>
-                                            <Button 
-                                                variant="default" 
-                                                size="sm" 
-                                                className="flex-1"
-                                                onClick={handleSaveFmAccessConfig}
-                                                disabled={isSavingFmAccess}
-                                            >
-                                                {isSavingFmAccess ? (
-                                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                                                ) : (
-                                                    <Save className="h-3.5 w-3.5 mr-1.5" />
-                                                )}
-                                                {isSavingFmAccess ? 'Sparar...' : 'Verifiera'}
-                                            </Button>
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground">
-                                            FM Access-secrets (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD) konfigureras i Lovable Cloud.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Senslinc API Section */}
-                                <div className="border rounded-lg p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Radar className="h-5 w-5 text-primary" />
-                                            <h4 className="font-medium">Senslinc</h4>
-                                        </div>
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">API URL</Label>
-                                            <Input
-                                                placeholder="https://api.senslinc.se"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">API Key</Label>
-                                            <Input
-                                                type="password"
-                                                placeholder="••••••••"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Ivion API Section */}
-                                <div className="border rounded-lg p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Zap className="h-5 w-5 text-primary" />
-                                            <h4 className="font-medium">Ivion (360+)</h4>
-                                        </div>
-                                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                                            Aktiv
-                                        </Badge>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Integration med NavVis Ivion för 360°-panorama och Point of Interest (POI) synkronisering.
-                                        Assets kan skapas direkt från Ivion via <code className="bg-muted px-1 rounded">/ivion-create</code>.
-                                    </p>
-                                    <div className="space-y-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Embed URL</Label>
-                                            <div className="flex items-center gap-2">
-                                                <Input
-                                                    value={`${window.location.origin}/ivion-create`}
-                                                    readOnly
-                                                    className="h-8 text-sm font-mono bg-muted"
-                                                />
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="h-8 px-2"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(`${window.location.origin}/ivion-create`);
-                                                        toast({ title: 'Kopierat!', description: 'URL kopierad till urklipp.' });
-                                                    }}
-                                                >
-                                                    <ExternalLink className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Använd denna URL i Ivion för att skapa assets. Lägg till ?siteId=X&imageId=Y&x=...&y=...&z=...
-                                            </p>
-                                        </div>
+                                <details className="border rounded-lg">
+                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
+                                        <Building2 className="h-5 w-5 text-primary" />
+                                        <span>FM Access</span>
+                                        {fmAccessStatus === 'success' && <Badge className="ml-auto text-xs bg-green-100 text-green-800">Ansluten</Badge>}
+                                    </summary>
+                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
+                                        <p className="text-xs text-muted-foreground">Secrets konfigureras i Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
                                         <div className="flex gap-2">
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="flex-1"
-                                                onClick={async () => {
-                                                    try {
-                                                        const { data, error } = await supabase.functions.invoke('ivion-poi', {
-                                                            body: { action: 'test-connection' }
-                                                        });
-                                                        if (error) throw error;
-                                                        if (data?.success) {
-                                                            toast({ title: 'Anslutning OK', description: data.message });
-                                                        } else {
-                                                            toast({ variant: 'destructive', title: 'Anslutning misslyckades', description: data?.message || 'Okänt fel' });
-                                                        }
-                                                    } catch (err: any) {
-                                                        toast({ variant: 'destructive', title: 'Fel', description: err.message });
-                                                    }
-                                                }}
-                                            >
-                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                            <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
+                                                {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
                                                 Testa anslutning
                                             </Button>
                                         </div>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground">
-                                        Ivion-secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.
-                                    </p>
-                                </div>
+                                </details>
+
+                                {/* Ivion API Section */}
+                                <details className="border rounded-lg">
+                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
+                                        <View className="h-5 w-5 text-primary" />
+                                        <span>Ivion (360+)</span>
+                                        <Badge variant="outline" className="ml-auto text-xs bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
+                                    </summary>
+                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
+                                        <p className="text-xs text-muted-foreground">Integration med NavVis Ivion för 360°-panorama. Secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.</p>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs">Embed URL för Ivion</Label>
+                                            <div className="flex gap-2">
+                                                <Input value={`${window.location.origin}/ivion-create`} readOnly className="h-8 text-sm font-mono bg-muted" />
+                                                <Button variant="outline" size="sm" className="h-8" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/ivion-create`); toast({ title: 'Kopierat!' }); }}>
+                                                    <ExternalLink className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <Button variant="outline" size="sm" onClick={async () => {
+                                            try {
+                                                const { data, error } = await supabase.functions.invoke('ivion-poi', { body: { action: 'test-connection' } });
+                                                if (error) throw error;
+                                                toast({ title: data?.success ? 'Anslutning OK' : 'Misslyckades', description: data?.message });
+                                            } catch (err: any) { toast({ variant: 'destructive', title: 'Fel', description: err.message }); }
+                                        }}>
+                                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                        </Button>
+                                    </div>
+                                </details>
+
+                                {/* Senslinc API Section */}
+                                <details className="border rounded-lg">
+                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
+                                        <Radar className="h-5 w-5 text-primary" />
+                                        <span>Senslinc</span>
+                                        <Badge variant="outline" className="ml-auto text-xs">Kommer snart</Badge>
+                                    </summary>
+                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
+                                        <p className="text-xs text-muted-foreground">IoT-sensorer och mätvärden. Inte konfigurerad ännu.</p>
+                                    </div>
+                                </details>
 
                                 {/* Faciliate API Section */}
-                                <div className="border rounded-lg p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Wrench className="h-5 w-5 text-orange-500" />
-                                            <h4 className="font-medium">Faciliate</h4>
-                                        </div>
-                                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
-                                            FM System
-                                        </Badge>
+                                <details className="border rounded-lg">
+                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
+                                        <Wrench className="h-5 w-5 text-orange-500" />
+                                        <span>Faciliate</span>
+                                        <Badge variant="outline" className="ml-auto text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>
+                                    </summary>
+                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
+                                        <p className="text-xs text-muted-foreground">Integration med Faciliate för arbetsorder. Inte konfigurerad ännu.</p>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Integration med Faciliate för arbetsorder och underhållshantering.
-                                        Konfigureras via REST API med JWT eller Basic Auth.
-                                    </p>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">API Base URL</Label>
-                                            <Input
-                                                placeholder="https://faciliate.example.com/api/v2"
-                                                disabled
-                                                className="h-8 text-sm bg-muted"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Username</Label>
-                                                <Input
-                                                    placeholder="api-user"
-                                                    disabled
-                                                    className="h-8 text-sm bg-muted"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Password / Token</Label>
-                                                <Input
-                                                    type="password"
-                                                    placeholder="••••••••"
-                                                    disabled
-                                                    className="h-8 text-sm bg-muted"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                                        <strong>Endpoints:</strong> /workorder, /building, /customer
-                                    </div>
-                                </div>
+                                </details>
                             </div>
                         )}
                     </TabsContent>
