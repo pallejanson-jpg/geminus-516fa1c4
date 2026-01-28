@@ -14,6 +14,7 @@ import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVEN
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
+import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
@@ -88,7 +89,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [isSavingView, setIsSavingView] = useState(false);
   
   // Active side-pop submenu state
-  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | null>(null);
+  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
   
   // Clipping height state (for 2D floor plan view)
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
@@ -670,7 +671,20 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         </div>
                         <span className="text-xs sm:text-sm">Visa annotationer</span>
                       </div>
-                      <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
+                      <div className="flex items-center gap-1">
+                        <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
+                        <Button
+                          variant={activeSubMenu === 'annotations' ? "secondary" : "ghost"}
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => setActiveSubMenu(activeSubMenu === 'annotations' ? null : 'annotations')}
+                        >
+                          <ChevronRight className={cn(
+                            "h-3 w-3 transition-transform",
+                            activeSubMenu === 'annotations' && "rotate-180"
+                          )} />
+                        </Button>
+                      </div>
                     </div>
                   )}
 
@@ -833,6 +847,20 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               onVisibleFloorsChange={handleVisibleFloorsChange}
               enableClipping={true}
               listOnly={true}
+            />
+          </SidePopPanel>
+          
+          {/* Side-pop panel for Annotation Categories */}
+          <SidePopPanel
+            isOpen={activeSubMenu === 'annotations'}
+            onClose={() => setActiveSubMenu(null)}
+            title="Annotationstyper"
+            parentPosition={position}
+            parentWidth={panelWidth}
+          >
+            <AnnotationCategoryList
+              viewerRef={viewerRef}
+              buildingFmGuid={buildingFmGuid}
             />
           </SidePopPanel>
           
