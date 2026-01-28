@@ -5,11 +5,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AppContext } from '@/context/AppContext';
+import BuildingMapPicker from '@/components/map/BuildingMapPicker';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
 import { useXktPreload } from '@/hooks/useXktPreload';
@@ -336,49 +337,42 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     </div>
                   </div>
                   
-                  {/* Map Position Settings */}
+                  {/* Map Position Settings with Interactive Picker */}
                   <div className="border-t pt-4">
                     <Label className="text-xs flex items-center gap-2 mb-3">
                       <Globe size={12} />
                       Map Position
                     </Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="latitude" className="text-[10px] text-muted-foreground">Latitude</Label>
-                        <Input
-                          id="latitude"
-                          value={latitudeInput}
-                          onChange={(e) => setLatitudeInput(e.target.value)}
-                          placeholder="e.g. 59.3293"
-                          className="h-8 text-sm"
-                          type="number"
-                          step="0.0001"
-                        />
+                    
+                    {/* Interactive Map Picker */}
+                    <BuildingMapPicker
+                      latitude={settings?.latitude ?? null}
+                      longitude={settings?.longitude ?? null}
+                      onPositionChange={(lat, lng) => {
+                        setLatitudeInput(lat.toFixed(6));
+                        setLongitudeInput(lng.toFixed(6));
+                      }}
+                      className="mb-3"
+                    />
+                    
+                    {/* Coordinate display and save */}
+                    <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2">
+                      <div className="text-xs text-muted-foreground">
+                        {latitudeInput && longitudeInput ? (
+                          <span>
+                            {parseFloat(latitudeInput).toFixed(4)}, {parseFloat(longitudeInput).toFixed(4)}
+                          </span>
+                        ) : (
+                          <span className="italic">Ingen position satt</span>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="longitude" className="text-[10px] text-muted-foreground">Longitude</Label>
-                        <Input
-                          id="longitude"
-                          value={longitudeInput}
-                          onChange={(e) => setLongitudeInput(e.target.value)}
-                          placeholder="e.g. 18.0686"
-                          className="h-8 text-sm"
-                          type="number"
-                          step="0.0001"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <p className="text-[10px] text-muted-foreground">
-                        Set exact map coordinates for this building
-                      </p>
                       <Button 
                         size="sm" 
                         onClick={handleSaveMapPosition}
-                        disabled={isSaving}
+                        disabled={isSaving || (!latitudeInput && !longitudeInput)}
                         className="h-7 text-xs"
                       >
-                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save Position'}
+                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
                       </Button>
                     </div>
                   </div>

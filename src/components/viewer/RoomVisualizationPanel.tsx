@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
 import { Palette, X, RefreshCw, AlertCircle, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { AppContext } from '@/context/AppContext';
 import {
   VisualizationType,
   VISUALIZATION_CONFIGS,
@@ -39,9 +39,13 @@ interface RoomData {
   attributes: Record<string, any> | null;
 }
 
+// Custom event for forcing spaces visibility
+export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
+
 /**
  * Floating, draggable panel for visualizing rooms with color-coding based on sensor data.
- * Auto-activates "Visa Rum" on mount and supports floor filtering for performance.
+ * OPTIMIZED: Uses in-memory allData instead of DB queries for performance.
+ * Auto-activates "Visa Rum" on mount and supports floor filtering.
  */
 const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   viewerRef,
@@ -51,12 +55,18 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   visibleFloorFmGuids,
   className,
 }) => {
+  const { allData } = useContext(AppContext);
+  
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('none');
   const [useMockData, setUseMockData] = useState(false);
   const [rooms, setRooms] = useState<RoomData[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [colorizedCount, setColorizedCount] = useState(0);
   const [hasRealData, setHasRealData] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Cache for space entity IDs - built once from metaScene
+  const [entityIdCache, setEntityIdCache] = useState<Map<string, string[]>>(new Map());
+  const [isCacheBuilt, setIsCacheBuilt] = useState(false);
 
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -74,8 +84,11 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     }
   }, [position.x, position.y]);
 
-  // Auto-activate "Visa Rum" on mount
+  // Auto-activate "Visa Rum" on mount and dispatch event
   useEffect(() => {
+    // Dispatch event for VisualizationToolbar to listen to
+    window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    
     if (onShowSpaces) {
       onShowSpaces(true);
     }
@@ -115,89 +128,130 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, [isDragging, dragOffset]);
 
-  // Fetch rooms for the building, optionally filtered by visible floors
-  const fetchRooms = useCallback(async () => {
-    if (!buildingFmGuid) return;
+  // Get rooms from in-memory allData (FAST - no DB queries)
+  const filteredRooms = useMemo(() => {
+    if (!buildingFmGuid || !allData.length) return [];
     
-    setIsLoading(true);
-    try {
-      let query = supabase
-        .from('assets')
-        .select('fm_guid, name, level_fm_guid, attributes')
-        .eq('category', 'Space')
-        .ilike('building_fm_guid', buildingFmGuid);
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      let roomData: RoomData[] = (data || []).map((r) => ({
-        fmGuid: r.fm_guid,
-        name: r.name,
-        levelFmGuid: r.level_fm_guid,
-        attributes: r.attributes as Record<string, any> | null,
+    const buildingLower = buildingFmGuid.toLowerCase();
+    
+    // Filter rooms for this building
+    let roomData = allData
+      .filter((a: any) => 
+        a.category === 'Space' && 
+        a.buildingFmGuid?.toLowerCase() === buildingLower
+      )
+      .map((r: any) => ({
+        fmGuid: r.fmGuid,
+        name: r.name || r.commonName,
+        levelFmGuid: r.levelFmGuid,
+        attributes: r.attributes,
       }));
 
-      // Filter by visible floors if specified (case-insensitive matching)
-      if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
-        const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
-        roomData = roomData.filter(room => {
-          if (!room.levelFmGuid) return false;
-          return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
-        });
-      }
-
-      setRooms(roomData);
-
-      // Check if any rooms have real sensor data
-      const hasReal = roomData.some((room) => {
-        const attrs = room.attributes;
-        if (!attrs) return false;
-        const keys = Object.keys(attrs);
-        return keys.some(
-          (k) =>
-            k.toLowerCase().includes('sensortemperature') ||
-            k.toLowerCase().includes('sensorco2') ||
-            k.toLowerCase().includes('sensorhum') ||
-            k.toLowerCase().includes('sensoroccupancy')
-        );
+    // Filter by visible floors if specified (case-insensitive matching)
+    if (visibleFloorFmGuids && visibleFloorFmGuids.length > 0) {
+      const lowerCaseVisibleGuids = visibleFloorFmGuids.map(g => g.toLowerCase());
+      roomData = roomData.filter(room => {
+        if (!room.levelFmGuid) return false;
+        return lowerCaseVisibleGuids.includes(room.levelFmGuid.toLowerCase());
       });
-      setHasRealData(hasReal);
-
-      const floorInfo = visibleFloorFmGuids && visibleFloorFmGuids.length > 0 
-        ? `${visibleFloorFmGuids.length} floors selected` 
-        : 'all';
-      console.log(`Fetched ${roomData.length} rooms for visualization (floor: ${floorInfo})`);
-    } catch (error) {
-      console.error('Failed to fetch rooms:', error);
-    } finally {
-      setIsLoading(false);
     }
-  }, [buildingFmGuid, visibleFloorFmGuids]);
 
+    return roomData as RoomData[];
+  }, [allData, buildingFmGuid, visibleFloorFmGuids]);
+
+  // Update rooms state when filter changes
   useEffect(() => {
-    fetchRooms();
-  }, [fetchRooms]);
+    setRooms(filteredRooms);
+    
+    // Check if any rooms have real sensor data
+    const hasReal = filteredRooms.some((room) => {
+      const attrs = room.attributes;
+      if (!attrs) return false;
+      const keys = Object.keys(attrs);
+      return keys.some(
+        (k) =>
+          k.toLowerCase().includes('sensortemperature') ||
+          k.toLowerCase().includes('sensorco2') ||
+          k.toLowerCase().includes('sensorhum') ||
+          k.toLowerCase().includes('sensoroccupancy')
+      );
+    });
+    setHasRealData(hasReal);
 
-  // Get item IDs by FmGuid from viewer
-  const getItemIdsByFmGuid = useCallback((fmGuidToFind: string) => {
+    const floorInfo = visibleFloorFmGuids && visibleFloorFmGuids.length > 0 
+      ? `${visibleFloorFmGuids.length} floors selected` 
+      : 'all';
+    console.log(`Room visualization: ${filteredRooms.length} rooms (floor: ${floorInfo})`);
+  }, [filteredRooms, visibleFloorFmGuids]);
+
+  // Build entity ID cache from metaScene (one-time, indexed for O(1) lookup)
+  useEffect(() => {
+    if (isCacheBuilt) return;
+    
+    const viewer = viewerRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.metaScene?.metaObjects) return;
+
+    const metaObjects = xeokitViewer.metaScene.metaObjects;
+    const cache = new Map<string, string[]>();
+    
+    // Build parent->children map for fast traversal
+    const childrenMap = new Map<string, string[]>();
+    Object.values(metaObjects).forEach((metaObj: any) => {
+      const parentId = metaObj.parent?.id;
+      if (parentId) {
+        if (!childrenMap.has(parentId)) {
+          childrenMap.set(parentId, []);
+        }
+        childrenMap.get(parentId)!.push(metaObj.id);
+      }
+    });
+    
+    // Helper to get all child IDs recursively
+    const getAllChildIds = (id: string): string[] => {
+      const ids = [id];
+      const children = childrenMap.get(id) || [];
+      children.forEach(childId => {
+        ids.push(...getAllChildIds(childId));
+      });
+      return ids;
+    };
+    
+    // Index all IfcSpace objects by their fmGuid
+    Object.values(metaObjects).forEach((metaObj: any) => {
+      if (metaObj.type?.toLowerCase() === 'ifcspace') {
+        const fmGuid = (metaObj.originalSystemId || metaObj.id || '').toLowerCase();
+        if (fmGuid) {
+          const childIds = getAllChildIds(metaObj.id);
+          cache.set(fmGuid, childIds);
+        }
+      }
+    });
+    
+    setEntityIdCache(cache);
+    setIsCacheBuilt(true);
+    console.log(`Built entity ID cache for ${cache.size} spaces`);
+  }, [viewerRef, isCacheBuilt]);
+
+  // Get item IDs by FmGuid using cache (fast O(1) lookup)
+  const getItemIdsByFmGuid = useCallback((fmGuidToFind: string): string[] => {
+    const cached = entityIdCache.get(fmGuidToFind.toLowerCase());
+    if (cached) return cached;
+    
+    // Fallback to viewer method if not in cache
     const viewer = viewerRef.current;
     const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-
     if (assetView) {
-      const itemIds = assetView.getItemsByPropertyValue('fmguid', fmGuidToFind.toUpperCase());
-      return itemIds || [];
+      return assetView.getItemsByPropertyValue('fmguid', fmGuidToFind.toUpperCase()) || [];
     }
     return [];
-  }, [viewerRef]);
+  }, [viewerRef, entityIdCache]);
 
   // Colorize a single space in the viewer
   const colorizeSpace = useCallback(
     (fmGuid: string, color: [number, number, number] | null) => {
       const viewer = viewerRef.current;
-      const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-      const xeokitViewer = assetView?.viewer;
-
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xeokitViewer?.scene) return false;
 
       const itemIds = getItemIdsByFmGuid(fmGuid);
@@ -230,41 +284,73 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     setColorizedCount(0);
   }, [rooms, colorizeSpace]);
 
-  // Apply visualization colors
+  // Apply visualization colors with chunking for smooth UI
   const applyVisualization = useCallback(() => {
     if (visualizationType === 'none') {
       resetColors();
       return;
     }
 
+    if (isProcessing) return;
+    setIsProcessing(true);
+
     let count = 0;
-    rooms.forEach((room) => {
-      let value: number | null = null;
+    const CHUNK_SIZE = 30;
+    const chunks: RoomData[][] = [];
+    
+    for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
+      chunks.push(rooms.slice(i, i + CHUNK_SIZE));
+    }
 
-      if (useMockData) {
-        value = generateMockSensorData(room.fmGuid, visualizationType);
-      } else {
-        value = extractSensorValue(room.attributes, visualizationType);
+    const processChunk = (chunkIndex: number) => {
+      if (chunkIndex >= chunks.length) {
+        setColorizedCount(count);
+        setIsProcessing(false);
+        console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
+        return;
       }
 
-      if (value !== null) {
-        const color = getVisualizationColor(value, visualizationType);
-        if (color && colorizeSpace(room.fmGuid, color)) {
-          count++;
+      chunks[chunkIndex].forEach((room) => {
+        let value: number | null = null;
+
+        if (useMockData) {
+          value = generateMockSensorData(room.fmGuid, visualizationType);
+        } else {
+          value = extractSensorValue(room.attributes, visualizationType);
         }
-      }
-    });
 
-    setColorizedCount(count);
-    console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
-  }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors]);
+        if (value !== null) {
+          const color = getVisualizationColor(value, visualizationType);
+          if (color && colorizeSpace(room.fmGuid, color)) {
+            count++;
+          }
+        }
+      });
+
+      // Use requestIdleCallback if available, otherwise requestAnimationFrame
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => processChunk(chunkIndex + 1), { timeout: 50 });
+      } else {
+        requestAnimationFrame(() => processChunk(chunkIndex + 1));
+      }
+    };
+
+    processChunk(0);
+  }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors, isProcessing]);
 
   // Apply visualization when type or mock data changes
   useEffect(() => {
-    if (rooms.length > 0) {
+    if (rooms.length > 0 && isCacheBuilt) {
       applyVisualization();
     }
-  }, [visualizationType, useMockData, rooms.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visualizationType, useMockData, isCacheBuilt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-apply when rooms change (floor filter)
+  useEffect(() => {
+    if (visualizationType !== 'none' && rooms.length > 0 && isCacheBuilt) {
+      applyVisualization();
+    }
+  }, [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
@@ -313,8 +399,6 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       {/* Content */}
       <div className="p-3 space-y-4">
-        {/* Floor selector is now in VisualizationToolbar */}
-
         {/* Visualization type selector */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
@@ -375,7 +459,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         {/* Stats */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
           <span>
-            {isLoading ? 'Laddar...' : `${rooms.length} rum hittade`}
+            {isProcessing ? 'Bearbetar...' : `${rooms.length} rum hittade`}
           </span>
           {colorizedCount > 0 && (
             <span className="text-primary">{colorizedCount} färglagda</span>
@@ -389,7 +473,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             size="sm"
             className="flex-1"
             onClick={resetColors}
-            disabled={colorizedCount === 0}
+            disabled={colorizedCount === 0 || isProcessing}
           >
             <RefreshCw className="h-3 w-3 mr-1" />
             Återställ
@@ -399,7 +483,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             size="sm"
             className="flex-1"
             onClick={applyVisualization}
-            disabled={visualizationType === 'none' || isLoading}
+            disabled={visualizationType === 'none' || isProcessing}
           >
             Uppdatera
           </Button>
