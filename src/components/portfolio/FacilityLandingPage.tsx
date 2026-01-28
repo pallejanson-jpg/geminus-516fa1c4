@@ -1,7 +1,7 @@
 import React, { useState, useContext, useMemo } from 'react';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,10 +49,12 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onAddAsset,
   setSelectedFacility
 }) => {
-  const { allData, setActiveApp, setViewer3dFmGuid, startInventory } = useContext(AppContext);
+  const { allData, setActiveApp, setViewer3dFmGuid, startInventory, openEntityInsights } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
+  const [latitudeInput, setLatitudeInput] = useState('');
+  const [longitudeInput, setLongitudeInput] = useState('');
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
 
   // Use building settings hook
@@ -61,7 +63,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     isLoading: isLoadingSettings, 
     isSaving, 
     toggleFavorite, 
-    updateIvionSiteId 
+    updateIvionSiteId,
+    updateMapPosition
   } = useBuildingSettings(facility.fmGuid || null);
 
   // Sync ivion input with settings
@@ -69,7 +72,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     if (settings?.ivionSiteId) {
       setIvionSiteIdInput(settings.ivionSiteId);
     }
-  }, [settings?.ivionSiteId]);
+    if (settings?.latitude !== null && settings?.latitude !== undefined) {
+      setLatitudeInput(String(settings.latitude));
+    }
+    if (settings?.longitude !== null && settings?.longitude !== undefined) {
+      setLongitudeInput(String(settings.longitude));
+    }
+  }, [settings?.ivionSiteId, settings?.latitude, settings?.longitude]);
 
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -159,6 +168,18 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   // Handler for saving Ivion Site ID
   const handleSaveIvionSiteId = () => {
     updateIvionSiteId(ivionSiteIdInput || null);
+  };
+
+  // Handler for saving map position
+  const handleSaveMapPosition = () => {
+    const lat = latitudeInput ? parseFloat(latitudeInput) : null;
+    const lng = longitudeInput ? parseFloat(longitudeInput) : null;
+    updateMapPosition(lat, lng);
+  };
+
+  // Handler for showing entity insights
+  const handleShowInsights = () => {
+    openEntityInsights(facility);
   };
 
   const title = facility.commonName || facility.name || 'Unnamed Object';
@@ -314,6 +335,53 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </p>
                     </div>
                   </div>
+                  
+                  {/* Map Position Settings */}
+                  <div className="border-t pt-4">
+                    <Label className="text-xs flex items-center gap-2 mb-3">
+                      <Globe size={12} />
+                      Map Position
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="latitude" className="text-[10px] text-muted-foreground">Latitude</Label>
+                        <Input
+                          id="latitude"
+                          value={latitudeInput}
+                          onChange={(e) => setLatitudeInput(e.target.value)}
+                          placeholder="e.g. 59.3293"
+                          className="h-8 text-sm"
+                          type="number"
+                          step="0.0001"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="longitude" className="text-[10px] text-muted-foreground">Longitude</Label>
+                        <Input
+                          id="longitude"
+                          value={longitudeInput}
+                          onChange={(e) => setLongitudeInput(e.target.value)}
+                          placeholder="e.g. 18.0686"
+                          className="h-8 text-sm"
+                          type="number"
+                          step="0.0001"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        Set exact map coordinates for this building
+                      </p>
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveMapPosition}
+                        disabled={isSaving}
+                        className="h-7 text-xs"
+                      >
+                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save Position'}
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -407,7 +475,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onToggle3D={handleToggle3D}
             onToggle2D={handleToggle2D}
             onShowDocs={onShowDocs}
-            onShowInsights={onShowInsights}
+            onShowInsights={handleShowInsights}
             onOpenIoT={onOpenIoT}
             onAddAsset={handleAddAsset}
             onInventory={handleInventory}

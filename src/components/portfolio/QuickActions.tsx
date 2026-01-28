@@ -57,12 +57,11 @@ const QuickActions: React.FC<QuickActionsProps> = ({
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
-          {isBuilding && (
-            <Button variant="ghost" onClick={() => onShowInsights(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
-              <BarChart size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-              <span className="text-[10px] sm:text-xs">Insights</span>
-            </Button>
-          )}
+          {/* Insights - available for all levels */}
+          <Button variant="ghost" onClick={() => onShowInsights(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
+            <BarChart size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+            <span className="text-[10px] sm:text-xs">Insights</span>
+          </Button>
           <Button variant="ghost" onClick={() => onShowAssets(facility)} className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4">
             <Package size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
             <span className="text-[10px] sm:text-xs">Assets</span>
