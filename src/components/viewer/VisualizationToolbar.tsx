@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, PaintBucket } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,6 +17,7 @@ import CreateViewDialog from "./CreateViewDialog";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
+import { ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -88,6 +89,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Clipping height state (for 2D floor plan view)
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
   const [is2DMode, setIs2DMode] = useState(false);
+  
+  // Architect view mode state
+  const [isArchitectMode, setIsArchitectMode] = useState(false);
   
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -171,6 +175,25 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
       detail: { mode }
     }));
+  }, []);
+
+  // Handle Architect mode toggle
+  const handleArchitectModeToggle = useCallback((enabled: boolean) => {
+    setIsArchitectMode(enabled);
+    window.dispatchEvent(new CustomEvent(ARCHITECT_MODE_REQUESTED_EVENT, {
+      detail: { enabled }
+    }));
+  }, []);
+
+  // Listen for architect mode changes (from external sources)
+  useEffect(() => {
+    const handleArchitectModeChange = (e: CustomEvent) => {
+      setIsArchitectMode(e.detail?.enabled ?? false);
+    };
+    window.addEventListener(ARCHITECT_MODE_CHANGED_EVENT, handleArchitectModeChange as EventListener);
+    return () => {
+      window.removeEventListener(ARCHITECT_MODE_CHANGED_EVENT, handleArchitectModeChange as EventListener);
+    };
   }, []);
 
   // Capture current view state for saving
@@ -558,6 +581,28 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 </Label>
 
                 <div className="space-y-0.5 sm:space-y-1">
+                  {/* Architect View Mode Toggle */}
+                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div
+                        className={cn(
+                          "p-1 sm:p-1.5 rounded-md",
+                          isArchitectMode
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <PaintBucket className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Arkitektvy</span>
+                    </div>
+                    <Switch 
+                      checked={isArchitectMode} 
+                      onCheckedChange={handleArchitectModeToggle}
+                      disabled={!isViewerReady}
+                    />
+                  </div>
+
                   {/* 2D Plan View Toggle */}
                   <div className="flex items-center justify-between py-1.5 sm:py-2">
                     <div className="flex items-center gap-2 sm:gap-3">
