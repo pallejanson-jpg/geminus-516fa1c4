@@ -1,210 +1,151 @@
 
-# Plan: Ivion Integration - Fas 6: Skapa Asset från Ivion POI
+# Plan: Utöka IvionCreate med Plan/Rum-väljare & 3D Position Picker
 
 ## Sammanfattning
 
-Implementera ett flöde där användaren kan skapa en asset i Geminus (Lovable) direkt inifrån Ivion när de skapar en POI. Detta kräver:
-1. En dedikerad webbsida/endpoint i Geminus som kan bäddas in i Ivions POI-dialog
-2. Backend-funktion för att hämta POI-data och skapa assets
-3. Kommunikation mellan Ivion och Geminus (postMessage eller URL-parametrar)
+Utöka `/ivion-create` sidan med:
+1. **Våningsplan- och Rum-väljare** - Lägg till dropdowns för Plan och Rum (samma som i InventoryForm)
+2. **3D Position Picker** - Lägg till knapp för att välja position i 3D-viewern
+3. **360+ Deep-linking** - Lägg till funktionalitet för att öppna Ivion med rätt rum/position
 
 ---
 
-## Arkitekturval: Iframe-embed i Ivion
+## Nuvarande tillstånd
 
-Baserat på bilden och Ivions kapaciteter finns det ett sätt att lägga till en "Geminus"-flik i Ivions POI-dialog:
+### IvionCreate.tsx
+- Har Building-väljare (hämtar från Supabase `assets` table)
+- Saknar Floor/Room-väljare
+- Saknar 3D position picker
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│                              IVION                                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │                        Create POI Dialog                             │  │
-│  │  ┌────────────────┬────────────────┬───────────────────┐            │  │
-│  │  │     Basic      │   Advanced     │     Geminus       │ ◄─ CUSTOM  │  │
-│  │  └────────────────┴────────────────┴───────────────────┘   TAB/LINK │  │
-│  │                                                                      │  │
-│  │  ┌───────────────────────────────────────────────────────────────┐  │  │
-│  │  │                                                               │  │  │
-│  │  │    IFRAME: geminus.app/ivion-create?siteId=X&imageId=Y       │  │  │
-│  │  │                                                               │  │  │
-│  │  │    ┌────────────────────────────────────┐                    │  │  │
-│  │  │    │  Registrera ny tillgång           │                    │  │  │
-│  │  │    │                                    │                    │  │  │
-│  │  │    │  Namn: _______________            │                    │  │  │
-│  │  │    │  Kategori: [v]                    │                    │  │  │
-│  │  │    │  Symbol: [v]                      │                    │  │  │
-│  │  │    │  Byggnad: (auto-fylld)            │                    │  │  │
-│  │  │    │                                    │                    │  │  │
-│  │  │    │  [Avbryt]  [Spara]                │                    │  │  │
-│  │  │    └────────────────────────────────────┘                    │  │  │
-│  │  │                                                               │  │  │
-│  │  └───────────────────────────────────────────────────────────────┘  │  │
-│  │                                                                      │  │
-│  │                               [Cancel]  [Save]                       │  │
-│  └─────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+### InventoryForm.tsx
+- Använder `BuildingSelector`, `FloorSelector`, `RoomSelector` från `selectors/`
+- Dessa komponenter kräver `AppContext.navigatorTreeData` för att fungera
 
-### Alternativa tillvägagångssätt
-
-1. **Iframe-embed (Rekommenderat)**: Ivion stöder custom HTML i POI-beskrivningar. Vi kan använda en länk/knapp i Ivion som öppnar Geminus-formuläret i en sidopanel eller popup.
-
-2. **Popup-fönster**: Användaren klickar på en knapp i Ivion som öppnar ett nytt fönster med Geminus-formuläret, pre-populerat med position och site-data.
-
-3. **Webhook-baserat**: Ivion skapar POI först, sedan pollar/webhookar Geminus för nya POIs att importera.
-
-**Vald strategi**: Kombinera **popup-fönster** med **webhook/polling** för en robust lösning som fungerar oavsett hur användaren skapar POI.
+### Problem
+`IvionCreate` är en standalone-sida (kan köras utanför huvudappen i iframe) och har därför inte tillgång till `AppContext.navigatorTreeData`. Vi behöver antingen:
+1. Hämta floor/room data direkt från Supabase
+2. Eller skapa standalone versioner av selectors
 
 ---
 
-## Implementationsplan
+## Implementation
 
-### Fas 6.1: Databas - Nya kolumner för Ivion-koppling
+### Del 1: Lägg till Floor/Room-väljare i IvionCreate
 
-Lägg till kolumner i `assets`-tabellen för att spåra Ivion POI-kopplingar:
-
-```sql
-ALTER TABLE assets ADD COLUMN ivion_poi_id INTEGER;
-ALTER TABLE assets ADD COLUMN ivion_site_id TEXT;
-ALTER TABLE assets ADD COLUMN ivion_synced_at TIMESTAMPTZ;
-ALTER TABLE assets ADD COLUMN ivion_image_id INTEGER;
-```
-
-| Kolumn | Typ | Syfte |
-|--------|-----|-------|
-| `ivion_poi_id` | INTEGER | Ivion POI ID (för deep-linking tillbaka) |
-| `ivion_site_id` | TEXT | Vilken Ivion-site denna asset tillhör |
-| `ivion_synced_at` | TIMESTAMPTZ | Senaste synk med Ivion |
-| `ivion_image_id` | INTEGER | Ivion panorama-bild ID (för position) |
-
-### Fas 6.2: Edge Function - `ivion-poi`
-
-Skapa en ny edge function som hanterar Ivion API-kommunikation:
-
-```text
-supabase/functions/ivion-poi/index.ts
-
-Stödda actions:
-├── get-token          → Autentisera mot Ivion API
-├── get-pois           → Hämta alla POIs för en site  
-├── get-poi            → Hämta en specifik POI
-├── create-poi         → Skapa POI i Ivion (från asset)
-├── update-poi         → Uppdatera POI i Ivion
-├── delete-poi         → Ta bort POI från Ivion
-├── import-poi         → Importera POI till Geminus-asset
-└── sync-all           → Bulk-synk alla POIs för en site
-```
-
-**Autentisering** (Ivion API):
-```typescript
-const getIvionToken = async () => {
-  const response = await fetch(`${IVION_API_URL}/api/auth/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `username=${encodeURIComponent(IVION_USERNAME)}&password=${encodeURIComponent(IVION_PASSWORD)}`
-  });
-  return response.json();
-};
-```
-
-### Fas 6.3: Ny sida - Ivion Create Asset
-
-Skapa en dedikerad sida för att skapa assets från Ivion-kontext:
-
-```text
-src/pages/IvionCreate.tsx
-
-Route: /ivion-create
-
-URL-parametrar:
-├── siteId       → Ivion site ID
-├── imageId      → Panorama-bild ID (position)
-├── x, y, z      → Koordinater (om tillgängliga)
-├── fov          → Field of view
-├── orientation  → Kamera-orientering (quaternion)
-└── poiId        → Om vi länkar till befintlig POI
-```
-
-**Flöde:**
-1. Användaren är i Ivion och klickar på en "Skapa i Geminus"-länk
-2. Länken öppnar `/ivion-create?siteId=X&imageId=Y&x=10&y=20&z=1`
-3. Sidan visar samma formulär som `InventoryForm` men:
-   - Byggnad auto-väljs baserat på `ivion_site_id` → `building_settings.fm_guid`
-   - Koordinater pre-fylls från URL-parametrar
-   - Efter spara: skapa/uppdatera POI i Ivion och spara `ivion_poi_id`
-
-### Fas 6.4: Ivion Custom Integration
-
-För att lägga till "Geminus"-knappen i Ivion finns flera alternativ:
-
-**Alternativ A: POI Custom Data med länk**
-När man skapar en POI i Ivion kan man inkludera en länk i beskrivningen:
-```html
-<a href="https://geminus.app/ivion-create?siteId=123&imageId=456" target="_blank">
-  Registrera i Geminus
-</a>
-```
-
-**Alternativ B: Ivion Frontend API Customization**
-Om ni har tillgång till Ivions Frontend API kan ni:
-```javascript
-// I Ivion custom script
-ivionApi.poi.on('create', (poiData) => {
-  // Öppna Geminus-formulär med POI-data
-  window.open(`https://geminus.app/ivion-create?` + new URLSearchParams({
-    siteId: poiData.siteId,
-    imageId: poiData.imageId,
-    x: poiData.location.x,
-    y: poiData.location.y,
-    z: poiData.location.z
-  }));
-});
-```
-
-**Alternativ C: Separat synk-process**
-Skapa POIs i Ivion som vanligt, sedan:
-1. "Importera från Ivion"-knapp i Geminus settings
-2. Hämtar alla nya POIs och skapar assets
-
-### Fas 6.5: Settings UI - Ivion API-konfiguration
-
-Lägg till Ivion API-inställningar i `ApiSettingsModal`:
-
-```text
-Ivion-sektionen:
-├── API URL: https://customer.ivion.navvis.com
-├── Username: admin@company.com  
-├── Password: ••••••••
-├── [Testa anslutning]
-└── [Synka POIs från Ivion]
-```
-
-**Nya Supabase Secrets:**
-- `IVION_API_URL`
-- `IVION_USERNAME`
-- `IVION_PASSWORD`
-
-### Fas 6.6: Import-flöde från Ivion
-
-Skapa ett import-flöde som:
-1. Hämtar alla POIs från Ivion site
-2. Matchar mot `ivion_site_id` i `building_settings`
-3. Skapar assets för POIs som inte redan finns (matcha på `ivion_poi_id`)
-4. Sparar koordinater och metadata
+Skapa egna selectors som hämtar data från Supabase direkt istället för AppContext:
 
 ```typescript
-// Importera POIs från Ivion
-const importPoisFromIvion = async (siteId: string, buildingFmGuid: string) => {
-  // 1. Hämta alla POIs från Ivion
-  const pois = await ivionApi.getPois(siteId);
+// Nya state-variabler
+const [floors, setFloors] = useState<{fm_guid: string; common_name: string; name: string}[]>([]);
+const [rooms, setRooms] = useState<{fm_guid: string; common_name: string; name: string}[]>([]);
+const [levelFmGuid, setLevelFmGuid] = useState('');
+const [roomFmGuid, setRoomFmGuid] = useState('');
+
+// Hämta våningar när byggnad väljs
+useEffect(() => {
+  if (!buildingFmGuid) return;
+  supabase
+    .from('assets')
+    .select('fm_guid, common_name, name')
+    .eq('building_fm_guid', buildingFmGuid)
+    .eq('category', 'Building Storey')
+    .order('common_name')
+    .then(res => setFloors(res.data || []));
+}, [buildingFmGuid]);
+
+// Hämta rum när våning väljs
+useEffect(() => {
+  if (!levelFmGuid) return;
+  supabase
+    .from('assets')
+    .select('fm_guid, common_name, name')
+    .eq('level_fm_guid', levelFmGuid)
+    .eq('category', 'Space')
+    .order('common_name')
+    .then(res => setRooms(res.data || []));
+}, [levelFmGuid]);
+```
+
+### Del 2: Lägg till 3D Position Picker
+
+Skapa en modal/dialog som visar 3D-viewern i pick-mode:
+
+**Ny komponent: `PositionPickerDialog.tsx`**
+
+```text
+src/components/inventory/PositionPickerDialog.tsx
+
+Props:
+├── open: boolean
+├── onOpenChange: (open: boolean) => void
+├── buildingFmGuid: string
+├── roomFmGuid?: string
+├── initialCoordinates?: {x, y, z}
+└── onPositionPicked: (coords: {x, y, z}) => void
+```
+
+**Funktionalitet:**
+1. Öppnar Dialog med AssetPlusViewer i pick-mode
+2. Om `roomFmGuid` finns - navigerar till det rummet
+3. Användaren klickar på en yta → koordinater returneras
+4. Dialog stängs och koordinater sparas
+
+### Del 3: Uppdatera IvionCreate med 3D picker
+
+Lägg till:
+- "Välj position i 3D" knapp (synlig endast när byggnad är vald)
+- PositionPickerDialog integration
+- Koordinatvisning med möjlighet att rensa/ändra
+
+```tsx
+// I IvionCreate.tsx
+const [positionDialogOpen, setPositionDialogOpen] = useState(false);
+const [coordinates, setCoordinates] = useState<{x: number; y: number; z: number} | null>(
+  x !== 0 || y !== 0 || z !== 0 ? { x, y, z } : null
+);
+
+// Knapp för att öppna 3D picker
+<div className="space-y-2">
+  <Label>Position</Label>
+  {coordinates ? (
+    <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+      <div className="font-mono text-sm">
+        X: {coordinates.x.toFixed(2)} Y: {coordinates.y.toFixed(2)} Z: {coordinates.z.toFixed(2)}
+      </div>
+      <Button variant="ghost" size="sm" onClick={() => setCoordinates(null)}>
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  ) : (
+    <Button
+      variant="outline"
+      onClick={() => setPositionDialogOpen(true)}
+      disabled={!buildingFmGuid}
+      className="w-full"
+    >
+      <Crosshair className="h-4 w-4 mr-2" />
+      Välj position i 3D
+    </Button>
+  )}
+</div>
+```
+
+### Del 4: 360+ Deep-linking funktionalitet
+
+Lägg till knapp för att öppna Ivion med rätt rum/POI:
+
+```tsx
+// Om asset redan har ivion_poi_id
+const handleOpen360 = () => {
+  const ivionUrl = localStorage.getItem('ivionApiUrl') || 
+                   buildingSettings?.ivion_url;
   
-  // 2. Filtrera bort redan importerade
-  const existingPoiIds = await getExistingPoiIds(buildingFmGuid);
-  const newPois = pois.filter(p => !existingPoiIds.includes(p.id));
-  
-  // 3. Skapa assets för varje ny POI
-  for (const poi of newPois) {
-    await createAssetFromPoi(poi, buildingFmGuid);
+  if (ivionUrl && siteId) {
+    // Navigera till specifik POI om vi har ett
+    const url = poiId 
+      ? `${ivionUrl}/site/${siteId}/poi/${poiId}`
+      : `${ivionUrl}/site/${siteId}`;
+    window.open(url, '_blank');
   }
 };
 ```
@@ -215,213 +156,233 @@ const importPoisFromIvion = async (siteId: string, buildingFmGuid: string) => {
 
 | Fil | Ändring |
 |-----|---------|
-| `supabase/migrations/*.sql` | Nya kolumner: `ivion_poi_id`, `ivion_site_id`, `ivion_synced_at`, `ivion_image_id` |
-| `supabase/functions/ivion-poi/index.ts` | NY: Edge function för Ivion REST API |
-| `src/pages/IvionCreate.tsx` | NY: Dedikerad sida för asset-skapande från Ivion |
-| `src/App.tsx` | Lägg till route `/ivion-create` |
-| `src/components/inventory/InventoryForm.tsx` | Utöka med stöd för Ivion-kontext (koordinater, POI-ID) |
-| `src/components/settings/ApiSettingsModal.tsx` | Lägg till Ivion API-konfiguration och import-knapp |
+| `src/pages/IvionCreate.tsx` | Lägg till Floor/Room dropdowns, 3D position picker knapp, koordinathantering, spara level_fm_guid och in_room_fm_guid |
+| `src/components/inventory/PositionPickerDialog.tsx` | NY: Modal med 3D-viewer i pick-mode |
+| `src/components/portfolio/AssetsView.tsx` | Lägg till 360+ knapp per asset (för deep-linking) |
 
 ---
 
-## Sekvensdiagram: Skapa Asset från Ivion
+## Detaljerade ändringar i IvionCreate.tsx
 
-```text
-┌─────────┐     ┌─────────┐     ┌──────────┐     ┌─────────┐     ┌────────┐
-│  User   │     │  Ivion  │     │ Geminus  │     │  Edge   │     │Supabase│
-│         │     │         │     │  (React) │     │Function │     │   DB   │
-└────┬────┘     └────┬────┘     └────┬─────┘     └────┬────┘     └───┬────┘
-     │               │               │                │              │
-     │  Skapa POI    │               │                │              │
-     │──────────────>│               │                │              │
-     │               │               │                │              │
-     │  Klicka       │               │                │              │
-     │  "Geminus"    │               │                │              │
-     │──────────────>│               │                │              │
-     │               │               │                │              │
-     │               │   Popup/Tab   │                │              │
-     │               │   med params  │                │              │
-     │               │──────────────>│                │              │
-     │               │               │                │              │
-     │               │               │  Fyll formulär │              │
-     │<──────────────│──────────────>│                │              │
-     │               │               │                │              │
-     │  Klicka Spara │               │                │              │
-     │──────────────>│──────────────>│                │              │
-     │               │               │                │              │
-     │               │               │ Spara asset    │              │
-     │               │               │───────────────>│  INSERT      │
-     │               │               │                │─────────────>│
-     │               │               │                │              │
-     │               │               │ Skapa POI      │              │
-     │               │               │ i Ivion        │              │
-     │               │               │───────────────>│              │
-     │               │               │                │──────>Ivion  │
-     │               │               │                │              │
-     │               │               │ Uppdatera      │              │
-     │               │               │ ivion_poi_id   │              │
-     │               │               │───────────────>│  UPDATE      │
-     │               │               │                │─────────────>│
-     │               │               │                │              │
-     │               │               │  Success!      │              │
-     │<──────────────│<──────────────│<───────────────│<─────────────│
-     │               │               │                │              │
+### Nya imports
+```tsx
+import { Crosshair, View } from 'lucide-react';
+import PositionPickerDialog from '@/components/inventory/PositionPickerDialog';
 ```
 
----
+### Nya state-variabler
+```tsx
+// Floor and room selection
+const [floors, setFloors] = useState<Array<{fm_guid: string; common_name: string | null; name: string | null}>>([]);
+const [rooms, setRooms] = useState<Array<{fm_guid: string; common_name: string | null; name: string | null}>>([]);
+const [levelFmGuid, setLevelFmGuid] = useState('');
+const [roomFmGuid, setRoomFmGuid] = useState('');
 
-## Användargränssnitt
-
-### IvionCreate-sidan
-
-```text
-┌───────────────────────────────────────────────────────┐
-│  Geminus - Registrera tillgång från Ivion            │
-│───────────────────────────────────────────────────────│
-│                                                       │
-│  📍 Position från Ivion                              │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ X: 10.523   Y: 20.341   Z: 1.200               │ │
-│  │ Panorama: #456  Site: Centralstationen         │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Namn / Beteckning *                                 │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ Brandsläckare BS-001                           │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Kategori *                                          │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ 🔥 Brandsläckare                            ▼ │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Symbol *                                            │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ 🧯 Brandsläckare CO2                        ▼ │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Byggnad * (auto-vald)                               │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ 🏢 Centralstationen                         ▼ │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  ┌─────────────────┐  ┌─────────────────────────────┐│
-│  │     Avbryt      │  │    Spara & Länka till Ivion ││
-│  └─────────────────┘  └─────────────────────────────┘│
-└───────────────────────────────────────────────────────┘
+// 3D position picker
+const [positionDialogOpen, setPositionDialogOpen] = useState(false);
+const [coordinates, setCoordinates] = useState<{x: number; y: number; z: number} | null>(
+  (x !== 0 || y !== 0 || z !== 0) ? { x, y, z } : null
+);
 ```
 
-### Ivion Import-sektion i Settings
-
-```text
-┌───────────────────────────────────────────────────────┐
-│  ⚡ Ivion Integration                                 │
-│───────────────────────────────────────────────────────│
-│                                                       │
-│  API URL                                             │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ https://swg.iv.navvis.com                      │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Användarnamn                                        │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ admin@company.com                              │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  Lösenord                                            │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │ ••••••••                                       │ │
-│  └─────────────────────────────────────────────────┘ │
-│                                                       │
-│  ┌─────────────────┐  ┌─────────────────────────────┐│
-│  │ Testa anslutning│  │ Importera POIs från Ivion  ││
-│  └─────────────────┘  └─────────────────────────────┘│
-│                                                       │
-│  Status: ✅ 12 POIs importerade (2026-01-28)         │
-└───────────────────────────────────────────────────────┘
-```
-
----
-
-## Tekniska detaljer
-
-### Ivion POI-struktur
-
-```typescript
-interface IvionPoi {
-  id: number;
-  titles: Record<string, string>;        // { "sv": "Brandsläckare" }
-  descriptions: Record<string, string>;  // { "sv": "<p>Beskrivning</p>" }
-  location: { x: number; y: number; z: number };
-  orientation: { x: number; y: number; z: number; w: number }; // Quaternion
-  poiType: { id: number };
-  pointOfView: {
-    imageId: number;
-    location: { x: number; y: number; z: number };
-    orientation: { x: number; y: number; z: number; w: number };
-    fov: number;
-  };
-  customData?: string;  // JSON-sträng för att spara fm_guid
-  importance: number;
-  icon?: string;
-}
-```
-
-### Mapping Ivion POI → Geminus Asset
-
-```typescript
-const createAssetFromIvionPoi = (poi: IvionPoi, buildingFmGuid: string) => ({
-  fm_guid: crypto.randomUUID(),
-  name: poi.titles['sv'] || poi.titles['en'] || 'Unnamed',
-  category: 'Instance',
-  asset_type: mapPoiTypeToAssetType(poi.poiType.id),
-  building_fm_guid: buildingFmGuid,
-  coordinate_x: poi.location.x,
-  coordinate_y: poi.location.y,
-  coordinate_z: poi.location.z,
-  ivion_poi_id: poi.id,
-  ivion_site_id: siteId,
-  ivion_image_id: poi.pointOfView?.imageId,
-  ivion_synced_at: new Date().toISOString(),
-  is_local: true,
-  created_in_model: false,
-  annotation_placed: true,  // Har position från Ivion
-  attributes: {
-    ivionDescription: poi.descriptions['sv'],
-    ivionOrientation: poi.orientation,
-    // ...
+### Nya useEffects för datahämtning
+```tsx
+// Fetch floors when building changes
+useEffect(() => {
+  if (!buildingFmGuid) {
+    setFloors([]);
+    setLevelFmGuid('');
+    return;
   }
-});
+  supabase
+    .from('assets')
+    .select('fm_guid, common_name, name')
+    .eq('building_fm_guid', buildingFmGuid)
+    .eq('category', 'Building Storey')
+    .order('common_name')
+    .then(({ data }) => setFloors(data || []));
+}, [buildingFmGuid]);
+
+// Fetch rooms when floor changes
+useEffect(() => {
+  if (!levelFmGuid) {
+    setRooms([]);
+    setRoomFmGuid('');
+    return;
+  }
+  supabase
+    .from('assets')
+    .select('fm_guid, common_name, name')
+    .eq('level_fm_guid', levelFmGuid)
+    .eq('category', 'Space')
+    .order('common_name')
+    .then(({ data }) => setRooms(data || []));
+}, [levelFmGuid]);
+```
+
+### Uppdatera handleSubmit
+```tsx
+const newAsset = {
+  // ...existing fields...
+  level_fm_guid: levelFmGuid || null,
+  in_room_fm_guid: roomFmGuid || null,
+  coordinate_x: coordinates?.x ?? null,
+  coordinate_y: coordinates?.y ?? null,
+  coordinate_z: coordinates?.z ?? null,
+  // ...
+};
+```
+
+### Nya UI-komponenter i formuläret
+
+**Floor Selector:**
+```tsx
+{buildingFmGuid && floors.length > 0 && (
+  <div className="space-y-2">
+    <Label>Våningsplan</Label>
+    <Select value={levelFmGuid} onValueChange={(v) => {
+      setLevelFmGuid(v);
+      setRoomFmGuid('');
+    }}>
+      <SelectTrigger className="h-12">
+        <SelectValue placeholder="Välj våning..." />
+      </SelectTrigger>
+      <SelectContent className="bg-popover z-50">
+        {floors.map((f) => (
+          <SelectItem key={f.fm_guid} value={f.fm_guid}>
+            {f.common_name || f.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+)}
+```
+
+**Room Selector:**
+```tsx
+{levelFmGuid && rooms.length > 0 && (
+  <div className="space-y-2">
+    <Label>Rum</Label>
+    <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
+      <SelectTrigger className="h-12">
+        <SelectValue placeholder="Välj rum..." />
+      </SelectTrigger>
+      <SelectContent className="bg-popover z-50 max-h-60">
+        {rooms.map((r) => (
+          <SelectItem key={r.fm_guid} value={r.fm_guid}>
+            {r.common_name || r.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+)}
+```
+
+**Position Picker Button:**
+```tsx
+<div className="space-y-2">
+  <Label>3D Position</Label>
+  {coordinates ? (
+    <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Crosshair className="h-4 w-4 text-primary" />
+        <span className="font-mono text-sm">
+          X: {coordinates.x.toFixed(2)} Y: {coordinates.y.toFixed(2)} Z: {coordinates.z.toFixed(2)}
+        </span>
+      </div>
+      <Button variant="ghost" size="icon" onClick={() => setCoordinates(null)}>
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  ) : (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => setPositionDialogOpen(true)}
+      disabled={!buildingFmGuid}
+      className="w-full h-12"
+    >
+      <Crosshair className="h-4 w-4 mr-2" />
+      Välj position i 3D
+    </Button>
+  )}
+</div>
 ```
 
 ---
 
-## Prioriterad implementation
+## PositionPickerDialog.tsx - Ny komponent
 
-1. **Databas**: Lägg till Ivion-kolumner i assets-tabellen
-2. **Secrets**: Be användaren lägga till IVION_API_URL, IVION_USERNAME, IVION_PASSWORD
-3. **Edge function**: Implementera `ivion-poi` med auth och POI CRUD
-4. **IvionCreate-sida**: Skapa dedikerad sida för asset-skapande från Ivion
-5. **Settings UI**: Lägg till Ivion-konfiguration och import-funktion
-6. **InventoryForm**: Utöka med stöd för Ivion-kontext
+```tsx
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
+import { NavigatorNode } from '@/components/navigator/TreeNode';
+
+interface PositionPickerDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  buildingFmGuid: string;
+  roomFmGuid?: string;
+  onPositionPicked: (coords: { x: number; y: number; z: number }) => void;
+}
+
+const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
+  open,
+  onOpenChange,
+  buildingFmGuid,
+  roomFmGuid,
+  onPositionPicked,
+}) => {
+  const handleCoordinatePicked = (
+    coords: { x: number; y: number; z: number },
+    parentNode: NavigatorNode | null
+  ) => {
+    onPositionPicked(coords);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[95vw] h-[85vh] p-0 overflow-hidden">
+        <DialogHeader className="p-4 pb-0">
+          <DialogTitle>Välj position i 3D-modellen</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 h-full min-h-0">
+          <AssetPlusViewer
+            fmGuid={roomFmGuid || buildingFmGuid}
+            pickModeEnabled={true}
+            onCoordinatePicked={handleCoordinatePicked}
+            onClose={() => onOpenChange(false)}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PositionPickerDialog;
+```
 
 ---
 
-## Beroenden och förutsättningar
+## Framtida förbättringar (ej i denna implementation)
 
-| Beroende | Status |
-|----------|--------|
-| Ivion REST API-access | Kräver credentials |
-| `building_settings.ivion_site_id` | Finns redan |
-| Supabase Edge Functions | Aktivt |
-| Ivion Frontend API (valfritt) | För djupare integration |
+1. **360+ deep-linking från AssetsView** - Lägg till View-ikon på assets med `ivion_poi_id` som öppnar Ivion
+2. **Automatisk POI-synk** - Synka skapade assets till Ivion som POIs
+3. **Ivion room-navigation** - Navigera till specifikt rum i Ivion baserat på `room_fm_guid`
 
 ---
 
-## Nästa steg efter godkännande
+## Testning
 
-1. Skapa databasmigration med nya kolumner
-2. Be om Ivion API-credentials (secrets)
-3. Implementera edge function `ivion-poi`
-4. Skapa `/ivion-create` sidan
-5. Uppdatera settings med Ivion-konfiguration
+Efter implementation:
+1. Öppna `/ivion-create?siteId=test&name=Testbrandsläckare`
+2. Välj en byggnad → kontrollera att våningar laddas
+3. Välj våning → kontrollera att rum laddas
+4. Klicka "Välj position i 3D" → kontrollera att 3D-viewer öppnas
+5. Klicka på en yta → kontrollera att koordinater sparas
+6. Spara asset → kontrollera att alla fält sparas korrekt i databasen
