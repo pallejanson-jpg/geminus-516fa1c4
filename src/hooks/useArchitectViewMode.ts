@@ -67,16 +67,35 @@ const IFC_TYPE_COLORS: Record<string, number[]> = {
   'ifcfurniture': ARCHITECT_COLORS.furniture,
 };
 
-// Background color presets
+// Background color presets - all gradients from white to color
 export const ARCHITECT_BACKGROUND_PRESETS = [
-  { id: 'green-gradient', name: 'Grön gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(223, 236, 220)' }, // Default #DFECDC
-  { id: 'blue-gradient', name: 'Blå gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(220, 232, 243)' }, // #DCE8F3
-  { id: 'warm-gradient', name: 'Varm gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(243, 236, 220)' }, // #F3ECDC
-  { id: 'gray-gradient', name: 'Grå gradient', top: 'rgb(255, 255, 255)', bottom: 'rgb(235, 235, 235)' }, // #EBEBEB
-  { id: 'pure-white', name: 'Vit', top: 'rgb(255, 255, 255)', bottom: 'rgb(255, 255, 255)' },
-  { id: 'light-beige', name: 'Beige', top: 'rgb(250, 248, 245)', bottom: 'rgb(240, 235, 225)' }, // #F0EBE1
-  { id: 'cool-gray', name: 'Kall grå', top: 'rgb(245, 247, 250)', bottom: 'rgb(225, 230, 238)' }, // #E1E6EE
-  { id: 'soft-pink', name: 'Rosa', top: 'rgb(255, 255, 255)', bottom: 'rgb(245, 230, 235)' }, // #F5E6EB
+  // Neutrals row
+  { id: 'white', name: 'Vit', bottom: 'rgb(255, 255, 255)' },
+  { id: 'light-gray', name: 'Ljusgrå', bottom: 'rgb(230, 230, 230)' },
+  { id: 'gray', name: 'Grå', bottom: 'rgb(180, 180, 180)' },
+  { id: 'dark-gray', name: 'Mörkgrå', bottom: 'rgb(120, 120, 120)' },
+  { id: 'charcoal', name: 'Antracit', bottom: 'rgb(60, 60, 60)' },
+  
+  // Colors row 1 - Light pastels
+  { id: 'mint', name: 'Mint', bottom: 'rgb(200, 235, 220)' },
+  { id: 'sage', name: 'Salvia', bottom: 'rgb(223, 236, 220)' }, // Original green
+  { id: 'sky', name: 'Himmel', bottom: 'rgb(210, 230, 245)' },
+  { id: 'lavender', name: 'Lavendel', bottom: 'rgb(230, 220, 245)' },
+  { id: 'blush', name: 'Rouge', bottom: 'rgb(245, 225, 230)' },
+  
+  // Colors row 2 - Warm tones
+  { id: 'cream', name: 'Grädde', bottom: 'rgb(250, 245, 235)' },
+  { id: 'sand', name: 'Sand', bottom: 'rgb(240, 230, 210)' },
+  { id: 'peach', name: 'Persika', bottom: 'rgb(255, 220, 200)' },
+  { id: 'coral', name: 'Korall', bottom: 'rgb(255, 200, 180)' },
+  { id: 'terracotta', name: 'Terrakotta', bottom: 'rgb(230, 180, 160)' },
+  
+  // Colors row 3 - Cool tones  
+  { id: 'ice', name: 'Is', bottom: 'rgb(225, 240, 250)' },
+  { id: 'powder', name: 'Puder', bottom: 'rgb(200, 220, 240)' },
+  { id: 'steel', name: 'Stål', bottom: 'rgb(180, 200, 220)' },
+  { id: 'slate', name: 'Skiffer', bottom: 'rgb(160, 180, 200)' },
+  { id: 'ocean', name: 'Ocean', bottom: 'rgb(140, 180, 200)' },
 ];
 
 export type BackgroundPresetId = typeof ARCHITECT_BACKGROUND_PRESETS[number]['id'];
@@ -99,7 +118,7 @@ export function useArchitectViewMode() {
     originalEdgeColor: [0, 0, 0],
     originalEdgeAlpha: 1,
     originalEdgesEnabled: true,
-    currentBackgroundPreset: 'green-gradient',
+    currentBackgroundPreset: 'sage', // Default green
   });
 
   /**
@@ -111,7 +130,8 @@ export function useArchitectViewMode() {
 
     const container = document.getElementById('AssetPlusViewer');
     if (container) {
-      container.style.background = `linear-gradient(180deg, ${preset.top} 0%, ${preset.bottom} 100%)`;
+      // All presets are gradients from white to the bottom color
+      container.style.background = `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`;
     }
     stateRef.current.currentBackgroundPreset = presetId;
   }, []);
@@ -143,8 +163,8 @@ export function useArchitectViewMode() {
     const container = document.getElementById('AssetPlusViewer');
     if (container) {
       state.originalBackground = container.style.background || '';
-      // Apply gradient background
-      container.style.background = `linear-gradient(180deg, ${preset.top} 0%, ${preset.bottom} 100%)`;
+      // Apply gradient background (white to color)
+      container.style.background = `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`;
       state.currentBackgroundPreset = presetId;
     }
 

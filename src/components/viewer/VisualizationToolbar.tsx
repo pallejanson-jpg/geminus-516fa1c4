@@ -92,7 +92,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   
   // Architect view mode state
   const [isArchitectMode, setIsArchitectMode] = useState(false);
-  const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('green-gradient');
+  const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
   
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -618,21 +618,21 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         <Label className="text-[10px] sm:text-xs text-muted-foreground mb-2 block">
                           Bakgrundsfärg
                         </Label>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="grid grid-cols-5 gap-1.5">
                           {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
                             <button
                               key={preset.id}
                               title={preset.name}
                               onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
                               className={cn(
-                                "w-6 h-6 sm:w-7 sm:h-7 rounded-md border-2 transition-all",
+                                "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
                                 "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
                                 architectBackground === preset.id
                                   ? "border-primary ring-2 ring-primary/30"
-                                  : "border-border/50"
+                                  : "border-border/40"
                               )}
                               style={{
-                                background: `linear-gradient(180deg, ${preset.top} 0%, ${preset.bottom} 100%)`
+                                background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
                               }}
                             />
                           ))}
