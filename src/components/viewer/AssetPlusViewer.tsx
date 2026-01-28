@@ -1143,11 +1143,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   }, []);
 
   const initializeViewer = useCallback(async () => {
-    // Wait one frame so refs are attached (critical: otherwise init silently never runs)
+    // Wait for DOM with retry logic (handles React Strict Mode timing issues)
     setInitStep('wait_dom');
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-    if (!viewerContainerRef.current) {
+    
+    // Retry up to 5 times with increasing delays
+    let containerReady = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      
+      if (viewerContainerRef.current && document.getElementById('AssetPlusViewer')) {
+        containerReady = true;
+        break;
+      }
+      
+      // Wait a bit longer each attempt
+      await new Promise<void>((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+    
+    if (!containerReady || !viewerContainerRef.current) {
       setInitStep('error');
       setState(prev => ({
         ...prev,
@@ -1332,13 +1345,31 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
 
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = React.useRef(true);
+  // Prevent concurrent initializations (React Strict Mode double-mount protection)
+  const initializingRef = React.useRef(false);
   
-  // Initialize on mount
+  // Initialize on mount with race condition protection
   useEffect(() => {
     isMountedRef.current = true;
-    initializeViewer();
+    
+    // Prevent concurrent initializations
+    if (initializingRef.current) {
+      console.debug('AssetPlusViewer: Skipping duplicate initialization (already in progress)');
+      return;
+    }
+    
+    // Use a small delay to let React Strict Mode complete its mount/unmount cycle
+    const initTimeout = setTimeout(() => {
+      if (isMountedRef.current && !initializingRef.current) {
+        initializingRef.current = true;
+        initializeViewer().finally(() => {
+          initializingRef.current = false;
+        });
+      }
+    }, 50);
 
     return () => {
+      clearTimeout(initTimeout);
       isMountedRef.current = false;
       
       // Restore original fetch on unmount
