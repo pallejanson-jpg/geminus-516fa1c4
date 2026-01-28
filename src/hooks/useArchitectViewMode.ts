@@ -26,7 +26,7 @@ const ARCHITECT_COLORS = {
   column: [0.820, 0.808, 0.749],         // #D1CEBF
   stair: [0.780, 0.769, 0.710],          // #C7C4B5
   railing: [0.741, 0.729, 0.671],        // #BDBAAB
-  furniture: [0.890, 0.882, 0.863],      // #E3E1DC
+  furniture: [0.451, 0.545, 0.467],      // #738B77
   default: [0.933, 0.929, 0.918],        // #EEE
 };
 
