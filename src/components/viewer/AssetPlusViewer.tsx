@@ -20,6 +20,7 @@ import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -127,6 +128,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   
   // Flash highlighting hook
   const { flashEntityById, stopFlashing } = useFlashHighlight();
+  
+  // Architect view mode hook
+  const { toggleArchitectMode, isActive: isArchitectModeActive } = useArchitectViewMode();
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -1025,7 +1029,26 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     };
   }, [flashEntityById, lookAtInstanceFromAngle]);
 
-  // Initialize viewer - following EXACT pattern from external_viewer.html
+  // Listen for Architect View Mode requests
+  useEffect(() => {
+    const handleArchitectModeRequest = (e: CustomEvent<{ enabled: boolean }>) => {
+      console.log('ARCHITECT_MODE_REQUESTED:', e.detail.enabled);
+      const success = toggleArchitectMode(viewerInstanceRef, e.detail.enabled);
+      
+      // Dispatch confirmation event
+      if (success) {
+        window.dispatchEvent(new CustomEvent(ARCHITECT_MODE_CHANGED_EVENT, {
+          detail: { enabled: e.detail.enabled }
+        }));
+        toast.info(e.detail.enabled ? 'Arkitektvy aktiverad' : 'Arkitektvy avaktiverad', { duration: 2000 });
+      }
+    };
+    
+    window.addEventListener(ARCHITECT_MODE_REQUESTED_EVENT, handleArchitectModeRequest as EventListener);
+    return () => {
+      window.removeEventListener(ARCHITECT_MODE_REQUESTED_EVENT, handleArchitectModeRequest as EventListener);
+    };
+  }, [toggleArchitectMode]);
   // Setup XKT fetch interceptor for caching
   const setupCacheInterceptor = useCallback(() => {
     // Store original fetch if not already stored
