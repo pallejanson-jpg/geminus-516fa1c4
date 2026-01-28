@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import BuildingSelector from './selectors/BuildingSelector';
 import FloorSelector from './selectors/FloorSelector';
 import RoomSelector from './selectors/RoomSelector';
+import ImageUpload from './ImageUpload';
 import type { InventoryItem } from '@/pages/Inventory';
 
 interface AnnotationSymbol {
@@ -62,6 +63,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   const [buildingFmGuid, setBuildingFmGuid] = useState(prefill?.buildingFmGuid || '');
   const [levelFmGuid, setLevelFmGuid] = useState(prefill?.levelFmGuid || '');
   const [roomFmGuid, setRoomFmGuid] = useState(prefill?.roomFmGuid || '');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   // Fetch symbols on mount
   useEffect(() => {
@@ -116,6 +118,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         attributes: {
           description: description.trim() || null,
           inventoryDate: new Date().toISOString(),
+          imageUrl: imageUrl || null,
         },
       };
 
@@ -259,6 +262,13 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
           onChange={setRoomFmGuid}
         />
       )}
+
+      {/* Image upload */}
+      <ImageUpload
+        value={imageUrl}
+        onChange={setImageUrl}
+        disabled={isLoading}
+      />
 
       {/* Description - expandable */}
       <div className="space-y-2">

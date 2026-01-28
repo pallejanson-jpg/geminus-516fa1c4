@@ -188,6 +188,8 @@ export type Database = {
           id: string
           is_favorite: boolean
           ivion_site_id: string | null
+          latitude: number | null
+          longitude: number | null
           updated_at: string
         }
         Insert: {
@@ -196,6 +198,8 @@ export type Database = {
           id?: string
           is_favorite?: boolean
           ivion_site_id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           updated_at?: string
         }
         Update: {
@@ -204,6 +208,8 @@ export type Database = {
           id?: string
           is_favorite?: boolean
           ivion_site_id?: string | null
+          latitude?: number | null
+          longitude?: number | null
           updated_at?: string
         }
         Relationships: []
