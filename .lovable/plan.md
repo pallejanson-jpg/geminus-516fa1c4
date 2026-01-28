@@ -1,236 +1,537 @@
 
-# Plan: Fix Visualization, 2D Clipping, Toolbar Settings & Screenshot Capture
+# Plan: Asset Synkronisering, Inventering Desktop UX & 3D Annotation Placering
 
-## Issues Identified
+## Sammanfattning
 
-### 1. Room Visualization Not Coloring Rooms
-**Root Cause:** The `applyVisualization` function in `RoomVisualizationPanel.tsx` has a dependency issue in its `useEffect`:
-- Lines 389-393 show dependencies as `[visualizationType, useMockData, entityIdCache.size]`
-- But `applyVisualization` is called directly, which can be stale due to React's closure behavior
-- When visualization type changes, the function may reference outdated state
+Sju förbättringsområden:
 
-**Fix:**
-- Change the useEffect to directly inline the visualization logic OR use `applyVisualization` with proper dependencies
-- Add `rooms.length` as a key dependency
-- Ensure `entityIdCache.size > 0` guard is properly checking fresh cache
+1. **Asset+ synk-kompatibilitet** - Obligatoriska fält, datatyper och 128-bitars GUID
+2. **Partiell/inkrementell synkning** - Lösa 40k-objekt timeout-problemet  
+3. **Fallback-synk per byggnad** - Auto-synk när assets saknas
+4. **Desktop-anpassning av Inventory UI** - Bättre layout på större skärmar
+5. **Kamera-knapp fix** - Aktivera mobil kamera korrekt
+6. **"Ej i modell" indikering** - Visuell markering i asset-listor
+7. **3D Annotation placering** - Spara position och visa symbol för orphan assets
 
-### 2. 2D/3D Toggle Naming and Clipping Not Working
-**Current Issues:**
-- Label says "2D planvy" instead of "2D/3D" (line ~555 in VisualizationToolbar)
-- Clip height slider dispatches `CLIP_HEIGHT_CHANGED_EVENT` (lines 157-164)
-- ViewerToolbar listens but `updateFloorCutHeight` only re-applies if `currentFloorIdRef.current && currentClipModeRef.current === 'floor'` (lines 253-260 in useSectionPlaneClipping)
-- The `currentFloorIdRef` is null when no specific floor is selected, so clipping never applies
+---
 
-**Fix:**
-- Rename "2D planvy" to "2D/3D"
-- When entering 2D mode without a specific floor selected, use the scene's first floor or apply global clipping at clip height
-- Modify `handleViewModeChange` in ViewerToolbar to always apply clipping in 2D mode, even if no specific floor is selected
+## Del 1: Asset+ Synk-kompatibilitet
 
-### 3. Toolbar Customization Changes Not Reflected Immediately
-**Root Cause:** In `ToolbarSettings.tsx`, the `saveToolbarSettings` function (line 142-150) dispatches `TOOLBAR_SETTINGS_CHANGED_EVENT`. 
-- `ViewerToolbar.tsx` listens on lines 100-112 and calls `setToolSettings(getNavigationToolSettings())`
-- This should work, but the issue may be that the toolbar rendering uses `getOrderedMainTools()` which depends on `toolSettings` state
+### Problem
+Assets skapade lokalt via InventoryForm saknar vissa fält som krävs för att senare synkas till Asset+.
 
-**Potential Issue:** The settings are saved correctly but the UI re-render may not be triggering because the reference equality check on `toolSettings` array doesn't detect changes.
+### Asset+ API-krav för ObjectType 4 (Instance)
+Baserat på `asset-plus-create/index.ts`:
 
-**Fix:**
-- Increment a version counter when settings change to force re-render
-- OR ensure the event handler creates a new array reference
+| Fält | Typ | Obligatoriskt | Beskrivning |
+|------|-----|---------------|-------------|
+| `fmGuid` | 128-bit UUID | Ja | Unik identifierare |
+| `objectType` | int (4) | Ja | Alltid 4 för Instance |
+| `designation` | string | Ja | Primärt namn/nummer |
+| `inRoomFmGuid` | string | Ja* | Koppling till rum (parent Space) |
+| `commonName` | string | Nej | Beskrivande namn |
+| `properties` | array | Nej | Utökade egenskaper med dataType |
 
-### 4. "Skapa Vy" (Create View) Error - Wrong Screenshot Method
-**Console Error:** `TypeError: xeokitViewer.getImage is not a function`
+*Asset+ kräver `inRoomFmGuid` för ObjectType 4, men vi tillåter assets utan rum lokalt för "korridor-assets".
 
-**Root Cause:** In `VisualizationToolbar.tsx` lines 187-192, we call:
-```javascript
-const screenshotDataUrl = xeokitViewer.getImage({...})
-```
-But xeokit viewer doesn't have a `getImage()` method. The correct approach is to access the canvas directly.
-
-**Fix:** Use the canvas's `toDataURL()` method:
+### Nuvarande problem i InventoryForm.tsx
 ```typescript
-const canvas = xeokitViewer.scene.canvas.canvas; // The actual HTML canvas element
-const screenshotDataUrl = canvas.toDataURL('image/png');
+// Rad 106 - Använder crypto.randomUUID() som ger korrekt 128-bit UUID
+fm_guid: crypto.randomUUID(),
+
+// MEN: saknar mappning till Asset+ properties-format
+// MEN: sparar inte `objectType` explicit
+// MEN: `category` sätts till 'Instance' - korrekt
+```
+
+### Åtgärder
+
+**A. Lägg till explicit objectType i assets-tabellen**
+```sql
+-- Ny kolumn (valfritt - kan använda category-mappning istället)
+-- ALTER TABLE assets ADD COLUMN object_type integer DEFAULT 4;
+-- Beslut: Behåll nuvarande category-mappning, objekttyp härleds vid synk
+```
+
+**B. Utöka InventoryForm med Asset+ properties-format**
+```
+Fil: src/components/inventory/InventoryForm.tsx
+
+Vid save, strukturera `attributes` enligt Asset+ format:
+{
+  objectType: 4,
+  designation: name,
+  commonName: name,
+  inRoomFmGuid: roomFmGuid || null,
+  levelFmGuid: levelFmGuid || null,
+  buildingFmGuid: buildingFmGuid,
+  assetCategory: category, // fire_extinguisher etc
+  description: description,
+  inventoryDate: new Date().toISOString(),
+  imageUrl: imageUrl,
+  // Properties array för Asset+ sync
+  syncProperties: [
+    { name: 'Description', value: description, dataType: 0 }, // String
+    { name: 'InventoryDate', value: inventoryDate, dataType: 4 }, // DateTime
+  ]
+}
+```
+
+**C. GUID-validering**
+`crypto.randomUUID()` genererar redan RFC 4122 UUID v4 (128-bit) - korrekt för Asset+. Ingen ändring behövs.
+
+---
+
+## Del 2: Partiell/Inkrementell Synkning
+
+### Problem
+Synkförsök avbryts vid ~40,000 objekt pga timeout. Den chunked sync-strategin (`sync-assets-chunked`) existerar men används inte alltid.
+
+### Nuvarande strategi i asset-plus-sync/index.ts
+- `sync-assets-chunked` (rad 385-452): Bygger redan per byggnad i 500-chunks
+- Problem: Fortfarande timeout vid stora byggnader eller många byggnader
+
+### Åtgärder
+
+**A. Lägg till resume-stöd i sync-assets-chunked**
+```
+Fil: supabase/functions/asset-plus-sync/index.ts
+
+Ny logik:
+1. Spara progress i asset_sync_state: { currentBuildingIndex, lastProcessedSkip }
+2. Vid timeout/restart: Läs senaste progress och fortsätt därifrån
+3. Lägg till max-time-guard (50s) för att avsluta graceful före Supabase timeout
+```
+
+**B. Implementera inkrementell synk baserad på dateModified**
+```typescript
+// I sync-assets-chunked:
+// 1. Hämta senaste synced_at från assets för aktuell byggnad
+// 2. Skicka dateModified filter till Asset+ API:
+const filter = [
+  ["buildingFmGuid", "=", building.fm_guid],
+  "and",
+  ["objectType", "=", 4],
+  "and",
+  ["dateModified", ">", lastSyncedAt] // Inkrementell
+];
+```
+
+**C. Ny action: sync-single-building**
+```typescript
+// Ny action för on-demand synk av en specifik byggnad
+if (action === 'sync-single-building') {
+  if (!buildingFmGuid) {
+    return error('buildingFmGuid required');
+  }
+  
+  await updateSyncState(supabase, `building-${buildingFmGuid}`, 'running');
+  
+  // Synka endast assets för denna byggnad
+  const filter = [
+    ["buildingFmGuid", "=", buildingFmGuid],
+    "and",
+    ["objectType", "=", 4]
+  ];
+  
+  // ... standard pagination loop ...
+  
+  return { success: true, totalSynced };
+}
 ```
 
 ---
 
-## Detailed Changes
+## Del 3: Fallback-synk per byggnad
 
-### File 1: `src/components/viewer/RoomVisualizationPanel.tsx`
+### Problem
+När man öppnar assets för en byggnad och inga finns i Supabase, visas tom lista.
 
-**Problem:** Auto-apply not triggering room coloring
+### Lösning
 
-**Changes:**
-1. Fix the auto-apply useEffect to properly trigger visualization:
+**A. Lägg till auto-sync check i FacilityLandingPage**
+```
+Fil: src/components/portfolio/FacilityLandingPage.tsx
+
+Ny useEffect:
+1. När showAssets klickas, kontrollera:
+   - Finns assets för denna building_fm_guid i DB?
+   - const { count } = await supabase.from('assets').select('*', { count: 'exact', head: true }).eq('building_fm_guid', fmGuid).eq('category', 'Instance');
+   
+2. Om count === 0:
+   - Visa laddningsindikator
+   - Anropa edge function: sync-single-building med buildingFmGuid
+   - Vänta på resultat
+   - Refresha asset-lista
+```
+
+**B. Alternativ: Lazy-load i AssetsView**
+```
+Fil: src/components/portfolio/AssetsView.tsx
+
+Om assets.length === 0 vid mount:
+1. Visa "Inga synkade assets - synkar nu..."
+2. Trigga sync-single-building
+3. Poll för completion
+4. Re-fetch assets när klar
+```
+
+**C. Ny funktion i asset-plus-service.ts**
 ```typescript
-// Line ~389-393: Improve dependency tracking
+export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promise<boolean> {
+  // Check local count
+  const { count } = await supabase
+    .from('assets')
+    .select('*', { count: 'exact', head: true })
+    .eq('building_fm_guid', buildingFmGuid)
+    .eq('category', 'Instance');
+  
+  if (count && count > 0) return false; // Already has assets
+  
+  // Trigger sync
+  const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+    body: { action: 'sync-single-building', buildingFmGuid }
+  });
+  
+  return data?.success ?? false;
+}
+```
+
+---
+
+## Del 4: Desktop-anpassning av Inventory UI
+
+### Problem
+Inventory-sidan är designad för mobil och ser dålig ut på desktop.
+
+### Nuvarande layout (Inventory.tsx)
+- Full bredd container
+- Sheet från bottom (mobil) eller right (desktop)
+- Sheet bredd 450px på desktop
+
+### Åtgärder
+
+**A. Lägg till responsiv grid-layout**
+```
+Fil: src/pages/Inventory.tsx
+
+Ändra från:
+<div className="h-full flex flex-col p-4 space-y-4">
+
+Till:
+<div className="h-full flex flex-col lg:flex-row gap-6 p-4 lg:p-8">
+  {/* Left column: Saved items list */}
+  <div className="flex-1 lg:max-w-md order-2 lg:order-1">
+    <InventoryList items={savedItems} isLoading={isLoading} />
+  </div>
+  
+  {/* Right column: Form (always visible on desktop) */}
+  <div className="flex-1 order-1 lg:order-2">
+    {/* On mobile: Button + Sheet */}
+    {/* On desktop: Inline form */}
+    {isMobile ? (
+      <Button onClick={() => setIsFormOpen(true)}>Ny tillgång</Button>
+    ) : (
+      <Card className="p-6">
+        <InventoryForm onSaved={handleSaved} onCancel={() => {}} prefill={prefill} />
+      </Card>
+    )}
+  </div>
+</div>
+```
+
+**B. Gör InventoryForm mer desktop-vänlig**
+```
+Fil: src/components/inventory/InventoryForm.tsx
+
+Lägg till:
+- Två-kolumns layout för inputs på desktop
+- className="grid grid-cols-1 md:grid-cols-2 gap-4"
+- Större touch targets behålls för mobil men mer kompakt på desktop
+```
+
+---
+
+## Del 5: Kamera-knapp fix
+
+### Problem
+"Ta foto"-knappen aktiverar inte kameran på mobil, den fungerar samma som "Ladda upp".
+
+### Analys av ImageUpload.tsx
+```typescript
+// Rad 149-156: Båda inputs har samma onChange handler
+<input
+  ref={cameraInputRef}
+  type="file"
+  accept="image/*"
+  capture="environment"  // <-- Detta BORDE aktivera kameran
+  className="hidden"
+  onChange={handleFileSelect}
+/>
+```
+
+### Problem
+`capture="environment"` fungerar, men på desktop finns ingen kamera så det fallback:ar till fil-väljare. På mobil bör det fungera - men det kan finnas browserproblem.
+
+### Åtgärder
+
+**A. Villkorlig rendering baserad på enhet**
+```
+Fil: src/components/inventory/ImageUpload.tsx
+
+import { useIsMobile } from '@/hooks/use-mobile';
+
+// Visa kamera-knappen endast på mobil
+{isMobile && (
+  <Button onClick={() => cameraInputRef.current?.click()}>
+    <Camera /> Ta foto
+  </Button>
+)}
+
+// På desktop: visa bara Ladda upp
+{!isMobile && (
+  <Button onClick={() => fileInputRef.current?.click()}>
+    <Upload /> Välj bild
+  </Button>
+)}
+```
+
+**B. Alternativt: Lägg till mediaDevices check**
+```typescript
+const [hasCamera, setHasCamera] = useState(false);
+
 useEffect(() => {
-  // Only apply if we have rooms, cache, and a type selected
-  if (visualizationType !== 'none' && rooms.length > 0 && entityIdCache.size > 0) {
-    // Reset colorized count before re-applying
-    setColorizedCount(0);
-    applyVisualization();
-  } else if (visualizationType === 'none') {
-    resetColors();
-  }
-}, [visualizationType, useMockData, rooms.length, entityIdCache.size]);
-```
+  navigator.mediaDevices?.enumerateDevices?.()
+    .then(devices => {
+      setHasCamera(devices.some(d => d.kind === 'videoinput'));
+    })
+    .catch(() => setHasCamera(false));
+}, []);
 
-2. Ensure `applyVisualization` is properly memoized and doesn't have stale closures - the current implementation references `rooms` which may be stale.
+// Visa kamera-knappen endast om enheten har kamera
+```
 
 ---
 
-### File 2: `src/components/viewer/VisualizationToolbar.tsx`
+## Del 6: "Ej i modell" Indikering
 
-**Changes:**
+### Problem
+När man listar assets vill man se vilka som har `created_in_model = false`.
 
-1. **Rename label** (around line 555):
-```typescript
-// Change from "2D planvy" to "2D/3D"
-<Label htmlFor="2d-mode-switch" className="text-sm">2D/3D</Label>
+### Nuvarande status i AssetsView.tsx
+Redan implementerat! (Rad 619-623)
+```tsx
+{!asset.createdInModel && (
+  <span title="Ej i modell">
+    <AlertCircle className="h-4 w-4 text-amber-500" />
+  </span>
+)}
 ```
 
-2. **Fix screenshot capture** (lines 187-192):
-```typescript
-// OLD (broken):
-const screenshotDataUrl = xeokitViewer.getImage({...});
+### Förbättringar
 
-// NEW (working):
-const canvas = xeokitViewer.scene?.canvas?.canvas;
-if (!canvas) {
-  toast({ title: "Kan inte skapa vy", description: "Canvas inte tillgängligt", variant: "destructive" });
-  return;
+**A. Lägg till samma indikering i InventoryList**
+```
+Fil: src/components/inventory/InventoryList.tsx
+
+<Card key={item.fm_guid}>
+  <div className="flex items-start gap-3">
+    <span className="text-xl">{cat.icon}</span>
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2">
+        <p className="font-medium truncate">{item.name}</p>
+        {/* Add "not in model" badge */}
+        <Badge variant="outline" className="text-amber-500 border-amber-500 text-xs">
+          Ej i modell
+        </Badge>
+      </div>
+      ...
+    </div>
+  </div>
+</Card>
+```
+
+**B. Lägg till kolumn i Navigator-trädet**
+```
+Fil: src/components/navigator/TreeNode.tsx
+
+// Vid rendering av Instance-noder:
+{node.category === 'Instance' && !node.createdInModel && (
+  <AlertCircle className="h-3 w-3 text-amber-500 ml-1" title="Ej i modell" />
+)}
+```
+
+---
+
+## Del 7: 3D Annotation Placering för Orphan Assets
+
+### Problem
+Assets utan position (`coordinate_x/y/z = null`) kan inte visas i 3D. Behöver möjlighet att placera annotation via 3D-viewer.
+
+### Befintligt stöd
+- AssetsView har redan `onPlaceAnnotation` callback (rad 380-389)
+- Assets-tabellen har `coordinate_x/y/z`, `annotation_placed`, `symbol_id`
+- VisualizationToolbar har "Skapa tillgång" som sätter coordinates
+
+### Flöde
+
+```text
+1. Användaren klickar "Placera annotation" (MapPin-ikon) på en orphan asset
+2. 3D-viewer öppnas med pick-mode aktiverat
+3. Användaren klickar på en yta i 3D
+4. Koordinater sparas till assets-tabellen
+5. Annotation visas på platsen med vald symbol
+```
+
+### Åtgärder
+
+**A. Utöka AppContext med annotation-placement state**
+```
+Fil: src/context/AppContext.tsx
+
+Lägg till:
+interface AnnotationPlacementContext {
+  asset: any; // Asset som ska placeras
+  buildingFmGuid: string;
 }
-// Force a render before capturing
-xeokitViewer.scene?.render?.(true);
-const screenshotDataUrl = canvas.toDataURL('image/png');
+
+annotationPlacementContext: AnnotationPlacementContext | null;
+startAnnotationPlacement: (asset: any, buildingFmGuid: string) => void;
+completeAnnotationPlacement: (coordinates: { x: number; y: number; z: number }) => void;
+cancelAnnotationPlacement: () => void;
 ```
 
----
+**B. Implementera placement-flow i AssetsView**
+```
+Fil: src/components/portfolio/AssetsView.tsx
 
-### File 3: `src/components/viewer/ViewerToolbar.tsx`
-
-**Changes:**
-
-1. **Fix 2D clipping to work without specific floor selected** (in `handleViewModeChange`, around line 324):
-
-When entering 2D mode and no floor is selected:
-- Get scene AABB (bounding box)
-- Calculate a reasonable clip height (e.g., minY + clipHeight where clipHeight = 1.2m)
-- Create section plane at that height
-
-```typescript
-if (mode === '2d') {
-  // ... existing camera setup ...
-  
-  // Apply clipping even without specific floor
-  if (currentFloorId) {
-    applyFloorPlanClipping(currentFloorId);
-  } else {
-    // No specific floor - apply global clipping at base + height
-    const scene = viewer.scene;
-    const sceneAABB = scene?.getAABB?.();
-    if (sceneAABB) {
-      const baseHeight = sceneAABB[1]; // minY
-      // Create a synthetic floor for global clipping
-      applyGlobalFloorPlanClipping(baseHeight);
-    }
-  }
-}
+const handlePlaceAnnotation = (asset: AssetData) => {
+  // Spara asset i context och öppna viewer
+  startAnnotationPlacement(asset.raw, asset.buildingFmGuid);
+  setViewer3dFmGuid(asset.buildingFmGuid);
+};
 ```
 
-2. **Add listener dependency fix** (line 210):
-Currently `handleViewModeChange` is not in the dependency array of the VIEW_MODE_REQUESTED_EVENT listener, causing stale closure.
+**C. Lägg till pick-mode i AssetPlusViewer för annotation**
+```
+Fil: src/components/viewer/AssetPlusViewer.tsx
 
----
+// Lyssna på annotationPlacementContext
+const { annotationPlacementContext, completeAnnotationPlacement } = useContext(AppContext);
 
-### File 4: `src/hooks/useSectionPlaneClipping.ts`
-
-**Changes:**
-
-Add a new function `applyGlobalClipping` that doesn't require a floor ID:
-```typescript
-const applyGlobalClipping = useCallback((baseHeight: number, customHeight?: number) => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene) return;
-  
-  const height = customHeight ?? floorCutHeightRef.current;
-  const clipY = baseHeight + height;
-  
-  // Remove existing plane
-  if (sectionPlaneRef.current?.destroy) {
-    sectionPlaneRef.current.destroy();
+// När pick sker och annotationPlacementContext finns:
+const handleAnnotationPick = (coordinates: { x, y, z }, parentSpace: string) => {
+  if (annotationPlacementContext) {
+    // Spara koordinater till databasen
+    await supabase.from('assets')
+      .update({
+        coordinate_x: coordinates.x,
+        coordinate_y: coordinates.y,
+        coordinate_z: coordinates.z,
+        annotation_placed: true,
+        in_room_fm_guid: parentSpace, // Auto-assign rum om det kunde identifieras
+      })
+      .eq('fm_guid', annotationPlacementContext.asset.fm_guid);
+    
+    // Skapa annotation i viewer
+    createAnnotationMarker(coordinates, annotationPlacementContext.asset);
+    
+    completeAnnotationPlacement(coordinates);
+    toast.success('Annotation placerad!');
   }
-  
-  // Create new plane
-  const plugin = initializeSectionPlanesPlugin();
-  if (plugin) {
-    sectionPlaneRef.current = plugin.createSectionPlane({
-      id: 'global-floor-clip',
-      pos: [0, clipY, 0],
-      dir: [0, -1, 0],
-      active: true,
-    });
-    currentClipModeRef.current = 'floor';
-  }
-}, [getXeokitViewer, initializeSectionPlanesPlugin]);
+};
 ```
 
----
+**D. Lägg till dynamisk annotation-rendering**
+```
+Fil: src/components/viewer/AssetPlusViewer.tsx
 
-### File 5: `src/components/viewer/ToolbarSettings.tsx`
-
-**Verify settings dispatch works correctly:**
-
-The current implementation looks correct. The issue may be in how ViewerToolbar receives the event.
-
-In ViewerToolbar, ensure the event handler forces a fresh state update:
-```typescript
-const handleSettingsChange = () => {
-  const newSettings = getNavigationToolSettings();
-  setToolSettings([...newSettings]); // Create new array reference
+// Hämta alla assets med koordinater för aktuell byggnad
+const loadAssetAnnotations = async () => {
+  const { data } = await supabase
+    .from('assets')
+    .select('fm_guid, name, coordinate_x, coordinate_y, coordinate_z, symbol_id, asset_type')
+    .eq('building_fm_guid', buildingFmGuid)
+    .eq('annotation_placed', true)
+    .not('coordinate_x', 'is', null);
+  
+  // Skapa xeokit annotations för varje
+  data?.forEach(asset => {
+    createAnnotationMarker({
+      x: asset.coordinate_x,
+      y: asset.coordinate_y,
+      z: asset.coordinate_z,
+    }, asset);
+  });
 };
 ```
 
 ---
 
-## Summary of Root Causes
+## Filändringar
 
-| Issue | Root Cause | Fix |
-|-------|------------|-----|
-| Room visualization not coloring | useEffect dependencies don't trigger re-apply properly; possibly stale closure on `rooms` | Restructure useEffect with proper dependencies |
-| 2D/3D label wrong | Hardcoded "2D planvy" string | Change to "2D/3D" |
-| Clip height slider no effect | Clipping only applies if a specific floor is selected | Add global clipping fallback when no floor selected |
-| Toolbar changes not immediate | Possibly stale array reference | Force new array on settings change |
-| Screenshot error | Wrong API method (`getImage` doesn't exist) | Use `canvas.toDataURL()` instead |
+| Fil | Ändring |
+|-----|---------|
+| `supabase/functions/asset-plus-sync/index.ts` | Lägg till `sync-single-building`, resume-stöd, inkrementell sync |
+| `src/services/asset-plus-service.ts` | Ny `syncBuildingAssetsIfNeeded()` funktion |
+| `src/pages/Inventory.tsx` | Responsiv desktop-layout med sidvid-sida |
+| `src/components/inventory/InventoryForm.tsx` | Grid-layout för desktop, Asset+ properties-format |
+| `src/components/inventory/ImageUpload.tsx` | Villkorlig kamera-knapp baserat på enhet |
+| `src/components/inventory/InventoryList.tsx` | "Ej i modell" badge |
+| `src/components/portfolio/AssetsView.tsx` | Koppla placeAnnotation till context |
+| `src/context/AppContext.tsx` | Lägg till annotationPlacementContext |
+| `src/components/viewer/AssetPlusViewer.tsx` | Annotation pick-mode och rendering |
+| `src/components/navigator/TreeNode.tsx` | "Ej i modell" ikon |
 
 ---
 
-## Testing Checklist
+## Leveransordning
 
-1. **Room Visualization:**
-   - Open viewer with building
-   - Open Room Visualization panel
-   - Select "Temperatur" from dropdown
-   - Verify rooms get colored immediately (no "Uppdatera" button needed)
-   - Switch to "CO2" - verify colors change automatically
+1. **GUID & Asset+ format** - Säkerställ attributes har rätt struktur
+2. **Sync-single-building** - Ny edge function action
+3. **Fallback-synk i UI** - Trigga auto-sync när assets saknas
+4. **Desktop Inventory layout** - Responsiv design
+5. **Kamera-knapp** - Villkorlig rendering
+6. **"Ej i modell" badges** - Visuell indikering
+7. **3D Annotation placement** - Full placerings-flow
 
-2. **2D/3D Mode:**
-   - Verify label shows "2D/3D" not "2D planvy"
-   - Toggle to 2D mode
-   - Move clip height slider
-   - Verify the section plane cuts at different heights
-   - Return to 3D mode - verify clipping is removed
+---
 
-3. **Toolbar Customization:**
-   - Open "Anpassa verktygsfält"
-   - Toggle off a tool (e.g., "Mätverktyg")
-   - Click Save
-   - Verify tool disappears from bottom toolbar immediately
+## Tekniska detaljer
 
-4. **Create View:**
-   - Click "Skapa Vy" in display menu
-   - Verify dialog opens with screenshot preview
-   - Enter name and save
-   - Verify view appears in saved views list
+### GUID-format
+```typescript
+// crypto.randomUUID() genererar:
+// "550e8400-e29b-41d4-a716-446655440000"
+// Detta är 128-bit RFC 4122 UUID v4 - kompatibelt med Asset+
+```
 
+### Edge Function Timeout-hantering
+```typescript
+const MAX_EXECUTION_TIME = 50000; // 50 seconds (Supabase limit is 60s)
+const startTime = Date.now();
+
+while (hasMore) {
+  if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+    // Save progress and exit gracefully
+    await updateSyncState(supabase, 'assets', 'interrupted', totalSynced, undefined, {
+      resumeData: { buildingIndex: i, skip }
+    });
+    return { success: true, message: 'Partial sync, will resume', totalSynced, interrupted: true };
+  }
+  // ... continue sync
+}
+```
+
+### Annotation Marker Creation
+```typescript
+const createAnnotationMarker = (coords: {x,y,z}, asset: any) => {
+  const annotation = viewer.scene.annotations?.createAnnotation({
+    id: asset.fm_guid,
+    worldPos: [coords.x, coords.y, coords.z],
+    markerShown: true,
+    labelShown: false,
+    markerHTML: getMarkerHTML(asset.symbol_id, asset.asset_type),
+  });
+};
+```
