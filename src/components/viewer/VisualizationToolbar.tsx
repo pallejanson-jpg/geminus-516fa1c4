@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useEffect } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight } from "lucide-react";
+import React, { useCallback, useState, useEffect, useContext } from "react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,12 +13,18 @@ import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVEN
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
+import CreateViewDialog from "./CreateViewDialog";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
+import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
+import { AppContext } from "@/context/AppContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid?: string;
+  buildingName?: string;
   isViewerReady?: boolean;
   onToggleNavCube?: (visible: boolean) => void;
   onToggleMinimap?: (visible: boolean) => void;
@@ -36,6 +42,10 @@ interface VisualizationToolbarProps {
   showMinimap?: boolean;
   className?: string;
   inline?: boolean;
+  /** Current visible model IDs for saved view capture */
+  visibleModelIds?: string[];
+  /** Current visible floor IDs for saved view capture */
+  visibleFloorIds?: string[];
 }
 
 /**
@@ -48,6 +58,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { 
     viewerRef,
     buildingFmGuid,
+    buildingName,
     isViewerReady = true,
     className, 
     inline = false,
@@ -55,12 +66,21 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     showVisualization = false,
     onAddAsset,
     onVisibleFloorsChange,
+    visibleModelIds = [],
+    visibleFloorIds = [],
   } = props;
+
+  const { allData } = useContext(AppContext);
 
   const [isOpen, setIsOpen] = useState(false);
   const [showSpaces, setShowSpaces] = useState(false); // Default OFF per requirements
   const [showAnnotations, setShowAnnotations] = useState(false); // Default OFF per requirements
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
+  
+  // Saved view dialog state
+  const [showCreateViewDialog, setShowCreateViewDialog] = useState(false);
+  const [pendingViewState, setPendingViewState] = useState<any>(null);
+  const [isSavingView, setIsSavingView] = useState(false);
   
   // Active side-pop submenu state
   const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | null>(null);
@@ -143,6 +163,142 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       detail: { height: newHeight }
     }));
   }, []);
+
+  // Handle 2D/3D mode toggle from this menu
+  const handle2DModeToggle = useCallback((enabled: boolean) => {
+    const mode = enabled ? '2d' : '3d';
+    // Dispatch request event for ViewerToolbar to handle
+    window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
+      detail: { mode }
+    }));
+  }, []);
+
+  // Capture current view state for saving
+  const captureViewState = useCallback(async () => {
+    const viewer = viewerRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    
+    if (!xeokitViewer || !buildingFmGuid) {
+      toast({ title: "Kan inte skapa vy", description: "Viewer är inte redo", variant: "destructive" });
+      return;
+    }
+
+    try {
+      // Get screenshot
+      const screenshotDataUrl = xeokitViewer.getImage({
+        format: "png",
+        width: 400,
+        height: 300
+      });
+
+      // Get camera state
+      const camera = xeokitViewer.camera;
+      const cameraState = {
+        eye: [...camera.eye],
+        look: [...camera.look],
+        up: [...camera.up],
+        projection: camera.projection,
+      };
+
+      // Get building name
+      const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+
+      const viewState = {
+        buildingFmGuid,
+        buildingName: resolvedBuildingName,
+        screenshotDataUrl,
+        cameraEye: cameraState.eye,
+        cameraLook: cameraState.look,
+        cameraUp: cameraState.up,
+        cameraProjection: cameraState.projection,
+        viewMode: is2DMode ? '2d' : '3d',
+        clipHeight,
+        visibleModelIds,
+        visibleFloorIds,
+        showSpaces,
+        showAnnotations,
+        visualizationType: 'none', // Will be enhanced when RoomVisualizationPanel provides this
+        visualizationMockData: false,
+      };
+
+      setPendingViewState(viewState);
+      setShowCreateViewDialog(true);
+    } catch (err) {
+      console.error('Failed to capture view state:', err);
+      toast({ title: "Fel", description: "Kunde inte fånga vyn", variant: "destructive" });
+    }
+  }, [viewerRef, buildingFmGuid, buildingName, allData, is2DMode, clipHeight, visibleModelIds, visibleFloorIds, showSpaces, showAnnotations]);
+
+  // Save the view to database
+  const handleSaveView = useCallback(async (name: string, description: string) => {
+    if (!pendingViewState) return;
+
+    setIsSavingView(true);
+    try {
+      // Upload screenshot to storage
+      const viewId = crypto.randomUUID();
+      const base64Data = pendingViewState.screenshotDataUrl.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+
+      const { error: uploadError } = await supabase.storage
+        .from('saved-view-screenshots')
+        .upload(`${viewId}.png`, blob, { contentType: 'image/png' });
+
+      if (uploadError) {
+        console.error('Screenshot upload failed:', uploadError);
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('saved-view-screenshots')
+        .getPublicUrl(`${viewId}.png`);
+
+      // Insert saved view record
+      const { error: insertError } = await supabase
+        .from('saved_views')
+        .insert({
+          id: viewId,
+          name,
+          description: description || null,
+          building_fm_guid: pendingViewState.buildingFmGuid,
+          building_name: pendingViewState.buildingName,
+          screenshot_url: urlData?.publicUrl || null,
+          camera_eye: pendingViewState.cameraEye,
+          camera_look: pendingViewState.cameraLook,
+          camera_up: pendingViewState.cameraUp,
+          camera_projection: pendingViewState.cameraProjection,
+          view_mode: pendingViewState.viewMode,
+          clip_height: pendingViewState.clipHeight,
+          visible_model_ids: pendingViewState.visibleModelIds,
+          visible_floor_ids: pendingViewState.visibleFloorIds,
+          show_spaces: pendingViewState.showSpaces,
+          show_annotations: pendingViewState.showAnnotations,
+          visualization_type: pendingViewState.visualizationType,
+          visualization_mock_data: pendingViewState.visualizationMockData,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      toast({ title: "Vy sparad!", description: `"${name}" har sparats` });
+      setShowCreateViewDialog(false);
+      setPendingViewState(null);
+    } catch (err) {
+      console.error('Failed to save view:', err);
+      toast({ title: "Fel", description: "Kunde inte spara vyn", variant: "destructive" });
+      throw err;
+    } finally {
+      setIsSavingView(false);
+    }
+  }, [pendingViewState]);
 
   // Tool visibility check
   const isToolVisible = useCallback((toolId: string) => {
@@ -398,6 +554,24 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 </Label>
 
                 <div className="space-y-0.5 sm:space-y-1">
+                  {/* 2D Plan View Toggle */}
+                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div
+                        className={cn(
+                          "p-1 sm:p-1.5 rounded-md",
+                          is2DMode
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">2D planvy</span>
+                    </div>
+                    <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
+                  </div>
+
                   {isToolVisible('spaces') && (
                     <div className="flex items-center justify-between py-1.5 sm:py-2">
                       <div className="flex items-center gap-2 sm:gap-3">
@@ -458,13 +632,26 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               </div>
 
               {/* Actions section */}
-              {isToolVisible('addAsset') && onAddAsset && (
-                <div>
-                  <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                    Åtgärder
-                  </Label>
+              <div>
+                <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+                  Åtgärder
+                </Label>
 
-                  <div className="space-y-1">
+                <div className="space-y-1">
+                  {/* Create View button */}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
+                    onClick={captureViewState}
+                    disabled={!isViewerReady}
+                  >
+                    <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
+                      <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </div>
+                    <span className="text-xs sm:text-sm">Skapa vy</span>
+                  </Button>
+
+                  {isToolVisible('addAsset') && onAddAsset && (
                     <Button
                       variant="outline"
                       className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
@@ -475,9 +662,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       </div>
                       <span className="text-xs sm:text-sm">Registrera tillgång</span>
                     </Button>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </ScrollArea>
           </div>
@@ -514,6 +701,18 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               listOnly={true}
             />
           </SidePopPanel>
+          
+          {/* Create View Dialog */}
+          <CreateViewDialog
+            open={showCreateViewDialog}
+            onClose={() => {
+              setShowCreateViewDialog(false);
+              setPendingViewState(null);
+            }}
+            onSave={handleSaveView}
+            viewState={pendingViewState}
+            isSaving={isSavingView}
+          />
         </TooltipProvider>
       )}
     </div>
