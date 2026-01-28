@@ -42,6 +42,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
     const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
     const [clippingEnabled, setClippingEnabled] = useState(false);
+    const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
     
     // Stable refs to preserve selection across re-renders
     const visibleFloorIdsRef = React.useRef<Set<string>>(new Set());
@@ -55,6 +56,36 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     React.useEffect(() => {
       floorsRef.current = floors;
     }, [floors]);
+
+    // Load saved selection from localStorage
+    useEffect(() => {
+      if (!buildingFmGuid || localStorageLoaded) return;
+      
+      const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
+      const saved = localStorage.getItem(storageKey);
+      
+      if (saved) {
+        try {
+          const savedIds = JSON.parse(saved) as string[];
+          if (Array.isArray(savedIds) && savedIds.length > 0) {
+            console.debug("Restoring saved floor selection:", savedIds);
+            setVisibleFloorIds(new Set(savedIds));
+            visibleFloorIdsRef.current = new Set(savedIds);
+          }
+        } catch (e) {
+          console.debug("Failed to parse saved floor selection:", e);
+        }
+      }
+      setLocalStorageLoaded(true);
+    }, [buildingFmGuid, localStorageLoaded]);
+
+    // Save selection to localStorage when it changes
+    useEffect(() => {
+      if (!buildingFmGuid || !isInitialized || visibleFloorIds.size === 0) return;
+      
+      const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
+    }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
     // SectionPlane clipping hook (uses ceiling mode for 3D solo)
     const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
@@ -160,7 +191,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       return extractedFloors;
     }, [getXeokitViewer, floorNamesMap]);
 
-    // Load floors once and set all visible by default
+    // Load floors once and set visible based on localStorage or default to all
     useEffect(() => {
       if (isInitialized) return;
 
@@ -168,8 +199,21 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         const newFloors = extractFloors();
         if (newFloors.length > 0) {
           setFloors(newFloors);
-          const allIds = new Set(newFloors.map(f => f.id));
-          setVisibleFloorIds(allIds);
+          
+          // If localStorage already loaded a selection, validate and apply it
+          const savedSelection = visibleFloorIdsRef.current;
+          const validFloorIds = new Set(newFloors.map(f => f.id));
+          const validSavedSelection = new Set(
+            Array.from(savedSelection).filter(id => validFloorIds.has(id))
+          );
+          
+          if (validSavedSelection.size > 0) {
+            // Use saved selection
+            setVisibleFloorIds(validSavedSelection);
+          } else {
+            // Default to all visible
+            setVisibleFloorIds(validFloorIds);
+          }
           setIsInitialized(true);
         }
       };
