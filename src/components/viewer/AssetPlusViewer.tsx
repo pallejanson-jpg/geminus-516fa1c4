@@ -78,6 +78,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const accessTokenRef = useRef<string>('');
   const baseUrlRef = useRef<string>('');
   const originalFetchRef = useRef<typeof fetch | null>(null);
+  // Prevent concurrent initializations (React Strict Mode double-mount protection)
+  const initializingRef = useRef(false);
   
   // Deferred loading state (matching Asset+ pattern exactly)
   const deferCallsRef = useRef(true);
@@ -1143,23 +1145,25 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   }, []);
 
   const initializeViewer = useCallback(async () => {
-    // Wait for DOM with retry logic (handles React Strict Mode timing issues)
+    // Always clear error first so the viewer container renders back into the DOM.
     setInitStep('wait_dom');
-    
-    // Retry up to 5 times with increasing delays
+    setState(prev => ({ ...prev, isLoading: true, error: null, isInitialized: false }));
+
+    // Wait for DOM with retry logic (handles React Strict Mode timing issues)
+    // Retry up to 6 times with increasing delays
     let containerReady = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 6; attempt++) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      
+
       if (viewerContainerRef.current && document.getElementById('AssetPlusViewer')) {
         containerReady = true;
         break;
       }
-      
+
       // Wait a bit longer each attempt
-      await new Promise<void>((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+      await new Promise<void>((resolve) => setTimeout(resolve, 60 * (attempt + 1)));
     }
-    
+
     if (!containerReady || !viewerContainerRef.current) {
       setInitStep('error');
       setState(prev => ({
@@ -1170,7 +1174,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       return;
     }
 
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
     setModelLoadState('idle');
     setCacheStatus(null);
     
@@ -1343,10 +1346,32 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, [fmGuid, assetData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
+  const handleRetry = useCallback(() => {
+    // If we're already initializing, ignore retry clicks.
+    if (initializingRef.current) {
+      console.debug('AssetPlusViewer: Retry ignored (initialization in progress)');
+      return;
+    }
+
+    // Clear the error FIRST so the viewer container is rendered back into the DOM,
+    // then trigger initialization on the next frames.
+    setState(prev => ({
+      ...prev,
+      error: null,
+      isLoading: true,
+      isInitialized: false,
+    }));
+    setInitStep('wait_dom');
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        initializeViewer();
+      });
+    });
+  }, [initializeViewer]);
+
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = React.useRef(true);
-  // Prevent concurrent initializations (React Strict Mode double-mount protection)
-  const initializingRef = React.useRef(false);
   
   // Initialize on mount with race condition protection
   useEffect(() => {
@@ -1439,7 +1464,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 <p className="text-lg font-medium">Could not load 3D viewer</p>
                 <p className="text-sm text-muted-foreground mt-2">{state.error}</p>
               </div>
-              <Button onClick={initializeViewer} variant="outline">
+              <Button onClick={handleRetry} variant="outline">
                 Try again
               </Button>
             </div>
