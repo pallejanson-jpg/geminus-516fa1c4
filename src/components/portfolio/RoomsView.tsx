@@ -497,30 +497,31 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   return (
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300">
       {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <DoorOpen className="h-5 w-5 text-primary" />
-          <div>
-            <h1 className="text-lg font-bold">{title}</h1>
-            <p className="text-xs text-muted-foreground">
-              {filteredRooms.length} rum · {Math.round(totalArea).toLocaleString('sv-SE')} m² totalt · {allColumns.length} tillgängliga egenskaper
+      <div className="border-b px-2 sm:px-3 md:px-4 py-2 sm:py-3 flex items-center justify-between shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <DoorOpen className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+              {filteredRooms.length} rum · {Math.round(totalArea).toLocaleString('sv-SE')} m²
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X size={20} />
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
+          <X size={16} className="sm:hidden" />
+          <X size={20} className="hidden sm:block" />
         </Button>
       </div>
 
       {/* Toolbar */}
-      <div className="border-b px-4 py-2 flex gap-2 shrink-0">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="border-b px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 flex gap-1.5 sm:gap-2 shrink-0">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
             placeholder="Sök rum..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
+            className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
         </div>
         
@@ -686,7 +687,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                         onClick={() => handleSelectRoom(room)}
                       >
                         {orderedVisibleColumns.map((colKey) => (
-                          <TableCell key={colKey} className="py-2 whitespace-nowrap">
+                          <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm">
                             {formatCellValue(colKey, room[colKey])}
                           </TableCell>
                         ))}
