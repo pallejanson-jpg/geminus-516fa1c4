@@ -112,6 +112,10 @@ export type Database = {
           id: string
           in_room_fm_guid: string | null
           is_local: boolean
+          ivion_image_id: number | null
+          ivion_poi_id: number | null
+          ivion_site_id: string | null
+          ivion_synced_at: string | null
           level_fm_guid: string | null
           name: string | null
           source_updated_at: string | null
@@ -138,6 +142,10 @@ export type Database = {
           id?: string
           in_room_fm_guid?: string | null
           is_local?: boolean
+          ivion_image_id?: number | null
+          ivion_poi_id?: number | null
+          ivion_site_id?: string | null
+          ivion_synced_at?: string | null
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null
@@ -164,6 +172,10 @@ export type Database = {
           id?: string
           in_room_fm_guid?: string | null
           is_local?: boolean
+          ivion_image_id?: number | null
+          ivion_poi_id?: number | null
+          ivion_site_id?: string | null
+          ivion_synced_at?: string | null
           level_fm_guid?: string | null
           name?: string | null
           source_updated_at?: string | null
