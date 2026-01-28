@@ -35,7 +35,7 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
   const handleConfirm = () => {
     if (pendingCoords) {
       onPositionConfirmed(pendingCoords);
-      onClose();
+      // Do NOT call onClose() - keep 3D view open until form is saved
     }
   };
 
