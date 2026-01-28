@@ -83,10 +83,11 @@ export type BackgroundPresetId = typeof ARCHITECT_BACKGROUND_PRESETS[number]['id
 
 export interface ArchitectViewModeState {
   isActive: boolean;
-  originalColors: Map<string, { color: number[]; opacity: number }>;
+  originalColors: Map<string, { color: number[]; opacity: number; edges: boolean }>;
   originalBackground: string;
   originalEdgeColor: number[];
   originalEdgeAlpha: number;
+  originalEdgesEnabled: boolean;
   currentBackgroundPreset: BackgroundPresetId;
 }
 
@@ -97,6 +98,7 @@ export function useArchitectViewMode() {
     originalBackground: '',
     originalEdgeColor: [0, 0, 0],
     originalEdgeAlpha: 1,
+    originalEdgesEnabled: true,
     currentBackgroundPreset: 'green-gradient',
   });
 
@@ -146,15 +148,16 @@ export function useArchitectViewMode() {
       state.currentBackgroundPreset = presetId;
     }
 
-    // Store and modify edge rendering for smoother lines
+    // Store and modify edge rendering - disable most edges for cleaner look
     const edgeMaterial = scene.edgeMaterial;
     if (edgeMaterial) {
       state.originalEdgeColor = [...edgeMaterial.edgeColor];
       state.originalEdgeAlpha = edgeMaterial.edgeAlpha;
+      state.originalEdgesEnabled = scene.edgesEnabled ?? true;
       
-      // Softer, lighter edges
-      edgeMaterial.edgeColor = [0.7, 0.7, 0.68];
-      edgeMaterial.edgeAlpha = 0.4;
+      // Very subtle edges - almost invisible for clean architectural look
+      edgeMaterial.edgeColor = [0.85, 0.84, 0.82];
+      edgeMaterial.edgeAlpha = 0.15;
       edgeMaterial.edgeWidth = 1;
     }
 
@@ -169,17 +172,22 @@ export function useArchitectViewMode() {
         
         if (!entity || !metaObject) continue;
         
-        // Store original color and opacity
-        if (entity.colorize) {
-          state.originalColors.set(objectId, {
-            color: [...entity.colorize],
-            opacity: entity.opacity ?? 1,
-          });
-        }
+        // Store original color, opacity, and edge visibility
+        state.originalColors.set(objectId, {
+          color: entity.colorize ? [...entity.colorize] : [1, 1, 1],
+          opacity: entity.opacity ?? 1,
+          edges: entity.edges ?? true,
+        });
         
         // Get IFC type and find matching color
         const ifcType = (metaObject.type || '').toLowerCase();
         const newColor = IFC_TYPE_COLORS[ifcType] || ARCHITECT_COLORS.default;
+        
+        // Disable edges on most objects for cleaner look
+        // Only keep edges on walls, doors, windows for definition
+        const keepEdges = ['ifcwall', 'ifcwallstandardcase', 'ifcdoor', 'ifcdoorstandardcase', 
+                          'ifcwindow', 'ifcwindowstandardcase', 'ifccurtainwall'].includes(ifcType);
+        entity.edges = keepEdges;
         
         // Apply new color
         entity.colorize = newColor;
@@ -223,13 +231,14 @@ export function useArchitectViewMode() {
       scene.edgeMaterial.edgeAlpha = state.originalEdgeAlpha;
     }
 
-    // Restore original colors
+    // Restore original colors and edges
     if (scene?.objects) {
       for (const [objectId, original] of state.originalColors) {
         const entity = scene.objects[objectId];
         if (entity) {
           entity.colorize = original.color;
           entity.opacity = original.opacity;
+          entity.edges = original.edges;
         }
       }
     }
