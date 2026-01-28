@@ -34,6 +34,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const [isInitialized, setIsInitialized] = useState(false);
     const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
     const [isLoadingNames, setIsLoadingNames] = useState(false);
+    const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
     
     // Stable refs to preserve selection across re-renders
     const visibleModelIdsRef = React.useRef<Set<string>>(new Set());
@@ -47,6 +48,36 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     React.useEffect(() => {
       modelsRef.current = models;
     }, [models]);
+
+    // Load saved selection from localStorage
+    useEffect(() => {
+      if (!buildingFmGuid || localStorageLoaded) return;
+      
+      const storageKey = `viewer-visible-models-${buildingFmGuid}`;
+      const saved = localStorage.getItem(storageKey);
+      
+      if (saved) {
+        try {
+          const savedIds = JSON.parse(saved) as string[];
+          if (Array.isArray(savedIds) && savedIds.length > 0) {
+            console.debug("Restoring saved model selection:", savedIds);
+            setVisibleModelIds(new Set(savedIds));
+            visibleModelIdsRef.current = new Set(savedIds);
+          }
+        } catch (e) {
+          console.debug("Failed to parse saved model selection:", e);
+        }
+      }
+      setLocalStorageLoaded(true);
+    }, [buildingFmGuid, localStorageLoaded]);
+
+    // Save selection to localStorage when it changes
+    useEffect(() => {
+      if (!buildingFmGuid || !isInitialized || visibleModelIds.size === 0) return;
+      
+      const storageKey = `viewer-visible-models-${buildingFmGuid}`;
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleModelIds)));
+    }, [visibleModelIds, buildingFmGuid, isInitialized]);
 
   // Helper to extract model ID from xktFileUrl
   const extractModelIdFromUrl = (xktFileUrl: string): string => {
@@ -252,7 +283,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       });
     }, [getXeokitViewer]);
 
-    // Load models once and set only A-models visible by default
+    // Load models once and set visible based on localStorage or default to A-models
     // Wait for model names to be loaded before initializing
     useEffect(() => {
       if (isInitialized || isLoadingNames) return;
@@ -262,18 +293,33 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         if (newModels.length > 0) {
           setModels(newModels);
           
-          // Filter to only A-models as default
-          const aModelIds = new Set(
-            newModels
-              .filter(m => {
-                const nameLower = m.name.toLowerCase();
-                return nameLower.startsWith('a') || nameLower.includes('a-modell') || nameLower.includes('arkitekt');
-              })
-              .map(m => m.id)
+          // Check if localStorage already loaded a selection
+          const savedSelection = visibleModelIdsRef.current;
+          const validModelIds = new Set(newModels.map(m => m.id));
+          const validSavedSelection = new Set(
+            Array.from(savedSelection).filter(id => validModelIds.has(id))
           );
           
-          // If no A-models found, show all
-          const idsToShow = aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id));
+          let idsToShow: Set<string>;
+          
+          if (validSavedSelection.size > 0) {
+            // Use saved selection
+            idsToShow = validSavedSelection;
+          } else {
+            // Default: Filter to only A-models
+            const aModelIds = new Set(
+              newModels
+                .filter(m => {
+                  const nameLower = m.name.toLowerCase();
+                  return nameLower.startsWith('a') || nameLower.includes('a-modell') || nameLower.includes('arkitekt');
+                })
+                .map(m => m.id)
+            );
+            
+            // If no A-models found, show all
+            idsToShow = aModelIds.size > 0 ? aModelIds : new Set(newModels.map(m => m.id));
+          }
+          
           setVisibleModelIds(idsToShow);
           
           // Apply visibility immediately
