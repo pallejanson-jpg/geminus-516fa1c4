@@ -1,260 +1,242 @@
 
-# Plan: Åtgärda Rumsvisualisering, Dölja Röststyrning & Förbättra Inventeringens Tillgänglighet
+Mål (utifrån din feedback)
+1) Kartposition per byggnad: Under “Map Position” ska en karta visas där man klickar ut positionen → spara latitude/longitude.
+2) Rumsvisualisering: Den ska alltid hitta rätt rum (alla rum när alla våningsplan visas, annars bara rum på valda plan) och den ska vara snabb. “Visa rum”-sliden ska alltid vara aktiv när man jobbar med rumsvisualisering.
+3) Namngivning: Våningsplan och BIM-modeller visar ofta fel namn → ska bli stabilt och konsekvent.
+4) 2D/3D + klippning: Sax/klippning ska synas och vara aktivt användbar. Klippning ska fungera i 3D (taknivå mellan våningar för att klippa “felritade” objekt) och i 2D (planritning med justerbar klipphöjd). En kontroll i Visningsmenyn ska kunna styra 2D/3D samt klipphöjd.
 
-## Sammanfattning
+------------------------------------------------------------
+A) Kartposition för byggnad – klicka på karta och spara lat/lng
+Problem i nuläget
+- FacilityLandingPage har fält för latitude/longitude som man skriver in manuellt.
+- MapView visar byggnader på “fejkade” koordinater (NORDIC_CITIES + random), och använder inte sparade koordinater från building_settings.
 
-Tre huvudproblem att lösa:
+Lösning
+A1. Bygg en “Map picker” i Building Settings (FacilityLandingPage)
+- I sektionen “Map Position” ersätter vi (eller kompletterar) numeriska inputs med en liten karta (t.ex. 240px hög).
+- Kartan:
+  - Hämtar Mapbox-token via befintlig backend-funktion (samma strategi som MapView).
+  - Visar en marker om building_settings redan har lat/lng.
+  - Klick på kartan sätter “pending” lat/lng och flyttar markern direkt.
+  - Knapp “Spara position” sparar via updateMapPosition(lat,lng).
+  - Extra: knapp “Använd min position” (valfritt) kan använda GeolocateControl om du vill.
 
-1. **Rumsvisualisering hittar 0 rum** - Felsökning visar att `category` i databasen är `'Space'` (inte `'IfcSpace'`), så det borde fungera. Problemet kan vara att `buildingFmGuid` matchning kräver exakt case-matchning. Dessutom ska transparens på färger matcha BIM-modeller.
+A2. Gör så att MapView faktiskt använder sparade koordinater
+- Vid rendering av mapFacilities:
+  - Hämta building_settings för alla byggnader (en query med select fm_guid, latitude, longitude).
+  - För varje building:
+    - Om lat/lng finns → använd dem.
+    - Annars fallback till dagens “NORDIC_CITIES”-logik (så inget blir “utan position”).
+- Resultat: När du klickar ut position i building settings syns det direkt i kartvyn.
 
-2. **Röststyrning visas alltid** - Ska döljas som standard och endast visas när aktiverad i Settings.
+Filer som berörs
+- src/components/portfolio/FacilityLandingPage.tsx (UI: karta + klick-to-set + save)
+- src/components/map/MapView.tsx (använd sparade coords från building_settings)
+- (ev. ny liten komponent, t.ex. src/components/map/BuildingMapPicker.tsx för återanvändning)
 
-3. **Inventeringsfunktionen svår att hitta** - Ska läggas i vänster sidomeny, Quick Actions på alla nivåer, och i Navigator med förifylla baserat på navigationskontext.
+------------------------------------------------------------
+B) Rumsvisualisering – varför 0 rum ibland + prestanda
+Observationer i koden (nuvarande)
+- RoomVisualizationPanel hämtar rum via databasen (assets) och filtrerar sedan på visibleFloorFmGuids.
+- visibleFloorFmGuids kommer från FloorVisibilitySelector och baseras på metaObject.originalSystemId/metaObject.id. I vissa modeller matchar detta inte DB:s level_fm_guid → filter kan bli “0 rum” även om det finns rum.
+- Prestanda: applyVisualization loopar igenom alla rum och gör getItemsByPropertyValue('fmguid', ...) per rum. Detta är väldigt dyrt när rum är många.
 
----
+Mål-beteende (som du beskriver)
+- Om alla våningsplan är aktiva → hitta alla rum.
+- Om ett enstaka plan väljs → bara rum på det planet.
+- Kännas lika snabbt som Portfolio/Navigator.
 
-## Problem 1: Rumsvisualisering - Inga Rum Hittas
+Lösning – två delar: Stabil “hitta rum” + snabb “färga rum”
+B1. Sluta fråga databasen i RoomVisualizationPanel – använd redan laddad allData
+- Portfolio/Navigator är snabba eftersom de använder AppContext.allData (in-memory).
+- Vi gör samma i RoomVisualizationPanel:
+  - Hämta allData via AppContext direkt i komponenten.
+  - rooms = allData.filter(category === 'Space' && buildingFmGuid matchar) och sedan filter på levelFmGuid när visibleFloorFmGuids finns.
+- Detta tar bort:
+  - risk för query-limit
+  - nät/DB-latens
+  - “ibland 0 rum” pga query timing
+- Viktigt: byggnads-ID måste vara korrekt (se B2).
 
-### Analys
-Databasen har 3,933 rum med `category = 'Space'`. RoomVisualizationPanel söker korrekt med `category = 'Space'`, men problemet kan vara:
+B2. Säkerställ att “buildingFmGuid” alltid är byggnadens guid i viewer-sammanhang
+- I AssetPlusViewer sätts buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid.
+- Om man öppnar viewer från ett plan/rum där buildingFmGuid saknas i datat → faller det tillbaka till fel guid → 0 rum, fel modellnamn etc.
+- Åtgärd:
+  - Införa en “resolveBuildingFmGuid(fmGuid)” i AssetPlusViewer:
+    - Om assetData.category === 'Building' → fmGuid
+    - Else om assetData.buildingFmGuid finns → den
+    - Else fallback: försök härleda via allData/navigatorTreeData (t.ex. hitta Building Storey/Space och dess buildingFmGuid)
+    - Sista fallback: (om behövs) en liten DB lookup på assets för just den fm_guid för att läsa building_fm_guid
+- Alla viewer-subsystem (RoomVisualizationPanel, FloorVisibilitySelector, ModelVisibilitySelector) ska använda den resolved byggnads-guiden.
 
-1. **buildingFmGuid matchar inte** - Frågan söker med OR för olika case-varianter, men kanske blir buildingFmGuid aldrig rätt skickat
-2. **buildingFmGuid skickas som uppercase/lowercase fel** - databasen har lowercase GUIDs
+B3. Gör floor-filter robust: visibleFloorFmGuids måste vara DB:ns level_fm_guid-värden
+- FloorVisibilitySelector bygger databaseLevelFmGuids utifrån metaScene. Det är här mismatchen ofta uppstår.
+- Vi förbättrar mappingen:
+  - Bygg en lookup från DB-storeys (assets där category='Building Storey' och building_fm_guid=byggnaden):
+    - normalizedName → [storeyFmGuid...]
+    - displayName från common_name/name
+  - När vi extraherar metaScene floors:
+    - normalisera metaObject.name
+    - matcha mot DB lookup
+    - om match finns:
+      - använd DB displayName (så UI-namnet blir rätt)
+      - och fyll databaseLevelFmGuids med de DB-guids som matchar
+    - annars fallback till nuvarande logik
+- Resultat:
+  - “Våningsplan”-listan får stabila och rätta namn.
+  - visibleFloorFmGuids blir rätt nivå-id för rooms-filter → rumsvisualisering hittar rätt.
 
-### Lösning
-```typescript
-// RoomVisualizationPanel.tsx rad 124-128
-// Nuvarande kod:
-.or(`building_fm_guid.eq.${buildingFmGuid},building_fm_guid.eq.${buildingFmGuid.toLowerCase()},building_fm_guid.eq.${buildingFmGuid.toUpperCase()}`)
+B4. Prestanda: bygg en index-map för rum→objektIds en gång, inte per rum
+- Nu: getItemsByPropertyValue per rum (dyrt).
+- Ny strategi:
+  - Bygg en cache när panelen öppnas / när viewer är redo:
+    - Gå igenom metaScene.metaObjects, plocka IfcSpace metaobjekt
+    - använd originalSystemId (fmGuid) som nyckel
+    - samla deras “child object ids” via en childrenMap (samma optimering som FloorVisibilitySelector redan använder)
+    - skapa Map<fmGuidLower, string[]> med alla entity ids i scene som hör till rummet
+  - När man färgar:
+    - slå upp entity ids i map och sätt colorize/opacity direkt (utan property-sök)
+  - Kör färgningen i batchar med requestIdleCallback eller chunking (t.ex. 50 rum per frame) för att inte frysa UI.
+  - När våningsfilter ändras: färga om endast de rum som påverkas.
 
-// Förbättrad: Använd ilike för case-insensitiv matchning
-.ilike('building_fm_guid', buildingFmGuid)
-```
+B5. “Visa rum” ska alltid vara aktiverad när rumsvisualisering används
+Nuvarande problem
+- VisualizationToolbar äger showSpaces-state och default är OFF.
+- RoomVisualizationPanel försöker “auto-activate” mot viewerRef, men den kan inte tvinga UI-switchen att bli ON eftersom AssetPlusViewer inte skickar onShowSpaces.
 
-### Transparens för Rumsvisualisering
-```typescript
-// RoomVisualizationPanel.tsx rad 289-294
-// FÖRE:
-className="bg-card/95 backdrop-blur-sm"
+Åtgärd
+- Gör en tydlig koppling mellan “Rumsvisualisering öppnas” och “Visa rum = ON”:
+  Alternativ 1 (enkel och robust):
+  - Lyft showSpaces-state till AssetPlusViewer och gör VisualizationToolbar kontrollerad (props).
+  - När showVisualizationPanel = true → setShowSpaces(true) och disable toggling OFF medan panelen är öppen.
+  Alternativ 2 (event-baserad):
+  - Inför ett custom event t.ex. FORCE_SHOW_SPACES_EVENT som VisualizationToolbar lyssnar på.
+  - RoomVisualizationPanel dispatchar event vid mount.
+- Jag rekommenderar alternativ 1 eftersom det blir enklare att hålla UI i sync och undvika “lägen som glider isär”.
 
-// EFTER (samma som VisualizationToolbar):
-className="bg-card/60 backdrop-blur-md"
-```
+Filer som berörs
+- src/components/viewer/AssetPlusViewer.tsx (resolveBuildingFmGuid, lyfta showSpaces-state, skicka props)
+- src/components/viewer/RoomVisualizationPanel.tsx (använd allData, robust filter, cache/index, batch-colorize)
+- src/components/viewer/FloorVisibilitySelector.tsx (robust DB-name mapping + korrekta databaseLevelFmGuids)
+- src/components/viewer/VisualizationToolbar.tsx (showSpaces styrs externt eller via event + låsning när rumsvisualisering är aktiv)
 
-### Rumsvisualisering - Transparenta Färger
-För att färgerna ska ha samma transparens som BIM-modeller måste vi använda opacity:
-```typescript
-// visualization-utils.ts - colorizeSpace funktion
-// Lägg till opacity på entity:
-entity.opacity = 0.6; // Samma transparens som BIM-modeller
-```
+------------------------------------------------------------
+C) Namngivning på BIM-modeller (ofta fel)
+Rotorsaker i nuläget
+- ModelVisibilitySelector bygger friendlyName via matchning mellan viewer.scene.models keys och en nameMap från xkt_models/Asset+ GetModels.
+- Men den använder ibland model.id före sceneModels-key. Om model.id inte representerar filnamn/guid korrekt → matchningen blir fel → fel namn visas.
 
----
+Lösning
+C1. Förbättra “rawName”/match-strategi i ModelVisibilitySelector
+- Prioritera alltid sceneModels-key (modelId från Object.entries(sceneModels)) som primär identifierare.
+- Använd model.id endast som sekundär fallback.
+- Förbättra matchning:
+  - matcha både med/utan .xkt
+  - matcha guid-substring om key innehåller extra prefix/suffix
+- Säkerställ att buildingFmGuid som används för xkt_models-query är resolved building guid (från B2), annars hämtas namn från fel building eller inte alls.
 
-## Problem 2: Röststyrning - Ska Vara Dold Som Standard
+Filer som berörs
+- src/components/viewer/ModelVisibilitySelector.tsx
+- src/components/viewer/AssetPlusViewer.tsx (skicka korrekt buildingFmGuid till selectors)
 
-### Nuvarande Implementation
-`VoiceControlButton` renderas alltid i `AppLayout.tsx` (rad 50).
+------------------------------------------------------------
+D) 2D/3D + klippning (sax) – synlighet och funktion i både 3D och 2D
+Problem i nuläget
+- “Sax” finns i FloorVisibilitySelector-header, men i Visningsmenyn används listOnly=true i SidePopPanel → header renderas inte → sax-knappen syns inte → clippingEnabled är alltid false.
+- 2D-klipphöjd-slider visas bara när ViewerToolbar redan är i 2D och har dispatchat VIEW_MODE_CHANGED_EVENT.
+- När man öppnar “2D” från Navigator/QuickActions får man bara toast “växla i verktygsfältet” → 2D blir inte aktivt automatiskt → upplevs som att 2D/klippning “inte fungerar”.
 
-### Lösning
-Läs `enabled`-inställningen från `VoiceSettings` och villkorsrendera:
+Lösning
+D1. Gör sax/klippning synlig i SidePopPanel (Våningsplan)
+- Uppdatera SidePopPanel så den kan ta emot “headerActions” (t.ex. en Scissors-knapp).
+- Lägg klippknappen i SidePopPanel-header för Våningsplan, så den alltid syns även i listOnly-läge.
+- Wire:a knappen till FloorVisibilitySelector:
+  - Antingen via props: externalClippingEnabled + onToggleClipping
+  - Eller genom att låta FloorVisibilitySelector i listOnly-mode rendera en liten topp-rad med sax (enklast: ny prop showHeaderInListOnly / showClippingToggle)
 
-```typescript
-// AppLayout.tsx
-import { useState, useEffect } from 'react';
-import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
+D2. Lägg “2D/3D” kontroll i Visningsmenyn (under “Visa”)
+- Lägg till en Switch “2D plan” i VisualizationToolbar under “Visa”.
+- När användaren slår på:
+  - begär ViewMode=2D i ViewerToolbar (se D3)
+  - se till att klippning för 2D är aktiv (floor plan clipping)
+- När användaren slår av:
+  - begär ViewMode=3D
 
-const AppLayoutInner: React.FC = () => {
-  const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
-  
-  // Lyssna på ändringar i röstinställningar
-  useEffect(() => {
-    const handleSettingsChange = (e: CustomEvent) => {
-      setVoiceEnabled(e.detail?.enabled ?? false);
-    };
-    window.addEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
-    return () => window.removeEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
-  }, []);
+D3. Inför en styrkanal för att byta viewMode från andra delar av UI
+- Skapa ett nytt custom event, t.ex. VIEW_MODE_REQUESTED_EVENT (separat från VIEW_MODE_CHANGED_EVENT som är “status”).
+- ViewerToolbar lyssnar på VIEW_MODE_REQUESTED_EVENT och kör handleViewModeChange('2d'|'3d').
 
-  return (
-    <div>
-      {/* ... existing code ... */}
-      
-      {/* Voice Control - endast synlig när aktiverad i Settings */}
-      {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
-    </div>
-  );
-};
-```
+D4. När man öppnar 2D från Navigator/QuickActions: starta i 2D direkt + välj rätt våningsplan
+- Utöka AppContext med:
+  - viewerInitialMode: '2d' | '3d' | null
+  - viewerInitialFloorFmGuid: string | null (DB storey fm_guid)
+- När Navigator “2D”-ikon klickas:
+  - sätt viewerInitialMode='2d'
+  - viewer3dFmGuid = storey.fmGuid
+- I AssetPlusViewer:
+  - om assetData är Building Storey → initialFloorFmGuid = assetData.fmGuid
+  - om assetData är Space → initialFloorFmGuid = assetData.levelFmGuid
+- Uppdatera FloorVisibilitySelector:
+  - ta prop initialFloorFmGuid
+  - när floors extraherats: auto-solo den floor-grupp som matchar initialFloorFmGuid (via databaseLevelFmGuids)
+  - dispatcha FLOOR_SELECTION_CHANGED_EVENT så ViewerToolbar får currentFloorId och kan applicera applyFloorPlanClipping korrekt
+- Resultat: 2D öppnas “på rätt sätt” och klippningen blir aktiv direkt.
 
----
+D5. Klipphöjd
+- 2D: behåll slider 0.5–2.5m (finns redan), men säkerställ att den alltid syns när 2D är aktivt (oavsett om 2D aktiverats från botten-toolbar eller visningsmeny).
+- 3D: tak-klippning mellan storeys ska vara “på/av” (sax) och inte styras av slider (som du önskar). Den använder storey bounds (minY/maxY) vilket useSectionPlaneClipping redan gör.
 
-## Problem 3: Inventering - Bättre Tillgänglighet
+Filer som berörs
+- src/components/viewer/SidePopPanel.tsx (headerActions)
+- src/components/viewer/VisualizationToolbar.tsx (2D/3D switch, koppla till event, visa/håll slider logik)
+- src/components/viewer/ViewerToolbar.tsx (lyssna på VIEW_MODE_REQUESTED_EVENT)
+- src/components/viewer/FloorVisibilitySelector.tsx (clipping toggle tillgänglig även i listOnly + initialFloorFmGuid auto-solo)
+- src/context/AppContext.tsx (viewerInitialMode + viewerInitialFloorFmGuid)
+- src/components/navigator/NavigatorView.tsx (Open2D ska faktiskt starta 2D, inte bara toast)
+- src/components/portfolio/QuickActions.tsx (om 2D finns där: sätt initial mode)
 
-### A. Lägg till i Vänster Sidomeny
+------------------------------------------------------------
+E) Test/validering – exakt vad vi ska verifiera
+1) Map Position
+- Öppna en byggnad → Building Settings → klicka på karta → spara → återöppna byggnaden och verifiera att markern ligger kvar.
+- Öppna kartvyn → byggnaden ska ligga på sparad position.
 
-```typescript
-// LeftSidebar.tsx - Lägg till "Inventering" före Home-knappen
-import { ClipboardList } from 'lucide-react';
+2) Rumsvisualisering
+- Öppna viewer på byggnad:
+  - Alla våningsplan synliga → rumsvisualisering visar rum > 0 och färgning sker utan att UI fryser.
+- Välj ett enskilt våningsplan:
+  - rumsvisualisering hittar bara rum för detta plan (inte 0 pga mismatch).
+- Växla mellan floors snabbt:
+  - färgning ska ske snabbt och stabilt (chunking + cache).
+- “Visa rum”:
+  - när rumsvisualisering är ON ska “Visa rum” vara ON och inte gå att råka stänga av (eller auto-sättas tillbaka).
 
-// I ICON_COLORS (rad 8-17):
-inventory: 'text-orange-500',
+3) Namn
+- Våningsplan: listan ska visa common_name/name från databasen, inte GUID.
+- BIM-modeller: namnen ska matcha model_name från xkt_models/Asset+ GetModels.
 
-// I nav-sektionen (före Home-knappen, rad 69):
-<AppButton 
-  onClick={() => setActiveApp('inventory')} 
-  variant={activeApp === 'inventory' ? 'default' : 'ghost'} 
-  className="w-full !justify-start gap-3" 
-  title={isSidebarExpanded ? "" : "Inventering"}
->
-  <ClipboardList size={18} className={getIconColor('inventory')} />
-  <span className={`${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
-</AppButton>
-```
+4) 2D/3D + klippning
+- I Visningsmenyn:
+  - 2D-switch slår på 2D direkt, och klipphöjd fungerar.
+  - Sax-knapp för 3D-klippning syns i Våningsplan panelen.
+- Från Navigator 2D-ikon:
+  - viewer öppnar i 2D direkt på vald våning och klippning är aktiv.
 
-### B. Lägg till i Quick Actions
+------------------------------------------------------------
+Leveransordning (för att minska risk och snabbt se förbättring)
+1) Fix FloorVisibilitySelector (databaseLevelFmGuids + namn) + resolved buildingFmGuid i AssetPlusViewer
+   - Detta bör direkt lösa “0 rum” och förbättra naming.
+2) Refaktor RoomVisualizationPanel: använd allData + bygg cache för space→entity ids + chunked coloring
+   - Detta ger stora prestandavinster.
+3) Visa rum-låsning och UI-sync när rumsvisualisering är aktiv
+4) 2D/3D switch i visningsmenyn + VIEW_MODE_REQUESTED_EVENT + initial 2D från Navigator/QuickActions
+5) Map picker i building settings + MapView använder sparade coords
 
-```typescript
-// QuickActions.tsx - Lägg till "Inventering" för alla nivåer
-interface QuickActionsProps {
-  // ... existing props
-  onInventory?: (facility: Facility, prefill: InventoryPrefill) => void;
-}
+Tekniska risker / edge cases vi hanterar
+- Om en modell saknar tydlig mapping mellan metaScene storey name och DB storey names:
+  - fallback: visa metaObject.name men ändå låt floors fungera, samt logga mismatch.
+- Om byggnadens buildingFmGuid saknas i datat:
+  - fallback resolution + (om behövs) DB lookup för just den fm_guid.
+- Om väldigt många rum (tusentals):
+  - chunking + cache + möjlighet att auto-begränsa till valda våningar för bättre UX.
 
-interface InventoryPrefill {
-  buildingFmGuid?: string;
-  levelFmGuid?: string;
-  roomFmGuid?: string;
-}
-
-// I komponenten:
-{onInventory && (
-  <Button 
-    variant="ghost" 
-    onClick={() => onInventory(facility, {
-      buildingFmGuid: isBuilding ? facility.fmGuid : facility.buildingFmGuid,
-      levelFmGuid: isStorey ? facility.fmGuid : facility.levelFmGuid,
-      roomFmGuid: isSpace ? facility.fmGuid : undefined,
-    })} 
-    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-  >
-    <ClipboardList size={12} className="sm:w-3.5 sm:h-3.5 text-orange-500" />
-    <span className="text-[10px] sm:text-xs">Inventering</span>
-  </Button>
-)}
-```
-
-### C. Förifylla i InventoryForm
-
-```typescript
-// InventoryForm.tsx - Acceptera prefill-props
-interface InventoryFormProps {
-  onSaved: (item: any) => void;
-  onCancel: () => void;
-  prefill?: {
-    buildingFmGuid?: string;
-    levelFmGuid?: string;
-    roomFmGuid?: string;
-  };
-}
-
-// I komponenten - initialisera state med prefill:
-const [buildingFmGuid, setBuildingFmGuid] = useState(prefill?.buildingFmGuid || '');
-const [levelFmGuid, setLevelFmGuid] = useState(prefill?.levelFmGuid || '');
-const [roomFmGuid, setRoomFmGuid] = useState(prefill?.roomFmGuid || '');
-```
-
-### D. Lägg till i Navigator (TreeNode)
-
-```typescript
-// TreeNode.tsx - Lägg till Inventering-ikon vid hover
-interface TreeNodeProps {
-  // ... existing props
-  onInventory?: (node: NavigatorNode) => void;
-}
-
-// I hover-actions:
-{onInventory && (node.category === 'Building' || node.category === 'Building Storey' || node.category === 'Space') && (
-  <Button
-    variant="ghost"
-    size="icon"
-    className="h-5 w-5"
-    onClick={(e) => { e.stopPropagation(); onInventory(node); }}
-    title="Inventera här"
-  >
-    <ClipboardList className="h-3 w-3 text-orange-500" />
-  </Button>
-)}
-```
-
-### E. AppContext - Ny Inventering-kontext
-
-```typescript
-// AppContext.tsx - Lägg till inventering-prefill state
-interface InventoryPrefillContext {
-  buildingFmGuid?: string;
-  levelFmGuid?: string;
-  roomFmGuid?: string;
-}
-
-// I context:
-inventoryPrefill: InventoryPrefillContext | null;
-startInventory: (prefill: InventoryPrefillContext) => void;
-
-// Implementation:
-const startInventory = useCallback((prefill: InventoryPrefillContext) => {
-  setInventoryPrefill(prefill);
-  setActiveApp('inventory');
-}, []);
-```
-
----
-
-## Filändringar
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/viewer/RoomVisualizationPanel.tsx` | Fixa query (ilike), öka transparens till bg-card/60 |
-| `src/lib/visualization-utils.ts` | Lägg till opacity på entity.colorize |
-| `src/components/layout/AppLayout.tsx` | Villkorsrendera VoiceControlButton baserat på settings |
-| `src/components/layout/LeftSidebar.tsx` | Lägg till Inventering-knapp i sidomeny |
-| `src/components/portfolio/QuickActions.tsx` | Lägg till Inventering i Quick Actions med prefill |
-| `src/components/navigator/TreeNode.tsx` | Lägg till Inventering-ikon vid hover |
-| `src/components/navigator/NavigatorView.tsx` | Hantera onInventory callback |
-| `src/components/inventory/InventoryForm.tsx` | Acceptera och använd prefill-props |
-| `src/pages/Inventory.tsx` | Läs prefill från context |
-| `src/context/AppContext.tsx` | Lägg till inventoryPrefill och startInventory |
-| `src/components/portfolio/FacilityLandingPage.tsx` | Koppla onInventory till Quick Actions |
-
----
-
-## Tekniska Detaljer
-
-### Rum-query förbättring
-```sql
--- Nuvarande (problematisk OR):
-building_fm_guid.eq.XXX OR building_fm_guid.eq.xxx OR building_fm_guid.eq.XXX
-
--- Förbättrad (case-insensitive):
-building_fm_guid ILIKE 'xxx'
-```
-
-### Förifylla-logik
-```
-Användaren är på:        Förifylla-värden:
-─────────────────────────────────────────
-Byggnad (B1)             building=B1
-Våningsplan (F2 i B1)    building=B1, level=F2
-Rum (R3 i F2 i B1)       building=B1, level=F2, room=R3
-Asset (A4 i R3)          building=B1, level=F2, room=R3
-```
-
-### Transparens-nivåer
-```
-Komponent                  Transparens
-─────────────────────────────────────────
-VisualizationToolbar       bg-card/60 backdrop-blur-md
-SidePopPanel              bg-card/65 backdrop-blur-md
-RoomVisualizationPanel    bg-card/60 backdrop-blur-md (uppdaterad)
-Rum-färger                opacity: 0.6 (ny)
-```
