@@ -506,7 +506,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           </div>
 
           {/* Content - compact height for side-pop architecture */}
-          <ScrollArea className="flex-1 min-h-0 p-2.5 sm:p-3 [&>[data-radix-scroll-area-viewport]]:max-h-full [&_[data-radix-scroll-area-scrollbar]]:w-2 [&_[data-radix-scroll-area-scrollbar]]:bg-muted/50 [&_[data-radix-scroll-area-thumb]]:bg-muted-foreground/50">
+          <ScrollArea className="flex-1 min-h-0 p-2.5 sm:p-3">
             <div className="space-y-2 sm:space-y-3">
               {/* BIM Models - click to open side panel */}
               <div className="flex items-center justify-between py-1.5">
