@@ -109,9 +109,15 @@ export function useLightingControls() {
   /**
    * Get xeokit scene lights
    */
-  const getSceneLights = useCallback(() => {
+  const getSceneLights = useCallback((): any[] => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    return xeokitViewer?.scene?.lights || [];
+    const lights = xeokitViewer?.scene?.lights;
+    // Ensure we return an array - lights could be an object or undefined
+    if (!lights) return [];
+    if (Array.isArray(lights)) return lights;
+    // If lights is an object (dictionary), convert to array
+    if (typeof lights === 'object') return Object.values(lights);
+    return [];
   }, []);
 
   /**

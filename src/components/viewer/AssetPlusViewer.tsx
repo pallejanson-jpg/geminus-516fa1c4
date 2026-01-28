@@ -95,6 +95,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     error: null,
     modelInfo: null,
   });
+  
+  // Separate flag to suppress flashing error messages during initialization
+  // The error is set internally but only displayed after a delay
+  const [showError, setShowError] = useState(false);
+  const showErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [initStep, setInitStep] = useState<InitStep>('idle');
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>('idle');
@@ -1334,10 +1339,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       
       displayFmGuid(fmGuid, displayAction);
 
+      // Clear any pending error display on successful init
+      if (showErrorTimeoutRef.current) {
+        clearTimeout(showErrorTimeoutRef.current);
+        showErrorTimeoutRef.current = null;
+      }
+      setShowError(false);
+
       setState(prev => ({
         ...prev,
         isLoading: false,
         isInitialized: true,
+        error: null, // Ensure error is cleared on success
         modelInfo: {
           name: assetData?.commonName || assetData?.name || 'Unknown model',
           type: 'IFC/XKT',
@@ -1348,11 +1361,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     } catch (error) {
       console.error('Failed to initialize 3D viewer:', error);
       setInitStep('error');
+      
+      // Set error state but delay showing the error UI to suppress brief flashes
+      // during React Strict Mode double-mount cycles
       setState(prev => ({
         ...prev,
         isLoading: false,
         error: error instanceof Error ? error.message : 'Could not load 3D viewer',
       }));
+      
+      // Only show error after a delay - if initialization succeeds by then, error clears
+      if (showErrorTimeoutRef.current) {
+        clearTimeout(showErrorTimeoutRef.current);
+      }
+      showErrorTimeoutRef.current = setTimeout(() => {
+        setShowError(true);
+      }, 800); // 800ms delay to allow retry to succeed
     }
   }, [fmGuid, assetData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
@@ -1361,6 +1385,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     if (initializingRef.current) {
       console.debug('AssetPlusViewer: Retry ignored (initialization in progress)');
       return;
+    }
+
+    // Clear error display state and timeout
+    setShowError(false);
+    if (showErrorTimeoutRef.current) {
+      clearTimeout(showErrorTimeoutRef.current);
+      showErrorTimeoutRef.current = null;
     }
 
     // Clear the error FIRST so the viewer container is rendered back into the DOM,
@@ -1407,6 +1438,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       clearTimeout(initTimeout);
       isMountedRef.current = false;
       
+      // Clear any pending error display timeout
+      if (showErrorTimeoutRef.current) {
+        clearTimeout(showErrorTimeoutRef.current);
+        showErrorTimeoutRef.current = null;
+      }
+
       // Restore original fetch on unmount
       restoreFetch();
       
@@ -1444,8 +1481,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
 
   // Viewer uses built-in Asset+ controls - no custom handlers needed
 
-  // Show error state
-  if (state.error) {
+  // Show error state - only show after the delay to prevent flashing during initialization
+  if (state.error && showError) {
     return (
       <div className="h-full flex flex-col p-2 sm:p-4">
         {/* Header */}

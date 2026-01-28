@@ -566,36 +566,71 @@ serve(async (req) => {
         const buildingName = building.common_name || buildingFmGuid;
 
         try {
-          // Normalize URL: remove /api/v1/AssetDB if present, use base domain with /api/threed
+          // Try multiple API paths - the threed API endpoint might differ between environments
           const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
-          const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
           
-          // Debug logging
+          // Try the primary path
+          let modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+          
+          // Debug logging for first building
           if (i === 0) {
             console.log(`DEBUG: apiUrl = ${apiUrl}`);
             console.log(`DEBUG: baseUrl = ${baseUrl}`);
             console.log(`DEBUG: modelsUrl = ${modelsUrl}`);
           }
           
-          const modelsRes = await fetch(modelsUrl, {
+          let modelsRes = await fetch(modelsUrl, {
             headers: { "Authorization": `Bearer ${accessToken}` }
           });
 
+          // If 404, try alternate path without /api prefix
+          if (modelsRes.status === 404) {
+            const altUrl = `${baseUrl}/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+            console.log(`Primary path 404, trying alternate: ${altUrl}`);
+            modelsRes = await fetch(altUrl, {
+              headers: { "Authorization": `Bearer ${accessToken}` }
+            });
+          }
+
+          // If still 404, try with v1/AssetDB path (some APIs use this)
+          if (modelsRes.status === 404) {
+            const altUrl2 = `${apiUrl?.replace(/\/+$/, '')}/GetModels?fmGuid=${buildingFmGuid}`;
+            console.log(`Alternate path 404, trying AssetDB path: ${altUrl2}`);
+            modelsRes = await fetch(altUrl2, {
+              headers: { 
+                "Authorization": `Bearer ${accessToken}`,
+                "x-api-key": apiKey || ''
+              }
+            });
+          }
+
           if (!modelsRes.ok) {
-            console.log(`Building ${buildingName}: No models endpoint (${modelsRes.status})`);
+            console.log(`Building ${buildingName}: No models endpoint available (${modelsRes.status})`);
+            // This is not an error - some buildings may not have 3D models
             continue;
           }
 
-          const models = await modelsRes.json();
+          let models: any[];
+          try {
+            models = await modelsRes.json();
+          } catch {
+            console.log(`Building ${buildingName}: Invalid JSON response from models endpoint`);
+            continue;
+          }
           
           if (!Array.isArray(models) || models.length === 0) {
             console.log(`Building ${buildingName}: No XKT models available`);
             continue;
           }
 
+          console.log(`Building ${buildingName}: Found ${models.length} models`);
+
           // Process each model
           for (const model of models) {
-            if (!model.xktFileUrl) continue;
+            if (!model.xktFileUrl) {
+              console.log(`Model ${model.id || 'unknown'}: No xktFileUrl`);
+              continue;
+            }
 
             const modelId = model.id || model.modelId || model.xktFileUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
             const fileName = model.xktFileUrl.split('/').pop() || `${modelId}.xkt`;
@@ -616,7 +651,9 @@ serve(async (req) => {
             }
 
             try {
-              // Fetch XKT file
+              console.log(`Fetching XKT: ${model.xktFileUrl}`);
+              
+              // Fetch XKT file - may need auth
               const xktRes = await fetch(model.xktFileUrl, {
                 headers: { "Authorization": `Bearer ${accessToken}` }
               });
@@ -628,6 +665,13 @@ serve(async (req) => {
 
               const xktData = await xktRes.arrayBuffer();
               const fileSize = xktData.byteLength;
+              
+              if (fileSize === 0) {
+                console.log(`Model ${modelId}: Empty XKT data (0 bytes), skipping`);
+                continue;
+              }
+              
+              console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
               // Upload to storage
               const { error: uploadError } = await supabase.storage
@@ -638,14 +682,18 @@ serve(async (req) => {
                 });
 
               if (uploadError) {
-                console.log(`Storage upload failed for ${modelId}:`, uploadError);
-                // Continue anyway to save the record
+                console.log(`Storage upload failed for ${modelId}:`, uploadError.message);
+                // Continue anyway to save the record pointing to source
               }
 
-              // Get signed URL for storage
-              const { data: urlData } = await supabase.storage
-                .from('xkt-models')
-                .createSignedUrl(storagePath, 86400 * 365); // 1 year
+              // Get signed URL for storage (if upload succeeded)
+              let signedUrl: string | null = null;
+              if (!uploadError) {
+                const { data: urlData } = await supabase.storage
+                  .from('xkt-models')
+                  .createSignedUrl(storagePath, 86400 * 365); // 1 year
+                signedUrl = urlData?.signedUrl || null;
+              }
 
               // Insert into database
               const { error: dbError } = await supabase
@@ -656,7 +704,7 @@ serve(async (req) => {
                   model_id: modelId,
                   model_name: model.name || model.modelName || fileName,
                   file_name: fileName,
-                  file_url: urlData?.signedUrl || null,
+                  file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
                   source_url: model.xktFileUrl,
@@ -664,15 +712,16 @@ serve(async (req) => {
                 }, { onConflict: 'building_fm_guid,model_id' });
 
               if (dbError) {
-                console.log(`Database insert failed for ${modelId}:`, dbError);
+                console.log(`Database insert failed for ${modelId}:`, dbError.message);
                 errors.push(`${buildingName}/${modelId}: DB error`);
                 continue;
               }
 
               synced++;
-              console.log(`Synced model ${modelId} for ${buildingName}`);
+              console.log(`Synced model ${modelId} for ${buildingName} (${fileSize} bytes)`);
             } catch (e) {
-              console.log(`Failed to sync model ${modelId}:`, e);
+              const errMsg = e instanceof Error ? e.message : String(e);
+              console.log(`Failed to sync model ${modelId}: ${errMsg}`);
             }
           }
           
