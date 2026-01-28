@@ -20,6 +20,12 @@ interface ClusterProperties {
   facility?: MapFacility;
 }
 
+interface BuildingCoordinates {
+  fm_guid: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 // Collapsible building sidebar component for mobile responsiveness
 const BuildingSidebar: React.FC<{
   facilities: MapFacility[];
@@ -96,10 +102,39 @@ const MapView: React.FC = () => {
   });
   const [selectedMarker, setSelectedMarker] = useState<MapFacility | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
+  const [buildingCoordinates, setBuildingCoordinates] = useState<BuildingCoordinates[]>([]);
   const mapRef = useRef<any>(null);
 
+  // Fetch saved building coordinates from database
+  useEffect(() => {
+    const fetchBuildingCoordinates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('building_settings')
+          .select('fm_guid, latitude, longitude');
+        
+        if (!error && data) {
+          setBuildingCoordinates(data);
+        }
+      } catch (e) {
+        console.debug('Failed to fetch building coordinates:', e);
+      }
+    };
+    
+    fetchBuildingCoordinates();
+  }, []);
+
   // Convert navigatorTreeData to map facilities with coordinates
+  // Prioritize saved coordinates from building_settings
   const mapFacilities: MapFacility[] = useMemo(() => {
+    // Create lookup map for saved coordinates
+    const coordsLookup: Record<string, { lat: number; lng: number }> = {};
+    buildingCoordinates.forEach(bc => {
+      if (bc.latitude !== null && bc.longitude !== null) {
+        coordsLookup[bc.fm_guid.toLowerCase()] = { lat: bc.latitude, lng: bc.longitude };
+      }
+    });
+
     return navigatorTreeData.map((building, index) => {
       // Count storeys and spaces
       const storeys = building.children || [];
@@ -126,9 +161,26 @@ const MapView: React.FC = () => {
           return sum + areaValue;
         }, 0);
 
-      // Assign coordinates from Nordic cities (cycle through them)
-      const cityIndex = index % NORDIC_CITIES.length;
-      const city = NORDIC_CITIES[cityIndex];
+      // Check for saved coordinates first
+      const savedCoords = coordsLookup[building.fmGuid.toLowerCase()];
+      
+      let lat: number;
+      let lng: number;
+      let address: string;
+      
+      if (savedCoords) {
+        // Use saved coordinates
+        lat = savedCoords.lat;
+        lng = savedCoords.lng;
+        address = building.attributes?.address || 'Custom Location';
+      } else {
+        // Fallback to Nordic cities (cycle through them)
+        const cityIndex = index % NORDIC_CITIES.length;
+        const city = NORDIC_CITIES[cityIndex];
+        lat = city.lat + (Math.random() - 0.5) * 0.1;
+        lng = city.lng + (Math.random() - 0.5) * 0.1;
+        address = building.attributes?.address || city.name;
+      }
 
       return {
         fmGuid: building.fmGuid,
@@ -139,12 +191,12 @@ const MapView: React.FC = () => {
         numberOfLevels: storeys.length,
         numberOfSpaces: totalSpaces,
         area: Math.round(totalArea),
-        address: building.attributes?.address || city.name,
-        lat: city.lat + (Math.random() - 0.5) * 0.1,
-        lng: city.lng + (Math.random() - 0.5) * 0.1,
+        address,
+        lat,
+        lng,
       };
     });
-  }, [navigatorTreeData, allData]);
+  }, [navigatorTreeData, allData, buildingCoordinates]);
 
   // Create supercluster instance
   const supercluster = useMemo(() => {
