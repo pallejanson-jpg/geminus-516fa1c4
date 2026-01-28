@@ -133,6 +133,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x: number; y: number; z: number} | null>(null);
   const inventoryPickModeRef = useRef(false);
   
+  // Ref for local annotations plugin
+  const localAnnotationsPluginRef = useRef<any>(null);
+  
   // Keep ref in sync with state for callback access
   const setFlashOnSelectEnabled = useCallback((enabled: boolean) => {
     flashOnSelectEnabledRef.current = enabled;
@@ -452,6 +455,197 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, [doDisplayFmGuid]);
 
+  // Helper to resolve building GUID for the current view
+  const resolveBuildingFmGuid = useCallback((): string | null => {
+    // If assetData is a Building, use its fmGuid
+    if (assetData?.category === 'Building') {
+      return assetData.fmGuid;
+    }
+    // Otherwise use the buildingFmGuid property
+    if (assetData?.buildingFmGuid) {
+      return assetData.buildingFmGuid;
+    }
+    // Fallback to fmGuid if nothing else
+    return buildingFmGuid || null;
+  }, [assetData, buildingFmGuid]);
+
+  // Load local annotations from database (assets with annotation_placed=true)
+  const loadLocalAnnotations = useCallback(async () => {
+    const resolvedBuildingGuid = resolveBuildingFmGuid();
+    if (!resolvedBuildingGuid) {
+      console.debug('loadLocalAnnotations: No building GUID available');
+      return;
+    }
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer) {
+      console.debug('loadLocalAnnotations: xeokit viewer not ready');
+      return;
+    }
+
+    try {
+      // Fetch assets with placed annotations for this building
+      const { data: assets, error: assetsError } = await supabase
+        .from('assets')
+        .select('fm_guid, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+        .eq('building_fm_guid', resolvedBuildingGuid)
+        .eq('annotation_placed', true)
+        .not('coordinate_x', 'is', null);
+
+      if (assetsError) {
+        console.error('Failed to fetch local annotations:', assetsError);
+        return;
+      }
+
+      if (!assets || assets.length === 0) {
+        console.log('No local annotations found for building:', resolvedBuildingGuid);
+        return;
+      }
+
+      // Fetch all symbols for icons and colors
+      const { data: symbols } = await supabase
+        .from('annotation_symbols')
+        .select('id, name, category, color, icon_url');
+
+      const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
+
+      // Create a simple annotation manager object
+      const annotationsData: Array<{
+        id: string;
+        worldPos: [number, number, number];
+        category: string;
+        name: string;
+        color: string;
+        iconUrl: string;
+        markerShown: boolean;
+      }> = [];
+
+      // Build annotation data array
+      assets.forEach(asset => {
+        const symbol = asset.symbol_id ? symbolMap.get(asset.symbol_id) : null;
+        const iconUrl = symbol?.icon_url || '';
+        const color = symbol?.color || '#3B82F6';
+
+        annotationsData.push({
+          id: `local-${asset.fm_guid}`,
+          worldPos: [
+            Number(asset.coordinate_x),
+            Number(asset.coordinate_y),
+            Number(asset.coordinate_z)
+          ],
+          category: asset.asset_type || 'Övrigt',
+          name: asset.name || 'Okänd',
+          color,
+          iconUrl,
+          markerShown: showAnnotations,
+        });
+      });
+
+      // Store the local annotations data in a simple object for category filtering
+      const localAnnotationsManager = {
+        annotations: {} as Record<string, typeof annotationsData[0] & { markerElement?: HTMLElement }>,
+        container: null as HTMLElement | null,
+        
+        clear: () => {
+          Object.keys(localAnnotationsManager.annotations).forEach(id => {
+            const ann = localAnnotationsManager.annotations[id];
+            if (ann.markerElement) {
+              ann.markerElement.remove();
+            }
+          });
+          localAnnotationsManager.annotations = {};
+        },
+        
+        updatePositions: () => {
+          const canvas = xeokitViewer.scene?.canvas?.canvas;
+          if (!canvas) return;
+          
+          Object.values(localAnnotationsManager.annotations).forEach(ann => {
+            if (!ann.markerElement || !ann.markerShown) return;
+            
+            // Project world position to canvas position
+            const canvasPos = xeokitViewer.scene.camera.projectWorldPos(ann.worldPos);
+            if (canvasPos && canvasPos[2] > 0 && canvasPos[2] < 1) {
+              ann.markerElement.style.display = 'flex';
+              ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
+              ann.markerElement.style.top = `${canvasPos[1] - 14}px`;
+            } else {
+              ann.markerElement.style.display = 'none';
+            }
+          });
+        },
+      };
+
+      // Create container for markers if not exists
+      let container = document.getElementById('local-annotations-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'local-annotations-container';
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;overflow:hidden;';
+        viewerContainerRef.current?.appendChild(container);
+      }
+      localAnnotationsManager.container = container;
+      
+      // Clear existing markers
+      container.innerHTML = '';
+
+      // Create marker elements for each annotation
+      annotationsData.forEach(ann => {
+        const marker = document.createElement('div');
+        marker.id = ann.id;
+        marker.className = 'local-annotation-marker';
+        marker.style.cssText = `
+          position: absolute;
+          width: 28px;
+          height: 28px;
+          background: ${ann.color};
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+          display: ${ann.markerShown ? 'flex' : 'none'};
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform 0.15s;
+          pointer-events: auto;
+        `;
+        
+        if (ann.iconUrl) {
+          const img = document.createElement('img');
+          img.src = ann.iconUrl;
+          img.alt = '';
+          img.style.cssText = 'width: 18px; height: 18px; filter: brightness(0) invert(1);';
+          img.onerror = () => { img.style.display = 'none'; };
+          marker.appendChild(img);
+        }
+        
+        marker.title = ann.name;
+        container.appendChild(marker);
+        
+        localAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
+      });
+
+      // Store the manager for category filtering
+      localAnnotationsPluginRef.current = localAnnotationsManager;
+      if (viewerInstanceRef.current) {
+        viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsManager;
+      }
+
+      // Set up camera update listener to reposition markers
+      const updateHandler = () => localAnnotationsManager.updatePositions();
+      xeokitViewer.scene.camera.on('viewMatrix', updateHandler);
+      xeokitViewer.scene.camera.on('projMatrix', updateHandler);
+      
+      // Initial position update
+      setTimeout(updateHandler, 100);
+
+      console.log(`Created ${assets.length} local annotations for building:`, resolvedBuildingGuid);
+    } catch (e) {
+      console.error('Error loading local annotations:', e);
+    }
+  }, [resolveBuildingFmGuid, showAnnotations]);
+
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
     console.log("allModelsLoadedCallback");
@@ -494,6 +688,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     } catch (e) {
       console.debug("Could not hide spaces:", e);
     }
+
+    // Load local annotations from database (assets with annotation_placed=true)
+    loadLocalAnnotations();
 
     // Initialize NavCube using custom plugin
     try {

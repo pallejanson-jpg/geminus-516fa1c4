@@ -5,7 +5,8 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AnnotationCategory {
-  category: string;
+  category: string;       // Internal key (asset_type)
+  displayName: string;    // Swedish display name from symbol
   count: number;
   visible: boolean;
   color: string;
@@ -18,6 +19,7 @@ interface AnnotationCategoryListProps {
 
 /**
  * List component to toggle visibility of annotation categories in the 3D viewer.
+ * Uses Swedish display names from annotation_symbols table.
  * Used inside SidePopPanel as a flyout from the main VisualizationToolbar.
  */
 const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
@@ -25,60 +27,58 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   buildingFmGuid,
 }) => {
   const [categories, setCategories] = useState<AnnotationCategory[]>([]);
-  const [symbolColors, setSymbolColors] = useState<Record<string, string>>({});
   const [allVisible, setAllVisible] = useState(true);
-
-  // Fetch annotation symbols for colors
-  useEffect(() => {
-    const fetchSymbols = async () => {
-      const { data } = await supabase
-        .from('annotation_symbols')
-        .select('category, color');
-      
-      if (data) {
-        const colorMap: Record<string, string> = {};
-        data.forEach(s => {
-          colorMap[s.category] = s.color;
-        });
-        setSymbolColors(colorMap);
-      }
-    };
-    fetchSymbols();
-  }, []);
 
   // Fetch asset categories with annotations for this building
   useEffect(() => {
     const fetchCategories = async () => {
       if (!buildingFmGuid) return;
 
-      // Get unique asset types for this building that have annotations
-      const { data } = await supabase
+      // Get assets with placed annotations for this building
+      const { data: assets } = await supabase
         .from('assets')
-        .select('asset_type, category')
+        .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
-        .eq('category', 'Instance')
         .eq('annotation_placed', true);
 
-      if (data) {
-        // Group by asset_type or category
-        const typeCount: Record<string, number> = {};
-        data.forEach(asset => {
-          const type = asset.asset_type || 'Övrigt';
-          typeCount[type] = (typeCount[type] || 0) + 1;
+      // Get all symbols for Swedish names and colors
+      const { data: symbols } = await supabase
+        .from('annotation_symbols')
+        .select('id, name, color');
+
+      const symbolById = new Map(symbols?.map(s => [s.id, s]) || []);
+
+      if (assets) {
+        // Group by asset_type and get Swedish names from symbols
+        const typeInfo: Record<string, { count: number; displayName: string; color: string }> = {};
+        
+        assets.forEach(asset => {
+          const symbol = asset.symbol_id ? symbolById.get(asset.symbol_id) : null;
+          const key = asset.asset_type || 'Övrigt';
+          
+          if (!typeInfo[key]) {
+            typeInfo[key] = {
+              count: 0,
+              displayName: symbol?.name || key,  // Use Swedish name from symbol
+              color: symbol?.color || '#3B82F6',
+            };
+          }
+          typeInfo[key].count++;
         });
 
-        const cats: AnnotationCategory[] = Object.entries(typeCount).map(([type, count]) => ({
+        const cats: AnnotationCategory[] = Object.entries(typeInfo).map(([type, info]) => ({
           category: type,
-          count,
+          displayName: info.displayName,
+          count: info.count,
           visible: true,
-          color: symbolColors[type] || '#3B82F6',
+          color: info.color,
         }));
 
         setCategories(cats);
       }
     };
     fetchCategories();
-  }, [buildingFmGuid, symbolColors]);
+  }, [buildingFmGuid]);
 
   // Toggle a specific category
   const handleToggleCategory = useCallback((category: string) => {
@@ -86,22 +86,22 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
       if (c.category === category) {
         const newVisible = !c.visible;
         
-        // Toggle annotations in viewer
+        // Toggle annotations in the LOCAL annotations manager
         try {
-          const viewer = viewerRef.current;
-          if (viewer?.annotationsPlugin) {
-            const annotations = viewer.annotationsPlugin.annotations || {};
-            Object.values(annotations).forEach((annotation: any) => {
+          const localPlugin = viewerRef.current?.localAnnotationsPlugin;
+          if (localPlugin?.annotations) {
+            Object.values(localPlugin.annotations).forEach((annotation: any) => {
               // Check if annotation belongs to this category
-              if (annotation.cfg?.category === category || 
-                  annotation.entity?.meta?.assetType === category) {
+              if (annotation.category === category) {
                 annotation.markerShown = newVisible;
-                annotation.labelShown = newVisible;
+                if (annotation.markerElement) {
+                  annotation.markerElement.style.display = newVisible ? 'flex' : 'none';
+                }
               }
             });
           }
         } catch (e) {
-          console.debug('Could not toggle annotations:', e);
+          console.debug('Could not toggle local annotations:', e);
         }
         
         return { ...c, visible: newVisible };
@@ -117,18 +117,19 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     
     setCategories(prev => prev.map(c => ({ ...c, visible: newVisible })));
     
-    // Toggle all annotations in viewer
+    // Toggle all annotations in the LOCAL annotations manager
     try {
-      const viewer = viewerRef.current;
-      if (viewer?.annotationsPlugin) {
-        const annotations = viewer.annotationsPlugin.annotations || {};
-        Object.values(annotations).forEach((annotation: any) => {
+      const localPlugin = viewerRef.current?.localAnnotationsPlugin;
+      if (localPlugin?.annotations) {
+        Object.values(localPlugin.annotations).forEach((annotation: any) => {
           annotation.markerShown = newVisible;
-          annotation.labelShown = newVisible;
+          if (annotation.markerElement) {
+            annotation.markerElement.style.display = newVisible ? 'flex' : 'none';
+          }
         });
       }
     } catch (e) {
-      console.debug('Could not toggle all annotations:', e);
+      console.debug('Could not toggle all local annotations:', e);
     }
   }, [allVisible, viewerRef]);
 
@@ -169,7 +170,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         </Button>
       </div>
       
-      {/* Category list */}
+      {/* Category list with Swedish display names */}
       {categories.map((cat) => (
         <div
           key={cat.category}
@@ -180,7 +181,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
               className="w-2.5 h-2.5 rounded-full border"
               style={{ backgroundColor: cat.color }}
             />
-            <span className="text-xs">{cat.category}</span>
+            <span className="text-xs">{cat.displayName}</span>
             <span className="text-[10px] text-muted-foreground">({cat.count})</span>
           </div>
           <Switch
