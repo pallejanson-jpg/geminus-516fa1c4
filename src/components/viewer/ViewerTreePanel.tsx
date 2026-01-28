@@ -103,12 +103,12 @@ const TreeNodeComponent: React.FC<{
     <div>
       <div
         className={cn(
-          "flex items-center gap-1 py-1 px-1 rounded cursor-pointer text-sm transition-colors",
-          "hover:bg-accent/50",
+          "flex items-center gap-0.5 sm:gap-1 py-0.5 sm:py-1 px-0.5 sm:px-1 rounded cursor-pointer text-xs sm:text-sm transition-colors",
+          "hover:bg-accent/50 active:bg-accent/60",
           isSelected && "bg-accent text-accent-foreground",
           searchQuery && matchesSearch && "bg-yellow-500/20"
         )}
-        style={{ paddingLeft: `${level * 12 + 4}px` }}
+        style={{ paddingLeft: `${level * 10 + 2}px` }}
         onClick={() => onSelect(node)}
         onMouseEnter={() => onHover(node.id)}
         onMouseLeave={() => onHover(null)}
@@ -123,29 +123,29 @@ const TreeNodeComponent: React.FC<{
             className="p-0.5 hover:bg-muted rounded"
           >
             {isExpanded ? (
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
             ) : (
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
             )}
           </button>
         ) : (
-          <span className="w-4" />
+          <span className="w-3 sm:w-4" />
         )}
         
         {/* Type icon */}
-        {getTypeIcon(node.type)}
+        <span className="shrink-0">{getTypeIcon(node.type)}</span>
         
         {/* Name */}
-        <span className="truncate flex-1 min-w-0">{node.name}</span>
+        <span className="truncate flex-1 min-w-0 text-[11px] sm:text-sm">{node.name}</span>
         
-        {/* Type badge */}
-        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">
+        {/* Type badge - hidden on mobile */}
+        <Badge variant="outline" className="hidden sm:inline-flex text-[9px] sm:text-[10px] px-1 py-0 h-3.5 sm:h-4 shrink-0">
           {getTypeLabel(node.type)}
         </Badge>
 
         {/* Descendant count for expandable nodes */}
         {hasChildren && descendantCount > 0 && (
-          <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 shrink-0">
+          <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0 h-3.5 sm:h-4 shrink-0">
             {descendantCount}
           </Badge>
         )}
@@ -395,29 +395,29 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     return (
       <div className="flex flex-col h-full max-h-[40vh]">
         {/* Search */}
-        <div className="p-2 border-b">
+        <div className="p-1.5 sm:p-2 border-b">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Sök objekt..."
-              className="h-7 pl-7 text-xs"
+              placeholder="Sök..."
+              className="h-6 sm:h-7 pl-6 sm:pl-7 text-[11px] sm:text-xs"
             />
           </div>
         </div>
 
         {/* Tree content */}
         <ScrollArea className="flex-1">
-          <div className="p-1">
+          <div className="p-0.5 sm:p-1">
             {isLoading ? (
-              <div className="flex items-center justify-center py-4 text-muted-foreground text-xs">
+              <div className="flex items-center justify-center py-3 sm:py-4 text-muted-foreground text-[10px] sm:text-xs">
                 Laddar modellträd...
               </div>
             ) : treeData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-4 text-muted-foreground text-xs gap-1">
-                <TreeDeciduous className="h-6 w-6 opacity-50" />
-                <span>Inget modellträd tillgängligt</span>
+              <div className="flex flex-col items-center justify-center py-3 sm:py-4 text-muted-foreground text-[10px] sm:text-xs gap-1">
+                <TreeDeciduous className="h-5 w-5 sm:h-6 sm:w-6 opacity-50" />
+                <span>Inget modellträd</span>
               </div>
             ) : (
               treeData.map(node => (
@@ -444,47 +444,47 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   return (
     <div 
       className={cn(
-        "absolute top-14 left-3 z-40 w-80 max-h-[calc(100%-120px)]",
+        "absolute top-12 sm:top-14 left-2 sm:left-3 z-40 w-[calc(100%-1rem)] sm:w-72 md:w-80 max-h-[calc(100%-100px)] sm:max-h-[calc(100%-120px)]",
         "bg-card/95 backdrop-blur-md border rounded-lg shadow-xl",
         "flex flex-col animate-slide-in-right"
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b">
-        <div className="flex items-center gap-2">
-          <TreeDeciduous className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Modellträd</span>
-          <Badge variant="secondary" className="text-xs">{nodeCount.toLocaleString('sv-SE')}</Badge>
+      <div className="flex items-center justify-between p-2 sm:p-3 border-b">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+          <span className="font-medium text-xs sm:text-sm">Modellträd</span>
+          <Badge variant="secondary" className="text-[10px] sm:text-xs">{nodeCount.toLocaleString('sv-SE')}</Badge>
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-          <X className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="icon" className="h-5 w-5 sm:h-6 sm:w-6" onClick={onClose}>
+          <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         </Button>
       </div>
 
       {/* Search */}
-      <div className="p-2 border-b">
+      <div className="p-1.5 sm:p-2 border-b">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Sök objekt..."
-            className="h-8 pl-7 text-sm"
+            placeholder="Sök..."
+            className="h-7 sm:h-8 pl-6 sm:pl-7 text-xs sm:text-sm"
           />
         </div>
       </div>
 
       {/* Tree content */}
-      <ScrollArea className="flex-1 p-2">
+      <ScrollArea className="flex-1 p-1 sm:p-2">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+          <div className="flex items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm">
             Laddar modellträd...
           </div>
         ) : treeData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-2">
-            <TreeDeciduous className="h-8 w-8 opacity-50" />
-            <span>Inget modellträd tillgängligt</span>
-            <span className="text-xs">Modellen kanske fortfarande laddas</span>
+          <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm gap-1.5 sm:gap-2">
+            <TreeDeciduous className="h-6 w-6 sm:h-8 sm:w-8 opacity-50" />
+            <span>Inget modellträd</span>
+            <span className="text-[10px] sm:text-xs">Modellen laddas...</span>
           </div>
         ) : (
           treeData.map(node => (

@@ -27,34 +27,36 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
     }
 
     return (
-        <div className="h-full p-3 sm:p-4 md:p-6 overflow-y-auto">
+        <div className="h-full p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto">
             {/* Page Header */}
-            <div className="mb-6">
-                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Insights</h1>
-                <p className="text-sm text-muted-foreground">
+            <div className="mb-4 sm:mb-6">
+                <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground">Insights</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                     Analys och insikter för din fastighetsportfölj
                 </p>
             </div>
 
             {/* Tabs */}
             <Tabs defaultValue="performance" className="w-full">
-                <TabsList className="w-full flex-nowrap overflow-x-auto justify-start mb-6 h-auto p-1">
-                    <TabsTrigger value="performance" className="text-xs sm:text-sm whitespace-nowrap">
-                        Performance
-                    </TabsTrigger>
-                    <TabsTrigger value="facility" className="text-xs sm:text-sm whitespace-nowrap">
-                        Facility Management
-                    </TabsTrigger>
-                    <TabsTrigger value="space" className="text-xs sm:text-sm whitespace-nowrap">
-                        Space Management
-                    </TabsTrigger>
-                    <TabsTrigger value="asset" className="text-xs sm:text-sm whitespace-nowrap">
-                        Asset Management
-                    </TabsTrigger>
-                    <TabsTrigger value="portfolio" className="text-xs sm:text-sm whitespace-nowrap">
-                        Portfolio Management
-                    </TabsTrigger>
-                </TabsList>
+                <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
+                    <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
+                        <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                            Performance
+                        </TabsTrigger>
+                        <TabsTrigger value="facility" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                            FM
+                        </TabsTrigger>
+                        <TabsTrigger value="space" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                            Space
+                        </TabsTrigger>
+                        <TabsTrigger value="asset" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                            Asset
+                        </TabsTrigger>
+                        <TabsTrigger value="portfolio" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                            Portfolio
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
 
                 <TabsContent value="performance" className="mt-0">
                     <PerformanceTab onSelectBuilding={setViewingBuilding} />
