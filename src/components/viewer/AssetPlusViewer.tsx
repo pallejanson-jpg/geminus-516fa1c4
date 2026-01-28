@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
-import AnnotationToggleMenu from './AnnotationToggleMenu';
+// AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
@@ -1579,10 +1579,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                     showMinimap={showMinimap}
                     inline={true}
                   />
-                  <AnnotationToggleMenu 
-                    viewerRef={viewerInstanceRef} 
-                    buildingFmGuid={fmGuid}
-                  />
+                  {/* AnnotationToggleMenu removed - now in VisualizationToolbar flyout */}
                 </>
               )}
             </div>
