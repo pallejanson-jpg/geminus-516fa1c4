@@ -1,176 +1,170 @@
 
-# Plan: Fixa rum-synlighet, våningsplan-filtrering och verktygsfält-inställningar
+
+# Plan: Fixa 3D-positionsval, Spara-knapp, Bild-uppladdning och Annotation-synlighet
 
 ## Identifierade problem
 
-Baserat på analys av skärmbilder och kod har jag identifierat tre huvudproblem:
+### Problem 1: "Select Object" är förvalt i 3D
+- **Orsak**: I `ViewerToolbar.tsx` (rad 75) sätts `activeTool` till `'select'` som default
+- **Effekt**: När användaren navigerar för att välja position så markeras objekt oavsiktligt
+- **Lösning**: I pick-mode bör inget verktyg vara aktivt (`null`) så att användaren kan navigera fritt
 
-### Problem 1: Rum visas vid första våningsklipp trots att "Visa rum" är avstängt
-- **Orsak**: Viewer-komponenten anropar `assetViewer.onToggleAnnotation(true)` vid modell-laddning (rad 467), men kan inte hitta någon explicit kod som aktiverar rum. Problemet kan ligga i Asset+ viewer-paketet som visar spaces som standard när man kör "cutOutFloorsByFmGuid".
-- **Lösning**: Explicit deaktivera rum (`onShowSpacesChanged(false)`) efter modelladdning och efter varje floor cutout operation.
+### Problem 2: Ingen annotation-symbol visas vid vald position
+- **Orsak**: Det finns ingen logik som visar en temporär markör vid klickad position
+- **Lösning**: Lägg till en visuell markör (använd Asset+ annotation API eller xeokit Entity) vid den valda positionen. Aktivera även "Visa Annotationer" automatiskt om den är avstängd
 
-### Problem 2: Flera våningsplans rum visas vid Solo-val
-- **Orsak**: `FloorVisibilitySelector.applyFloorVisibility()` döljer endast geometriobjekt (solida objekt) baserat på floor-hierarkin, men `RoomVisualizationPanel` filtrerar bara rum när visualiseringen är aktiv. Spaces-synlighet i själva xeokit/Asset+ viewer styrs separat och påverkas inte av floor filtering.
-- **Lösning**: När "Solo" klickas måste vi även anropa `onShowSpacesChanged(false)` som standard, och endast aktivera rum för det valda våningsplanet om "Visa rum" är aktivt.
+### Problem 3: 3D stängs vid bekräftelse av position
+- **Orsak**: I `Inline3dPositionPicker.tsx` rad 37-39 anropas `onClose()` direkt efter `onPositionConfirmed()`
+- **Effekt**: 3D-vyn försvinner innan användaren fyller i formuläret
+- **Lösning**: Ta bort `onClose()` från bekräfta-handlingen. Låt 3D-vyn ligga kvar. Stäng 3D-vyn först när formuläret sparas
 
-### Problem 3: Fel verktyg i "Anpassa verktygsfält"-dialogen
-**Verktyg att ta bort** (dessa finns redan i VisualizationToolbar/Visning-menyn):
-- `viewMode` (2D/3D växla)
-- `annotations` (Annotationer)
-- `addAsset` (Registrera tillgång)
-- `bimModels` (BIM-modeller)
-- `floors` (Våningsplan)
+### Problem 4: Spara-knappen fungerar inte
+- **Möjlig orsak 1**: Formuläret har `type="submit"` men `handleSubmit` kanske inte triggas korrekt
+- **Möjlig orsak 2**: RLS-policy problem (men verifierat att INSERT har `with_check: true` för public)
+- **Lösning**: Verifiera att form-elementet har korrekt `onSubmit` handler och att alla required fält valideras korrekt
 
-**Övermenyn kanske fungerar men har UI-problem**:
-- Scroll-area kan vara för liten vertikalt
-- Verktyg med "inOverflow: true" kanske inte renderas korrekt
+### Problem 5: Ta foto/Ladda upp bild fungerar inte
+- **Möjlig orsak**: Hidden file input-elementens `click()` anrop kanske blockeras eller input-refs är `null`
+- **Lösning**: Verifiera att refs kopplas korrekt och att `onClick` handler triggar rätt input
 
 ---
 
 ## Detaljerad implementation
 
-### Del 1: Ta bort dubbletter från ToolbarSettings
+### Del 1: Inaktivera Select Tool vid pick-mode
 
-**Fil: `src/components/viewer/ToolbarSettings.tsx`**
+**Fil: `src/components/inventory/Inline3dPositionPicker.tsx`**
 
-Ta bort följande från `NAVIGATION_TOOLS`:
-- `viewMode` (rad 56)
-
-Ta bort följande från `VISUALIZATION_TOOLS`:
-- `annotations` (rad 65)
-- `bimModels` (rad 70)
-- `floors` (rad 71)
-- `addAsset` (rad 74)
-
-Öka `SETTINGS_VERSION` till 5 för att tvinga en reset av localStorage.
+Skicka en prop eller event till AssetPlusViewer som indikerar att standardverktyget inte ska vara "select":
 
 ```typescript
-// Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 5;
-
-// Navigation tools - shown in the bottom toolbar (interaction & navigation only)
-export const NAVIGATION_TOOLS: ToolConfig[] = [
-  { id: 'orbit', label: 'Orbit (rotera)', visible: true, inOverflow: false },
-  { id: 'firstPerson', label: 'Första person', visible: true, inOverflow: false },
-  { id: 'zoomIn', label: 'Zooma in', visible: true, inOverflow: false },
-  { id: 'zoomOut', label: 'Zooma ut', visible: true, inOverflow: false },
-  { id: 'viewFit', label: 'Anpassa vy', visible: true, inOverflow: false },
-  { id: 'resetView', label: 'Återställ vy', visible: true, inOverflow: false },
-  { id: 'select', label: 'Välj objekt', visible: true, inOverflow: false },
-  { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
-  { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
-  // REMOVED: viewMode - exists in VisualizationToolbar
-  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: false },
-  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: false },
-];
-
-// Visualization tools - shown in the right sidebar toolbar (view options & toggles)
-export const VISUALIZATION_TOOLS: ToolConfig[] = [
-  { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: false },
-  { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: false },
-  // REMOVED: annotations - exists in VisualizationToolbar (Visa annotationer)
-  { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
-  { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
-  { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
-  { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
-  // REMOVED: bimModels - exists in VisualizationToolbar
-  // REMOVED: floors - exists in VisualizationToolbar
-  { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
-  { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
-  // REMOVED: addAsset - exists in VisualizationToolbar (Registrera tillgång)
-];
+<AssetPlusViewer
+  fmGuid={targetFmGuid}
+  pickModeEnabled={pickModeActive && !pendingCoords}
+  disableSelectTool={true}  // NY PROP
+  onCoordinatePicked={handleCoordinatePicked}
+  onClose={onClose}
+/>
 ```
-
-### Del 2: Säkerställ att rum är dolda som standard
 
 **Fil: `src/components/viewer/AssetPlusViewer.tsx`**
 
-I `handleAllModelsLoaded` callback (runt rad 449-530), lägg till explicit deaktivering av spaces:
+Lägg till prop `disableSelectTool` och skicka vidare till ViewerToolbar via context eller prop
+
+**Fil: `src/components/viewer/ViewerToolbar.tsx`**
+
+Ändra initial state för `activeTool` baserat på prop:
 
 ```typescript
-// Efter models laddats - säkerställ att rum är dolda som standard
-try {
-  const assetViewer = viewer?.assetViewer;
-  if (assetViewer?.onShowSpacesChanged) {
-    assetViewer.onShowSpacesChanged(false);
-    console.log("Spaces hidden by default");
+const [activeTool, setActiveTool] = useState<ViewerTool>(
+  props.disableSelectTool ? null : 'select'
+);
+```
+
+### Del 2: Aktivera annotationer automatiskt och visa markör vid vald position
+
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
+
+När en position väljs i pick-mode:
+1. Kontrollera om `showAnnotations` är false
+2. Om ja, anropa `viewer.onToggleAnnotation(true)` och uppdatera state
+3. Skapa en temporär annotation/markör vid de valda koordinaterna
+
+```typescript
+// I handleCoordinatePicked (i setupPickModeListenerInternal):
+// Aktivera annotationer om de är dolda
+if (!showAnnotations) {
+  const assetViewer = viewerInstanceRef.current?.assetViewer;
+  if (assetViewer?.onToggleAnnotation) {
+    assetViewer.onToggleAnnotation(true);
+    setShowAnnotations(true);
   }
-} catch (e) {
-  console.debug("Could not hide spaces:", e);
 }
+
+// Skapa temporär markör vid positionen
+// Asset+ viewer har createTemporaryAnnotation eller liknande API
 ```
 
-### Del 3: Synkronisera rum-synlighet med våningsfiltrering
+### Del 3: Låt 3D-vyn ligga kvar tills formuläret sparas
 
-**Fil: `src/components/viewer/FloorVisibilitySelector.tsx`**
+**Fil: `src/components/inventory/Inline3dPositionPicker.tsx`**
 
-Problemet är att `applyFloorVisibility` bara hanterar objektsynlighet, inte IfcSpace-synlighet. Spaces styrs av `onShowSpacesChanged` på Asset+ viewer-nivå, inte per-floor.
+Ta bort `onClose()` från bekräfta-handlingen:
 
-Lösningen är att:
-1. Skicka med information om vilka floors som är synliga till VisualizationToolbar
-2. VisualizationToolbar anropar `onShowSpacesChanged(true/false)` baserat på selection
-3. RoomVisualizationPanel redan filtrerar rätt via `visibleFloorFmGuids` prop
-
-Lägg till en callback i `handleShowOnlyFloor`:
 ```typescript
-const handleShowOnlyFloor = useCallback((floorId: string) => {
-  const newSet = new Set([floorId]);
-  setVisibleFloorIds(newSet);
-  applyFloorVisibility(newSet);
-  
-  // Apply clipping when showing single floor
-  updateClipping([floorId]);
-  
-  // Emit event for other components (e.g., ViewerToolbar 2D mode)
-  const floor = floors.find(f => f.id === floorId);
-  const bounds = calculateFloorBounds(floorId);
-  const eventDetail: FloorSelectionEventDetail = {
-    floorId,
-    floorName: floor?.name || null,
-    bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-  };
-  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-  
-  if (onVisibleFloorsChange) {
-    if (floor) {
-      onVisibleFloorsChange(floor.databaseLevelFmGuids);
-    }
+const handleConfirm = () => {
+  if (pendingCoords) {
+    onPositionConfirmed(pendingCoords);
+    // REMOVED: onClose(); - Låt 3D-vyn ligga kvar
   }
-}, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
+};
 ```
 
-Detta fungerar redan. Det verkliga problemet är att Asset+ viewer visar IfcSpace-geometri som standard vid floor cutout. Vi behöver anropa `onShowSpacesChanged(false)` för att dölja dem.
+**Fil: `src/pages/Inventory.tsx`**
 
-### Del 4: Koppla spaces-synlighet till floor filtering
-
-**Fil: `src/components/viewer/VisualizationToolbar.tsx`**
-
-Modifiera `handleVisibleFloorsChange` för att återinitiera spaces-visibility baserat på `showSpaces` state:
+Uppdatera `handleSaved` för att stänga 3D-vyn när formuläret sparas:
 
 ```typescript
-// Handle visible floors change from floor selector
-const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
-  console.log("Visible floors changed:", visibleFloorIds);
-  onVisibleFloorsChange?.(visibleFloorIds);
+const handleSaved = (item: InventoryItem) => {
+  // ... befintlig logik ...
   
-  // Re-apply spaces visibility to ensure correct floor-filtered state
-  // This ensures only the visible floors' spaces are shown if showSpaces is enabled
-  try {
-    const assetViewer = viewerRef.current?.assetViewer;
-    if (assetViewer?.onShowSpacesChanged) {
-      // First hide all spaces, then re-enable if showSpaces is on
-      assetViewer.onShowSpacesChanged(false);
-      if (showSpaces) {
-        // Small delay to allow floor filtering to complete
-        setTimeout(() => {
-          assetViewer.onShowSpacesChanged(true);
-        }, 100);
-      }
-    }
-  } catch (e) {
-    console.debug("Could not sync spaces visibility:", e);
-  }
-}, [onVisibleFloorsChange, viewerRef, showSpaces]);
+  // Stäng 3D-viewer efter spara
+  setViewer3dOpen(false);
+  setViewer3dBuildingFmGuid(null);
+  setViewer3dRoomFmGuid(null);
+  
+  // Reload to get fresh data
+  loadRecentItems();
+};
+```
+
+### Del 4: Felsök Spara-knappen
+
+**Fil: `src/components/inventory/InventoryForm.tsx`**
+
+Formuläret ser korrekt ut med `<form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>` och `<Button type="submit">`.
+
+Lägg till console.log för debugging:
+
+```typescript
+const handleSubmit = async () => {
+  console.log('handleSubmit called');
+  // ... resten av koden
+};
+```
+
+Kontrollera att valideringen inte blockerar submit:
+- `name.trim()` - OK
+- `category` - Kräver val
+- `symbolId` - Kräver val
+- `buildingFmGuid` - Kräver val
+
+### Del 5: Felsök Ta foto / Ladda upp bild
+
+**Fil: `src/components/inventory/ImageUpload.tsx`**
+
+Koden ser korrekt ut. Möjliga problem:
+1. `cameraInputRef.current` eller `fileInputRef.current` är `null`
+2. `capture="environment"` fungerar inte på alla enheter
+
+Lägg till debugging:
+
+```typescript
+const handleCameraClick = () => {
+  console.log('Camera button clicked, ref:', cameraInputRef.current);
+  cameraInputRef.current?.click();
+};
+
+const handleUploadClick = () => {
+  console.log('Upload button clicked, ref:', fileInputRef.current);
+  fileInputRef.current?.click();
+};
+```
+
+Och uppdatera button onClick:
+
+```typescript
+<Button onClick={handleCameraClick}>
 ```
 
 ---
@@ -179,14 +173,73 @@ const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/ToolbarSettings.tsx` | Ta bort dubblettverktyg: viewMode, annotations, bimModels, floors, addAsset. Öka VERSION till 5. |
-| `src/components/viewer/AssetPlusViewer.tsx` | Explicit dölja spaces i `handleAllModelsLoaded` |
-| `src/components/viewer/VisualizationToolbar.tsx` | Synkronisera spaces-synlighet vid floor-ändring |
+| `src/components/inventory/Inline3dPositionPicker.tsx` | Ta bort `onClose()` från bekräfta, lägg till `disableSelectTool` prop |
+| `src/pages/Inventory.tsx` | Stäng 3D-viewer i `handleSaved` |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till `disableSelectTool` prop, aktivera annotationer automatiskt vid pick, visa temporär markör |
+| `src/components/viewer/ViewerToolbar.tsx` | Respektera `disableSelectTool` prop för initial tool state |
+| `src/components/inventory/ImageUpload.tsx` | Lägg till debugging/förbättra button click handlers |
 
 ---
 
-## Förväntade resultat
+## Visuellt flöde efter fix
 
-1. **Rum dolda som standard**: Vid initial laddning och floor cutout kommer rum att vara dolda om inte "Visa rum" är aktiverat
-2. **Korrekt floor filtering**: När man väljer Solo på ett våningsplan visas endast det våningsplanets rum (om aktiverat)
-3. **Ren verktygslista**: "Anpassa verktygsfält" visar endast verktyg som faktiskt finns i navigations-toolbaren (botten), utan dubbletter av VisualizationToolbar-verktyg
+```text
+1. Användare klickar "Välj 3D-position" i formuläret
+2. 3D öppnas till höger (inget verktyg aktivt, kan navigera fritt)
+3. Användare klickar "Börja välja"
+4. Användare klickar på en yta
+5. Annotation-symbol visas vid positionen (annotationer aktiveras automatiskt)
+6. Koordinater visas i header-bar
+7. Användare kan klicka "Välj ny" eller fortsätta
+8. Användare fyller i formuläret (3D kvar till höger)
+9. Användare klickar "Spara"
+10. Asset sparas och 3D stängs
+```
+
+---
+
+## Tekniska detaljer
+
+### ViewerToolbar default tool
+
+Ändra rad 75 i ViewerToolbar.tsx:
+
+```typescript
+// Före:
+const [activeTool, setActiveTool] = useState<ViewerTool>('select');
+
+// Efter (med prop):
+interface ViewerToolbarProps {
+  // ... befintliga
+  disableSelectTool?: boolean;
+}
+
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
+  // ... befintliga
+  disableSelectTool = false,
+}) => {
+  const [activeTool, setActiveTool] = useState<ViewerTool>(
+    disableSelectTool ? null : 'select'
+  );
+```
+
+### Auto-enable annotations
+
+I AssetPlusViewer, lägg till i pick-resultats handler:
+
+```typescript
+// Säkerställ att annotationer är synliga när position väljs
+if (!showAnnotations) {
+  try {
+    const assetViewer = viewerInstanceRef.current?.assetViewer;
+    if (assetViewer?.onToggleAnnotation) {
+      assetViewer.onToggleAnnotation(true);
+      setShowAnnotations(true);
+      console.log('Annotations auto-enabled for position picking');
+    }
+  } catch (e) {
+    console.debug('Could not auto-enable annotations:', e);
+  }
+}
+```
+
