@@ -20,7 +20,7 @@ import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
-import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
+import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -1049,6 +1049,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       window.removeEventListener(ARCHITECT_MODE_REQUESTED_EVENT, handleArchitectModeRequest as EventListener);
     };
   }, [toggleArchitectMode]);
+
+  // Listen for architect background color changes
+  const { setBackgroundPreset } = useArchitectViewMode();
+  useEffect(() => {
+    const handleBackgroundChange = (e: CustomEvent<{ presetId: BackgroundPresetId }>) => {
+      console.log('ARCHITECT_BACKGROUND_CHANGED:', e.detail.presetId);
+      setBackgroundPreset(viewerInstanceRef, e.detail.presetId);
+    };
+    
+    window.addEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
+    return () => {
+      window.removeEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
+    };
+  }, [setBackgroundPreset]);
   // Setup XKT fetch interceptor for caching
   const setupCacheInterceptor = useCallback(() => {
     // Store original fetch if not already stored
