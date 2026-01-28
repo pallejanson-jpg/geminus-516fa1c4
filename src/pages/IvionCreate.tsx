@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MapPin, Loader2, CheckCircle2, X } from 'lucide-react';
+import { MapPin, Loader2, CheckCircle2, X, Crosshair } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { INVENTORY_CATEGORIES } from '@/components/inventory/InventoryForm';
+import PositionPickerDialog from '@/components/inventory/PositionPickerDialog';
 
 interface AnnotationSymbol {
   id: string;
@@ -31,15 +32,21 @@ interface Building {
   name: string | null;
 }
 
+interface FloorOrRoom {
+  fm_guid: string;
+  common_name: string | null;
+  name: string | null;
+}
+
 const IvionCreate: React.FC = () => {
   const [searchParams] = useSearchParams();
   
   // URL parameters from Ivion
   const siteId = searchParams.get('siteId') || '';
   const imageId = searchParams.get('imageId') || '';
-  const x = parseFloat(searchParams.get('x') || '0');
-  const y = parseFloat(searchParams.get('y') || '0');
-  const z = parseFloat(searchParams.get('z') || '0');
+  const urlX = parseFloat(searchParams.get('x') || '0');
+  const urlY = parseFloat(searchParams.get('y') || '0');
+  const urlZ = parseFloat(searchParams.get('z') || '0');
   const poiId = searchParams.get('poiId') || '';
   const poiName = searchParams.get('name') || '';
   
@@ -55,6 +62,18 @@ const IvionCreate: React.FC = () => {
   const [category, setCategory] = useState('');
   const [symbolId, setSymbolId] = useState('');
   const [buildingFmGuid, setBuildingFmGuid] = useState('');
+
+  // Floor and room selection
+  const [floors, setFloors] = useState<FloorOrRoom[]>([]);
+  const [rooms, setRooms] = useState<FloorOrRoom[]>([]);
+  const [levelFmGuid, setLevelFmGuid] = useState('');
+  const [roomFmGuid, setRoomFmGuid] = useState('');
+
+  // 3D position picker
+  const [positionDialogOpen, setPositionDialogOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState<{ x: number; y: number; z: number } | null>(
+    (urlX !== 0 || urlY !== 0 || urlZ !== 0) ? { x: urlX, y: urlY, z: urlZ } : null
+  );
 
   // Fetch symbols and buildings on mount
   useEffect(() => {
@@ -94,6 +113,40 @@ const IvionCreate: React.FC = () => {
     fetchData();
   }, [siteId]);
 
+  // Fetch floors when building changes
+  useEffect(() => {
+    if (!buildingFmGuid) {
+      setFloors([]);
+      setLevelFmGuid('');
+      setRooms([]);
+      setRoomFmGuid('');
+      return;
+    }
+    supabase
+      .from('assets')
+      .select('fm_guid, common_name, name')
+      .eq('building_fm_guid', buildingFmGuid)
+      .eq('category', 'Building Storey')
+      .order('common_name')
+      .then(({ data }) => setFloors(data || []));
+  }, [buildingFmGuid]);
+
+  // Fetch rooms when floor changes
+  useEffect(() => {
+    if (!levelFmGuid) {
+      setRooms([]);
+      setRoomFmGuid('');
+      return;
+    }
+    supabase
+      .from('assets')
+      .select('fm_guid, common_name, name')
+      .eq('level_fm_guid', levelFmGuid)
+      .eq('category', 'Space')
+      .order('common_name')
+      .then(({ data }) => setRooms(data || []));
+  }, [levelFmGuid]);
+
   const handleSubmit = async () => {
     // Validation
     if (!name.trim()) {
@@ -127,21 +180,25 @@ const IvionCreate: React.FC = () => {
         asset_type: category,
         symbol_id: symbolId,
         building_fm_guid: buildingFmGuid,
-        coordinate_x: x,
-        coordinate_y: y,
-        coordinate_z: z,
+        level_fm_guid: levelFmGuid || null,
+        in_room_fm_guid: roomFmGuid || null,
+        coordinate_x: coordinates?.x ?? null,
+        coordinate_y: coordinates?.y ?? null,
+        coordinate_z: coordinates?.z ?? null,
         ivion_poi_id: poiId ? parseInt(poiId, 10) : null,
         ivion_site_id: siteId || null,
         ivion_image_id: imageId ? parseInt(imageId, 10) : null,
         ivion_synced_at: new Date().toISOString(),
         created_in_model: false,
         is_local: true,
-        annotation_placed: true,
+        annotation_placed: coordinates !== null,
         attributes: {
           objectType: 4,
           designation: name.trim(),
           commonName: name.trim(),
           buildingFmGuid: buildingFmGuid,
+          levelFmGuid: levelFmGuid || null,
+          inRoomFmGuid: roomFmGuid || null,
           assetCategory: category,
           description: description.trim() || null,
           inventoryDate: inventoryDate,
@@ -179,6 +236,11 @@ const IvionCreate: React.FC = () => {
     } else {
       window.close();
     }
+  };
+
+  const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
+    setCoordinates(coords);
+    toast.success('Position vald');
   };
 
   // Group symbols by category
@@ -221,13 +283,13 @@ const IvionCreate: React.FC = () => {
         
         <CardContent className="space-y-5">
           {/* Position info from Ivion */}
-          {(x !== 0 || y !== 0 || z !== 0) && (
+          {coordinates && (
             <div className="bg-muted/50 rounded-lg p-3 flex items-start gap-3">
               <MapPin className="h-5 w-5 text-primary mt-0.5" />
-              <div className="text-sm">
-                <div className="font-medium mb-1">Position från Ivion</div>
+              <div className="flex-1 text-sm">
+                <div className="font-medium mb-1">Position</div>
                 <div className="text-muted-foreground font-mono text-xs">
-                  X: {x.toFixed(2)} Y: {y.toFixed(2)} Z: {z.toFixed(2)}
+                  X: {coordinates.x.toFixed(2)} Y: {coordinates.y.toFixed(2)} Z: {coordinates.z.toFixed(2)}
                 </div>
                 {imageId && (
                   <div className="text-muted-foreground text-xs mt-1">
@@ -235,6 +297,14 @@ const IvionCreate: React.FC = () => {
                   </div>
                 )}
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setCoordinates(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
 
@@ -319,7 +389,14 @@ const IvionCreate: React.FC = () => {
                 </span>
               )}
             </Label>
-            <Select value={buildingFmGuid} onValueChange={setBuildingFmGuid}>
+            <Select 
+              value={buildingFmGuid} 
+              onValueChange={(v) => {
+                setBuildingFmGuid(v);
+                setLevelFmGuid('');
+                setRoomFmGuid('');
+              }}
+            >
               <SelectTrigger className="h-12">
                 <SelectValue placeholder="Välj byggnad..." />
               </SelectTrigger>
@@ -332,6 +409,66 @@ const IvionCreate: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Floor dropdown - only show when building is selected and has floors */}
+          {buildingFmGuid && floors.length > 0 && (
+            <div className="space-y-2">
+              <Label>Våningsplan</Label>
+              <Select 
+                value={levelFmGuid} 
+                onValueChange={(v) => {
+                  setLevelFmGuid(v);
+                  setRoomFmGuid('');
+                }}
+              >
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Välj våning..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {floors.map((f) => (
+                    <SelectItem key={f.fm_guid} value={f.fm_guid}>
+                      {f.common_name || f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Room dropdown - only show when floor is selected and has rooms */}
+          {levelFmGuid && rooms.length > 0 && (
+            <div className="space-y-2">
+              <Label>Rum</Label>
+              <Select value={roomFmGuid} onValueChange={setRoomFmGuid}>
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="Välj rum..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50 max-h-60">
+                  {rooms.map((r) => (
+                    <SelectItem key={r.fm_guid} value={r.fm_guid}>
+                      {r.common_name || r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* 3D Position picker button */}
+          {!coordinates && buildingFmGuid && (
+            <div className="space-y-2">
+              <Label>3D Position</Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPositionDialogOpen(true)}
+                className="w-full h-12"
+              >
+                <Crosshair className="h-4 w-4 mr-2" />
+                Välj position i 3D
+              </Button>
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-2">
@@ -370,6 +507,15 @@ const IvionCreate: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* 3D Position Picker Dialog */}
+      <PositionPickerDialog
+        open={positionDialogOpen}
+        onOpenChange={setPositionDialogOpen}
+        buildingFmGuid={buildingFmGuid}
+        roomFmGuid={roomFmGuid}
+        onPositionPicked={handlePositionPicked}
+      />
     </div>
   );
 };
