@@ -590,55 +590,56 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
                 <div className="space-y-0.5 sm:space-y-1">
                   {/* Architect View Mode Toggle */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between py-1.5 sm:py-2">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div
-                          className={cn(
-                            "p-1 sm:p-1.5 rounded-md",
-                            isArchitectMode
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          <PaintBucket className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        </div>
-                        <span className="text-xs sm:text-sm">Arkitektvy</span>
+                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div
+                        className={cn(
+                          "p-1 sm:p-1.5 rounded-md",
+                          isArchitectMode
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <PaintBucket className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <Switch 
-                        checked={isArchitectMode} 
-                        onCheckedChange={handleArchitectModeToggle}
-                        disabled={!isViewerReady}
-                      />
+                      <span className="text-xs sm:text-sm">Arkitektvy</span>
                     </div>
+                    <Switch 
+                      checked={isArchitectMode} 
+                      onCheckedChange={handleArchitectModeToggle}
+                      disabled={!isViewerReady}
+                    />
+                  </div>
 
-                    {/* Background color palette - only visible when architect mode is active */}
-                    {isArchitectMode && (
-                      <div className="pl-8 sm:pl-10 pb-2">
-                        <Label className="text-[10px] sm:text-xs text-muted-foreground mb-2 block">
-                          Bakgrundsfärg
-                        </Label>
-                        <div className="grid grid-cols-5 gap-1.5">
-                          {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
-                            <button
-                              key={preset.id}
-                              title={preset.name}
-                              onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
-                              className={cn(
-                                "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
-                                "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                                architectBackground === preset.id
-                                  ? "border-primary ring-2 ring-primary/30"
-                                  : "border-border/40"
-                              )}
-                              style={{
-                                background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
-                              }}
-                            />
-                          ))}
-                        </div>
+                  {/* Background color palette - always visible */}
+                  <div className="py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                    )}
+                      <span className="text-xs sm:text-sm">Bakgrundsfärg</span>
+                    </div>
+                    <div className="pl-8 sm:pl-10">
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            title={preset.name}
+                            onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
+                            className={cn(
+                              "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
+                              "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                              architectBackground === preset.id
+                                ? "border-primary ring-2 ring-primary/30"
+                                : "border-border/40"
+                            )}
+                            style={{
+                              background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {/* 2D Plan View Toggle */}
