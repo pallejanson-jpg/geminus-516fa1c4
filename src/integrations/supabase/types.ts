@@ -319,6 +319,39 @@ export type Database = {
         }
         Relationships: []
       }
+      viewer_themes: {
+        Row: {
+          color_mappings: Json
+          created_at: string
+          edge_settings: Json | null
+          id: string
+          is_system: boolean
+          name: string
+          space_opacity: number | null
+          updated_at: string
+        }
+        Insert: {
+          color_mappings?: Json
+          created_at?: string
+          edge_settings?: Json | null
+          id?: string
+          is_system?: boolean
+          name: string
+          space_opacity?: number | null
+          updated_at?: string
+        }
+        Update: {
+          color_mappings?: Json
+          created_at?: string
+          edge_settings?: Json | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          space_opacity?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       work_orders: {
         Row: {
           actual_cost: number | null
