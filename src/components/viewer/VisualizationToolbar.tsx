@@ -14,6 +14,7 @@ import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
 import CreateViewDialog from "./CreateViewDialog";
+import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
@@ -477,9 +478,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               "fixed z-[60] border rounded-lg shadow-xl",
               // Enhanced semi-transparent frosted glass effect
               "bg-card/60 backdrop-blur-md",
-              "max-h-[70vh] sm:max-h-[80vh]",
+              // Mobile: allow more height for scrolling
+              "max-h-[85vh] sm:max-h-[80vh]",
               "flex flex-col overflow-hidden",
-              "transition-all duration-150",
               "transition-all duration-150",
               // Mobile: bottom sheet style with safe area
               "left-2 right-2 bottom-16 sm:inset-auto",
@@ -614,8 +615,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   Visa
                 </Label>
 
-                <div className="space-y-0.5 sm:space-y-1">
-                  {/* Architect View Mode Toggle */}
+                <div className="space-y-2 sm:space-y-3">
+                  {/* Viewer Theme Selector - NEW */}
+                  <ViewerThemeSelector 
+                    viewerRef={viewerRef}
+                    disabled={!isViewerReady}
+                  />
+
+                  <Separator className="my-1.5" />
+
+                  {/* Architect View Mode Toggle (kept for quick access) */}
                   <div className="flex items-center justify-between py-1.5 sm:py-2">
                     <div className="flex items-center gap-2 sm:gap-3">
                       <div
