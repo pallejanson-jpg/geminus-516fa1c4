@@ -15,9 +15,23 @@ export { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPa
 /** Event dispatched when a saved view should be loaded */
 export const LOAD_SAVED_VIEW_EVENT = 'LOAD_SAVED_VIEW';
 
+/** Event dispatched when 3D viewer context changes (for Gunnar AI) */
+export const VIEWER_CONTEXT_CHANGED_EVENT = 'VIEWER_CONTEXT_CHANGED';
+
 /** Type for view mode request event detail */
 export interface ViewModeRequestedDetail {
   mode: '2d' | '3d';
+}
+
+/** Type for viewer context changes (for Gunnar AI integration) */
+export interface ViewerContextChangedDetail {
+  buildingFmGuid: string;
+  buildingName?: string;
+  viewMode: '2d' | '3d';
+  visibleFloorFmGuids: string[];
+  visibleModelIds: string[];
+  selectedFmGuids: string[];
+  clipHeight: number;
 }
 
 /** Type for load saved view event detail */

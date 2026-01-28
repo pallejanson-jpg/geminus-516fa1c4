@@ -18,8 +18,8 @@ import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT } from '@/lib/viewer-events';
-import { CLIP_HEIGHT_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
+import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -947,6 +947,83 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       window.removeEventListener(LOAD_SAVED_VIEW_EVENT, handleLoadSavedView as EventListener);
     };
   }, [state.isInitialized, modelLoadState]);
+
+  // Dispatch viewer context changes for Gunnar AI integration
+  const [currentViewMode, setCurrentViewMode] = useState<'2d' | '3d'>('3d');
+  const [clipHeight, setClipHeight] = useState(1.2);
+  
+  // Listen for view mode changes
+  useEffect(() => {
+    const handleViewModeChanged = (e: CustomEvent<{ mode: '2d' | '3d' }>) => {
+      setCurrentViewMode(e.detail.mode);
+    };
+    const handleClipHeightChanged = (e: CustomEvent<{ height: number }>) => {
+      setClipHeight(e.detail.height);
+    };
+    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChanged as EventListener);
+    window.addEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChanged as EventListener);
+    return () => {
+      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChanged as EventListener);
+      window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChanged as EventListener);
+    };
+  }, []);
+  
+  // Dispatch context to Gunnar when relevant state changes
+  useEffect(() => {
+    if (!state.isInitialized || modelLoadState !== 'loaded') return;
+    
+    const contextDetail: ViewerContextChangedDetail = {
+      buildingFmGuid: buildingFmGuid || fmGuid,
+      buildingName: assetData?.commonName || assetData?.name,
+      viewMode: currentViewMode,
+      visibleFloorFmGuids: visibleFloorFmGuids,
+      visibleModelIds: [], // Could be expanded if model visibility state is tracked
+      selectedFmGuids: selectedFmGuids,
+      clipHeight: clipHeight,
+    };
+    
+    window.dispatchEvent(new CustomEvent(VIEWER_CONTEXT_CHANGED_EVENT, {
+      detail: contextDetail
+    }));
+  }, [state.isInitialized, modelLoadState, buildingFmGuid, fmGuid, assetData, currentViewMode, visibleFloorFmGuids, selectedFmGuids, clipHeight]);
+
+  // Listen for Gunnar commands
+  useEffect(() => {
+    const handleGunnarShowFloor = (e: CustomEvent<{ floorFmGuid: string }>) => {
+      const viewer = viewerInstanceRef.current;
+      if (viewer && e.detail.floorFmGuid) {
+        try {
+          viewer.cutOutFloorsByFmGuid(e.detail.floorFmGuid, true, { doViewFit: true });
+        } catch (err) {
+          console.debug('Could not cut to floor:', err);
+        }
+      }
+    };
+    
+    const handleGunnarHighlight = (e: CustomEvent<{ fmGuids: string[] }>) => {
+      if (e.detail.fmGuids && e.detail.fmGuids.length > 0) {
+        e.detail.fmGuids.forEach(guid => {
+          flashEntityById(guid, viewerInstanceRef.current);
+        });
+      }
+    };
+    
+    const handleGunnarFlyTo = (e: CustomEvent<{ fmGuid: string }>) => {
+      if (e.detail.fmGuid) {
+        lookAtInstanceFromAngle(e.detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
+      }
+    };
+    
+    window.addEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
+    window.addEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
+    window.addEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+    
+    return () => {
+      window.removeEventListener('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor as EventListener);
+      window.removeEventListener('GUNNAR_HIGHLIGHT', handleGunnarHighlight as EventListener);
+      window.removeEventListener('GUNNAR_FLY_TO', handleGunnarFlyTo as EventListener);
+    };
+  }, [flashEntityById, lookAtInstanceFromAngle]);
 
   // Initialize viewer - following EXACT pattern from external_viewer.html
   // Setup XKT fetch interceptor for caching
