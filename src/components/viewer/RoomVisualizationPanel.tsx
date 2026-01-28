@@ -387,17 +387,16 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
   // Apply visualization when type or mock data changes (AUTO-APPLY, no button needed)
   useEffect(() => {
-    if (rooms.length > 0 && entityIdCache.size > 0) {
-      applyVisualization();
-    }
-  }, [visualizationType, useMockData, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Re-apply when rooms change (floor filter) - only if visualization is active
-  useEffect(() => {
+    // Only apply when visualization is active, rooms are loaded, and cache is built
     if (visualizationType !== 'none' && rooms.length > 0 && entityIdCache.size > 0) {
+      // Reset count before re-applying
+      setColorizedCount(0);
       applyVisualization();
+    } else if (visualizationType === 'none') {
+      resetColors();
     }
-  }, [rooms, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visualizationType, useMockData, rooms.length, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Cleanup on unmount
   useEffect(() => {
