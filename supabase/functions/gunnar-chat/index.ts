@@ -141,13 +141,18 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Check if we have a current building context
+    const currentBuildingFmGuid = context?.currentBuilding?.fmGuid;
+    const currentBuildingName = context?.currentBuilding?.name;
+
     // Get comprehensive asset statistics for context
     const [
-      categoryCounts,
+      globalCategoryCounts,
       totalAssets,
       buildingsList,
+      buildingSpecificCounts,
     ] = await Promise.all([
-      // Category counts
+      // Global category counts
       supabase.from("assets").select("category").then(({ data }) => {
         const counts: Record<string, number> = {};
         data?.forEach((item) => {
@@ -159,6 +164,16 @@ serve(async (req) => {
       supabase.from("assets").select("*", { count: "exact", head: true }).then(({ count }) => count || 0),
       // Buildings list for context
       supabase.from("assets").select("fm_guid, common_name, name").eq("category", "Building").limit(50),
+      // Building-specific counts (if in a building context)
+      currentBuildingFmGuid
+        ? supabase.from("assets").select("category").eq("building_fm_guid", currentBuildingFmGuid).then(({ data }) => {
+            const counts: Record<string, number> = {};
+            data?.forEach((item) => {
+              counts[item.category] = (counts[item.category] || 0) + 1;
+            });
+            return counts;
+          })
+        : Promise.resolve(null),
     ]);
 
     // Build current context section
@@ -191,17 +206,44 @@ NUVARANDE KONTEXT (var användaren befinner sig):
       `  - ${b.common_name || b.name || 'Okänd'}: ${b.fm_guid}`
     ).join('\n') || '  (Inga byggnader synkade)';
 
+    // Build data statistics section - prioritize building-specific if available
+    let dataStatsSection = "";
+    if (currentBuildingFmGuid && buildingSpecificCounts) {
+      // Show building-specific stats prominently
+      dataStatsSection = `
+STATISTIK FÖR AKTUELL BYGGNAD (${currentBuildingName}):
+  - Våningsplan (Building Storey): ${buildingSpecificCounts['Building Storey'] || 0}
+  - Rum (Space): ${buildingSpecificCounts['Space'] || 0}
+  - Inventarier/Tillgångar (Instance): ${buildingSpecificCounts['Instance'] || 0}
+  - Dörrar (Door): ${buildingSpecificCounts['Door'] || 0}
+
+GLOBAL STATISTIK (hela databasen - för referens):
+- Totalt: ${totalAssets} objekt
+  - Byggnader (Building): ${globalCategoryCounts['Building'] || 0}
+  - Våningsplan (Building Storey): ${globalCategoryCounts['Building Storey'] || 0}
+  - Rum (Space): ${globalCategoryCounts['Space'] || 0}
+  - Inventarier/Tillgångar (Instance): ${globalCategoryCounts['Instance'] || 0}
+  - Dörrar (Door): ${globalCategoryCounts['Door'] || 0}`;
+    } else {
+      // No building context - show global stats
+      dataStatsSection = `
+GLOBAL STATISTIK (hela databasen):
+- Totalt: ${totalAssets} objekt
+  - Byggnader (Building): ${globalCategoryCounts['Building'] || 0}
+  - Våningsplan (Building Storey): ${globalCategoryCounts['Building Storey'] || 0}
+  - Rum (Space): ${globalCategoryCounts['Space'] || 0}
+  - Inventarier/Tillgångar (Instance): ${globalCategoryCounts['Instance'] || 0}
+  - Dörrar (Door): ${globalCategoryCounts['Door'] || 0}`;
+    }
+
     // Build context about the data
     const dataContext = `
 Du är Gunnar, en intelligent AI-assistent för ett fastighetssystem. Du hjälper användare att utforska och förstå sina byggnader och tillgångar.
 
+${currentContextSection}
+
 TILLGÄNGLIG DATA I DATABASEN (tabell: assets):
-- Totalt: ${totalAssets} objekt
-  - Byggnader (Building): ${categoryCounts['Building'] || 0}
-  - Våningsplan (Building Storey): ${categoryCounts['Building Storey'] || 0}
-  - Rum (Space): ${categoryCounts['Space'] || 0}
-  - Inventarier/Tillgångar (Instance): ${categoryCounts['Instance'] || 0}
-  - Dörrar (Door): ${categoryCounts['Door'] || 0}
+${dataStatsSection}
 
 BYGGNADER I SYSTEMET:
 ${buildingsInfo}
@@ -269,10 +311,11 @@ eller
 VIKTIGA REGLER:
 1. Svara på samma språk som frågan (svenska/engelska)
 2. Var koncis och tydlig
-3. Om du refererar till en specifik byggnad som finns i kontexten, använd dess fmGuid i queries
-4. Om användaren inte specificerar byggnad men är på en byggnadssida, anta den byggnaden
-5. Ge alltid konkreta siffror när du har data
-6. Om du inte kan svara, förklara varför och föreslå alternativ
+3. **KRITISKT**: Om användaren är på en specifik byggnad (se "Aktiv byggnad" i kontexten), anta ALLTID att frågor handlar om den byggnaden om inte annat specificeras. ANVÄND ALLTID building_fm_guid i SQL-frågor när det finns en aktiv byggnad.
+4. När du svarar om en byggnad, använd ENDAST statistik från den byggnaden - INTE global statistik.
+5. Om du refererar till en specifik byggnad, använd dess fmGuid i WHERE-villkor: building_fm_guid = '[fmGuid]'
+6. Ge alltid konkreta siffror när du har data
+7. Om du inte kan svara, förklara varför och föreslå alternativ
 
 Svara nu på användarens fråga:
 `;
