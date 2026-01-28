@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Building2, Search, Layers, MapPin, Box, Camera, Trash2, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail } from '@/lib/viewer-events';
 
 interface SavedView {
   id: string;
@@ -19,6 +20,18 @@ interface SavedView {
   screenshot_url: string | null;
   view_mode: string;
   created_at: string;
+  // Full view settings
+  camera_eye: number[] | null;
+  camera_look: number[] | null;
+  camera_up: number[] | null;
+  camera_projection: string | null;
+  clip_height: number | null;
+  visible_model_ids: string[] | null;
+  visible_floor_ids: string[] | null;
+  show_spaces: boolean | null;
+  show_annotations: boolean | null;
+  visualization_type: string | null;
+  visualization_mock_data: boolean | null;
 }
 
 /**
@@ -60,14 +73,14 @@ const BuildingSelector: React.FC = () => {
     });
   }, [savedViews, searchQuery]);
 
-  // Fetch saved views
+  // Fetch saved views with ALL fields
   useEffect(() => {
     const fetchSavedViews = async () => {
       setIsLoadingViews(true);
       try {
         const { data, error } = await supabase
           .from('saved_views')
-          .select('id, name, description, building_fm_guid, building_name, screenshot_url, view_mode, created_at')
+          .select('*')
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -118,9 +131,32 @@ const BuildingSelector: React.FC = () => {
   };
 
   const handleSelectView = (view: SavedView) => {
-    // For now, just navigate to the building
-    // TODO: Pass saved view settings to restore camera position and settings
+    // First, set the building to trigger viewer load
     setViewer3dFmGuid(view.building_fm_guid);
+    
+    // Dispatch event with full view settings to be applied after viewer initializes
+    // Use a short delay to ensure the viewer context is set up
+    setTimeout(() => {
+      const eventDetail: LoadSavedViewDetail = {
+        viewId: view.id,
+        cameraEye: view.camera_eye || [0, 50, 100],
+        cameraLook: view.camera_look || [0, 0, 0],
+        cameraUp: view.camera_up || [0, 1, 0],
+        cameraProjection: view.camera_projection || 'perspective',
+        viewMode: (view.view_mode as '2d' | '3d') || '3d',
+        clipHeight: view.clip_height || 1.2,
+        visibleModelIds: view.visible_model_ids || [],
+        visibleFloorIds: view.visible_floor_ids || [],
+        showSpaces: view.show_spaces || false,
+        showAnnotations: view.show_annotations || false,
+        visualizationType: view.visualization_type || 'none',
+        visualizationMockData: view.visualization_mock_data || false,
+      };
+      
+      window.dispatchEvent(new CustomEvent(LOAD_SAVED_VIEW_EVENT, { detail: eventDetail }));
+      console.log('Dispatched LOAD_SAVED_VIEW_EVENT:', eventDetail);
+    }, 100);
+    
     toast({ title: "Laddar vy", description: `Öppnar "${view.name}"` });
   };
 
