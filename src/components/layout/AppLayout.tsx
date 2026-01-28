@@ -6,6 +6,7 @@ import RightSidebar from './RightSidebar';
 import MobileNav from './MobileNav';
 import MainContent from './MainContent';
 import VoiceControlButton from '@/components/voice/VoiceControlButton';
+import GunnarButton from '@/components/chat/GunnarButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
 
@@ -57,6 +58,9 @@ const AppLayoutInner: React.FC = () => {
 
             {/* Voice Control - only visible when enabled in Settings */}
             {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
+
+            {/* Gunnar AI Assistant - always visible */}
+            <GunnarButton />
         </div>
     );
 };

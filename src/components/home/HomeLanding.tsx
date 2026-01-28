@@ -15,18 +15,20 @@ const ASSISTANTS: Array<{
   id: AssistantType;
   title: string;
   subtitle: string;
+  description: string;
   icon: React.ComponentType<{ className?: string }>;
+  available: boolean;
 }> = [
-  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", icon: Database },
-  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", icon: FileQuestion },
-  { id: "doris", title: "Doris", subtitle: "FM Access Assistant", icon: Sparkles },
+  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Fråga om byggnader, rum och tillgångar", icon: Database, available: true },
+  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Sök i dokument och ritningar", icon: FileQuestion, available: false },
+  { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration med FM Access", icon: Sparkles, available: false },
 ];
 
 export default function HomeLanding() {
   const { toast } = useToast();
   const [gunnarOpen, setGunnarOpen] = useState(false);
   const { favorites, isLoading: isLoadingFavorites } = useFavoriteBuildings();
-  const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
+  const { navigatorTreeData, setSelectedFacility, setActiveApp, allData, activeApp } = useContext(AppContext);
 
   // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
   const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
@@ -128,15 +130,23 @@ export default function HomeLanding() {
                 key={a.id}
                 type="button"
                 onClick={() => openAssistant(a.id)}
-                className="rounded-xl border border-border bg-card/60 p-4 text-left transition-colors hover:bg-muted"
+                disabled={!a.available}
+                className={`rounded-xl border border-border bg-card/60 p-4 text-left transition-colors ${
+                  a.available ? 'hover:bg-muted hover:border-primary/50' : 'opacity-60 cursor-not-allowed'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${a.available ? 'bg-primary/10' : 'bg-muted'}`}>
+                    <Icon className={`h-5 w-5 ${a.available ? 'text-primary' : 'text-muted-foreground'}`} />
                   </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold leading-none">{a.title}</div>
-                    <div className="text-sm text-muted-foreground">{a.subtitle}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold leading-none">{a.title}</span>
+                      {!a.available && (
+                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Kommer snart</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">{a.description}</div>
                   </div>
                 </div>
               </button>
@@ -202,8 +212,12 @@ export default function HomeLanding() {
       </section>
       </div>
 
-      {/* Gunnar Chat Modal */}
-      <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} />
+      {/* Gunnar Chat Modal - with home context */}
+      <GunnarChat 
+        open={gunnarOpen} 
+        onClose={() => setGunnarOpen(false)} 
+        context={{ activeApp: 'home' }}
+      />
     </div>
   );
 }
