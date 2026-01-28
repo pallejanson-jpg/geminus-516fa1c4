@@ -14,6 +14,7 @@ import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
 import RoomVisualizationPanel from './RoomVisualizationPanel';
 import VisualizationToolbar from './VisualizationToolbar';
+import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
@@ -126,6 +127,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [hoverHighlightEnabled, setHoverHighlightEnabled] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
   const hoverListenerRef = useRef<(() => void) | null>(null);
+  
+  // Inventory form sheet state
+  const [inventorySheetOpen, setInventorySheetOpen] = useState(false);
+  const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x: number; y: number; z: number} | null>(null);
+  const inventoryPickModeRef = useRef(false);
   
   // Keep ref in sync with state for callback access
   const setFlashOnSelectEnabled = useCallback((enabled: boolean) => {
@@ -665,8 +671,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           }
         }
 
-        // If external callback is provided, use it (asset registration flow)
-        if (onCoordinatePicked) {
+        // Check if this pick is for the inventory form sheet
+        if (inventoryPickModeRef.current) {
+          console.log('Routing pick result to inventory form sheet');
+          setInventoryPendingPosition(coords);
+          inventoryPickModeRef.current = false;
+          setIsPickMode(false);
+        } else if (onCoordinatePicked) {
+          // External callback is provided, use it (asset registration flow)
           console.log('Calling external onCoordinatePicked callback');
           onCoordinatePicked(coords, parentNode);
           setIsPickMode(false);
@@ -790,6 +802,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     setAddAssetParentNode(null);
     toast.success('Tillgång registrerad med 3D-koordinater!');
   }, []);
+
+  // Open inventory sheet (replaces old add asset dialog flow)
+  const handleOpenInventorySheet = useCallback(() => {
+    setInventorySheetOpen(true);
+  }, []);
+
+  // Handle pick request from inventory sheet
+  const handleInventoryPickRequest = useCallback(() => {
+    inventoryPickModeRef.current = true;
+    const success = setupPickModeListenerInternal();
+    if (success) {
+      setIsPickMode(true);
+      toast.info('Klicka på en yta i 3D-vyn för att välja position', {
+        duration: 5000,
+      });
+    }
+  }, [setupPickModeListenerInternal]);
 
   // Handle floor selection from carousel
   const handleFloorSelect = useCallback((floor: FloorInfo) => {
@@ -1568,7 +1597,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                       }
                     }}
                     onVisibleFloorsChange={(floorIds) => setVisibleFloorFmGuids(floorIds)}
-                    onAddAsset={handleTogglePickMode}
+                    onAddAsset={handleOpenInventorySheet}
                     onPickCoordinate={handleTogglePickMode}
                     onShowProperties={() => setPropertiesDialogOpen(true)}
                     onOpenSettings={() => setToolbarSettingsOpen(true)}
@@ -1704,6 +1733,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             initialCoordinates={pickedCoordinates}
             onPickCoordinates={handleTogglePickMode}
             isPickingCoordinates={isPickMode}
+          />
+          
+          {/* Inventory Form Sheet - opens from "Registrera tillgång" menu item */}
+          <InventoryFormSheet
+            isOpen={inventorySheetOpen}
+            onClose={() => {
+              setInventorySheetOpen(false);
+              setInventoryPendingPosition(null);
+            }}
+            buildingFmGuid={buildingFmGuid || ''}
+            levelFmGuid={assetData?.levelFmGuid}
+            roomFmGuid={assetData?.inRoomFmGuid || (assetData?.category === 'Space' ? assetData?.fmGuid : null)}
+            pendingPosition={inventoryPendingPosition}
+            onPickPositionRequest={handleInventoryPickRequest}
+            isPickingPosition={isPickMode && inventoryPickModeRef.current}
+            onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
           />
           
           {/* Toolbar Settings Modal */}
