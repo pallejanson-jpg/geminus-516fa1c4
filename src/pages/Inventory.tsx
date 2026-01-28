@@ -87,6 +87,12 @@ const Inventory: React.FC = () => {
     setIsFormOpen(false);
     setEditItem(null);
     clearInventoryPrefill();
+    
+    // Close 3D viewer when form is saved
+    setViewer3dOpen(false);
+    setViewer3dBuildingFmGuid(null);
+    setViewer3dRoomFmGuid(null);
+    
     // Reload to get fresh data
     loadRecentItems();
   };
@@ -130,7 +136,7 @@ const Inventory: React.FC = () => {
 
   const handlePositionConfirmed = (coords: { x: number; y: number; z: number }) => {
     setPendingPositionForEdit(coords);
-    setViewer3dOpen(false);
+    // Do NOT close 3D viewer here - keep it open until form is saved
   };
 
   const handleClose3d = () => {

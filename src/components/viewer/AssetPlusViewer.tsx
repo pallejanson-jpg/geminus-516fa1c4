@@ -651,6 +651,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           pickModeListenerRef.current = null;
         }
 
+        // Auto-enable annotations if they're off, so the user can see the marker
+        if (!showAnnotations) {
+          try {
+            const assetViewer = viewerInstanceRef.current?.assetViewer;
+            if (assetViewer?.onToggleAnnotation) {
+              assetViewer.onToggleAnnotation(true);
+              setShowAnnotations(true);
+              console.log('Annotations auto-enabled for position picking');
+            }
+          } catch (e) {
+            console.debug('Could not auto-enable annotations:', e);
+          }
+        }
+
         // If external callback is provided, use it (asset registration flow)
         if (onCoordinatePicked) {
           console.log('Calling external onCoordinatePicked callback');
@@ -1612,6 +1626,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 onToggleFlashOnSelect={setFlashOnSelectEnabled}
                 hoverHighlightEnabled={hoverHighlightEnabled}
                 onToggleHoverHighlight={setHoverHighlightEnabled}
+                disableSelectTool={pickModeEnabled}
               />
               
               {/* Tree View Panel - standalone mode (not in sheet) */}

@@ -49,6 +49,8 @@ interface ViewerToolbarProps {
   hoverHighlightEnabled?: boolean;
   onToggleHoverHighlight?: (enabled: boolean) => void;
   className?: string;
+  /** When true, disables the select tool as default (for pick-mode navigation) */
+  disableSelectTool?: boolean;
 }
 
 type ViewerTool = 'select' | 'measure' | 'slicer' | null;
@@ -70,9 +72,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   onToggleFlashOnSelect,
   hoverHighlightEnabled = false,
   onToggleHoverHighlight,
-  className
+  className,
+  disableSelectTool = false
 }) => {
-  const [activeTool, setActiveTool] = useState<ViewerTool>('select');
+  // When disableSelectTool is true, start with no tool active (for pick-mode navigation)
+  const [activeTool, setActiveTool] = useState<ViewerTool>(disableSelectTool ? null : 'select');
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isExpanded, setIsExpanded] = useState(true);
