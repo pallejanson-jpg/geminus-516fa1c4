@@ -1,278 +1,212 @@
 
 
-# Plan: Byt "Registrera tillgång" till Inventeringsformulär med inline-positionsval
+# Plan: Implementera lokal annotation-rendering i 3D-viewern
 
-## Sammanfattning
+## Identifierat problem
 
-Ändra funktionen "Registrera tillgång" i Visning-menyn så att den öppnar inventeringsformuläret (InventoryForm) istället för den nuvarande AssetPropertiesDialog. Formuläret ska visas som en draggbar dialog/Sheet på sidan av 3D-viewern medan den redan laddade 3D-vyn används för positionsval.
+Annotationer som skapats via inventeringsformuläret (sparade i `assets`-tabellen med `annotation_placed=true` och koordinater) **visas aldrig i 3D-viewern**.
 
----
+**Grundorsak:** Det finns ingen kod som skapar xeokit-annotationer baserat på vår lokala databas. Koden:
+1. Hämtar kategoridata från databasen
+2. Försöker toggla `viewer.annotationsPlugin.annotations` - men den kollektionen är **tom**
+3. Skapar aldrig visuella markörer med xeokits `AnnotationsPlugin.createAnnotation()`
 
-## Nuvarande flöde
+Dessutom visas engelska tekniska namn (`fire_blanket`) istället för svenska namn (`Brandfilt`).
 
-```text
-1. Användare klickar "Registrera tillgång" i Visning-menyn
-2. handleAddAsset() kallas → onAddAsset() → handleTogglePickMode()
-3. Pickläge aktiveras - användaren klickar i 3D
-4. AssetPropertiesDialog öppnas med koordinater
-5. Förenklad form med begränsade fält
-```
-
-## Nytt flöde
-
-```text
-1. Användare klickar "Registrera tillgång" i Visning-menyn
-2. InventoryFormSheet öppnas direkt (Sheet med InventoryForm)
-3. Byggnaden förfylls baserat på aktuell byggnad i viewern
-4. Användaren kan klicka "Välj 3D-position" i formuläret
-5. Pickläge aktiveras i samma viewer som redan är öppen
-6. Koordinater skickas till formuläret via callback
-7. Användaren fyller i resten av formuläret och sparar
-```
+**Data i databasen:**
+- Asset: `asset_type=fire_blanket`, `symbol_id=e165e79d...`, koordinater (10.5, 20.3, 1.2)
+- Symbol: `name=Brandfilt`, `icon_url=.../Brandfilt.png`, `color=#A11D1D`
 
 ---
 
-## Tekniska ändringar
+## Lösning
 
-### 1. Ny komponent: `InventoryFormSheet.tsx`
+### Del 1: Lägg till `loadLocalAnnotations` i AssetPlusViewer.tsx
 
-Skapa en ny Sheet-komponent som:
-- Visar InventoryForm i en Sheet/drawer
-- Stödjer positionsval via callback
-- Förfyller byggnads-fmGuid från viewer-kontexten
-- Är draggbar på desktop
+Skapa en funktion som:
+1. Hämtar alla assets med `annotation_placed=true` för aktuell byggnad
+2. Hämtar symboler för att få ikoner och färger
+3. Skapar xeokit-annotationer via `AnnotationsPlugin.createAnnotation()` för varje asset
+4. Lagrar plugin-instansen i en ref för kategori-filtrering
 
+**Var:** I `AssetPlusViewer.tsx`, anropa funktionen i `handleAllModelsLoaded` efter att modellerna laddats.
+
+**Kod:**
 ```typescript
-interface InventoryFormSheetProps {
-  isOpen: boolean;
-  onClose: () => void;
-  buildingFmGuid: string;
-  levelFmGuid?: string | null;
-  roomFmGuid?: string | null;
-  pendingPosition?: { x: number; y: number; z: number } | null;
-  onPickPositionRequest?: () => void;  // Triggers pick mode in viewer
-  isPickingPosition?: boolean;
-}
+// Ny ref för lokalt AnnotationsPlugin
+const localAnnotationsPluginRef = useRef<any>(null);
 
-// Sheet-variant som positioneras till höger/botten beroende på skärmstorlek
-// Innehåller InventoryForm med anpassade callbacks
-```
+// Funktion för att ladda lokala annotationer
+const loadLocalAnnotations = useCallback(async () => {
+  const buildingGuid = resolveBuildingFmGuid();
+  if (!buildingGuid) return;
+  
+  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (!xeokitViewer) return;
 
-### 2. Ändra AssetPlusViewer.tsx
+  // Hämta assets med placerade annotationer
+  const { data: assets } = await supabase
+    .from('assets')
+    .select('fm_guid, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+    .eq('building_fm_guid', buildingGuid)
+    .eq('annotation_placed', true)
+    .not('coordinate_x', 'is', null);
 
-**Ta bort:** Logik som öppnar `AssetPropertiesDialog` i createMode
+  // Hämta symboler för ikoner och färger
+  const { data: symbols } = await supabase
+    .from('annotation_symbols')
+    .select('id, name, category, color, icon_url');
+  
+  const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
 
-**Lägg till:**
-- State för `inventorySheetOpen`
-- Callback `handleOpenInventoryForm` som öppnar sheeten
-- Skicka `buildingFmGuid` och `levelFmGuid` som prefill
-- När användaren klickar "Välj 3D-position" i formuläret, aktivera pickläge
-- När position väljs, skicka tillbaka till sheeten via `pendingPosition`
-
-```typescript
-// Ny state
-const [inventorySheetOpen, setInventorySheetOpen] = useState(false);
-const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x:number,y:number,z:number}|null>(null);
-
-// Modifiera handleTogglePickMode till att stödja inventory flow
-const handleInventoryPickRequest = useCallback(() => {
-  // Aktivera pick mode, men skicka resultat till inventoryPendingPosition
-  // istället för att öppna AssetPropertiesDialog
-  setupPickModeListenerForInventory();
-  setIsPickMode(true);
-}, []);
-```
-
-### 3. Ändra VisualizationToolbar.tsx
-
-**Ersätt:** `onAddAsset` callback
-
-**Med:** `onOpenInventoryForm` callback som öppnar inventeringsformuläret
-
-Eller behåll samma callback-namn men ändra beteendet i AssetPlusViewer.
-
-### 4. Uppdatera InventoryForm.tsx
-
-InventoryForm stödjer redan:
-- `prefill` prop för att förfylla byggnad/våning/rum
-- `pendingPosition` prop för att ta emot koordinater
-- `onOpen3d` callback för att begära 3D-picker
-
-**Anpassa:** När `onOpen3d` kallas och vi redan är i 3D-viewern, skicka `onPickPositionRequest()` istället för att öppna en ny dialog.
-
----
-
-## Komponentstruktur efter ändring
-
-```text
-AssetPlusViewer
-├── ViewerToolbar (bottom)
-├── VisualizationToolbar (top-right)
-│   └── "Registrera tillgång" → setInventorySheetOpen(true)
-├── [Viewer Canvas]
-├── InventoryFormSheet (right side sheet) ← NY
-│   └── InventoryForm
-│       ├── Byggnadsväljare (förfylld)
-│       ├── Våningsväljare
-│       ├── Rumsväljare
-│       ├── "Välj 3D-position" → onPickPositionRequest()
-│       └── Symbolväljare, Bild, etc.
-└── (AssetPropertiesDialog behålls för view/edit mode, tas bort för createMode)
-```
-
----
-
-## Detaljerade kodändringar
-
-### Fil 1: `src/components/inventory/InventoryFormSheet.tsx` (NY)
-
-```typescript
-import React from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import InventoryForm from './InventoryForm';
-import type { InventoryItem } from '@/pages/Inventory';
-
-interface InventoryFormSheetProps {
-  isOpen: boolean;
-  onClose: () => void;
-  buildingFmGuid: string;
-  levelFmGuid?: string | null;
-  roomFmGuid?: string | null;
-  pendingPosition?: { x: number; y: number; z: number } | null;
-  onPickPositionRequest?: () => void;
-  isPickingPosition?: boolean;
-  onPendingPositionConsumed?: () => void;
-}
-
-const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
-  isOpen,
-  onClose,
-  buildingFmGuid,
-  levelFmGuid,
-  roomFmGuid,
-  pendingPosition,
-  onPickPositionRequest,
-  isPickingPosition,
-  onPendingPositionConsumed,
-}) => {
-  const handleSaved = (item: InventoryItem) => {
-    onClose();
-  };
-
-  return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>Registrera tillgång</SheetTitle>
-        </SheetHeader>
-        <div className="mt-4">
-          <InventoryForm
-            onSaved={handleSaved}
-            onCancel={onClose}
-            prefill={{
-              buildingFmGuid,
-              levelFmGuid: levelFmGuid || undefined,
-              roomFmGuid: roomFmGuid || undefined,
-            }}
-            // Use the inline pick mode, don't open separate 3D picker dialog
-            onOpen3d={onPickPositionRequest ? () => onPickPositionRequest() : undefined}
-            pendingPosition={pendingPosition}
-            onPendingPositionConsumed={onPendingPositionConsumed}
-          />
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-};
-
-export default InventoryFormSheet;
-```
-
-### Fil 2: `src/components/viewer/AssetPlusViewer.tsx`
-
-**Lägg till state:**
-```typescript
-const [inventorySheetOpen, setInventorySheetOpen] = useState(false);
-const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x:number,y:number,z:number}|null>(null);
-const inventoryPickModeRef = useRef(false); // Track if pick is for inventory
-```
-
-**Modifiera setupPickModeListenerInternal:**
-```typescript
-// I handlePick-funktionen:
-if (inventoryPickModeRef.current) {
-  // Send to inventory form
-  setInventoryPendingPosition(coords);
-  inventoryPickModeRef.current = false;
-  setIsPickMode(false);
-} else if (onCoordinatePicked) {
-  // External callback
-  onCoordinatePicked(coords, parentNode);
-  setIsPickMode(false);
-} else {
-  // Old dialog flow - kan tas bort eller behållas som fallback
-}
-```
-
-**Lägg till callback för inventory:**
-```typescript
-const handleInventoryPickRequest = useCallback(() => {
-  inventoryPickModeRef.current = true;
-  const success = setupPickModeListenerInternal();
-  if (success) {
-    setIsPickMode(true);
-    toast.info('Klicka på en yta i 3D-vyn för att välja position');
+  // Skapa eller hämta AnnotationsPlugin
+  if (!localAnnotationsPluginRef.current) {
+    const { AnnotationsPlugin } = await import('@xeokit/xeokit-sdk/dist/xeokit-sdk.es.js');
+    localAnnotationsPluginRef.current = new AnnotationsPlugin(xeokitViewer, {
+      markerHTML: `<div class="local-annotation-marker" style="...">
+        <img src="{{iconUrl}}" ... />
+      </div>`,
+      labelHTML: `<div class="local-annotation-label" style="...">{{name}}</div>`,
+    });
   }
-}, [setupPickModeListenerInternal]);
-
-const handleOpenInventorySheet = useCallback(() => {
-  setInventorySheetOpen(true);
-}, []);
+  
+  // Rensa befintliga och skapa nya
+  localAnnotationsPluginRef.current.clear();
+  
+  assets?.forEach(asset => {
+    const symbol = asset.symbol_id ? symbolMap.get(asset.symbol_id) : null;
+    
+    localAnnotationsPluginRef.current.createAnnotation({
+      id: `local-${asset.fm_guid}`,
+      worldPos: [asset.coordinate_x, asset.coordinate_y, asset.coordinate_z],
+      markerShown: showAnnotations,
+      labelShown: false,
+      values: {
+        name: asset.name || 'Okänd',
+        color: symbol?.color || '#3B82F6',
+        iconUrl: symbol?.icon_url || '',
+      },
+      cfg: {
+        category: asset.asset_type,
+        assetFmGuid: asset.fm_guid,
+      }
+    });
+  });
+  
+  console.log(`Created ${assets?.length || 0} local annotations`);
+}, [showAnnotations]);
 ```
 
-**Uppdatera VisualizationToolbar prop:**
+**Anropa i `handleAllModelsLoaded`:**
 ```typescript
-<VisualizationToolbar
-  ...
-  onAddAsset={handleOpenInventorySheet}  // Ändrad från handleTogglePickMode
-  ...
-/>
+// Efter rad 527 (efter NavCube initialisering)
+loadLocalAnnotations();
 ```
 
-**Lägg till InventoryFormSheet i render:**
+**Exponera pluginet till viewerRef för kategorilistan:**
 ```typescript
-<InventoryFormSheet
-  isOpen={inventorySheetOpen}
-  onClose={() => {
-    setInventorySheetOpen(false);
-    setInventoryPendingPosition(null);
-  }}
-  buildingFmGuid={buildingFmGuid || ''}
-  levelFmGuid={assetData?.levelFmGuid}
-  roomFmGuid={assetData?.inRoomFmGuid || assetData?.fmGuid}
-  pendingPosition={inventoryPendingPosition}
-  onPickPositionRequest={handleInventoryPickRequest}
-  isPickingPosition={isPickMode && inventoryPickModeRef.current}
-  onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
-/>
+// I viewerInstanceRef, lägg till en property:
+if (viewerInstanceRef.current) {
+  viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsPluginRef.current;
+}
 ```
 
 ---
 
-## Sammanfattning av filändringar
+### Del 2: Fixa AnnotationCategoryList.tsx med svenska namn
+
+**Uppdatera fetchCategories:**
+```typescript
+// Hämta assets och joina med symbols för svenska namn
+const { data: assets } = await supabase
+  .from('assets')
+  .select('asset_type, symbol_id')
+  .eq('building_fm_guid', buildingFmGuid)
+  .eq('annotation_placed', true);
+
+const { data: symbols } = await supabase
+  .from('annotation_symbols')
+  .select('id, name, color');
+
+const symbolById = new Map(symbols?.map(s => [s.id, s]) || []);
+
+// Gruppera och använd symbolens svenska namn
+assets?.forEach(asset => {
+  const symbol = asset.symbol_id ? symbolById.get(asset.symbol_id) : null;
+  const key = asset.asset_type || 'Övrigt';
+  
+  if (!typeInfo[key]) {
+    typeInfo[key] = {
+      count: 0,
+      displayName: symbol?.name || key,  // Svenska namnet
+      color: symbol?.color || '#3B82F6',
+    };
+  }
+  typeInfo[key].count++;
+});
+```
+
+**Uppdatera interface:**
+```typescript
+interface AnnotationCategory {
+  category: string;       // Intern nyckel (asset_type)
+  displayName: string;    // Svenskt namn för UI
+  count: number;
+  visible: boolean;
+  color: string;
+}
+```
+
+**Visa displayName i UI:**
+```typescript
+<span className="text-xs">{cat.displayName}</span>  // Istället för cat.category
+```
+
+**Uppdatera toggle-logik för att använda lokalt plugin:**
+```typescript
+const handleToggleCategory = useCallback((category: string) => {
+  // Använd localAnnotationsPlugin istället för annotationsPlugin
+  const localPlugin = viewerRef.current?.localAnnotationsPlugin;
+  if (localPlugin?.annotations) {
+    Object.values(localPlugin.annotations).forEach((annotation: any) => {
+      if (annotation.cfg?.category === category) {
+        annotation.markerShown = newVisible;
+      }
+    });
+  }
+}, [viewerRef]);
+```
+
+---
+
+## Filändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/inventory/InventoryFormSheet.tsx` | NY - Sheet-wrapper för InventoryForm |
-| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till inventory sheet state, modifiera pick-logik, byt onAddAsset till att öppna sheet |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till `localAnnotationsPluginRef`, `loadLocalAnnotations()`, anropa i `handleAllModelsLoaded`, exponera till viewerRef |
+| `src/components/viewer/AnnotationCategoryList.tsx` | Lägg till `displayName` i interface, joina med `annotation_symbols` för svenska namn, använd `localAnnotationsPlugin` för toggle |
+
+---
+
+## Visuellt flöde efter implementation
+
+```text
+1. Modeller laddas i viewern
+2. handleAllModelsLoaded() anropas
+3. loadLocalAnnotations() hämtar assets med annotation_placed=true
+4. xeokit AnnotationsPlugin skapar visuella markörer vid koordinaterna
+5. Markörer visas med rätt ikon och färg från annotation_symbols
+6. Användaren öppnar "Visa annotationer" flyout
+7. Listan visar svenska namn ("Brandfilt") med rätt antal
+8. Toggle på/av fungerar per kategori
+```
 
 ---
 
 ## Förväntade resultat
 
-1. **"Registrera tillgång"** öppnar det fullständiga inventeringsformuläret
-2. **Sheet på sidan** - formuläret visas till höger om 3D-vyn
-3. **Inline positionsval** - "Välj 3D-position" aktiverar pickläge i befintlig viewer
-4. **Alla fält** - namn, kategori, symbol, byggnad, våning, rum, bild, beskrivning
-5. **Förfylld byggnad** - baserat på aktuell viewer-kontext
+1. **Annotationer visas i 3D** - Markörer vid sparade koordinater
+2. **Rätt ikoner och färger** - Från annotation_symbols tabellen
+3. **Svenska namn i listan** - "Brandfilt" istället för "fire_blanket"
+4. **Kategorifiltrering fungerar** - Toggle döljer/visar rätt annotationer
 
