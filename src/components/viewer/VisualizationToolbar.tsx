@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, PaintBucket, Sun } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
@@ -18,7 +19,7 @@ import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
-import { ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
+import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -93,8 +94,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
   const [is2DMode, setIs2DMode] = useState(false);
   
-  // Architect view mode state
-  const [isArchitectMode, setIsArchitectMode] = useState(false);
+  // Viewer settings collapsible state
+  const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
 
   // Scroll indicator (external, on panel edge)
@@ -202,30 +203,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }));
   }, []);
 
-  // Handle Architect mode toggle
-  const handleArchitectModeToggle = useCallback((enabled: boolean) => {
-    setIsArchitectMode(enabled);
-    window.dispatchEvent(new CustomEvent(ARCHITECT_MODE_REQUESTED_EVENT, {
-      detail: { enabled }
-    }));
-  }, []);
   // Handle background preset change
   const handleBackgroundChange = useCallback((presetId: BackgroundPresetId) => {
     setArchitectBackground(presetId);
     window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, {
       detail: { presetId }
     }));
-  }, []);
-
-  // Listen for architect mode changes (from external sources)
-  useEffect(() => {
-    const handleArchitectModeChange = (e: CustomEvent) => {
-      setIsArchitectMode(e.detail?.enabled ?? false);
-    };
-    window.addEventListener(ARCHITECT_MODE_CHANGED_EVENT, handleArchitectModeChange as EventListener);
-    return () => {
-      window.removeEventListener(ARCHITECT_MODE_CHANGED_EVENT, handleArchitectModeChange as EventListener);
-    };
   }, []);
 
   // Capture current view state for saving
@@ -609,82 +592,13 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
               <Separator />
 
-              {/* Visibility section */}
+              {/* Visibility section - "Visa" */}
               <div>
                 <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
                   Visa
                 </Label>
 
                 <div className="space-y-2 sm:space-y-3">
-                  {/* Viewer Theme Selector - NEW */}
-                  <ViewerThemeSelector 
-                    viewerRef={viewerRef}
-                    disabled={!isViewerReady}
-                  />
-
-                  <Separator className="my-1.5" />
-
-                  {/* Architect View Mode Toggle (kept for quick access) */}
-                  <div className="flex items-center justify-between py-1.5 sm:py-2">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div
-                        className={cn(
-                          "p-1 sm:p-1.5 rounded-md",
-                          isArchitectMode
-                            ? "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <PaintBucket className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Arkitektvy</span>
-                    </div>
-                    <Switch 
-                      checked={isArchitectMode} 
-                      onCheckedChange={handleArchitectModeToggle}
-                      disabled={!isViewerReady}
-                    />
-                  </div>
-
-                  {/* Background color palette - always visible */}
-                  <div className="py-1.5 sm:py-2">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
-                        <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Bakgrundsfärg</span>
-                    </div>
-                    <div className="pl-8 sm:pl-10">
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            title={preset.name}
-                            onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
-                            className={cn(
-                              "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
-                              "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                              architectBackground === preset.id
-                                ? "border-primary ring-2 ring-primary/30"
-                                : "border-border/40"
-                            )}
-                            style={{
-                              background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lighting Controls */}
-                  <LightingControlsPanel
-                    viewerRef={viewerRef}
-                    isViewerReady={isViewerReady}
-                  />
-
-                  <Separator className="my-2" />
-
                   {/* 2D Plan View Toggle */}
                   <div className="flex items-center justify-between py-1.5 sm:py-2">
                     <div className="flex items-center gap-2 sm:gap-3">
@@ -761,6 +675,72 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   )}
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Viewer Settings - Collapsible Section */}
+              <Collapsible open={viewerSettingsOpen} onOpenChange={setViewerSettingsOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm font-medium">Viewer settings</span>
+                    </div>
+                    <ChevronDown className={cn(
+                      "h-4 w-4 text-muted-foreground transition-transform",
+                      viewerSettingsOpen && "rotate-180"
+                    )} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  {/* Viewer Theme Selector */}
+                  <ViewerThemeSelector 
+                    viewerRef={viewerRef}
+                    disabled={!isViewerReady}
+                  />
+
+                  {/* Background color palette */}
+                  <div className="py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Bakgrundsfärg</span>
+                    </div>
+                    <div className="pl-8 sm:pl-10">
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {ARCHITECT_BACKGROUND_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            title={preset.name}
+                            onClick={() => handleBackgroundChange(preset.id as BackgroundPresetId)}
+                            className={cn(
+                              "w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 transition-all",
+                              "hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                              architectBackground === preset.id
+                                ? "border-primary ring-2 ring-primary/30"
+                                : "border-border/40"
+                            )}
+                            style={{
+                              background: `linear-gradient(180deg, rgb(255, 255, 255) 0%, ${preset.bottom} 100%)`
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lighting Controls */}
+                  <LightingControlsPanel
+                    viewerRef={viewerRef}
+                    isViewerReady={isViewerReady}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
 
               {/* Actions section */}
               <div>
