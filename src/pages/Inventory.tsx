@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { useIsMobile } from '@/hooks/use-mobile';
 import InventoryForm from '@/components/inventory/InventoryForm';
 import InventoryList from '@/components/inventory/InventoryList';
+import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 
@@ -33,6 +35,9 @@ const Inventory: React.FC = () => {
   const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  
+  // Ivion 360 side panel state (desktop only)
+  const [ivion360Url, setIvion360Url] = useState<string | null>(null);
 
   // Auto-open form if we have prefill data
   useEffect(() => {
@@ -96,42 +101,72 @@ const Inventory: React.FC = () => {
     setEditItem(null);
   };
 
-  // Desktop layout: side-by-side with form always visible
+  // Handler for opening 360 inline (desktop)
+  const handleOpen360 = (url: string) => {
+    setIvion360Url(url);
+  };
+
+  const handleClose360 = () => {
+    setIvion360Url(null);
+  };
+
+  // Desktop layout: side-by-side with resizable panels
   if (!isMobile) {
     return (
-      <div className="h-full flex gap-6 p-6 bg-background">
-        {/* Left column: Recently saved items */}
-        <div className="flex-1 flex flex-col max-w-md">
-          <div className="flex items-center gap-3 mb-4">
-            <ClipboardList className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
-            <Badge variant="secondary" className="ml-auto">
-              {savedItems.length} sparade
-            </Badge>
-          </div>
-          <InventoryList 
-            items={savedItems} 
-            isLoading={isLoading} 
-            onEdit={handleEdit}
-            selectedFmGuid={editItem?.fm_guid}
-          />
-        </div>
+      <div className="h-full bg-background">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Left column: Recently saved items */}
+          <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
+            <div className="h-full flex flex-col p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <ClipboardList className="h-6 w-6 text-primary" />
+                <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+                <Badge variant="secondary" className="ml-auto">
+                  {savedItems.length} sparade
+                </Badge>
+              </div>
+              <InventoryList 
+                items={savedItems} 
+                isLoading={isLoading} 
+                onEdit={handleEdit}
+                selectedFmGuid={editItem?.fm_guid}
+              />
+            </div>
+          </ResizablePanel>
 
-        {/* Right column: Registration form - always visible */}
-        <div className="flex-1 max-w-xl">
-          <Card className="p-6 h-full overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">
-              {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
-            </h2>
-            <InventoryForm
-              onSaved={handleSaved}
-              onCancel={handleClearEdit}
-              prefill={inventoryPrefill || undefined}
-              editItem={editItem}
-              onClearEdit={handleClearEdit}
-            />
-          </Card>
-        </div>
+          <ResizableHandle withHandle />
+
+          {/* Middle column: Registration form */}
+          <ResizablePanel defaultSize={ivion360Url ? 35 : 75} minSize={30}>
+            <div className="h-full p-4">
+              <Card className="p-6 h-full overflow-y-auto">
+                <h2 className="text-lg font-semibold mb-4">
+                  {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
+                </h2>
+                <InventoryForm
+                  onSaved={handleSaved}
+                  onCancel={handleClearEdit}
+                  prefill={inventoryPrefill || undefined}
+                  editItem={editItem}
+                  onClearEdit={handleClearEdit}
+                  onOpen360={handleOpen360}
+                />
+              </Card>
+            </div>
+          </ResizablePanel>
+
+          {/* Right column: Ivion 360 (conditional) */}
+          {ivion360Url && (
+            <>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={40} minSize={25}>
+                <div className="h-full">
+                  <Ivion360View url={ivion360Url} onClose={handleClose360} />
+                </div>
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
       </div>
     );
   }

@@ -143,8 +143,9 @@ const PortfolioView: React.FC = () => {
       // Build the full URL - use configured URL or default to ivion.se
       const baseUrl = ivionConfig.url && ivionConfig.url.trim() !== '' 
         ? ivionConfig.url.replace(/\/$/, '') // Remove trailing slash
-        : 'https://ivion.se';
-      const fullUrl = `${baseUrl}/site/${siteId}`;
+        : 'https://swg.iv.navvis.com';
+      // FIX: Use /?site= query parameter format instead of /site/
+      const fullUrl = `${baseUrl}/?site=${siteId}`;
       
       console.log('[360+] Opening Ivion:', { siteId, openMode: ivionConfig.openMode, baseUrl, fullUrl });
       
