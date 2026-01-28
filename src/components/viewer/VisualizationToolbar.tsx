@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, PaintBucket } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, PaintBucket, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,6 +21,7 @@ import { ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import LightingControlsPanel from "./LightingControlsPanel";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -641,6 +642,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Lighting Controls */}
+                  <LightingControlsPanel
+                    viewerRef={viewerRef}
+                    isViewerReady={isViewerReady}
+                  />
+
+                  <Separator className="my-2" />
 
                   {/* 2D Plan View Toggle */}
                   <div className="flex items-center justify-between py-1.5 sm:py-2">
