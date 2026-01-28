@@ -124,7 +124,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
               type="button"
               variant="outline"
               className="flex-1 h-20 flex-col gap-2"
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Camera button clicked, ref:', cameraInputRef.current);
+                cameraInputRef.current?.click();
+              }}
               disabled={disabled || isUploading}
             >
               {isUploading ? (
@@ -143,7 +148,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
             type="button"
             variant="outline"
             className="flex-1 h-20 flex-col gap-2"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Upload button clicked, ref:', fileInputRef.current);
+              fileInputRef.current?.click();
+            }}
             disabled={disabled || isUploading}
           >
             {isUploading ? (
