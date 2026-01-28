@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X, Pencil } from 'lucide-react';
+import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -76,6 +76,10 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
   // Building settings for Ivion
   const [buildingSettings, setBuildingSettings] = useState<{ ivion_site_id: string | null } | null>(null);
+
+  // 360+ sync state
+  const [isSyncing360, setIsSyncing360] = useState(false);
+  const [ivionPoiId, setIvionPoiId] = useState<number | null>(null);
 
   // Track the fm_guid when editing
   const [editingFmGuid, setEditingFmGuid] = useState<string | null>(null);
@@ -203,7 +207,51 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       onOpen360(fullUrl);
     } else {
       window.open(fullUrl, '_blank');
-      toast.info('Ivion öppnat i ny flik');
+      toast.info('Ivion öppnat i ny flik', {
+        description: 'Long-press för att skapa en POI, sedan synka tillbaka',
+      });
+    }
+  };
+
+  // Handler for syncing POIs from Ivion 360+
+  const handleSync360 = async () => {
+    if (!buildingSettings?.ivion_site_id || !buildingFmGuid) {
+      toast.error('Ivion ej konfigurerat för denna byggnad');
+      return;
+    }
+
+    setIsSyncing360(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'import-pois',
+          siteId: buildingSettings.ivion_site_id,
+          buildingFmGuid: buildingFmGuid,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.imported > 0) {
+        toast.success(`Synkade ${data.imported} nya POIs från Ivion`, {
+          description: `${data.skipped} redan importerade`,
+        });
+      } else if (data?.skipped > 0) {
+        toast.info('Inga nya POIs', {
+          description: `${data.skipped} POIs redan importerade`,
+        });
+      } else {
+        toast.info('Inga POIs hittades', {
+          description: 'Skapa en POI i Ivion först (long-press i panoramat)',
+        });
+      }
+    } catch (err: any) {
+      console.error('Sync 360+ error:', err);
+      toast.error('Kunde inte synka från Ivion', {
+        description: err.message,
+      });
+    } finally {
+      setIsSyncing360(false);
     }
   };
 
@@ -500,10 +548,11 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
       {/* 3D Position & 360+ Section */}
       {buildingFmGuid && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label className="text-base">Position (valfritt)</Label>
+          
           {coordinates && (
-            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between mb-2">
+            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Crosshair className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-mono text-xs sm:text-sm">
@@ -521,29 +570,67 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
               </Button>
             </div>
           )}
-          {/* Always show both buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPositionDialogOpen(true)}
-              className="h-12"
-            >
-              <Crosshair className="h-4 w-4 mr-2" />
-              <span className="text-xs sm:text-sm">
-                {coordinates ? 'Ändra 3D' : '3D-position'}
-              </span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleOpen360Internal}
-              className="h-12"
-            >
-              <Eye className="h-4 w-4 mr-2" />
-              <span className="text-xs sm:text-sm">360+</span>
-            </Button>
-          </div>
+
+          {/* 3D Position button */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPositionDialogOpen(true)}
+            className="w-full h-12"
+          >
+            <Crosshair className="h-4 w-4 mr-2" />
+            <span className="text-xs sm:text-sm">
+              {coordinates ? 'Ändra 3D-position' : 'Välj 3D-position'}
+            </span>
+          </Button>
+
+          {/* 360+ Section with instructions */}
+          {buildingSettings?.ivion_site_id && (
+            <div className="border border-border rounded-lg p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">360+ Position</span>
+              </div>
+              
+              <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
+                <div className="flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>Öppna 360+ och navigera till rätt plats</li>
+                    <li>Long-press för att skapa POI i Ivion</li>
+                    <li>Synka tillbaka för att importera</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleOpen360Internal}
+                  className="h-10"
+                >
+                  <Eye className="h-4 w-4 mr-1.5" />
+                  <span className="text-xs">Öppna 360+</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSync360}
+                  disabled={isSyncing360}
+                  className="h-10"
+                >
+                  {isSyncing360 ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1.5" />
+                  )}
+                  <span className="text-xs">Synka</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
           {!buildingSettings?.ivion_site_id && (
             <p className="text-xs text-muted-foreground">
               360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.

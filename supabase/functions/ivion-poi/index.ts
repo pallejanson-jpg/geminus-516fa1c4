@@ -89,6 +89,25 @@ async function getPois(siteId: string): Promise<IvionPoi[]> {
   return response.json();
 }
 
+// Get a single POI by ID
+async function getPoi(siteId: string, poiId: number): Promise<IvionPoi> {
+  const token = await getIvionToken();
+  
+  const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois/${poiId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to get POI: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
 // Get POI types for a site
 async function getPoiTypes(siteId: string): Promise<any[]> {
   const token = await getIvionToken();
@@ -294,6 +313,11 @@ serve(async (req) => {
       case 'get-pois':
         if (!params.siteId) throw new Error('siteId required');
         result = await getPois(params.siteId);
+        break;
+
+      case 'get-poi':
+        if (!params.siteId || !params.poiId) throw new Error('siteId and poiId required');
+        result = await getPoi(params.siteId, params.poiId);
         break;
         
       case 'get-poi-types':
