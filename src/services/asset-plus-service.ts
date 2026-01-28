@@ -144,3 +144,40 @@ export async function fetchRoomSensorData(buildingFmGuid: string): Promise<any[]
     attributes: room.attributes,
   }));
 }
+
+/**
+ * Check if a building has any synced assets (ObjectType 4), and if not, trigger a sync.
+ * Returns true if sync was triggered, false if assets already exist.
+ */
+export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promise<{ synced: boolean; count: number }> {
+  // Check local count
+  const { count, error: countError } = await supabase
+    .from("assets")
+    .select("*", { count: "exact", head: true })
+    .eq("building_fm_guid", buildingFmGuid)
+    .eq("category", "Instance");
+
+  if (countError) {
+    console.error("Failed to count assets:", countError);
+    throw new Error(countError.message || "Failed to count assets");
+  }
+
+  if (count && count > 0) {
+    console.log(`Building ${buildingFmGuid} already has ${count} assets`);
+    return { synced: false, count };
+  }
+
+  console.log(`Building ${buildingFmGuid} has no assets, triggering sync...`);
+
+  // Trigger sync for this building
+  const { data, error } = await supabase.functions.invoke("asset-plus-sync", {
+    body: { action: "sync-single-building", buildingFmGuid },
+  });
+
+  if (error) {
+    console.error("Failed to sync building assets:", error);
+    throw new Error(error.message || "Failed to sync building assets");
+  }
+
+  return { synced: true, count: data?.totalSynced || 0 };
+}

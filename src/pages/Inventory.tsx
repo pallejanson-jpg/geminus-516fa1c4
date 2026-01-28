@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Plus, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import InventoryForm from '@/components/inventory/InventoryForm';
@@ -73,6 +74,38 @@ const Inventory: React.FC = () => {
     clearInventoryPrefill();
   };
 
+  // Desktop layout: side-by-side with form always visible
+  if (!isMobile) {
+    return (
+      <div className="h-full flex gap-6 p-6 bg-background">
+        {/* Left column: Recently saved items */}
+        <div className="flex-1 flex flex-col max-w-md">
+          <div className="flex items-center gap-3 mb-4">
+            <ClipboardList className="h-6 w-6 text-primary" />
+            <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+            <Badge variant="secondary" className="ml-auto">
+              {savedItems.length} sparade
+            </Badge>
+          </div>
+          <InventoryList items={savedItems} isLoading={isLoading} />
+        </div>
+
+        {/* Right column: Registration form - always visible */}
+        <div className="flex-1 max-w-xl">
+          <Card className="p-6 h-full overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">Registrera ny tillgång</h2>
+            <InventoryForm
+              onSaved={handleSaved}
+              onCancel={() => {}}
+              prefill={inventoryPrefill || undefined}
+            />
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Mobile layout: Button + sheet
   return (
     <div className="h-full flex flex-col p-4 space-y-4 bg-background">
       {/* Header */}
@@ -102,8 +135,8 @@ const Inventory: React.FC = () => {
       {/* Form as sheet/drawer on mobile */}
       <Sheet open={isFormOpen} onOpenChange={(open) => { if (!open) handleCloseForm(); else setIsFormOpen(true); }}>
         <SheetContent 
-          side={isMobile ? "bottom" : "right"} 
-          className={`${isMobile ? 'h-[90vh] rounded-t-2xl' : 'w-[450px]'} overflow-y-auto`}
+          side="bottom" 
+          className="h-[90vh] rounded-t-2xl overflow-y-auto"
         >
           <SheetHeader className="mb-4">
             <SheetTitle className="text-xl">Registrera tillgång</SheetTitle>

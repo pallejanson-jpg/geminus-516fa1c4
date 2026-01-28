@@ -381,8 +381,60 @@ serve(async (req) => {
       );
     }
 
-    // ============ SYNC ASSETS CHUNKED (ObjectType 4 per building) ============
+    // ============ SYNC SINGLE BUILDING ASSETS (ObjectType 4 for one building) ============
+    if (action === 'sync-single-building') {
+      if (!buildingFmGuid) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'buildingFmGuid is required' }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const syncStateId = `building-assets-${buildingFmGuid}`;
+      await updateSyncState(supabase, syncStateId, 'running');
+      const accessToken = await getAccessToken();
+      console.log(`Starting sync-single-building for: ${buildingFmGuid}`);
+
+      const filter = [
+        ["buildingFmGuid", "=", buildingFmGuid],
+        "and",
+        ["objectType", "=", 4]
+      ];
+
+      let totalSynced = 0;
+      let skip = 0;
+      const take = 500;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.log(`Fetching assets at skip=${skip}...`);
+        const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
+        
+        if (result.data.length > 0) {
+          const synced = await upsertAssets(supabase, result.data);
+          totalSynced += synced;
+          console.log(`Synced ${synced} assets (total: ${totalSynced})`);
+        }
+
+        hasMore = result.hasMore;
+        skip += take;
+        await updateSyncState(supabase, syncStateId, 'running', totalSynced);
+      }
+
+      await updateSyncState(supabase, syncStateId, 'completed', totalSynced);
+      console.log(`Single building sync completed: ${totalSynced} assets`);
+
+      return new Response(
+        JSON.stringify({ success: true, message: `Synced ${totalSynced} assets for building`, totalSynced, buildingFmGuid }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============ SYNC ASSETS CHUNKED (ObjectType 4 per building with timeout guard) ============
     if (action === 'sync-assets-chunked') {
+      const MAX_EXECUTION_TIME = 50000; // 50 seconds (Supabase limit is 60s)
+      const startTime = Date.now();
+      
       await updateSyncState(supabase, 'assets', 'running');
       const accessToken = await getAccessToken();
       console.log('Starting sync-assets-chunked (ObjectType 4 by building)');
@@ -405,8 +457,17 @@ serve(async (req) => {
 
       let totalSynced = 0;
       const totalBuildings = buildings.length;
+      let interrupted = false;
 
       for (let i = 0; i < buildings.length; i++) {
+        // Check timeout before processing each building
+        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+          console.log(`Timeout guard triggered at building ${i + 1}/${totalBuildings}`);
+          interrupted = true;
+          await updateSyncState(supabase, 'assets', 'interrupted', totalSynced, `Interrupted at building ${i + 1}/${totalBuildings}. Run again to continue.`);
+          break;
+        }
+
         const building = buildings[i];
         console.log(`Syncing assets for building ${i + 1}/${totalBuildings}: ${building.common_name || building.fm_guid}`);
 
@@ -422,6 +483,13 @@ serve(async (req) => {
         let buildingSynced = 0;
 
         while (hasMore) {
+          // Check timeout before each batch
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            console.log(`Timeout guard triggered during building ${building.common_name}`);
+            interrupted = true;
+            break;
+          }
+
           const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
           
           if (result.data.length > 0) {
@@ -434,19 +502,30 @@ serve(async (req) => {
           skip += take;
         }
 
+        if (interrupted) break;
+
         console.log(`Building ${building.common_name}: ${buildingSynced} assets`);
         await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
           subtree_name: `Alla Tillgångar (${i + 1}/${totalBuildings})`
         });
       }
 
-      await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
-        subtree_name: 'Alla Tillgångar'
-      });
-      console.log(`Assets sync completed: ${totalSynced} items from ${totalBuildings} buildings`);
+      if (!interrupted) {
+        await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
+          subtree_name: 'Alla Tillgångar'
+        });
+      }
+      console.log(`Assets sync ${interrupted ? 'interrupted' : 'completed'}: ${totalSynced} items from ${totalBuildings} buildings`);
 
       return new Response(
-        JSON.stringify({ success: true, message: `Synced ${totalSynced} assets from ${totalBuildings} buildings`, totalSynced }),
+        JSON.stringify({ 
+          success: true, 
+          message: interrupted 
+            ? `Partial sync: ${totalSynced} assets. Run again to continue.`
+            : `Synced ${totalSynced} assets from ${totalBuildings} buildings`, 
+          totalSynced,
+          interrupted 
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Plus, Eye, Box, Square, ClipboardList } from "lucide-react";
+import { ChevronRight, Plus, Eye, Box, Square, ClipboardList, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ export type NavigatorNode = {
   children?: NavigatorNode[];
   buildingFmGuid?: string;
   levelFmGuid?: string;
+  createdInModel?: boolean;
   [key: string]: any;
 };
 
@@ -91,6 +92,15 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               "truncate text-sm",
               isSelected ? "font-medium text-primary" : "text-foreground"
             )}>{label}</span>
+            {/* "Not in model" indicator for Instance nodes */}
+            {node.category === 'Instance' && node.createdInModel === false && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" />
+                </TooltipTrigger>
+                <TooltipContent side="top">Ej i modell</TooltipContent>
+              </Tooltip>
+            )}
             {isSelected && (
               <span className="shrink-0 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                 AI match

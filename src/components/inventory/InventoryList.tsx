@@ -1,8 +1,9 @@
 import React, { useContext } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { Package, Loader2 } from 'lucide-react';
+import { Package, Loader2, AlertCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppContext } from '@/context/AppContext';
 import { INVENTORY_CATEGORIES } from './InventoryForm';
@@ -107,7 +108,17 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading }) => {
                 <div className="flex items-start gap-3">
                   <span className="text-xl">{cat.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-foreground truncate">{item.name}</p>
+                      {/* "Not in model" badge - inventory items are never in model */}
+                      <Badge 
+                        variant="outline" 
+                        className="text-amber-500 border-amber-500 text-[10px] px-1.5 py-0 shrink-0"
+                      >
+                        <AlertCircle className="h-3 w-3 mr-0.5" />
+                        Ej i modell
+                      </Badge>
+                    </div>
                     {location && (
                       <p className="text-sm text-muted-foreground truncate">{location}</p>
                     )}
