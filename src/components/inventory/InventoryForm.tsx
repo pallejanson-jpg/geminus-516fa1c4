@@ -39,6 +39,9 @@ interface InventoryFormProps {
   editItem?: InventoryItem | null;
   onClearEdit?: () => void;
   onOpen360?: (url: string) => void; // Callback for inline 360 view on desktop
+  onOpen3d?: (buildingFmGuid: string, roomFmGuid?: string) => void; // Callback for inline 3D picker on desktop
+  pendingPosition?: { x: number; y: number; z: number } | null; // Position received from inline 3D picker
+  onPendingPositionConsumed?: () => void; // Called when pendingPosition has been applied
 }
 
 export const INVENTORY_CATEGORIES = [
@@ -55,7 +58,7 @@ export const INVENTORY_CATEGORIES = [
   { value: 'other', label: 'Övrigt', icon: '📦' },
 ];
 
-const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360 }) => {
+const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -105,6 +108,19 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
       resetForm();
     }
   }, [editItem]);
+
+  // Handle pending position from inline 3D picker
+  useEffect(() => {
+    if (pendingPosition) {
+      setCoordinates(pendingPosition);
+      toast.success('Position vald!', {
+        description: `X: ${pendingPosition.x.toFixed(2)}, Y: ${pendingPosition.y.toFixed(2)}, Z: ${pendingPosition.z.toFixed(2)}`,
+      });
+      if (onPendingPositionConsumed) {
+        onPendingPositionConsumed();
+      }
+    }
+  }, [pendingPosition, onPendingPositionConsumed]);
 
   const loadCoordinates = async (fmGuid: string) => {
     const { data } = await supabase
@@ -571,11 +587,18 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             </div>
           )}
 
-          {/* 3D Position button */}
+          {/* 3D Position button - uses inline picker on desktop if available */}
           <Button
             type="button"
             variant="outline"
-            onClick={() => setPositionDialogOpen(true)}
+            onClick={() => {
+              if (onOpen3d) {
+                onOpen3d(buildingFmGuid, roomFmGuid || undefined);
+              } else {
+                // Fallback to dialog (mobile)
+                setPositionDialogOpen(true);
+              }
+            }}
             className="w-full h-12"
           >
             <Crosshair className="h-4 w-4 mr-2" />
