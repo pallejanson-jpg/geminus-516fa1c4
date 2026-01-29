@@ -1,286 +1,245 @@
 
-# Implementation Plan: Mobile-First Inventory Wizard with GPS Detection
+# Plan: Åtgärda Inventerings-UI, Annotations och Ivion-synkproblem
 
-## Overview
+## Sammanfattning av Identifierade Problem
 
-Transform the mobile inventory experience from a complex form-based approach to a streamlined wizard with GPS-based building detection. The desktop layout remains unchanged.
+Baserat på min analys av skärmbilderna och koden har jag identifierat följande problem som behöver åtgärdas:
 
 ---
 
-## Phase 1: GPS Hook - `useNearbyBuilding.ts`
+## Problem 1: Desktop Layout för Inventering
 
-Create a custom hook that:
-1. Requests user geolocation via browser API
-2. Fetches buildings with coordinates from `building_settings` 
-3. Joins with `assets` table to get building names
-4. Calculates distance using Haversine formula
-5. Returns nearest building if within threshold (200m)
+**Nuvarande situation:** 
+Formuläret är i mitten med en lista till vänster och 3D-viewer till höger (bild 1).
+
+**Önskat läge:**
+- Formuläret ska flyttas längst till vänster (ca 25% bredd som på bilden)
+- Listan på senast registrerade assets ska bli en collapsible dropdown istället för en fast panel
+- Höger sida ska vara förberedd för 3D-viewer OCH 360+ viewer
+
+**Lösning:**
+Omstrukturera `Inventory.tsx` med ny layout:
 
 ```text
-Hook Output:
-┌──────────────────────────────────────────────┐
-│ nearbyBuilding: {                            │
-│   fmGuid: '755950d9-...',                    │
-│   commonName: 'Centralstationen',            │
-│   distance: 45  // meters                    │
-│ } | null                                     │
-│                                              │
-│ isLoading: boolean                           │
-│ error: string | null                         │
-│ userPosition: { lat, lng } | null            │
-│ requestLocation: () => void                  │
-└──────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ DESKTOP LAYOUT                                              │
+├────────────────┬────────────────────────────────────────────┤
+│ FORMULÄR (25%) │ VIEWER PANEL (75%)                        │
+│                │                                            │
+│ ┌─ Dropdown ─┐ │  ┌──────────────────────────────────────┐  │
+│ │ Senaste 6  │ │  │                                      │  │
+│ │ sparade ▼  │ │  │  3D Viewer / 360+ Ivion              │  │
+│ └────────────┘ │  │                                      │  │
+│                │  │  (fylls med viewer vid behov)        │  │
+│ Registrera     │  │                                      │  │
+│ tillgång       │  │                                      │  │
+│                │  └──────────────────────────────────────┘  │
+│ [Formulär]     │                                            │
+│                │                                            │
+└────────────────┴────────────────────────────────────────────┘
 ```
 
-**File:** `src/hooks/useNearbyBuilding.ts`
+---
+
+## Problem 2: Inventerade Assets Syns Inte i Portfolio/Navigator
+
+**Nuvarande situation:**
+Nyregistrerade assets med `is_local: true` och `created_in_model: false` visas inte i Portfolio eller Navigator-vyerna.
+
+**Orsak:**
+`NavigatorView` och `PortfolioView` hämtar data från `AppContext.navigatorTreeData` som byggs från `allData`. Men `allData` filtrerar bort Instance-objekt som inte är `created_in_model`.
+
+**Lösning:**
+1. Uppdatera data-hämtningslogiken i `AppContext` för att inkludera lokalt skapade assets
+2. Lägg till ny kategori "Lokala assets" eller "Inventerade" som underordnade barn till relevant building/room
 
 ---
 
-## Phase 2: Wizard Framework - `MobileInventoryWizard.tsx`
+## Problem 3: Annotation Försvinner vid Bekräftelse + Dubbla Bekräftelser
 
-Main component managing wizard steps and state:
+**Nuvarande situation (bild 2):**
+- Användaren kan placera FLERA pins (📍) i 3D-vyn
+- Det finns TVÅ bekräftelsesteg: en overlay i 3D-viewern OCH en i Inline3dPositionPicker-toolbaren
+- Vid bekräftelse försvinner markeringen
 
-```text
-State Management:
-┌─────────────────────────────────────────────┐
-│ currentStep: 0 | 1 | 2 | 3                  │
-│                                             │
-│ formData: {                                 │
-│   buildingFmGuid: string                    │
-│   levelFmGuid: string                       │
-│   roomFmGuid: string                        │
-│   category: string                          │
-│   name: string                              │
-│   symbolId: string                          │
-│   imageUrl: string | null                   │
-│   description: string                       │
-│ }                                           │
-│                                             │
-│ savedPosition: { building, level, room }    │
-│ (for quick-loop registration)               │
-└─────────────────────────────────────────────┘
+**Orsak:**
+1. `Inline3dPositionPicker.tsx` har sin egen "Bekräfta"-knapp (rad 79-86)
+2. `AssetPlusViewer.tsx` har också en bekräftelse-overlay (rad 2318-2343)
+3. Det finns ingen logik som tar bort tidigare temporära markeringar när en ny väljs
+4. Temp-markören (`tempMarkerElement`) tas bort vid bekräftelse men ingen permanent annotation skapas förrän formuläret sparas
+
+**Lösning:**
+1. **En markering per asset:** Rensa befintlig temp-markör innan ny placeras
+2. **Konsolidera bekräftelse:** Ta bort redundant bekräftelse-UI från antingen `Inline3dPositionPicker` eller `AssetPlusViewer`
+3. **Permanent markör:** Behåll en visuell indikator tills formuläret sparas ELLER viewern stängs
+
+---
+
+## Problem 4: Annotations Kvarstår Efter Viewer Stängs (Bild 3)
+
+**Nuvarande situation:**
+Pins ligger kvar i gränssnittet även efter att 3D-viewern stängts.
+
+**Orsak:**
+Temp-markörerna skapas som absolut positionerade DOM-element med `document.body.appendChild(marker)` (rad 1130-1145 i AssetPlusViewer). Men dessa rensas inte ordentligt när:
+1. Viewern stängs
+2. Användaren navigerar bort
+3. Formuläret sparas
+
+**Lösning:**
+1. Lägg till cleanup i `Inventory.tsx` som tar bort alla `.temp-pick-marker` element när viewer stängs
+2. Lägg till cleanup i `AssetPlusViewer` unmount/cleanup effect
+3. Använd React refs istället för direkt DOM-manipulation
+
+---
+
+## Problem 5: Ivion POI Sync Fel (403 Authentication Required)
+
+**Felmeddelande:**
+```
+Ivion auth failed: 403 - {"msg":"Full authentication is required to access this resource"}
 ```
 
-**File:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
+**Orsak:**
+Ivion API:n förväntar sig en annan autentiseringsmetod. Funktionen `ivion-poi/index.ts` använder `/api/auth/login` med username/password i JSON body, men svaret ger 403.
+
+**Möjliga orsaker:**
+1. Fel endpoint för autentisering (NavVis har olika auth-metoder)
+2. Credentials är korrekta men API:n kräver OAuth2 flow
+3. Username/password är felaktiga
+
+**Lösning:**
+Verifiera Ivion-konfigurationen:
+1. Kontrollera att `IVION_API_URL`, `IVION_USERNAME`, `IVION_PASSWORD` är korrekta
+2. Testa alternativa auth-endpoints (t.ex. `/auth/token`, `/oauth/token`)
+3. Logga detaljerad request/response för debugging
 
 ---
 
-## Phase 3: Step Components
+## Problem 6: Övervakning av Asset+-synkronisering
 
-### Step 0: Location Detection
-- Shows loading spinner while GPS runs
-- If building found within 200m: "Are you at [Building]?" with Yes/No buttons  
-- If no building nearby or GPS fails: Skip to manual selection
+**Användarfråga:** 
+"Har du lyckats med att skapa upp objekten från Lovable till Asset+?"
 
-**File:** `src/components/inventory/mobile/LocationDetectionStep.tsx`
+**Nuvarande situation:**
+- `asset-plus-create` edge function finns och anropas, men det finns ingen UI för att visa synkstatus
+- Assets sparas lokalt (`is_local: true`) men synkning till Asset+ sker inte automatiskt
 
-### Step 1: Location Selection
-- Building dropdown (pre-filled if GPS confirmed)
-- Floor selection with large touch-friendly buttons
-- Room selection (optional)
-- "Save as quick position" toggle for repeat registrations
-
-**File:** `src/components/inventory/mobile/LocationSelectionStep.tsx`
-
-### Step 2: Category Selection
-- Grid of 80x80px touch-friendly category buttons
-- Uses existing `INVENTORY_CATEGORIES` from InventoryForm
-- Visual feedback on selection
-
-**File:** `src/components/inventory/mobile/CategorySelectionStep.tsx`
-
-### Step 3: Quick Registration
-- Large "Take Photo" button with native camera integration (`capture="environment"`)
-- Name/designation input
-- Auto-selected symbol based on category
-- "Save & Register Next" primary action (keeps position + category)
-- Optional: Description field, 3D position marker
-
-**File:** `src/components/inventory/mobile/QuickRegistrationStep.tsx`
+**Lösning:**
+1. Lägg till synkstatus-indikator i AssetsView (finns delvis redan med "Synka till Asset+"-knappen)
+2. Lägg till loggning/statusvisning i API Settings för att visa senaste synkförsök
+3. Visa tydlig feedback när ett objekt synkas
 
 ---
 
-## Phase 4: Update Inventory.tsx
+## Implementeringsplan
 
-Replace mobile Sheet-based form with new wizard:
+### Fas 1: Layout-förändringar (Inventory.tsx)
+
+**Fil:** `src/pages/Inventory.tsx`
+
+Ändringar:
+- Flytta formuläret till vänster
+- Gör "Senast registrerade"-listan till en collapsible dropdown
+- Justera panel-proportioner (25% form, 75% viewer)
+
+### Fas 2: Annotation Bugfixes
+
+**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+
+Ändringar:
+- Rensa tidigare temp-markörer innan ny placeras
+- Lägg till proper cleanup i useEffect för unmount
+- Synkronisera bekräftelse-logik
+
+**Fil:** `src/components/inventory/Inline3dPositionPicker.tsx`
+
+Ändringar:
+- Ta bort redundant bekräftelse-UI (använd AssetPlusViewer:s inbyggda)
+- Eller: Kommunicera med AssetPlusViewer för att dölja dess overlay
+
+**Fil:** `src/pages/Inventory.tsx`
+
+Ändringar:
+- Lägg till cleanup av `.temp-pick-marker` element när viewer stängs
+
+### Fas 3: Synlighet av Inventerade Assets
+
+**Fil:** `src/context/AppContext.tsx`
+
+Ändringar:
+- Modifiera `navigatorTreeData` byggnad för att inkludera lokalt skapade assets
+- Lägg till refreshData-anrop efter spara i InventoryForm
+
+### Fas 4: Ivion Authentication Fix
+
+**Fil:** `supabase/functions/ivion-poi/index.ts`
+
+Ändringar:
+- Lägg till mer detaljerad logging för auth
+- Testa alternativa auth-endpoints
+- Returnera tydligare felmeddelanden
+
+### Fas 5: Asset+ Synk-övervakning
+
+**Filer:** 
+- `src/components/settings/ApiSettingsModal.tsx`
+- `src/components/portfolio/AssetsView.tsx`
+
+Ändringar:
+- Lägg till en sektion som visar senaste synkförsök och resultat
+- Visa tydlig status för varje lokalt asset (synkad/ej synkad)
+
+---
+
+## Tekniska Detaljer
+
+### Cleanup av Temp-markörer
 
 ```typescript
-// Current mobile code (lines 222-277) replaced with:
-if (isMobile) {
-  return <MobileInventoryWizard onItemSaved={loadRecentItems} />;
-}
+// I Inventory.tsx - när viewer stängs
+const handleClose3d = () => {
+  setViewer3dOpen(false);
+  // Rensa alla temp-markörer
+  document.querySelectorAll('.temp-pick-marker').forEach(el => el.remove());
+};
 ```
 
----
+### Collapsible Dropdown för Senast Sparade
 
-## File Structure
-
-```text
-src/
-├── hooks/
-│   └── useNearbyBuilding.ts          (NEW)
-│
-├── components/inventory/
-│   ├── mobile/                        (NEW FOLDER)
-│   │   ├── MobileInventoryWizard.tsx
-│   │   ├── LocationDetectionStep.tsx
-│   │   ├── LocationSelectionStep.tsx
-│   │   ├── CategorySelectionStep.tsx
-│   │   └── QuickRegistrationStep.tsx
-│   │
-│   ├── InventoryForm.tsx             (unchanged - desktop)
-│   ├── InventoryList.tsx             (unchanged)
-│   └── selectors/                    (reused)
-│
-├── pages/
-│   └── Inventory.tsx                 (MODIFIED)
-```
-
----
-
-## Data Flow
-
-```text
-1. User opens Inventory on mobile
-   │
-   ▼
-2. MobileInventoryWizard mounts
-   │
-   ├── useNearbyBuilding() starts GPS detection
-   │   ├── navigator.geolocation.getCurrentPosition()
-   │   ├── Fetch building_settings WHERE lat IS NOT NULL
-   │   ├── Join with assets WHERE category = 'Building'
-   │   └── Calculate Haversine distance to each
-   │
-   ▼
-3. LocationDetectionStep renders
-   │
-   ├── If building within 200m:
-   │   └── "Are you at Centralstationen?" → [Yes] [No]
-   │
-   ├── If no building nearby:
-   │   └── Auto-advance to LocationSelectionStep
-   │
-   └── If GPS fails/denied:
-       └── Show message, auto-advance to manual selection
-   │
-   ▼
-4. LocationSelectionStep
-   │
-   ├── Building dropdown (pre-filled if GPS confirmed)
-   ├── Floor buttons (from navigatorTreeData)
-   └── Room selector (optional)
-   │
-   ▼
-5. CategorySelectionStep
-   │
-   └── 4x3 grid of category buttons
-   │
-   ▼
-6. QuickRegistrationStep
-   │
-   ├── [📷 TAKE PHOTO] → opens native camera
-   ├── Name input with suggestion
-   ├── Symbol auto-selected from category
-   │
-   └── [SAVE & REGISTER NEXT]
-       ├── Insert to Supabase (same as current InventoryForm)
-       ├── Keep position + category
-       └── Clear name + photo → ready for next item
-```
-
----
-
-## Database Queries Used
-
-**GPS Detection:**
-```sql
--- Get buildings with coordinates
-SELECT 
-  bs.fm_guid, bs.latitude, bs.longitude,
-  a.common_name
-FROM building_settings bs
-JOIN assets a ON a.fm_guid = bs.fm_guid AND a.category = 'Building'
-WHERE bs.latitude IS NOT NULL
-```
-
-**Save Asset (existing logic reused):**
-```sql
-INSERT INTO assets (
-  fm_guid, name, common_name, category, asset_type,
-  symbol_id, building_fm_guid, level_fm_guid, in_room_fm_guid,
-  is_local, created_in_model, attributes
-) VALUES (...)
-```
-
----
-
-## UI Specifications
-
-| Element | Size | Notes |
-|---------|------|-------|
-| Category buttons | 80x80px min | Touch-friendly grid |
-| Take Photo button | Full width, 120px height | Native camera access |
-| Save button | Full width, 56px height | Primary action |
-| Step indicators | Small dots at top | Progress feedback |
-| Back button | 44x44px | Each step except first |
-
----
-
-## Implementation Order
-
-1. **`useNearbyBuilding.ts`** - GPS hook with Haversine formula
-2. **`MobileInventoryWizard.tsx`** - Main wizard shell with step state
-3. **`LocationDetectionStep.tsx`** - GPS detection UI
-4. **`LocationSelectionStep.tsx`** - Building/floor/room selection
-5. **`CategorySelectionStep.tsx`** - Category grid
-6. **`QuickRegistrationStep.tsx`** - Photo + save logic
-7. **`Inventory.tsx`** - Switch to wizard on mobile
-
----
-
-## Technical Details
-
-### Haversine Formula
-```typescript
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth radius in meters
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  return R * c;
-}
-```
-
-### GPS Options
-```typescript
-navigator.geolocation.getCurrentPosition(
-  success, error,
-  { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-);
-```
-
-### Camera Input
 ```tsx
-<input type="file" accept="image/*" capture="environment" />
+<Collapsible open={showRecent} onOpenChange={setShowRecent}>
+  <CollapsibleTrigger className="flex items-center gap-2 w-full p-2">
+    <span>Senast registrerade ({savedItems.length})</span>
+    <ChevronDown className={showRecent ? 'rotate-180' : ''} />
+  </CollapsibleTrigger>
+  <CollapsibleContent>
+    <InventoryList items={savedItems} onEdit={handleEdit} />
+  </CollapsibleContent>
+</Collapsible>
+```
+
+### Förhindra Multipla Pins
+
+```typescript
+// I AssetPlusViewer.tsx - handlePick
+const handlePick = (pickResult: any) => {
+  // FÖRST: Ta bort befintlig temp-markör
+  if (tempMarkerElement) {
+    tempMarkerElement.remove();
+    setTempMarkerElement(null);
+  }
+  // ... resten av logiken
+};
 ```
 
 ---
 
-## Error Handling
+## Förväntat Resultat
 
-| Scenario | Behavior |
-|----------|----------|
-| GPS permission denied | Show message, skip to manual selection |
-| GPS timeout | Show message, skip to manual selection |
-| No buildings with coordinates | Skip GPS step entirely |
-| No building within 200m | Skip confirmation, show manual selection |
-| Photo upload fails | Show toast error, allow retry |
-| Save fails | Show toast error, keep form data |
+1. **Layout:** Formuläret till vänster, viewer till höger, dropdown för senaste items
+2. **Annotations:** Endast EN markör åt gången, rensas ordentligt vid stängning
+3. **Synlighet:** Lokalt skapade assets visas i Navigator/Portfolio
+4. **Ivion:** Bättre felhantering och logging för att diagnostisera auth-problem
+5. **Asset+:** Tydlig status för synkronisering
+
