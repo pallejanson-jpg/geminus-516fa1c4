@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Plus, Eye, Box, Square, ClipboardList, AlertCircle } from "lucide-react";
+import { ChevronRight, Plus, Eye, Box, Square, ClipboardList, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,10 +30,11 @@ type Props = {
   onOpen3D?: (node: NavigatorNode) => void;
   onOpen2D?: (node: NavigatorNode) => void;
   onInventory?: (node: NavigatorNode) => void;
+  onSyncToAssetPlus?: (node: NavigatorNode) => void;
   selectedFmGuids?: Set<string>;
 };
 
-export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, onInventory, selectedFmGuids }: Props) {
+export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onView, onOpen3D, onOpen2D, onInventory, onSyncToAssetPlus, selectedFmGuids }: Props) {
   const label = node.commonName || node.name || "(unnamed)";
   const hasChildren = Boolean(node.children?.length);
   const isOpen = expanded.has(node.fmGuid);
@@ -46,6 +47,8 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
   const canOpen3D = true; // All nodes can potentially have 3D models
   const canOpen2D = node.category === 'Building Storey'; // 2D view only for floors
   const canInventory = node.category === 'Building' || node.category === 'Building Storey' || node.category === 'Space';
+  // Sync button only for Instance assets that are local (not yet synced) and have a room
+  const canSyncToAssetPlus = node.category === 'Instance' && node.isLocal === true && node.inRoomFmGuid;
 
   // Get child count and appropriate label
   const childCount = node.children?.length || 0;
@@ -219,6 +222,26 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               <TooltipContent side="top">Lägg till</TooltipContent>
             </Tooltip>
           )}
+          {canSyncToAssetPlus && onSyncToAssetPlus && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSyncToAssetPlus(node);
+                  }}
+                  className="h-6 w-6"
+                  aria-label="Synka till Asset+"
+                >
+                  <RefreshCw className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Synka till Asset+</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -236,6 +259,7 @@ export function TreeNode({ node, depth = 0, expanded, onToggle, onAddChild, onVi
               onOpen3D={onOpen3D}
               onOpen2D={onOpen2D}
               onInventory={onInventory}
+              onSyncToAssetPlus={onSyncToAssetPlus}
               selectedFmGuids={selectedFmGuids}
             />
           ))}
