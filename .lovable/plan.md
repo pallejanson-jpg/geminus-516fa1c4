@@ -1,152 +1,165 @@
 
-# Plan: Fixa Dubbleringar och Fel "Finns i modell"-status i AssetsView
+# Plan: Fixa Krasch i Mobil Inventering vid Val av Våningsplan
 
 ## Sammanfattning av Identifierade Problem
 
-### Problem 1: Inventerade objekt visas flera gånger
-**Symptom:** "Pål brandsläckare 2", "Påls sensor 2" och "Testbrandsläckare" visas tre gånger vardera i listan.
+### Problem 1: Krasch vid val av "Inget specifikt rum"
+**Grundorsak:** Rad 189 i `LocationSelectionStep.tsx` har `<SelectItem value="">` med tom sträng som värde. Radix UI Select-komponenten hanterar inte tomma strängar korrekt och kan krascha.
 
-**Grundorsak:** Databasen innehåller KORREKTA data (endast EN post per objekt). Duplikationen sker i frontend - troligtvis i `navigatorTreeData` som innehåller samma byggnad flera gånger, eller i `allData` som på något sätt har blivit förorenad med dubbletter.
+**Bevis:**
+```tsx
+<SelectItem value="" className="py-3">
+  Inget specifikt rum
+</SelectItem>
+```
+
+**Lösning:** Byt ut tom sträng mot ett speciellt värde som `"__none__"` och hantera det i `onChange`:
+```tsx
+<SelectItem value="__none__" className="py-3">
+  Inget specifikt rum
+</SelectItem>
+```
+
+### Problem 2: Saknade våningsplan / laddningsproblem
+**Symptom:** Inte alla våningsplan visas i mobil-inventering.
+
+**Grundorsak:** `LocationSelectionStep.tsx` använder `navigatorTreeData` från `AppContext`, men kontrollerar INTE om data fortfarande laddas (`isLoadingData`). Med 47 000+ objekt tar inläsningen flera sekunder, och om användaren öppnar inventering innan det är klart visas inga byggnader eller våningsplan.
+
+**Databasverifiering:**
+- 14 Buildings i databasen
+- 87 Building Storeys
+- Centralstationen har 16 våningsplan
 
 **Lösning:** 
-1. Lägg till deduplicering i `getAssetsForFacility()` i PortfolioView
-2. Lägg till deduplicering i `assetData` i AssetsView baserat på `fmGuid`
-3. Lägg till säkerhetscheck i `refreshInitialData()` för att säkerställa inga dubbletter
-
-### Problem 2: "Finns i modell" visar fel status (Ja/grön istället för Nej)
-**Symptom:** Inventerade objekt har `created_in_model: false` i databasen, men visar "Ja" (grön) i UI.
-
-**Grundorsak:** Fallback-logiken i rad 253 av AssetsView:
-```typescript
-createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
-```
-Om `created_in_model` kommer som `undefined` istället för `false`, faller koden igenom till `true`.
-
-**Lösning:** Ändra fallback till explicit `false`:
-```typescript
-createdInModel: asset.created_in_model === true, // Explicit sant, annars falskt
-```
-
-### Problem 3: Visa 3D och annotations vid selektion
-**Krav:** När man selekterar ett inventerat objekt ska 3D-viewern öppnas och annotation ska visas automatiskt.
-
-**Lösning:** Uppdatera `handleOpen3D` i AssetsView för att:
-1. Öppna viewern för rätt byggnad
-2. Aktivera "Visa lokala annotations" automatiskt
+1. Lägg till `isLoadingData` i LocationSelectionStep
+2. Visa loading-indikator om data laddas
+3. Alternativt: trigga refresh om data är tom
 
 ---
 
 ## Teknisk Implementering
 
-### Steg 1: Fixa Deduplicering i AssetsView
+### Steg 1: Fixa tomt SelectItem-värde
 
-**Fil:** `src/components/portfolio/AssetsView.tsx`
+**Fil:** `src/components/inventory/mobile/LocationSelectionStep.tsx`
 
-Ändra `assetData` useMemo (rad 240-260):
-```typescript
-const assetData: AssetData[] = useMemo(() => {
-  // Deduplicate by fmGuid first
-  const seenGuids = new Set<string>();
-  const uniqueAssets = assets.filter((asset) => {
-    const guid = asset.fm_guid || asset.fmGuid;
-    if (seenGuids.has(guid)) return false;
-    seenGuids.add(guid);
-    return true;
-  });
-  
-  return uniqueAssets.map((asset) => {
-    const attrs = asset.attributes || {};
-    return {
-      fmGuid: asset.fm_guid || asset.fmGuid,
-      // ... resten av mappningen
-      // VIKTIGT: Ändra createdInModel logik:
-      createdInModel: asset.created_in_model === true, // Explicit sant-check
-      // ... resten
-    };
-  });
-}, [assets]);
+**Nuvarande kod (rad 184-199):**
+```tsx
+<Select value={formData.roomFmGuid} onValueChange={handleRoomChange}>
+  <SelectTrigger className="h-14 text-base">
+    <SelectValue placeholder="Välj rum..." />
+  </SelectTrigger>
+  <SelectContent className="bg-popover z-50 max-h-64">
+    <SelectItem value="" className="py-3">
+      Inget specifikt rum
+    </SelectItem>
+    {rooms.map((room) => (
+      <SelectItem key={room.fmGuid} value={room.fmGuid} className="py-3">
+        {room.commonName || room.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
 ```
 
-### Steg 2: Fixa Deduplicering i PortfolioView
+**Ändring:**
+```tsx
+const NONE_VALUE = "__none__"; // Konstant för "inget rum valt"
 
-**Fil:** `src/components/portfolio/PortfolioView.tsx`
-
-Ändra `getAssetsForFacility` (rad 202-211):
-```typescript
-const getAssetsForFacility = (facility: Facility) => {
-  if (!allData) return [];
-  const isBuilding = facility.category === 'Building';
-  const isStorey = facility.category === 'Building Storey';
-  
-  const filtered = allData.filter((item: any) => 
-    item.category === 'Instance' &&
-    (isBuilding ? item.buildingFmGuid === facility.fmGuid : 
-     isStorey ? item.levelFmGuid === facility.fmGuid : false)
-  );
-  
-  // Deduplicate by fmGuid
-  const seen = new Set<string>();
-  return filtered.filter((item: any) => {
-    const guid = item.fmGuid || item.fm_guid;
-    if (seen.has(guid)) return false;
-    seen.add(guid);
-    return true;
-  });
-};
-```
-
-### Steg 3: Fixa "createdInModel" fallback
-
-**Fil:** `src/components/portfolio/AssetsView.tsx` (rad 253)
-
-Nuvarande kod:
-```typescript
-createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
-```
-
-Ändras till:
-```typescript
-createdInModel: asset.created_in_model === true || asset.createdInModel === true,
-```
-
-Detta säkerställer att endast objekt med explicit `true` visas som "Ja". Alla andra (inklusive `false`, `undefined`, `null`) blir "Nej".
-
-### Steg 4: Auto-aktivera Annotations vid 3D-öppning
-
-**Fil:** `src/components/portfolio/AssetsView.tsx`
-
-Uppdatera `handleOpen3D`:
-```typescript
-const handleOpen3D = (asset: AssetData) => {
-  if (onOpen3D) {
-    // If this is a local asset, we might want to enable annotations
-    if (asset.isLocal || !asset.createdInModel) {
-      // Store preference to show local annotations
-      localStorage.setItem('viewer-show-local-annotations', 'true');
-    }
-    onOpen3D(asset.fmGuid, asset.levelFmGuid);
+const handleRoomChange = (fmGuid: string) => {
+  if (fmGuid === NONE_VALUE) {
+    updateFormData({
+      roomFmGuid: '',
+      roomName: '',
+    });
+    return;
   }
+  const room = rooms.find((r) => r.fmGuid === fmGuid);
+  updateFormData({
+    roomFmGuid: fmGuid,
+    roomName: room?.commonName || room?.name || '',
+  });
 };
+
+// I JSX:
+<Select 
+  value={formData.roomFmGuid || NONE_VALUE} 
+  onValueChange={handleRoomChange}
+>
+  ...
+  <SelectItem value={NONE_VALUE} className="py-3">
+    Inget specifikt rum
+  </SelectItem>
+  ...
+</Select>
 ```
 
-Och i **AssetPlusViewer.tsx**, läs denna preference och aktivera annotations automatiskt.
+### Steg 2: Lägg till loading-kontroll
+
+**Fil:** `src/components/inventory/mobile/LocationSelectionStep.tsx`
+
+**Nuvarande kod (rad 32):**
+```tsx
+const { navigatorTreeData } = useContext(AppContext);
+```
+
+**Ändring:**
+```tsx
+const { navigatorTreeData, isLoadingData, refreshInitialData } = useContext(AppContext);
+
+// Om data laddas - visa skeleton/loading
+if (isLoadingData) {
+  return (
+    <div className="p-4 space-y-4">
+      <Skeleton className="h-14 w-full" />
+      <Skeleton className="h-14 w-full" />
+      <Skeleton className="h-14 w-full" />
+      <p className="text-center text-muted-foreground">Laddar byggnader...</p>
+    </div>
+  );
+}
+
+// Om data är tom efter laddning - trigga refresh och visa meddelande
+if (!isLoadingData && navigatorTreeData.length === 0) {
+  return (
+    <div className="p-4 space-y-4 flex flex-col items-center justify-center h-full">
+      <Building2 className="h-12 w-12 text-muted-foreground" />
+      <p className="text-muted-foreground text-center">
+        Ingen data hittades. Kontrollera att synkronisering har genomförts i Inställningar.
+      </p>
+      <Button variant="outline" onClick={() => refreshInitialData()}>
+        Försök igen
+      </Button>
+    </div>
+  );
+}
+```
 
 ---
 
-## Filer som påverkas
+## Filer som Påverkas
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/portfolio/AssetsView.tsx` | Deduplicering, createdInModel fix, handleOpen3D uppdatering |
-| `src/components/portfolio/PortfolioView.tsx` | Deduplicering i getAssetsForFacility |
-| `src/components/viewer/AssetPlusViewer.tsx` | Auto-aktivera lokala annotations |
+| `src/components/inventory/mobile/LocationSelectionStep.tsx` | Fixa tomt SelectItem-värde, lägg till loading-kontroll |
 
 ---
 
 ## Verifiering
 
-1. Öppna Portfolio → Centralstationen → Assets
-2. Verifiera att varje inventerat objekt bara visas EN gång
-3. Verifiera att "Finns i modell" visar "Nej" för inventerade objekt
-4. Klicka på "Öppna i 3D" för ett inventerat objekt
-5. Verifiera att 3D-viewern öppnas och annotation syns
+1. Öppna mobil inventering
+2. Verifiera att loading-indikator visas om data laddas
+3. Välj byggnad → verifiera att alla våningsplan visas
+4. Välj våningsplan → verifiera ingen krasch
+5. I rum-dropdown, välj "Inget specifikt rum" → verifiera ingen krasch
+6. Fortsätt genom wizard → verifiera att registration fungerar
+
+---
+
+## Relaterat: XKT-synkning
+
+Användaren nämnde att "fulla synken inte fungerar". Detta är ett separat problem som handlar om XKT-modellsynkronisering i `asset-plus-sync` edge function, inte om byggnads-/våningsdata. Byggnader och Building Storeys synkas separat (ObjectTypes 1-2) och fungerar - det finns 14 buildings och 87 storeys i databasen.
+
+Om alla våningsplan ändå inte visas efter denna fix kan det bero på:
+1. Att träd-byggnadsfunktionen (`buildNavigatorTree`) filtrerar bort våningar som saknar korrekt `buildingFmGuid`
+2. Race condition om användaren öppnar inventering innan `refreshInitialData` avslutas
