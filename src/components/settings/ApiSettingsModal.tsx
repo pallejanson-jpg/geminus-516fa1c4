@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -25,6 +25,7 @@ import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
+import ProfileSettings from './ProfileSettings';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -86,7 +87,7 @@ const getAppIcon = (key: string) => {
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
     const { toast } = useToast();
     const { appConfigs, setAppConfigs } = useContext(AppContext);
-    const [activeTab, setActiveTab] = useState('apps');
+    const [activeTab, setActiveTab] = useState('profile');
     // Separate syncing states for each sync type
     const [isSyncingStructure, setIsSyncingStructure] = useState(false);
     const [isSyncingAssets, setIsSyncingAssets] = useState(false);
@@ -778,7 +779,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
+                    <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
+                        <TabsTrigger value="profile" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                            <User className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Profil</span>
+                        </TabsTrigger>
                         <TabsTrigger value="apps" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Apps</span>
@@ -804,6 +809,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <span className="hidden sm:inline">Röst</span>
                         </TabsTrigger>
                     </TabsList>
+
+                    {/* Profile Settings Tab */}
+                    <TabsContent value="profile" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <ProfileSettings />
+                    </TabsContent>
 
                     {/* Applications Settings Tab */}
                     <TabsContent value="apps" className="space-y-4 mt-4 flex-1 overflow-y-auto">
