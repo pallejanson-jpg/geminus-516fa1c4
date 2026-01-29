@@ -1,5 +1,5 @@
 import React, { useContext, useMemo } from 'react';
-import { Building2, Layers, DoorOpen } from 'lucide-react';
+import { Building2, Layers, DoorOpen, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -11,8 +11,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AppContext } from '@/context/AppContext';
 import type { WizardFormData } from './MobileInventoryWizard';
+
+// Konstant för "inget rum valt" - Radix UI kräver icke-tom sträng
+const NONE_ROOM_VALUE = '__none__';
 
 interface LocationSelectionStepProps {
   formData: WizardFormData;
@@ -29,7 +33,7 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
   quickLoopEnabled,
   setQuickLoopEnabled,
 }) => {
-  const { navigatorTreeData } = useContext(AppContext);
+  const { navigatorTreeData, isLoadingData, refreshInitialData } = useContext(AppContext);
 
   // Get buildings from navigator tree
   const buildings = useMemo(() => {
@@ -107,6 +111,13 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
   };
 
   const handleRoomChange = (fmGuid: string) => {
+    if (fmGuid === NONE_ROOM_VALUE) {
+      updateFormData({
+        roomFmGuid: '',
+        roomName: '',
+      });
+      return;
+    }
     const room = rooms.find((r) => r.fmGuid === fmGuid);
     updateFormData({
       roomFmGuid: fmGuid,
@@ -115,6 +126,34 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
   };
 
   const canContinue = formData.buildingFmGuid && formData.levelFmGuid;
+
+  // Visa loading om data fortfarande laddas
+  if (isLoadingData) {
+    return (
+      <div className="p-4 space-y-4">
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <p className="text-center text-muted-foreground">Laddar byggnader...</p>
+      </div>
+    );
+  }
+
+  // Visa meddelande om data är tom efter laddning
+  if (!isLoadingData && navigatorTreeData.length === 0) {
+    return (
+      <div className="p-4 space-y-4 flex flex-col items-center justify-center h-full">
+        <Building2 className="h-12 w-12 text-muted-foreground" />
+        <p className="text-muted-foreground text-center">
+          Ingen data hittades. Kontrollera att synkronisering har genomförts i Inställningar.
+        </p>
+        <Button variant="outline" onClick={() => refreshInitialData()}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Försök igen
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <ScrollArea className="h-full">
@@ -181,12 +220,15 @@ const LocationSelectionStep: React.FC<LocationSelectionStepProps> = ({
               <DoorOpen className="h-5 w-5 text-primary" />
               <Label className="text-base font-medium">Rum (valfritt)</Label>
             </div>
-            <Select value={formData.roomFmGuid} onValueChange={handleRoomChange}>
+            <Select 
+              value={formData.roomFmGuid || NONE_ROOM_VALUE} 
+              onValueChange={handleRoomChange}
+            >
               <SelectTrigger className="h-14 text-base">
                 <SelectValue placeholder="Välj rum..." />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50 max-h-64">
-                <SelectItem value="" className="py-3">
+                <SelectItem value={NONE_ROOM_VALUE} className="py-3">
                   Inget specifikt rum
                 </SelectItem>
                 {rooms.map((room) => (
