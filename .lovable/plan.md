@@ -1,165 +1,225 @@
 
-# Plan: Fixa Krasch i Mobil Inventering vid Val av Våningsplan
 
-## Sammanfattning av Identifierade Problem
+# Plan: Åtgärda Saknade Byggnader & Bakgrundsladda Hierarki
 
-### Problem 1: Krasch vid val av "Inget specifikt rum"
-**Grundorsak:** Rad 189 i `LocationSelectionStep.tsx` har `<SelectItem value="">` med tom sträng som värde. Radix UI Select-komponenten hanterar inte tomma strängar korrekt och kan krascha.
+## Sammanfattning
 
-**Bevis:**
-```tsx
-<SelectItem value="" className="py-3">
-  Inget specifikt rum
-</SelectItem>
-```
+Inventerings-wizarden visar bara 8 av 14 byggnader på grund av två problem:
 
-**Lösning:** Byt ut tom sträng mot ett speciellt värde som `"__none__"` och hantera det i `onChange`:
-```tsx
-<SelectItem value="__none__" className="py-3">
-  Inget specifikt rum
-</SelectItem>
-```
+1. **Kategorifiltrering** – inläsningen hämtar bara `Building`, inte `IfcBuilding` (och motsvarande för storeys/spaces)
+2. **Långsam laddning** – hierarkin tar 20+ sekunder att ladda (47k+ poster), så wizarden kan öppnas innan data är klar
 
-### Problem 2: Saknade våningsplan / laddningsproblem
-**Symptom:** Inte alla våningsplan visas i mobil-inventering.
-
-**Grundorsak:** `LocationSelectionStep.tsx` använder `navigatorTreeData` från `AppContext`, men kontrollerar INTE om data fortfarande laddas (`isLoadingData`). Med 47 000+ objekt tar inläsningen flera sekunder, och om användaren öppnar inventering innan det är klart visas inga byggnader eller våningsplan.
-
-**Databasverifiering:**
-- 14 Buildings i databasen
-- 87 Building Storeys
-- Centralstationen har 16 våningsplan
-
-**Lösning:** 
-1. Lägg till `isLoadingData` i LocationSelectionStep
-2. Visa loading-indikator om data laddas
-3. Alternativt: trigga refresh om data är tom
+### Lösning
+1. Lägg till `IfcBuilding`, `IfcBuildingStorey`, `IfcSpace` i kategorifilteringen
+2. Skapa en tvåstegsladding: först enbart hierarkin (Building/Storey/Space = snabb), sedan tillgångar (Instance) on-demand
+3. Bakgrundsladda hierarkin vid app-uppstart
 
 ---
 
-## Teknisk Implementering
+## Del 1: Fixa Kategorifiltrering
 
-### Steg 1: Fixa tomt SelectItem-värde
-
-**Fil:** `src/components/inventory/mobile/LocationSelectionStep.tsx`
-
-**Nuvarande kod (rad 184-199):**
-```tsx
-<Select value={formData.roomFmGuid} onValueChange={handleRoomChange}>
-  <SelectTrigger className="h-14 text-base">
-    <SelectValue placeholder="Välj rum..." />
-  </SelectTrigger>
-  <SelectContent className="bg-popover z-50 max-h-64">
-    <SelectItem value="" className="py-3">
-      Inget specifikt rum
-    </SelectItem>
-    {rooms.map((room) => (
-      <SelectItem key={room.fmGuid} value={room.fmGuid} className="py-3">
-        {room.commonName || room.name}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
+### Problem
+`refreshInitialData` i `AppContext.tsx` anropar:
+```typescript
+await fetchLocalAssets(['Building', 'Building Storey', 'Space', 'Instance'])
 ```
 
-**Ändring:**
-```tsx
-const NONE_VALUE = "__none__"; // Konstant för "inget rum valt"
+Detta missar alternativa IFC-kategorier som kan finnas i databasen.
 
-const handleRoomChange = (fmGuid: string) => {
-  if (fmGuid === NONE_VALUE) {
-    updateFormData({
-      roomFmGuid: '',
-      roomName: '',
-    });
-    return;
-  }
-  const room = rooms.find((r) => r.fmGuid === fmGuid);
-  updateFormData({
-    roomFmGuid: fmGuid,
-    roomName: room?.commonName || room?.name || '',
-  });
-};
+### Lösning
+Lägg till IFC-varianter:
 
-// I JSX:
-<Select 
-  value={formData.roomFmGuid || NONE_VALUE} 
-  onValueChange={handleRoomChange}
->
-  ...
-  <SelectItem value={NONE_VALUE} className="py-3">
-    Inget specifikt rum
-  </SelectItem>
-  ...
-</Select>
+```typescript
+await fetchLocalAssets([
+    'Building', 'IfcBuilding',
+    'Building Storey', 'IfcBuildingStorey', 
+    'Space', 'IfcSpace',
+    // Instance laddas INTE vid uppstart, utan on-demand
+]);
 ```
 
-### Steg 2: Lägg till loading-kontroll
+**Fil:** `src/context/AppContext.tsx` (rad 464-469)
 
-**Fil:** `src/components/inventory/mobile/LocationSelectionStep.tsx`
+---
 
-**Nuvarande kod (rad 32):**
-```tsx
-const { navigatorTreeData } = useContext(AppContext);
+## Del 2: Tvåstegsladdning
+
+### Nuvarande flöde
+```
+App start → fetchLocalAssets([allt inkl Instance]) → 47k+ poster → 20+ sek
 ```
 
-**Ändring:**
-```tsx
+### Nytt flöde
+```
+App start → fetchLocalAssets([Building, Storey, Space]) → ~4k poster → 2-3 sek
+                                                         ↓
+                                            navigatorTreeData klar
+                                                         ↓
+                                            Inventory kan visa byggnader
+```
+
+Tillgångar (Instance) laddas sedan on-demand när:
+- Användaren expanderar ett rum i Navigator
+- Användaren öppnar Assets-vy för en byggnad/våning
+
+### Implementation
+
+**Fil:** `src/context/AppContext.tsx`
+
+```typescript
+const refreshInitialData = useCallback(async (includeAssets = false) => {
+    setIsLoadingData(true);
+    try {
+        // Steg 1: Ladda hierarki snabbt
+        const categories = [
+            'Building', 'IfcBuilding',
+            'Building Storey', 'IfcBuildingStorey',
+            'Space', 'IfcSpace',
+        ];
+        
+        if (includeAssets) {
+            categories.push('Instance');
+        }
+        
+        const allObjects = await fetchLocalAssets(categories);
+        setAllData(allObjects);
+        setNavigatorTreeData(buildNavigatorTree(allObjects));
+    } catch (error) {
+        console.error('Failed to load assets:', error);
+    } finally {
+        setIsLoadingData(false);
+    }
+}, [buildNavigatorTree, setAllData]);
+```
+
+---
+
+## Del 3: Fixa `buildNavigatorTree` för IFC-kategorier
+
+### Problem
+Rad 281-283 filtrerar bara `Building`, inte `IfcBuilding`:
+```typescript
+const buildings = items.filter(item => item.category === 'Building');
+```
+
+### Lösning
+Uppdatera alla filtreringar att inkludera IFC-varianter:
+
+```typescript
+const buildings = items.filter(item => 
+    item.category === 'Building' || item.category === 'IfcBuilding'
+);
+const storeys = items.filter(item => 
+    item.category === 'Building Storey' || item.category === 'IfcBuildingStorey'
+);
+const spaces = items.filter(item => 
+    item.category === 'Space' || item.category === 'IfcSpace'
+);
+```
+
+**Fil:** `src/context/AppContext.tsx` (rad 278-284)
+
+---
+
+## Del 4: Lazy Load för Tillgångar
+
+### Ny funktion i `asset-plus-service.ts`
+
+```typescript
+/**
+ * Fetch assets (Instance) for a specific building on demand.
+ */
+export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<any[]> {
+    const { data, error } = await supabase
+        .from('assets')
+        .select('fm_guid, category, name, common_name, ...')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('category', 'Instance');
+    
+    if (error) throw error;
+    return mapToCamelCase(data || []);
+}
+```
+
+### Användning i Navigator/AssetsView
+När användaren expanderar ett rum eller öppnar AssetsView:
+```typescript
+const assets = await fetchAssetsForBuilding(buildingFmGuid);
+// Merge into allData or show directly
+```
+
+---
+
+## Del 5: Garanterad laddning vid wizard-öppning
+
+### Problem
+`LocationSelectionStep` visar loading-skeleton om `isLoadingData` är true, men om det redan är laddat och listan är tom visas "Ingen data".
+
+### Lösning
+Kontrollera att hierarki är laddad innan wizarden öppnas:
+
+**Fil:** `src/pages/Inventory.tsx`
+
+```typescript
 const { navigatorTreeData, isLoadingData, refreshInitialData } = useContext(AppContext);
 
-// Om data laddas - visa skeleton/loading
-if (isLoadingData) {
-  return (
-    <div className="p-4 space-y-4">
-      <Skeleton className="h-14 w-full" />
-      <Skeleton className="h-14 w-full" />
-      <Skeleton className="h-14 w-full" />
-      <p className="text-center text-muted-foreground">Laddar byggnader...</p>
-    </div>
-  );
-}
-
-// Om data är tom efter laddning - trigga refresh och visa meddelande
-if (!isLoadingData && navigatorTreeData.length === 0) {
-  return (
-    <div className="p-4 space-y-4 flex flex-col items-center justify-center h-full">
-      <Building2 className="h-12 w-12 text-muted-foreground" />
-      <p className="text-muted-foreground text-center">
-        Ingen data hittades. Kontrollera att synkronisering har genomförts i Inställningar.
-      </p>
-      <Button variant="outline" onClick={() => refreshInitialData()}>
-        Försök igen
-      </Button>
-    </div>
-  );
-}
+useEffect(() => {
+    // Säkerställ att hierarki är laddad
+    if (!isLoadingData && navigatorTreeData.length === 0) {
+        refreshInitialData();
+    }
+}, []);
 ```
 
 ---
 
-## Filer som Påverkas
+## Filer som påverkas
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/inventory/mobile/LocationSelectionStep.tsx` | Fixa tomt SelectItem-värde, lägg till loading-kontroll |
+| `src/context/AppContext.tsx` | Lägg till IFC-kategorier, tvåstegsladdning |
+| `src/services/asset-plus-service.ts` | Ny `fetchAssetsForBuilding()` funktion |
+| `src/pages/Inventory.tsx` | Trigga refresh om hierarki saknas |
+| `src/components/inventory/mobile/LocationSelectionStep.tsx` | Redan fixad med loading/empty states |
 
 ---
 
-## Verifiering
+## Teknisk sammanfattning
 
-1. Öppna mobil inventering
-2. Verifiera att loading-indikator visas om data laddas
-3. Välj byggnad → verifiera att alla våningsplan visas
-4. Välj våningsplan → verifiera ingen krasch
-5. I rum-dropdown, välj "Inget specifikt rum" → verifiera ingen krasch
-6. Fortsätt genom wizard → verifiera att registration fungerar
+```
+┌────────────────────────────────────────────────────────────┐
+│                    APP STARTUP                              │
+├────────────────────────────────────────────────────────────┤
+│  1. refreshInitialData(includeAssets=false)                │
+│     └─> Hämtar Building, Storey, Space (~4k poster, ~2s)   │
+│  2. navigatorTreeData populeras                            │
+│  3. isLoadingData = false                                  │
+└────────────────────────────────────────────────────────────┘
+                            ↓
+┌────────────────────────────────────────────────────────────┐
+│               MOBILE INVENTORY WIZARD                       │
+├────────────────────────────────────────────────────────────┤
+│  • Alla 14 byggnader visas direkt                          │
+│  • Alla 87 våningsplan tillgängliga                        │
+│  • Rum laddas redan (ingår i Space)                        │
+└────────────────────────────────────────────────────────────┘
+                            ↓
+┌────────────────────────────────────────────────────────────┐
+│               ON-DEMAND ASSET LOADING                       │
+├────────────────────────────────────────────────────────────┤
+│  När användaren:                                           │
+│  • Öppnar AssetsView för en byggnad                        │
+│  • Expanderar rum i Navigator                              │
+│  → fetchAssetsForBuilding(buildingFmGuid)                  │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Relaterat: XKT-synkning
+## Förväntat resultat
 
-Användaren nämnde att "fulla synken inte fungerar". Detta är ett separat problem som handlar om XKT-modellsynkronisering i `asset-plus-sync` edge function, inte om byggnads-/våningsdata. Byggnader och Building Storeys synkas separat (ObjectTypes 1-2) och fungerar - det finns 14 buildings och 87 storeys i databasen.
+1. **Snabbare uppstart** – hierarkin laddas på ~2-3 sekunder istället för 20+
+2. **Alla byggnader visas** – 14 st istället för 8
+3. **Alla våningar visas** – inklusive IFC-varianter
+4. **Inventering fungerar direkt** – ingen väntan på tillgångsladdning
 
-Om alla våningsplan ändå inte visas efter denna fix kan det bero på:
-1. Att träd-byggnadsfunktionen (`buildNavigatorTree`) filtrerar bort våningar som saknar korrekt `buildingFmGuid`
-2. Race condition om användaren öppnar inventering innan `refreshInitialData` avslutas
