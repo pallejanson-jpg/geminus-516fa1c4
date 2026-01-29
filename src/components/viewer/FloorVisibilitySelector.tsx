@@ -301,12 +301,14 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     }, []);
 
     // Apply visibility changes to 3D viewer (optimized batch approach)
+    // Also hides IfcCovering objects in solo mode to prevent visual clutter
     const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
 
       const scene = viewer.scene;
       const childrenMap = buildChildrenMap();
+      const isSoloMode = visibleIds.size === 1;
       
       // Collect ALL object IDs to show (batch approach for performance)
       const idsToShow: string[] = [];
@@ -336,6 +338,19 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             }
           });
         }, { timeout: 100 });
+      }
+      
+      // Hide IfcCovering objects in solo mode (they often cause visual artifacts)
+      if (isSoloMode) {
+        const metaObjects = viewer.metaScene?.metaObjects || {};
+        Object.values(metaObjects).forEach((metaObj: any) => {
+          if (metaObj.type?.toLowerCase() === 'ifccovering') {
+            const entity = scene.objects?.[metaObj.id];
+            if (entity) {
+              entity.visible = false;
+            }
+          }
+        });
       }
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
@@ -368,6 +383,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       const newSet = new Set([floorId]);
       setVisibleFloorIds(newSet);
       applyFloorVisibility(newSet);
+      
+      // Auto-enable clipping in solo mode for ceiling cut
+      setClippingEnabled(true);
       
       // Apply clipping when showing single floor
       updateClipping([floorId]);

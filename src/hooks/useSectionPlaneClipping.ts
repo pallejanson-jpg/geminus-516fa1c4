@@ -322,27 +322,32 @@ export function useSectionPlaneClipping(
       return;
     }
     
-    // Re-apply clipping if currently in floor mode OR if we should be in floor mode
-    // This allows the slider to work even if the mode wasn't set properly
-    if (currentClipModeRef.current === 'floor') {
-      if (currentFloorIdRef.current) {
-        applySectionPlane(currentFloorIdRef.current, 'floor');
-      } else {
-        // Global clipping - get scene base and re-apply
-        const sceneAABB = viewer.scene?.getAABB?.();
-        if (sceneAABB) {
-          applyGlobalFloorPlanClipping(sceneAABB[1]);
-        }
+    console.log('Updating clip height to:', newHeight, 'Current mode:', currentClipModeRef.current);
+    
+    // Destroy existing section plane first to force re-creation
+    if (sectionPlaneRef.current) {
+      try {
+        sectionPlaneRef.current.destroy?.();
+      } catch (e) {
+        console.debug('Error destroying section plane during height update:', e);
       }
+      sectionPlaneRef.current = null;
+    }
+    
+    // Re-apply clipping - always use floor mode when slider is used
+    if (currentFloorIdRef.current) {
+      // Apply to specific floor
+      applySectionPlane(currentFloorIdRef.current, 'floor');
     } else {
-      // Even if mode isn't set to 'floor', if we're adjusting clip height,
-      // the user probably wants floor clipping. Apply global clipping.
-      console.log('Clip height changed but mode was not floor, applying global clipping');
+      // Global clipping - get scene base and re-apply
       const sceneAABB = viewer.scene?.getAABB?.();
       if (sceneAABB) {
         applyGlobalFloorPlanClipping(sceneAABB[1]);
       }
     }
+    
+    // Update mode to floor since we're using the slider
+    currentClipModeRef.current = 'floor';
   }, [applySectionPlane, getXeokitViewer, applyGlobalFloorPlanClipping]);
 
   // Apply ceiling clipping (3D solo mode) - convenience function  
