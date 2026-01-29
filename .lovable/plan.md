@@ -1,411 +1,152 @@
 
-# Plan: Förbättra Detaljlistor, XKT-synkning och Profilinställningar
+# Plan: Fixa Dubbleringar och Fel "Finns i modell"-status i AssetsView
 
 ## Sammanfattning av Identifierade Problem
 
-1. **Kolumnval fungerar dåligt** - Sheet-baserad kolumnväljare är svår att använda
-2. **Multi-selektion saknas** - Kan inte markera flera rader för batch-redigering
-3. **Kolumnbredder** - Fasta bredder, ingen justering möjlig
-4. **Åtgärder tar plats längst ned** - Borde flyttas till verktygsfält högst upp
-5. **Visa/redigera egenskaper saknas** - Ingen modal för att visa alla egenskaper
-6. **Placera annotation villkorad** - Ska bara visas för assets med "Finns i modell = Nej"
-7. **XKT-synkning fungerar inte** - Backend-sync misslyckas, behöver preload-strategi
-8. **Tema till Profile** - Flytta tema-val från User dropdown till dedikerad Profile-sektion med namn/foto
+### Problem 1: Inventerade objekt visas flera gånger
+**Symptom:** "Pål brandsläckare 2", "Påls sensor 2" och "Testbrandsläckare" visas tre gånger vardera i listan.
 
----
+**Grundorsak:** Databasen innehåller KORREKTA data (endast EN post per objekt). Duplikationen sker i frontend - troligtvis i `navigatorTreeData` som innehåller samma byggnad flera gånger, eller i `allData` som på något sätt har blivit förorenad med dubbletter.
 
-## Del 1: Förbättra Kolumnväljaren
+**Lösning:** 
+1. Lägg till deduplicering i `getAssetsForFacility()` i PortfolioView
+2. Lägg till deduplicering i `assetData` i AssetsView baserat på `fmGuid`
+3. Lägg till säkerhetscheck i `refreshInitialData()` för att säkerställa inga dubbletter
 
-### Problem
-Den nuvarande Sheet-baserade kolumnväljaren (`ColumnSelectorTree`) är svår att använda och kräver att man öppnar en sidopanel.
+### Problem 2: "Finns i modell" visar fel status (Ja/grön istället för Nej)
+**Symptom:** Inventerade objekt har `created_in_model: false` i databasen, men visar "Ja" (grön) i UI.
 
-### Lösning
-Ersätt Sheet med en DropdownMenu som har bättre interaktion:
+**Grundorsak:** Fallback-logiken i rad 253 av AssetsView:
+```typescript
+createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
+```
+Om `created_in_model` kommer som `undefined` istället för `false`, faller koden igenom till `true`.
 
-**Filer att ändra:**
-- `src/components/portfolio/AssetsView.tsx`
-- `src/components/portfolio/RoomsView.tsx`
-
-```text
-Nuvarande UI:
-┌─────────────────────────────────────────┐
-│ [Kolumner] → Öppnar Sheet → svårt att  │
-│                              navigera   │
-└─────────────────────────────────────────┘
-
-Ny UI:
-┌─────────────────────────────────────────┐
-│ [▼ Kolumner] → DropdownMenuCheckboxItem │
-│  ☑ Beteckning                          │
-│  ☑ Namn                                │
-│  ☐ Typ                                 │
-│  ☑ Våning                              │
-│  ─────────────────                      │
-│  ☐ FMGUID                              │
-│  ☑ I modell                            │
-└─────────────────────────────────────────┘
+**Lösning:** Ändra fallback till explicit `false`:
+```typescript
+createdInModel: asset.created_in_model === true, // Explicit sant, annars falskt
 ```
 
+### Problem 3: Visa 3D och annotations vid selektion
+**Krav:** När man selekterar ett inventerat objekt ska 3D-viewern öppnas och annotation ska visas automatiskt.
+
+**Lösning:** Uppdatera `handleOpen3D` i AssetsView för att:
+1. Öppna viewern för rätt byggnad
+2. Aktivera "Visa lokala annotations" automatiskt
+
 ---
 
-## Del 2: Multi-selektion i Listorna
+## Teknisk Implementering
 
-### Problem
-Kan inte välja flera rader för batch-operationer som redigering eller synkning.
+### Steg 1: Fixa Deduplicering i AssetsView
 
-### Lösning
-Lägg till en checkbox-kolumn längst till vänster och en `selectedRows` state.
+**Fil:** `src/components/portfolio/AssetsView.tsx`
 
-**Filer att ändra:**
-- `src/components/portfolio/AssetsView.tsx`
-- `src/components/portfolio/RoomsView.tsx`
-
+Ändra `assetData` useMemo (rad 240-260):
 ```typescript
-// Ny state
-const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-
-// Checkbox i header för "välj alla"
-<TableHead className="w-10">
-  <Checkbox 
-    checked={selectedRows.size === filteredAssets.length}
-    onCheckedChange={(checked) => {
-      if (checked) {
-        setSelectedRows(new Set(filteredAssets.map(a => a.fmGuid)));
-      } else {
-        setSelectedRows(new Set());
-      }
-    }}
-  />
-</TableHead>
-
-// Checkbox per rad
-<TableCell className="py-2 w-10">
-  <Checkbox 
-    checked={selectedRows.has(asset.fmGuid)}
-    onCheckedChange={(checked) => {
-      const newSet = new Set(selectedRows);
-      if (checked) newSet.add(asset.fmGuid);
-      else newSet.delete(asset.fmGuid);
-      setSelectedRows(newSet);
-    }}
-  />
-</TableCell>
+const assetData: AssetData[] = useMemo(() => {
+  // Deduplicate by fmGuid first
+  const seenGuids = new Set<string>();
+  const uniqueAssets = assets.filter((asset) => {
+    const guid = asset.fm_guid || asset.fmGuid;
+    if (seenGuids.has(guid)) return false;
+    seenGuids.add(guid);
+    return true;
+  });
+  
+  return uniqueAssets.map((asset) => {
+    const attrs = asset.attributes || {};
+    return {
+      fmGuid: asset.fm_guid || asset.fmGuid,
+      // ... resten av mappningen
+      // VIKTIGT: Ändra createdInModel logik:
+      createdInModel: asset.created_in_model === true, // Explicit sant-check
+      // ... resten
+    };
+  });
+}, [assets]);
 ```
 
----
+### Steg 2: Fixa Deduplicering i PortfolioView
 
-## Del 3: Justerbara Kolumnbredder
+**Fil:** `src/components/portfolio/PortfolioView.tsx`
 
-### Problem
-Kolumnerna har fasta bredder, kan inte justeras.
-
-### Lösning
-1. **Smartare standardbredder** baserat på innehåll (max-tecken)
-2. **Drag-resize** genom att lägga till resize-handles
-
-**Teknisk implementering:**
-
+Ändra `getAssetsForFacility` (rad 202-211):
 ```typescript
-// Ny state för kolumnbredder
-const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-  designation: 150,
-  commonName: 180,
-  assetType: 120,
-  levelCommonName: 100,
-  createdInModel: 80,
-  // etc.
-});
-
-// Auto-calculate baserat på innehåll
-const calculateColumnWidth = (colKey: string, data: any[]): number => {
-  const maxChars = Math.max(
-    colKey.length,
-    ...data.map(d => String(d[colKey] || '').length)
+const getAssetsForFacility = (facility: Facility) => {
+  if (!allData) return [];
+  const isBuilding = facility.category === 'Building';
+  const isStorey = facility.category === 'Building Storey';
+  
+  const filtered = allData.filter((item: any) => 
+    item.category === 'Instance' &&
+    (isBuilding ? item.buildingFmGuid === facility.fmGuid : 
+     isStorey ? item.levelFmGuid === facility.fmGuid : false)
   );
-  return Math.min(300, Math.max(60, maxChars * 8 + 24)); // padding
+  
+  // Deduplicate by fmGuid
+  const seen = new Set<string>();
+  return filtered.filter((item: any) => {
+    const guid = item.fmGuid || item.fm_guid;
+    if (seen.has(guid)) return false;
+    seen.add(guid);
+    return true;
+  });
 };
 ```
 
----
+### Steg 3: Fixa "createdInModel" fallback
 
-## Del 4: Flytta Åtgärder till Verktygsfält
+**Fil:** `src/components/portfolio/AssetsView.tsx` (rad 253)
 
-### Problem
-Åtgärder per rad tar plats och kommer bli fler. Borde samlas i ett verktygsfält.
-
-### Lösning
-Skapa ett kontextuellt verktygsfält som visas när rader är markerade:
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ 🔍 Sök...  [Filter ▼] [Kolumner ▼]                     [Grid][List]  │
-├─────────────────────────────────────────────────────────────────┤
-│ ✓ 3 markerade │ [📋 Egenskaper] [📍 Placera] [🔄 Synka] [✕ Avmarkera]│
-└─────────────────────────────────────────────────────────────────┘
+Nuvarande kod:
+```typescript
+createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
 ```
 
-**Filer att ändra:**
-- `src/components/portfolio/AssetsView.tsx`
-- `src/components/portfolio/RoomsView.tsx`
-
+Ändras till:
 ```typescript
-// Kontextuellt verktygsfält som visas när selectedRows.size > 0
-{selectedRows.size > 0 && (
-  <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50">
-    <Badge variant="secondary">{selectedRows.size} markerade</Badge>
-    <Button size="sm" variant="outline" onClick={handleShowProperties}>
-      <Info size={14} className="mr-1" /> Egenskaper
-    </Button>
-    <Button size="sm" variant="outline" onClick={handleBatchPlaceAnnotation}>
-      <MapPin size={14} className="mr-1" /> Placera
-    </Button>
-    <Button size="sm" variant="outline" onClick={handleBatchSync}>
-      <RefreshCw size={14} className="mr-1" /> Synka
-    </Button>
-    <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())}>
-      <X size={14} className="mr-1" /> Avmarkera
-    </Button>
-  </div>
-)}
+createdInModel: asset.created_in_model === true || asset.createdInModel === true,
 ```
 
----
+Detta säkerställer att endast objekt med explicit `true` visas som "Ja". Alla andra (inklusive `false`, `undefined`, `null`) blir "Nej".
 
-## Del 5: Visa Egenskaper och Redigera
+### Steg 4: Auto-aktivera Annotations vid 3D-öppning
 
-### Problem
-Saknar möjlighet att se alla egenskaper för valda objekt.
+**Fil:** `src/components/portfolio/AssetsView.tsx`
 
-### Lösning
-Återanvänd och utöka `UniversalPropertiesDialog` för att stödja:
-1. Visa alla egenskaper
-2. Redigera läge (ny prop)
-
-**Filer att ändra:**
-- `src/components/common/UniversalPropertiesDialog.tsx`
-- `src/components/portfolio/AssetsView.tsx`
-
+Uppdatera `handleOpen3D`:
 ```typescript
-// I AssetsView - visa dialog för valda rader
-const [showPropertiesFor, setShowPropertiesFor] = useState<string[]>([]);
-
-const handleShowProperties = () => {
-  setShowPropertiesFor(Array.from(selectedRows));
-};
-
-// Ny prop för redigering
-<UniversalPropertiesDialog
-  fmGuids={showPropertiesFor}
-  editable={true}
-  onClose={() => setShowPropertiesFor([])}
-/>
-```
-
----
-
-## Del 6: Villkorad "Placera Annotation"
-
-### Problem
-"Placera annotation"-knappen visas för alla assets, borde bara visas för de som saknar position.
-
-### Nuvarande kod (rad 746-756 i AssetsView):
-```typescript
-{!asset.annotationPlaced && (
-  <Button onClick={() => handlePlaceAnnotation(asset)}>
-    <MapPin size={14} />
-  </Button>
-)}
-```
-
-### Ändring
-Behåll nuvarande logik - den är redan korrekt! Den visar bara knappen om `annotationPlaced === false`. Men lägg till ytterligare villkor för `createdInModel`:
-
-```typescript
-{!asset.createdInModel && !asset.annotationPlaced && (
-  // Visa bara för assets som INTE finns i modell OCH saknar annotation
-)}
-```
-
----
-
-## Del 7: XKT-synkning och Preload
-
-### Problem
-1. Synkfunktionen i Settings misslyckas (API-endpoints hittas inte)
-2. XKT tar lång tid att ladda när 3D-viewern öppnas
-
-### Lösning - Tvådelad
-
-#### A) Fixa Backend-synk (`asset-plus-sync`)
-
-Problemet verkar vara att `/api/threed/GetModels` returnerar 404. Edge-funktionen försöker redan flera paths, men missar kanske rätt endpoint.
-
-**Debugging-steg:**
-1. Logga exakt vilken URL som används
-2. Testa med curl mot Asset+ API direkt
-3. Verifiera att `ASSET_PLUS_API_URL` pekar på rätt base URL
-
-**Fil att ändra:**
-- `supabase/functions/asset-plus-sync/index.ts`
-
-#### B) Förbättra Preload-hook
-
-Nuvarande `useXktPreload` hook fungerar men behöver:
-1. **Aktiveras tidigare** - när användare väljer byggnad i Portfolio, inte bara i FacilityLandingPage
-2. **Spara till Supabase** med datumkontroll
-
-**Filer att ändra:**
-- `src/hooks/useXktPreload.ts`
-- `src/components/portfolio/PortfolioView.tsx`
-- `src/components/navigator/NavigatorView.tsx`
-
-```typescript
-// I PortfolioView - trigga preload när byggnad väljs
-const { selectedBuilding } = useContext(AppContext);
-useXktPreload(selectedBuilding?.fmGuid);
-```
-
-#### C) Datumkontroll för Cached XKT
-
-Lägg till kontroll så att cachad XKT jämförs mot källans senaste uppdatering:
-
-```typescript
-// I xkt-cache-service.ts
-async checkCacheFreshness(modelId: string, buildingFmGuid: string, sourceModifiedDate?: Date): Promise<boolean> {
-  const { data } = await supabase
-    .from('xkt_models')
-    .select('synced_at')
-    .eq('building_fm_guid', buildingFmGuid)
-    .eq('model_id', modelId)
-    .maybeSingle();
-
-  if (!data) return false; // Not cached
-
-  if (sourceModifiedDate) {
-    // Compare dates
-    return new Date(data.synced_at) >= sourceModifiedDate;
+const handleOpen3D = (asset: AssetData) => {
+  if (onOpen3D) {
+    // If this is a local asset, we might want to enable annotations
+    if (asset.isLocal || !asset.createdInModel) {
+      // Store preference to show local annotations
+      localStorage.setItem('viewer-show-local-annotations', 'true');
+    }
+    onOpen3D(asset.fmGuid, asset.levelFmGuid);
   }
-
-  return true; // Assume fresh if no source date
-}
+};
 ```
 
----
-
-## Del 8: Flytta Tema till Profile
-
-### Problem
-Tema-växlaren (Dark/Light/SWG) ligger i User dropdown. Ska flyttas till en dedikerad Profile-sektion med möjlighet att lägga till namn och foto.
-
-### Nuvarande UI (AppHeader rad 202-229)
-Tema-knappar i dropdown-menyn under User.
-
-### Lösning
-1. **Skapa ny Profile-komponent** eller utöka ApiSettingsModal med en "Profile"-tab
-2. **Flytta tema** från dropdown till Profile
-3. **Lägg till namn/foto** med localStorage-lagring (ingen auth än)
-
-**Filer att ändra:**
-- `src/components/layout/AppHeader.tsx` (ta bort tema härifrån)
-- `src/components/settings/ApiSettingsModal.tsx` (lägg till Profile-tab)
-
-**Ny Profile-tab innehåll:**
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ Profile                                                          │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────┐                                                       │
-│  │ 📷   │  Klicka för att ladda upp foto                       │
-│  └──────┘                                                       │
-│                                                                 │
-│  Namn: ___________________                                      │
-│  E-post: _________________ (informativt)                        │
-│                                                                 │
-│  ─────────────────────────────────                              │
-│  Tema:                                                          │
-│  ┌──────┐  ┌──────┐  ┌──────┐                                  │
-│  │ Dark │  │Light │  │ SWG  │                                  │
-│  └──────┘  └──────┘  └──────┘                                  │
-│                                                                 │
-│                                            [Spara]              │
-└─────────────────────────────────────────────────────────────────┘
-```
+Och i **AssetPlusViewer.tsx**, läs denna preference och aktivera annotations automatiskt.
 
 ---
 
-## Implementeringsordning
-
-| Fas | Uppgift | Prioritet |
-|-----|---------|-----------|
-| 1 | Multi-selektion + checkbox-kolumn | Hög |
-| 2 | Flytta åtgärder till verktygsfält | Hög |
-| 3 | Förbättra kolumnväljare (dropdown istället för sheet) | Medium |
-| 4 | Visa egenskaper-dialog för markerade | Medium |
-| 5 | Villkorad "Placera annotation" | Låg (redan delvis rätt) |
-| 6 | Kolumnbredder - smartare defaults | Medium |
-| 7 | XKT preload i fler komponenter | Hög |
-| 8 | Fixa XKT sync endpoint-logik | Hög |
-| 9 | Profile-tab med tema/namn/foto | Medium |
-
----
-
-## Filer som Påverkas
+## Filer som påverkas
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/portfolio/AssetsView.tsx` | Multi-select, toolbar, kolumnväljare, egenskaper |
-| `src/components/portfolio/RoomsView.tsx` | Multi-select, toolbar, kolumnväljare |
-| `src/components/portfolio/PortfolioView.tsx` | Aktivera XKT preload |
-| `src/components/navigator/NavigatorView.tsx` | Aktivera XKT preload |
-| `src/hooks/useXktPreload.ts` | Bättre cache-kontroll |
-| `src/services/xkt-cache-service.ts` | Datumkontroll för freshness |
-| `src/components/settings/ApiSettingsModal.tsx` | Ny Profile-tab |
-| `src/components/layout/AppHeader.tsx` | Ta bort tema från dropdown |
-| `src/components/common/UniversalPropertiesDialog.tsx` | Stöd för multi-select och redigering |
-| `supabase/functions/asset-plus-sync/index.ts` | Debugging/fix för XKT endpoints |
+| `src/components/portfolio/AssetsView.tsx` | Deduplicering, createdInModel fix, handleOpen3D uppdatering |
+| `src/components/portfolio/PortfolioView.tsx` | Deduplicering i getAssetsForFacility |
+| `src/components/viewer/AssetPlusViewer.tsx` | Auto-aktivera lokala annotations |
 
 ---
 
-## Tekniska Detaljer
+## Verifiering
 
-### localStorage för Profile
-```typescript
-interface UserProfile {
-  displayName: string;
-  avatarUrl: string | null;
-  theme: 'dark' | 'light' | 'swg';
-}
-
-// Spara
-localStorage.setItem('userProfile', JSON.stringify(profile));
-
-// Läsa (i AppContext)
-const savedProfile = localStorage.getItem('userProfile');
-if (savedProfile) {
-  const profile = JSON.parse(savedProfile);
-  setTheme(profile.theme);
-  // etc.
-}
-```
-
-### XKT Preload Trigger Points
-
-```text
-1. FacilityLandingPage (redan aktiv)
-2. PortfolioView → när byggnad klickas
-3. NavigatorView → när byggnad expanderas
-4. MapView → när byggnad väljs på kartan
-```
-
----
-
-## Förväntat Resultat
-
-1. **Kolumnval fungerar bra** - Snabb dropdown med checkboxar
-2. **Multi-selektion möjlig** - Checkbox-kolumn med batch-åtgärder
-3. **Justerbara bredder** - Smartare defaults, möjligen resize
-4. **Åtgärder i toolbar** - Kontextuellt verktygsfält för markerade
-5. **Egenskaper visas** - Modal för att se/redigera alla egenskaper
-6. **Annotation villkorad** - Bara för assets utan modell-position
-7. **XKT laddar snabbare** - Preload vid byggnadsval + fungerande sync
-8. **Profil med tema** - Dedikerad sektion för personliga inställningar
+1. Öppna Portfolio → Centralstationen → Assets
+2. Verifiera att varje inventerat objekt bara visas EN gång
+3. Verifiera att "Finns i modell" visar "Nej" för inventerade objekt
+4. Klicka på "Öppna i 3D" för ett inventerat objekt
+5. Verifiera att 3D-viewern öppnas och annotation syns
