@@ -18,6 +18,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
     let query = supabase
       .from("assets")
       .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id")
+      .order("fm_guid", { ascending: true }) // Stable ordering for pagination
       .range(offset, offset + pageSize - 1);
 
     if (categories && categories.length > 0) {
@@ -51,6 +52,66 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
         syncedAt: asset.synced_at,
         annotationPlaced: asset.annotation_placed,
         symbolId: asset.symbol_id,
+      }));
+      allAssets.push(...mapped);
+      
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        offset += pageSize;
+      }
+    }
+  }
+
+  return allAssets;
+}
+
+/**
+ * Fetch assets (Instance) for a specific building on demand.
+ * Used for lazy-loading assets when user opens AssetsView or expands a room in Navigator.
+ */
+export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<any[]> {
+  const allAssets: any[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("assets")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id, coordinate_x, coordinate_y, coordinate_z")
+      .eq("building_fm_guid", buildingFmGuid)
+      .eq("category", "Instance")
+      .order("fm_guid", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      console.error("Failed to fetch building assets:", error);
+      throw new Error(error.message || "Failed to fetch building assets");
+    }
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      const mapped = data.map((asset) => ({
+        fmGuid: asset.fm_guid,
+        category: asset.category,
+        name: asset.name,
+        commonName: asset.common_name,
+        buildingFmGuid: asset.building_fm_guid,
+        levelFmGuid: asset.level_fm_guid,
+        inRoomFmGuid: asset.in_room_fm_guid,
+        complexCommonName: asset.complex_common_name,
+        attributes: asset.attributes,
+        isLocal: asset.is_local,
+        createdInModel: asset.created_in_model,
+        assetType: asset.asset_type,
+        syncedAt: asset.synced_at,
+        annotationPlaced: asset.annotation_placed,
+        symbolId: asset.symbol_id,
+        coordinateX: asset.coordinate_x,
+        coordinateY: asset.coordinate_y,
+        coordinateZ: asset.coordinate_z,
       }));
       allAssets.push(...mapped);
       
