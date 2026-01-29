@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Server
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Server, Settings
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { THEMES, THEME_OPTIONS } from '@/lib/constants';
-import { AppContext, ThemeType } from '@/context/AppContext';
+import { THEMES } from '@/lib/constants';
+import { AppContext } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
@@ -31,7 +31,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 }) => {
     const { 
         theme, 
-        setTheme, 
         activeApp, 
         setActiveApp, 
         viewMode, 
@@ -184,54 +183,21 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             </Avatar>
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent align="end" className="w-48 bg-popover">
                         <div className="px-2 py-1.5">
                             <p className="text-sm font-medium">User</p>
                             <p className="text-xs text-muted-foreground">user@example.com</p>
                         </div>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                            <UserIcon className="mr-2 h-4 w-4" />
-                            Profile
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
-                            <Server className="mr-2 h-4 w-4" />
-                            Settings
+                            <UserIcon className="mr-2 h-4 w-4" />
+                            Profil & Inställningar
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <div className="px-2 py-1.5">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Theme</p>
-                            <div className="flex gap-2">
-                                {THEME_OPTIONS.map((option) => (
-                                    <button
-                                        key={option.value}
-                                        onClick={() => setTheme(option.value as ThemeType)}
-                                        className={`flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
-                                            theme === option.value 
-                                                ? 'bg-primary/20 ring-1 ring-primary' 
-                                                : 'hover:bg-muted'
-                                        }`}
-                                        title={option.label}
-                                    >
-                                        <div className="flex gap-0.5">
-                                            {option.colors.map((color, i) => (
-                                                <div 
-                                                    key={i}
-                                                    className="w-3 h-3 rounded-full border border-border"
-                                                    style={{ backgroundColor: color }}
-                                                />
-                                            ))}
-                                        </div>
-                                        <span className="text-[10px]">{option.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                             onClick={() => toast({ title: "Sign Out", description: "Authentication coming soon with Lovable Cloud" })}
                         >
-                            Sign Out
+                            Logga ut
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
