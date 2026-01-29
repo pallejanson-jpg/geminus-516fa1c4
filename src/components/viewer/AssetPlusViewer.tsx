@@ -1031,6 +1031,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       console.debug("Could not hide spaces:", e);
     }
 
+    // Check if we should auto-enable local annotations (triggered from AssetsView)
+    const shouldAutoEnableLocalAnnotations = localStorage.getItem('viewer-show-local-annotations') === 'true';
+    if (shouldAutoEnableLocalAnnotations) {
+      // Clear the flag after reading to prevent it from persisting
+      localStorage.removeItem('viewer-show-local-annotations');
+      console.log('Auto-enabling local annotations from AssetsView trigger');
+    }
+    
     // Load local annotations from database (assets with annotation_placed=true)
     loadLocalAnnotations();
     

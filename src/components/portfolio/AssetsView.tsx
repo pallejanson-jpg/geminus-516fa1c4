@@ -236,9 +236,18 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     return [...SYSTEM_COLUMNS, ...STATUS_COLUMNS];
   }, []);
 
-  // Transform raw asset data
+  // Transform raw asset data with deduplication
   const assetData: AssetData[] = useMemo(() => {
-    return assets.map((asset) => {
+    // Deduplicate by fmGuid first to prevent duplicate entries
+    const seenGuids = new Set<string>();
+    const uniqueAssets = assets.filter((asset) => {
+      const guid = asset.fm_guid || asset.fmGuid;
+      if (!guid || seenGuids.has(guid)) return false;
+      seenGuids.add(guid);
+      return true;
+    });
+    
+    return uniqueAssets.map((asset) => {
       const attrs = asset.attributes || {};
       return {
         fmGuid: asset.fm_guid || asset.fmGuid,
@@ -250,7 +259,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         levelCommonName: attrs.levelCommonName || '-',
         roomFmGuid: asset.in_room_fm_guid || attrs.inRoomFmGuid,
         roomName: attrs.inRoomCommonName || '-',
-        createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
+        // FIXED: Explicit boolean check - only true if explicitly set to true
+        createdInModel: asset.created_in_model === true,
         annotationPlaced: asset.annotation_placed ?? false,
         buildingFmGuid: asset.building_fm_guid || attrs.buildingFmGuid,
         isLocal: asset.is_local ?? false,
@@ -337,6 +347,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
 
   const handleOpen3D = (asset: AssetData) => {
     if (onOpen3D) {
+      // If this is a local asset (not in model), auto-enable local annotations
+      if (asset.isLocal || !asset.createdInModel) {
+        localStorage.setItem('viewer-show-local-annotations', 'true');
+      }
       onOpen3D(asset.fmGuid, asset.levelFmGuid);
     }
   };
