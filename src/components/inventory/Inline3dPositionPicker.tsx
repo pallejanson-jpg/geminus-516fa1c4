@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Crosshair, X, Check, RefreshCw } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Crosshair, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
@@ -18,29 +18,31 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
   onPositionConfirmed,
   onClose,
 }) => {
-  const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
-  const [pickModeActive, setPickModeActive] = useState(false);
+  // Cleanup temp markers on unmount
+  useEffect(() => {
+    return () => {
+      // Remove all temp pick markers when this component unmounts
+      document.querySelectorAll('.temp-pick-marker').forEach(el => el.remove());
+    };
+  }, []);
 
   const handleCoordinatePicked = (
     coords: { x: number; y: number; z: number },
     _parentNode: NavigatorNode | null
   ) => {
-    // Save coordinates but do NOT close the viewer
-    setPendingCoords(coords);
-    toast.success('Position markerad', {
+    // Position confirmed via AssetPlusViewer's built-in confirmation UI
+    // Just pass it up to the parent
+    onPositionConfirmed(coords);
+    toast.success('Position bekräftad', {
       description: `X: ${coords.x.toFixed(2)}, Y: ${coords.y.toFixed(2)}, Z: ${coords.z.toFixed(2)}`,
     });
+    // Do NOT call onClose() - keep 3D view open until form is saved
   };
 
-  const handleConfirm = () => {
-    if (pendingCoords) {
-      onPositionConfirmed(pendingCoords);
-      // Do NOT call onClose() - keep 3D view open until form is saved
-    }
-  };
-
-  const handleReset = () => {
-    setPendingCoords(null);
+  const handleClose = () => {
+    // Cleanup markers before closing
+    document.querySelectorAll('.temp-pick-marker').forEach(el => el.remove());
+    onClose();
   };
 
   // Use room if available for better camera positioning, otherwise building
@@ -48,71 +50,29 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Toolbar */}
+      {/* Minimal toolbar - just title and close */}
       <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur shrink-0">
         <div className="flex items-center gap-2">
           <Crosshair className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">Välj 3D-position</span>
         </div>
-        <div className="flex items-center gap-2">
-          {!pickModeActive && !pendingCoords && (
-            <Button 
-              size="sm" 
-              onClick={() => setPickModeActive(true)}
-              className="gap-1"
-            >
-              <Crosshair className="h-3 w-3" />
-              Börja välja
-            </Button>
-          )}
-          {pendingCoords && (
-            <>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={handleReset}
-                className="gap-1"
-              >
-                <RefreshCw className="h-3 w-3" />
-                Välj ny
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={handleConfirm}
-                className="gap-1"
-              >
-                <Check className="h-3 w-3" />
-                Bekräfta
-              </Button>
-            </>
-          )}
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
-      {/* Instructions / Status */}
-      {pickModeActive && !pendingCoords && (
-        <div className="bg-primary/10 px-3 py-2 text-sm text-primary shrink-0">
-          Navigera i modellen, klicka sedan på en yta för att markera position
-        </div>
-      )}
-      {pendingCoords && (
-        <div className="bg-green-500/10 px-3 py-2 text-sm flex items-center justify-between shrink-0">
-          <span className="font-mono text-xs">
-            Position: X:{pendingCoords.x.toFixed(2)} Y:{pendingCoords.y.toFixed(2)} Z:{pendingCoords.z.toFixed(2)}
-          </span>
-        </div>
-      )}
+      {/* Instructions */}
+      <div className="bg-primary/10 px-3 py-2 text-sm text-primary shrink-0">
+        Klicka på en yta för att markera position. Bekräfta sedan i modellen.
+      </div>
 
-      {/* 3D Viewer */}
+      {/* 3D Viewer - uses its own built-in confirmation UI */}
       <div className="flex-1 min-h-0">
         <AssetPlusViewer
           fmGuid={targetFmGuid}
-          pickModeEnabled={pickModeActive && !pendingCoords}
+          pickModeEnabled={true}
           onCoordinatePicked={handleCoordinatePicked}
-          onClose={onClose}
+          onClose={handleClose}
         />
       </div>
     </div>
