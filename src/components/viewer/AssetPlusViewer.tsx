@@ -125,6 +125,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
+  
+  // CENTRALIZED showSpaces state - ALWAYS starts OFF
+  const [showSpaces, setShowSpaces] = useState(false);
   const [flashOnSelectEnabled, setFlashOnSelectEnabledState] = useState(true);
   const [hoverHighlightEnabled, setHoverHighlightEnabled] = useState(false);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
@@ -155,6 +158,116 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
+
+  // Filter spaces to only show rooms on visible floors
+  const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean) => {
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
+      console.debug('filterSpacesToVisibleFloors: No viewer available');
+      return;
+    }
+
+    const metaObjects = xeokitViewer.metaScene.metaObjects;
+    const scene = xeokitViewer.scene;
+    const visibleGuidsLower = new Set(visibleFloorGuids.map((g: string) => g.toLowerCase()));
+    
+    console.log(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors:`, visibleFloorGuids);
+    
+    // If showSpaces is OFF, hide ALL IfcSpace entities
+    if (!forceShow) {
+      let hiddenCount = 0;
+      Object.values(metaObjects).forEach((metaObj: any) => {
+        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
+        const entity = scene.objects?.[metaObj.id];
+        if (entity && entity.visible) {
+          entity.visible = false;
+          hiddenCount++;
+        }
+      });
+      console.log(`Spaces hidden: ${hiddenCount} (showSpaces is OFF)`);
+      return;
+    }
+    
+    // If no floor filter, show all spaces (when showSpaces is ON)
+    if (visibleFloorGuids.length === 0) {
+      let shownCount = 0;
+      Object.values(metaObjects).forEach((metaObj: any) => {
+        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
+        const entity = scene.objects?.[metaObj.id];
+        if (entity && !entity.visible) {
+          entity.visible = true;
+          shownCount++;
+        }
+      });
+      console.log(`All spaces shown: ${shownCount} (no floor filter)`);
+      return;
+    }
+
+    // Filter: show only spaces on visible floors
+    let shownCount = 0;
+    let hiddenCount = 0;
+    
+    Object.values(metaObjects).forEach((metaObj: any) => {
+      if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
+      
+      // Find parent storey by walking up the hierarchy
+      let parentStorey: any = null;
+      let current = metaObj;
+      while (current?.parent) {
+        current = current.parent;
+        if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
+          parentStorey = current;
+          break;
+        }
+      }
+      
+      if (!parentStorey) {
+        // No parent storey found - hide it
+        const entity = scene.objects?.[metaObj.id];
+        if (entity) entity.visible = false;
+        return;
+      }
+      
+      const storeyFmGuid = (parentStorey.originalSystemId || parentStorey.id || '').toLowerCase();
+      const isVisible = visibleGuidsLower.has(storeyFmGuid);
+      
+      const entity = scene.objects?.[metaObj.id];
+      if (entity) {
+        entity.visible = isVisible;
+        if (isVisible) shownCount++;
+        else hiddenCount++;
+      }
+    });
+    
+    console.log(`Spaces filtered - shown: ${shownCount}, hidden: ${hiddenCount}`);
+  }, []);
+
+  // Centralized handler for showSpaces changes
+  const handleShowSpacesChange = useCallback((show: boolean) => {
+    setShowSpaces(show);
+    
+    // Call Asset+ viewer API
+    try {
+      const assetViewer = viewerInstanceRef.current?.assetViewer;
+      assetViewer?.onShowSpacesChanged?.(show);
+    } catch (e) {
+      console.debug('onShowSpacesChanged failed:', e);
+    }
+    
+    // Apply floor filtering
+    filterSpacesToVisibleFloors(visibleFloorFmGuids, show);
+  }, [visibleFloorFmGuids, filterSpacesToVisibleFloors]);
+
+  // Handler for visible floors change - also filters spaces
+  const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
+    setVisibleFloorFmGuids(floorIds);
+    
+    // If showSpaces is ON, filter spaces to match new floor selection
+    if (showSpaces) {
+      filterSpacesToVisibleFloors(floorIds, showSpaces);
+    }
+  }, [showSpaces, filterSpacesToVisibleFloors]);
 
   // Helper: Get item IDs by FmGuid
   const getItemIdsByFmGuid = useCallback((fmGuidToFind: string) => {
@@ -1921,14 +2034,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                       setShowVisualizationPanel(visible);
                       // Auto-activate "Visa rum" when opening visualization panel
                       if (visible) {
-                        try {
-                          viewerInstanceRef.current?.assetViewer?.onShowSpacesChanged?.(true);
-                        } catch (e) {
-                          console.debug('Could not auto-activate spaces:', e);
-                        }
+                        handleShowSpacesChange(true);
                       }
                     }}
-                    onVisibleFloorsChange={(floorIds) => setVisibleFloorFmGuids(floorIds)}
+                    onVisibleFloorsChange={handleVisibleFloorsChange}
                     onAddAsset={handleOpenInventorySheet}
                     onPickCoordinate={handleTogglePickMode}
                     onShowProperties={() => setPropertiesDialogOpen(true)}
@@ -1939,6 +2048,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                     showNavCube={showNavCube}
                     showMinimap={showMinimap}
                     inline={true}
+                    showSpaces={showSpaces}
+                    onShowSpacesChange={handleShowSpacesChange}
                   />
                   {/* AnnotationToggleMenu removed - now in VisualizationToolbar flyout */}
                 </>

@@ -144,6 +144,57 @@ export function useSectionPlaneClipping(
     };
   }, [getXeokitViewer]);
 
+  // Calculate clip height from floor boundary (for 3D Solo mode)
+  // This finds the next floor's base height instead of using geometry max
+  const calculateClipHeightFromFloorBoundary = useCallback((floorId: string): number | null => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return null;
+
+    const metaObjects = viewer.metaScene.metaObjects;
+
+    // Collect all storeys with their bounds
+    const storeys: { id: string; name: string; minY: number; maxY: number }[] = [];
+
+    Object.values(metaObjects).forEach((metaObj: any) => {
+      if (metaObj.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+
+      // Calculate bounds for this storey
+      const bounds = calculateFloorBounds(metaObj.id);
+      if (bounds) {
+        storeys.push({
+          id: metaObj.id,
+          name: bounds.name,
+          minY: bounds.minY,
+          maxY: bounds.maxY,
+        });
+      }
+    });
+
+    if (storeys.length === 0) return null;
+
+    // Sort by minY (lowest first = lowest floor)
+    storeys.sort((a, b) => a.minY - b.minY);
+
+    // Find selected storey and next storey
+    const currentIndex = storeys.findIndex(s => s.id === floorId);
+    if (currentIndex === -1) {
+      console.debug('Floor not found in storeys list:', floorId);
+      return null;
+    }
+
+    if (currentIndex < storeys.length - 1) {
+      // Clip at next floor's base level
+      const nextFloor = storeys[currentIndex + 1];
+      console.log(`Clipping at next floor boundary: ${nextFloor.name} minY=${nextFloor.minY.toFixed(2)}`);
+      return nextFloor.minY;
+    } else {
+      // Top floor - clip at own maxY + small offset
+      const topFloor = storeys[currentIndex];
+      console.log(`Top floor - clipping at maxY + offset: ${(topFloor.maxY + 0.1).toFixed(2)}`);
+      return topFloor.maxY + 0.1;
+    }
+  }, [getXeokitViewer, calculateFloorBounds]);
+
   // Create or update horizontal section plane
   const applySectionPlane = useCallback((floorId: string, mode?: ClipMode) => {
     if (!enabled) return;
@@ -151,21 +202,34 @@ export function useSectionPlaneClipping(
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
 
-    const bounds = calculateFloorBounds(floorId);
-    if (!bounds) {
-      console.debug('Could not calculate bounds for floor clipping:', floorId);
-      return;
-    }
-
     const effectiveMode = mode || clipMode;
     const floorCutHeight = floorCutHeightRef.current;
     
-    // Calculate clip height based on mode
-    // 'ceiling': clips at ceiling level (hides objects above floor ceiling)
-    // 'floor': clips ~1.2m above floor (creates floor plan view)
-    const clipHeight = effectiveMode === 'floor' 
-      ? bounds.minY + floorCutHeight  // Floor plan: height above floor
-      : bounds.maxY + offset;          // Ceiling: at ceiling level + offset
+    let clipHeight: number;
+    let floorName = 'Unknown';
+    
+    if (effectiveMode === 'ceiling') {
+      // 3D Solo mode: clip at next floor's boundary
+      const boundaryHeight = calculateClipHeightFromFloorBoundary(floorId);
+      if (!boundaryHeight) {
+        console.debug('Could not calculate floor boundary for clipping:', floorId);
+        return;
+      }
+      clipHeight = boundaryHeight;
+      
+      // Get floor name for logging
+      const bounds = calculateFloorBounds(floorId);
+      floorName = bounds?.name || floorId;
+    } else {
+      // 2D floor plan mode: clip at floor level + height offset
+      const bounds = calculateFloorBounds(floorId);
+      if (!bounds) {
+        console.debug('Could not calculate bounds for floor clipping:', floorId);
+        return;
+      }
+      clipHeight = bounds.minY + floorCutHeight;
+      floorName = bounds.name;
+    }
     
     // Remove existing section plane
     if (sectionPlaneRef.current) {
@@ -190,8 +254,8 @@ export function useSectionPlaneClipping(
           active: true,
         });
         
-        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå';
-        console.log(`Section plane created at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${bounds.name}`);
+        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå (våningsgräns)';
+        console.log(`Section plane created at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${floorName}`);
         currentFloorIdRef.current = floorId;
         currentClipModeRef.current = effectiveMode;
         return;
@@ -212,8 +276,8 @@ export function useSectionPlaneClipping(
           active: true,
         });
         
-        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå';
-        console.log(`Section plane created (direct) at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${bounds.name}`);
+        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå (våningsgräns)';
+        console.log(`Section plane created (direct) at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${floorName}`);
         currentFloorIdRef.current = floorId;
         currentClipModeRef.current = effectiveMode;
       } else {
@@ -239,7 +303,7 @@ export function useSectionPlaneClipping(
     } catch (e) {
       console.debug('Failed to create section plane directly:', e);
     }
-  }, [enabled, offset, clipMode, getXeokitViewer, calculateFloorBounds, initializeSectionPlanesPlugin]);
+  }, [enabled, clipMode, getXeokitViewer, calculateFloorBounds, calculateClipHeightFromFloorBoundary, initializeSectionPlanesPlugin]);
 
   // Apply floor plan clipping (2D mode) - convenience function
   const applyFloorPlanClipping = useCallback((floorId: string, customHeight?: number) => {
