@@ -17,7 +17,7 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
   while (hasMore) {
     let query = supabase
       .from("assets")
-      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes")
+      .select("fm_guid, category, name, common_name, building_fm_guid, level_fm_guid, in_room_fm_guid, complex_common_name, attributes, is_local, created_in_model, asset_type, synced_at, annotation_placed, symbol_id")
       .range(offset, offset + pageSize - 1);
 
     if (categories && categories.length > 0) {
@@ -45,6 +45,12 @@ export async function fetchLocalAssets(categories?: string[]): Promise<any[]> {
         inRoomFmGuid: asset.in_room_fm_guid,
         complexCommonName: asset.complex_common_name,
         attributes: asset.attributes,
+        isLocal: asset.is_local,
+        createdInModel: asset.created_in_model,
+        assetType: asset.asset_type,
+        syncedAt: asset.synced_at,
+        annotationPlaced: asset.annotation_placed,
+        symbolId: asset.symbol_id,
       }));
       allAssets.push(...mapped);
       
@@ -119,6 +125,156 @@ export async function createAssetPlusObject(payload: CreateAssetPayload): Promis
  */
 export async function updateAssetPlus(_payload: any): Promise<any> {
   throw new Error("updateAssetPlus is not implemented yet");
+}
+
+/**
+ * Sync a local asset to Asset+ API.
+ * This pushes an asset that was created locally (is_local=true) to the external Asset+ system.
+ * 
+ * Requirements:
+ * - Asset must have in_room_fm_guid (parent space) - required by Asset+
+ * - Asset should have a name/designation
+ * 
+ * @returns Success status and any error message
+ */
+export async function syncAssetToAssetPlus(assetFmGuid: string): Promise<{ success: boolean; error?: string; asset?: any }> {
+  // 1. Fetch asset from local database
+  const { data: asset, error: fetchError } = await supabase
+    .from("assets")
+    .select("*")
+    .eq("fm_guid", assetFmGuid)
+    .maybeSingle();
+
+  if (fetchError || !asset) {
+    return { 
+      success: false, 
+      error: fetchError?.message || `Asset ${assetFmGuid} not found` 
+    };
+  }
+
+  // 2. Validate - must have parent space
+  if (!asset.in_room_fm_guid) {
+    return {
+      success: false,
+      error: "Asset måste vara kopplad till ett rum (in_room_fm_guid) för att synkas till Asset+"
+    };
+  }
+
+  // 3. Build properties array for Asset+ (only non-Lovable-specific fields)
+  const properties: AssetProperty[] = [];
+  
+  // Add asset_type as a property
+  if (asset.asset_type) {
+    properties.push({
+      name: "AssetCategory",
+      value: asset.asset_type,
+      dataType: 0, // String
+    });
+  }
+
+  // Add inventory date
+  properties.push({
+    name: "InventoryDate",
+    value: new Date().toISOString(),
+    dataType: 4, // DateTime
+  });
+
+  // Add description from attributes if present
+  const attrs = (asset.attributes as Record<string, any>) || {};
+  if (attrs.description) {
+    properties.push({
+      name: "Description",
+      value: String(attrs.description),
+      dataType: 0, // String
+    });
+  }
+
+  // 4. Call edge function to create in Asset+
+  const payload: CreateAssetPayload = {
+    parentSpaceFmGuid: asset.in_room_fm_guid,
+    designation: asset.name || "Okänd",
+    commonName: asset.common_name || undefined,
+    properties: properties.length > 0 ? properties : undefined,
+  };
+
+  // Include existing fmGuid so Asset+ uses the same ID
+  const requestBody = {
+    ...payload,
+    fmGuid: asset.fm_guid,
+    // Include coordinates for local storage update
+    coordinates: asset.coordinate_x != null ? {
+      x: asset.coordinate_x,
+      y: asset.coordinate_y,
+      z: asset.coordinate_z,
+    } : undefined,
+  };
+
+  const { data, error } = await supabase.functions.invoke("asset-plus-create", {
+    body: requestBody,
+  });
+
+  if (error) {
+    return {
+      success: false,
+      error: error.message || "Failed to sync to Asset+",
+    };
+  }
+
+  if (!data?.success) {
+    return {
+      success: false,
+      error: data?.error || "Unknown error syncing to Asset+",
+    };
+  }
+
+  // 5. Update local database to mark as synced
+  const { error: updateError } = await supabase
+    .from("assets")
+    .update({
+      is_local: false,
+      synced_at: new Date().toISOString(),
+    })
+    .eq("fm_guid", assetFmGuid);
+
+  if (updateError) {
+    console.warn("Failed to update local sync status:", updateError);
+    // Don't fail - the sync to Asset+ succeeded
+  }
+
+  return {
+    success: true,
+    asset: data.asset,
+  };
+}
+
+/**
+ * Batch sync multiple local assets to Asset+.
+ * @returns Summary of results
+ */
+export async function batchSyncAssetsToAssetPlus(assetFmGuids: string[]): Promise<{
+  total: number;
+  synced: number;
+  failed: number;
+  errors: Array<{ fmGuid: string; error: string }>;
+}> {
+  const results = {
+    total: assetFmGuids.length,
+    synced: 0,
+    failed: 0,
+    errors: [] as Array<{ fmGuid: string; error: string }>,
+  };
+
+  for (const fmGuid of assetFmGuids) {
+    const result = await syncAssetToAssetPlus(fmGuid);
+    if (result.success) {
+      results.synced++;
+    } else {
+      results.failed++;
+      results.errors.push({ fmGuid, error: result.error || "Unknown error" });
+    }
+  }
+
+  return results;
 }
 
 /**

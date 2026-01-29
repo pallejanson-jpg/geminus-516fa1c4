@@ -19,6 +19,8 @@ import {
   Filter,
   AlertCircle,
   Loader2,
+  RefreshCw,
+  CloudUpload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,7 +56,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
-import { syncBuildingAssetsIfNeeded } from '@/services/asset-plus-service';
+import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus } from '@/services/asset-plus-service';
 import {
   DndContext,
   closestCenter,
@@ -107,6 +109,7 @@ const SYSTEM_COLUMNS: ColumnDef[] = [
 const STATUS_COLUMNS: ColumnDef[] = [
   { key: 'createdInModel', label: 'I modell', category: 'status' },
   { key: 'annotationPlaced', label: 'Annotation', category: 'status' },
+  { key: 'isLocal', label: 'Synkad', category: 'status' },
 ];
 
 // Default visible columns
@@ -249,7 +252,7 @@ const ColumnSelectorTree: React.FC<{
   );
 };
 
-type FilterMode = 'all' | 'orphans' | 'no-annotation';
+type FilterMode = 'all' | 'orphans' | 'no-annotation' | 'unsynced';
 
 const AssetsView: React.FC<AssetsViewProps> = ({
   facility,
@@ -268,6 +271,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [isSyncingAssets, setIsSyncingAssets] = useState(false);
+  const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
+  const [isBatchSyncing, setIsBatchSyncing] = useState(false);
 
   // Check if we need to sync assets on mount (if zero assets for this building)
   useEffect(() => {
@@ -329,6 +334,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         createdInModel: asset.created_in_model ?? attrs.createdInModel ?? true,
         annotationPlaced: asset.annotation_placed ?? false,
         buildingFmGuid: asset.building_fm_guid || attrs.buildingFmGuid,
+        isLocal: asset.is_local ?? false,
         raw: asset,
       };
     });
@@ -352,6 +358,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       result = result.filter((a) => !a.createdInModel);
     } else if (filterMode === 'no-annotation') {
       result = result.filter((a) => !a.annotationPlaced);
+    } else if (filterMode === 'unsynced') {
+      result = result.filter((a) => a.isLocal === true);
     }
 
     // Sort
@@ -429,6 +437,79 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     }
   };
 
+  // Handle syncing a single asset to Asset+
+  const handleSyncToAssetPlus = useCallback(async (asset: AssetData) => {
+    if (!asset.roomFmGuid) {
+      toast({
+        title: 'Kan inte synka',
+        description: 'Asset måste vara kopplad till ett rum för att synkas till Asset+',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSyncingAssetIds((prev) => new Set(prev).add(asset.fmGuid));
+    try {
+      const result = await syncAssetToAssetPlus(asset.fmGuid);
+      if (result.success) {
+        toast({
+          title: 'Synkad!',
+          description: `${asset.designation} har synkats till Asset+`,
+        });
+      } else {
+        toast({
+          title: 'Kunde inte synka',
+          description: result.error || 'Okänt fel',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Synkfel',
+        description: error.message || 'Kunde inte synka asset',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingAssetIds((prev) => {
+        const next = new Set(prev);
+        next.delete(asset.fmGuid);
+        return next;
+      });
+    }
+  }, [toast]);
+
+  // Handle batch sync of all unsynced assets
+  const handleBatchSync = useCallback(async () => {
+    const unsyncedAssets = assetData.filter((a) => a.isLocal && a.roomFmGuid);
+    if (unsyncedAssets.length === 0) {
+      toast({
+        title: 'Inga att synka',
+        description: 'Alla assets är redan synkade eller saknar rum-koppling',
+      });
+      return;
+    }
+
+    setIsBatchSyncing(true);
+    try {
+      const fmGuids = unsyncedAssets.map((a) => a.fmGuid);
+      const result = await batchSyncAssetsToAssetPlus(fmGuids);
+      
+      toast({
+        title: 'Batch-synk klar',
+        description: `Synkade ${result.synced} av ${result.total}. ${result.failed} misslyckades.`,
+        variant: result.failed > 0 ? 'destructive' : 'default',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Batch-synk misslyckades',
+        description: error.message || 'Kunde inte synka assets',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBatchSyncing(false);
+    }
+  }, [assetData, toast]);
+
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
     const ordered = columnOrder.filter((key) => visibleColumns.includes(key));
@@ -448,11 +529,21 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       );
     }
 
+    // isLocal: false means synced (good), true means not synced (needs action)
+    if (colKey === 'isLocal') {
+      return value ? (
+        <Badge variant="secondary" className="bg-amber-500/20 text-amber-600">Ej synkad</Badge>
+      ) : (
+        <Badge variant="default" className="bg-green-600">Synkad</Badge>
+      );
+    }
+
     return String(value);
   };
 
   const orphanCount = assetData.filter((a) => !a.createdInModel).length;
   const noAnnotationCount = assetData.filter((a) => !a.annotationPlaced).length;
+  const unsyncedCount = assetData.filter((a) => a.isLocal === true).length;
 
   const title =
     facility.category === 'Building'
@@ -516,7 +607,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                 ? 'Alla'
                 : filterMode === 'orphans'
                   ? 'Ej i modell'
-                  : 'Utan annotation'}
+                  : filterMode === 'unsynced'
+                    ? 'Ej synkade'
+                    : 'Utan annotation'}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -534,8 +627,30 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               <Check className={`h-4 w-4 mr-2 ${filterMode === 'no-annotation' ? 'opacity-100' : 'opacity-0'}`} />
               Utan annotation ({noAnnotationCount})
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFilterMode('unsynced')}>
+              <Check className={`h-4 w-4 mr-2 ${filterMode === 'unsynced' ? 'opacity-100' : 'opacity-0'}`} />
+              Ej synkade ({unsyncedCount})
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Batch sync button */}
+        {unsyncedCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handleBatchSync}
+            disabled={isBatchSyncing}
+          >
+            {isBatchSyncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CloudUpload className="h-4 w-4" />
+            )}
+            Synka alla ({unsyncedCount})
+          </Button>
+        )}
 
         {/* View mode toggles */}
         <div className="flex items-center gap-1 border rounded-lg p-1">
@@ -637,6 +752,22 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               title="Placera annotation"
                             >
                               <MapPin size={14} />
+                            </Button>
+                          )}
+                          {asset.isLocal && asset.roomFmGuid && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-blue-500 hover:text-blue-600"
+                              onClick={() => handleSyncToAssetPlus(asset)}
+                              disabled={syncingAssetIds.has(asset.fmGuid)}
+                              title="Synka till Asset+"
+                            >
+                              {syncingAssetIds.has(asset.fmGuid) ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <RefreshCw size={14} />
+                              )}
                             </Button>
                           )}
                         </div>
