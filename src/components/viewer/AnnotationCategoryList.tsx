@@ -34,12 +34,12 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     const fetchCategories = async () => {
       if (!buildingFmGuid) return;
 
-      // Get assets with placed annotations for this building
+      // Get assets with placed annotations OR alarm types for this building
       const { data: assets } = await supabase
         .from('assets')
         .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
-        .eq('annotation_placed', true);
+        .or('annotation_placed.eq.true,asset_type.eq.IfcAlarm');
 
       // Get all symbols for Swedish names and colors
       const { data: symbols } = await supabase
