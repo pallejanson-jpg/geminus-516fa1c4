@@ -1,284 +1,281 @@
 
-# Plan: Visa inventerade assets i Navigator/Portfolio och synka till Asset+
+# Plan: Fixa klippning, visningsfel och inventerings-UX i 3D-viewern
 
-## Sammanfattning
+## Sammanfattning av identifierade problem
 
-Detta projekt kräver två huvudändringar:
-1. **Inkludera inventerade assets** (`is_local=true`, `created_in_model=false`) i Navigator-trädet och Portfolio AssetsView
-2. **Implementera synkronisering till Asset+** API för att skriva lokalt skapade assets till det centrala systemet
+### 1. Våningsplansklippning fungerar inte korrekt i 3D
+**Problem:** När man väljer ett våningsplan i 3D syns objekt från andra våningsplan som sticker upp (t.ex. väggar).
+**Orsak:** Klippning (SectionPlane) aktiveras inte automatiskt i 3D "Solo"-läge. Saxikonen (Scissors) som aktiverar klippningen har försvunnit från Visningsmenyn.
 
----
+### 2. IfcCovering-objekt (gröna) syns felaktigt
+**Problem:** Gröna objekt av typen "Covering" visas i 3D även om de borde klippas bort.
+**Lösning:** Dölj IfcCovering-objekt automatiskt i 3D Solo-läge, alternativt löses det av korrekt klippning.
 
-## Del 1: Visa inventerade assets i Navigator och Portfolio
+### 3. 2D-klipphöjdsslider fungerar inte
+**Problem:** Slidern för klipphöjd i 2D-läge visas, men ingenting händer när man ändrar värdet.
+**Orsak:** `CLIP_HEIGHT_CHANGED_EVENT` skickas men tas inte emot korrekt av ViewerToolbar, eller section plane uppdateras inte.
 
-### 1.1 Problem
+### 4. Inventeringssidans egenskapsfönster är för brett
+**Problem:** Formuläret (ResizablePanel) har för stor standardbredd.
+**Lösning:** Minska `defaultSize` från 80% till ~40% när ingen viewer-panel är öppen.
 
-Lokalt inventerade assets (5 st i databasen) visas **inte** i Navigator-trädet eller AssetsView eftersom:
+### 5. 360°-positionsknappen saknas
+**Problem:** Knappen "Öppna 360+" visas inte i inventeringsformuläret.
+**Orsak:** `buildingSettings?.ivion_site_id` är null/undefined, så hela 360+-sektionen renderas inte.
 
-- `fetchLocalAssets()` filtrerar på `category: ['Building', 'Building Storey', 'Space']` - exkluderar `Instance`
-- Navigator-trädet bygger endast upp Building → Storey → Space-hierarkin
-- AssetsView hämtar assets separat för en specifik byggnad
+### 6. "Skapa tillgång i 3D" - dialog-UX
+**Problem:** Dialogen har solid bakgrund, är inte draggbar, och detekterar inte automatiskt byggnad/våning/rum.
+**Lösning:** 
+- Gör AssetPropertiesDialog transparent och draggbar
+- Detektera rum från kamerans position eller senaste pick
+- Implementera två-stegs bekräftelse för positionspicking (peka → bekräfta)
 
-### 1.2 Lösning för Navigator
-
-**Ändra AppContext.tsx:**
-
-1. Lägg till `Instance` i kategorifiltret för `fetchLocalAssets()`
-2. Uppdatera `buildNavigatorTree()` för att hantera Instance-objekt som barn till Spaces
-
-```text
-Building
-├── Building Storey
-│   ├── Space (Rum)
-│   │   ├── Instance (Synkad asset från Asset+)
-│   │   ├── Instance (Lokal inventerad asset) [med "Ej i modell"-ikon]
-│   │   └── Instance (Lokal inventerad asset)
-│   └── Space
-```
-
-**Uppdatera TreeNode.tsx:**
-- Visa redan "Ej i modell"-ikon (AlertCircle) för `createdInModel === false`
-- Lägg till actions för Instance-noder (3D-vy, Edit, Sync-status)
-
-### 1.3 Lösning för Portfolio AssetsView
-
-AssetsView hämtar redan alla assets för en byggnad via direkt databasquery:
-
-```typescript
-// Nuvarande - från props.assets som kommer från FacilityLandingPage
-const { data } = await supabase
-  .from('assets')
-  .select('*')
-  .eq('building_fm_guid', buildingFmGuid)
-  .eq('category', 'Instance');
-```
-
-**Verifiera:** Kontrollera att AssetsView faktiskt inkluderar `is_local=true` assets (bör redan göra det).
-
-**Lägg till kolumn/filter:**
-- Ny kolumn: "Synkad" (visar om asset är synkad till Asset+)
-- Filter: "Ej synkade" för att se lokala assets som väntar på synk
-
----
-
-## Del 2: Synka till Asset+ API
-
-### 2.1 Asset+ API-krav
-
-Baserat på befintlig kod i `asset-plus-create/index.ts`:
-
-**Obligatoriska fält för ObjectType 4 (Instance):**
-
-| Fält | Beskrivning | Källa i Lovable |
-|------|-------------|-----------------|
-| `objectType` | `4` (Instance) | Hårdkodat |
-| `designation` | Primärt namn/nummer | `assets.name` |
-| `inRoomFmGuid` | Länk till förälder-Space | `assets.in_room_fm_guid` |
-
-**Valfria fält:**
-
-| Fält | Datatyp | Källa i Lovable |
-|------|---------|-----------------|
-| `fmGuid` | UUID (128-bit) | `assets.fm_guid` |
-| `commonName` | String | `assets.common_name` |
-| `properties` | Array | Se nedan |
-
-**Properties-array (användardefinierade egenskaper):**
-
-```typescript
-properties: [
-  { name: "Description", value: "...", dataType: 0 }, // String
-  { name: "InventoryDate", value: "2026-01-28T12:00:00Z", dataType: 4 }, // DateTime
-  { name: "AssetCategory", value: "fire_extinguisher", dataType: 0 }, // String
-]
-```
-
-**DataType-enum:**
-- 0 = String
-- 1 = Int32
-- 2 = Int64
-- 3 = Decimal
-- 4 = DateTime
-- 5 = Bool
-
-### 2.2 Egenskaper som INTE synkas till Asset+
-
-Dessa Lovable-specifika fält finns endast lokalt:
-
-| Lovable-fält | Anledning |
-|--------------|-----------|
-| `symbol_id` | Lokal annotation-styling |
-| `annotation_placed` | Lokal 3D-markör-status |
-| `coordinate_x/y/z` | Lovable-specifik 3D-position |
-| `ivion_poi_id` | Ivion-integration |
-| `is_local` | Synk-tracking |
-| `created_in_model` | Lokal status |
-
-### 2.3 Synk-flöde
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Synk-process                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. Användare klickar "Synka till Asset+"                   │
-│     └─> Ikon på asset-rad i AssetsView                      │
-│     └─> Eller "Synka alla osykade" knapp                    │
-│                                                             │
-│  2. Frontend anropar edge function                          │
-│     └─> supabase.functions.invoke('asset-plus-create')      │
-│                                                             │
-│  3. Edge function:                                          │
-│     a) Hämtar Keycloak access token                         │
-│     b) Bygger BimObject payload                             │
-│     c) POST till Asset+ /AddObject                          │
-│     d) Vid success: uppdaterar lokal databas                │
-│        └─> is_local = false                                 │
-│        └─> synced_at = now()                                │
-│                                                             │
-│  4. UI uppdateras                                           │
-│     └─> "Ej synkad" badge försvinner                        │
-│     └─> Asset visas som synkad                              │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2.4 Validering före synk
-
-Asset+ kräver `inRoomFmGuid` - assets utan koppling till ett rum kan inte synkas:
-
-```typescript
-// Validera innan synk
-if (!asset.in_room_fm_guid) {
-  throw new Error('Asset måste vara kopplad till ett rum för att synkas till Asset+');
-}
-```
+### 7. Annotation visas inte direkt vid positionsval
+**Problem:** När man pekar ut en position visas ingen visuell markör.
+**Lösning:** Skapa en temporär annotation direkt vid klick.
 
 ---
 
 ## Tekniska ändringar
 
-### Fil 1: `src/context/AppContext.tsx`
+### Del 1: Fixa 3D våningsplansklippning med saxikon
 
-**Ändring:** Inkludera `Instance` i kategorifilter och bygg ut trädet
+**Fil: `src/components/viewer/FloorVisibilitySelector.tsx`**
+
+1. Lägg till state och logik för `clippingEnabled` som redan finns men inte används korrekt
+2. Se till att `updateClipping()` anropas med rätt parametrar i Solo-läge
+3. Lägg till Sax-ikon toggle i headern som aktiverar/avaktiverar klippning
 
 ```typescript
-// Rad 441-445: Lägg till 'Instance' i filter
-const allObjects = await fetchLocalAssets([
-  'Building',
-  'Building Storey',
-  'Space',
-  'Instance', // <-- NYTT
-]);
-
-// Uppdatera buildNavigatorTree() för att hantera Instance
-// (ny sektion efter space-hantering)
+// I handleShowOnlyFloor - aktivera klippning automatiskt
+const handleShowOnlyFloor = useCallback((floorId: string) => {
+  // ... existing code ...
+  
+  // Aktivera klippning automatiskt i Solo-läge
+  if (enableClipping) {
+    setClippingEnabled(true);
+    applyCeilingClipping(floorId); // Klipp vid taknivå
+  }
+}, [...]);
 ```
 
-### Fil 2: `src/services/asset-plus-service.ts`
+**Fil: `src/components/viewer/VisualizationToolbar.tsx`**
 
-**Lägg till:** `fetchLocalAssets()` ska inkludera fler kolumner
-
+Lägg till Sax-toggle i Våningsplan-sektionen:
 ```typescript
-// Lägg till: is_local, created_in_model, asset_type, synced_at
-.select("fm_guid, category, name, common_name, ..., is_local, created_in_model, asset_type, synced_at")
+// Efter "Våningsplan"-raden, lägg till klippnings-toggle
+<div className="flex items-center justify-between py-1.5">
+  <div className="flex items-center gap-2">
+    <Scissors className="h-3.5 w-3.5" />
+    <span className="text-xs">Klipp vid tak</span>
+  </div>
+  <Switch checked={clippingEnabled} onCheckedChange={setClippingEnabled} />
+</div>
 ```
 
-**Lägg till:** Ny funktion för att synka enskild asset
+### Del 2: Dölj IfcCovering automatiskt i Solo-läge
 
+**Fil: `src/components/viewer/FloorVisibilitySelector.tsx`**
+
+I `applyFloorVisibility()` - lägg till logik för att dölja Covering:
 ```typescript
-export async function syncAssetToAssetPlus(assetFmGuid: string): Promise<{success: boolean; error?: string}> {
-  // 1. Hämta asset från lokal DB
-  // 2. Validera (måste ha in_room_fm_guid)
-  // 3. Anropa asset-plus-create edge function
-  // 4. Uppdatera lokal status vid success
-}
+// Efter att ha satt synlighet, dölj IfcCovering om solo-läge
+const metaObjects = viewer.metaScene?.metaObjects || {};
+Object.values(metaObjects).forEach((metaObj: any) => {
+  if (metaObj.type?.toLowerCase() === 'ifccovering') {
+    const entity = scene.objects?.[metaObj.id];
+    if (entity) entity.visible = false;
+  }
+});
 ```
 
-### Fil 3: `src/components/navigator/TreeNode.tsx`
+### Del 3: Fixa 2D-klipphöjdsslider
 
-**Lägg till:** Actions för Instance-noder
+**Fil: `src/hooks/useSectionPlaneClipping.ts`**
 
+Problemet är att `updateFloorCutHeight` inte triggar om-rendering korrekt. Fixa:
 ```typescript
-// canSyncToAssetPlus = Instance && is_local && has in_room_fm_guid
-// Visa sync-ikon för osykade assets
+const updateFloorCutHeight = useCallback((newHeight: number) => {
+  floorCutHeightRef.current = newHeight;
+  
+  const viewer = getXeokitViewer();
+  if (!viewer?.scene) return;
+  
+  // Förstör befintligt section plane och skapa nytt
+  if (sectionPlaneRef.current) {
+    sectionPlaneRef.current.destroy?.();
+    sectionPlaneRef.current = null;
+  }
+  
+  // Tillämpa ny klippning
+  if (currentFloorIdRef.current) {
+    applySectionPlane(currentFloorIdRef.current, 'floor');
+  } else {
+    const sceneAABB = viewer.scene?.getAABB?.();
+    if (sceneAABB) {
+      applyGlobalFloorPlanClipping(sceneAABB[1]);
+    }
+  }
+}, [applySectionPlane, getXeokitViewer, applyGlobalFloorPlanClipping]);
 ```
 
-### Fil 4: `src/components/portfolio/AssetsView.tsx`
+### Del 4: Minska formulärbredd på Inventory-sidan
 
-**Lägg till:**
-- Ny kolumn: `syncStatus` (Synkad / Ej synkad)
-- Ny åtgärd: "Synka till Asset+" knapp
-- Batch-synk knapp i toolbar
+**Fil: `src/pages/Inventory.tsx`**
 
-### Fil 5: `supabase/functions/asset-plus-create/index.ts`
+Ändra `defaultSize` för mittenkolumnen:
+```typescript
+// Från:
+<ResizablePanel defaultSize={showViewerPanel ? 30 : 80} minSize={25} maxSize={showViewerPanel ? 40 : 85}>
 
-**Uppdatera:** Hantera synk av befintliga lokala assets (inte bara nya)
+// Till:
+<ResizablePanel defaultSize={showViewerPanel ? 30 : 40} minSize={25} maxSize={showViewerPanel ? 45 : 50}>
+```
+
+### Del 5: Visa 360°-knappen även utan Ivion Site ID
+
+**Fil: `src/components/inventory/InventoryForm.tsx`**
+
+Knappen är redan där men villkoret döljer den. Visa alltid men med disabled-state:
+```typescript
+// Ändra rad 611 från:
+{buildingSettings?.ivion_site_id && (
+
+// Till:
+<div className="border border-border rounded-lg p-3 space-y-3">
+  {/* Visa alltid 360+ section */}
+  {buildingSettings?.ivion_site_id ? (
+    // Existerande kod...
+  ) : (
+    <div className="text-xs text-muted-foreground flex items-center gap-2">
+      <Eye className="h-4 w-4" />
+      <span>360+ kräver Ivion Site ID i byggnadsinställningar</span>
+    </div>
+  )}
+</div>
+```
+
+### Del 6: Transparent, draggbar dialog för "Skapa tillgång i 3D"
+
+**Fil: `src/components/viewer/AssetPropertiesDialog.tsx`**
+
+1. Lägg till draggbar funktionalitet
+2. Gör bakgrunden transparent
+3. Detektera byggnad/våning/rum från viewerns aktuella kontext
 
 ```typescript
-// Lägg till stöd för att hämta asset från DB om endast fmGuid skickas
-// Bygg payload från DB-data istället för request body
+// Lägg till samma drag-logik som i VisualizationToolbar
+const [position, setPosition] = useState({ x: 100, y: 100 });
+const [isDragging, setIsDragging] = useState(false);
+
+// CSS-klass:
+"bg-card/70 backdrop-blur-lg"
+
+// Detektera rum från senaste pick eller kamerans position
+useEffect(() => {
+  if (createMode && !parentSpaceFmGuid) {
+    // Försök detektera rum från viewerRef
+    const camera = viewerRef?.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer?.camera;
+    // ... logik för att hitta närmaste rum
+  }
+}, [createMode]);
+```
+
+### Del 7: Visa annotation direkt vid positionsval
+
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
+
+I `handlePick()` - skapa temporär annotation direkt:
+```typescript
+const handlePick = (pickResult: any) => {
+  if (pickResult?.worldPos) {
+    const [x, y, z] = pickResult.worldPos;
+    
+    // Skapa temporär visuell markör direkt
+    const tempMarker = document.createElement('div');
+    tempMarker.className = 'temp-pick-marker';
+    tempMarker.innerHTML = '📍';
+    tempMarker.style.cssText = `
+      position: absolute;
+      font-size: 24px;
+      transform: translate(-50%, -100%);
+      pointer-events: none;
+      z-index: 1000;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    `;
+    
+    // Projicera world-koordinater till screen
+    const canvas = xeokitViewer.scene.canvas.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const canvasPos = xeokitViewer.scene.camera.projectWorldPos([x, y, z]);
+    
+    tempMarker.style.left = `${rect.left + canvasPos[0]}px`;
+    tempMarker.style.top = `${rect.top + canvasPos[1]}px`;
+    document.body.appendChild(tempMarker);
+    
+    // Ta bort efter 3 sekunder eller vid nästa pick
+    setTimeout(() => tempMarker.remove(), 3000);
+    
+    // ... befintlig kod ...
+  }
+};
+```
+
+### Del 8: Två-stegs bekräftelse för positionspicking
+
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
+
+Lägg till en "Bekräfta position"-knapp istället för direkt dialog-öppning:
+```typescript
+// Ny state
+const [pendingPickCoords, setPendingPickCoords] = useState<{x:number,y:number,z:number}|null>(null);
+
+// I handlePick - spara koordinater men öppna inte dialog direkt
+setPendingPickCoords(coords);
+
+// Visa "Bekräfta/Välj om"-knappar overlay
+{pendingPickCoords && (
+  <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 bg-card/90 backdrop-blur-sm p-3 rounded-lg shadow-lg flex gap-2">
+    <Button variant="outline" onClick={() => {
+      setPendingPickCoords(null);
+      setupPickModeListenerInternal();
+    }}>
+      Välj om
+    </Button>
+    <Button onClick={() => {
+      setPickedCoordinates(pendingPickCoords);
+      setAddAssetDialogOpen(true);
+      setPendingPickCoords(null);
+    }}>
+      Bekräfta position
+    </Button>
+  </div>
+)}
 ```
 
 ---
 
-## Mappning: Lovable → Asset+
+## Filändringar sammanfattning
 
-```text
-┌────────────────────────────────────────────────────────────────┐
-│  Lovable (assets tabell)    →    Asset+ (AddObject)           │
-├────────────────────────────────────────────────────────────────┤
-│  fm_guid                    →    fmGuid                       │
-│  name                       →    designation                  │
-│  common_name                →    commonName                   │
-│  in_room_fm_guid            →    inRoomFmGuid (OBLIGATORISK)  │
-│  (hårdkodat: 4)             →    objectType                   │
-│                                                               │
-│  attributes.description     →    properties[{name:"Description", │
-│                                    value:..., dataType:0}]    │
-│  attributes.inventoryDate   →    properties[{name:"InventoryDate",│
-│                                    value:..., dataType:4}]    │
-│  asset_type                 →    properties[{name:"AssetCategory",│
-│                                    value:..., dataType:0}]    │
-│                                                               │
-│  --- EJ SYNKADE (Lovable-specifika) ---                       │
-│  symbol_id                  →    (endast lokal)               │
-│  annotation_placed          →    (endast lokal)               │
-│  coordinate_x/y/z           →    (endast lokal)               │
-│  is_local                   →    (synk-tracking)              │
-│  created_in_model           →    (endast lokal)               │
-└────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## UI-ändringar
-
-### Navigator-träd (efter implementation)
-
-```text
-🏢 Kungsgatan 12
-  ├─ 📐 Plan 1
-  │    ├─ 🚪 Entré
-  │    │    ├─ 🔧 Sensor-001 (synkad)
-  │    │    └─ 🧯 Brandsläckare-A ⚠️ [Ej synkad]
-  │    └─ 🚪 Kontor A
-  └─ 📐 Plan 2
-```
-
-### AssetsView med synk-status
-
-| Beteckning | Namn | I modell | Synkad | Åtgärder |
-|------------|------|----------|--------|----------|
-| BS-001 | Brandsläckare | Nej ⚠️ | Nej 🔄 | [3D] [Synka] |
-| Sensor-1 | Temperatursensor | Ja ✓ | Ja ✓ | [3D] |
+| Fil | Ändringar |
+|-----|-----------|
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Aktivera klippning automatiskt i Solo-läge, dölj IfcCovering |
+| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till Sax-toggle för klippning |
+| `src/hooks/useSectionPlaneClipping.ts` | Fixa `updateFloorCutHeight` för att faktiskt uppdatera klippningen |
+| `src/pages/Inventory.tsx` | Minska formulärets standardbredd |
+| `src/components/inventory/InventoryForm.tsx` | Visa 360+-sektion alltid, med disabled-state om ej konfigurerat |
+| `src/components/viewer/AssetPropertiesDialog.tsx` | Gör transparent och draggbar |
+| `src/components/viewer/AssetPlusViewer.tsx` | Visa temp-markör, två-stegs bekräftelse, rum-detektering |
 
 ---
 
 ## Förväntade resultat
 
-1. **Navigator visar alla assets** - inkl. lokalt skapade under respektive rum
-2. **AssetsView visar synk-status** - tydligt vilka som väntar på synk
-3. **Synka till Asset+** - knapp för att pusha lokala assets till centralt system
-4. **Batch-synk** - möjlighet att synka alla osykade assets samtidigt
-5. **Validering** - assets utan rum-koppling kan inte synkas (tydligt felmeddelande)
+1. **Våningsplan klipps korrekt** - Väggar/objekt från andra våningar döljs i Solo-läge
+2. **IfcCovering döljs** - Gröna objekt försvinner vid våningsfiltrering
+3. **2D-slider fungerar** - Klipphöjden uppdateras i realtid
+4. **Smalare formulär** - Egenskapsfönstret tar ~40% istället för 80%
+5. **360°-knapp synlig** - Alltid synlig med förklarande text om ej konfigurerad
+6. **Transparent draggbar dialog** - Flyter över 3D-vyn
+7. **Direkt visuell feedback** - Markör visas vid klick
+8. **Två-stegs bekräftelse** - Användaren kan välja om position
