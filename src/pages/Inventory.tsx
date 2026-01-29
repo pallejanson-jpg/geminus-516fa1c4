@@ -10,6 +10,7 @@ import InventoryForm from '@/components/inventory/InventoryForm';
 import InventoryList from '@/components/inventory/InventoryList';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import Inline3dPositionPicker from '@/components/inventory/Inline3dPositionPicker';
+import MobileInventoryWizard from '@/components/inventory/mobile/MobileInventoryWizard';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
 
@@ -219,63 +220,8 @@ const Inventory: React.FC = () => {
     );
   }
 
-  // Mobile layout: Button + sheet
-  return (
-    <div className="h-full flex flex-col p-4 space-y-4 bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <ClipboardList className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
-        </div>
-        <Badge variant="secondary" className="text-sm">
-          {savedItems.length} sparade
-        </Badge>
-      </div>
-
-      {/* Large "New Asset" button */}
-      <Button
-        size="lg"
-        className="w-full h-16 text-lg gap-3"
-        onClick={() => {
-          setEditItem(null);
-          setIsFormOpen(true);
-        }}
-      >
-        <Plus className="h-6 w-6" />
-        Ny tillgång
-      </Button>
-
-      {/* Recently registered list */}
-      <InventoryList 
-        items={savedItems} 
-        isLoading={isLoading} 
-        onEdit={handleEdit}
-        selectedFmGuid={editItem?.fm_guid}
-      />
-
-      {/* Form as sheet/drawer on mobile */}
-      <Sheet open={isFormOpen} onOpenChange={(open) => { if (!open) handleCloseForm(); else setIsFormOpen(true); }}>
-        <SheetContent 
-          side="bottom" 
-          className="h-[90vh] rounded-t-2xl overflow-y-auto"
-        >
-          <SheetHeader className="mb-4">
-            <SheetTitle className="text-xl">
-              {editItem ? 'Redigera tillgång' : 'Registrera tillgång'}
-            </SheetTitle>
-          </SheetHeader>
-          <InventoryForm
-            onSaved={handleSaved}
-            onCancel={handleCloseForm}
-            prefill={inventoryPrefill || undefined}
-            editItem={editItem}
-            onClearEdit={handleClearEdit}
-          />
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
+  // Mobile layout: Full-screen wizard
+  return <MobileInventoryWizard onItemSaved={loadRecentItems} />;
 };
 
 export default Inventory;
