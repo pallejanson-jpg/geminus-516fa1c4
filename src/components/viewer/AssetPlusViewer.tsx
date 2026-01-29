@@ -111,6 +111,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [pendingPickCoords, setPendingPickCoords] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [tempMarkerElement, setTempMarkerElement] = useState<HTMLDivElement | null>(null);
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
@@ -764,7 +766,56 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         const [x, y, z] = pickResult.worldPos;
         console.log('Picked coordinates:', { x, y, z });
         
-        // Store coordinates
+        // Store as PENDING coordinates (not final yet)
+        const coords = { x, y, z };
+        setPendingPickCoords(coords);
+        
+        // Create temporary visual marker immediately
+        const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+        if (xeokitViewer?.scene?.canvas?.canvas) {
+          // Remove existing temp marker if any
+          if (tempMarkerElement) {
+            tempMarkerElement.remove();
+          }
+          
+          // Project world coords to screen
+          const canvas = xeokitViewer.scene.canvas.canvas;
+          const rect = canvas.getBoundingClientRect();
+          const canvasPos = xeokitViewer.camera?.projectWorldPos?.([x, y, z]);
+          
+          if (canvasPos) {
+            const marker = document.createElement('div');
+            marker.className = 'temp-pick-marker';
+            marker.innerHTML = '📍';
+            marker.style.cssText = `
+              position: fixed;
+              font-size: 32px;
+              transform: translate(-50%, -100%);
+              pointer-events: none;
+              z-index: 1000;
+              filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+              animation: bounce 0.5s ease-out;
+            `;
+            marker.style.left = `${rect.left + canvasPos[0]}px`;
+            marker.style.top = `${rect.top + canvasPos[1]}px`;
+            document.body.appendChild(marker);
+            setTempMarkerElement(marker);
+          }
+        }
+        
+        // Don't proceed to dialog yet - wait for user confirmation
+        toast.success(`Position markerad: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`, {
+          description: 'Bekräfta eller välj ny position',
+          duration: 4000,
+        });
+        return; // Stop here - user needs to confirm
+      }
+    };
+    
+    // Original handlePick logic is now in handleConfirmPosition
+    const handlePickLegacy = (pickResult: any) => {
+      if (pickResult?.worldPos) {
+        const [x, y, z] = pickResult.worldPos;
         const coords = { x, y, z };
         setPickedCoordinates(coords);
         
@@ -938,11 +989,95 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     return true;
   }, [allData, assetData, fmGuid, onCoordinatePicked]);
 
+  // Handle confirming the pending position
+  const handleConfirmPosition = useCallback(() => {
+    if (!pendingPickCoords) return;
+    
+    // Remove temp marker
+    if (tempMarkerElement) {
+      tempMarkerElement.remove();
+      setTempMarkerElement(null);
+    }
+    
+    // Set as final coordinates
+    setPickedCoordinates(pendingPickCoords);
+    
+    // Build parent node from the picked data
+    let parentNode: NavigatorNode | null = null;
+    
+    // Use current asset context for parent info
+    if (assetData) {
+      if (assetData.category === 'Space') {
+        parentNode = {
+          fmGuid: assetData.fmGuid,
+          name: assetData.name || '',
+          commonName: assetData.commonName || assetData.name || '',
+          category: 'Space',
+          children: [],
+        };
+      } else if (assetData.inRoomFmGuid) {
+        const roomData = allData.find((a: any) => a.fmGuid === assetData.inRoomFmGuid);
+        if (roomData) {
+          parentNode = {
+            fmGuid: roomData.fmGuid,
+            name: roomData.name || '',
+            commonName: roomData.commonName || roomData.name || '',
+            category: 'Space',
+            children: [],
+          };
+        }
+      }
+    }
+    
+    // Clear pending and disable pick mode
+    setPendingPickCoords(null);
+    setIsPickMode(false);
+    
+    if (pickModeListenerRef.current) {
+      pickModeListenerRef.current();
+      pickModeListenerRef.current = null;
+    }
+    
+    // Check routing
+    if (inventoryPickModeRef.current) {
+      setInventoryPendingPosition(pendingPickCoords);
+      inventoryPickModeRef.current = false;
+    } else if (onCoordinatePicked) {
+      onCoordinatePicked(pendingPickCoords, parentNode);
+    } else {
+      setAddAssetParentNode(parentNode);
+      setTimeout(() => setAddAssetDialogOpen(true), 50);
+    }
+    
+    toast.success('Position bekräftad!');
+  }, [pendingPickCoords, tempMarkerElement, assetData, allData, onCoordinatePicked]);
+
+  // Handle repicking position
+  const handleRepickPosition = useCallback(() => {
+    // Remove temp marker
+    if (tempMarkerElement) {
+      tempMarkerElement.remove();
+      setTempMarkerElement(null);
+    }
+    setPendingPickCoords(null);
+    
+    // Restart pick mode
+    const success = setupPickModeListenerInternal();
+    if (success) {
+      toast.info('Klicka på en ny position');
+    }
+  }, [tempMarkerElement, setupPickModeListenerInternal]);
+
   // Handle coordinate picking mode - supports both internal and external control
   const handleTogglePickMode = useCallback(() => {
     if (isPickMode) {
       // Disable pick mode
       setIsPickMode(false);
+      setPendingPickCoords(null);
+      if (tempMarkerElement) {
+        tempMarkerElement.remove();
+        setTempMarkerElement(null);
+      }
       toast.info('Registreringsläge avbrutet');
       
       // Remove listener if exists
@@ -960,7 +1095,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         });
       }
     }
-  }, [isPickMode, setupPickModeListenerInternal]);
+  }, [isPickMode, setupPickModeListenerInternal, tempMarkerElement]);
 
   // Respond to external pickModeEnabled prop changes
   useEffect(() => {
@@ -1829,12 +1964,39 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           />
 
           {/* Pick mode indicator overlay */}
-          {isPickMode && (
+          {isPickMode && !pendingPickCoords && (
             <div className="absolute inset-0 pointer-events-none z-10 border-4 border-dashed border-accent/50 animate-pulse">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
                 <p className="text-sm font-medium text-center">
                   🎯 Klicka på en yta för att välja position
                 </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Two-step confirmation overlay for position picking */}
+          {pendingPickCoords && (
+            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 bg-card/95 backdrop-blur-md p-4 rounded-xl shadow-2xl border flex flex-col gap-3 min-w-[280px]">
+              <div className="text-center">
+                <p className="font-medium text-sm mb-1">📍 Position markerad</p>
+                <p className="text-xs text-muted-foreground font-mono">
+                  X: {pendingPickCoords.x.toFixed(2)} Y: {pendingPickCoords.y.toFixed(2)} Z: {pendingPickCoords.z.toFixed(2)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleRepickPosition}
+                  className="flex-1"
+                >
+                  Välj om
+                </Button>
+                <Button 
+                  onClick={handleConfirmPosition}
+                  className="flex-1"
+                >
+                  Bekräfta ✓
+                </Button>
               </div>
             </div>
           )}
