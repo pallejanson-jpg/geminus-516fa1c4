@@ -761,6 +761,215 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, [resolveBuildingFmGuid, showAnnotations]);
 
+  // Load alarm annotations from BIM geometry (assets with asset_type = 'IfcAlarm')
+  // These are placed at their BIM object positions, not from coordinate_x/y/z
+  const loadAlarmAnnotations = useCallback(async () => {
+    const resolvedBuildingGuid = resolveBuildingFmGuid();
+    if (!resolvedBuildingGuid) return;
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
+      console.log('Cannot load alarm annotations - viewer not ready');
+      return;
+    }
+
+    try {
+      // Fetch Alarm symbol
+      const { data: alarmSymbol } = await supabase
+        .from('annotation_symbols')
+        .select('id, name, color, icon_url')
+        .eq('name', 'Alarm')
+        .maybeSingle();
+
+      if (!alarmSymbol) {
+        console.log('No Alarm symbol configured - skipping alarm annotations');
+        return;
+      }
+
+      // Fetch all alarm assets for this building (limit to 1000 for performance)
+      const { data: alarms, error } = await supabase
+        .from('assets')
+        .select('id, fm_guid, name, asset_type, level_fm_guid, in_room_fm_guid, symbol_id')
+        .eq('building_fm_guid', resolvedBuildingGuid)
+        .eq('asset_type', 'IfcAlarm')
+        .limit(1000);
+
+      if (error || !alarms || alarms.length === 0) {
+        console.log('No alarms found for building:', resolvedBuildingGuid);
+        return;
+      }
+
+      console.log(`Found ${alarms.length} alarm assets, looking up BIM positions...`);
+
+      const metaObjects = xeokitViewer.metaScene.metaObjects;
+      const scene = xeokitViewer.scene;
+
+      // Find alarms in BIM geometry and calculate their positions
+      let foundCount = 0;
+      const alarmAnnotations: Array<{
+        id: string;
+        worldPos: [number, number, number];
+        category: string;
+        name: string;
+        color: string;
+        iconUrl: string;
+        markerShown: boolean;
+        levelFmGuid: string | null;
+      }> = [];
+
+      alarms.forEach(alarm => {
+        // Look up object in metaScene via fmGuid
+        const metaObj = Object.values(metaObjects).find((m: any) =>
+          (m.originalSystemId || m.id)?.toUpperCase() === alarm.fm_guid?.toUpperCase()
+        );
+
+        if (!metaObj) return; // Not in loaded BIM model
+
+        // Get entity and its bounding box
+        const entity = scene.objects?.[(metaObj as any).id];
+        if (!entity?.aabb) return;
+
+        const aabb = entity.aabb;
+        // Center of bounding box, slightly above
+        const worldPos: [number, number, number] = [
+          (aabb[0] + aabb[3]) / 2,
+          (aabb[1] + aabb[4]) / 2 + 0.1,
+          (aabb[2] + aabb[5]) / 2
+        ];
+
+        alarmAnnotations.push({
+          id: `alarm-${alarm.fm_guid}`,
+          worldPos,
+          category: 'Alarm',
+          name: alarm.name || 'Alarm',
+          color: alarmSymbol.color,
+          iconUrl: alarmSymbol.icon_url || '',
+          markerShown: showAnnotations,
+          levelFmGuid: alarm.level_fm_guid,
+        });
+
+        foundCount++;
+      });
+
+      console.log(`Found ${foundCount} alarm annotations with BIM positions`);
+
+      if (foundCount === 0) return;
+
+      // Get existing annotations manager or create new container
+      let localAnnotationsManager = localAnnotationsPluginRef.current;
+      let container = document.getElementById('local-annotations-container');
+
+      if (!localAnnotationsManager) {
+        // Initialize a basic annotations manager
+        localAnnotationsManager = {
+          annotations: {} as Record<string, any>,
+          container: null as HTMLElement | null,
+          updatePositions: () => {
+            const canvas = xeokitViewer.scene?.canvas?.canvas;
+            if (!canvas) return;
+            Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
+              if (!ann.markerElement || !ann.markerShown) return;
+              const canvasPos = xeokitViewer.scene.camera.projectWorldPos(ann.worldPos);
+              if (canvasPos && canvasPos[2] > 0 && canvasPos[2] < 1) {
+                ann.markerElement.style.display = 'flex';
+                ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
+                ann.markerElement.style.top = `${canvasPos[1] - 14}px`;
+              } else {
+                ann.markerElement.style.display = 'none';
+              }
+            });
+          },
+        };
+        localAnnotationsPluginRef.current = localAnnotationsManager;
+        if (viewerInstanceRef.current) {
+          viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsManager;
+        }
+      }
+
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'local-annotations-container';
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;overflow:hidden;';
+        viewerContainerRef.current?.appendChild(container);
+      }
+      localAnnotationsManager.container = container;
+
+      // Create marker elements for each alarm annotation
+      alarmAnnotations.forEach(ann => {
+        // Skip if already exists
+        if (localAnnotationsManager.annotations[ann.id]) return;
+
+        const marker = document.createElement('div');
+        marker.id = ann.id;
+        marker.className = 'local-annotation-marker alarm-marker';
+        marker.style.cssText = `
+          position: absolute;
+          width: 28px;
+          height: 28px;
+          background: ${ann.color};
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+          display: ${ann.markerShown ? 'flex' : 'none'};
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform 0.15s;
+          pointer-events: auto;
+        `;
+
+        if (ann.iconUrl) {
+          const img = document.createElement('img');
+          img.src = ann.iconUrl;
+          img.alt = '';
+          img.style.cssText = 'width: 18px; height: 18px; filter: brightness(0) invert(1);';
+          img.onerror = () => { img.style.display = 'none'; };
+          marker.appendChild(img);
+        }
+
+        marker.title = ann.name;
+        container!.appendChild(marker);
+
+        localAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
+      });
+
+      // Set up camera update listener (only once)
+      if (!localAnnotationsManager._cameraListenerSet) {
+        const updateHandler = () => localAnnotationsManager.updatePositions();
+        xeokitViewer.scene.camera.on('viewMatrix', updateHandler);
+        xeokitViewer.scene.camera.on('projMatrix', updateHandler);
+        localAnnotationsManager._cameraListenerSet = true;
+
+        // Initial position update
+        setTimeout(updateHandler, 100);
+      } else {
+        // Just update positions for new markers
+        setTimeout(() => localAnnotationsManager.updatePositions(), 100);
+      }
+
+      console.log(`Created ${foundCount} alarm annotations for building:`, resolvedBuildingGuid);
+
+      // Bulk update symbol_id for alarms that don't have it set
+      const alarmsWithoutSymbol = alarms.filter(a => !a.symbol_id);
+      if (alarmsWithoutSymbol.length > 0) {
+        console.log(`Updating ${alarmsWithoutSymbol.length} alarms with Alarm symbol_id`);
+        // Update in batches to avoid large queries
+        const batchSize = 100;
+        for (let i = 0; i < alarmsWithoutSymbol.length; i += batchSize) {
+          const batch = alarmsWithoutSymbol.slice(i, i + batchSize);
+          const ids = batch.map(a => a.id);
+          await supabase
+            .from('assets')
+            .update({ symbol_id: alarmSymbol.id })
+            .in('id', ids);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading alarm annotations:', e);
+    }
+  }, [resolveBuildingFmGuid, showAnnotations]);
+
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
     console.log("allModelsLoadedCallback");
@@ -798,7 +1007,25 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       const assetViewer = viewer?.assetViewer;
       if (assetViewer?.onShowSpacesChanged) {
         assetViewer.onShowSpacesChanged(false);
-        console.log("Spaces hidden by default");
+        console.log("Spaces hidden by default via Asset+ API");
+      }
+      
+      // ALSO hide IfcSpace entities directly on xeokit level for redundancy
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (xeokitViewer?.metaScene?.metaObjects && xeokitViewer?.scene?.objects) {
+        const metaObjects = xeokitViewer.metaScene.metaObjects;
+        const sceneObjects = xeokitViewer.scene.objects;
+        let hiddenCount = 0;
+        Object.values(metaObjects).forEach((metaObj: any) => {
+          if (metaObj.type?.toLowerCase() === 'ifcspace') {
+            const entity = sceneObjects[metaObj.id];
+            if (entity && entity.visible) {
+              entity.visible = false;
+              hiddenCount++;
+            }
+          }
+        });
+        console.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
       }
     } catch (e) {
       console.debug("Could not hide spaces:", e);
@@ -806,6 +1033,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
 
     // Load local annotations from database (assets with annotation_placed=true)
     loadLocalAnnotations();
+    
+    // Load alarm annotations from BIM geometry (IfcAlarm assets)
+    loadAlarmAnnotations();
 
     // Initialize NavCube using custom plugin
     try {
@@ -857,7 +1087,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
         viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
       }
     }
-  }, [executeDisplayAction, cacheStatus, showNavCube]);
+  }, [executeDisplayAction, cacheStatus, showNavCube, loadLocalAnnotations, loadAlarmAnnotations]);
 
   // NavCube visibility is now controlled via React style prop on the canvas
   // The navCubeRef.setVisible() method is NOT used to avoid DOM manipulation crashes
