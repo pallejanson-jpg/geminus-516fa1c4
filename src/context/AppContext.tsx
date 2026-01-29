@@ -276,11 +276,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     }, []);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
-        // STRICT HIERARCHY: Building → Building Storey → Space
+        // STRICT HIERARCHY: Building → Building Storey → Space → Instance
         // With synthetic "Okänd våning" fallback for orphan spaces
         const buildings = items.filter(item => item.category === 'Building');
         const storeys = items.filter(item => item.category === 'Building Storey');
         const spaces = items.filter(item => item.category === 'Space');
+        const instances = items.filter(item => item.category === 'Instance');
 
         // Build building map first
         const buildingMap = new Map<string, NavigatorNode>();
@@ -347,6 +348,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Track orphan spaces per building for synthetic storey fallback
         const orphanSpacesByBuilding = new Map<string, any[]>();
 
+        // Build space map for instance attachment
+        const spaceMap = new Map<string, NavigatorNode>();
+
         // Attach spaces to storeys - with fallback matching by levelCommonName
         spaces.forEach((space: any) => {
             let parentStorey = storeyMap.get(space.levelFmGuid);
@@ -372,14 +376,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 }
             }
             
+            const spaceNode: NavigatorNode = { ...space, children: [] };
+            spaceMap.set(space.fmGuid, spaceNode);
+            
             if (parentStorey) {
-                parentStorey.children!.push({ ...space, children: [] });
+                parentStorey.children!.push(spaceNode);
             } else if (space.buildingFmGuid && buildingMap.has(space.buildingFmGuid)) {
                 // Orphan space with valid building - collect for synthetic storey
                 if (!orphanSpacesByBuilding.has(space.buildingFmGuid)) {
                     orphanSpacesByBuilding.set(space.buildingFmGuid, []);
                 }
-                orphanSpacesByBuilding.get(space.buildingFmGuid)!.push(space);
+                orphanSpacesByBuilding.get(space.buildingFmGuid)!.push(spaceNode);
             }
             // Spaces without building are truly orphaned and excluded
         });
@@ -395,8 +402,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 
                 if (buildingStoreys.length === 1) {
                     // Assign all orphans to the single storey
-                    orphanSpaces.forEach((space: any) => {
-                        buildingStoreys[0].children!.push({ ...space, children: [] });
+                    orphanSpaces.forEach((spaceNode: NavigatorNode) => {
+                        buildingStoreys[0].children!.push(spaceNode);
                     });
                 } else {
                     // Create synthetic storey for orphans
@@ -407,11 +414,24 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                         name: 'Unknown Floor',
                         isSynthetic: true,
                         buildingFmGuid: buildingGuid,
-                        children: orphanSpaces.map((space: any) => ({ ...space, children: [] })),
+                        children: orphanSpaces,
                     };
                     building.children!.push(syntheticStorey);
                 }
             }
+        });
+
+        // Attach instances (assets) to their parent spaces
+        instances.forEach((instance: any) => {
+            const parentSpace = spaceMap.get(instance.inRoomFmGuid);
+            if (parentSpace) {
+                parentSpace.children!.push({
+                    ...instance,
+                    children: [], // Instances don't have children
+                });
+            }
+            // Instances without a valid parent space are not shown in tree
+            // They can still be seen in AssetsView
         });
 
         const sortedTree = Array.from(buildingMap.values());
@@ -422,6 +442,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 // Put synthetic storeys at the end
                 if ((a as any).isSynthetic && !(b as any).isSynthetic) return 1;
                 if (!(a as any).isSynthetic && (b as any).isSynthetic) return -1;
+                // Put instances after spaces
+                if (a.category === 'Instance' && b.category !== 'Instance') return 1;
+                if (a.category !== 'Instance' && b.category === 'Instance') return -1;
                 return (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true });
             });
             node.children.forEach(sortNode);
@@ -442,6 +465,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 'Building',
                 'Building Storey',
                 'Space',
+                'Instance', // Include assets in Navigator tree
             ]);
             setAllData(allObjects);
             setNavigatorTreeData(buildNavigatorTree(allObjects));
