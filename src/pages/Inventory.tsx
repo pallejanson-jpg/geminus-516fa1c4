@@ -173,7 +173,7 @@ const Inventory: React.FC = () => {
           <ResizableHandle withHandle />
 
           {/* Middle column: Registration form - fixed width */}
-          <ResizablePanel defaultSize={showViewerPanel ? 30 : 80} minSize={25} maxSize={showViewerPanel ? 40 : 85}>
+          <ResizablePanel defaultSize={showViewerPanel ? 30 : 40} minSize={25} maxSize={showViewerPanel ? 50 : 55}>
             <div className="h-full p-4">
               <Card className="p-6 h-full overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">
