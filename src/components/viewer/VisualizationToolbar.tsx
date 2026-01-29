@@ -52,6 +52,10 @@ interface VisualizationToolbarProps {
   visibleModelIds?: string[];
   /** Current visible floor IDs for saved view capture */
   visibleFloorIds?: string[];
+  /** Controlled "Visa rum" (Show Spaces) state from parent */
+  showSpaces?: boolean;
+  /** Callback when "Visa rum" is toggled */
+  onShowSpacesChange?: (show: boolean) => void;
 }
 
 /**
@@ -74,12 +78,16 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     onVisibleFloorsChange,
     visibleModelIds = [],
     visibleFloorIds = [],
+    showSpaces: externalShowSpaces,
+    onShowSpacesChange,
   } = props;
 
   const { allData } = useContext(AppContext);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showSpaces, setShowSpaces] = useState(false); // Default OFF per requirements
+  // Use controlled state if provided, otherwise local state
+  const [localShowSpaces, setLocalShowSpaces] = useState(false);
+  const showSpaces = externalShowSpaces !== undefined ? externalShowSpaces : localShowSpaces;
   const [showAnnotations, setShowAnnotations] = useState(false); // Default OFF per requirements
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
   
@@ -169,7 +177,12 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   useEffect(() => {
     const handleForceShowSpaces = (e: CustomEvent) => {
       if (e.detail?.show && !showSpaces) {
-        setShowSpaces(true);
+        // Use callback if controlled, otherwise local state
+        if (onShowSpacesChange) {
+          onShowSpacesChange(true);
+        } else {
+          setLocalShowSpaces(true);
+        }
         try {
           const assetViewer = viewerRef.current?.assetViewer;
           assetViewer?.onShowSpacesChanged?.(true);
@@ -182,7 +195,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     return () => {
       window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
     };
-  }, [showSpaces, viewerRef]);
+  }, [showSpaces, viewerRef, onShowSpacesChange]);
 
   // Handle clip height change
   const handleClipHeightChange = useCallback((value: number[]) => {
@@ -397,14 +410,19 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   const handleToggleSpaces = useCallback(() => {
     const newValue = !showSpaces;
-    setShowSpaces(newValue);
-    try {
-      const assetViewer = viewerRef.current?.assetViewer;
-      assetViewer?.onShowSpacesChanged?.(newValue);
-    } catch (e) {
-      console.debug("Toggle spaces failed:", e);
+    // Use callback if controlled, otherwise local state
+    if (onShowSpacesChange) {
+      onShowSpacesChange(newValue);
+    } else {
+      setLocalShowSpaces(newValue);
+      try {
+        const assetViewer = viewerRef.current?.assetViewer;
+        assetViewer?.onShowSpacesChanged?.(newValue);
+      } catch (e) {
+        console.debug("Toggle spaces failed:", e);
+      }
     }
-  }, [viewerRef, showSpaces]);
+  }, [viewerRef, showSpaces, onShowSpacesChange]);
 
   const handleToggleAnnotations = useCallback(() => {
     const newValue = !showAnnotations;
@@ -427,22 +445,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   }, [onAddAsset]);
 
   // Handle visible floors change from floor selector
-  // ALWAYS turn off "Visa rum" when floor selection changes
+  // Notify parent of floor changes (parent decides whether to reset showSpaces)
   const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
     console.log("Visible floors changed:", visibleFloorIds);
     onVisibleFloorsChange?.(visibleFloorIds);
-    
-    // ALWAYS reset "Visa rum" to OFF when floors change
-    if (showSpaces) {
-      setShowSpaces(false);
-      try {
-        const assetViewer = viewerRef.current?.assetViewer;
-        assetViewer?.onShowSpacesChanged?.(false);
-      } catch (e) {
-        console.debug("Could not turn off spaces:", e);
-      }
-    }
-  }, [onVisibleFloorsChange, viewerRef, showSpaces]);
+  }, [onVisibleFloorsChange]);
 
   const containerClassName = cn(
     inline ? "" : "absolute top-4 right-4 z-20",
