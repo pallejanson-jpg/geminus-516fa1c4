@@ -311,7 +311,7 @@ export function useSectionPlaneClipping(
     }
   }, [enabled, getXeokitViewer, initializeSectionPlanesPlugin]);
 
-  // Update floor cut height dynamically
+  // Update floor cut height dynamically - creates or updates section plane in real-time
   const updateFloorCutHeight = useCallback((newHeight: number) => {
     floorCutHeightRef.current = newHeight;
     
@@ -322,9 +322,28 @@ export function useSectionPlaneClipping(
       return;
     }
     
-    console.log('Updating clip height to:', newHeight, 'Current mode:', currentClipModeRef.current);
+    console.log('Updating clip height to:', newHeight);
     
-    // Destroy existing section plane first to force re-creation
+    // Calculate the absolute clip position
+    let clipY: number;
+    
+    if (currentFloorIdRef.current) {
+      // If a floor is selected, use its base height + new height
+      const bounds = calculateFloorBounds(currentFloorIdRef.current);
+      if (bounds) {
+        clipY = bounds.minY + newHeight;
+      } else {
+        // Fallback to scene base
+        const sceneAABB = viewer.scene?.getAABB?.();
+        clipY = sceneAABB ? sceneAABB[1] + newHeight : newHeight;
+      }
+    } else {
+      // Global - use scene base height
+      const sceneAABB = viewer.scene?.getAABB?.();
+      clipY = sceneAABB ? sceneAABB[1] + newHeight : newHeight;
+    }
+    
+    // Destroy existing section plane
     if (sectionPlaneRef.current) {
       try {
         sectionPlaneRef.current.destroy?.();
@@ -334,21 +353,42 @@ export function useSectionPlaneClipping(
       sectionPlaneRef.current = null;
     }
     
-    // Re-apply clipping - always use floor mode when slider is used
-    if (currentFloorIdRef.current) {
-      // Apply to specific floor
-      applySectionPlane(currentFloorIdRef.current, 'floor');
-    } else {
-      // Global clipping - get scene base and re-apply
-      const sceneAABB = viewer.scene?.getAABB?.();
-      if (sceneAABB) {
-        applyGlobalFloorPlanClipping(sceneAABB[1]);
+    // Create new section plane at the calculated height
+    const plugin = initializeSectionPlanesPlugin();
+    
+    if (plugin) {
+      try {
+        sectionPlaneRef.current = plugin.createSectionPlane({
+          id: `floor-clip-dynamic-${Date.now()}`,
+          pos: [0, clipY, 0],
+          dir: [0, -1, 0],
+          active: true,
+        });
+        console.log(`Section plane updated to Y=${clipY.toFixed(2)} (height: ${newHeight}m)`);
+        currentClipModeRef.current = 'floor';
+        return;
+      } catch (e) {
+        console.debug('Failed to update section plane via plugin:', e);
       }
     }
     
-    // Update mode to floor since we're using the slider
-    currentClipModeRef.current = 'floor';
-  }, [applySectionPlane, getXeokitViewer, applyGlobalFloorPlanClipping]);
+    // Fallback: Create section plane directly on scene
+    try {
+      const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
+      if (SectionPlane) {
+        sectionPlaneRef.current = new SectionPlane(viewer.scene, {
+          id: `floor-clip-dynamic-${Date.now()}`,
+          pos: [0, clipY, 0],
+          dir: [0, -1, 0],
+          active: true,
+        });
+        console.log(`Section plane updated (direct) to Y=${clipY.toFixed(2)}`);
+        currentClipModeRef.current = 'floor';
+      }
+    } catch (e) {
+      console.debug('Failed to update section plane directly:', e);
+    }
+  }, [getXeokitViewer, calculateFloorBounds, initializeSectionPlanesPlugin]);
 
   // Apply ceiling clipping (3D solo mode) - convenience function  
   const applyCeilingClipping = useCallback((floorId: string) => {

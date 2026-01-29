@@ -387,12 +387,20 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       // Auto-enable clipping in solo mode for ceiling cut
       setClippingEnabled(true);
       
-      // Apply clipping when showing single floor
-      updateClipping([floorId]);
+      // Apply ceiling clipping immediately using the hook's function
+      // Get the actual floor bounds and apply section plane
+      const bounds = calculateFloorBounds(floorId);
+      if (bounds && enableClipping) {
+        const viewer = getXeokitViewer();
+        if (viewer?.scene) {
+          // Use xeokit SectionPlanesPlugin to apply ceiling clipping
+          // The updateClipping function from the hook handles this
+          updateClipping([floorId]);
+        }
+      }
       
       // Emit event for other components (e.g., ViewerToolbar 2D mode)
       const floor = floors.find(f => f.id === floorId);
-      const bounds = calculateFloorBounds(floorId);
       const eventDetail: FloorSelectionEventDetail = {
         floorId,
         floorName: floor?.name || null,
@@ -405,7 +413,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           onVisibleFloorsChange(floor.databaseLevelFmGuids);
         }
       }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds, enableClipping, getXeokitViewer]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
