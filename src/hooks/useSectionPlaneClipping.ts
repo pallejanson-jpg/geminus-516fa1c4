@@ -246,11 +246,18 @@ export function useSectionPlaneClipping(
     
     if (plugin) {
       try {
-        // Create horizontal section plane pointing downward (clips everything above)
+        // Create horizontal section plane
+        // For 2D floor plan: dir [0, 1, 0] (points UP) = clips everything ABOVE the plane
+        // For 3D ceiling: dir [0, -1, 0] (points DOWN) = clips above ceiling height
+        // NOTE: xeokit discards geometry in the direction of 'dir'
+        const direction: [number, number, number] = effectiveMode === 'floor' 
+          ? [0, 1, 0]   // 2D: clip above floor cut height
+          : [0, -1, 0]; // 3D ceiling: clip above ceiling
+          
         sectionPlaneRef.current = plugin.createSectionPlane({
           id: `floor-clip-${floorId}-${effectiveMode}`,
           pos: [0, clipHeight, 0],
-          dir: [0, -1, 0], // Points down, clips above
+          dir: direction,
           active: true,
         });
         
@@ -267,12 +274,14 @@ export function useSectionPlaneClipping(
     // Fallback: Create section plane directly on scene
     try {
       const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
+      const direction: [number, number, number] = effectiveMode === 'floor' 
+        ? [0, 1, 0] : [0, -1, 0];
       
       if (SectionPlane) {
         sectionPlaneRef.current = new SectionPlane(viewer.scene, {
           id: `floor-clip-${floorId}-${effectiveMode}`,
           pos: [0, clipHeight, 0],
-          dir: [0, -1, 0],
+          dir: direction,
           active: true,
         });
         
@@ -341,11 +350,11 @@ export function useSectionPlaneClipping(
         sectionPlaneRef.current = plugin.createSectionPlane({
           id: 'global-floor-clip',
           pos: [0, clipHeight, 0],
-          dir: [0, -1, 0],
+          dir: [0, 1, 0], // Points UP = clips everything above (for 2D floor plan)
           active: true,
         });
         
-        console.log(`Global section plane created at Y=${clipHeight.toFixed(2)} (2D planritning)`);
+        console.log(`Global section plane created at Y=${clipHeight.toFixed(2)} (2D planritning) [dir: UP]`);
         currentFloorIdRef.current = null;
         currentClipModeRef.current = 'floor';
         return;
@@ -362,11 +371,11 @@ export function useSectionPlaneClipping(
         sectionPlaneRef.current = new SectionPlane(viewer.scene, {
           id: 'global-floor-clip',
           pos: [0, clipHeight, 0],
-          dir: [0, -1, 0],
+          dir: [0, 1, 0], // Points UP = clips above
           active: true,
         });
         
-        console.log(`Global section plane created (direct) at Y=${clipHeight.toFixed(2)}`);
+        console.log(`Global section plane created (direct) at Y=${clipHeight.toFixed(2)} [dir: UP]`);
         currentFloorIdRef.current = null;
         currentClipModeRef.current = 'floor';
       }
@@ -418,6 +427,7 @@ export function useSectionPlaneClipping(
     }
     
     // Create new section plane at the calculated height
+    // For 2D floor plan mode, use dir [0, 1, 0] to clip above the plane
     const plugin = initializeSectionPlanesPlugin();
     
     if (plugin) {
@@ -425,10 +435,10 @@ export function useSectionPlaneClipping(
         sectionPlaneRef.current = plugin.createSectionPlane({
           id: `floor-clip-dynamic-${Date.now()}`,
           pos: [0, clipY, 0],
-          dir: [0, -1, 0],
+          dir: [0, 1, 0], // Points UP = clips everything above
           active: true,
         });
-        console.log(`Section plane updated to Y=${clipY.toFixed(2)} (height: ${newHeight}m)`);
+        console.log(`Section plane updated to Y=${clipY.toFixed(2)} (height: ${newHeight}m) [dir: UP]`);
         currentClipModeRef.current = 'floor';
         return;
       } catch (e) {
@@ -443,10 +453,10 @@ export function useSectionPlaneClipping(
         sectionPlaneRef.current = new SectionPlane(viewer.scene, {
           id: `floor-clip-dynamic-${Date.now()}`,
           pos: [0, clipY, 0],
-          dir: [0, -1, 0],
+          dir: [0, 1, 0], // Points UP = clips above
           active: true,
         });
-        console.log(`Section plane updated (direct) to Y=${clipY.toFixed(2)}`);
+        console.log(`Section plane updated (direct) to Y=${clipY.toFixed(2)} [dir: UP]`);
         currentClipModeRef.current = 'floor';
       }
     } catch (e) {
