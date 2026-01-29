@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, ClipboardList } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useIsMobile } from '@/hooks/use-mobile';
 import InventoryForm from '@/components/inventory/InventoryForm';
 import InventoryList from '@/components/inventory/InventoryList';
@@ -32,11 +31,11 @@ export interface InventoryItem {
 
 const Inventory: React.FC = () => {
   const isMobile = useIsMobile();
-  const { inventoryPrefill, clearInventoryPrefill } = useContext(AppContext);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const { inventoryPrefill, clearInventoryPrefill, refreshInitialData } = useContext(AppContext);
   const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [showRecentItems, setShowRecentItems] = useState(false);
   
   // Ivion 360 side panel state (desktop only)
   const [ivion360Url, setIvion360Url] = useState<string | null>(null);
@@ -46,13 +45,6 @@ const Inventory: React.FC = () => {
   const [viewer3dBuildingFmGuid, setViewer3dBuildingFmGuid] = useState<string | null>(null);
   const [viewer3dRoomFmGuid, setViewer3dRoomFmGuid] = useState<string | null>(null);
   const [pendingPositionForEdit, setPendingPositionForEdit] = useState<{ x: number; y: number; z: number } | null>(null);
-
-  // Auto-open form if we have prefill data
-  useEffect(() => {
-    if (inventoryPrefill) {
-      setIsFormOpen(true);
-    }
-  }, [inventoryPrefill]);
 
   // Load recently created local assets on mount
   const loadRecentItems = async () => {
@@ -78,47 +70,54 @@ const Inventory: React.FC = () => {
     loadRecentItems();
   }, []);
 
-  const handleSaved = (item: InventoryItem) => {
+  const handleSaved = async (item: InventoryItem) => {
     // If editing, update the item in the list
     if (editItem) {
       setSavedItems(prev => prev.map(i => i.fm_guid === item.fm_guid ? item : i));
     } else {
       setSavedItems(prev => [item, ...prev]);
     }
-    setIsFormOpen(false);
     setEditItem(null);
     clearInventoryPrefill();
     
-    // Close 3D viewer when form is saved
-    setViewer3dOpen(false);
-    setViewer3dBuildingFmGuid(null);
-    setViewer3dRoomFmGuid(null);
+    // Close 3D viewer when form is saved and cleanup markers
+    cleanupViewerAndMarkers();
     
     // Reload to get fresh data
-    loadRecentItems();
+    await loadRecentItems();
+    
+    // Refresh navigator data so new assets appear in Portfolio/Navigator
+    await refreshInitialData();
   };
 
   const handleCloseForm = () => {
-    setIsFormOpen(false);
     setEditItem(null);
     clearInventoryPrefill();
   };
 
   const handleEdit = (item: InventoryItem) => {
     setEditItem(item);
-    if (isMobile) {
-      setIsFormOpen(true);
-    }
+    // Expand recent items to show selection
+    setShowRecentItems(true);
   };
 
   const handleClearEdit = () => {
     setEditItem(null);
   };
 
+  // Cleanup function - removes all temp markers and closes viewer
+  const cleanupViewerAndMarkers = () => {
+    setViewer3dOpen(false);
+    setViewer3dBuildingFmGuid(null);
+    setViewer3dRoomFmGuid(null);
+    // Remove all temp pick markers from DOM
+    document.querySelectorAll('.temp-pick-marker').forEach(el => el.remove());
+  };
+
   // Handler for opening 360 inline (desktop)
   const handleOpen360 = (url: string) => {
-    // Close 3D if open
-    setViewer3dOpen(false);
+    // Close 3D if open and cleanup markers
+    cleanupViewerAndMarkers();
     setIvion360Url(url);
   };
 
@@ -141,48 +140,62 @@ const Inventory: React.FC = () => {
   };
 
   const handleClose3d = () => {
-    setViewer3dOpen(false);
+    cleanupViewerAndMarkers();
   };
 
   // Check if viewer panel should be visible
   const showViewerPanel = viewer3dOpen || ivion360Url;
 
-  // Desktop layout: side-by-side with resizable panels
+  // Desktop layout: Form left (25%), Viewer right (75%)
   if (!isMobile) {
     return (
       <div className="h-full bg-background">
         <ResizablePanelGroup direction="horizontal" className="h-full">
-          {/* Left column: Recently saved items - narrower */}
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <div className="h-full flex flex-col p-4">
+          {/* Left column: Form with collapsible recent items */}
+          <ResizablePanel defaultSize={showViewerPanel ? 25 : 35} minSize={20} maxSize={40}>
+            <div className="h-full flex flex-col p-4 overflow-y-auto">
+              {/* Header with collapsible recent items dropdown */}
               <div className="flex items-center gap-3 mb-4">
                 <ClipboardList className="h-6 w-6 text-primary" />
                 <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
-                <Badge variant="secondary" className="ml-auto">
-                  {savedItems.length} sparade
-                </Badge>
               </div>
-              <InventoryList 
-                items={savedItems} 
-                isLoading={isLoading} 
-                onEdit={handleEdit}
-                selectedFmGuid={editItem?.fm_guid}
-              />
-            </div>
-          </ResizablePanel>
+              
+              {/* Collapsible dropdown for recent items */}
+              <Collapsible open={showRecentItems} onOpenChange={setShowRecentItems} className="mb-4">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-muted/50 hover:bg-muted rounded-lg transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Senast registrerade</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {savedItems.length}
+                    </Badge>
+                  </div>
+                  {showRecentItems ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="max-h-[200px] overflow-y-auto border rounded-lg">
+                    <InventoryList 
+                      items={savedItems} 
+                      isLoading={isLoading} 
+                      onEdit={handleEdit}
+                      selectedFmGuid={editItem?.fm_guid}
+                      compact
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
-          <ResizableHandle withHandle />
-
-          {/* Middle column: Registration form - fixed width */}
-          <ResizablePanel defaultSize={showViewerPanel ? 30 : 40} minSize={25} maxSize={showViewerPanel ? 50 : 55}>
-            <div className="h-full p-4">
-              <Card className="p-6 h-full overflow-y-auto">
+              {/* Registration form */}
+              <Card className="p-4 flex-1 overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">
                   {editItem ? 'Redigera tillgång' : 'Registrera ny tillgång'}
                 </h2>
                 <InventoryForm
                   onSaved={handleSaved}
-                  onCancel={handleClearEdit}
+                  onCancel={handleCloseForm}
                   prefill={inventoryPrefill || undefined}
                   editItem={editItem}
                   onClearEdit={handleClearEdit}
@@ -195,26 +208,32 @@ const Inventory: React.FC = () => {
             </div>
           </ResizablePanel>
 
-          {/* Right column: 3D Viewer or Ivion 360 (conditional) */}
-          {showViewerPanel && (
-            <>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={30}>
-                <div className="h-full">
-                  {viewer3dOpen && viewer3dBuildingFmGuid ? (
-                    <Inline3dPositionPicker
-                      buildingFmGuid={viewer3dBuildingFmGuid}
-                      roomFmGuid={viewer3dRoomFmGuid || undefined}
-                      onPositionConfirmed={handlePositionConfirmed}
-                      onClose={handleClose3d}
-                    />
-                  ) : ivion360Url ? (
-                    <Ivion360View url={ivion360Url} onClose={handleClose360} />
-                  ) : null}
+          {/* Right column: Viewer area (always visible, shows placeholder when empty) */}
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={showViewerPanel ? 75 : 65} minSize={50}>
+            <div className="h-full bg-muted/20">
+              {viewer3dOpen && viewer3dBuildingFmGuid ? (
+                <Inline3dPositionPicker
+                  buildingFmGuid={viewer3dBuildingFmGuid}
+                  roomFmGuid={viewer3dRoomFmGuid || undefined}
+                  onPositionConfirmed={handlePositionConfirmed}
+                  onClose={handleClose3d}
+                />
+              ) : ivion360Url ? (
+                <Ivion360View url={ivion360Url} onClose={handleClose360} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  <div className="text-center max-w-md p-8">
+                    <div className="text-6xl mb-4">🏢</div>
+                    <h3 className="text-lg font-medium mb-2">3D-vy / 360°-vy</h3>
+                    <p className="text-sm">
+                      Välj en byggnad och klicka på "Välj i 3D" eller "Öppna 360+" i formuläret för att visa vyn här.
+                    </p>
+                  </div>
                 </div>
-              </ResizablePanel>
-            </>
-          )}
+              )}
+            </div>
+          </ResizablePanel>
         </ResizablePanelGroup>
       </div>
     );
