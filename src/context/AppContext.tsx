@@ -278,9 +278,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
         // STRICT HIERARCHY: Building → Building Storey → Space → Instance
         // With synthetic "Okänd våning" fallback for orphan spaces
-        const buildings = items.filter(item => item.category === 'Building');
-        const storeys = items.filter(item => item.category === 'Building Storey');
-        const spaces = items.filter(item => item.category === 'Space');
+        // Include both standard and IFC category variants
+        const buildings = items.filter(item => 
+            item.category === 'Building' || item.category === 'IfcBuilding'
+        );
+        const storeys = items.filter(item => 
+            item.category === 'Building Storey' || item.category === 'IfcBuildingStorey'
+        );
+        const spaces = items.filter(item => 
+            item.category === 'Space' || item.category === 'IfcSpace'
+        );
         const instances = items.filter(item => item.category === 'Instance');
 
         // Build building map first
@@ -459,13 +466,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const refreshInitialData = useCallback(async () => {
         setIsLoadingData(true);
         try {
-            // Fetch from local synced database instead of external API
-            // Doors excluded from navigator per user request
+            // TWO-PHASE LOADING: Load hierarchy first (fast), assets on-demand (slow)
+            // Phase 1: Building/Storey/Space hierarchy only (~4k records, ~2-3 seconds)
+            // Include both standard and IFC category variants
             const allObjects = await fetchLocalAssets([
-                'Building',
-                'Building Storey',
-                'Space',
-                'Instance', // Include assets in Navigator tree
+                'Building', 'IfcBuilding',
+                'Building Storey', 'IfcBuildingStorey',
+                'Space', 'IfcSpace',
+                // NOTE: 'Instance' excluded at startup for faster load
+                // Assets are loaded on-demand via fetchAssetsForBuilding()
             ]);
             setAllData(allObjects);
             setNavigatorTreeData(buildNavigatorTree(allObjects));
