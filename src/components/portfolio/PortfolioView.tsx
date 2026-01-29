@@ -20,6 +20,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
+import { useXktPreload } from '@/hooks/useXktPreload';
 
 interface ComplexGroup {
   complexName: string;
@@ -28,6 +29,9 @@ interface ComplexGroup {
 
 const PortfolioView: React.FC = () => {
   const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData } = useContext(AppContext);
+  
+  // Preload XKT when a building is selected
+  useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');

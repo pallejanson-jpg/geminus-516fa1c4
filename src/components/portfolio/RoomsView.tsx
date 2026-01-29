@@ -11,11 +11,7 @@ import {
   Cuboid,
   Settings2,
   GripVertical,
-  ChevronRight,
-  Check,
-  FolderOpen,
-  Folder,
-  Menu,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,14 +27,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Facility } from '@/lib/types';
 import {
   DndContext,
@@ -57,6 +53,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface RoomData {
   fmGuid: string;
@@ -103,8 +101,14 @@ const SYSTEM_COLUMNS: ColumnDef[] = [
   { key: 'fmGuid', label: 'FMGUID', category: 'system' },
 ];
 
+// Calculated columns
+const CALCULATED_COLUMNS: ColumnDef[] = [
+  { key: 'nta', label: 'NTA (m²)', category: 'calculated', dataType: 3 },
+  { key: 'omkrets', label: 'Omkrets (m)', category: 'calculated', dataType: 3 },
+];
+
 // Default visible columns
-const DEFAULT_VISIBLE_COLUMNS = ['roomNumber', 'commonName', 'levelCommonName', 'nta', 'hyresobjekt'];
+const DEFAULT_VISIBLE_COLUMNS = ['roomNumber', 'commonName', 'levelCommonName', 'nta'];
 
 // Sortable Column Header Component
 const SortableColumnHeader: React.FC<{
@@ -164,88 +168,6 @@ const SortableColumnHeader: React.FC<{
   );
 };
 
-// Column Selector Tree Component
-const ColumnSelectorTree: React.FC<{
-  columns: ColumnDef[];
-  visibleColumns: string[];
-  onToggle: (key: string) => void;
-}> = ({ columns, visibleColumns, onToggle }) => {
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
-    system: true,
-    userDefined: true,
-    calculated: true,
-  });
-
-  const groupedColumns = useMemo(() => {
-    const groups: Record<string, ColumnDef[]> = {
-      system: [],
-      userDefined: [],
-      calculated: [],
-    };
-    columns.forEach(col => {
-      if (groups[col.category]) {
-        groups[col.category].push(col);
-      }
-    });
-    return groups;
-  }, [columns]);
-
-  const categoryLabels: Record<string, string> = {
-    system: 'Systemegenskaper',
-    userDefined: 'Användardefinierade egenskaper',
-    calculated: 'Beräknade egenskaper',
-  };
-
-  const categoryIcons: Record<string, React.ReactNode> = {
-    system: <Folder size={14} className="text-blue-500" />,
-    userDefined: <FolderOpen size={14} className="text-green-500" />,
-    calculated: <Folder size={14} className="text-orange-500" />,
-  };
-
-  return (
-    <div className="space-y-2">
-      {Object.entries(groupedColumns).map(([category, cols]) => (
-        cols.length > 0 && (
-          <Collapsible
-            key={category}
-            open={openCategories[category]}
-            onOpenChange={(open) => setOpenCategories(prev => ({ ...prev, [category]: open }))}
-          >
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-muted rounded-md transition-colors">
-              <ChevronRight 
-                size={14} 
-                className={`transition-transform ${openCategories[category] ? 'rotate-90' : ''}`} 
-              />
-              {categoryIcons[category]}
-              <span className="font-medium text-sm">{categoryLabels[category]}</span>
-              <Badge variant="secondary" className="ml-auto text-xs">
-                {cols.filter(c => visibleColumns.includes(c.key)).length}/{cols.length}
-              </Badge>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="ml-6 mt-1 space-y-0.5 max-h-48 overflow-y-auto">
-                {cols.map(col => (
-                  <div
-                    key={col.key}
-                    className="flex items-center gap-2 p-1.5 hover:bg-muted/50 rounded cursor-pointer"
-                    onClick={() => onToggle(col.key)}
-                  >
-                    <Checkbox 
-                      checked={visibleColumns.includes(col.key)}
-                      onCheckedChange={() => onToggle(col.key)}
-                    />
-                    <span className="text-sm truncate">{col.label}</span>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )
-      ))}
-    </div>
-  );
-};
-
 const RoomsView: React.FC<RoomsViewProps> = ({
   facility,
   rooms,
@@ -253,12 +175,19 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   onOpen3D,
   onSelectRoom,
 }) => {
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('roomNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  
+  // Multi-selection state
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  
+  // Properties dialog state
+  const [showPropertiesFor, setShowPropertiesFor] = useState<string | null>(null);
 
   // DnD sensors
   const sensors = useSensors(
@@ -272,6 +201,11 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
     // Add system columns first
     SYSTEM_COLUMNS.forEach(col => {
+      discoveredColumns.set(col.key, col);
+    });
+
+    // Add calculated columns
+    CALCULATED_COLUMNS.forEach(col => {
       discoveredColumns.set(col.key, col);
     });
 
@@ -296,15 +230,6 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           });
         }
       });
-    });
-
-    // Add calculated columns (like extracted values)
-    const calculated: ColumnDef[] = [
-      { key: 'nta', label: 'NTA (m²)', category: 'calculated', dataType: 3 },
-      { key: 'omkrets', label: 'Omkrets (m)', category: 'calculated', dataType: 3 },
-    ];
-    calculated.forEach(col => {
-      discoveredColumns.set(col.key, col);
     });
 
     return Array.from(discoveredColumns.values());
@@ -455,6 +380,39 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     }
   };
 
+  // Multi-selection handlers
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedRows(new Set(filteredRooms.map(r => r.fmGuid)));
+    } else {
+      setSelectedRows(new Set());
+    }
+  }, [filteredRooms]);
+
+  const handleSelectRow = useCallback((fmGuid: string, checked: boolean) => {
+    setSelectedRows(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(fmGuid);
+      } else {
+        newSet.delete(fmGuid);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Batch action handlers
+  const handleShowSelectedProperties = useCallback(() => {
+    if (selectedRows.size === 1) {
+      setShowPropertiesFor(Array.from(selectedRows)[0]);
+    } else {
+      toast({
+        title: 'Välj ett objekt',
+        description: 'Välj exakt ett objekt för att visa egenskaper',
+      });
+    }
+  }, [selectedRows, toast]);
+
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
     const ordered = columnOrder.filter(key => visibleColumns.includes(key));
@@ -494,6 +452,11 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       ? `Rum i ${facility.commonName || facility.name}`
       : `Rum på ${facility.commonName || facility.name}`;
 
+  // Group columns by category for dropdown
+  const systemCols = allColumns.filter(c => c.category === 'system');
+  const calculatedCols = allColumns.filter(c => c.category === 'calculated');
+  const userDefinedCols = allColumns.filter(c => c.category === 'userDefined');
+
   return (
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300">
       {/* Header */}
@@ -525,123 +488,98 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           />
         </div>
         
-        {/* Mobile: Hamburger menu for column selector + view mode */}
-        <div className="sm:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9">
-                <Menu size={16} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-80">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
-                  <Settings2 size={18} />
-                  Inställningar
-                </SheetTitle>
-              </SheetHeader>
-              <div className="mt-4 space-y-6">
-                {/* View mode section */}
-                <div>
-                  <p className="text-sm font-medium mb-2">Visningsläge</p>
-                  <div className="flex border rounded-md w-fit">
-                    <Button
-                      variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setViewMode('grid')}
-                      className="h-9 gap-2"
-                    >
-                      <List size={16} />
-                      Tabell
-                    </Button>
-                    <Button
-                      variant={viewMode === 'gallery' ? 'secondary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setViewMode('gallery')}
-                      className="h-9 gap-2"
-                    >
-                      <LayoutGrid size={16} />
-                      Galleri
-                    </Button>
-                  </div>
-                </div>
-                
-                {/* Column selector section */}
-                <div>
-                  <p className="text-sm font-medium mb-2">
-                    Kolumner ({visibleColumns.length} valda)
-                  </p>
-                  <ScrollArea className="h-[calc(100vh-280px)]">
-                    <ColumnSelectorTree
-                      columns={allColumns}
-                      visibleColumns={visibleColumns}
-                      onToggle={toggleColumn}
-                    />
-                  </ScrollArea>
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-        </div>
-        
-        {/* Desktop: Inline controls */}
-        <div className="hidden sm:flex gap-2">
-          {/* Column selector (Sheet for tree menu) */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2">
-                <Settings2 size={14} />
-                <span>Kolumner</span>
-                <Badge variant="secondary" className="text-xs ml-1">
-                  {visibleColumns.length}
-                </Badge>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-80 sm:w-96">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
-                  <Settings2 size={18} />
-                  Välj kolumner
-                </SheetTitle>
-              </SheetHeader>
-              <div className="mt-4">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Välj vilka egenskaper som ska visas. Dra i kolumnhuvudena för att ändra ordning.
-                </p>
-                <ScrollArea className="h-[calc(100vh-200px)]">
-                  <ColumnSelectorTree
-                    columns={allColumns}
-                    visibleColumns={visibleColumns}
-                    onToggle={toggleColumn}
-                  />
-                </ScrollArea>
-              </div>
-            </SheetContent>
-          </Sheet>
+        {/* Column selector dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
+              <Settings2 size={14} />
+              <span className="hidden sm:inline">Kolumner</span>
+              <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
+            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            {systemCols.map(col => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={visibleColumns.includes(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            {calculatedCols.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Beräknade</DropdownMenuLabel>
+                {calculatedCols.map(col => (
+                  <DropdownMenuCheckboxItem
+                    key={col.key}
+                    checked={visibleColumns.includes(col.key)}
+                    onCheckedChange={() => toggleColumn(col.key)}
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </>
+            )}
+            {userDefinedCols.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                {userDefinedCols.map(col => (
+                  <DropdownMenuCheckboxItem
+                    key={col.key}
+                    checked={visibleColumns.includes(col.key)}
+                    onCheckedChange={() => toggleColumn(col.key)}
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-          {/* View mode toggle */}
-          <div className="flex border rounded-md">
-            <Button
-              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-              className="h-9 w-9"
-              title="Tabell"
-            >
-              <List size={16} />
-            </Button>
-            <Button
-              variant={viewMode === 'gallery' ? 'secondary' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('gallery')}
-              className="h-9 w-9"
-              title="Galleri"
-            >
-              <LayoutGrid size={16} />
-            </Button>
-          </div>
+        {/* View mode toggle */}
+        <div className="flex border rounded-md">
+          <Button
+            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => setViewMode('grid')}
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            title="Tabell"
+          >
+            <List size={16} />
+          </Button>
+          <Button
+            variant={viewMode === 'gallery' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => setViewMode('gallery')}
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            title="Galleri"
+          >
+            <LayoutGrid size={16} />
+          </Button>
         </div>
       </div>
+
+      {/* Selection toolbar - shown when rows are selected */}
+      {selectedRows.size > 0 && (
+        <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
+          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          
+          <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
+            <Info size={14} />
+            Egenskaper
+          </Button>
+          
+          <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
+            <X size={14} />
+            Avmarkera
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       <ScrollArea className="flex-1">
@@ -657,6 +595,13 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {/* Checkbox column header */}
+                      <TableHead className="bg-muted/50 w-10">
+                        <Checkbox
+                          checked={selectedRows.size === filteredRooms.length && filteredRooms.length > 0}
+                          onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                        />
+                      </TableHead>
                       <SortableContext
                         items={orderedVisibleColumns}
                         strategy={horizontalListSortingStrategy}
@@ -683,9 +628,16 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                     {filteredRooms.map((room) => (
                       <TableRow 
                         key={room.fmGuid} 
-                        className="hover:bg-muted/50 cursor-pointer"
+                        className={`hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-muted/50' : ''}`}
                         onClick={() => handleSelectRoom(room)}
                       >
+                        {/* Checkbox cell */}
+                        <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedRows.has(room.fmGuid)}
+                            onCheckedChange={(checked) => handleSelectRow(room.fmGuid, !!checked)}
+                          />
+                        </TableCell>
                         {orderedVisibleColumns.map((colKey) => (
                           <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm">
                             {formatCellValue(colKey, room[colKey])}
@@ -710,7 +662,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                     {filteredRooms.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={orderedVisibleColumns.length + 1}
+                          colSpan={orderedVisibleColumns.length + 2}
                           className="text-center py-8 text-muted-foreground"
                         >
                           Inga rum hittades
@@ -729,15 +681,22 @@ const RoomsView: React.FC<RoomsViewProps> = ({
               {filteredRooms.map((room) => (
                 <Card
                   key={room.fmGuid}
-                  className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
-                  onClick={() => handleSelectRoom(room)}
+                  className={`overflow-hidden group cursor-pointer hover:border-primary/50 transition-all ${
+                    selectedRows.has(room.fmGuid) ? 'ring-2 ring-primary' : ''
+                  }`}
+                  onClick={() => handleSelectRow(room.fmGuid, !selectedRows.has(room.fmGuid))}
                 >
                   <div className="h-24 bg-gradient-to-br from-primary/20 to-accent/20 relative flex items-center justify-center">
                     <DoorOpen className="h-10 w-10 text-primary/40" />
-                    <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 right-2 flex items-center gap-2">
                       <Badge variant="secondary" className="text-[10px]">
                         {room.levelCommonName}
                       </Badge>
+                      <Checkbox
+                        checked={selectedRows.has(room.fmGuid)}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={(checked) => handleSelectRow(room.fmGuid, !!checked)}
+                      />
                     </div>
                   </div>
                   <CardContent className="p-3">
@@ -779,6 +738,15 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           </div>
         )}
       </ScrollArea>
+
+      {/* Properties dialog */}
+      {showPropertiesFor && (
+        <UniversalPropertiesDialog
+          isOpen={true}
+          fmGuid={showPropertiesFor}
+          onClose={() => setShowPropertiesFor(null)}
+        />
+      )}
     </div>
   );
 };

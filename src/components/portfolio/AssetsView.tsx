@@ -9,18 +9,16 @@ import {
   ChevronUp,
   Box,
   Cuboid,
-  Settings2,
   GripVertical,
-  ChevronRight,
-  Check,
-  FolderOpen,
-  Folder,
   MapPin,
   Filter,
   AlertCircle,
   Loader2,
   RefreshCw,
   CloudUpload,
+  Check,
+  Settings2,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,16 +40,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -74,6 +65,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 
 interface AssetData {
   fmGuid: string;
@@ -173,85 +165,6 @@ const SortableColumnHeader: React.FC<{
   );
 };
 
-// Column Selector Tree Component
-const ColumnSelectorTree: React.FC<{
-  columns: ColumnDef[];
-  visibleColumns: string[];
-  onToggle: (key: string) => void;
-}> = ({ columns, visibleColumns, onToggle }) => {
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
-    system: true,
-    status: true,
-    userDefined: true,
-  });
-
-  const groupedColumns = useMemo(() => {
-    const groups: Record<string, ColumnDef[]> = {
-      system: [],
-      status: [],
-      userDefined: [],
-    };
-    columns.forEach((col) => {
-      if (groups[col.category]) {
-        groups[col.category].push(col);
-      }
-    });
-    return groups;
-  }, [columns]);
-
-  const categoryLabels: Record<string, string> = {
-    system: 'Systemegenskaper',
-    status: 'Status',
-    userDefined: 'Användardefinierade',
-  };
-
-  return (
-    <div className="space-y-2">
-      {Object.entries(groupedColumns).map(
-        ([category, cols]) =>
-          cols.length > 0 && (
-            <Collapsible
-              key={category}
-              open={openCategories[category]}
-              onOpenChange={(open) =>
-                setOpenCategories((prev) => ({ ...prev, [category]: open }))
-              }
-            >
-              <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 hover:bg-muted rounded-md transition-colors">
-                <ChevronRight
-                  size={14}
-                  className={`transition-transform ${openCategories[category] ? 'rotate-90' : ''}`}
-                />
-                <Folder size={14} className="text-blue-500" />
-                <span className="font-medium text-sm">{categoryLabels[category]}</span>
-                <Badge variant="secondary" className="ml-auto text-xs">
-                  {cols.filter((c) => visibleColumns.includes(c.key)).length}/{cols.length}
-                </Badge>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="ml-6 mt-1 space-y-0.5 max-h-48 overflow-y-auto">
-                  {cols.map((col) => (
-                    <div
-                      key={col.key}
-                      className="flex items-center gap-2 p-1.5 hover:bg-muted/50 rounded cursor-pointer"
-                      onClick={() => onToggle(col.key)}
-                    >
-                      <Checkbox
-                        checked={visibleColumns.includes(col.key)}
-                        onCheckedChange={() => onToggle(col.key)}
-                      />
-                      <span className="text-sm truncate">{col.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          )
-      )}
-    </div>
-  );
-};
-
 type FilterMode = 'all' | 'orphans' | 'no-annotation' | 'unsynced';
 
 const AssetsView: React.FC<AssetsViewProps> = ({
@@ -273,6 +186,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [isSyncingAssets, setIsSyncingAssets] = useState(false);
   const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
   const [isBatchSyncing, setIsBatchSyncing] = useState(false);
+  
+  // Multi-selection state
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  
+  // Properties dialog state
+  const [showPropertiesFor, setShowPropertiesFor] = useState<string | null>(null);
 
   // Check if we need to sync assets on mount (if zero assets for this building)
   useEffect(() => {
@@ -510,6 +429,90 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     }
   }, [assetData, toast]);
 
+  // Multi-selection handlers
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedRows(new Set(filteredAssets.map(a => a.fmGuid)));
+    } else {
+      setSelectedRows(new Set());
+    }
+  }, [filteredAssets]);
+
+  const handleSelectRow = useCallback((fmGuid: string, checked: boolean) => {
+    setSelectedRows(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(fmGuid);
+      } else {
+        newSet.delete(fmGuid);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Batch action handlers
+  const handleShowSelectedProperties = useCallback(() => {
+    if (selectedRows.size === 1) {
+      setShowPropertiesFor(Array.from(selectedRows)[0]);
+    } else {
+      toast({
+        title: 'Välj ett objekt',
+        description: 'Välj exakt ett objekt för att visa egenskaper',
+      });
+    }
+  }, [selectedRows, toast]);
+
+  const handleBatchPlaceAnnotation = useCallback(() => {
+    const selectedAssets = filteredAssets.filter(a => 
+      selectedRows.has(a.fmGuid) && !a.createdInModel && !a.annotationPlaced
+    );
+    
+    if (selectedAssets.length === 0) {
+      toast({
+        title: 'Inga att placera',
+        description: 'Valda assets finns redan i modell eller har redan annotation',
+      });
+      return;
+    }
+    
+    // Place first one - user needs to do one at a time
+    handlePlaceAnnotation(selectedAssets[0]);
+  }, [selectedRows, filteredAssets, toast, handlePlaceAnnotation]);
+
+  const handleBatchSyncSelected = useCallback(async () => {
+    const selectedAssets = filteredAssets.filter(a => 
+      selectedRows.has(a.fmGuid) && a.isLocal && a.roomFmGuid
+    );
+    
+    if (selectedAssets.length === 0) {
+      toast({
+        title: 'Inga att synka',
+        description: 'Valda assets är redan synkade eller saknar rum-koppling',
+      });
+      return;
+    }
+
+    setIsBatchSyncing(true);
+    try {
+      const fmGuids = selectedAssets.map(a => a.fmGuid);
+      const result = await batchSyncAssetsToAssetPlus(fmGuids);
+      
+      toast({
+        title: 'Synk klar',
+        description: `Synkade ${result.synced} av ${result.total}`,
+        variant: result.failed > 0 ? 'destructive' : 'default',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Synk misslyckades',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBatchSyncing(false);
+    }
+  }, [selectedRows, filteredAssets, toast]);
+
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
     const ordered = columnOrder.filter((key) => visibleColumns.includes(key));
@@ -544,6 +547,16 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const orphanCount = assetData.filter((a) => !a.createdInModel).length;
   const noAnnotationCount = assetData.filter((a) => !a.annotationPlaced).length;
   const unsyncedCount = assetData.filter((a) => a.isLocal === true).length;
+  
+  // Count how many selected can have annotation placed
+  const selectedCanPlaceAnnotation = filteredAssets.filter(a => 
+    selectedRows.has(a.fmGuid) && !a.createdInModel && !a.annotationPlaced
+  ).length;
+  
+  // Count how many selected can be synced
+  const selectedCanSync = filteredAssets.filter(a => 
+    selectedRows.has(a.fmGuid) && a.isLocal && a.roomFmGuid
+  ).length;
 
   const title =
     facility.category === 'Building'
@@ -612,7 +625,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                     : 'Utan annotation'}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="bg-popover">
             <DropdownMenuLabel>Filtrera</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setFilterMode('all')}>
@@ -634,23 +647,39 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Batch sync button */}
-        {unsyncedCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={handleBatchSync}
-            disabled={isBatchSyncing}
-          >
-            {isBatchSyncing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CloudUpload className="h-4 w-4" />
-            )}
-            Synka alla ({unsyncedCount})
-          </Button>
-        )}
+        {/* Column selector dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Settings2 size={14} />
+              Kolumner
+              <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto bg-popover">
+            <DropdownMenuLabel>Systemegenskaper</DropdownMenuLabel>
+            {SYSTEM_COLUMNS.map(col => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={visibleColumns.includes(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Status</DropdownMenuLabel>
+            {STATUS_COLUMNS.map(col => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={visibleColumns.includes(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* View mode toggles */}
         <div className="flex items-center gap-1 border rounded-lg p-1">
@@ -671,29 +700,44 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <List size={14} />
           </Button>
         </div>
-
-        {/* Column selector */}
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Settings2 size={14} />
-              Kolumner
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-80">
-            <SheetHeader>
-              <SheetTitle>Välj kolumner</SheetTitle>
-            </SheetHeader>
-            <div className="mt-4">
-              <ColumnSelectorTree
-                columns={allColumns}
-                visibleColumns={visibleColumns}
-                onToggle={toggleColumn}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
       </div>
+
+      {/* Selection toolbar - shown when rows are selected */}
+      {selectedRows.size > 0 && (
+        <div className="border-b px-4 py-2 flex items-center gap-2 bg-muted/50 shrink-0">
+          <Badge variant="secondary">{selectedRows.size} markerade</Badge>
+          
+          <Button size="sm" variant="outline" onClick={handleShowSelectedProperties} className="gap-1">
+            <Info size={14} />
+            Egenskaper
+          </Button>
+          
+          {selectedCanPlaceAnnotation > 0 && (
+            <Button size="sm" variant="outline" onClick={handleBatchPlaceAnnotation} className="gap-1">
+              <MapPin size={14} />
+              Placera ({selectedCanPlaceAnnotation})
+            </Button>
+          )}
+          
+          {selectedCanSync > 0 && (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={handleBatchSyncSelected} 
+              disabled={isBatchSyncing}
+              className="gap-1"
+            >
+              {isBatchSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Synka ({selectedCanSync})
+            </Button>
+          )}
+          
+          <Button size="sm" variant="ghost" onClick={() => setSelectedRows(new Set())} className="gap-1 ml-auto">
+            <X size={14} />
+            Avmarkera
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       <ScrollArea className="flex-1">
@@ -703,6 +747,13 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {/* Checkbox column header */}
+                    <TableHead className="bg-muted/50 w-10">
+                      <Checkbox
+                        checked={selectedRows.size === filteredAssets.length && filteredAssets.length > 0}
+                        onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                      />
+                    </TableHead>
                     <SortableContext
                       items={orderedVisibleColumns}
                       strategy={horizontalListSortingStrategy}
@@ -726,7 +777,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                 </TableHeader>
                 <TableBody>
                   {filteredAssets.map((asset) => (
-                    <TableRow key={asset.fmGuid} className="hover:bg-muted/30">
+                    <TableRow 
+                      key={asset.fmGuid} 
+                      className={`hover:bg-muted/30 ${selectedRows.has(asset.fmGuid) ? 'bg-muted/50' : ''}`}
+                    >
+                      {/* Checkbox cell */}
+                      <TableCell className="py-2 w-10">
+                        <Checkbox
+                          checked={selectedRows.has(asset.fmGuid)}
+                          onCheckedChange={(checked) => handleSelectRow(asset.fmGuid, !!checked)}
+                        />
+                      </TableCell>
                       {orderedVisibleColumns.map((colKey) => (
                         <TableCell key={colKey} className="py-2">
                           {formatCellValue(colKey, asset[colKey])}
@@ -743,7 +804,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                           >
                             <Cuboid size={14} />
                           </Button>
-                          {!asset.annotationPlaced && (
+                          {/* Only show place annotation for assets NOT in model and without annotation */}
+                          {!asset.createdInModel && !asset.annotationPlaced && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -777,7 +839,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                   {filteredAssets.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={orderedVisibleColumns.length + 1}
+                        colSpan={orderedVisibleColumns.length + 2}
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -795,17 +857,26 @@ const AssetsView: React.FC<AssetsViewProps> = ({
               {filteredAssets.map((asset) => (
                 <Card
                   key={asset.fmGuid}
-                  className="group hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => handleOpen3D(asset)}
+                  className={`group hover:shadow-md transition-shadow cursor-pointer ${
+                    selectedRows.has(asset.fmGuid) ? 'ring-2 ring-primary' : ''
+                  }`}
+                  onClick={() => handleSelectRow(asset.fmGuid, !selectedRows.has(asset.fmGuid))}
                 >
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between mb-2">
                       <Box className="h-4 w-4 text-primary" />
-                      {!asset.createdInModel && (
-                        <span title="Ej i modell">
-                          <AlertCircle className="h-4 w-4 text-amber-500" />
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {!asset.createdInModel && (
+                          <span title="Ej i modell">
+                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                          </span>
+                        )}
+                        <Checkbox
+                          checked={selectedRows.has(asset.fmGuid)}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={(checked) => handleSelectRow(asset.fmGuid, !!checked)}
+                        />
+                      </div>
                     </div>
                     <h3 className="font-medium text-sm truncate">
                       {asset.designation}
@@ -817,19 +888,32 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                       <span className="text-xs text-muted-foreground truncate">
                         {asset.assetType}
                       </span>
-                      {!asset.annotationPlaced && (
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-amber-500"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handlePlaceAnnotation(asset);
+                            handleOpen3D(asset);
                           }}
                         >
-                          <MapPin size={12} />
+                          <Cuboid size={12} />
                         </Button>
-                      )}
+                        {!asset.createdInModel && !asset.annotationPlaced && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-amber-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePlaceAnnotation(asset);
+                            }}
+                          >
+                            <MapPin size={12} />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -844,6 +928,15 @@ const AssetsView: React.FC<AssetsViewProps> = ({
           </div>
         )}
       </ScrollArea>
+
+      {/* Properties dialog */}
+      {showPropertiesFor && (
+        <UniversalPropertiesDialog
+          isOpen={true}
+          fmGuid={showPropertiesFor}
+          onClose={() => setShowPropertiesFor(null)}
+        />
+      )}
     </div>
   );
 };
