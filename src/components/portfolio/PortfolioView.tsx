@@ -198,16 +198,25 @@ const PortfolioView: React.FC = () => {
     );
   };
 
-  // Get assets (Instance) for a facility
+  // Get assets (Instance) for a facility with deduplication
   const getAssetsForFacility = (facility: Facility) => {
     if (!allData) return [];
     const isBuilding = facility.category === 'Building';
     const isStorey = facility.category === 'Building Storey';
     
-    return allData.filter((item: any) => 
+    const filtered = allData.filter((item: any) => 
       item.category === 'Instance' &&
       (isBuilding ? item.buildingFmGuid === facility.fmGuid : isStorey ? item.levelFmGuid === facility.fmGuid : false)
     );
+    
+    // Deduplicate by fmGuid to prevent duplicate entries
+    const seen = new Set<string>();
+    return filtered.filter((item: any) => {
+      const guid = item.fmGuid || item.fm_guid;
+      if (!guid || seen.has(guid)) return false;
+      seen.add(guid);
+      return true;
+    });
   };
 
   // Handle opening 3D viewer for a room/asset
