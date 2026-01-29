@@ -1460,13 +1460,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, [pickModeEnabled, isPickMode, state.isInitialized, setupPickModeListenerInternal]);
 
-  // Cleanup pick mode listener on unmount
+  // Cleanup pick mode listener and temp markers on unmount
   useEffect(() => {
     return () => {
       if (pickModeListenerRef.current) {
         pickModeListenerRef.current();
         pickModeListenerRef.current = null;
       }
+      // Remove all temp pick markers from DOM when viewer unmounts
+      document.querySelectorAll('.temp-pick-marker').forEach(el => el.remove());
     };
   }, []);
 

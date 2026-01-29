@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppContext } from '@/context/AppContext';
+import { cn } from '@/lib/utils';
 import { INVENTORY_CATEGORIES } from './InventoryForm';
 import type { InventoryItem } from '@/pages/Inventory';
 
@@ -14,9 +15,10 @@ interface InventoryListProps {
   isLoading: boolean;
   onEdit?: (item: InventoryItem) => void;
   selectedFmGuid?: string | null;
+  compact?: boolean;
 }
 
-const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit, selectedFmGuid }) => {
+const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit, selectedFmGuid, compact = false }) => {
   const { navigatorTreeData } = useContext(AppContext);
 
   // Helper to find names from tree data
@@ -71,10 +73,12 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <h2 className="text-sm font-medium text-muted-foreground mb-2">
-        Senast registrerade {onEdit && <span className="text-xs">(klicka för att redigera)</span>}
-      </h2>
+    <div className={cn("flex-1 flex flex-col min-h-0", compact && "")}>
+      {!compact && (
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">
+          Senast registrerade {onEdit && <span className="text-xs">(klicka för att redigera)</span>}
+        </h2>
+      )}
       <ScrollArea className="flex-1">
         <div className="space-y-2 pr-2">
           {items.map((item) => {
@@ -107,34 +111,38 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
             return (
               <Card
                 key={item.fm_guid}
-                className={`p-3 transition-colors cursor-pointer ${
+                className={cn(
+                  "transition-colors cursor-pointer",
+                  compact ? "p-2" : "p-3",
                   isSelected 
                     ? 'bg-primary/10 border-primary' 
                     : 'hover:bg-accent/50'
-                }`}
+                )}
                 onClick={() => onEdit?.(item)}
               >
-                <div className="flex items-start gap-3">
-                  <span className="text-xl">{cat.icon}</span>
+                <div className={cn("flex items-start", compact ? "gap-2" : "gap-3")}>
+                  <span className={compact ? "text-base" : "text-xl"}>{cat.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-foreground truncate">{item.name}</p>
+                      <p className={cn("font-medium text-foreground truncate", compact && "text-sm")}>{item.name}</p>
                       {/* "Not in model" badge - inventory items are never in model */}
-                      <Badge 
-                        variant="outline" 
-                        className="text-amber-500 border-amber-500 text-[10px] px-1.5 py-0 shrink-0"
-                      >
-                        <AlertCircle className="h-3 w-3 mr-0.5" />
-                        Ej i modell
-                      </Badge>
+                      {!compact && (
+                        <Badge 
+                          variant="outline" 
+                          className="text-amber-500 border-amber-500 text-[10px] px-1.5 py-0 shrink-0"
+                        >
+                          <AlertCircle className="h-3 w-3 mr-0.5" />
+                          Ej i modell
+                        </Badge>
+                      )}
                     </div>
                     {location && (
-                      <p className="text-sm text-muted-foreground truncate">{location}</p>
+                      <p className={cn("text-muted-foreground truncate", compact ? "text-xs" : "text-sm")}>{location}</p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-0.5">{timeAgo}</p>
+                    {!compact && <p className="text-xs text-muted-foreground mt-0.5">{timeAgo}</p>}
                   </div>
                   {onEdit && (
-                    <Pencil className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                    <Pencil className={cn("text-muted-foreground shrink-0", compact ? "h-3 w-3" : "h-4 w-4 mt-1")} />
                   )}
                 </div>
               </Card>

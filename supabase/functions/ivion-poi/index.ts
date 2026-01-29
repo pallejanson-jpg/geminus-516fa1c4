@@ -39,38 +39,130 @@ interface IvionPoi {
   icon?: string;
 }
 
-// Get auth token from Ivion
+// Get auth token from Ivion - try multiple auth methods
 async function getIvionToken(): Promise<string> {
   if (!IVION_API_URL || !IVION_USERNAME || !IVION_PASSWORD) {
-    throw new Error('Ivion API credentials not configured');
+    throw new Error('Ivion API credentials not configured. Please set IVION_API_URL, IVION_USERNAME, and IVION_PASSWORD in Cloud secrets.');
   }
 
-  // NavVis IVION uses /api/auth/login with JSON body
-  const response = await fetch(`${IVION_API_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: IVION_USERNAME,
-      password: IVION_PASSWORD,
-    }),
-  });
+  console.log('Attempting Ivion auth to:', IVION_API_URL);
 
-  if (!response.ok) {
+  // Method 1: Try /api/auth/login with JSON body (standard NavVis approach)
+  try {
+    console.log('Trying auth method 1: /api/auth/login with JSON body');
+    const response = await fetch(`${IVION_API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: IVION_USERNAME,
+        password: IVION_PASSWORD,
+      }),
+    });
+
+    if (response.ok) {
+      const data: IvionTokenResponse = await response.json();
+      console.log('Auth method 1 succeeded');
+      return data.access_token;
+    }
+    
     const text = await response.text();
-    throw new Error(`Ivion auth failed: ${response.status} - ${text}`);
+    console.log(`Auth method 1 failed: ${response.status} - ${text}`);
+  } catch (e) {
+    console.log('Auth method 1 error:', e);
   }
 
-  const data: IvionTokenResponse = await response.json();
-  return data.access_token;
+  // Method 2: Try /api/v1/auth/login (alternative API version)
+  try {
+    console.log('Trying auth method 2: /api/v1/auth/login');
+    const response = await fetch(`${IVION_API_URL}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: IVION_USERNAME,
+        password: IVION_PASSWORD,
+      }),
+    });
+
+    if (response.ok) {
+      const data: IvionTokenResponse = await response.json();
+      console.log('Auth method 2 succeeded');
+      return data.access_token;
+    }
+    
+    const text = await response.text();
+    console.log(`Auth method 2 failed: ${response.status} - ${text}`);
+  } catch (e) {
+    console.log('Auth method 2 error:', e);
+  }
+
+  // Method 3: Try Basic Auth header approach
+  try {
+    console.log('Trying auth method 3: Basic Auth header');
+    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
+    const response = await fetch(`${IVION_API_URL}/api/auth/token`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+    });
+
+    if (response.ok) {
+      const data: IvionTokenResponse = await response.json();
+      console.log('Auth method 3 succeeded');
+      return data.access_token;
+    }
+    
+    const text = await response.text();
+    console.log(`Auth method 3 failed: ${response.status} - ${text}`);
+  } catch (e) {
+    console.log('Auth method 3 error:', e);
+  }
+
+  // Method 4: Try OAuth2 token endpoint with form data
+  try {
+    console.log('Trying auth method 4: OAuth2 token endpoint');
+    const response = await fetch(`${IVION_API_URL}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'password',
+        username: IVION_USERNAME,
+        password: IVION_PASSWORD,
+      }),
+    });
+
+    if (response.ok) {
+      const data: IvionTokenResponse = await response.json();
+      console.log('Auth method 4 succeeded');
+      return data.access_token;
+    }
+    
+    const text = await response.text();
+    console.log(`Auth method 4 failed: ${response.status} - ${text}`);
+  } catch (e) {
+    console.log('Auth method 4 error:', e);
+  }
+
+  throw new Error(`Ivion auth failed. Tried 4 different authentication methods. Please verify that IVION_API_URL (${IVION_API_URL}), IVION_USERNAME, and IVION_PASSWORD are correct.`);
 }
 
 // Test connection to Ivion
-async function testConnection(): Promise<{ success: boolean; message: string }> {
+async function testConnection(): Promise<{ success: boolean; message: string; details?: string }> {
   try {
     const token = await getIvionToken();
-    return { success: true, message: 'Successfully connected to Ivion API' };
+    return { 
+      success: true, 
+      message: 'Successfully connected to Ivion API',
+      details: `Token obtained (${token.substring(0, 10)}...)` 
+    };
   } catch (error: any) {
-    return { success: false, message: error.message };
+    return { 
+      success: false, 
+      message: error.message,
+      details: `URL: ${IVION_API_URL}, Username: ${IVION_USERNAME ? IVION_USERNAME.substring(0, 3) + '***' : 'NOT SET'}`
+    };
   }
 }
 
