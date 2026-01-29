@@ -607,58 +607,59 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             </span>
           </Button>
 
-          {/* 360+ Section with instructions */}
-          {buildingSettings?.ivion_site_id && (
-            <div className="border border-border rounded-lg p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">360+ Position</span>
-              </div>
-              
-              <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
-                <div className="flex items-start gap-2">
-                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <ol className="list-decimal list-inside space-y-0.5">
-                    <li>Öppna 360+ och navigera till rätt plats</li>
-                    <li>Long-press för att skapa POI i Ivion</li>
-                    <li>Synka tillbaka för att importera</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleOpen360Internal}
-                  className="h-10"
-                >
-                  <Eye className="h-4 w-4 mr-1.5" />
-                  <span className="text-xs">Öppna 360+</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSync360}
-                  disabled={isSyncing360}
-                  className="h-10"
-                >
-                  {isSyncing360 ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-1.5" />
-                  )}
-                  <span className="text-xs">Synka</span>
-                </Button>
-              </div>
+          {/* 360+ Section - always visible, enabled state depends on ivion_site_id */}
+          <div className="border border-border rounded-lg p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <Eye className={buildingSettings?.ivion_site_id ? "h-4 w-4 text-primary" : "h-4 w-4 text-muted-foreground"} />
+              <span className="text-sm font-medium">360+ Position</span>
             </div>
-          )}
+            
+            {buildingSettings?.ivion_site_id ? (
+              <>
+                <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <ol className="list-decimal list-inside space-y-0.5">
+                      <li>Öppna 360+ och navigera till rätt plats</li>
+                      <li>Long-press för att skapa POI i Ivion</li>
+                      <li>Synka tillbaka för att importera</li>
+                    </ol>
+                  </div>
+                </div>
 
-          {!buildingSettings?.ivion_site_id && (
-            <p className="text-xs text-muted-foreground">
-              360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.
-            </p>
-          )}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpen360Internal}
+                    className="h-10"
+                  >
+                    <Eye className="h-4 w-4 mr-1.5" />
+                    <span className="text-xs">Öppna 360+</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSync360}
+                    disabled={isSyncing360}
+                    className="h-10"
+                  >
+                    {isSyncing360 ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1.5" />
+                    )}
+                    <span className="text-xs">Synka</span>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-md flex items-center gap-2">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>360+ kräver att Ivion Site ID är konfigurerat i byggnadsinställningarna.</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
