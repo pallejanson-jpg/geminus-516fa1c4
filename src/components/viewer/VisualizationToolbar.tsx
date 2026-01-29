@@ -427,27 +427,20 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   }, [onAddAsset]);
 
   // Handle visible floors change from floor selector
-  // Re-apply spaces visibility to ensure only selected floors' spaces are shown
+  // ALWAYS turn off "Visa rum" when floor selection changes
   const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
     console.log("Visible floors changed:", visibleFloorIds);
     onVisibleFloorsChange?.(visibleFloorIds);
     
-    // Re-sync spaces visibility with floor filtering
-    // This ensures only visible floors' spaces are shown if showSpaces is enabled
-    try {
-      const assetViewer = viewerRef.current?.assetViewer;
-      if (assetViewer?.onShowSpacesChanged) {
-        // First hide all spaces
-        assetViewer.onShowSpacesChanged(false);
-        // Then re-enable only if showSpaces is on (with small delay for floor filtering to complete)
-        if (showSpaces) {
-          setTimeout(() => {
-            assetViewer.onShowSpacesChanged(true);
-          }, 100);
-        }
+    // ALWAYS reset "Visa rum" to OFF when floors change
+    if (showSpaces) {
+      setShowSpaces(false);
+      try {
+        const assetViewer = viewerRef.current?.assetViewer;
+        assetViewer?.onShowSpacesChanged?.(false);
+      } catch (e) {
+        console.debug("Could not turn off spaces:", e);
       }
-    } catch (e) {
-      console.debug("Could not sync spaces visibility:", e);
     }
   }, [onVisibleFloorsChange, viewerRef, showSpaces]);
 
@@ -578,38 +571,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 </Button>
               </div>
 
-              {/* Clipping height slider - visible when 2D mode is active */}
-              {is2DMode && (
-                <div className="space-y-2 sm:space-y-3">
-                  <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider block">
-                    Klipphöjd (2D-vy)
-                  </Label>
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-primary/10 text-primary">
-                        <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <Slider
-                          value={[clipHeight]}
-                          onValueChange={handleClipHeightChange}
-                          min={0.5}
-                          max={2.5}
-                          step={0.1}
-                          className="w-full"
-                        />
-                      </div>
-                      <span className="text-xs sm:text-sm font-medium w-10 sm:w-12 text-right">
-                        {clipHeight.toFixed(1)}m
-                      </span>
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">
-                      Höjd ovanför golv
-                    </p>
-                  </div>
-                </div>
-              )}
-
               <Separator />
 
               {/* Visibility section - "Visa" */}
@@ -728,6 +689,32 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
+                  {/* Clip height slider - moved from main menu to Viewer Settings */}
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-1">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Klipphöjd (2D-vy)</span>
+                      <span className="text-xs font-medium ml-auto">
+                        {clipHeight.toFixed(1)}m
+                      </span>
+                    </div>
+                    <div className="pl-8 sm:pl-10">
+                      <Slider
+                        value={[clipHeight]}
+                        onValueChange={handleClipHeightChange}
+                        min={0.5}
+                        max={2.5}
+                        step={0.1}
+                        className="w-full"
+                      />
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                        Höjd ovanför golv
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Viewer Theme Selector */}
                   <ViewerThemeSelector 
                     viewerRef={viewerRef}
