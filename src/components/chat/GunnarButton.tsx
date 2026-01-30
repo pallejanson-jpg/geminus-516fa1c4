@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, MessageCircle, GripHorizontal, X } from 'lucide-react';
+import { Sparkles, MessageCircle, GripHorizontal, X, Minimize2, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useApp } from '@/context/AppContext';
@@ -10,9 +10,11 @@ import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/
 /**
  * Floating Gunnar AI assistant button available throughout the application.
  * Opens a draggable floating panel with semi-transparent background.
+ * Can be minimized to a small bubble to view content behind it.
  */
 export default function GunnarButton() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [viewerContext, setViewerContext] = useState<ViewerContextChangedDetail | null>(null);
   const { activeApp, selectedFacility, viewer3dFmGuid, navigatorTreeData } = useApp();
   
@@ -171,6 +173,14 @@ export default function GunnarButton() {
     return context;
   };
 
+  const handleExpand = () => {
+    setIsMinimized(false);
+  };
+
+  const handleMinimize = () => {
+    setIsMinimized(true);
+  };
+
   return (
     <TooltipProvider>
       {/* Floating trigger button - positioned bottom right */}
@@ -179,7 +189,10 @@ export default function GunnarButton() {
           <TooltipTrigger asChild>
             <span>
               <Button
-                onClick={() => setIsOpen(true)}
+                onClick={() => {
+                  setIsOpen(true);
+                  setIsMinimized(false);
+                }}
                 size="lg"
                 className={cn(
                   "h-12 w-12 rounded-full shadow-lg",
@@ -202,8 +215,25 @@ export default function GunnarButton() {
         </Tooltip>
       </div>
 
+      {/* Minimized bubble */}
+      {isOpen && isMinimized && (
+        <div 
+          className="fixed bottom-20 right-4 z-[60] cursor-pointer sm:bottom-6"
+          onClick={handleExpand}
+        >
+          <div className={cn(
+            "bg-card/90 backdrop-blur-lg border rounded-full p-3 shadow-lg",
+            "flex items-center gap-2 hover:bg-card transition-colors"
+          )}>
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span className="text-sm font-medium max-w-32 truncate">Gunnar</span>
+            <Maximize2 className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </div>
+      )}
+
       {/* Floating draggable panel */}
-      {isOpen && (
+      {isOpen && !isMinimized && (
         <div
           ref={panelRef}
           className={cn(
@@ -238,14 +268,29 @@ export default function GunnarButton() {
                 <span className="font-medium text-sm">Gunnar AI</span>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 hover:bg-muted/50"
-              onClick={() => setIsOpen(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 hover:bg-muted/50"
+                    onClick={handleMinimize}
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
+              </Tooltip>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 hover:bg-muted/50"
+                onClick={() => setIsOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Chat content */}

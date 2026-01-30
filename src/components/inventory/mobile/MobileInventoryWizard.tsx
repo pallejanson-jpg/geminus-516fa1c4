@@ -1,11 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { ClipboardList, ChevronLeft } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { ClipboardList, ChevronLeft, List, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 import LocationDetectionStep from './LocationDetectionStep';
 import LocationSelectionStep from './LocationSelectionStep';
 import CategorySelectionStep from './CategorySelectionStep';
+import PositionPickerStep from './PositionPickerStep';
 import QuickRegistrationStep from './QuickRegistrationStep';
+import SavedItemsList from './SavedItemsList';
 
 export interface WizardFormData {
   buildingFmGuid: string;
@@ -23,17 +26,43 @@ export interface WizardFormData {
   coordinates: { x: number; y: number; z: number } | null;
 }
 
+interface SavedItem {
+  id: string;
+  fm_guid: string;
+  name: string | null;
+  common_name: string | null;
+  asset_type: string | null;
+  building_fm_guid: string | null;
+  level_fm_guid: string | null;
+  in_room_fm_guid: string | null;
+  symbol_id: string | null;
+  created_at: string;
+  annotation_placed: boolean | null;
+  coordinate_x: number | null;
+  coordinate_y: number | null;
+  coordinate_z: number | null;
+  symbol?: {
+    name: string;
+    icon_url: string | null;
+    color: string;
+  } | null;
+}
+
 interface MobileInventoryWizardProps {
   onItemSaved: () => void;
 }
 
-type WizardStep = 'detection' | 'location' | 'category' | 'registration';
+type WizardStep = 'detection' | 'location' | 'category' | 'position' | 'registration';
+type ViewMode = 'wizard' | 'list';
 
-const STEP_ORDER: WizardStep[] = ['detection', 'location', 'category', 'registration'];
+const STEP_ORDER: WizardStep[] = ['detection', 'location', 'category', 'position', 'registration'];
 
 const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSaved }) => {
   const [currentStep, setCurrentStep] = useState<WizardStep>('detection');
   const [savedCount, setSavedCount] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>('wizard');
+  const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
   
   // Form data state
   const [formData, setFormData] = useState<WizardFormData>({
@@ -56,6 +85,62 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
   const [quickLoopEnabled, setQuickLoopEnabled] = useState(false);
 
   const currentStepIndex = STEP_ORDER.indexOf(currentStep);
+
+  // Load saved items
+  const loadSavedItems = useCallback(async () => {
+    setIsLoadingItems(true);
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select(`
+          id,
+          fm_guid,
+          name,
+          common_name,
+          asset_type,
+          building_fm_guid,
+          level_fm_guid,
+          in_room_fm_guid,
+          symbol_id,
+          created_at,
+          annotation_placed,
+          coordinate_x,
+          coordinate_y,
+          coordinate_z,
+          annotation_symbols!assets_symbol_id_fkey (
+            name,
+            icon_url,
+            color
+          )
+        `)
+        .eq('is_local', true)
+        .eq('category', 'Instance')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Error loading saved items:', error);
+        return;
+      }
+
+      // Transform data to include symbol info
+      const items: SavedItem[] = (data || []).map((item: any) => ({
+        ...item,
+        symbol: item.annotation_symbols || null,
+      }));
+
+      setSavedItems(items);
+    } catch (err) {
+      console.error('Error loading saved items:', err);
+    } finally {
+      setIsLoadingItems(false);
+    }
+  }, []);
+
+  // Load items on mount and when savedCount changes
+  useEffect(() => {
+    loadSavedItems();
+  }, [loadSavedItems, savedCount]);
 
   const goToStep = useCallback((step: WizardStep) => {
     setCurrentStep(step);
@@ -97,6 +182,14 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
     goNext();
   }, [goNext]);
 
+  const handlePositionComplete = useCallback(() => {
+    goNext();
+  }, [goNext]);
+
+  const handlePositionSkip = useCallback(() => {
+    goNext();
+  }, [goNext]);
+
   const handleRegistrationComplete = useCallback((registerAnother: boolean) => {
     setSavedCount((prev) => prev + 1);
     onItemSaved();
@@ -109,7 +202,8 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
         description: '',
         coordinates: null,
       });
-      // Stay on registration step
+      // Go back to position step for quick loop
+      goToStep('position');
     } else if (registerAnother) {
       // Go back to category selection but keep location
       updateFormData({
@@ -143,18 +237,43 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
     }
   }, [onItemSaved, quickLoopEnabled, updateFormData, goToStep]);
 
+  const handleEditItem = useCallback((item: SavedItem) => {
+    // Populate form with item data for editing
+    // For now, we'll just switch to wizard view - full edit support can be added later
+    setFormData({
+      buildingFmGuid: item.building_fm_guid || '',
+      buildingName: '', // Would need to fetch
+      levelFmGuid: item.level_fm_guid || '',
+      levelName: '',
+      roomFmGuid: item.in_room_fm_guid || '',
+      roomName: '',
+      category: item.asset_type || '',
+      categoryLabel: item.asset_type || '',
+      name: item.name || item.common_name || '',
+      symbolId: item.symbol_id || '',
+      imageUrl: null,
+      description: '',
+      coordinates: item.coordinate_x !== null && item.coordinate_y !== null && item.coordinate_z !== null
+        ? { x: item.coordinate_x, y: item.coordinate_y, z: item.coordinate_z }
+        : null,
+    });
+    setCurrentStep('registration');
+    setViewMode('wizard');
+  }, []);
+
   // Step progress indicator
   const renderStepIndicator = () => {
     const steps = [
       { key: 'detection', label: '📍' },
       { key: 'location', label: '🏢' },
       { key: 'category', label: '📋' },
+      { key: 'position', label: '🎯' },
       { key: 'registration', label: '✏️' },
     ];
 
     return (
       <div className="flex items-center justify-center gap-2 py-2">
-        {steps.map((step, index) => {
+        {steps.map((step) => {
           const isActive = step.key === currentStep;
           const isPast = STEP_ORDER.indexOf(step.key as WizardStep) < currentStepIndex;
 
@@ -182,7 +301,7 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-3">
-          {currentStep !== 'detection' && (
+          {viewMode === 'wizard' && currentStep !== 'detection' && (
             <Button variant="ghost" size="icon" onClick={goBack} className="h-10 w-10">
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -190,49 +309,93 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
           <ClipboardList className="h-6 w-6 text-primary" />
           <h1 className="text-lg font-semibold text-foreground">Inventering</h1>
         </div>
-        {savedCount > 0 && (
-          <Badge variant="secondary" className="text-sm">
-            {savedCount} sparade
-          </Badge>
-        )}
+        
+        {/* View mode toggle */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'wizard' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('wizard')}
+            className="h-9"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Ny
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('list')}
+            className="h-9"
+          >
+            <List className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">Lista</span>
+            {savedItems.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {savedItems.length}
+              </Badge>
+            )}
+          </Button>
+        </div>
       </div>
 
-      {/* Step indicator */}
-      {renderStepIndicator()}
-
-      {/* Step content */}
-      <div className="flex-1 overflow-hidden">
-        {currentStep === 'detection' && (
-          <LocationDetectionStep onComplete={handleDetectionComplete} />
-        )}
-
-        {currentStep === 'location' && (
-          <LocationSelectionStep
-            formData={formData}
-            updateFormData={updateFormData}
-            onComplete={handleLocationComplete}
-            quickLoopEnabled={quickLoopEnabled}
-            setQuickLoopEnabled={setQuickLoopEnabled}
+      {/* Content */}
+      {viewMode === 'list' ? (
+        <div className="flex-1 overflow-hidden">
+          <SavedItemsList
+            items={savedItems}
+            isLoading={isLoadingItems}
+            onEdit={handleEditItem}
           />
-        )}
+        </div>
+      ) : (
+        <>
+          {/* Step indicator */}
+          {renderStepIndicator()}
 
-        {currentStep === 'category' && (
-          <CategorySelectionStep
-            formData={formData}
-            updateFormData={updateFormData}
-            onComplete={handleCategoryComplete}
-          />
-        )}
+          {/* Step content */}
+          <div className="flex-1 overflow-hidden">
+            {currentStep === 'detection' && (
+              <LocationDetectionStep onComplete={handleDetectionComplete} />
+            )}
 
-        {currentStep === 'registration' && (
-          <QuickRegistrationStep
-            formData={formData}
-            updateFormData={updateFormData}
-            onComplete={handleRegistrationComplete}
-            quickLoopEnabled={quickLoopEnabled}
-          />
-        )}
-      </div>
+            {currentStep === 'location' && (
+              <LocationSelectionStep
+                formData={formData}
+                updateFormData={updateFormData}
+                onComplete={handleLocationComplete}
+                quickLoopEnabled={quickLoopEnabled}
+                setQuickLoopEnabled={setQuickLoopEnabled}
+              />
+            )}
+
+            {currentStep === 'category' && (
+              <CategorySelectionStep
+                formData={formData}
+                updateFormData={updateFormData}
+                onComplete={handleCategoryComplete}
+              />
+            )}
+
+            {currentStep === 'position' && (
+              <PositionPickerStep
+                formData={formData}
+                updateFormData={updateFormData}
+                onComplete={handlePositionComplete}
+                onSkip={handlePositionSkip}
+              />
+            )}
+
+            {currentStep === 'registration' && (
+              <QuickRegistrationStep
+                formData={formData}
+                updateFormData={updateFormData}
+                onComplete={handleRegistrationComplete}
+                quickLoopEnabled={quickLoopEnabled}
+              />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
