@@ -53,6 +53,57 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_plus_endpoint_cache: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
+      asset_sync_progress: {
+        Row: {
+          building_fm_guid: string | null
+          created_at: string | null
+          current_building_index: number | null
+          job: string
+          skip: number | null
+          total_buildings: number | null
+          total_synced: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          created_at?: string | null
+          current_building_index?: number | null
+          job: string
+          skip?: number | null
+          total_buildings?: number | null
+          total_synced?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          created_at?: string | null
+          current_building_index?: number | null
+          job?: string
+          skip?: number | null
+          total_buildings?: number | null
+          total_synced?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       asset_sync_state: {
         Row: {
           created_at: string

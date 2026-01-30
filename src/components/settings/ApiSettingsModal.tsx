@@ -257,78 +257,129 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Sync all assets (chunked by building)
+    // Sync all assets with loop-until-complete behavior
     const handleSyncAssetsChunked = async () => {
         setIsSyncingAssets(true);
-        try {
-            supabase.functions.invoke('asset-plus-sync', {
-                body: { action: 'sync-assets-chunked' }
-            }).catch((err) => {
-                console.log('Edge function call ended:', err?.message);
-            });
+        
+        const runResumableSync = async (): Promise<void> => {
+            try {
+                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                    body: { action: 'sync-assets-resumable' }
+                });
 
-            toast({
-                title: "Synkar tillgångar",
-                description: "Hämtar alla tillgångar byggnad för byggnad. Detta kan ta lång tid.",
-            });
+                if (error) {
+                    console.error('Asset sync error:', error);
+                    toast({
+                        variant: "destructive",
+                        title: "Sync Error",
+                        description: error.message,
+                    });
+                    setIsSyncingAssets(false);
+                    return;
+                }
 
-            // Poll only fetchSyncStatus, not checkSyncStatus continuously
-            const pollInterval = setInterval(async () => {
+                // Update status display
                 await fetchSyncStatus();
-            }, 5000);
 
-            setTimeout(() => {
-                clearInterval(pollInterval);
+                if (data?.interrupted) {
+                    // Continue syncing - call again after a short delay
+                    console.log(`Asset sync progress: ${data.totalSynced} synced, continuing...`);
+                    toast({
+                        title: "Syncing Assets",
+                        description: `${data.totalSynced} assets synced. Continuing...`,
+                    });
+                    
+                    // Wait 1 second then continue
+                    setTimeout(() => runResumableSync(), 1000);
+                } else {
+                    // Completed
+                    console.log(`Asset sync completed: ${data?.totalSynced} total`);
+                    toast({
+                        title: "Sync Complete",
+                        description: `${data?.totalSynced || 0} assets synced successfully.`,
+                    });
+                    setIsSyncingAssets(false);
+                    await checkSyncStatus();
+                }
+            } catch (error: any) {
+                console.error('Asset sync exception:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Sync Failed",
+                    description: error.message,
+                });
                 setIsSyncingAssets(false);
-                fetchSyncStatus();
-                checkSyncStatus(); // Only check once when done
-            }, 600000);
+            }
+        };
 
-        } catch (error: any) {
-            toast({
-                variant: "destructive",
-                title: "Synk misslyckades",
-                description: error.message,
-            });
-            setIsSyncingAssets(false);
-        }
+        toast({
+            title: "Starting Asset Sync",
+            description: "Syncing all assets building by building. This will complete automatically.",
+        });
+
+        runResumableSync();
     };
 
-    // Sync all XKT models to database
+    // Sync all XKT models with loop-until-complete behavior
     const handleSyncXkt = async () => {
         setIsSyncingXkt(true);
-        try {
-            supabase.functions.invoke('asset-plus-sync', {
-                body: { action: 'sync-xkt' }
-            }).catch((err) => {
-                console.log('Edge function call ended:', err?.message);
-            });
+        
+        const runResumableSync = async (): Promise<void> => {
+            try {
+                const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                    body: { action: 'sync-xkt-resumable' }
+                });
 
-            toast({
-                title: "Synkar XKT-filer",
-                description: "Hämtar och sparar 3D-modeller till databasen för snabbare laddning.",
-            });
+                if (error) {
+                    console.error('XKT sync error:', error);
+                    toast({
+                        variant: "destructive",
+                        title: "Sync Error",
+                        description: error.message,
+                    });
+                    setIsSyncingXkt(false);
+                    return;
+                }
 
-            // Poll only fetchSyncStatus, not checkSyncStatus continuously
-            const pollInterval = setInterval(async () => {
+                // Update status display
                 await fetchSyncStatus();
-            }, 5000);
 
-            setTimeout(() => {
-                clearInterval(pollInterval);
+                if (data?.interrupted) {
+                    // Continue syncing - call again after a short delay
+                    console.log(`XKT sync progress: ${data.synced} synced, continuing...`);
+                    toast({
+                        title: "Syncing XKT Models",
+                        description: `${data.synced} models synced. Continuing...`,
+                    });
+                    
+                    setTimeout(() => runResumableSync(), 1000);
+                } else {
+                    // Completed
+                    console.log(`XKT sync completed: ${data?.synced} total`);
+                    toast({
+                        title: "XKT Sync Complete",
+                        description: `${data?.synced || 0} 3D models synced successfully.`,
+                    });
+                    setIsSyncingXkt(false);
+                    await checkSyncStatus();
+                }
+            } catch (error: any) {
+                console.error('XKT sync exception:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Sync Failed",
+                    description: error.message,
+                });
                 setIsSyncingXkt(false);
-                fetchSyncStatus();
-                checkSyncStatus(); // Only check once when done
-            }, 600000);
+            }
+        };
 
-        } catch (error: any) {
-            toast({
-                variant: "destructive",
-                title: "Synk misslyckades",
-                description: error.message,
-            });
-            setIsSyncingXkt(false);
-        }
+        toast({
+            title: "Starting XKT Sync",
+            description: "Syncing 3D models for all buildings. This will complete automatically.",
+        });
+
+        runResumableSync();
     };
 
     // Fetch favorite building(s)
