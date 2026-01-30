@@ -21,11 +21,16 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Helper for deterministic pseudo-random based on string
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
+
+// Truncate name for chart display
+const truncateName = (name: string, maxLen = 12) => 
+    name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
 
 // Work order status types
 type WorkOrderStatus = 'open' | 'in_progress' | 'pending' | 'completed' | 'cancelled';
@@ -45,14 +50,14 @@ interface MockWorkOrder {
 
 // Generate mock work orders for demo
 const generateMockWorkOrders = (buildings: any[]): MockWorkOrder[] => {
-    const categories = ['VVS', 'El', 'Hiss', 'Lås/Dörr', 'Ventilation', 'Städ', 'Övrigt'];
+    const categories = ['HVAC', 'Electrical', 'Elevator', 'Doors/Locks', 'Ventilation', 'Cleaning', 'Other'];
     const statuses: WorkOrderStatus[] = ['open', 'in_progress', 'pending', 'completed', 'cancelled'];
     const priorities: MockWorkOrder['priority'][] = ['low', 'medium', 'high', 'critical'];
     const assignees = ['Johan A.', 'Maria B.', 'Erik C.', 'Anna D.', 'Olof E.'];
     const titles = [
-        'Läckage i tak', 'Trasig dörr', 'Hiss ur funktion', 'Värmeproblem',
-        'Lampor ur funktion', 'Ventilation bullrar', 'Låsproblem', 'Vattenkran läcker',
-        'Golvslitage', 'Fuktskada', 'Fönster trasigt', 'Elfel', 'AC fungerar ej'
+        'Roof leak', 'Broken door', 'Elevator malfunction', 'Heating issue',
+        'Lights out', 'Ventilation noise', 'Lock problem', 'Faucet leak',
+        'Floor wear', 'Moisture damage', 'Window broken', 'Electrical fault', 'AC not working'
     ];
 
     const orders: MockWorkOrder[] = [];
@@ -76,7 +81,7 @@ const generateMockWorkOrders = (buildings: any[]): MockWorkOrder[] => {
                 status: statuses[seed % statuses.length],
                 priority: priorities[(seed + i) % priorities.length],
                 category: categories[seed % categories.length],
-                buildingName: building.commonName || building.name || 'Okänd byggnad',
+                buildingName: building.commonName || building.name || 'Unknown building',
                 buildingFmGuid: building.fmGuid,
                 reportedAt: reportedDate.toISOString().split('T')[0],
                 dueDate: dueDate.toISOString().split('T')[0],
@@ -90,22 +95,23 @@ const generateMockWorkOrders = (buildings: any[]): MockWorkOrder[] => {
 
 // Status colors and labels
 const statusConfig: Record<WorkOrderStatus, { label: string; color: string; bgClass: string }> = {
-    open: { label: 'Öppen', color: 'text-blue-600', bgClass: 'bg-blue-100 dark:bg-blue-900/30' },
-    in_progress: { label: 'Pågående', color: 'text-amber-600', bgClass: 'bg-amber-100 dark:bg-amber-900/30' },
-    pending: { label: 'Väntande', color: 'text-purple-600', bgClass: 'bg-purple-100 dark:bg-purple-900/30' },
-    completed: { label: 'Klar', color: 'text-green-600', bgClass: 'bg-green-100 dark:bg-green-900/30' },
-    cancelled: { label: 'Avbruten', color: 'text-gray-500', bgClass: 'bg-gray-100 dark:bg-gray-800' },
+    open: { label: 'Open', color: 'text-blue-600', bgClass: 'bg-blue-100 dark:bg-blue-900/30' },
+    in_progress: { label: 'In Progress', color: 'text-amber-600', bgClass: 'bg-amber-100 dark:bg-amber-900/30' },
+    pending: { label: 'Pending', color: 'text-purple-600', bgClass: 'bg-purple-100 dark:bg-purple-900/30' },
+    completed: { label: 'Completed', color: 'text-green-600', bgClass: 'bg-green-100 dark:bg-green-900/30' },
+    cancelled: { label: 'Cancelled', color: 'text-gray-500', bgClass: 'bg-gray-100 dark:bg-gray-800' },
 };
 
 const priorityConfig: Record<MockWorkOrder['priority'], { label: string; color: string }> = {
-    low: { label: 'Låg', color: 'text-gray-500' },
+    low: { label: 'Low', color: 'text-gray-500' },
     medium: { label: 'Medium', color: 'text-blue-500' },
-    high: { label: 'Hög', color: 'text-orange-500' },
-    critical: { label: 'Kritisk', color: 'text-red-500' },
+    high: { label: 'High', color: 'text-orange-500' },
+    critical: { label: 'Critical', color: 'text-red-500' },
 };
 
 export default function FacilityManagementTab() {
     const { navigatorTreeData } = useContext(AppContext);
+    const isMobile = useIsMobile();
     const [showWorkOrderList, setShowWorkOrderList] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | 'all'>('all');
@@ -127,11 +133,11 @@ export default function FacilityManagementTab() {
         workOrders.forEach(wo => counts[wo.status]++);
         
         return [
-            { name: 'Öppna', value: counts.open, fill: 'hsl(220, 80%, 55%)' },
-            { name: 'Pågående', value: counts.in_progress, fill: 'hsl(38, 92%, 50%)' },
-            { name: 'Väntande', value: counts.pending, fill: 'hsl(262, 83%, 58%)' },
-            { name: 'Klara', value: counts.completed, fill: 'hsl(142, 71%, 45%)' },
-            { name: 'Avbrutna', value: counts.cancelled, fill: 'hsl(var(--muted-foreground))' },
+            { name: 'Open', value: counts.open, fill: 'hsl(220, 80%, 55%)' },
+            { name: 'In Progress', value: counts.in_progress, fill: 'hsl(38, 92%, 50%)' },
+            { name: 'Pending', value: counts.pending, fill: 'hsl(262, 83%, 58%)' },
+            { name: 'Completed', value: counts.completed, fill: 'hsl(142, 71%, 45%)' },
+            { name: 'Cancelled', value: counts.cancelled, fill: 'hsl(var(--muted-foreground))' },
         ];
     }, [workOrders]);
 
@@ -140,9 +146,11 @@ export default function FacilityManagementTab() {
         return navigatorTreeData.map((building) => {
             const hash = hashString(building.fmGuid || '');
             const buildingOrders = workOrders.filter(wo => wo.buildingFmGuid === building.fmGuid);
+            const fullName = building.commonName || building.name || 'Building';
             return {
                 fmGuid: building.fmGuid,
-                name: building.commonName || building.name || 'Byggnad',
+                name: truncateName(fullName),
+                fullName,
                 activeIssues: buildingOrders.filter(wo => wo.status === 'open' || wo.status === 'in_progress').length,
                 plannedMaintenance: 1 + (hash % 5),
                 completedThisMonth: buildingOrders.filter(wo => wo.status === 'completed').length,
@@ -207,34 +215,39 @@ export default function FacilityManagementTab() {
 
     const kpiCards = [
         { 
-            title: 'Aktiva ärenden', 
+            title: 'Active Issues', 
             value: totals.totalActive, 
             icon: AlertTriangle, 
             color: 'text-yellow-500',
-            badge: 'Öppna + Pågående'
+            badge: 'Open + In Progress'
         },
         { 
-            title: 'Väntande', 
+            title: 'Pending', 
             value: totals.totalPending, 
             icon: Clock, 
             color: 'text-purple-500',
-            badge: 'Inväntar'
+            badge: 'Awaiting'
         },
         { 
-            title: 'Avslutade (månad)', 
+            title: 'Completed (month)', 
             value: totals.totalCompleted, 
             icon: CheckCircle2, 
             color: 'text-green-500',
-            badge: 'Denna period'
+            badge: 'This period'
         },
         { 
-            title: 'SLA-efterlevnad', 
+            title: 'SLA Compliance', 
             value: `${totals.avgSla}%`, 
             icon: TrendingUp, 
             color: 'text-primary',
-            badge: 'Snitt'
+            badge: 'Average'
         },
     ];
+
+    // Mobile-friendly pie chart label
+    const renderPieLabel = isMobile 
+        ? undefined 
+        : ({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`;
 
     return (
         <div className="space-y-6">
@@ -263,13 +276,13 @@ export default function FacilityManagementTab() {
                         <div>
                             <CardTitle className="text-base flex items-center gap-2">
                                 <Wrench className="h-4 w-4 text-orange-500" />
-                                Arbetsorderstatus
+                                Work Order Status
                             </CardTitle>
-                            <CardDescription>Fördelning per status - klicka för detaljer</CardDescription>
+                            <CardDescription>Distribution by status - click for details</CardDescription>
                         </div>
                         <Button variant="ghost" size="sm" className="gap-1">
                             <List className="h-4 w-4" />
-                            Visa lista
+                            View List
                             <ChevronRight className="h-3 w-3" />
                         </Button>
                     </div>
@@ -281,7 +294,7 @@ export default function FacilityManagementTab() {
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                 <XAxis 
                                     dataKey="name" 
-                                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                 />
                                 <YAxis />
                                 <Tooltip 
@@ -293,7 +306,7 @@ export default function FacilityManagementTab() {
                                 />
                                 <Bar 
                                     dataKey="value" 
-                                    name="Antal"
+                                    name="Count"
                                     radius={[4, 4, 0, 0]}
                                 />
                             </BarChart>
@@ -309,9 +322,9 @@ export default function FacilityManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-primary" />
-                            Ärenden per byggnad
+                            Issues per Building
                         </CardTitle>
-                        <CardDescription>Aktiva serviceärenden</CardDescription>
+                        <CardDescription>Active service issues</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -322,8 +335,8 @@ export default function FacilityManagementTab() {
                                     <YAxis 
                                         dataKey="name" 
                                         type="category" 
-                                        width={100}
-                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                                        width={isMobile ? 60 : 100}
+                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
                                     <Tooltip 
                                         contentStyle={{ 
@@ -331,10 +344,14 @@ export default function FacilityManagementTab() {
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
+                                        formatter={(value: number, name: string, props: any) => [
+                                            `${value} issues`,
+                                            props.payload.fullName
+                                        ]}
                                     />
                                     <Bar 
                                         dataKey="activeIssues" 
-                                        name="Ärenden"
+                                        name="Issues"
                                         fill="hsl(var(--primary))"
                                         radius={[0, 4, 4, 0]}
                                     />
@@ -349,9 +366,9 @@ export default function FacilityManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <FileText className="h-4 w-4 text-orange-500" />
-                            Ärendekategorier
+                            Issue Categories
                         </CardTitle>
-                        <CardDescription>Fördelning per kategori</CardDescription>
+                        <CardDescription>Distribution by category</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -361,12 +378,12 @@ export default function FacilityManagementTab() {
                                         data={categoryData}
                                         cx="50%"
                                         cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
+                                        innerRadius={isMobile ? 40 : 50}
+                                        outerRadius={isMobile ? 65 : 80}
                                         paddingAngle={2}
                                         dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={false}
+                                        label={renderPieLabel}
+                                        labelLine={!isMobile}
                                     >
                                         {categoryData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -392,27 +409,27 @@ export default function FacilityManagementTab() {
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-primary" />
-                        Fastighetsöversikt
+                        Property Overview
                     </CardTitle>
-                    <CardDescription>FM-status per byggnad</CardDescription>
+                    <CardDescription>FM status per building</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Byggnad</TableHead>
-                                    <TableHead className="text-right">Aktiva</TableHead>
-                                    <TableHead className="text-right">Planerat</TableHead>
-                                    <TableHead className="text-right">Avslutade</TableHead>
+                                    <TableHead>Building</TableHead>
+                                    <TableHead className="text-right">Active</TableHead>
+                                    <TableHead className="text-right">Planned</TableHead>
+                                    <TableHead className="text-right">Completed</TableHead>
                                     <TableHead className="text-right">SLA %</TableHead>
-                                    <TableHead className="text-right">Kostnad/mån</TableHead>
+                                    <TableHead className="text-right">Cost/month</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {fmData.slice(0, 10).map((building) => (
                                     <TableRow key={building.fmGuid}>
-                                        <TableCell className="font-medium">{building.name}</TableCell>
+                                        <TableCell className="font-medium">{building.fullName}</TableCell>
                                         <TableCell className="text-right">
                                             <Badge variant={building.activeIssues > 5 ? "destructive" : "secondary"}>
                                                 {building.activeIssues}
@@ -426,7 +443,7 @@ export default function FacilityManagementTab() {
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {building.monthlyCost.toLocaleString('sv-SE')} kr
+                                            {building.monthlyCost.toLocaleString()} SEK
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -442,49 +459,49 @@ export default function FacilityManagementTab() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Wrench className="h-5 w-5 text-orange-500" />
-                            Arbetsorderlista
+                            Work Order List
                         </DialogTitle>
                         <DialogDescription>
-                            {workOrders.length} arbetsorder totalt
+                            {workOrders.length} work orders total
                         </DialogDescription>
                     </DialogHeader>
                     
                     {/* Filters */}
                     <div className="flex flex-wrap gap-2 py-2">
                         <Input
-                            placeholder="Sök ärende..."
+                            placeholder="Search issues..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-48 h-9"
                         />
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                             <Button
                                 variant={statusFilter === 'all' ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => setStatusFilter('all')}
                             >
-                                Alla
+                                All
                             </Button>
                             <Button
                                 variant={statusFilter === 'open' ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => setStatusFilter('open')}
                             >
-                                Öppna
+                                Open
                             </Button>
                             <Button
                                 variant={statusFilter === 'in_progress' ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => setStatusFilter('in_progress')}
                             >
-                                Pågående
+                                In Progress
                             </Button>
                             <Button
                                 variant={statusFilter === 'completed' ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => setStatusFilter('completed')}
                             >
-                                Klara
+                                Completed
                             </Button>
                         </div>
                     </div>
@@ -495,13 +512,13 @@ export default function FacilityManagementTab() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="w-24">ID</TableHead>
-                                    <TableHead>Ärende</TableHead>
-                                    <TableHead>Byggnad</TableHead>
-                                    <TableHead>Kategori</TableHead>
+                                    <TableHead>Issue</TableHead>
+                                    <TableHead>Building</TableHead>
+                                    <TableHead>Category</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Prioritet</TableHead>
-                                    <TableHead>Tilldelad</TableHead>
-                                    <TableHead>Förfaller</TableHead>
+                                    <TableHead>Priority</TableHead>
+                                    <TableHead>Assigned</TableHead>
+                                    <TableHead>Due</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -533,7 +550,7 @@ export default function FacilityManagementTab() {
                         </Table>
                         {filteredWorkOrders.length === 0 && (
                             <div className="flex items-center justify-center py-12 text-muted-foreground">
-                                Inga arbetsorder matchar filtren
+                                No work orders match the filters
                             </div>
                         )}
                     </ScrollArea>
