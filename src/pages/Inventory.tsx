@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ClipboardList, ChevronDown, ChevronUp, Scan } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -30,6 +32,7 @@ export interface InventoryItem {
 }
 
 const Inventory: React.FC = () => {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { inventoryPrefill, clearInventoryPrefill, refreshInitialData } = useContext(AppContext);
   const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
@@ -155,9 +158,20 @@ const Inventory: React.FC = () => {
           <ResizablePanel defaultSize={showViewerPanel ? 25 : 35} minSize={20} maxSize={40}>
             <div className="h-full flex flex-col p-4 overflow-y-auto">
               {/* Header with collapsible recent items dropdown */}
-              <div className="flex items-center gap-3 mb-4">
-                <ClipboardList className="h-6 w-6 text-primary" />
-                <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <ClipboardList className="h-6 w-6 text-primary" />
+                  <h1 className="text-xl font-semibold text-foreground">Inventering</h1>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => navigate('/inventory/ai-scan')}
+                  className="gap-2"
+                >
+                  <Scan className="h-4 w-4" />
+                  AI Skanning
+                </Button>
               </div>
               
               {/* Collapsible dropdown for recent items */}
