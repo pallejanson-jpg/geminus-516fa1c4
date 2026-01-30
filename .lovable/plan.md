@@ -1,350 +1,164 @@
 
-# Plan: Mobil 3D Viewer & Förbättrad TreeView
+# Plan: Förbättra Mobil Inventering UI/UX
 
 ## Sammanfattning
 
-Användaren vill:
-1. **Dedikerad Mobil 3D Viewer** - Som MobileInventoryWizard men för 3D-viewern
-2. **TreeView-förbättringar:**
-   - Checkboxar för att tända/släcka objekt (visibility toggle)
-   - Börja trädet från våningsplan (skippa Site/Building-nivåer)
-   - Visa meningsfulla typnamn (Vägg, Dörr, Fönster) istället för 128-bitars GUIDs
+Användaren har identifierat flera UI/UX-problem med den mobila inventeringsvyn:
+
+1. **"Ny"-knappen** har en för "fet" lila bakgrund - vill ha bara plus-tecknet
+2. **Spara-knappen** hamnar under iPhones browser-navigering och är svår att nå
+3. **Färgglada emoji-ikoner** ser oprofessionella ut - ska ersättas med Lucide-ikoner
+4. **Allt känns för stort** - behöver kompaktare layout
 
 ---
 
-## Del 1: Förbättrad TreeView (ViewerTreePanel.tsx)
+## Ändringar
 
-### Problem 1: Inga checkboxar för visibility
+### 1. "Ny"-knappen - Ta bort bakgrund
 
-**Nuvarande:** Klick på en nod selekterar och flyger till objektet, men kan inte visa/dölja.
+**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
 
-**Lösning:** Lägg till en checkbox framför varje nod som togglar `entity.visible`:
+Ändra knappstilen från solid bakgrund till ghost/minimal:
 
-```typescript
-interface TreeNode {
-  id: string;
-  name: string;
-  type: string;
-  children?: TreeNode[];
-  fmGuid?: string;
-  objectCount?: number;
-  visible: boolean; // NY: spåra synlighet
-  indeterminate: boolean; // NY: för delvis checkade parents
-}
+```tsx
+// FÖRE (rad 315-323):
+<Button
+  variant={viewMode === 'wizard' ? 'default' : 'outline'}
+  size="sm"
+  onClick={() => setViewMode('wizard')}
+  className="h-9"
+>
+  <Plus className="h-4 w-4 mr-1" />
+  Ny
+</Button>
 
-// I TreeNodeComponent:
-<Checkbox
-  checked={node.visible}
-  indeterminate={node.indeterminate}
-  onCheckedChange={(checked) => {
-    // Toggla visibility för denna nod och alla barn
-    toggleNodeVisibility(node, checked);
-  }}
-  className="h-4 w-4 mr-1"
-/>
+// EFTER:
+<Button
+  variant="ghost"
+  size="icon"
+  onClick={() => setViewMode('wizard')}
+  className={cn(
+    "h-9 w-9",
+    viewMode === 'wizard' && "bg-primary/10 text-primary"
+  )}
+>
+  <Plus className="h-5 w-5" />
+</Button>
 ```
 
-**Visibility-logik:**
-```typescript
-const toggleNodeVisibility = (node: TreeNode, visible: boolean) => {
-  const xeokitViewer = getXeokitViewer();
-  const scene = xeokitViewer?.scene;
-  if (!scene) return;
+### 2. Spara-knappen - Fixa iOS safe-area
 
-  // Toggla denna nod
-  const entity = scene.objects[node.id];
-  if (entity) {
-    entity.visible = visible;
-  }
+**Problem:** Knappen hamnar under iPhones browser-navigering (home indicator, toolbar).
 
-  // Toggla alla barn rekursivt
-  const toggleChildren = (n: TreeNode) => {
-    n.children?.forEach(child => {
-      const childEntity = scene.objects[child.id];
-      if (childEntity) {
-        childEntity.visible = visible;
-      }
-      toggleChildren(child);
-    });
-  };
-  toggleChildren(node);
+**Fil:** `src/components/inventory/mobile/QuickRegistrationStep.tsx`
 
-  // Uppdatera state för att reflektera ändringarna
-  refreshVisibilityState();
-};
+Lägg till `pb-safe` (safe-area-inset-bottom) och minska storlek:
+
+```tsx
+// FÖRE (rad 339-362):
+<div className="space-y-3 pt-4">
+  <Button className="w-full h-14 text-lg">...</Button>
+  <Button className="w-full h-12">...</Button>
+</div>
+
+// EFTER:
+<div className="space-y-2 pt-3 pb-[env(safe-area-inset-bottom,0px)]">
+  <Button className="w-full h-12 text-base">...</Button>
+  <Button className="w-full h-10">...</Button>
+</div>
 ```
 
-### Problem 2: Trädet börjar för högt upp (Site/Building)
+Säkerställ också att `ScrollArea` har rätt padding i botten.
 
-**Nuvarande (rad 264-268):**
-```typescript
-Object.values(rootMetaObjects).forEach((rootObj: any) => {
-  const node = buildNode(rootObj);
-  tree.push(node);
-});
+### 3. Ersätt Emoji-ikoner med Lucide-ikoner
+
+**Fil:** `src/components/inventory/InventoryForm.tsx`
+
+Ändra `INVENTORY_CATEGORIES` från emojis till Lucide-ikoner:
+
+```tsx
+// FÖRE:
+export const INVENTORY_CATEGORIES = [
+  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: '🔥' },
+  { value: 'fire_blanket', label: 'Brandfilt', icon: '🧯' },
+  // ...
+];
+
+// EFTER:
+import { Flame, Siren, Hose, DoorOpen, Radio, Droplets, 
+         Fan, Lightbulb, Armchair, Monitor, Package } from 'lucide-react';
+
+export const INVENTORY_CATEGORIES = [
+  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: Flame, color: 'text-red-500' },
+  { value: 'fire_blanket', label: 'Brandfilt', icon: Siren, color: 'text-orange-500' },
+  { value: 'fire_hose', label: 'Brandslang', icon: Hose, color: 'text-red-600' },
+  { value: 'emergency_exit', label: 'Nödutgång', icon: DoorOpen, color: 'text-green-500' },
+  { value: 'sensor', label: 'Sensor', icon: Radio, color: 'text-blue-500' },
+  { value: 'sprinkler', label: 'Sprinkler', icon: Droplets, color: 'text-cyan-500' },
+  { value: 'hvac_unit', label: 'Luftbehandling', icon: Fan, color: 'text-slate-500' },
+  { value: 'lamp', label: 'Lampa', icon: Lightbulb, color: 'text-yellow-500' },
+  { value: 'furniture', label: 'Möbel', icon: Armchair, color: 'text-amber-600' },
+  { value: 'it_equipment', label: 'IT-utrustning', icon: Monitor, color: 'text-purple-500' },
+  { value: 'other', label: 'Övrigt', icon: Package, color: 'text-gray-500' },
+];
 ```
 
-**Lösning:** Börja trädet från IfcBuildingStorey-nivån:
+**Fil:** `src/components/inventory/mobile/CategorySelectionStep.tsx`
 
-```typescript
-// Ny funktion: Hitta alla storeys och börja därifrån
-const findStoreys = (metaObject: any): any[] => {
-  const storeys: any[] = [];
-  
-  const traverse = (obj: any) => {
-    if (obj.type === 'IfcBuildingStorey') {
-      storeys.push(obj);
-      return; // Stoppa här, inkludera inte barnens storeys
-    }
-    obj.children?.forEach(traverse);
-  };
-  
-  traverse(metaObject);
-  return storeys;
-};
+Uppdatera renderingen för att använda Lucide-komponenter:
 
-// I buildTree():
-Object.values(rootMetaObjects).forEach((rootObj: any) => {
-  const storeys = findStoreys(rootObj);
-  storeys.forEach(storey => {
-    const node = buildNode(storey);
-    tree.push(node);
-  });
-});
+```tsx
+// FÖRE (rad 55):
+<span className="text-3xl">{cat.icon}</span>
 
-// Sortera storeys efter våningsnummer
-tree.sort(sortByStoreyLevel);
+// EFTER:
+const IconComponent = cat.icon;
+<IconComponent className={cn("h-8 w-8", cat.color)} />
 ```
 
-### Problem 3: Visar GUIDs istället för meningsfulla namn
+**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
 
-**Nuvarande (rad 231-240):**
-```typescript
-const node: TreeNode = {
-  id: metaObject.id,
-  name: metaObject.name || metaObject.id, // <-- PROBLEM: fallback till ID (GUID)
-  type: metaObject.type || 'Unknown',
-  ...
-};
+Ersätt step-indicator emojis med Lucide-ikoner:
+
+```tsx
+// FÖRE (rad 266-272):
+const steps = [
+  { key: 'detection', label: '📍' },
+  { key: 'location', label: '🏢' },
+  { key: 'category', label: '📋' },
+  { key: 'position', label: '🎯' },
+  { key: 'registration', label: '✏️' },
+];
+
+// EFTER:
+import { MapPin, Building2, LayoutGrid, Crosshair, FileEdit } from 'lucide-react';
+
+const steps = [
+  { key: 'detection', icon: MapPin },
+  { key: 'location', icon: Building2 },
+  { key: 'category', icon: LayoutGrid },
+  { key: 'position', icon: Crosshair },
+  { key: 'registration', icon: FileEdit },
+];
+
+// I renderingen:
+const StepIcon = step.icon;
+<StepIcon className="h-4 w-4" />
 ```
 
-**Lösning:** Förbättra namnhantering med typ-översättning och bättre fallbacks:
+### 4. Kompaktare Layout
 
-```typescript
-// Översättningstabell för IFC-typer till svenska
-const IFC_TYPE_LABELS: Record<string, string> = {
-  'IfcWall': 'Vägg',
-  'IfcWallStandardCase': 'Vägg',
-  'IfcSlab': 'Bjälklag',
-  'IfcDoor': 'Dörr',
-  'IfcWindow': 'Fönster',
-  'IfcColumn': 'Pelare',
-  'IfcBeam': 'Balk',
-  'IfcStair': 'Trappa',
-  'IfcRoof': 'Tak',
-  'IfcSpace': 'Rum',
-  'IfcBuildingStorey': 'Våning',
-  'IfcFurniture': 'Möbel',
-  'IfcFurnishingElement': 'Inredning',
-  'IfcRailing': 'Räcke',
-  'IfcCovering': 'Beklädnad',
-  'IfcPlate': 'Platta',
-  'IfcMember': 'Element',
-  'IfcOpeningElement': 'Öppning',
-};
+**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
 
-// Förbättrad namnlogik
-const getDisplayName = (metaObject: any): string => {
-  // 1. Försök med namn från modellen
-  if (metaObject.name && !isGuid(metaObject.name)) {
-    return metaObject.name;
-  }
-  
-  // 2. Försök med LongName från PropertySets
-  const longName = metaObject.propertySetsByName?.Pset_SpaceCommon?.LongName ||
-                   metaObject.propertySetsByName?.Pset_WallCommon?.Reference ||
-                   metaObject.attributes?.LongName;
-  if (longName && !isGuid(longName)) {
-    return longName;
-  }
-  
-  // 3. Använd översatt typ + index
-  const typeLabel = IFC_TYPE_LABELS[metaObject.type] || metaObject.type?.replace('Ifc', '') || 'Objekt';
-  
-  // Räkna antal av samma typ bland syskon
-  const siblings = metaObject.parent?.children || [];
-  const sameTypeSiblings = siblings.filter((s: any) => s.type === metaObject.type);
-  const index = sameTypeSiblings.indexOf(metaObject) + 1;
-  
-  return `${typeLabel} ${index}`;
-};
+- Minska header padding: `p-4` → `p-3`
+- Minska step-indicator storlek: `w-8 h-8` → `w-7 h-7`
+- Minska gap mellan element
 
-// Hjälpfunktion för att upptäcka GUIDs
-const isGuid = (str: string): boolean => {
-  if (!str || str.length < 20) return false;
-  // Matcha typiska GUID-format (med eller utan bindestreck)
-  return /^[0-9a-f]{8}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{12}$/i.test(str) ||
-         /^[0-9a-zA-Z$_]{22,}$/.test(str); // Base64-kodade IFC GUIDs
-};
-```
+**Fil:** `src/components/inventory/mobile/QuickRegistrationStep.tsx`
 
----
-
-## Del 2: Dedikerad Mobil 3D Viewer
-
-### Arkitektur
-
-Följ samma mönster som MobileInventoryWizard:
-- Detektera mobil med `useIsMobile()` hook
-- Rendera helt separat mobilkomponent
-- Fullskärmsvy med touch-optimerade kontroller
-- Minimalistiskt gränssnitt - bara det mest nödvändiga
-
-### Ny Fil: `src/components/viewer/mobile/MobileViewer.tsx`
-
-```typescript
-import React, { useState, useRef, useCallback } from 'react';
-import { ChevronLeft, Maximize2, Settings2, TreeDeciduous, Layers, Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import ViewerTreePanel from '../ViewerTreePanel';
-
-interface MobileViewerProps {
-  fmGuid: string;
-  onClose?: () => void;
-}
-
-type MobileViewerMode = 'view' | 'tree' | 'settings';
-
-const MobileViewer: React.FC<MobileViewerProps> = ({ fmGuid, onClose }) => {
-  const viewerRef = useRef<any>(null);
-  const [mode, setMode] = useState<MobileViewerMode>('view');
-  const [showFloorsDrawer, setShowFloorsDrawer] = useState(false);
-  
-  return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header - kompakt */}
-      <div className="flex items-center justify-between p-2 bg-card/80 backdrop-blur-sm z-10">
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9">
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
-        
-        <h1 className="text-sm font-medium truncate flex-1 mx-2 text-center">
-          3D Viewer
-        </h1>
-        
-        <div className="flex items-center gap-1">
-          <Button 
-            variant={mode === 'tree' ? 'default' : 'ghost'} 
-            size="icon" 
-            className="h-9 w-9"
-            onClick={() => setMode(mode === 'tree' ? 'view' : 'tree')}
-          >
-            <TreeDeciduous className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9"
-            onClick={() => setShowFloorsDrawer(true)}
-          >
-            <Layers className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Viewer canvas - tar upp resten */}
-      <div className="flex-1 relative">
-        {/* Asset+ viewer laddas här */}
-        <div id="mobile-viewer-container" ref={viewerRef} className="w-full h-full" />
-        
-        {/* TreeView overlay - från höger */}
-        {mode === 'tree' && (
-          <div className="absolute inset-y-0 left-0 w-4/5 max-w-80 z-20 bg-card/95 backdrop-blur-md border-r shadow-xl">
-            <ViewerTreePanel
-              viewerRef={viewerRef}
-              isVisible={true}
-              onClose={() => setMode('view')}
-              embedded={false}
-              // Nya props för förbättrad funktionalitet:
-              showVisibilityCheckboxes={true}
-              startFromStoreys={true}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Bottom quick actions */}
-      <div className="flex items-center justify-around p-2 bg-card/80 backdrop-blur-sm border-t">
-        <Button variant="ghost" size="sm" className="flex-1">
-          <Eye className="h-4 w-4 mr-1" />
-          Rum
-        </Button>
-        <Button variant="ghost" size="sm" className="flex-1">
-          2D
-        </Button>
-        <Button variant="ghost" size="sm" className="flex-1">
-          3D
-        </Button>
-      </div>
-
-      {/* Floors drawer - bottom sheet */}
-      <Drawer open={showFloorsDrawer} onOpenChange={setShowFloorsDrawer}>
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>Välj våningar</DrawerTitle>
-          </DrawerHeader>
-          {/* FloorCarousel eller lista */}
-        </DrawerContent>
-      </Drawer>
-    </div>
-  );
-};
-
-export default MobileViewer;
-```
-
-### Uppdatera AssetPlusViewer.tsx
-
-```typescript
-import { useIsMobile } from '@/hooks/use-mobile';
-import MobileViewer from './mobile/MobileViewer';
-
-const AssetPlusViewer: React.FC<AssetPlusViewerProps> = (props) => {
-  const isMobile = useIsMobile();
-
-  // På mobil: rendera dedikerad mobil-viewer
-  if (isMobile) {
-    return <MobileViewer fmGuid={props.fmGuid} onClose={props.onClose} />;
-  }
-
-  // Desktop: befintlig kod
-  return (
-    // ... befintlig implementation
-  );
-};
-```
-
----
-
-## Del 3: Nya TreeView Props
-
-Utöka ViewerTreePanel med nya props:
-
-```typescript
-interface ViewerTreePanelProps {
-  viewerRef: React.RefObject<any>;
-  isVisible: boolean;
-  onClose: () => void;
-  onNodeSelect?: (nodeId: string, fmGuid?: string) => void;
-  onNodeHover?: (nodeId: string | null) => void;
-  embedded?: boolean;
-  // NYA PROPS:
-  showVisibilityCheckboxes?: boolean; // Visa checkboxar för visibility
-  startFromStoreys?: boolean; // Börja trädet från våningsplan
-}
-```
+- Minska input-höjd: `h-14` → `h-12`
+- Minska "Ta foto"-knappens höjd: `h-28` → `h-20`
+- Minska space mellan sektioner: `space-y-5` → `space-y-4`
 
 ---
 
@@ -352,60 +166,66 @@ interface ViewerTreePanelProps {
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/viewer/ViewerTreePanel.tsx` | Checkboxar, storey-start, bättre namn |
-| `src/components/viewer/mobile/MobileViewer.tsx` | **NY FIL** - Mobil 3D viewer |
-| `src/components/viewer/AssetPlusViewer.tsx` | Villkorlig rendering för mobil |
+| `src/components/inventory/InventoryForm.tsx` | Ersätt emoji med Lucide-ikoner i INVENTORY_CATEGORIES |
+| `src/components/inventory/mobile/MobileInventoryWizard.tsx` | Minimal "Ny"-knapp, Lucide step-ikoner, kompaktare layout |
+| `src/components/inventory/mobile/CategorySelectionStep.tsx` | Rendera Lucide-ikoner istället för emojis |
+| `src/components/inventory/mobile/QuickRegistrationStep.tsx` | iOS safe-area, kompaktare knappar |
 
 ---
 
-## Flödesöversikt
+## Visuell Jämförelse
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│              DESKTOP 3D VIEWER (befintlig)                     │
-├────────────────────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌────────────────────────────┐ ┌──────────────┐  │
-│  │TreeView │ │      3D Canvas             │ │VisToolbar   │  │
-│  │ ☑ Vån 1 │ │                            │ │ [2D] [3D]   │  │
-│  │  ☐ Vägg │ │                            │ │ [Rum] [Ann] │  │
-│  │  ☑ Dörr │ │                            │ │             │  │
-│  │ ☑ Vån 2 │ │                            │ │             │  │
-│  └─────────┘ └────────────────────────────┘ └──────────────┘  │
-└────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────┐
-│                 MOBIL 3D VIEWER (ny)                           │
-├────────────────────────────────────────────────────────────────┤
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │ [←]         3D Viewer          [🌲] [📄]              │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                                                                │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │                                                        │   │
-│  │               3D Canvas (fullskärm)                    │   │
-│  │                                                        │   │
-│  │  ┌─── TreeView overlay ───┐                           │   │
-│  │  │ 🔍 Sök...             │                            │   │
-│  │  │ ☑ Våning 1            │                            │   │
-│  │  │   ☐ Vägg 1            │                            │   │
-│  │  │   ☐ Vägg 2            │                            │   │
-│  │  │   ☑ Dörr 1            │                            │   │
-│  │  │ ☑ Våning 2            │                            │   │
-│  │  └────────────────────────┘                           │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                                                                │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │   [👁 Rum]    [2D]    [3D]                             │   │
-│  └────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────┘
+FÖRE                              EFTER
+┌─────────────────────────┐      ┌─────────────────────────┐
+│ 📋 Inventering  [■ Ny] │      │ 📋 Inventering    [+]   │
+├─────────────────────────┤      ├─────────────────────────┤
+│ 📍 🏢 📋 🎯 ✏️         │      │ ○  ○  ●  ○  ○           │
+├─────────────────────────┤      ├─────────────────────────┤
+│                         │      │                         │
+│ 🔥 Brandsläckare       │      │ [🔥] Brandsläckare      │
+│ 🧯 Brandfilt           │      │ [⚠️] Brandfilt          │
+│ 🚒 Brandslang          │      │ [💧] Brandslang         │
+│                         │      │                         │
+├─────────────────────────┤      ├─────────────────────────┤
+│ [████ SPARA ████]      │      │ [   SPARA   ]           │
+│ (dold under browser)   │      │ ← Synlig med safe-area  │
+└─────────────────────────┘      └─────────────────────────┘
 ```
+
+---
+
+## Tekniska Detaljer
+
+### iOS Safe Area
+
+CSS-variabeln `env(safe-area-inset-bottom)` ger oss höjden på iPhones "home indicator" bar. Genom att lägga till denna som padding-bottom säkerställer vi att innehållet alltid är synligt.
+
+```css
+/* Tailwind custom utility (om det inte redan finns) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+```
+
+Om Tailwind inte har denna utility inbyggd, kan vi använda inline style:
+```tsx
+style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
+```
+
+### Lucide-ikoner
+
+Lucide React har ingen inbyggd `Hose`-ikon, så vi använder närmaste alternativ:
+- `Hose` → `Droplet` eller custom
+- `Siren` → `AlertTriangle` eller `Bell`
+
+Om specifika ikoner saknas, använd generella alternativ från Lucide-biblioteket.
 
 ---
 
 ## Förväntade Resultat
 
-1. **Visibility checkboxar** - Användare kan tända/släcka individuella objekt och grupper
-2. **Bättre trädstruktur** - Börjar från våningsplan, inte Site/Building
-3. **Läsbara namn** - "Vägg 1", "Dörr 3" istället för "3xF$7dQ8kB..."
-4. **Mobil-optimerad viewer** - Touch-vänlig med minimalistiskt UI
-5. **Konsekvent UX** - Samma mönster som MobileInventoryWizard
+1. **Minimal "Ny"-knapp** - Bara ett plus-tecken, inget "fett" bakgrund
+2. **Synlig Spara-knapp** - Alltid ovanför iPhones browser-navigering
+3. **Professionella ikoner** - Lucide-ikoner istället för emojis
+4. **Kompaktare layout** - Mindre storlek på element, bättre utnyttjande av skärmutrymme
