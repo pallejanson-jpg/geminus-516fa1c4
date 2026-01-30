@@ -8,6 +8,7 @@ interface BuildingSettings {
     ivionSiteId: string | null;
     latitude: number | null;
     longitude: number | null;
+    heroImageUrl: string | null;
 }
 
 export function useBuildingSettings(fmGuid: string | null) {
@@ -37,6 +38,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     ivionSiteId: data.ivion_site_id,
                     latitude: data.latitude ?? null,
                     longitude: data.longitude ?? null,
+                    heroImageUrl: (data as any).hero_image_url ?? null,
                 });
             } else {
                 // No settings yet, use defaults
@@ -46,6 +48,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     ivionSiteId: null,
                     latitude: null,
                     longitude: null,
+                    heroImageUrl: null,
                 });
             }
         } catch (error) {
@@ -79,7 +82,10 @@ export function useBuildingSettings(fmGuid: string | null) {
                     longitude: updates.longitude !== undefined
                         ? updates.longitude
                         : settings?.longitude ?? null,
-                }, { 
+                    hero_image_url: updates.heroImageUrl !== undefined
+                        ? updates.heroImageUrl
+                        : settings?.heroImageUrl ?? null,
+                } as any, { 
                     onConflict: 'fm_guid' 
                 });
 
@@ -120,6 +126,11 @@ export function useBuildingSettings(fmGuid: string | null) {
         await saveSettings({ latitude: lat, longitude: lng });
     }, [saveSettings]);
 
+    // Update hero image
+    const updateHeroImage = useCallback(async (url: string | null) => {
+        await saveSettings({ heroImageUrl: url });
+    }, [saveSettings]);
+
     return {
         settings,
         isLoading,
@@ -127,6 +138,7 @@ export function useBuildingSettings(fmGuid: string | null) {
         toggleFavorite,
         updateIvionSiteId,
         updateMapPosition,
+        updateHeroImage,
         refetch: fetchSettings,
     };
 }
