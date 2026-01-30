@@ -1,225 +1,227 @@
 
+# Plan: Mobila Förbättringar - Gunnar Minimering, 3D/360 Position & Inventeringslista
 
-# Plan: Åtgärda Saknade Byggnader & Bakgrundsladda Hierarki
+## Sammanfattning av Problem
 
-## Sammanfattning
+### Problem 1: Gunnar-chatten täcker hela skärmen på mobil
+**Nuvarande:** Gunnar öppnas som en stor flytande panel (400×550px) som på mobil tar upp nästan hela skärmen utan möjlighet att minimera.
 
-Inventerings-wizarden visar bara 8 av 14 byggnader på grund av två problem:
+**Önskat:** Kunna minimera/dölja Gunnar-panelen för att se 3D-vyn bakom när man ber den öppna något.
 
-1. **Kategorifiltrering** – inläsningen hämtar bara `Building`, inte `IfcBuilding` (och motsvarande för storeys/spaces)
-2. **Långsam laddning** – hierarkin tar 20+ sekunder att ladda (47k+ poster), så wizarden kan öppnas innan data är klar
+### Problem 2: Saknar möjlighet att sätta position i 3D/360
+**Nuvarande:** Mobil-inventeringen (`MobileInventoryWizard`) har ingen funktion för att välja position i 3D eller 360°. Desktop-versionen har `Inline3dPositionPicker` och `Ivion360View`.
 
-### Lösning
-1. Lägg till `IfcBuilding`, `IfcBuildingStorey`, `IfcSpace` i kategorifilteringen
-2. Skapa en tvåstegsladding: först enbart hierarkin (Building/Storey/Space = snabb), sedan tillgångar (Instance) on-demand
-3. Bakgrundsladda hierarkin vid app-uppstart
+**Önskat:** Kunna välja position i både 3D-modellen och 360-vyn även på mobil.
 
----
+### Problem 3: Lista på sparade inventarier saknas i mobil
+**Nuvarande:** Mobil-wizarden visar bara en badge med antal sparade (`{savedCount} sparade`) men ingen klickbar lista.
 
-## Del 1: Fixa Kategorifiltrering
+**Desktop:** Har en kollapsbar lista (`InventoryList`) där man kan klicka och redigera.
 
-### Problem
-`refreshInitialData` i `AppContext.tsx` anropar:
-```typescript
-await fetchLocalAssets(['Building', 'Building Storey', 'Space', 'Instance'])
-```
-
-Detta missar alternativa IFC-kategorier som kan finnas i databasen.
-
-### Lösning
-Lägg till IFC-varianter:
-
-```typescript
-await fetchLocalAssets([
-    'Building', 'IfcBuilding',
-    'Building Storey', 'IfcBuildingStorey', 
-    'Space', 'IfcSpace',
-    // Instance laddas INTE vid uppstart, utan on-demand
-]);
-```
-
-**Fil:** `src/context/AppContext.tsx` (rad 464-469)
+**Önskat:** Få samma funktionalitet på mobil - se lista och kunna redigera registrerade objekt.
 
 ---
 
-## Del 2: Tvåstegsladdning
+## Tekniska Lösningar
 
-### Nuvarande flöde
-```
-App start → fetchLocalAssets([allt inkl Instance]) → 47k+ poster → 20+ sek
-```
+### Del 1: Minimera-funktion för Gunnar
 
-### Nytt flöde
-```
-App start → fetchLocalAssets([Building, Storey, Space]) → ~4k poster → 2-3 sek
-                                                         ↓
-                                            navigatorTreeData klar
-                                                         ↓
-                                            Inventory kan visa byggnader
-```
+**Fil:** `src/components/chat/GunnarButton.tsx`
 
-Tillgångar (Instance) laddas sedan on-demand när:
-- Användaren expanderar ett rum i Navigator
-- Användaren öppnar Assets-vy för en byggnad/våning
-
-### Implementation
-
-**Fil:** `src/context/AppContext.tsx`
+Lägg till ett "minimerat läge" där panelen krymps till en liten bubbla med senaste meddelandet eller bara en ikon som kan expanderas igen.
 
 ```typescript
-const refreshInitialData = useCallback(async (includeAssets = false) => {
-    setIsLoadingData(true);
-    try {
-        // Steg 1: Ladda hierarki snabbt
-        const categories = [
-            'Building', 'IfcBuilding',
-            'Building Storey', 'IfcBuildingStorey',
-            'Space', 'IfcSpace',
-        ];
-        
-        if (includeAssets) {
-            categories.push('Instance');
-        }
-        
-        const allObjects = await fetchLocalAssets(categories);
-        setAllData(allObjects);
-        setNavigatorTreeData(buildNavigatorTree(allObjects));
-    } catch (error) {
-        console.error('Failed to load assets:', error);
-    } finally {
-        setIsLoadingData(false);
-    }
-}, [buildNavigatorTree, setAllData]);
+const [isMinimized, setIsMinimized] = useState(false);
+
+// Minimerad vy - liten klickbar bubbla
+{isOpen && isMinimized && (
+  <div 
+    className="fixed bottom-20 right-4 z-[60] cursor-pointer"
+    onClick={() => setIsMinimized(false)}
+  >
+    <div className="bg-card/90 backdrop-blur-lg border rounded-full p-3 shadow-lg flex items-center gap-2">
+      <Sparkles className="h-5 w-5 text-primary" />
+      <span className="text-sm font-medium max-w-32 truncate">Gunnar</span>
+      <Maximize2 className="h-4 w-4 text-muted-foreground" />
+    </div>
+  </div>
+)}
+
+// Lägg till minimera-knapp i header
+<Button
+  variant="ghost"
+  size="icon"
+  className="h-7 w-7 hover:bg-muted/50"
+  onClick={() => setIsMinimized(true)}
+>
+  <Minimize2 className="h-4 w-4" />
+</Button>
 ```
+
+**Förväntat resultat:** Användaren kan klicka på minimera-ikonen för att dölja panelen till en liten bubbla, sedan klicka på bubblan för att expandera igen.
 
 ---
 
-## Del 3: Fixa `buildNavigatorTree` för IFC-kategorier
+### Del 2: Lägg till 3D/360 Position i Mobil-Wizard
 
-### Problem
-Rad 281-283 filtrerar bara `Building`, inte `IfcBuilding`:
-```typescript
-const buildings = items.filter(item => item.category === 'Building');
-```
+**Ny fil:** `src/components/inventory/mobile/PositionPickerStep.tsx`
 
-### Lösning
-Uppdatera alla filtreringar att inkludera IFC-varianter:
+Skapa ett nytt steg i wizarden för att välja position:
 
 ```typescript
-const buildings = items.filter(item => 
-    item.category === 'Building' || item.category === 'IfcBuilding'
-);
-const storeys = items.filter(item => 
-    item.category === 'Building Storey' || item.category === 'IfcBuildingStorey'
-);
-const spaces = items.filter(item => 
-    item.category === 'Space' || item.category === 'IfcSpace'
-);
+type WizardStep = 'detection' | 'location' | 'category' | 'position' | 'registration';
+
+// I PositionPickerStep:
+// - Visa knappar: "Välj i 3D" och "Välj i 360°"
+// - Vid klick: öppna fullskärms-viewer med pick-mode
+// - Efter val: spara koordinater och gå vidare
 ```
 
-**Fil:** `src/context/AppContext.tsx` (rad 278-284)
+**Ändringar i befintliga filer:**
+
+1. **`MobileInventoryWizard.tsx`** - Lägg till `position` som valfritt steg:
+   - Lägg till state för `coordinates`
+   - Lägg till `PositionPickerStep` komponent
+   - Steppet är valfritt - användaren kan hoppa över
+
+2. **`QuickRegistrationStep.tsx`** - Visa valda koordinater om de finns
+
+3. **Integration med 360°:**
+   - Kräver att byggnaden har konfigurerat `ivion_site_id` i `building_settings`
+   - Öppna Ivion i fullskärmsläge med möjlighet att markera position
+
+**Förväntat resultat:**  
+- Användare på mobil kan trycka "Välj i 3D" → fullskärms 3D-viewer öppnas → de klickar på en yta → position sparas
+- Samma för 360° om det är konfigurerat
 
 ---
 
-## Del 4: Lazy Load för Tillgångar
+### Del 3: Lista på Sparade Inventarier i Mobil
 
-### Ny funktion i `asset-plus-service.ts`
+**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
 
-```typescript
-/**
- * Fetch assets (Instance) for a specific building on demand.
- */
-export async function fetchAssetsForBuilding(buildingFmGuid: string): Promise<any[]> {
-    const { data, error } = await supabase
-        .from('assets')
-        .select('fm_guid, category, name, common_name, ...')
-        .eq('building_fm_guid', buildingFmGuid)
-        .eq('category', 'Instance');
-    
-    if (error) throw error;
-    return mapToCamelCase(data || []);
-}
-```
-
-### Användning i Navigator/AssetsView
-När användaren expanderar ett rum eller öppnar AssetsView:
-```typescript
-const assets = await fetchAssetsForBuilding(buildingFmGuid);
-// Merge into allData or show directly
-```
-
----
-
-## Del 5: Garanterad laddning vid wizard-öppning
-
-### Problem
-`LocationSelectionStep` visar loading-skeleton om `isLoadingData` är true, men om det redan är laddat och listan är tom visas "Ingen data".
-
-### Lösning
-Kontrollera att hierarki är laddad innan wizarden öppnas:
-
-**Fil:** `src/pages/Inventory.tsx`
+Lägg till ett "lista-läge" som toggle i headern:
 
 ```typescript
-const { navigatorTreeData, isLoadingData, refreshInitialData } = useContext(AppContext);
+const [viewMode, setViewMode] = useState<'wizard' | 'list'>('wizard');
+const [savedItems, setSavedItems] = useState<InventoryItem[]>([]);
 
+// Ladda sparade objekt
 useEffect(() => {
-    // Säkerställ att hierarki är laddad
-    if (!isLoadingData && navigatorTreeData.length === 0) {
-        refreshInitialData();
-    }
-}, []);
+  const loadItems = async () => {
+    const { data } = await supabase
+      .from('assets')
+      .select('fm_guid, name, asset_type, ...')
+      .eq('is_local', true)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setSavedItems(data || []);
+  };
+  loadItems();
+}, [savedCount]);
+
+// Header med toggle
+<div className="flex items-center gap-2">
+  <Button 
+    variant={viewMode === 'wizard' ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => setViewMode('wizard')}
+  >
+    Ny
+  </Button>
+  <Button 
+    variant={viewMode === 'list' ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => setViewMode('list')}
+  >
+    Lista ({savedItems.length})
+  </Button>
+</div>
+
+// Visa lista eller wizard
+{viewMode === 'list' ? (
+  <InventoryList 
+    items={savedItems} 
+    isLoading={isLoading}
+    onEdit={(item) => {
+      // Sätt editItem och byt till wizard
+      setEditItem(item);
+      setViewMode('wizard');
+    }}
+  />
+) : (
+  // Befintlig wizard-kod
+)}
 ```
+
+**Förväntat resultat:**  
+- Användaren kan växla mellan "Ny" (wizard) och "Lista" (sparade objekt)
+- Klick på ett objekt i listan öppnar det för redigering
 
 ---
 
-## Filer som påverkas
+## Filer som Påverkas
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/context/AppContext.tsx` | Lägg till IFC-kategorier, tvåstegsladdning |
-| `src/services/asset-plus-service.ts` | Ny `fetchAssetsForBuilding()` funktion |
-| `src/pages/Inventory.tsx` | Trigga refresh om hierarki saknas |
-| `src/components/inventory/mobile/LocationSelectionStep.tsx` | Redan fixad med loading/empty states |
+| `src/components/chat/GunnarButton.tsx` | Minimera-funktion med toggle |
+| `src/components/inventory/mobile/MobileInventoryWizard.tsx` | Lista-vy, redigering, position-steg |
+| `src/components/inventory/mobile/PositionPickerStep.tsx` | **NY FIL** - 3D/360 position picker för mobil |
+| `src/components/inventory/mobile/QuickRegistrationStep.tsx` | Visa valda koordinater |
 
 ---
 
-## Teknisk sammanfattning
+## Flödesöversikt efter Implementering
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                    APP STARTUP                              │
-├────────────────────────────────────────────────────────────┤
-│  1. refreshInitialData(includeAssets=false)                │
-│     └─> Hämtar Building, Storey, Space (~4k poster, ~2s)   │
-│  2. navigatorTreeData populeras                            │
-│  3. isLoadingData = false                                  │
-└────────────────────────────────────────────────────────────┘
-                            ↓
-┌────────────────────────────────────────────────────────────┐
-│               MOBILE INVENTORY WIZARD                       │
-├────────────────────────────────────────────────────────────┤
-│  • Alla 14 byggnader visas direkt                          │
-│  • Alla 87 våningsplan tillgängliga                        │
-│  • Rum laddas redan (ingår i Space)                        │
-└────────────────────────────────────────────────────────────┘
-                            ↓
-┌────────────────────────────────────────────────────────────┐
-│               ON-DEMAND ASSET LOADING                       │
-├────────────────────────────────────────────────────────────┤
-│  När användaren:                                           │
-│  • Öppnar AssetsView för en byggnad                        │
-│  • Expanderar rum i Navigator                              │
-│  → fetchAssetsForBuilding(buildingFmGuid)                  │
-└────────────────────────────────────────────────────────────┘
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    GUNNAR CHAT (mobil)                          │
+├─────────────────────────────────────────────────────────────────┤
+│  [−] Minimera → Liten bubbla i hörnet                          │
+│  [+] Expandera → Full panel                                     │
+│  → 3D-vy synlig bakom minimerad bubbla                         │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                MOBIL INVENTERING                                │
+├─────────────────────────────────────────────────────────────────┤
+│  [Header]  [📍 Ny] [📋 Lista (9)]                               │
+│                                                                 │
+│  LISTA-VY:                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 🧯 Brandslang        Centralstationen → Plan 2    5 min    ││
+│  │ 🧯 Brandfilt         Centralstationen → Plan 1    10 min   ││
+│  │ 🧯 Brandsläckare     Centralstationen → Plan 2    1 h      ││
+│  │ → Klicka för att redigera                                  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  WIZARD-VY (ny/redigera):                                       │
+│  📍 Plats → 🏢 Byggnad/Våning → 📋 Kategori → 📍 Position → ✏️ │
+│                                                     ↑           │
+│                                            [Välj i 3D]          │
+│                                            [Välj i 360°]        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Förväntat resultat
+## Verifieringssteg
 
-1. **Snabbare uppstart** – hierarkin laddas på ~2-3 sekunder istället för 20+
-2. **Alla byggnader visas** – 14 st istället för 8
-3. **Alla våningar visas** – inklusive IFC-varianter
-4. **Inventering fungerar direkt** – ingen väntan på tillgångsladdning
+1. **Gunnar minimering:**
+   - Öppna Gunnar på mobil
+   - Tryck minimera-knappen
+   - Verifiera att 3D-vyn syns bakom
+   - Klicka på bubblan → panelen expanderas
 
+2. **3D/360 position:**
+   - Starta ny inventering på mobil
+   - Gå till position-steget
+   - Tryck "Välj i 3D" → fullskärms-viewer öppnas
+   - Klicka på en yta → position sparas
+   - Verifiera att koordinater visas i registreringssteget
+
+3. **Inventeringslista:**
+   - Öppna Inventering på mobil
+   - Tryck "Lista" i headern
+   - Verifiera att sparade objekt visas
+   - Klicka på ett objekt → det öppnas för redigering
