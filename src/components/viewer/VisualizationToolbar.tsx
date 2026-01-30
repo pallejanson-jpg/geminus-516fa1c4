@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import LightingControlsPanel from "./LightingControlsPanel";
 import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
+import { ROOM_LABELS_TOGGLE_EVENT } from "@/hooks/useRoomLabels";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -106,6 +107,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Viewer settings collapsible state
   const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
+  const [showRoomLabels, setShowRoomLabels] = useState(false);
 
   // Scroll indicator (external, on panel edge)
   const scrollWrapRef = useRef<HTMLDivElement | null>(null);
@@ -222,6 +224,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     setArchitectBackground(presetId);
     window.dispatchEvent(new CustomEvent(ARCHITECT_BACKGROUND_CHANGED_EVENT, {
       detail: { presetId }
+    }));
+  }, []);
+
+  // Handle room labels toggle
+  const handleRoomLabelsToggle = useCallback((enabled: boolean) => {
+    setShowRoomLabels(enabled);
+    window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, {
+      detail: { enabled }
     }));
   }, []);
 
@@ -720,6 +730,23 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         Höjd ovanför golv
                       </p>
                     </div>
+                  </div>
+
+                  {/* Room Labels Toggle */}
+                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Rumsetiketter</span>
+                    </div>
+                    <Switch 
+                      checked={showRoomLabels} 
+                      onCheckedChange={handleRoomLabelsToggle}
+                    />
                   </div>
 
                   {/* Viewer Theme Selector */}
