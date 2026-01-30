@@ -300,6 +300,53 @@ async function getPoi(siteId: string, poiId: number): Promise<IvionPoi> {
   return response.json();
 }
 
+// Update an existing POI
+async function updatePoi(siteId: string, poiId: number, updates: Partial<IvionPoi>): Promise<IvionPoi> {
+  const token = await getIvionToken();
+  
+  // First, get the existing POI to merge data
+  const existing = await getPoi(siteId, poiId);
+  
+  // Merge custom data to preserve existing attributes
+  let mergedCustomData: Record<string, any> = {};
+  try {
+    mergedCustomData = JSON.parse(existing.customData || '{}');
+  } catch {
+    // Ignore parse errors
+  }
+  
+  if (updates.customData) {
+    try {
+      const newCustomData = JSON.parse(updates.customData);
+      mergedCustomData = { ...mergedCustomData, ...newCustomData };
+    } catch {
+      // Ignore parse errors
+    }
+  }
+  
+  const updatedPoi = {
+    ...existing,
+    ...updates,
+    customData: JSON.stringify(mergedCustomData),
+  };
+  
+  const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois/${poiId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updatedPoi),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to update POI: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
 // Get POI types for a site
 async function getPoiTypes(siteId: string): Promise<any[]> {
   const token = await getIvionToken();
@@ -542,6 +589,11 @@ serve(async (req) => {
       case 'create-poi':
         if (!params.siteId || !params.poiData) throw new Error('siteId and poiData required');
         result = await createPoi(params.siteId, params.poiData);
+        break;
+        
+      case 'update-poi':
+        if (!params.siteId || !params.poiId) throw new Error('siteId and poiId required');
+        result = await updatePoi(params.siteId, params.poiId, params.poiData || {});
         break;
         
       case 'import-pois':
