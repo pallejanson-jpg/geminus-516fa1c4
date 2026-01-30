@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import Login from "@/pages/Login";
 import NotFound from "./pages/NotFound";
 
 // Standalone page for Ivion integration (can be embedded in iframe)
@@ -19,16 +21,31 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Public login page */}
+          <Route path="/login" element={<Login />} />
+          
           {/* Standalone Ivion create page - accessible without app layout */}
           <Route 
             path="/ivion-create" 
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-                <IvionCreate />
+                <ProtectedRoute>
+                  <IvionCreate />
+                </ProtectedRoute>
               </Suspense>
             } 
           />
-          <Route path="/*" element={<AppLayout />} />
+          
+          {/* Protected app routes */}
+          <Route 
+            path="/*" 
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            } 
+          />
+          
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
