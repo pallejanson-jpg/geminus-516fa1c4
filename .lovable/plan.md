@@ -1,71 +1,43 @@
 
 
-# Plan: Fixa Ivion API-autentisering med rätt header
+# Plan: Slutför Ivion API-autentisering
 
-## Problem identifierat
+## Status
 
-Ivion använder **`x-authorization`** istället för standard `Authorization`-header. Edge-funktionen skickar för närvarande `Authorization: Bearer ...` men borde skicka `x-authorization: Bearer ...`.
+Du har hittat rätt token! Nu behöver vi:
+1. Lägga till token som hemlig nyckel för omedelbar användning
+2. Uppdatera login-metoderna att använda `x-authorization` för automatisk token-förnyelse
 
-## Lösning
+## Steg 1: Lägg till IVION_ACCESS_TOKEN
 
-### Steg 1: Uppdatera edge-funktionen
+Lägg till den hämtade JWT-token som hemlig nyckel för omedelbar funktion:
+- **Namn:** IVION_ACCESS_TOKEN
+- **Värde:** `eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiQVVUSCIsInByb3ZpZGVyIjoiTE9DQUwiLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJzdWIiOiJTV0dfRGVtbyIsImV4cCI6MTc2OTc4NDk5MiwiaWF0IjoxNzY5NzgzMTkyfQ.6kSsIo54Xp9ID-zKsjgeiorFforTDgtOYGxn00kydsk`
 
-Ändra alla API-anrop i `supabase/functions/ivion-poi/index.ts` för att använda `x-authorization` istället för `Authorization`:
+## Steg 2: Uppdatera login-metoder för automatisk förnyelse
 
-```typescript
-// FÖRE:
-headers: {
-  'Authorization': `Bearer ${token}`,
-  'Content-Type': 'application/json',
-}
+Ändra auth-metoderna i edge-funktionen att använda `x-authorization` header istället för `Authorization`:
 
-// EFTER:
-headers: {
-  'x-authorization': `Bearer ${token}`,
-  'Content-Type': 'application/json',
-}
-```
+| Metod | Ändring |
+|-------|---------|
+| Method 3 (Basic Auth) | `Authorization: Basic ...` → `x-authorization: Basic ...` |
 
-### Steg 2: Uppdatera autentiseringsmetoder
+Dessutom lägga till en ny auth-metod som testar `/api/auth/local` endpoint som NavVis ibland använder.
 
-Eftersom tokenen som visades har `provider: LOCAL` och `sub: SWG_Demo`, verkar det som att username/password-autentisering faktiskt fungerar - men vi behöver använda rätt endpoint och headers för att hämta token.
+## Steg 3: Deploya och testa
 
-Uppdatera `attemptAuth`-funktionerna för att:
-1. Testa med `x-authorization` header
-2. Kontrollera om login-endpointen returnerar token i ett annat format
+1. Edge-funktionen deployeras automatiskt
+2. Testa "Skapa POI från Geminus"-knappen
+3. Verifiera att POIs skapas korrekt i Ivion
 
-### Steg 3: Lägg till IVION_ACCESS_TOKEN temporärt
-
-Som en snabb lösning, lägg till den token du hittade som hemlig nyckel:
-- **Namn:** IVION_ACCESS_TOKEN  
-- **Värde:** `eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiQVVUSCIsInByb3ZpZGVyIjoiTE9DQUwiLCJ0b2tlblR5cGUiOiJBQ0NFU1MiLCJzdWIiOiJTV0dfRGVtbyIsImV4cCI6MTc2OTc4NDA3NiwiaWF0IjoxNzY5NzgyMjc2fQ.rWbCFPv241SWgadz65d4U90JNkSY-rQbR8pjtLgd__g`
-
-**OBS:** Denna token går ut om ~30 minuter. För långsiktig användning behöver vi automatisk token-förnyelse.
-
-## Filer att ändra
+## Teknisk sammanfattning
 
 | Fil | Ändringar |
 |-----|-----------|
-| `supabase/functions/ivion-poi/index.ts` | Byt `Authorization` till `x-authorization` i alla API-anrop |
+| `supabase/functions/ivion-poi/index.ts` | Uppdatera login-metoder med `x-authorization` header |
+| Secrets | Lägg till `IVION_ACCESS_TOKEN` |
 
-## Token-information från JWT
+## Viktigt om token-livstid
 
-```text
-{
-  "type": "AUTH",
-  "provider": "LOCAL",
-  "tokenType": "ACCESS",
-  "sub": "SWG_Demo",
-  "exp": 1769784076,  // Utgår snart
-  "iat": 1769782276
-}
-```
-
-Detta bekräftar att IVION_USERNAME (SWG_Demo) är korrekt - vi använder bara fel header!
-
-## Nästa steg efter implementation
-
-1. Testa "Skapa POI från Geminus"-knappen
-2. Verifiera att POIs skapas korrekt i Ivion
-3. Implementera automatisk token-förnyelse om username/password fungerar med rätt headers
+Tokenen du hämtade utgår om ~30 minuter. Efter att automatisk förnyelse fungerar kommer edge-funktionen att hämta nya tokens automatiskt via username/password. Tills dess behöver tokenen uppdateras manuellt om den går ut.
 
