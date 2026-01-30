@@ -202,27 +202,58 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     setLocalAssets(assets);
   }, [assets]);
 
-  // On-demand sync: if no assets for this building, trigger sync and refetch
+  // On-demand sync: ALWAYS check database on mount, then sync if needed
   useEffect(() => {
-    const checkAndSyncAssets = async () => {
-      // Skip if we already have assets or already tried
-      if (localAssets.length > 0 || hasTriedSync) return;
-      if (!facility.fmGuid) return;
-      
-      // Only for buildings
-      if (facility.category !== 'Building') return;
-      
+    // Only for buildings with fmGuid
+    if (!facility.fmGuid || facility.category !== 'Building') return;
+    
+    // Prevent multiple simultaneous syncs
+    if (hasTriedSync) return;
+
+    const initAssets = async () => {
       setHasTriedSync(true);
       setIsSyncingAssets(true);
       
+      console.log('AssetsView: Initializing assets for building', facility.fmGuid);
+      
       try {
-        const result = await syncBuildingAssetsIfNeeded(facility.fmGuid);
+        // Step 1: Always fetch from database first (ignore props)
+        const existingAssets = await fetchAssetsForBuilding(facility.fmGuid!);
+        console.log('AssetsView: Found', existingAssets.length, 'existing assets in database');
+        
+        if (existingAssets.length > 0) {
+          // Map to expected format
+          const mapped = existingAssets.map((asset: any) => ({
+            fm_guid: asset.fmGuid,
+            category: asset.category,
+            name: asset.name,
+            common_name: asset.commonName,
+            building_fm_guid: asset.buildingFmGuid,
+            level_fm_guid: asset.levelFmGuid,
+            in_room_fm_guid: asset.inRoomFmGuid,
+            complex_common_name: asset.complexCommonName,
+            attributes: asset.attributes,
+            is_local: asset.isLocal,
+            created_in_model: asset.createdInModel,
+            asset_type: asset.assetType,
+            synced_at: asset.syncedAt,
+            annotation_placed: asset.annotationPlaced,
+            symbol_id: asset.symbolId,
+          }));
+          setLocalAssets(mapped);
+          setIsSyncingAssets(false);
+          return;
+        }
+        
+        // Step 2: No local assets - trigger sync from Asset+
+        console.log('AssetsView: No local assets, triggering sync...');
+        const result = await syncBuildingAssetsIfNeeded(facility.fmGuid!);
         
         if (result.synced && result.count > 0) {
           // Fetch newly synced assets from database
-          const newAssets = await fetchAssetsForBuilding(facility.fmGuid);
+          const newAssets = await fetchAssetsForBuilding(facility.fmGuid!);
           
-          // Map to expected format for this component
+          // Map to expected format
           const mapped = newAssets.map((asset: any) => ({
             fm_guid: asset.fmGuid,
             category: asset.category,
@@ -247,30 +278,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             title: 'Assets synkade',
             description: `Hämtade ${result.count} assets för denna byggnad`,
           });
-        } else if (!result.synced && result.count > 0) {
-          // Assets exist but weren't passed - refetch them
-          const existingAssets = await fetchAssetsForBuilding(facility.fmGuid);
-          const mapped = existingAssets.map((asset: any) => ({
-            fm_guid: asset.fmGuid,
-            category: asset.category,
-            name: asset.name,
-            common_name: asset.commonName,
-            building_fm_guid: asset.buildingFmGuid,
-            level_fm_guid: asset.levelFmGuid,
-            in_room_fm_guid: asset.inRoomFmGuid,
-            complex_common_name: asset.complexCommonName,
-            attributes: asset.attributes,
-            is_local: asset.isLocal,
-            created_in_model: asset.createdInModel,
-            asset_type: asset.assetType,
-            synced_at: asset.syncedAt,
-            annotation_placed: asset.annotationPlaced,
-            symbol_id: asset.symbolId,
-          }));
-          setLocalAssets(mapped);
+        } else if (!result.synced) {
+          console.log('AssetsView: Sync not triggered (already in sync or error)');
         }
       } catch (error: any) {
-        console.error('Failed to sync assets:', error);
+        console.error('AssetsView: Failed to sync assets:', error);
         toast({
           title: 'Kunde inte synka assets',
           description: error.message,
@@ -281,8 +293,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       }
     };
     
-    checkAndSyncAssets();
-  }, [facility.fmGuid, facility.category, localAssets.length, hasTriedSync, toast]);
+    initAssets();
+  }, [facility.fmGuid, facility.category, hasTriedSync, toast]);
 
   // DnD sensors
   const sensors = useSensors(
