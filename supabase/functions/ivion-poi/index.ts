@@ -3,13 +3,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  // Match Supabase web client preflight headers (keep permissive)
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function normalizeBaseUrl(url: string): string {
+  return (url || '').trim().replace(/\/+$/, '');
+}
+
 // Ivion API credentials from secrets
-const IVION_API_URL = Deno.env.get('IVION_API_URL') || '';
-const IVION_USERNAME = Deno.env.get('IVION_USERNAME') || '';
-const IVION_PASSWORD = Deno.env.get('IVION_PASSWORD') || '';
+// NOTE: Some Ivion instances are configured with SSO/OAuth where username/password login endpoints are not available.
+// In that case, provide a JWT via IVION_ACCESS_TOKEN.
+const IVION_API_URL = normalizeBaseUrl(Deno.env.get('IVION_API_URL') || '');
+const IVION_USERNAME = (Deno.env.get('IVION_USERNAME') || '').trim();
+const IVION_PASSWORD = (Deno.env.get('IVION_PASSWORD') || '').trim();
+const IVION_ACCESS_TOKEN = (Deno.env.get('IVION_ACCESS_TOKEN') || '').trim();
 
 // Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -20,6 +29,15 @@ interface IvionTokenResponse {
   token_type: string;
   expires_in: number;
 }
+
+type AuthAttempt = {
+  method: string;
+  url: string;
+  status?: number;
+  redirectedTo?: string | null;
+  bodyPreview?: string;
+  error?: string;
+};
 
 interface IvionPoi {
   id: number;
@@ -41,91 +59,152 @@ interface IvionPoi {
 
 // Get auth token from Ivion - try multiple auth methods
 async function getIvionToken(): Promise<string> {
+  // If a token is provided explicitly, always prefer it.
+  if (IVION_ACCESS_TOKEN) return IVION_ACCESS_TOKEN;
+
   if (!IVION_API_URL || !IVION_USERNAME || !IVION_PASSWORD) {
-    throw new Error('Ivion API credentials not configured. Please set IVION_API_URL, IVION_USERNAME, and IVION_PASSWORD in Cloud secrets.');
+    throw new Error(
+      'Ivion credentials not configured. Set IVION_API_URL and either (IVION_USERNAME + IVION_PASSWORD) OR IVION_ACCESS_TOKEN.'
+    );
   }
 
   console.log('Attempting Ivion auth to:', IVION_API_URL);
 
+  const attempts: AuthAttempt[] = [];
+  const recordAttempt = (a: AuthAttempt) => {
+    attempts.push(a);
+    // keep logs short but useful
+    console.log(`Auth attempt: ${a.method} -> ${a.status ?? 'ERR'}${a.redirectedTo ? ` (redirect ${a.redirectedTo})` : ''}`);
+  };
+
+  const commonJsonHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    // Some Spring Security setups expect this header for API login
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
   // Method 1: Try /api/auth/login with JSON body (standard NavVis approach)
   try {
     console.log('Trying auth method 1: /api/auth/login with JSON body');
-    const response = await fetch(`${IVION_API_URL}/api/auth/login`, {
+    const url = `${IVION_API_URL}/api/auth/login`;
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: commonJsonHeaders,
+      redirect: 'manual',
       body: JSON.stringify({
         username: IVION_USERNAME,
         password: IVION_PASSWORD,
       }),
     });
 
+    const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
       console.log('Auth method 1 succeeded');
       return data.access_token;
     }
-    
+
     const text = await response.text();
-    console.log(`Auth method 1 failed: ${response.status} - ${text}`);
+    recordAttempt({
+      method: 'method_1_api_auth_login',
+      url,
+      status: response.status,
+      redirectedTo,
+      bodyPreview: text?.slice(0, 300),
+    });
   } catch (e) {
-    console.log('Auth method 1 error:', e);
+    recordAttempt({
+      method: 'method_1_api_auth_login',
+      url: `${IVION_API_URL}/api/auth/login`,
+      error: String(e),
+    });
   }
 
   // Method 2: Try /api/v1/auth/login (alternative API version)
   try {
     console.log('Trying auth method 2: /api/v1/auth/login');
-    const response = await fetch(`${IVION_API_URL}/api/v1/auth/login`, {
+    const url = `${IVION_API_URL}/api/v1/auth/login`;
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: commonJsonHeaders,
+      redirect: 'manual',
       body: JSON.stringify({
         username: IVION_USERNAME,
         password: IVION_PASSWORD,
       }),
     });
 
+    const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
       console.log('Auth method 2 succeeded');
       return data.access_token;
     }
-    
+
     const text = await response.text();
-    console.log(`Auth method 2 failed: ${response.status} - ${text}`);
+    recordAttempt({
+      method: 'method_2_api_v1_auth_login',
+      url,
+      status: response.status,
+      redirectedTo,
+      bodyPreview: text?.slice(0, 300),
+    });
   } catch (e) {
-    console.log('Auth method 2 error:', e);
+    recordAttempt({
+      method: 'method_2_api_v1_auth_login',
+      url: `${IVION_API_URL}/api/v1/auth/login`,
+      error: String(e),
+    });
   }
 
   // Method 3: Try Basic Auth header approach
   try {
     console.log('Trying auth method 3: Basic Auth header');
     const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
-    const response = await fetch(`${IVION_API_URL}/api/auth/token`, {
+    const url = `${IVION_API_URL}/api/auth/token`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 
         'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
+      redirect: 'manual',
       body: 'grant_type=client_credentials',
     });
 
+    const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
       console.log('Auth method 3 succeeded');
       return data.access_token;
     }
-    
+
     const text = await response.text();
-    console.log(`Auth method 3 failed: ${response.status} - ${text}`);
+    recordAttempt({
+      method: 'method_3_basic_auth_token',
+      url,
+      status: response.status,
+      redirectedTo,
+      bodyPreview: text?.slice(0, 300),
+    });
   } catch (e) {
-    console.log('Auth method 3 error:', e);
+    recordAttempt({
+      method: 'method_3_basic_auth_token',
+      url: `${IVION_API_URL}/api/auth/token`,
+      error: String(e),
+    });
   }
 
   // Method 4: Try OAuth2 token endpoint with form data
   try {
     console.log('Trying auth method 4: OAuth2 token endpoint');
-    const response = await fetch(`${IVION_API_URL}/oauth/token`, {
+    const url = `${IVION_API_URL}/oauth/token`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      redirect: 'manual',
       body: new URLSearchParams({
         grant_type: 'password',
         username: IVION_USERNAME,
@@ -133,19 +212,36 @@ async function getIvionToken(): Promise<string> {
       }),
     });
 
+    const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
       console.log('Auth method 4 succeeded');
       return data.access_token;
     }
-    
+
     const text = await response.text();
-    console.log(`Auth method 4 failed: ${response.status} - ${text}`);
+    recordAttempt({
+      method: 'method_4_oauth_token',
+      url,
+      status: response.status,
+      redirectedTo,
+      bodyPreview: text?.slice(0, 300),
+    });
   } catch (e) {
-    console.log('Auth method 4 error:', e);
+    recordAttempt({
+      method: 'method_4_oauth_token',
+      url: `${IVION_API_URL}/oauth/token`,
+      error: String(e),
+    });
   }
 
-  throw new Error(`Ivion auth failed. Tried 4 different authentication methods. Please verify that IVION_API_URL (${IVION_API_URL}), IVION_USERNAME, and IVION_PASSWORD are correct.`);
+  // If all methods fail, this is commonly caused by SSO/OAuth being enabled on the Ivion instance.
+  // In that case, username/password login is not available and a JWT must be provided.
+  throw new Error(
+    `Ivion auth failed. This Ivion instance likely requires SSO/OAuth (or the credentials are not local Ivion accounts). ` +
+      `Provide IVION_ACCESS_TOKEN (JWT) in backend secrets, or ensure the instance supports local login via /api/auth/login. ` +
+      `Attempts: ${JSON.stringify(attempts)}`
+  );
 }
 
 // Test connection to Ivion
@@ -405,6 +501,28 @@ serve(async (req) => {
       case 'test-connection':
         result = await testConnection();
         break;
+
+      case 'test-auth':
+        // Returns detailed auth diagnostics; safe to expose (no passwords, only statuses and short previews)
+        try {
+          const token = await getIvionToken();
+          result = {
+            success: true,
+            message: 'Token obtained',
+            tokenPreview: token ? token.substring(0, 12) + '...' : null,
+            usingExplicitToken: !!IVION_ACCESS_TOKEN,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            message: e?.message || String(e),
+            usingExplicitToken: !!IVION_ACCESS_TOKEN,
+            hasApiUrl: !!IVION_API_URL,
+            hasUsername: !!IVION_USERNAME,
+            hasPassword: !!IVION_PASSWORD,
+          };
+        }
+        break;
         
       case 'get-pois':
         if (!params.siteId) throw new Error('siteId required');
@@ -441,10 +559,19 @@ serve(async (req) => {
       case 'get-latest-poi':
         // Get most recent POI from a site (useful for auto-linking)
         if (!params.siteId) throw new Error('siteId required');
-        const allPois = await getPois(params.siteId);
-        // Sort by ID descending (higher ID = newer)
-        const sortedPois = allPois.sort((a, b) => (b.id || 0) - (a.id || 0));
-        result = sortedPois.length > 0 ? sortedPois[0] : null;
+        try {
+          const allPois = await getPois(params.siteId);
+          // Sort by ID descending (higher ID = newer)
+          const sortedPois = allPois.sort((a, b) => (b.id || 0) - (a.id || 0));
+          result = sortedPois.length > 0 ? sortedPois[0] : null;
+        } catch (e: any) {
+          // Avoid returning a non-2xx status that may crash the UI; report as a soft failure.
+          result = {
+            success: false,
+            error: e?.message || String(e),
+            hint: 'If this Ivion instance uses SSO/OAuth, set IVION_ACCESS_TOKEN (JWT) in backend secrets.',
+          };
+        }
         break;
         
       default:
