@@ -197,6 +197,7 @@ export type Database = {
         Row: {
           created_at: string
           fm_guid: string
+          hero_image_url: string | null
           id: string
           is_favorite: boolean
           ivion_site_id: string | null
@@ -207,6 +208,7 @@ export type Database = {
         Insert: {
           created_at?: string
           fm_guid: string
+          hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
           ivion_site_id?: string | null
@@ -217,6 +219,7 @@ export type Database = {
         Update: {
           created_at?: string
           fm_guid?: string
+          hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
           ivion_site_id?: string | null
