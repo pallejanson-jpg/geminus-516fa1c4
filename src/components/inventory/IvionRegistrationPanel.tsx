@@ -46,6 +46,7 @@ interface IvionRegistrationPanelProps {
   ivionSiteId: string | null;
   onClose: () => void;
   onSaved: () => void;
+  onSavedAndClose?: () => void; // New: Save and navigate back to inventory
 }
 
 const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
@@ -53,11 +54,15 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   ivionSiteId,
   onClose,
   onSaved,
+  onSavedAndClose,
 }) => {
-  // Dragging state
-  const [position, setPosition] = useState({ x: window.innerWidth - 420, y: 80 });
+  // Dragging state - position to the left, near Ivion's panel
+  const [position, setPosition] = useState({ x: 360, y: 80 });
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
+  
+  // Track if we should close after saving
+  const [closeAfterSave, setCloseAfterSave] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -79,6 +84,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   const [isFetchingPoi, setIsFetchingPoi] = useState(false);
   const [fetchedPoiId, setFetchedPoiId] = useState<number | null>(null);
   const [fetchedImageId, setFetchedImageId] = useState<number | null>(null);
+  const [autoFetchAttempted, setAutoFetchAttempted] = useState(false);
 
   // Load symbols
   useEffect(() => {
@@ -92,6 +98,54 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
     };
     fetchSymbols();
   }, []);
+
+  // Auto-fetch latest POI when panel opens
+  useEffect(() => {
+    if (ivionSiteId && !autoFetchAttempted) {
+      setAutoFetchAttempted(true);
+      fetchLatestPoi();
+    }
+  }, [ivionSiteId, autoFetchAttempted]);
+
+  const fetchLatestPoi = async () => {
+    if (!ivionSiteId) return;
+    
+    setIsFetchingPoi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'get-latest-poi',
+          siteId: ivionSiteId,
+        },
+      });
+
+      if (!error && data?.location) {
+        setFetchedCoords({
+          x: data.location.x,
+          y: data.location.y,
+          z: data.location.z,
+        });
+        setFetchedPoiId(data.id);
+        setFetchedImageId(data.pointOfView?.imageId || null);
+
+        // Auto-fill name if empty
+        if (!name && data.titles) {
+          const title = data.titles['sv'] || data.titles['en'] || data.titles[Object.keys(data.titles)[0]];
+          if (title) setName(title);
+        }
+
+        toast.success('Senaste POI hämtad automatiskt!', {
+          description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
+        });
+      }
+      // Silent fail if no POI found - user can still register manually
+    } catch (err) {
+      // Silent fail - auto-fetch is a bonus feature
+      console.log('Auto-fetch POI failed:', err);
+    } finally {
+      setIsFetchingPoi(false);
+    }
+  };
 
   // Load floors for building
   useEffect(() => {
@@ -315,6 +369,13 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       if (error) throw error;
 
       toast.success('Tillgång sparad!');
+      
+      // Check if we should close after saving
+      if (closeAfterSave && onSavedAndClose) {
+        onSavedAndClose();
+        return;
+      }
+      
       onSaved();
 
       // Reset form for next registration
@@ -326,12 +387,14 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       setFetchedCoords(null);
       setFetchedPoiId(null);
       setFetchedImageId(null);
+      setAutoFetchAttempted(false); // Allow auto-fetch again for next item
       // Keep level and room for convenience
     } catch (err: any) {
       console.error('Save error:', err);
       toast.error('Kunde inte spara', { description: err.message });
     } finally {
       setIsLoading(false);
+      setCloseAfterSave(false);
     }
   };
 
@@ -525,23 +588,35 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
         </div>
       </ScrollArea>
 
-      {/* Save button */}
-      <div className="p-4 border-t bg-card/50">
+      {/* Save buttons */}
+      <div className="p-4 border-t bg-card/50 flex gap-2">
         <Button
-          onClick={handleSave}
-          className="w-full h-11"
+          variant="outline"
+          onClick={() => {
+            setCloseAfterSave(false);
+            handleSave();
+          }}
+          className="flex-1 h-11"
           disabled={isLoading || !name.trim() || !category || !symbolId}
         >
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Sparar...
-            </>
+          {isLoading && !closeAfterSave ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              Spara tillgång
-            </>
+            'Spara & fortsätt'
+          )}
+        </Button>
+        <Button
+          onClick={() => {
+            setCloseAfterSave(true);
+            handleSave();
+          }}
+          className="flex-1 h-11"
+          disabled={isLoading || !name.trim() || !category || !symbolId}
+        >
+          {isLoading && closeAfterSave ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            'Spara & avsluta'
           )}
         </Button>
       </div>
