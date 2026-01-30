@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GripVertical, X, Loader2, RefreshCw, Check, MapPin, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package } from 'lucide-react';
+import { GripVertical, X, Loader2, RefreshCw, Check, MapPin, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -48,13 +49,18 @@ interface IvionPoiData {
   pointOfView?: { imageId: number };
 }
 
+type ConnectionStatus = 'unknown' | 'connected' | 'error' | 'expired';
+
 interface IvionRegistrationPanelProps {
   buildingFmGuid: string;
   ivionSiteId: string | null;
   onClose: () => void;
   onSaved: () => void;
-  onSavedAndClose?: () => void; // New: Save and navigate back to inventory
-  initialPoi?: IvionPoiData | null; // Auto-detected POI from polling
+  onSavedAndClose?: () => void;
+  initialPoi?: IvionPoiData | null;
+  connectionStatus?: ConnectionStatus;
+  onLoadPendingPoi?: () => void;
+  hasPendingPoi?: boolean;
 }
 
 const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
@@ -64,6 +70,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   onSaved,
   onSavedAndClose,
   initialPoi,
+  connectionStatus = 'unknown',
+  onLoadPendingPoi,
+  hasPendingPoi = false,
 }) => {
   // Dragging state - position to the left, near Ivion's panel
   const [position, setPosition] = useState({ x: 360, y: 80 });
@@ -170,11 +179,13 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           if (title) setName(title);
         }
 
-        toast.success('Senaste POI hämtad automatiskt!', {
+        toast.success('Senaste POI hämtad!', {
           description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
         });
+      } else if (data?.error) {
+        // Show error but don't block the form
+        console.warn('POI fetch warning:', data.error);
       }
-      // Silent fail if no POI found - user can still register manually
     } catch (err) {
       // Silent fail - auto-fetch is a bonus feature
       console.log('Auto-fetch POI failed:', err);
@@ -465,10 +476,27 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
     return acc;
   }, {} as Record<string, AnnotationSymbol[]>);
 
+  // Connection status helper
+  const getConnectionStatusDisplay = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return { icon: Wifi, text: 'Ansluten', className: 'text-green-600 bg-green-100/80 dark:bg-green-900/30' };
+      case 'error':
+        return { icon: WifiOff, text: 'Anslutningsfel', className: 'text-red-600 bg-red-100/80 dark:bg-red-900/30' };
+      case 'expired':
+        return { icon: AlertCircle, text: 'Token utgått', className: 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' };
+      default:
+        return { icon: Loader2, text: 'Ansluter...', className: 'text-muted-foreground bg-muted' };
+    }
+  };
+
+  const statusDisplay = getConnectionStatusDisplay();
+  const StatusIcon = statusDisplay.icon;
+
   return (
     <div
       className={cn(
-        "fixed z-[60] w-[360px] max-h-[80vh]",
+        "fixed z-[60] w-[360px] max-h-[85vh]",
         "bg-card/90 backdrop-blur-md border rounded-xl shadow-2xl overflow-hidden",
         isDragging && "cursor-grabbing"
       )}
@@ -483,16 +511,54 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium">Registrera tillgång</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Mini connection status */}
+          <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-xs", statusDisplay.className)}>
+            <StatusIcon className={cn("h-3 w-3", connectionStatus === 'unknown' && 'animate-spin')} />
+          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {/* Pending POI notification */}
+      {hasPendingPoi && onLoadPendingPoi && (
+        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-100 dark:border-amber-900">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={onLoadPendingPoi}
+            className="w-full gap-2 border-amber-500 text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Ladda ny POI
+            <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">Ny!</Badge>
+          </Button>
+        </div>
+      )}
 
       {/* POI Fetch section */}
       <div className="p-4 border-b bg-muted/30">
-        <Label className="text-xs text-muted-foreground mb-1.5 block">
-          Hämta position från POI (valfritt)
-        </Label>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="text-xs text-muted-foreground">
+            Hämta position från POI
+          </Label>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchLatestPoi}
+            disabled={isFetchingPoi}
+            className="h-6 px-2 text-xs gap-1"
+          >
+            {isFetchingPoi ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Hämta senaste
+          </Button>
+        </div>
         <div className="flex gap-2">
           <Input
             placeholder="POI-ID eller Ivion-URL..."
@@ -509,7 +575,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             {isFetchingPoi ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <RefreshCw className="h-4 w-4" />
+              <Check className="h-4 w-4" />
             )}
           </Button>
         </div>
@@ -519,12 +585,23 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <span>
               Position: ({fetchedCoords.x.toFixed(2)}, {fetchedCoords.y.toFixed(2)}, {fetchedCoords.z.toFixed(2)})
             </span>
+            {fetchedPoiId && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1">
+                POI #{fetchedPoiId}
+              </Badge>
+            )}
+          </div>
+        )}
+        {!fetchedCoords && connectionStatus === 'expired' && (
+          <div className="flex items-center gap-2 text-xs text-amber-600 mt-2">
+            <AlertCircle className="h-3.5 w-3.5" />
+            <span>Token utgått - manuell hämtning kan misslyckas</span>
           </div>
         )}
       </div>
 
       {/* Form fields */}
-      <ScrollArea className="max-h-[50vh]">
+      <ScrollArea className="max-h-[45vh]">
         <div className="p-4 space-y-4">
           {/* Name */}
           <div className="space-y-1.5">
@@ -553,8 +630,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                       <span>{cat.label}</span>
                     </span>
                   </SelectItem>
-                ))
-                }
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -580,18 +656,15 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                           ) : (
                             <div
                               className="h-4 w-4 rounded-full"
-                              style={{ backgroundColor: sym.color }
-                              }
+                              style={{ backgroundColor: sym.color }}
                             />
                           )}
                           <span>{sym.name}</span>
                         </span>
                       </SelectItem>
-                    ))
-                    }
+                    ))}
                   </React.Fragment>
-                ))
-                }
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -608,8 +681,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                   <SelectItem key={f.fm_guid} value={f.fm_guid}>
                     {f.name}
                   </SelectItem>
-                ))
-                }
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -627,8 +699,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                     <SelectItem key={r.fm_guid} value={r.fm_guid}>
                       {r.name}
                     </SelectItem>
-                  ))
-                  }
+                  ))}
                 </SelectContent>
               </Select>
             </div>
