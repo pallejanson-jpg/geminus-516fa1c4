@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ClipboardList, ChevronLeft, List, Plus, MapPin, Building2, LayoutGrid, Crosshair, FileEdit, type LucideIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ClipboardList, ChevronLeft, List, Plus, MapPin, Building2, LayoutGrid, Crosshair, FileEdit, Scan, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -59,11 +60,13 @@ type ViewMode = 'wizard' | 'list';
 const STEP_ORDER: WizardStep[] = ['detection', 'location', 'category', 'position', 'registration'];
 
 const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSaved }) => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<WizardStep>('detection');
   const [savedCount, setSavedCount] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('wizard');
   const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [editingItem, setEditingItem] = useState<SavedItem | null>(null);
   
   // Form data state
   const [formData, setFormData] = useState<WizardFormData>({
@@ -192,6 +195,7 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
   }, [goNext]);
 
   const handleRegistrationComplete = useCallback((registerAnother: boolean) => {
+    setEditingItem(null);
     setSavedCount((prev) => prev + 1);
     onItemSaved();
 
@@ -239,8 +243,10 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
   }, [onItemSaved, quickLoopEnabled, updateFormData, goToStep]);
 
   const handleEditItem = useCallback((item: SavedItem) => {
+    // Track that we're editing an existing item
+    setEditingItem(item);
+    
     // Populate form with item data for editing
-    // For now, we'll just switch to wizard view - full edit support can be added later
     setFormData({
       buildingFmGuid: item.building_fm_guid || '',
       buildingName: '', // Would need to fetch
@@ -313,6 +319,14 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
         
         {/* View mode toggle - minimal buttons */}
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/inventory/ai-scan')}
+            className="h-9 w-9"
+          >
+            <Scan className="h-5 w-5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -396,6 +410,7 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
                 updateFormData={updateFormData}
                 onComplete={handleRegistrationComplete}
                 quickLoopEnabled={quickLoopEnabled}
+                editingItem={editingItem}
               />
             )}
           </div>
