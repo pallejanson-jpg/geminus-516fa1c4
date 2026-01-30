@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { THEMES } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
@@ -20,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSearchResults, SearchResult } from '@/hooks/useSearchResults';
 import { SearchResultsList } from '@/components/common/SearchResultsList';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
     isLoading?: boolean;
@@ -30,6 +33,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     isLoading = false,
     onToggleMobileMenu,
 }) => {
+    const navigate = useNavigate();
     const { 
         theme, 
         activeApp, 
@@ -42,6 +46,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         setViewer3dFmGuid,
     } = useContext(AppContext);
     
+    const { user, profile, isAdmin, signOut } = useAuth();
     const { toast } = useToast();
     const [globalSearch, setGlobalSearch] = useState('');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -49,6 +54,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
+
+    // User display info
+    const displayName = profile?.displayName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Användare';
+    const avatarUrl = profile?.avatarUrl || user?.user_metadata?.avatar_url;
+    const userInitials = displayName.slice(0, 2).toUpperCase();
+
+    // Handle sign out
+    const handleSignOut = useCallback(async () => {
+        await signOut();
+        navigate('/login');
+    }, [signOut, navigate]);
 
     // Search results from shared hook
     const searchResults = useSearchResults(navigatorTreeData, globalSearch, 15);
@@ -178,17 +194,25 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-muted transition-colors">
                             <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                                <AvatarImage src="" />
+                                <AvatarImage src={avatarUrl || ''} />
                                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                                    U
+                                    {userInitials}
                                 </AvatarFallback>
                             </Avatar>
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 bg-popover">
+                    <DropdownMenuContent align="end" className="w-56 bg-popover">
                         <div className="px-2 py-1.5">
-                            <p className="text-sm font-medium">User</p>
-                            <p className="text-xs text-muted-foreground">user@example.com</p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{displayName}</p>
+                                {isAdmin && (
+                                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                                        <Shield className="h-2.5 w-2.5 mr-0.5" />
+                                        Admin
+                                    </Badge>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                         </div>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
@@ -200,9 +224,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             Inställningar
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                            onClick={() => toast({ title: "Sign Out", description: "Authentication coming soon with Lovable Cloud" })}
-                        >
+                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+                            <LogOut className="mr-2 h-4 w-4" />
                             Logga ut
                         </DropdownMenuItem>
                     </DropdownMenuContent>

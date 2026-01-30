@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
 
 // Get Keycloak access token
 async function getAccessToken(): Promise<string> {
@@ -261,6 +257,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Verify authentication - sync operations require admin
+  const auth = await verifyAuth(req);
+  if (!auth.authenticated) {
+    return unauthorizedResponse(auth.error);
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -269,7 +271,14 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action = 'full-sync', buildingFmGuid } = body;
     
-    console.log(`Action: ${action}`);
+    // Only admins can run full sync operations
+    const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-all-xkt'];
+    if (adminOnlyActions.includes(action) && !auth.isAdmin) {
+      return forbiddenResponse("Only admins can run full sync operations");
+    }
+    
+    console.log(`Action: ${action} (user: ${auth.userId}, admin: ${auth.isAdmin})`);
+
 
     // ============ CHECK SYNC STATUS ============
     if (action === 'check-sync-status') {
