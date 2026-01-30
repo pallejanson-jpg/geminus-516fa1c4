@@ -754,6 +754,165 @@ serve(async (req) => {
       );
     }
 
+    // ============ SYNC XKT FOR SINGLE BUILDING (on-demand) ============
+    if (action === 'sync-xkt-building') {
+      if (!buildingFmGuid) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'buildingFmGuid is required' }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const accessToken = await getAccessToken();
+      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
+      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+      
+      console.log(`Starting sync-xkt-building for: ${buildingFmGuid}`);
+
+      // Get building name
+      const { data: building } = await supabase
+        .from('assets')
+        .select('common_name')
+        .eq('fm_guid', buildingFmGuid)
+        .eq('category', 'Building')
+        .maybeSingle();
+
+      const buildingName = building?.common_name || buildingFmGuid;
+
+      try {
+        const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
+        let modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+        
+        let modelsRes = await fetch(modelsUrl, {
+          headers: { "Authorization": `Bearer ${accessToken}` }
+        });
+
+        // Try alternate paths if 404
+        if (modelsRes.status === 404) {
+          const altUrl = `${baseUrl}/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+          modelsRes = await fetch(altUrl, {
+            headers: { "Authorization": `Bearer ${accessToken}` }
+          });
+        }
+
+        if (!modelsRes.ok) {
+          console.log(`Building ${buildingName}: No models endpoint available (${modelsRes.status})`);
+          return new Response(
+            JSON.stringify({ success: true, message: 'No 3D models available', modelCount: 0 }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        let models: any[];
+        try {
+          models = await modelsRes.json();
+        } catch {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invalid models response' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        if (!Array.isArray(models) || models.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, message: 'No models found', modelCount: 0 }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log(`Building ${buildingName}: Found ${models.length} models`);
+        let synced = 0;
+
+        for (const model of models) {
+          if (!model.xktFileUrl) continue;
+
+          const modelId = model.id || model.modelId || model.xktFileUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
+          const fileName = model.xktFileUrl.split('/').pop() || `${modelId}.xkt`;
+          const storagePath = `${buildingFmGuid}/${fileName}`;
+
+          // Check if already synced
+          const { data: existingModel } = await supabase
+            .from('xkt_models')
+            .select('id')
+            .eq('building_fm_guid', buildingFmGuid)
+            .eq('model_id', modelId)
+            .maybeSingle();
+
+          if (existingModel) {
+            console.log(`Model ${modelId} already synced`);
+            continue;
+          }
+
+          try {
+            console.log(`Fetching XKT: ${model.xktFileUrl}`);
+            const xktRes = await fetch(model.xktFileUrl, {
+              headers: { "Authorization": `Bearer ${accessToken}` }
+            });
+
+            if (!xktRes.ok) continue;
+
+            const xktData = await xktRes.arrayBuffer();
+            const fileSize = xktData.byteLength;
+            
+            if (fileSize === 0) continue;
+            
+            console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+
+            // Upload to storage
+            const { error: uploadError } = await supabase.storage
+              .from('xkt-models')
+              .upload(storagePath, new Uint8Array(xktData), {
+                contentType: 'application/octet-stream',
+                upsert: true
+              });
+
+            let signedUrl: string | null = null;
+            if (!uploadError) {
+              const { data: urlData } = await supabase.storage
+                .from('xkt-models')
+                .createSignedUrl(storagePath, 86400 * 365);
+              signedUrl = urlData?.signedUrl || null;
+            }
+
+            // Insert into database
+            await supabase
+              .from('xkt_models')
+              .upsert({
+                building_fm_guid: buildingFmGuid,
+                building_name: buildingName,
+                model_id: modelId,
+                model_name: model.name || model.modelName || fileName,
+                file_name: fileName,
+                file_url: signedUrl,
+                file_size: fileSize,
+                storage_path: storagePath,
+                source_url: model.xktFileUrl,
+                synced_at: new Date().toISOString(),
+              }, { onConflict: 'building_fm_guid,model_id' });
+
+            synced++;
+            console.log(`Synced model ${modelId}`);
+          } catch (e) {
+            console.log(`Failed to sync model ${modelId}: ${e}`);
+          }
+        }
+
+        console.log(`XKT sync for building completed: ${synced} models`);
+
+        return new Response(
+          JSON.stringify({ success: true, modelCount: synced }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`Error syncing XKT for building ${buildingName}:`, errMsg);
+        return new Response(
+          JSON.stringify({ success: false, error: errMsg }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // ============ BUILDING SYNC (legacy - single building hierarchy) ============
     if (action === 'building-sync') {
       if (!buildingFmGuid) {

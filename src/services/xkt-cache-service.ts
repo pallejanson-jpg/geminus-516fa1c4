@@ -318,6 +318,45 @@ export class XktCacheService {
 
     return data;
   }
+
+  /**
+   * Ensure XKT models are cached for a building.
+   * Triggers sync if no cached models exist.
+   * Used for proactive on-demand loading when opening a building in 3D viewer.
+   */
+  async ensureBuildingModels(
+    buildingFmGuid: string
+  ): Promise<{ cached: boolean; count: number; syncing: boolean }> {
+    try {
+      // 1. Check xkt_models table
+      const { count, error } = await supabase
+        .from('xkt_models')
+        .select('*', { count: 'exact', head: true })
+        .eq('building_fm_guid', buildingFmGuid);
+
+      if (error) {
+        console.warn('XKT cache: Error checking models:', error);
+        return { cached: false, count: 0, syncing: false };
+      }
+
+      if (count && count > 0) {
+        console.log(`XKT cache: ${count} models found for ${buildingFmGuid}`);
+        return { cached: true, count, syncing: false };
+      }
+
+      // 2. Trigger XKT sync for this building
+      console.log(`XKT cache: No models for ${buildingFmGuid}, triggering sync...`);
+      
+      supabase.functions.invoke('asset-plus-sync', {
+        body: { action: 'sync-xkt-building', buildingFmGuid }
+      }).catch(e => console.warn('XKT sync failed:', e));
+
+      return { cached: false, count: 0, syncing: true };
+    } catch (e) {
+      console.warn('XKT ensureBuildingModels error:', e);
+      return { cached: false, count: 0, syncing: false };
+    }
+  }
 }
 
 // Export singleton instance
