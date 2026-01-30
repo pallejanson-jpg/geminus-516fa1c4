@@ -69,6 +69,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['system', 'local', 'area']));
   
+  // Resize state (desktop only)
+  const [size, setSize] = useState({ width: 400, height: 500 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
 
@@ -147,6 +152,38 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, dragOffset]);
+
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeStart({
+      x: e.clientX,
+      y: e.clientY,
+      width: size.width,
+      height: size.height,
+    });
+  }, [size]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.max(320, Math.min(800, resizeStart.width + (e.clientX - resizeStart.x)));
+      const newHeight = Math.max(300, Math.min(window.innerHeight - 100, resizeStart.height + (e.clientY - resizeStart.y)));
+      setSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleMouseUp = () => setIsResizing(false);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, resizeStart]);
 
   // Parse all properties into a unified list
   const allProperties = useMemo((): PropertyItem[] => {
@@ -361,12 +398,18 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   return (
     <div
       className={cn(
-        "fixed z-50 bg-card border rounded-lg shadow-xl transition-all",
-        "w-full max-w-[400px] max-h-[85vh] flex flex-col",
-        "sm:w-[400px]",
-        isDragging && "cursor-grabbing opacity-90"
+        "fixed z-50 bg-card border rounded-lg shadow-xl transition-all flex flex-col",
+        "w-full max-w-[400px] max-h-[85vh]",
+        "sm:max-w-none",
+        isDragging && "cursor-grabbing opacity-90",
+        isResizing && "select-none"
       )}
-      style={{ left: position.x, top: position.y }}
+      style={{ 
+        left: position.x, 
+        top: position.y,
+        width: typeof window !== 'undefined' && window.innerWidth >= 640 ? size.width : undefined,
+        height: !isCollapsed && typeof window !== 'undefined' && window.innerWidth >= 640 ? size.height : undefined,
+      }}
     >
       {/* Header - Draggable */}
       <div
@@ -443,12 +486,6 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                           <span className="text-sm font-medium">{SECTION_LABELS[section]}</span>
                           <Badge variant="secondary" className="text-[10px]">{sectionProps.length}</Badge>
                         </div>
-                        {hasEditable && (
-                          <Badge variant="outline" className="text-[10px]">
-                            <Pencil className="h-2.5 w-2.5 mr-1" />
-                            Redigerbar
-                          </Badge>
-                        )}
                       </CollapsibleTrigger>
                       <CollapsibleContent className="pt-2 space-y-2">
                         {sectionProps.map(prop => (
@@ -499,6 +536,16 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               )}
             </div>
           )}
+
+          {/* Resize handle - desktop only */}
+          <div
+            className="hidden sm:block absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+            onMouseDown={handleResizeStart}
+          >
+            <svg className="w-3 h-3 absolute bottom-1 right-1 text-muted-foreground" viewBox="0 0 10 10">
+              <path d="M0 10 L10 0 M4 10 L10 4 M7 10 L10 7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
+          </div>
         </>
       )}
     </div>
