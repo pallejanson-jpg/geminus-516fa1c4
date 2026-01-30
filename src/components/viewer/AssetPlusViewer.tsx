@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
 import { Loader2, AlertCircle, X, Maximize2, Minimize2, TreeDeciduous } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,9 +15,11 @@ import ViewerTreePanel from './ViewerTreePanel';
 import RoomVisualizationPanel from './RoomVisualizationPanel';
 import VisualizationToolbar from './VisualizationToolbar';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
+import MobileViewerOverlay, { MobileFloorInfo } from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
@@ -83,6 +85,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   // Prevent concurrent initializations (React Strict Mode double-mount protection)
   const initializingRef = useRef(false);
   
+  // Mobile detection
+  const isMobile = useIsMobile();
+  
   // Deferred loading state (matching Asset+ pattern exactly)
   const deferCallsRef = useRef(true);
   const deferredFmGuidRef = useRef<string | undefined>(undefined);
@@ -126,6 +131,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
+  
+  // Mobile floors state for visibility control
+  const [mobileFloors, setMobileFloors] = useState<MobileFloorInfo[]>([]);
   
   // CENTRALIZED showSpaces state - ALWAYS starts OFF
   const [showSpaces, setShowSpaces] = useState(false);
@@ -1828,6 +1836,103 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handleRoomLabelsToggle as EventListener);
     };
   }, [setRoomLabelsEnabled]);
+
+  // Extract floors from viewer for mobile UI
+  const extractMobileFloors = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.metaScene?.metaObjects) return [];
+
+    const metaObjects = xeokitViewer.metaScene.metaObjects;
+    const extractedFloors: MobileFloorInfo[] = [];
+
+    Object.values(metaObjects).forEach((metaObject: any) => {
+      const type = metaObject?.type?.toLowerCase();
+      if (type === 'ifcbuildingstorey') {
+        extractedFloors.push({
+          id: metaObject.id,
+          fmGuid: metaObject.id,
+          name: metaObject.name || 'Okänd våning',
+          visible: true, // All visible by default
+        });
+      }
+    });
+
+    // Sort by name (floors are typically numbered)
+    extractedFloors.sort((a, b) => {
+      const extractLevel = (name: string): number => {
+        const match = name.match(/(-?\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+      return extractLevel(b.name) - extractLevel(a.name);
+    });
+
+    return extractedFloors;
+  }, []);
+
+  // Update mobile floors when model loads
+  useEffect(() => {
+    if (modelLoadState === 'loaded' && initStep === 'ready') {
+      const floors = extractMobileFloors();
+      setMobileFloors(floors);
+    }
+  }, [modelLoadState, initStep, extractMobileFloors]);
+
+  // Handle mobile floor toggle
+  const handleMobileFloorToggle = useCallback((floorId: string, visible: boolean) => {
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    const scene = xeokitViewer?.scene;
+    const metaScene = xeokitViewer?.metaScene;
+    
+    if (!scene || !metaScene) return;
+
+    try {
+      // Toggle visibility of the floor and all its children
+      const toggleHierarchy = (metaObjectId: string, visible: boolean) => {
+        const entity = scene.objects?.[metaObjectId];
+        if (entity) {
+          entity.visible = visible;
+        }
+        
+        const metaObject = metaScene.metaObjects?.[metaObjectId];
+        metaObject?.children?.forEach((child: any) => {
+          toggleHierarchy(child.id, visible);
+        });
+      };
+
+      toggleHierarchy(floorId, visible);
+
+      // Update state
+      setMobileFloors(prev => prev.map(f => 
+        f.id === floorId ? { ...f, visible } : f
+      ));
+    } catch (e) {
+      console.debug('Error toggling floor visibility:', e);
+    }
+  }, []);
+
+  // Reset camera to initial view
+  const handleResetCamera = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    
+    if (!xeokitViewer?.cameraFlight) return;
+
+    try {
+      // Fit scene to view
+      const scene = xeokitViewer.scene;
+      if (scene) {
+        xeokitViewer.cameraFlight.flyTo({
+          aabb: scene.aabb,
+          duration: 0.5,
+        });
+      }
+    } catch (e) {
+      console.debug('Error resetting camera:', e);
+    }
+  }, []);
+
   // XKT cache interceptor - DISABLED due to initialization conflicts
   // The interceptor was causing 'nextSibling' errors and sending empty data to cache
   // Models will load directly from Asset+ API for now
@@ -2250,41 +2355,57 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             </div>
           )}
           
-          {/* Top toolbar - contains close, fullscreen, visualization menu and annotations */}
-          <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
-            {/* Close and fullscreen buttons - left side */}
-            <div className="flex gap-1.5 pointer-events-auto">
-              {onClose && (
+          {/* Mobile UI Overlay - shown on mobile devices */}
+          {isMobile && state.isInitialized && (
+            <MobileViewerOverlay
+              onClose={onClose}
+              viewerInstanceRef={viewerInstanceRef}
+              buildingName={assetData?.commonName || assetData?.name}
+              showSpaces={showSpaces}
+              onShowSpacesChange={handleShowSpacesChange}
+              floors={mobileFloors}
+              onFloorToggle={handleMobileFloorToggle}
+              onResetCamera={handleResetCamera}
+              isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
+            />
+          )}
+          
+          {/* Desktop UI - Top toolbar - hidden on mobile */}
+          {!isMobile && (
+            <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+              {/* Close and fullscreen buttons - left side */}
+              <div className="flex gap-1.5 pointer-events-auto">
+                {onClose && (
+                  <Button 
+                    variant="secondary" 
+                    size="icon"
+                    onClick={onClose} 
+                    className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                    aria-label="Stäng 3D-vy"
+                  >
+                    <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </Button>
+                )}
                 <Button 
                   variant="secondary" 
                   size="icon"
-                  onClick={onClose} 
+                  onClick={() => setIsFullscreen(!isFullscreen)} 
                   className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                  aria-label="Stäng 3D-vy"
+                  aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
                 >
-                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                  {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </Button>
-              )}
-              <Button 
-                variant="secondary" 
-                size="icon"
-                onClick={() => setIsFullscreen(!isFullscreen)} 
-                className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
-              >
-                {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
-              </Button>
-              <Button 
-                variant={showTreePanel ? "default" : "secondary"}
-                size="icon"
-                onClick={() => setShowTreePanel(!showTreePanel)} 
-                className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                aria-label="Modellträd"
-                title="Modellträd"
-              >
-                <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-            </div>
+                <Button 
+                  variant={showTreePanel ? "default" : "secondary"}
+                  size="icon"
+                  onClick={() => setShowTreePanel(!showTreePanel)} 
+                  className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                  aria-label="Modellträd"
+                  title="Modellträd"
+                >
+                  <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
+              </div>
             
             {/* Right side: Visualization menu + Annotations */}
             <div className="flex gap-1.5 pointer-events-auto">
@@ -2322,7 +2443,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 </>
               )}
             </div>
-          </div>
+            </div>
+          )}
 
           {/* NavCube canvas - positioned in bottom-right corner, responsive size */}
           <canvas 
