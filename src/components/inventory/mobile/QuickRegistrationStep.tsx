@@ -30,11 +30,17 @@ interface AnnotationSymbol {
   icon_url: string | null;
 }
 
+interface EditingItem {
+  id: string;
+  fm_guid: string;
+}
+
 interface QuickRegistrationStepProps {
   formData: WizardFormData;
   updateFormData: (updates: Partial<WizardFormData>) => void;
   onComplete: (registerAnother: boolean) => void;
   quickLoopEnabled: boolean;
+  editingItem?: EditingItem | null;
 }
 
 const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
@@ -42,6 +48,7 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
   updateFormData,
   onComplete,
   quickLoopEnabled,
+  editingItem,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
@@ -121,10 +128,9 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
     try {
       const inventoryDate = new Date().toISOString();
-      const newFmGuid = crypto.randomUUID();
+      const isEditing = !!editingItem;
 
-      const newAsset = {
-        fm_guid: newFmGuid,
+      const assetData = {
         name: formData.name.trim(),
         common_name: formData.name.trim(),
         category: 'Instance',
@@ -133,8 +139,6 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
         building_fm_guid: formData.buildingFmGuid,
         level_fm_guid: formData.levelFmGuid || null,
         in_room_fm_guid: formData.roomFmGuid || null,
-        created_in_model: false,
-        is_local: true,
         annotation_placed: !!formData.coordinates,
         coordinate_x: formData.coordinates?.x ?? null,
         coordinate_y: formData.coordinates?.y ?? null,
@@ -156,14 +160,34 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             { name: 'AssetCategory', value: formData.category, dataType: 0 },
           ],
         },
+        updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from('assets').insert([newAsset]);
+      let error;
+
+      if (isEditing) {
+        // UPDATE existing asset
+        const result = await supabase
+          .from('assets')
+          .update(assetData)
+          .eq('id', editingItem.id);
+        error = result.error;
+      } else {
+        // INSERT new asset
+        const newFmGuid = crypto.randomUUID();
+        const result = await supabase.from('assets').insert([{
+          ...assetData,
+          fm_guid: newFmGuid,
+          created_in_model: false,
+          is_local: true,
+        }]);
+        error = result.error;
+      }
 
       if (error) throw error;
 
-      toast.success('Tillgång sparad!', {
-        description: `${formData.name} registrerad på ${formData.levelName}`,
+      toast.success(isEditing ? 'Tillgång uppdaterad!' : 'Tillgång sparad!', {
+        description: `${formData.name} ${isEditing ? 'uppdaterad' : 'registrerad'}${formData.levelName ? ` på ${formData.levelName}` : ''}`,
       });
 
       onComplete(registerAnother);
