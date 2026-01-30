@@ -9,9 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface UniversalPropertiesDialogProps {
   isOpen: boolean;
@@ -38,13 +40,13 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Instance': <Box className="h-4 w-4" />,
 };
 
-// Section labels in Swedish
+// Section labels in English
 const SECTION_LABELS: Record<string, string> = {
   'system': 'System',
-  'local': 'Lokala inställningar',
+  'local': 'Local Settings',
   'coordinates': 'Position',
-  'area': 'Area & Mått',
-  'user-defined': 'Användardefinierade',
+  'area': 'Area & Dimensions',
+  'user-defined': 'User-Defined',
 };
 
 // Fields that belong to Area section
@@ -57,6 +59,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   category,
   onUpdate,
 }) => {
+  const isMobile = useIsMobile();
   const [asset, setAsset] = useState<any>(null);
   const [buildingSettings, setBuildingSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,7 +120,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
-        toast.error('Kunde inte hämta data');
+        toast.error('Could not fetch data');
       } finally {
         setIsLoading(false);
       }
@@ -126,15 +129,16 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     fetchData();
   }, [isOpen, fmGuid, category]);
 
-  // Drag handlers
+  // Drag handlers (desktop only)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isMobile) return;
     if ((e.target as HTMLElement).closest('button, input, select')) return;
     setIsDragging(true);
     setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
-  }, [position]);
+  }, [position, isMobile]);
 
   useEffect(() => {
-    if (!isDragging) return;
+    if (!isDragging || isMobile) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       setPosition({
@@ -151,10 +155,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, isMobile]);
 
-  // Resize handlers
+  // Resize handlers (desktop only)
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    if (isMobile) return;
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
@@ -164,10 +169,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       width: size.width,
       height: size.height,
     });
-  }, [size]);
+  }, [size, isMobile]);
 
   useEffect(() => {
-    if (!isResizing) return;
+    if (!isResizing || isMobile) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = Math.max(320, Math.min(800, resizeStart.width + (e.clientX - resizeStart.x)));
@@ -183,7 +188,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing, resizeStart]);
+  }, [isResizing, resizeStart, isMobile]);
 
   // Parse all properties into a unified list
   const allProperties = useMemo((): PropertyItem[] => {
@@ -193,19 +198,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     
     // System properties
     props.push({ key: 'fm_guid', label: 'FM GUID', value: asset.fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
-    props.push({ key: 'category', label: 'Kategori', value: asset.category, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    props.push({ key: 'category', label: 'Category', value: asset.category, editable: false, source: 'lovable', type: 'text', section: 'system' });
     if (asset.name) {
-      props.push({ key: 'name', label: 'Namn (IFC)', value: asset.name, editable: false, source: 'lovable', type: 'text', section: 'system' });
+      props.push({ key: 'name', label: 'Name (IFC)', value: asset.name, editable: false, source: 'lovable', type: 'text', section: 'system' });
     }
     
     // Local editable properties
-    props.push({ key: 'common_name', label: 'Visningsnamn', value: asset.common_name, editable: true, source: 'lovable', type: 'text', section: 'local' });
-    props.push({ key: 'asset_type', label: 'Tillgångstyp', value: asset.asset_type, editable: true, source: 'lovable', type: 'text', section: 'local' });
+    props.push({ key: 'common_name', label: 'Display Name', value: asset.common_name, editable: true, source: 'lovable', type: 'text', section: 'local' });
+    props.push({ key: 'asset_type', label: 'Asset Type', value: asset.asset_type, editable: true, source: 'lovable', type: 'text', section: 'local' });
     
     // Building settings
     if (buildingSettings || asset.category === 'Building') {
       props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings?.ivion_site_id, editable: true, source: 'lovable', type: 'text', section: 'local' });
-      props.push({ key: 'is_favorite', label: 'Favorit', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'local' });
+      props.push({ key: 'is_favorite', label: 'Favorite', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'local' });
     }
     
     // Coordinates
@@ -216,15 +221,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
 
     // Status flags
-    props.push({ key: 'is_local', label: 'Lokalt skapat', value: asset.is_local, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
-    props.push({ key: 'annotation_placed', label: 'Annotation placerad', value: asset.annotation_placed, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
+    props.push({ key: 'is_local', label: 'Locally Created', value: asset.is_local, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
+    props.push({ key: 'annotation_placed', label: 'Annotation Placed', value: asset.annotation_placed, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
 
     // Hierarchy references
     if (asset.building_fm_guid) {
-      props.push({ key: 'building_fm_guid', label: 'Byggnad (GUID)', value: asset.building_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+      props.push({ key: 'building_fm_guid', label: 'Building (GUID)', value: asset.building_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
     }
     if (asset.level_fm_guid) {
-      props.push({ key: 'level_fm_guid', label: 'Våning (GUID)', value: asset.level_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+      props.push({ key: 'level_fm_guid', label: 'Floor (GUID)', value: asset.level_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
     }
 
     // Asset+ properties from attributes JSONB
@@ -336,11 +341,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         if (settingsError) throw settingsError;
       }
 
-      toast.success('Egenskaper sparade');
+      toast.success('Properties saved');
       setIsEditing(false);
       onUpdate?.();
     } catch (error: any) {
-      toast.error('Fel vid sparning: ' + error.message);
+      toast.error('Error saving: ' + error.message);
     } finally {
       setIsSaving(false);
     }
@@ -375,7 +380,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     if (prop.type === 'boolean') {
       return (
         <Badge variant={prop.value ? 'default' : 'secondary'} className="text-xs">
-          {prop.value ? 'Ja' : 'Nej'}
+          {prop.value ? 'Yes' : 'No'}
         </Badge>
       );
     }
@@ -387,14 +392,140 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
     
     if (typeof displayValue === 'number') {
-      return <span className="text-sm font-mono">{displayValue.toLocaleString('sv-SE')}</span>;
+      return <span className="text-sm font-mono">{displayValue.toLocaleString('en-US')}</span>;
     }
     
     return <span className="text-sm break-all">{String(displayValue)}</span>;
   };
 
+  // Content shared between mobile and desktop
+  const renderContent = () => (
+    <>
+      {/* Search field */}
+      <div className="p-3 border-b shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search properties..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-9 text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Content */}
+      <ScrollArea className="flex-1">
+        <div className="p-3 space-y-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !asset ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              <p>No data found</p>
+              <p className="text-xs mt-1 font-mono">{fmGuid}</p>
+            </div>
+          ) : filteredProperties.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              <p>No properties match the search</p>
+            </div>
+          ) : (
+            // Render sections
+            ['system', 'local', 'coordinates', 'area', 'user-defined'].map(section => {
+              const sectionProps = groupedProperties[section];
+              if (!sectionProps || sectionProps.length === 0) return null;
+              
+              const isOpen = openSections.has(section);
+              
+              return (
+                <Collapsible 
+                  key={section}
+                  open={isOpen}
+                  onOpenChange={() => toggleSection(section)}
+                >
+                  <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
+                    <div className="flex items-center gap-2">
+                      {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
+                      <span className="text-sm font-medium">{SECTION_LABELS[section]}</span>
+                      <Badge variant="secondary" className="text-[10px]">{sectionProps.length}</Badge>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-2">
+                    {sectionProps.map(prop => (
+                      <div 
+                        key={prop.key} 
+                        className={cn(
+                          "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded",
+                          prop.editable && "bg-accent/20"
+                        )}
+                      >
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                          {prop.label}
+                          {prop.source === 'asset-plus' && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0">A+</Badge>
+                          )}
+                        </Label>
+                        <div className="flex-1 sm:text-right">
+                          {renderPropertyValue(prop)}
+                        </div>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Footer actions */}
+      {asset && (
+        <div className="p-3 border-t flex justify-end gap-2 shrink-0">
+          {isEditing ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                Save
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit
+            </Button>
+          )}
+        </div>
+      )}
+    </>
+  );
+
   if (!isOpen) return null;
 
+  // Mobile: Use Sheet (bottom drawer)
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+          <SheetHeader className="p-3 border-b shrink-0">
+            <SheetTitle className="flex items-center gap-2 text-left">
+              {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
+              <span className="font-medium text-sm truncate flex-1">
+                {asset?.common_name || asset?.name || fmGuid.slice(0, 8)}
+              </span>
+              <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
+            </SheetTitle>
+          </SheetHeader>
+          {renderContent()}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: Floating dialog
   return (
     <div
       className={cn(
@@ -407,8 +538,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       style={{ 
         left: position.x, 
         top: position.y,
-        width: typeof window !== 'undefined' && window.innerWidth >= 640 ? size.width : undefined,
-        height: !isCollapsed && typeof window !== 'undefined' && window.innerWidth >= 640 ? size.height : undefined,
+        width: size.width,
+        height: !isCollapsed ? size.height : undefined,
       }}
     >
       {/* Header - Draggable */}
@@ -436,110 +567,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
       {!isCollapsed && (
         <>
-          {/* Search field */}
-          <div className="p-3 border-b shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Sök egenskaper..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-9 text-sm"
-              />
-            </div>
-          </div>
-
-          {/* Content */}
-          <ScrollArea className="flex-1">
-            <div className="p-3 space-y-2">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : !asset ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  <p>Ingen data hittad</p>
-                  <p className="text-xs mt-1 font-mono">{fmGuid}</p>
-                </div>
-              ) : filteredProperties.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  <p>Inga egenskaper matchar sökningen</p>
-                </div>
-              ) : (
-                // Render sections
-                ['system', 'local', 'coordinates', 'area', 'user-defined'].map(section => {
-                  const sectionProps = groupedProperties[section];
-                  if (!sectionProps || sectionProps.length === 0) return null;
-                  
-                  const isOpen = openSections.has(section);
-                  const hasEditable = sectionProps.some(p => p.editable);
-                  
-                  return (
-                    <Collapsible 
-                      key={section}
-                      open={isOpen}
-                      onOpenChange={() => toggleSection(section)}
-                    >
-                      <CollapsibleTrigger className="flex items-center justify-between w-full p-2 bg-muted/50 rounded-md hover:bg-muted transition-colors">
-                        <div className="flex items-center gap-2">
-                          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
-                          <span className="text-sm font-medium">{SECTION_LABELS[section]}</span>
-                          <Badge variant="secondary" className="text-[10px]">{sectionProps.length}</Badge>
-                        </div>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="pt-2 space-y-2">
-                        {sectionProps.map(prop => (
-                          <div 
-                            key={prop.key} 
-                            className={cn(
-                              "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 py-1.5 px-2 rounded",
-                              prop.editable && "bg-accent/20"
-                            )}
-                          >
-                            <Label className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
-                              {prop.label}
-                              {prop.source === 'asset-plus' && (
-                                <Badge variant="outline" className="text-[8px] px-1 py-0">A+</Badge>
-                              )}
-                            </Label>
-                            <div className="flex-1 sm:text-right">
-                              {renderPropertyValue(prop)}
-                            </div>
-                          </div>
-                        ))}
-                      </CollapsibleContent>
-                    </Collapsible>
-                  );
-                })
-              )}
-            </div>
-          </ScrollArea>
-
-          {/* Footer actions */}
-          {asset && (
-            <div className="p-3 border-t flex justify-end gap-2 shrink-0">
-              {isEditing ? (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
-                    Avbryt
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                    Spara
-                  </Button>
-                </>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                  <Pencil className="h-4 w-4 mr-1" />
-                  Redigera
-                </Button>
-              )}
-            </div>
-          )}
+          {renderContent()}
 
           {/* Resize handle - desktop only */}
           <div
-            className="hidden sm:block absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
             onMouseDown={handleResizeStart}
           >
             <svg className="w-3 h-3 absolute bottom-1 right-1 text-muted-foreground" viewBox="0 0 10 10">

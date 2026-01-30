@@ -32,7 +32,7 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
             <div className="mb-4 sm:mb-6">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground">Insights</h1>
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                    Analys och insikter för din fastighetsportfölj
+                    Analytics and insights for your property portfolio
                 </p>
             </div>
 

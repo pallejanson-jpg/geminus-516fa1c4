@@ -11,14 +11,20 @@ import {
 import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Helper for deterministic pseudo-random based on string
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
 
+// Truncate name for chart display
+const truncateName = (name: string, maxLen = 12) => 
+    name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
+
 export default function PortfolioManagementTab() {
     const { navigatorTreeData } = useContext(AppContext);
+    const isMobile = useIsMobile();
 
     // Portfolio data per building
     const portfolioData = useMemo(() => {
@@ -35,14 +41,16 @@ export default function PortfolioManagementTab() {
                 });
             });
 
+            const fullName = building.commonName || building.name || 'Building';
             return {
                 fmGuid: building.fmGuid,
-                name: building.commonName || building.name || 'Byggnad',
+                name: truncateName(fullName),
+                fullName,
                 marketValue: 20000000 + (hash % 80000000),
                 annualRent: 1000000 + (hash % 5000000),
                 roi: 3 + (hash % 7) + (hash % 10) / 10,
                 occupancy: 70 + (hash % 25),
-                riskLevel: hash % 100 > 70 ? 'Hög' : hash % 100 > 30 ? 'Medel' : 'Låg',
+                riskLevel: hash % 100 > 70 ? 'High' : hash % 100 > 30 ? 'Medium' : 'Low',
                 area: Math.round(totalArea),
             };
         });
@@ -59,13 +67,13 @@ export default function PortfolioManagementTab() {
 
     // Risk distribution
     const riskDistribution = useMemo(() => {
-        const low = portfolioData.filter(b => b.riskLevel === 'Låg').length;
-        const medium = portfolioData.filter(b => b.riskLevel === 'Medel').length;
-        const high = portfolioData.filter(b => b.riskLevel === 'Hög').length;
+        const low = portfolioData.filter(b => b.riskLevel === 'Low').length;
+        const medium = portfolioData.filter(b => b.riskLevel === 'Medium').length;
+        const high = portfolioData.filter(b => b.riskLevel === 'High').length;
         return [
-            { name: 'Låg risk', value: low, color: 'hsl(142, 71%, 45%)' },
-            { name: 'Medel risk', value: medium, color: 'hsl(48, 96%, 53%)' },
-            { name: 'Hög risk', value: high, color: 'hsl(var(--destructive))' },
+            { name: 'Low Risk', value: low, color: 'hsl(142, 71%, 45%)' },
+            { name: 'Medium Risk', value: medium, color: 'hsl(48, 96%, 53%)' },
+            { name: 'High Risk', value: high, color: 'hsl(var(--destructive))' },
         ];
     }, [portfolioData]);
 
@@ -85,7 +93,7 @@ export default function PortfolioManagementTab() {
         { month: 'Jul', value: 95 },
         { month: 'Aug', value: 97 },
         { month: 'Sep', value: 98 },
-        { month: 'Okt', value: 100 },
+        { month: 'Oct', value: 100 },
         { month: 'Nov', value: 101 },
         { month: 'Dec', value: 102 },
         { month: 'Jan', value: 100 },
@@ -96,25 +104,25 @@ export default function PortfolioManagementTab() {
 
     const kpiCards = [
         { 
-            title: 'Totalt portföljvärde', 
+            title: 'Total Portfolio Value', 
             value: `${(totals.totalValue / 1000000).toFixed(0)} MSEK`, 
             icon: CircleDollarSign, 
             color: 'text-primary'
         },
         { 
-            title: 'Årlig hyresintäkt', 
+            title: 'Annual Rental Income', 
             value: `${(totals.totalRent / 1000000).toFixed(1)} MSEK`, 
             icon: Briefcase, 
             color: 'text-green-500'
         },
         { 
-            title: 'Genomsnittlig ROI', 
+            title: 'Average ROI', 
             value: `${totals.avgRoi.toFixed(1)}%`, 
             icon: TrendingUp, 
             color: 'text-blue-500'
         },
         { 
-            title: 'Snitt uthyrningsgrad', 
+            title: 'Avg. Occupancy Rate', 
             value: `${totals.avgOccupancy}%`, 
             icon: Building2, 
             color: 'text-yellow-500'
@@ -123,16 +131,21 @@ export default function PortfolioManagementTab() {
 
     const getRiskBadge = (risk: string) => {
         switch (risk) {
-            case 'Låg':
-                return <Badge className="bg-green-600">Låg</Badge>;
-            case 'Medel':
-                return <Badge className="bg-yellow-600">Medel</Badge>;
-            case 'Hög':
-                return <Badge variant="destructive">Hög</Badge>;
+            case 'Low':
+                return <Badge className="bg-green-600">Low</Badge>;
+            case 'Medium':
+                return <Badge className="bg-yellow-600">Medium</Badge>;
+            case 'High':
+                return <Badge variant="destructive">High</Badge>;
             default:
                 return <Badge variant="secondary">{risk}</Badge>;
         }
     };
+
+    // Mobile-friendly pie chart label
+    const renderPieLabel = isMobile 
+        ? undefined 
+        : ({ name, value }: any) => `${name}: ${value}`;
 
     return (
         <div className="space-y-6">
@@ -158,9 +171,9 @@ export default function PortfolioManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <BarChart3 className="h-4 w-4 text-primary" />
-                            Marknadsvärde per byggnad
+                            Market Value per Building
                         </CardTitle>
-                        <CardDescription>Värdering i MSEK</CardDescription>
+                        <CardDescription>Valuation in MSEK</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -171,8 +184,8 @@ export default function PortfolioManagementTab() {
                                     <YAxis 
                                         dataKey="name" 
                                         type="category" 
-                                        width={100}
-                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                                        width={isMobile ? 60 : 100}
+                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
                                     <Tooltip 
                                         contentStyle={{ 
@@ -180,11 +193,14 @@ export default function PortfolioManagementTab() {
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
-                                        formatter={(value: number) => [`${value.toFixed(1)} MSEK`, 'Värde']}
+                                        formatter={(value: number, name: string, props: any) => [
+                                            `${value.toFixed(1)} MSEK`,
+                                            props.payload.fullName
+                                        ]}
                                     />
                                     <Bar 
                                         dataKey="valueInMillions" 
-                                        name="Värde (MSEK)"
+                                        name="Value (MSEK)"
                                         fill="hsl(var(--primary))"
                                         radius={[0, 4, 4, 0]}
                                     />
@@ -199,9 +215,9 @@ export default function PortfolioManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Shield className="h-4 w-4 text-blue-500" />
-                            Riskprofil
+                            Risk Profile
                         </CardTitle>
-                        <CardDescription>Byggnader per risknivå</CardDescription>
+                        <CardDescription>Buildings by risk level</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -211,12 +227,12 @@ export default function PortfolioManagementTab() {
                                         data={riskDistribution}
                                         cx="50%"
                                         cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
+                                        innerRadius={isMobile ? 40 : 50}
+                                        outerRadius={isMobile ? 65 : 80}
                                         paddingAngle={2}
                                         dataKey="value"
-                                        label={({ name, value }) => `${name}: ${value}`}
-                                        labelLine={false}
+                                        label={renderPieLabel}
+                                        labelLine={!isMobile}
                                     >
                                         {riskDistribution.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -242,9 +258,9 @@ export default function PortfolioManagementTab() {
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <TrendingUp className="h-4 w-4 text-green-500" />
-                        Portföljvärdering över tid
+                        Portfolio Valuation Over Time
                     </CardTitle>
-                    <CardDescription>Senaste 6 månaderna (MSEK)</CardDescription>
+                    <CardDescription>Last 6 months (MSEK)</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="h-48">
@@ -265,7 +281,7 @@ export default function PortfolioManagementTab() {
                                         border: '1px solid hsl(var(--border))',
                                         borderRadius: '8px'
                                     }}
-                                    formatter={(value: number) => [`${(value / 1000000).toFixed(1)} MSEK`, 'Värde']}
+                                    formatter={(value: number) => [`${(value / 1000000).toFixed(1)} MSEK`, 'Value']}
                                 />
                                 <Line 
                                     type="monotone" 
@@ -285,27 +301,27 @@ export default function PortfolioManagementTab() {
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-primary" />
-                        Fastighetsportfölj
+                        Property Portfolio
                     </CardTitle>
-                    <CardDescription>Ekonomisk översikt per byggnad</CardDescription>
+                    <CardDescription>Financial overview per building</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Byggnad</TableHead>
-                                    <TableHead className="text-right">Värde</TableHead>
-                                    <TableHead className="text-right">Hyra/år</TableHead>
+                                    <TableHead>Building</TableHead>
+                                    <TableHead className="text-right">Value</TableHead>
+                                    <TableHead className="text-right">Rent/year</TableHead>
                                     <TableHead className="text-right">ROI</TableHead>
-                                    <TableHead className="text-right">Uthyrning</TableHead>
+                                    <TableHead className="text-right">Occupancy</TableHead>
                                     <TableHead className="text-right">Risk</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {portfolioData.slice(0, 10).map((building) => (
                                     <TableRow key={building.fmGuid}>
-                                        <TableCell className="font-medium">{building.name}</TableCell>
+                                        <TableCell className="font-medium">{building.fullName}</TableCell>
                                         <TableCell className="text-right">
                                             {(building.marketValue / 1000000).toFixed(1)} MSEK
                                         </TableCell>
