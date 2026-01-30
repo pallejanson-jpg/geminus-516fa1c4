@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
-import { Loader2, AlertCircle, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Loader2, AlertCircle, X, Maximize2, Minimize2, TreeDeciduous } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
@@ -2273,6 +2273,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
                 aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
+              </Button>
+              <Button 
+                variant={showTreePanel ? "default" : "secondary"}
+                size="icon"
+                onClick={() => setShowTreePanel(!showTreePanel)} 
+                className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                aria-label="Modellträd"
+                title="Modellträd"
+              >
+                <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </div>
             
