@@ -398,3 +398,57 @@ export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promis
 
   return { synced: true, count: data?.totalSynced || 0 };
 }
+
+/**
+ * Ensure assets exist for a building - sync if needed.
+ * Returns immediately if assets exist, otherwise triggers background sync.
+ * This is used for proactive on-demand loading when navigating to a building.
+ */
+export async function ensureBuildingAssets(
+  buildingFmGuid: string,
+  options?: { waitForSync?: boolean }
+): Promise<{ hasAssets: boolean; count: number; syncing: boolean }> {
+  // 1. Check local count
+  const { count, error: countError } = await supabase
+    .from("assets")
+    .select("*", { count: "exact", head: true })
+    .eq("building_fm_guid", buildingFmGuid)
+    .eq("category", "Instance");
+
+  if (countError) {
+    console.error("Failed to count assets:", countError);
+    return { hasAssets: false, count: 0, syncing: false };
+  }
+
+  if (count && count > 0) {
+    return { hasAssets: true, count, syncing: false };
+  }
+
+  // 2. Trigger background sync
+  console.log(`No assets for ${buildingFmGuid}, triggering sync...`);
+  
+  const syncPromise = supabase.functions.invoke("asset-plus-sync", {
+    body: { action: "sync-single-building", buildingFmGuid }
+  });
+
+  if (options?.waitForSync) {
+    try {
+      await syncPromise;
+      // Re-check count
+      const { count: newCount } = await supabase
+        .from("assets")
+        .select("*", { count: "exact", head: true })
+        .eq("building_fm_guid", buildingFmGuid)
+        .eq("category", "Instance");
+      return { hasAssets: (newCount || 0) > 0, count: newCount || 0, syncing: false };
+    } catch (e) {
+      console.warn("Asset sync failed:", e);
+      return { hasAssets: false, count: 0, syncing: false };
+    }
+  }
+
+  // Fire-and-forget background sync
+  syncPromise.catch(e => console.warn("Background asset sync failed:", e));
+
+  return { hasAssets: false, count: 0, syncing: true };
+}

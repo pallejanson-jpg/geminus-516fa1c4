@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type } from "lucide-react";
+import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -75,6 +75,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     inline = false,
     onToggleVisualization,
     showVisualization = false,
+    onToggleTreeView,
+    showTreeView = false,
     onAddAsset,
     onVisibleFloorsChange,
     visibleModelIds = [],
@@ -614,6 +616,29 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     </div>
                     <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
                   </div>
+
+                  {/* Model Tree Toggle */}
+                  {onToggleTreeView && (
+                    <div className="flex items-center justify-between py-1.5 sm:py-2">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div
+                          className={cn(
+                            "p-1 sm:p-1.5 rounded-md",
+                            showTreeView
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm">Modellträd</span>
+                      </div>
+                      <Switch 
+                        checked={showTreeView} 
+                        onCheckedChange={(checked) => onToggleTreeView(checked)} 
+                      />
+                    </div>
+                  )}
 
                   {isToolVisible('spaces') && (
                     <div className="flex items-center justify-between py-1.5 sm:py-2">

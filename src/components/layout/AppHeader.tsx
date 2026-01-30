@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Server, Settings
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
+import ProfileModal from '@/components/settings/ProfileModal';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -45,6 +46,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [globalSearch, setGlobalSearch] = useState('');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
 
@@ -189,9 +191,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <p className="text-xs text-muted-foreground">user@example.com</p>
                         </div>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
+                        <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
                             <UserIcon className="mr-2 h-4 w-4" />
-                            Profil & Inställningar
+                            Profil
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
+                            <Settings className="mr-2 h-4 w-4" />
+                            Inställningar
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
@@ -202,6 +208,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     </DropdownMenuContent>
                 </DropdownMenu>
 
+                <ProfileModal 
+                    isOpen={isProfileOpen} 
+                    onClose={() => setIsProfileOpen(false)} 
+                />
                 <ApiSettingsModal 
                     isOpen={isApiSettingsOpen} 
                     onClose={() => setIsApiSettingsOpen(false)} 

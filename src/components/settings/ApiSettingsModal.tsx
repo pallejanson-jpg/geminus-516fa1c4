@@ -87,7 +87,7 @@ const getAppIcon = (key: string) => {
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
     const { toast } = useToast();
     const { appConfigs, setAppConfigs } = useContext(AppContext);
-    const [activeTab, setActiveTab] = useState('profile');
+    const [activeTab, setActiveTab] = useState('apps');
     // Separate syncing states for each sync type
     const [isSyncingStructure, setIsSyncingStructure] = useState(false);
     const [isSyncingAssets, setIsSyncingAssets] = useState(false);
@@ -779,11 +779,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
-                        <TabsTrigger value="profile" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
-                            <User className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Profil</span>
-                        </TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
                         <TabsTrigger value="apps" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Apps</span>
