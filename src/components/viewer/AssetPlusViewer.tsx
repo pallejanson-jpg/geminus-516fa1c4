@@ -171,6 +171,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
 
+  // On-demand XKT sync: ensure models are cached for this building
+  useEffect(() => {
+    if (!buildingFmGuid) return;
+    
+    const ensureModels = async () => {
+      const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
+      if (result.syncing) {
+        console.log('On-demand XKT sync triggered for building:', buildingFmGuid);
+      } else if (result.cached) {
+        console.log(`Building ${buildingFmGuid} has ${result.count} cached XKT models`);
+      }
+    };
+    
+    ensureModels();
+  }, [buildingFmGuid]);
+
   // Filter spaces to only show rooms on visible floors
   const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean) => {
     const viewer = viewerInstanceRef.current;

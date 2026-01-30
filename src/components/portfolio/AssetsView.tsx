@@ -47,7 +47,7 @@ import { Facility } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { AppContext } from '@/context/AppContext';
-import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus } from '@/services/asset-plus-service';
+import { syncBuildingAssetsIfNeeded, syncAssetToAssetPlus, batchSyncAssetsToAssetPlus, fetchAssetsForBuilding } from '@/services/asset-plus-service';
 import {
   DndContext,
   closestCenter,
@@ -187,28 +187,87 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const [syncingAssetIds, setSyncingAssetIds] = useState<Set<string>>(new Set());
   const [isBatchSyncing, setIsBatchSyncing] = useState(false);
   
+  // Local assets state for on-demand sync
+  const [localAssets, setLocalAssets] = useState<any[]>(assets);
+  const [hasTriedSync, setHasTriedSync] = useState(false);
+  
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   
   // Properties dialog state
   const [showPropertiesFor, setShowPropertiesFor] = useState<string | null>(null);
 
-  // Check if we need to sync assets on mount (if zero assets for this building)
+  // Sync localAssets when props change
+  useEffect(() => {
+    setLocalAssets(assets);
+  }, [assets]);
+
+  // On-demand sync: if no assets for this building, trigger sync and refetch
   useEffect(() => {
     const checkAndSyncAssets = async () => {
-      if (assets.length > 0 || !facility.fmGuid) return;
+      // Skip if we already have assets or already tried
+      if (localAssets.length > 0 || hasTriedSync) return;
+      if (!facility.fmGuid) return;
       
-      // Only for buildings - check if we need to sync
+      // Only for buildings
       if (facility.category !== 'Building') return;
       
+      setHasTriedSync(true);
       setIsSyncingAssets(true);
+      
       try {
         const result = await syncBuildingAssetsIfNeeded(facility.fmGuid);
+        
         if (result.synced && result.count > 0) {
+          // Fetch newly synced assets from database
+          const newAssets = await fetchAssetsForBuilding(facility.fmGuid);
+          
+          // Map to expected format for this component
+          const mapped = newAssets.map((asset: any) => ({
+            fm_guid: asset.fmGuid,
+            category: asset.category,
+            name: asset.name,
+            common_name: asset.commonName,
+            building_fm_guid: asset.buildingFmGuid,
+            level_fm_guid: asset.levelFmGuid,
+            in_room_fm_guid: asset.inRoomFmGuid,
+            complex_common_name: asset.complexCommonName,
+            attributes: asset.attributes,
+            is_local: asset.isLocal,
+            created_in_model: asset.createdInModel,
+            asset_type: asset.assetType,
+            synced_at: asset.syncedAt,
+            annotation_placed: asset.annotationPlaced,
+            symbol_id: asset.symbolId,
+          }));
+          
+          setLocalAssets(mapped);
+          
           toast({
             title: 'Assets synkade',
             description: `Hämtade ${result.count} assets för denna byggnad`,
           });
+        } else if (!result.synced && result.count > 0) {
+          // Assets exist but weren't passed - refetch them
+          const existingAssets = await fetchAssetsForBuilding(facility.fmGuid);
+          const mapped = existingAssets.map((asset: any) => ({
+            fm_guid: asset.fmGuid,
+            category: asset.category,
+            name: asset.name,
+            common_name: asset.commonName,
+            building_fm_guid: asset.buildingFmGuid,
+            level_fm_guid: asset.levelFmGuid,
+            in_room_fm_guid: asset.inRoomFmGuid,
+            complex_common_name: asset.complexCommonName,
+            attributes: asset.attributes,
+            is_local: asset.isLocal,
+            created_in_model: asset.createdInModel,
+            asset_type: asset.assetType,
+            synced_at: asset.syncedAt,
+            annotation_placed: asset.annotationPlaced,
+            symbol_id: asset.symbolId,
+          }));
+          setLocalAssets(mapped);
         }
       } catch (error: any) {
         console.error('Failed to sync assets:', error);
@@ -223,7 +282,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     };
     
     checkAndSyncAssets();
-  }, [facility.fmGuid, facility.category, assets.length, toast]);
+  }, [facility.fmGuid, facility.category, localAssets.length, hasTriedSync, toast]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -240,7 +299,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   const assetData: AssetData[] = useMemo(() => {
     // Deduplicate by fmGuid first to prevent duplicate entries
     const seenGuids = new Set<string>();
-    const uniqueAssets = assets.filter((asset) => {
+    const uniqueAssets = localAssets.filter((asset) => {
       const guid = asset.fm_guid || asset.fmGuid;
       if (!guid || seenGuids.has(guid)) return false;
       seenGuids.add(guid);
@@ -267,7 +326,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         raw: asset,
       };
     });
-  }, [assets]);
+  }, [localAssets]);
 
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
