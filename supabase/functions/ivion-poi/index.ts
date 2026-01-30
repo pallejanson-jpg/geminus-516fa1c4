@@ -13,12 +13,15 @@ function normalizeBaseUrl(url: string): string {
 }
 
 // Ivion API credentials from secrets
-// NOTE: Some Ivion instances are configured with SSO/OAuth where username/password login endpoints are not available.
-// In that case, provide a JWT via IVION_ACCESS_TOKEN.
+// NOTE: NavVis IVION uses OAuth mandate-based login which requires user interaction.
+// For automated access, provide:
+// - IVION_REFRESH_TOKEN (7 day validity) for automatic access token renewal
+// - IVION_ACCESS_TOKEN (30 min validity) as fallback
 const IVION_API_URL = normalizeBaseUrl(Deno.env.get('IVION_API_URL') || '');
 const IVION_USERNAME = (Deno.env.get('IVION_USERNAME') || '').trim();
 const IVION_PASSWORD = (Deno.env.get('IVION_PASSWORD') || '').trim();
 const IVION_ACCESS_TOKEN = (Deno.env.get('IVION_ACCESS_TOKEN') || '').trim();
+const IVION_REFRESH_TOKEN = (Deno.env.get('IVION_REFRESH_TOKEN') || '').trim();
 
 // Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -57,16 +60,88 @@ interface IvionPoi {
   icon?: string;
 }
 
+// Check if JWT token is expired
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    
+    const payload = JSON.parse(atob(parts[1]));
+    const exp = payload.exp;
+    if (!exp) return true;
+    
+    // Add 60 second buffer before actual expiration
+    const now = Math.floor(Date.now() / 1000);
+    return now >= (exp - 60);
+  } catch {
+    return true;
+  }
+}
+
+// Cached token from login
+let cachedToken: string | null = null;
+let cachedTokenExpiry: number = 0;
+
 // Get auth token from Ivion - try multiple auth methods
 async function getIvionToken(): Promise<string> {
-  // If a token is provided explicitly, always prefer it.
-  if (IVION_ACCESS_TOKEN) return IVION_ACCESS_TOKEN;
+  // Check cached token first
+  if (cachedToken && !isTokenExpired(cachedToken)) {
+    return cachedToken;
+  }
+  
+  // If IVION_ACCESS_TOKEN is provided and not expired, use it
+  if (IVION_ACCESS_TOKEN && !isTokenExpired(IVION_ACCESS_TOKEN)) {
+    console.log('Using provided IVION_ACCESS_TOKEN (still valid)');
+    return IVION_ACCESS_TOKEN;
+  }
+  
+  // Try to refresh using IVION_REFRESH_TOKEN if available
+  if (IVION_REFRESH_TOKEN) {
+    console.log('Attempting to refresh access token using IVION_REFRESH_TOKEN...');
+    try {
+      const refreshResponse = await fetch(`${IVION_API_URL}/api/auth/refresh_access_token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: IVION_REFRESH_TOKEN }),
+      });
+      
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        if (data.access_token) {
+          console.log('Successfully refreshed access token via refresh_token');
+          cachedToken = data.access_token;
+          return data.access_token;
+        }
+      } else {
+        const errorText = await refreshResponse.text();
+        console.log(`Refresh token request failed: ${refreshResponse.status} - ${errorText.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.log(`Refresh token error: ${e}`);
+    }
+  }
+  
+  if (IVION_ACCESS_TOKEN && isTokenExpired(IVION_ACCESS_TOKEN)) {
+    console.log('IVION_ACCESS_TOKEN has expired and no valid refresh token available');
+  }
 
-  if (!IVION_API_URL || !IVION_USERNAME || !IVION_PASSWORD) {
+  // NavVis IVION requires OAuth mandate-based login which needs user interaction.
+  // Username/password login is NOT supported directly via API.
+  if (!IVION_REFRESH_TOKEN && !IVION_ACCESS_TOKEN) {
     throw new Error(
-      'Ivion credentials not configured. Set IVION_API_URL and either (IVION_USERNAME + IVION_PASSWORD) OR IVION_ACCESS_TOKEN.'
+      'Ivion tokens not configured. NavVis IVION requires OAuth mandate-based login. ' +
+      'Provide IVION_REFRESH_TOKEN (7 day validity) for automatic renewal, or IVION_ACCESS_TOKEN (30 min validity) as fallback. ' +
+      'Username/password login is not supported by NavVis IVION REST API.'
     );
   }
+  
+  throw new Error(
+    'Ivion access token has expired. Please provide a fresh IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN. ' +
+    'To get tokens, log in to Ivion and extract them from browser developer tools (Network tab > api/auth/mandate/exchange response).'
+  );
 
   console.log('Attempting Ivion auth to:', IVION_API_URL);
 
@@ -107,7 +182,8 @@ async function getIvionToken(): Promise<string> {
     const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 1 succeeded');
+      console.log('Auth method 1 succeeded - token obtained');
+      cachedToken = data.access_token;
       return data.access_token;
     }
 
@@ -150,7 +226,8 @@ async function getIvionToken(): Promise<string> {
     const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 2 succeeded');
+      console.log('Auth method 2 succeeded - token obtained');
+      cachedToken = data.access_token;
       return data.access_token;
     }
 
@@ -189,7 +266,8 @@ async function getIvionToken(): Promise<string> {
     const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 3 succeeded');
+      console.log('Auth method 3 succeeded - token obtained');
+      cachedToken = data.access_token;
       return data.access_token;
     }
 
@@ -232,7 +310,8 @@ async function getIvionToken(): Promise<string> {
     const redirectedTo = response.headers.get('location');
     if (response.ok) {
       const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 4 succeeded');
+      console.log('Auth method 4 succeeded - token obtained');
+      cachedToken = data.access_token;
       return data.access_token;
     }
 
