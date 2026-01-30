@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, GripVertical } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react';
+import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, GripVertical, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -268,7 +268,8 @@ const TreeNodeComponent = React.memo<{
 
 TreeNodeComponent.displayName = 'TreeNodeComponent';
 
-const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
+// Use forwardRef to fix React warning about refs on function components
+const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   viewerRef,
   isVisible,
   onClose,
@@ -277,14 +278,16 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   embedded = false,
   showVisibilityCheckboxes = true,
   startFromStoreys = true,
-}) => {
+}, ref) => {
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [buildProgress, setBuildProgress] = useState<{ current: number; total: number } | null>(null);
   const buildAttempts = useRef(0);
+  const buildCancelledRef = useRef(false);
   
   // Desktop floating panel state - position, size, drag, resize
   const [position, setPosition] = useState({ x: 12, y: 56 });
@@ -436,7 +439,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     refreshVisibilityState();
   }, [getXeokitViewer, refreshVisibilityState]);
 
-  // Build tree from xeokit metaScene with chunked processing
+  // Build tree from xeokit metaScene with CHUNKED processing to prevent UI freeze
   const buildTree = useCallback(() => {
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -456,106 +459,151 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
       return;
     }
 
-    // Use requestIdleCallback for non-blocking tree building
-    const buildWithIdleCallback = () => {
-      try {
-        const rootMetaObjects = metaScene.rootMetaObjects || {};
-        const tree: TreeNode[] = [];
+    // Reset cancellation flag
+    buildCancelledRef.current = false;
+    
+    const sortByStoreyLevel = (a: TreeNode, b: TreeNode): number => {
+      const extractLevel = (name: string): number => {
+        const match = name.match(/(-?\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+      const levelA = extractLevel(a.name);
+      const levelB = extractLevel(b.name);
+      return levelB - levelA;
+    };
 
-        const sortByStoreyLevel = (a: TreeNode, b: TreeNode): number => {
-          const extractLevel = (name: string): number => {
-            const match = name.match(/(-?\d+)/);
-            return match ? parseInt(match[1], 10) : 0;
-          };
-          const levelA = extractLevel(a.name);
-          const levelB = extractLevel(b.name);
-          return levelB - levelA;
-        };
+    // Phase 1: Collect all meta objects that need processing
+    const rootMetaObjects = metaScene.rootMetaObjects || {};
+    const storeysToProcess: any[] = [];
+    const rootsToProcess: any[] = [];
+    
+    const findStoreys = (metaObject: any): any[] => {
+      const storeys: any[] = [];
+      const traverse = (obj: any) => {
+        if (obj.type === 'IfcBuildingStorey') {
+          storeys.push(obj);
+          return;
+        }
+        obj.children?.forEach(traverse);
+      };
+      traverse(metaObject);
+      return storeys;
+    };
 
-        const siblingCounters = new Map<string, Map<string, number>>();
+    if (startFromStoreys) {
+      Object.values(rootMetaObjects).forEach((rootObj: any) => {
+        const storeys = findStoreys(rootObj);
+        storeysToProcess.push(...storeys);
+      });
+    } else {
+      Object.values(rootMetaObjects).forEach((rootObj: any) => {
+        rootsToProcess.push(rootObj);
+      });
+    }
 
-        const buildNode = (metaObject: any, parentId: string = 'root', depth: number = 0): TreeNode => {
-          if (!siblingCounters.has(parentId)) {
-            siblingCounters.set(parentId, new Map());
-          }
-          const parentCounters = siblingCounters.get(parentId)!;
-          
-          const typeCount = (parentCounters.get(metaObject.type) || 0) + 1;
-          parentCounters.set(metaObject.type, typeCount);
+    const itemsToProcess = startFromStoreys ? storeysToProcess : rootsToProcess;
+    const totalItems = itemsToProcess.length;
+    
+    if (totalItems === 0) {
+      setIsLoading(false);
+      setBuildProgress(null);
+      return;
+    }
 
-          const entity = scene?.objects?.[metaObject.id];
-          const isVisible = entity ? entity.visible : true;
+    setBuildProgress({ current: 0, total: totalItems });
 
-          const node: TreeNode = {
-            id: metaObject.id,
-            name: getDisplayName(metaObject, typeCount),
-            type: metaObject.type || 'Unknown',
-            fmGuid: metaObject.propertySetsByName?.Ivion?.fmguid || 
-                    metaObject.propertySetsByName?.pset_ivion?.fmguid ||
-                    undefined,
-            children: [],
-            visible: isVisible,
-            indeterminate: false,
-          };
+    // Phase 2: Process items in chunks
+    const CHUNK_SIZE = 5; // Process 5 root items per chunk (each can have many children)
+    let processedCount = 0;
+    const tree: TreeNode[] = [];
+    const siblingCounters = new Map<string, Map<string, number>>();
 
-          if (metaObject.children && metaObject.children.length > 0) {
-            const childNodes = metaObject.children.map((child: any) => 
-              buildNode(child, metaObject.id, depth + 1)
-            );
-            
-            if (node.type === 'IfcBuilding') {
-              node.children = childNodes.sort(sortByStoreyLevel);
-            } else {
-              node.children = childNodes.sort((a: TreeNode, b: TreeNode) => 
-                a.name.localeCompare(b.name, 'sv', { numeric: true })
-              );
-            }
+    const buildNode = (metaObject: any, parentId: string = 'root', depth: number = 0): TreeNode => {
+      if (!siblingCounters.has(parentId)) {
+        siblingCounters.set(parentId, new Map());
+      }
+      const parentCounters = siblingCounters.get(parentId)!;
+      
+      const typeCount = (parentCounters.get(metaObject.type) || 0) + 1;
+      parentCounters.set(metaObject.type, typeCount);
 
-            const allVisible = node.children.every(c => c.visible && !c.indeterminate);
-            const allHidden = node.children.every(c => !c.visible);
-            if (!allVisible && !allHidden) {
-              node.indeterminate = true;
-            }
-          }
+      const entity = scene?.objects?.[metaObject.id];
+      const isVisible = entity ? entity.visible : true;
 
-          node.objectCount = countDescendants(node);
-          return node;
-        };
+      const node: TreeNode = {
+        id: metaObject.id,
+        name: getDisplayName(metaObject, typeCount),
+        type: metaObject.type || 'Unknown',
+        fmGuid: metaObject.propertySetsByName?.Ivion?.fmguid || 
+                metaObject.propertySetsByName?.pset_ivion?.fmguid ||
+                undefined,
+        children: [],
+        visible: isVisible,
+        indeterminate: false,
+      };
 
-        const findStoreys = (metaObject: any): any[] => {
-          const storeys: any[] = [];
-          
-          const traverse = (obj: any) => {
-            if (obj.type === 'IfcBuildingStorey') {
-              storeys.push(obj);
-              return;
-            }
-            obj.children?.forEach(traverse);
-          };
-          
-          traverse(metaObject);
-          return storeys;
-        };
+      if (metaObject.children && metaObject.children.length > 0) {
+        const childNodes = metaObject.children.map((child: any) => 
+          buildNode(child, metaObject.id, depth + 1)
+        );
+        
+        if (node.type === 'IfcBuilding') {
+          node.children = childNodes.sort(sortByStoreyLevel);
+        } else {
+          node.children = childNodes.sort((a: TreeNode, b: TreeNode) => 
+            a.name.localeCompare(b.name, 'sv', { numeric: true })
+          );
+        }
 
+        const allVisible = node.children.every(c => c.visible && !c.indeterminate);
+        const allHidden = node.children.every(c => !c.visible);
+        if (!allVisible && !allHidden) {
+          node.indeterminate = true;
+        }
+      }
+
+      node.objectCount = countDescendants(node);
+      return node;
+    };
+
+    const processChunk = () => {
+      // Check if build was cancelled
+      if (buildCancelledRef.current) {
+        setIsLoading(false);
+        setBuildProgress(null);
+        return;
+      }
+
+      const endIndex = Math.min(processedCount + CHUNK_SIZE, totalItems);
+      
+      // Process this chunk
+      for (let i = processedCount; i < endIndex; i++) {
+        const item = itemsToProcess[i];
+        const node = buildNode(item);
+        tree.push(node);
+      }
+      
+      processedCount = endIndex;
+      setBuildProgress({ current: processedCount, total: totalItems });
+
+      if (processedCount < totalItems) {
+        // Schedule next chunk using requestIdleCallback if available
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(processChunk, { timeout: 100 });
+        } else {
+          setTimeout(processChunk, 0);
+        }
+      } else {
+        // All done - finalize tree
         if (startFromStoreys) {
-          Object.values(rootMetaObjects).forEach((rootObj: any) => {
-            const storeys = findStoreys(rootObj);
-            storeys.forEach(storey => {
-              const node = buildNode(storey);
-              tree.push(node);
-            });
-          });
           tree.sort(sortByStoreyLevel);
         } else {
-          Object.values(rootMetaObjects).forEach((rootObj: any) => {
-            const node = buildNode(rootObj);
-            tree.push(node);
-          });
           tree.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
         }
 
         setTreeData(tree);
         
+        // Auto-expand first 2 levels
         const autoExpandIds = new Set<string>();
         const expandToDepth = (nodes: TreeNode[], depth: number, maxDepth: number) => {
           if (depth >= maxDepth) return;
@@ -571,18 +619,17 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
         
         const totalCount = tree.reduce((sum, node) => sum + 1 + (node.objectCount || 0), 0);
         console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes,', totalCount, 'total objects');
-      } catch (e) {
-        console.error('ViewerTreePanel: Error building tree:', e);
-      } finally {
+        
         setIsLoading(false);
+        setBuildProgress(null);
       }
     };
 
-    // Use requestIdleCallback if available, otherwise use setTimeout
+    // Start processing
     if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(buildWithIdleCallback, { timeout: 2000 });
+      (window as any).requestIdleCallback(processChunk, { timeout: 100 });
     } else {
-      setTimeout(buildWithIdleCallback, 0);
+      setTimeout(processChunk, 0);
     }
   }, [viewerRef, startFromStoreys]);
 
@@ -591,8 +638,12 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     if (isVisible) {
       setIsLoading(true);
       buildAttempts.current = 0;
+      buildCancelledRef.current = false;
       const timer = setTimeout(buildTree, 500);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        buildCancelledRef.current = true;
+      };
     }
   }, [isVisible, buildTree]);
 
@@ -674,10 +725,23 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
 
   if (!isVisible) return null;
 
+  // Loading indicator with progress
+  const LoadingIndicator = () => (
+    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm gap-2">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      <span>Laddar modellträd...</span>
+      {buildProgress && (
+        <span className="text-[10px] sm:text-xs">
+          {buildProgress.current} / {buildProgress.total} våningar
+        </span>
+      )}
+    </div>
+  );
+
   // Embedded mode: render without positioning, header, border
   if (embedded) {
     return (
-      <div className="flex flex-col h-full max-h-[40vh]">
+      <div ref={ref} className="flex flex-col h-full max-h-[40vh]">
         {/* Search */}
         <div className="p-1.5 sm:p-2 border-b">
           <div className="relative">
@@ -695,9 +759,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
         <ScrollArea className="flex-1">
           <div className="p-0.5 sm:p-1">
             {isLoading ? (
-              <div className="flex items-center justify-center py-3 sm:py-4 text-muted-foreground text-[10px] sm:text-xs">
-                Laddar modellträd...
-              </div>
+              <LoadingIndicator />
             ) : treeData.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-3 sm:py-4 text-muted-foreground text-[10px] sm:text-xs gap-1">
                 <TreeDeciduous className="h-5 w-5 sm:h-6 sm:w-6 opacity-50" />
@@ -729,6 +791,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   // Standard floating panel mode - now draggable and resizable on desktop
   return (
     <div 
+      ref={ref}
       className={cn(
         "fixed z-50",
         "bg-card/90 backdrop-blur-md border rounded-lg shadow-xl",
@@ -782,9 +845,7 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
       {/* Tree content */}
       <ScrollArea className="flex-1 p-1 sm:p-2">
         {isLoading ? (
-          <div className="flex items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm">
-            Laddar modellträd...
-          </div>
+          <LoadingIndicator />
         ) : treeData.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm gap-1.5 sm:gap-2">
             <TreeDeciduous className="h-6 w-6 sm:h-8 sm:w-8 opacity-50" />
@@ -821,6 +882,8 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ViewerTreePanel.displayName = 'ViewerTreePanel';
 
 export default ViewerTreePanel;
