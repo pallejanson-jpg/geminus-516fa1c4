@@ -623,15 +623,19 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             
             {buildingSettings?.ivion_site_id ? (
               <>
-                <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <ol className="list-decimal list-inside space-y-0.5">
-                      <li>Öppna 360+ och navigera till rätt plats</li>
-                      <li>Long-press för att skapa POI i Ivion</li>
-                      <li>Synka tillbaka för att importera</li>
-                    </ol>
-                  </div>
+                {/* Recommended: Ivion Inventory Mode */}
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => window.open(`/ivion-inventory?building=${buildingFmGuid}`, '_blank')}
+                  className="w-full h-12"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Starta inventering i 360°
+                </Button>
+
+                <div className="text-xs text-muted-foreground text-center">
+                  eller använd manuell synk:
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">

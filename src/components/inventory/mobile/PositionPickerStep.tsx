@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Camera, MapPin, SkipForward, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Box, Camera, MapPin, SkipForward, Loader2, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,6 +20,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
   onComplete,
   onSkip,
 }) => {
+  const navigate = useNavigate();
   const [showPositionPicker, setShowPositionPicker] = useState(false);
   const [ivionSiteId, setIvionSiteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,9 +61,14 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
   const handleOpen360 = () => {
     if (ivionSiteId) {
       // Open Ivion in a new tab - user creates POI there and syncs later
-      const ivionUrl = `https://ivion.navvis.com/?site=${ivionSiteId}`;
+      const ivionUrl = `https://swg.iv.navvis.com/?site=${ivionSiteId}`;
       window.open(ivionUrl, '_blank');
     }
+  };
+
+  // Navigate to fullscreen Ivion inventory mode
+  const handleStartIvionInventory = () => {
+    navigate(`/ivion-inventory?building=${formData.buildingFmGuid}`);
   };
 
   if (isLoading) {
@@ -119,16 +126,28 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
               <span className="text-base font-medium">Välj i 3D-modell</span>
             </Button>
 
-            {/* 360° Option - only show if configured */}
+            {/* 360° Inventory Mode - Recommended option */}
+            {ivionSiteId && (
+              <Button
+                variant="default"
+                className="w-full h-24 flex flex-col items-center justify-center gap-2 border-2"
+                onClick={handleStartIvionInventory}
+              >
+                <Play className="h-8 w-8" />
+                <span className="text-base font-medium">Starta inventering i 360°</span>
+                <span className="text-xs opacity-80">Skapa POI → Registrera direkt</span>
+              </Button>
+            )}
+
+            {/* Legacy 360° Option - open in new tab */}
             {ivionSiteId && (
               <Button
                 variant="outline"
-                className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2"
+                className="w-full h-16 flex flex-col items-center justify-center gap-1 border"
                 onClick={handleOpen360}
               >
-                <Camera className="h-8 w-8 text-accent" />
-                <span className="text-base font-medium">Öppna 360°-vy</span>
-                <span className="text-xs text-muted-foreground">Skapa POI i Ivion</span>
+                <Camera className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm">Öppna 360° i ny flik</span>
               </Button>
             )}
           </div>
