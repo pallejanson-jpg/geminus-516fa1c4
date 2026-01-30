@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package } from 'lucide-react';
+import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
 interface TreeNode {
@@ -14,6 +15,8 @@ interface TreeNode {
   parent?: TreeNode;
   fmGuid?: string;
   objectCount?: number;
+  visible: boolean;
+  indeterminate: boolean;
 }
 
 interface ViewerTreePanelProps {
@@ -22,9 +25,77 @@ interface ViewerTreePanelProps {
   onClose: () => void;
   onNodeSelect?: (nodeId: string, fmGuid?: string) => void;
   onNodeHover?: (nodeId: string | null) => void;
-  // New: embedded mode for inline display in sheets
   embedded?: boolean;
+  showVisibilityCheckboxes?: boolean;
+  startFromStoreys?: boolean;
 }
+
+// IFC type labels in Swedish
+const IFC_TYPE_LABELS: Record<string, string> = {
+  'IfcWall': 'Vägg',
+  'IfcWallStandardCase': 'Vägg',
+  'IfcSlab': 'Bjälklag',
+  'IfcDoor': 'Dörr',
+  'IfcWindow': 'Fönster',
+  'IfcColumn': 'Pelare',
+  'IfcBeam': 'Balk',
+  'IfcStair': 'Trappa',
+  'IfcStairFlight': 'Trapparm',
+  'IfcRoof': 'Tak',
+  'IfcSpace': 'Rum',
+  'IfcBuildingStorey': 'Våning',
+  'IfcFurniture': 'Möbel',
+  'IfcFurnishingElement': 'Inredning',
+  'IfcRailing': 'Räcke',
+  'IfcCovering': 'Beklädnad',
+  'IfcPlate': 'Platta',
+  'IfcMember': 'Element',
+  'IfcOpeningElement': 'Öppning',
+  'IfcCurtainWall': 'Glasvägg',
+  'IfcFlowTerminal': 'Installation',
+  'IfcFlowSegment': 'Rörsegment',
+  'IfcDistributionElement': 'Installation',
+  'IfcBuildingElementProxy': 'Objekt',
+};
+
+// Check if string looks like a GUID
+const isGuid = (str: string): boolean => {
+  if (!str || str.length < 20) return false;
+  // Match standard GUID format (with or without hyphens)
+  if (/^[0-9a-f]{8}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{12}$/i.test(str)) {
+    return true;
+  }
+  // Match Base64-encoded IFC GUIDs (22+ alphanumeric with $ or _)
+  if (/^[0-9a-zA-Z$_]{22,}$/.test(str)) {
+    return true;
+  }
+  return false;
+};
+
+// Get display name for meta object
+const getDisplayName = (metaObject: any, siblingIndex?: number): string => {
+  // 1. Try name from model (if not a GUID)
+  if (metaObject.name && !isGuid(metaObject.name)) {
+    return metaObject.name;
+  }
+  
+  // 2. Try LongName from PropertySets
+  const longName = metaObject.propertySetsByName?.Pset_SpaceCommon?.LongName ||
+                   metaObject.propertySetsByName?.Pset_WallCommon?.Reference ||
+                   metaObject.attributes?.LongName;
+  if (longName && !isGuid(longName)) {
+    return longName;
+  }
+  
+  // 3. Use translated type + index
+  const typeLabel = IFC_TYPE_LABELS[metaObject.type] || metaObject.type?.replace('Ifc', '') || 'Objekt';
+  
+  if (siblingIndex !== undefined && siblingIndex > 0) {
+    return `${typeLabel} ${siblingIndex}`;
+  }
+  
+  return typeLabel;
+};
 
 // Get icon for IFC type
 const getTypeIcon = (type: string) => {
@@ -50,8 +121,7 @@ const getTypeIcon = (type: string) => {
 // Get short type label
 const getTypeLabel = (type: string) => {
   if (!type) return '';
-  // Remove 'Ifc' prefix
-  return type.replace(/^Ifc/, '');
+  return IFC_TYPE_LABELS[type] || type.replace(/^Ifc/, '');
 };
 
 // Count all descendants recursively
@@ -70,8 +140,10 @@ const TreeNodeComponent: React.FC<{
   onToggle: (id: string) => void;
   onSelect: (node: TreeNode) => void;
   onHover: (nodeId: string | null) => void;
+  onVisibilityChange?: (node: TreeNode, visible: boolean) => void;
   searchQuery: string;
-}> = ({ node, level, selectedId, expandedIds, onToggle, onSelect, onHover, searchQuery }) => {
+  showVisibilityCheckboxes: boolean;
+}> = ({ node, level, selectedId, expandedIds, onToggle, onSelect, onHover, onVisibilityChange, searchQuery, showVisibilityCheckboxes }) => {
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
@@ -113,6 +185,21 @@ const TreeNodeComponent: React.FC<{
         onMouseEnter={() => onHover(node.id)}
         onMouseLeave={() => onHover(null)}
       >
+        {/* Visibility checkbox */}
+        {showVisibilityCheckboxes && (
+          <Checkbox
+            checked={node.visible && !node.indeterminate}
+            className={cn(
+              "h-3.5 w-3.5 sm:h-4 sm:w-4 mr-0.5",
+              node.indeterminate && "data-[state=checked]:bg-muted data-[state=checked]:text-muted-foreground"
+            )}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={(checked) => {
+              onVisibilityChange?.(node, !!checked);
+            }}
+          />
+        )}
+        
         {/* Expand/collapse button */}
         {hasChildren ? (
           <button
@@ -136,7 +223,12 @@ const TreeNodeComponent: React.FC<{
         <span className="shrink-0">{getTypeIcon(node.type)}</span>
         
         {/* Name */}
-        <span className="truncate flex-1 min-w-0 text-[11px] sm:text-sm">{node.name}</span>
+        <span className={cn(
+          "truncate flex-1 min-w-0 text-[11px] sm:text-sm",
+          !node.visible && "text-muted-foreground line-through"
+        )}>
+          {node.name}
+        </span>
         
         {/* Type badge - hidden on mobile */}
         <Badge variant="outline" className="hidden sm:inline-flex text-[9px] sm:text-[10px] px-1 py-0 h-3.5 sm:h-4 shrink-0">
@@ -164,7 +256,9 @@ const TreeNodeComponent: React.FC<{
               onToggle={onToggle}
               onSelect={onSelect}
               onHover={onHover}
+              onVisibilityChange={onVisibilityChange}
               searchQuery={searchQuery}
+              showVisibilityCheckboxes={showVisibilityCheckboxes}
             />
           ))}
         </div>
@@ -180,6 +274,8 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   onNodeSelect,
   onNodeHover,
   embedded = false,
+  showVisibilityCheckboxes = true,
+  startFromStoreys = true,
 }) => {
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -188,16 +284,92 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const buildAttempts = useRef(0);
 
-  // Build tree from xeokit metaScene using storeys hierarchy (like xeokit TreeViewPlugin)
+  // Get xeokit viewer scene reference
+  const getXeokitViewer = useCallback(() => {
+    const viewer = viewerRef.current;
+    return viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  }, [viewerRef]);
+
+  // Update visibility state from scene
+  const refreshVisibilityState = useCallback(() => {
+    const xeokitViewer = getXeokitViewer();
+    const scene = xeokitViewer?.scene;
+    if (!scene) return;
+
+    setTreeData(prevTree => {
+      const updateNodeVisibility = (node: TreeNode): TreeNode => {
+        const entity = scene.objects?.[node.id];
+        const nodeVisible = entity ? entity.visible : true;
+        
+        let childrenVisible = true;
+        let childrenHidden = true;
+        let indeterminate = false;
+        
+        const updatedChildren = node.children?.map(child => {
+          const updated = updateNodeVisibility(child);
+          if (updated.visible) childrenHidden = false;
+          if (!updated.visible) childrenVisible = false;
+          if (updated.indeterminate) indeterminate = true;
+          return updated;
+        });
+
+        // If some children visible and some hidden, this node is indeterminate
+        if (node.children && node.children.length > 0) {
+          if (!childrenVisible && !childrenHidden) {
+            indeterminate = true;
+          }
+        }
+
+        return {
+          ...node,
+          visible: nodeVisible,
+          indeterminate,
+          children: updatedChildren,
+        };
+      };
+
+      return prevTree.map(updateNodeVisibility);
+    });
+  }, [getXeokitViewer]);
+
+  // Toggle visibility for a node and all children
+  const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
+    const xeokitViewer = getXeokitViewer();
+    const scene = xeokitViewer?.scene;
+    if (!scene) return;
+
+    // Toggle this node
+    const entity = scene.objects?.[node.id];
+    if (entity) {
+      entity.visible = visible;
+    }
+
+    // Toggle all children recursively
+    const toggleChildren = (n: TreeNode) => {
+      n.children?.forEach(child => {
+        const childEntity = scene.objects?.[child.id];
+        if (childEntity) {
+          childEntity.visible = visible;
+        }
+        toggleChildren(child);
+      });
+    };
+    toggleChildren(node);
+
+    // Update state to reflect changes
+    refreshVisibilityState();
+  }, [getXeokitViewer, refreshVisibilityState]);
+
+  // Build tree from xeokit metaScene
   const buildTree = useCallback(() => {
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     const metaScene = xeokitViewer?.metaScene;
+    const scene = xeokitViewer?.scene;
     
     if (!metaScene) {
       console.debug('ViewerTreePanel: No metaScene available yet, attempt:', buildAttempts.current);
       
-      // Retry a few times as scene might still be loading
       if (buildAttempts.current < 5) {
         buildAttempts.current++;
         setTimeout(buildTree, 1000);
@@ -214,65 +386,112 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
 
       // Sort function for IFC storeys (floor names)
       const sortByStoreyLevel = (a: TreeNode, b: TreeNode): number => {
-        // Extract floor number from name like "Floor 1", "Våning 2", "Level -1", etc.
         const extractLevel = (name: string): number => {
           const match = name.match(/(-?\d+)/);
           return match ? parseInt(match[1], 10) : 0;
         };
-        
         const levelA = extractLevel(a.name);
         const levelB = extractLevel(b.name);
-        
-        // Sort descending (higher floors first)
         return levelB - levelA;
       };
 
-      // Recursive function to build tree with proper structure
-      const buildNode = (metaObject: any, depth: number = 0): TreeNode => {
+      // Track sibling indices for naming
+      const siblingCounters = new Map<string, Map<string, number>>();
+
+      // Recursive function to build tree
+      const buildNode = (metaObject: any, parentId: string = 'root', depth: number = 0): TreeNode => {
+        // Get sibling counter for this parent
+        if (!siblingCounters.has(parentId)) {
+          siblingCounters.set(parentId, new Map());
+        }
+        const parentCounters = siblingCounters.get(parentId)!;
+        
+        // Increment counter for this type
+        const typeCount = (parentCounters.get(metaObject.type) || 0) + 1;
+        parentCounters.set(metaObject.type, typeCount);
+
+        // Check visibility from scene
+        const entity = scene?.objects?.[metaObject.id];
+        const isVisible = entity ? entity.visible : true;
+
         const node: TreeNode = {
           id: metaObject.id,
-          name: metaObject.name || metaObject.id,
+          name: getDisplayName(metaObject, typeCount),
           type: metaObject.type || 'Unknown',
           fmGuid: metaObject.propertySetsByName?.Ivion?.fmguid || 
                   metaObject.propertySetsByName?.pset_ivion?.fmguid ||
                   undefined,
           children: [],
+          visible: isVisible,
+          indeterminate: false,
         };
 
         if (metaObject.children && metaObject.children.length > 0) {
-          // Build children
-          const childNodes = metaObject.children.map((child: any) => buildNode(child, depth + 1));
+          const childNodes = metaObject.children.map((child: any) => 
+            buildNode(child, metaObject.id, depth + 1)
+          );
           
           // Sort storeys by level, other children alphabetically
           if (node.type === 'IfcBuilding') {
-            // Sort storeys by floor level (descending)
             node.children = childNodes.sort(sortByStoreyLevel);
           } else {
-            // Sort other nodes alphabetically
             node.children = childNodes.sort((a: TreeNode, b: TreeNode) => 
               a.name.localeCompare(b.name, 'sv', { numeric: true })
             );
           }
+
+          // Calculate indeterminate state
+          const allVisible = node.children.every(c => c.visible && !c.indeterminate);
+          const allHidden = node.children.every(c => !c.visible);
+          if (!allVisible && !allHidden) {
+            node.indeterminate = true;
+          }
         }
 
-        // Cache object count for display
         node.objectCount = countDescendants(node);
-
         return node;
       };
 
-      // Process all root objects
-      Object.values(rootMetaObjects).forEach((rootObj: any) => {
-        const node = buildNode(rootObj);
-        tree.push(node);
-      });
+      // Find all storeys from root objects
+      const findStoreys = (metaObject: any): any[] => {
+        const storeys: any[] = [];
+        
+        const traverse = (obj: any) => {
+          if (obj.type === 'IfcBuildingStorey') {
+            storeys.push(obj);
+            return;
+          }
+          obj.children?.forEach(traverse);
+        };
+        
+        traverse(metaObject);
+        return storeys;
+      };
 
-      // Sort root level by name
-      tree.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
+      // Process all root objects
+      if (startFromStoreys) {
+        // Start from storeys level - skip Site/Building
+        Object.values(rootMetaObjects).forEach((rootObj: any) => {
+          const storeys = findStoreys(rootObj);
+          storeys.forEach(storey => {
+            const node = buildNode(storey);
+            tree.push(node);
+          });
+        });
+        // Sort by floor level
+        tree.sort(sortByStoreyLevel);
+      } else {
+        // Full hierarchy from root
+        Object.values(rootMetaObjects).forEach((rootObj: any) => {
+          const node = buildNode(rootObj);
+          tree.push(node);
+        });
+        tree.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
+      }
 
       setTreeData(tree);
       
-      // Auto-expand first few levels for better UX (like xeokit autoExpandDepth: 2)
+      // Auto-expand first few levels
       const autoExpandIds = new Set<string>();
       const expandToDepth = (nodes: TreeNode[], depth: number, maxDepth: number) => {
         if (depth >= maxDepth) return;
@@ -283,10 +502,9 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
           }
         });
       };
-      expandToDepth(tree, 0, 2); // Expand 2 levels deep
+      expandToDepth(tree, 0, 2);
       setExpandedIds(autoExpandIds);
       
-      // Count total objects for display
       const totalCount = tree.reduce((sum, node) => sum + 1 + (node.objectCount || 0), 0);
       console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes,', totalCount, 'total objects');
     } catch (e) {
@@ -294,14 +512,13 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [viewerRef]);
+  }, [viewerRef, startFromStoreys]);
 
   // Build tree when panel becomes visible
   useEffect(() => {
     if (isVisible) {
       setIsLoading(true);
       buildAttempts.current = 0;
-      // Wait a bit for the scene to be fully loaded
       const timer = setTimeout(buildTree, 500);
       return () => clearTimeout(timer);
     }
@@ -331,15 +548,12 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     setSelectedId(node.id);
 
     try {
-      // Clear previous selection
       scene.setObjectsSelected(scene.selectedObjectIds, false);
       
-      // Select new object
       const entity = scene.objects[node.id];
       if (entity) {
         entity.selected = true;
         
-        // Fly to the selected object
         xeokitViewer.cameraFlight.flyTo({
           aabb: entity.aabb,
           duration: 0.5,
@@ -361,10 +575,8 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
     if (!scene) return;
 
     try {
-      // Clear previous highlight
       scene.setObjectsHighlighted(scene.highlightedObjectIds, false);
       
-      // Highlight new object
       if (nodeId) {
         const entity = scene.objects[nodeId];
         if (entity) {
@@ -430,7 +642,9 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
                   onToggle={handleToggle}
                   onSelect={handleSelect}
                   onHover={handleHover}
+                  onVisibilityChange={handleVisibilityChange}
                   searchQuery={searchQuery}
+                  showVisibilityCheckboxes={showVisibilityCheckboxes}
                 />
               ))
             )}
@@ -497,7 +711,9 @@ const ViewerTreePanel: React.FC<ViewerTreePanelProps> = ({
               onToggle={handleToggle}
               onSelect={handleSelect}
               onHover={handleHover}
+              onVisibilityChange={handleVisibilityChange}
               searchQuery={searchQuery}
+              showVisibilityCheckboxes={showVisibilityCheckboxes}
             />
           ))
         )}
