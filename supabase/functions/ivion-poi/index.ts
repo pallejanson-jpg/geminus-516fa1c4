@@ -84,13 +84,19 @@ async function getIvionToken(): Promise<string> {
     'X-Requested-With': 'XMLHttpRequest',
   };
 
-  // Method 1: Try /api/auth/login with JSON body (standard NavVis approach)
+  // Method 1: Try /api/auth/local with x-authorization Basic header (NavVis local auth)
   try {
-    console.log('Trying auth method 1: /api/auth/login with JSON body');
-    const url = `${IVION_API_URL}/api/auth/login`;
+    console.log('Trying auth method 1: /api/auth/local with x-authorization Basic');
+    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
+    const url = `${IVION_API_URL}/api/auth/local`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: commonJsonHeaders,
+      headers: {
+        'x-authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       redirect: 'manual',
       body: JSON.stringify({
         username: IVION_USERNAME,
@@ -107,7 +113,7 @@ async function getIvionToken(): Promise<string> {
 
     const text = await response.text();
     recordAttempt({
-      method: 'method_1_api_auth_login',
+      method: 'method_1_api_auth_local',
       url,
       status: response.status,
       redirectedTo,
@@ -115,19 +121,25 @@ async function getIvionToken(): Promise<string> {
     });
   } catch (e) {
     recordAttempt({
-      method: 'method_1_api_auth_login',
-      url: `${IVION_API_URL}/api/auth/login`,
+      method: 'method_1_api_auth_local',
+      url: `${IVION_API_URL}/api/auth/local`,
       error: String(e),
     });
   }
 
-  // Method 2: Try /api/v1/auth/login (alternative API version)
+  // Method 2: Try /api/auth/login with x-authorization Basic header
   try {
-    console.log('Trying auth method 2: /api/v1/auth/login');
-    const url = `${IVION_API_URL}/api/v1/auth/login`;
+    console.log('Trying auth method 2: /api/auth/login with x-authorization Basic');
+    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
+    const url = `${IVION_API_URL}/api/auth/login`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: commonJsonHeaders,
+      headers: {
+        'x-authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       redirect: 'manual',
       body: JSON.stringify({
         username: IVION_USERNAME,
@@ -144,7 +156,7 @@ async function getIvionToken(): Promise<string> {
 
     const text = await response.text();
     recordAttempt({
-      method: 'method_2_api_v1_auth_login',
+      method: 'method_2_api_auth_login',
       url,
       status: response.status,
       redirectedTo,
@@ -152,21 +164,21 @@ async function getIvionToken(): Promise<string> {
     });
   } catch (e) {
     recordAttempt({
-      method: 'method_2_api_v1_auth_login',
-      url: `${IVION_API_URL}/api/v1/auth/login`,
+      method: 'method_2_api_auth_login',
+      url: `${IVION_API_URL}/api/auth/login`,
       error: String(e),
     });
   }
 
-  // Method 3: Try Basic Auth header approach
+  // Method 3: Try x-authorization Basic Auth for token endpoint
   try {
-    console.log('Trying auth method 3: Basic Auth header');
+    console.log('Trying auth method 3: x-authorization Basic for /api/auth/token');
     const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
     const url = `${IVION_API_URL}/api/auth/token`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 
-        'Authorization': `Basic ${basicAuth}`,
+        'x-authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
@@ -183,7 +195,7 @@ async function getIvionToken(): Promise<string> {
 
     const text = await response.text();
     recordAttempt({
-      method: 'method_3_basic_auth_token',
+      method: 'method_3_x_auth_token',
       url,
       status: response.status,
       redirectedTo,
@@ -191,19 +203,24 @@ async function getIvionToken(): Promise<string> {
     });
   } catch (e) {
     recordAttempt({
-      method: 'method_3_basic_auth_token',
+      method: 'method_3_x_auth_token',
       url: `${IVION_API_URL}/api/auth/token`,
       error: String(e),
     });
   }
 
-  // Method 4: Try OAuth2 token endpoint with form data
+  // Method 4: Try OAuth2 token endpoint with x-authorization Basic
   try {
-    console.log('Trying auth method 4: OAuth2 token endpoint');
+    console.log('Trying auth method 4: OAuth2 token endpoint with x-authorization');
+    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
     const url = `${IVION_API_URL}/oauth/token`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 
+        'x-authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
       redirect: 'manual',
       body: new URLSearchParams({
         grant_type: 'password',
@@ -221,7 +238,7 @@ async function getIvionToken(): Promise<string> {
 
     const text = await response.text();
     recordAttempt({
-      method: 'method_4_oauth_token',
+      method: 'method_4_oauth_x_auth',
       url,
       status: response.status,
       redirectedTo,
@@ -229,7 +246,7 @@ async function getIvionToken(): Promise<string> {
     });
   } catch (e) {
     recordAttempt({
-      method: 'method_4_oauth_token',
+      method: 'method_4_oauth_x_auth',
       url: `${IVION_API_URL}/oauth/token`,
       error: String(e),
     });
