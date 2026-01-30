@@ -22,6 +22,7 @@ import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
+import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -152,6 +153,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   
   // Architect view mode hook
   const { toggleArchitectMode, isActive: isArchitectModeActive, setBackgroundPreset, applyBackgroundPreset } = useArchitectViewMode();
+  
+  // Room labels hook
+  const { setLabelsEnabled: setRoomLabelsEnabled } = useRoomLabels(viewerInstanceRef);
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -1811,6 +1815,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       window.removeEventListener(ARCHITECT_BACKGROUND_CHANGED_EVENT, handleBackgroundChange as EventListener);
     };
   }, [applyBackgroundPreset]);
+
+  // Listen for room labels toggle from VisualizationToolbar
+  useEffect(() => {
+    const handleRoomLabelsToggle = (e: CustomEvent<RoomLabelsToggleDetail>) => {
+      console.log('ROOM_LABELS_TOGGLE:', e.detail.enabled);
+      setRoomLabelsEnabled(e.detail.enabled);
+    };
+    
+    window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handleRoomLabelsToggle as EventListener);
+    return () => {
+      window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handleRoomLabelsToggle as EventListener);
+    };
+  }, [setRoomLabelsEnabled]);
   // XKT cache interceptor - DISABLED due to initialization conflicts
   // The interceptor was causing 'nextSibling' errors and sending empty data to cache
   // Models will load directly from Asset+ API for now

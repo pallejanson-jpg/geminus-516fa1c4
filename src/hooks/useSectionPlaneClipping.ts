@@ -50,7 +50,6 @@ export function useSectionPlaneClipping(
 ) {
   const { enabled = true, offset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
   const sectionPlaneRef = useRef<any>(null);
-  const sectionPlanesPluginRef = useRef<any>(null);
   const currentFloorIdRef = useRef<string | null>(null);
   const currentClipModeRef = useRef<ClipMode | null>(null);
   const floorCutHeightRef = useRef<number>(initialFloorCutHeight);
@@ -64,33 +63,81 @@ export function useSectionPlaneClipping(
     }
   }, [viewerRef]);
 
-  // Initialize SectionPlanesPlugin if not already created
-  const initializeSectionPlanesPlugin = useCallback(() => {
-    if (sectionPlanesPluginRef.current) return sectionPlanesPluginRef.current;
+  /**
+   * Create a SectionPlane directly on the scene using xeokit's internal API.
+   * This bypasses SectionPlanesPlugin which may not be globally available.
+   */
+  const createSectionPlaneOnScene = useCallback((
+    viewer: any,
+    id: string,
+    pos: [number, number, number],
+    dir: [number, number, number]
+  ): any => {
+    const scene = viewer.scene;
+    if (!scene) return null;
 
-    const viewer = getXeokitViewer();
-    if (!viewer) return null;
+    // Remove any existing planes with same prefix
+    const existingPlanes = scene.sectionPlanes || {};
+    Object.keys(existingPlanes).forEach(planeId => {
+      if (planeId.startsWith('floor-clip-') || planeId === 'global-floor-clip') {
+        try {
+          existingPlanes[planeId].destroy?.();
+        } catch (e) {
+          console.debug('Error destroying existing plane:', planeId, e);
+        }
+      }
+    });
 
-    // Check if SectionPlanesPlugin is available globally (from xeokit)
-    const SectionPlanesPlugin = (window as any).SectionPlanesPlugin;
-    
-    if (!SectionPlanesPlugin) {
-      // Try to use viewer's built-in section planes if available
-      console.debug('SectionPlanesPlugin not available globally, using inline creation');
-      return null;
+    // Method 1: Direct SectionPlane constructor from scene
+    const SectionPlaneClass = scene.SectionPlane;
+    if (SectionPlaneClass) {
+      try {
+        const plane = new SectionPlaneClass(scene, { id, pos, dir, active: true });
+        console.log(`✅ SectionPlane created via scene.SectionPlane at Y=${pos[1].toFixed(2)}, dir=${JSON.stringify(dir)}`);
+        return plane;
+      } catch (e) {
+        console.debug('scene.SectionPlane constructor failed:', e);
+      }
     }
 
-    try {
-      sectionPlanesPluginRef.current = new SectionPlanesPlugin(viewer, {
-        overviewVisible: false,
-      });
-      console.log('SectionPlanesPlugin initialized for floor clipping');
-      return sectionPlanesPluginRef.current;
-    } catch (e) {
-      console.debug('Failed to initialize SectionPlanesPlugin:', e);
-      return null;
+    // Method 2: Use xeokit global SectionPlane if available
+    const GlobalSectionPlane = (window as any).xeokit?.SectionPlane || (window as any).SectionPlane;
+    if (GlobalSectionPlane) {
+      try {
+        const plane = new GlobalSectionPlane(scene, { id, pos, dir, active: true });
+        console.log(`✅ SectionPlane created via global constructor at Y=${pos[1].toFixed(2)}, dir=${JSON.stringify(dir)}`);
+        return plane;
+      } catch (e) {
+        console.debug('Global SectionPlane constructor failed:', e);
+      }
     }
-  }, [getXeokitViewer]);
+
+    // Method 3: Try scene.createSectionPlane helper if available
+    if (typeof scene.createSectionPlane === 'function') {
+      try {
+        const plane = scene.createSectionPlane({ id, pos, dir, active: true });
+        console.log(`✅ SectionPlane created via scene.createSectionPlane at Y=${pos[1].toFixed(2)}`);
+        return plane;
+      } catch (e) {
+        console.debug('scene.createSectionPlane failed:', e);
+      }
+    }
+
+    // Method 4: Try using xeokit's Component class if available
+    const sectionPlanes = scene.sectionPlanes;
+    if (sectionPlanes && typeof sectionPlanes.create === 'function') {
+      try {
+        const plane = sectionPlanes.create({ id, pos, dir, active: true });
+        console.log(`✅ SectionPlane created via scene.sectionPlanes.create at Y=${pos[1].toFixed(2)}`);
+        return plane;
+      } catch (e) {
+        console.debug('scene.sectionPlanes.create failed:', e);
+      }
+    }
+
+    console.warn('❌ Could not create SectionPlane - no method available');
+    return null;
+  }, []);
 
   // Calculate floor bounds from metaScene
   const calculateFloorBounds = useCallback((floorId: string): FloorBounds | null => {
@@ -234,85 +281,33 @@ export function useSectionPlaneClipping(
     // Remove existing section plane
     if (sectionPlaneRef.current) {
       try {
-        sectionPlaneRef.current.destroy();
+        sectionPlaneRef.current.destroy?.();
       } catch (e) {
         console.debug('Error destroying old section plane:', e);
       }
       sectionPlaneRef.current = null;
     }
 
-    // Try using SectionPlanesPlugin first
-    const plugin = initializeSectionPlanesPlugin();
-    
-    if (plugin) {
-      try {
-        // Create horizontal section plane
-        // For 2D floor plan: dir [0, 1, 0] (points UP) = clips everything ABOVE the plane
-        // For 3D ceiling: dir [0, -1, 0] (points DOWN) = clips above ceiling height
-        // NOTE: xeokit discards geometry in the direction of 'dir'
-        const direction: [number, number, number] = effectiveMode === 'floor' 
-          ? [0, 1, 0]   // 2D: clip above floor cut height
-          : [0, -1, 0]; // 3D ceiling: clip above ceiling
-          
-        sectionPlaneRef.current = plugin.createSectionPlane({
-          id: `floor-clip-${floorId}-${effectiveMode}`,
-          pos: [0, clipHeight, 0],
-          dir: direction,
-          active: true,
-        });
-        
-        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå (våningsgräns)';
-        console.log(`Section plane created at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${floorName}`);
-        currentFloorIdRef.current = floorId;
-        currentClipModeRef.current = effectiveMode;
-        return;
-      } catch (e) {
-        console.debug('Failed to create section plane via plugin:', e);
-      }
-    }
+    // Direction: [0, 1, 0] for 2D (clips above), [0, -1, 0] for 3D ceiling
+    const direction: [number, number, number] = effectiveMode === 'floor' 
+      ? [0, 1, 0]   // 2D: clip above floor cut height
+      : [0, -1, 0]; // 3D ceiling: clip above ceiling
 
-    // Fallback: Create section plane directly on scene
-    try {
-      const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
-      const direction: [number, number, number] = effectiveMode === 'floor' 
-        ? [0, 1, 0] : [0, -1, 0];
-      
-      if (SectionPlane) {
-        sectionPlaneRef.current = new SectionPlane(viewer.scene, {
-          id: `floor-clip-${floorId}-${effectiveMode}`,
-          pos: [0, clipHeight, 0],
-          dir: direction,
-          active: true,
-        });
-        
-        const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå (våningsgräns)';
-        console.log(`Section plane created (direct) at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${floorName}`);
-        currentFloorIdRef.current = floorId;
-        currentClipModeRef.current = effectiveMode;
-      } else {
-        // Ultimate fallback: Use xeokit scene's sectionPlanes directly
-        const sectionPlanes = viewer.scene.sectionPlanes;
-        if (sectionPlanes) {
-          const planeId = `floor-clip-${floorId}-${effectiveMode}`;
-          
-          // Create a new section plane using scene API
-          viewer.scene.createSectionPlane?.({
-            id: planeId,
-            pos: [0, clipHeight, 0],
-            dir: [0, -1, 0],
-            active: true,
-          });
-          
-          sectionPlaneRef.current = { id: planeId, scene: viewer.scene };
-          console.log(`Section plane created (scene API) at Y=${clipHeight.toFixed(2)}`);
-          currentFloorIdRef.current = floorId;
-          currentClipModeRef.current = effectiveMode;
-        }
-      }
-    } catch (e) {
-      console.debug('Failed to create section plane directly:', e);
+    // Create section plane using scene API
+    sectionPlaneRef.current = createSectionPlaneOnScene(
+      viewer,
+      `floor-clip-${floorId}-${effectiveMode}`,
+      [0, clipHeight, 0],
+      direction
+    );
+
+    if (sectionPlaneRef.current) {
+      const modeLabel = effectiveMode === 'floor' ? '2D planritning' : 'taknivå (våningsgräns)';
+      console.log(`Section plane created at Y=${clipHeight.toFixed(2)} (${modeLabel}) for floor: ${floorName}`);
+      currentFloorIdRef.current = floorId;
+      currentClipModeRef.current = effectiveMode;
     }
-  }, [enabled, clipMode, getXeokitViewer, calculateFloorBounds, calculateClipHeightFromFloorBoundary, initializeSectionPlanesPlugin]);
+  }, [enabled, clipMode, getXeokitViewer, calculateFloorBounds, calculateClipHeightFromFloorBoundary, createSectionPlaneOnScene]);
 
   // Apply floor plan clipping (2D mode) - convenience function
   const applyFloorPlanClipping = useCallback((floorId: string, customHeight?: number) => {
@@ -335,54 +330,27 @@ export function useSectionPlaneClipping(
     // Remove existing section plane
     if (sectionPlaneRef.current) {
       try {
-        sectionPlaneRef.current.destroy();
+        sectionPlaneRef.current.destroy?.();
       } catch (e) {
         console.debug('Error destroying old section plane:', e);
       }
       sectionPlaneRef.current = null;
     }
 
-    // Try using SectionPlanesPlugin first
-    const plugin = initializeSectionPlanesPlugin();
-    
-    if (plugin) {
-      try {
-        sectionPlaneRef.current = plugin.createSectionPlane({
-          id: 'global-floor-clip',
-          pos: [0, clipHeight, 0],
-          dir: [0, 1, 0], // Points UP = clips everything above (for 2D floor plan)
-          active: true,
-        });
-        
-        console.log(`Global section plane created at Y=${clipHeight.toFixed(2)} (2D planritning) [dir: UP]`);
-        currentFloorIdRef.current = null;
-        currentClipModeRef.current = 'floor';
-        return;
-      } catch (e) {
-        console.debug('Failed to create global section plane via plugin:', e);
-      }
-    }
+    // Create section plane using scene API
+    sectionPlaneRef.current = createSectionPlaneOnScene(
+      viewer,
+      'global-floor-clip',
+      [0, clipHeight, 0],
+      [0, 1, 0] // Points UP = clips everything above (for 2D floor plan)
+    );
 
-    // Fallback: Create section plane directly on scene
-    try {
-      const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
-      
-      if (SectionPlane) {
-        sectionPlaneRef.current = new SectionPlane(viewer.scene, {
-          id: 'global-floor-clip',
-          pos: [0, clipHeight, 0],
-          dir: [0, 1, 0], // Points UP = clips above
-          active: true,
-        });
-        
-        console.log(`Global section plane created (direct) at Y=${clipHeight.toFixed(2)} [dir: UP]`);
-        currentFloorIdRef.current = null;
-        currentClipModeRef.current = 'floor';
-      }
-    } catch (e) {
-      console.debug('Failed to create global section plane directly:', e);
+    if (sectionPlaneRef.current) {
+      console.log(`Global section plane created at Y=${clipHeight.toFixed(2)} (2D planritning) [dir: UP]`);
+      currentFloorIdRef.current = null;
+      currentClipModeRef.current = 'floor';
     }
-  }, [enabled, getXeokitViewer, initializeSectionPlanesPlugin]);
+  }, [enabled, getXeokitViewer, createSectionPlaneOnScene]);
 
   // Update floor cut height dynamically - creates or updates section plane in real-time
   const updateFloorCutHeight = useCallback((newHeight: number) => {
@@ -426,43 +394,19 @@ export function useSectionPlaneClipping(
       sectionPlaneRef.current = null;
     }
     
-    // Create new section plane at the calculated height
-    // For 2D floor plan mode, use dir [0, 1, 0] to clip above the plane
-    const plugin = initializeSectionPlanesPlugin();
-    
-    if (plugin) {
-      try {
-        sectionPlaneRef.current = plugin.createSectionPlane({
-          id: `floor-clip-dynamic-${Date.now()}`,
-          pos: [0, clipY, 0],
-          dir: [0, 1, 0], // Points UP = clips everything above
-          active: true,
-        });
-        console.log(`Section plane updated to Y=${clipY.toFixed(2)} (height: ${newHeight}m) [dir: UP]`);
-        currentClipModeRef.current = 'floor';
-        return;
-      } catch (e) {
-        console.debug('Failed to update section plane via plugin:', e);
-      }
+    // Create new section plane at the calculated height using scene API
+    sectionPlaneRef.current = createSectionPlaneOnScene(
+      viewer,
+      `floor-clip-dynamic-${Date.now()}`,
+      [0, clipY, 0],
+      [0, 1, 0] // Points UP = clips everything above
+    );
+
+    if (sectionPlaneRef.current) {
+      console.log(`Section plane updated to Y=${clipY.toFixed(2)} (height: ${newHeight}m) [dir: UP]`);
+      currentClipModeRef.current = 'floor';
     }
-    
-    // Fallback: Create section plane directly on scene
-    try {
-      const SectionPlane = viewer.scene.SectionPlane || (window as any).SectionPlane;
-      if (SectionPlane) {
-        sectionPlaneRef.current = new SectionPlane(viewer.scene, {
-          id: `floor-clip-dynamic-${Date.now()}`,
-          pos: [0, clipY, 0],
-          dir: [0, 1, 0], // Points UP = clips above
-          active: true,
-        });
-        console.log(`Section plane updated (direct) to Y=${clipY.toFixed(2)} [dir: UP]`);
-        currentClipModeRef.current = 'floor';
-      }
-    } catch (e) {
-      console.debug('Failed to update section plane directly:', e);
-    }
-  }, [getXeokitViewer, calculateFloorBounds, initializeSectionPlanesPlugin]);
+  }, [getXeokitViewer, calculateFloorBounds, createSectionPlaneOnScene]);
 
   // Apply ceiling clipping (3D solo mode) - convenience function  
   const applyCeilingClipping = useCallback((floorId: string) => {
@@ -516,14 +460,6 @@ export function useSectionPlaneClipping(
   useEffect(() => {
     return () => {
       removeSectionPlane();
-      
-      if (sectionPlanesPluginRef.current?.destroy) {
-        try {
-          sectionPlanesPluginRef.current.destroy();
-        } catch (e) {
-          console.debug('Error destroying SectionPlanesPlugin:', e);
-        }
-      }
     };
   }, [removeSectionPlane]);
 
