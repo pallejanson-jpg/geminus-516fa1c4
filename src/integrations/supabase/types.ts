@@ -280,6 +280,53 @@ export type Database = {
         }
         Relationships: []
       }
+      detection_templates: {
+        Row: {
+          ai_prompt: string
+          created_at: string | null
+          default_category: string | null
+          default_symbol_id: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          object_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          ai_prompt: string
+          created_at?: string | null
+          default_category?: string | null
+          default_symbol_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          object_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          ai_prompt?: string
+          created_at?: string | null
+          default_category?: string | null
+          default_symbol_id?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          object_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "detection_templates_default_symbol_id_fkey"
+            columns: ["default_symbol_id"]
+            isOneToOne: false
+            referencedRelation: "annotation_symbols"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       faciliate_sync_state: {
         Row: {
           created_at: string
@@ -315,6 +362,103 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      pending_detections: {
+        Row: {
+          ai_description: string | null
+          bounding_box: Json
+          building_fm_guid: string
+          confidence: number
+          coordinate_x: number | null
+          coordinate_y: number | null
+          coordinate_z: number | null
+          created_asset_fm_guid: string | null
+          created_at: string | null
+          created_ivion_poi_id: number | null
+          detection_template_id: string | null
+          id: string
+          ivion_dataset_name: string | null
+          ivion_image_id: number | null
+          ivion_site_id: string
+          object_type: string
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          scan_job_id: string
+          status: string | null
+          thumbnail_url: string | null
+        }
+        Insert: {
+          ai_description?: string | null
+          bounding_box: Json
+          building_fm_guid: string
+          confidence: number
+          coordinate_x?: number | null
+          coordinate_y?: number | null
+          coordinate_z?: number | null
+          created_asset_fm_guid?: string | null
+          created_at?: string | null
+          created_ivion_poi_id?: number | null
+          detection_template_id?: string | null
+          id?: string
+          ivion_dataset_name?: string | null
+          ivion_image_id?: number | null
+          ivion_site_id: string
+          object_type: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scan_job_id: string
+          status?: string | null
+          thumbnail_url?: string | null
+        }
+        Update: {
+          ai_description?: string | null
+          bounding_box?: Json
+          building_fm_guid?: string
+          confidence?: number
+          coordinate_x?: number | null
+          coordinate_y?: number | null
+          coordinate_z?: number | null
+          created_asset_fm_guid?: string | null
+          created_at?: string | null
+          created_ivion_poi_id?: number | null
+          detection_template_id?: string | null
+          id?: string
+          ivion_dataset_name?: string | null
+          ivion_image_id?: number | null
+          ivion_site_id?: string
+          object_type?: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scan_job_id?: string
+          status?: string | null
+          thumbnail_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_detections_detection_template_id_fkey"
+            columns: ["detection_template_id"]
+            isOneToOne: false
+            referencedRelation: "detection_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_detections_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "pending_detections_scan_job_id_fkey"
+            columns: ["scan_job_id"]
+            isOneToOne: false
+            referencedRelation: "scan_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -411,6 +555,68 @@ export type Database = {
           visualization_type?: string | null
         }
         Relationships: []
+      }
+      scan_jobs: {
+        Row: {
+          building_fm_guid: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          current_dataset: string | null
+          current_image_index: number | null
+          detections_found: number | null
+          error_message: string | null
+          id: string
+          ivion_site_id: string
+          processed_images: number | null
+          started_at: string | null
+          status: string | null
+          templates: string[]
+          total_images: number | null
+        }
+        Insert: {
+          building_fm_guid: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_dataset?: string | null
+          current_image_index?: number | null
+          detections_found?: number | null
+          error_message?: string | null
+          id?: string
+          ivion_site_id: string
+          processed_images?: number | null
+          started_at?: string | null
+          status?: string | null
+          templates: string[]
+          total_images?: number | null
+        }
+        Update: {
+          building_fm_guid?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_dataset?: string | null
+          current_image_index?: number | null
+          detections_found?: number | null
+          error_message?: string | null
+          id?: string
+          ivion_site_id?: string
+          processed_images?: number | null
+          started_at?: string | null
+          status?: string | null
+          templates?: string[]
+          total_images?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_jobs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

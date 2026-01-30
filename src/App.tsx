@@ -13,6 +13,8 @@ import NotFound from "./pages/NotFound";
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 // Ivion 360° Inventory page
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
+// AI Asset Scan page
+const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <IvionInventory />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* AI Asset Scan page - fullscreen mode */}
+          <Route 
+            path="/inventory/ai-scan" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <AiAssetScan />
                 </ProtectedRoute>
               </Suspense>
             } 
