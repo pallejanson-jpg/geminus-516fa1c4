@@ -1,367 +1,294 @@
 
-
-# Plan: Fixa 2D-klippning & Lägg till Rumsetiketter
+# Plan: Dela Profil/Settings, On-Demand Synk & TreeView i 3D
 
 ## Sammanfattning
 
 Användaren vill:
-1. **Fixa 2D-klippning** med slider för klipphöjd (standard 1.2m) - har aldrig fungerat
-2. **Lägg till rumsetiketter** som visar rumsnummer och rumsnamn med en slider i viewer settings
+1. **Dela upp Profil och övriga Settings** - som det var tidigare (separata tabs)
+2. **On-demand Asset-synk** - om assets saknas för en byggnad, hämta dem automatiskt när man öppnar UI
+3. **On-demand XKT-synk** - samma logik för 3D-modeller
+4. **TreeView i 3D-viewern** - xeokit:s TreeViewPlugin för BIM-hierarki, aktiverad via slider i Visningsmeny
 
 ---
 
-## Del 1: Fixa 2D-klippning
+## Del 1: Dela Profil och Settings
 
-### Problemanalys
+### Nuvarande struktur
+`ApiSettingsModal.tsx` har 7 tabs: Profil, Apps, API's, Sync, Symboler, Teman, Röst
 
-Efter att ha analyserat koden i `useSectionPlaneClipping.ts` och xeokit API-dokumentationen hittade jag grundorsaken:
+Profil innehåller: namn, email, avatar, tema-val
 
-**Nuvarande kod (rad 74-91):**
+### Önskad struktur
+Dela upp i två separata modaler:
+1. **Profil-modal** - användarens personliga inställningar (namn, foto, tema)
+2. **Settings-modal** - systeminställningar (Apps, API's, Sync, Symboler, Teman, Röst)
+
+### Ändringar
+
+**Ny fil:** `src/components/settings/ProfileModal.tsx`
+- Extrahera profillogiken till egen modal
+- Enkel dialog med avatar, namn, email, tema-val
+
+**Ändra:** `src/components/settings/ApiSettingsModal.tsx`
+- Ta bort Profil-tab
+- Behåll övriga 6 tabs
+- Byt namn till "SystemSettingsModal" eller behåll nuvarande namn
+
+**Ändra:** Header-dropdown (troligen `AppHeader.tsx` eller `AppSidebar.tsx`)
+- Separata menyval: "Profil" öppnar ProfileModal
+- "Inställningar" öppnar ApiSettingsModal
+
+---
+
+## Del 2: On-Demand Asset-synk
+
+### Nuvarande logik
+`AssetsView.tsx` (rad 197-226) har redan logik för on-demand synk:
 ```typescript
-const SectionPlanesPlugin = (window as any).SectionPlanesPlugin;
-
-if (!SectionPlanesPlugin) {
-  console.debug('SectionPlanesPlugin not available globally');
-  return null;
-}
+useEffect(() => {
+  const checkAndSyncAssets = async () => {
+    if (assets.length > 0 || !facility.fmGuid) return;
+    if (facility.category !== 'Building') return;
+    
+    setIsSyncingAssets(true);
+    const result = await syncBuildingAssetsIfNeeded(facility.fmGuid);
+    // ...
+  };
+  checkAndSyncAssets();
+}, [facility.fmGuid, ...]);
 ```
 
-**Problemet:** `SectionPlanesPlugin` är inte tillgänglig som global variabel eftersom Asset+ viewer-paketet inte exporterar xeokit-plugins globalt. Fallback-koden försöker använda `viewer.scene.SectionPlane` men detta konstruktor-anrop fungerar inte heller.
+`asset-plus-service.ts` har `syncBuildingAssetsIfNeeded()` som anropar edge function `sync-single-building`.
 
-### Lösning: Direkt Scene API
+### Problem
+1. Synken triggas bara i `AssetsView` - inte vid andra entry points
+2. Användaren måste vänta på synk när de öppnar vyn
+3. Inga återkopplingsmekanismer om synken misslyckas
 
-xeokit-scenen har en inbyggd `sectionPlanes`-manager som tillåter skapande av klippplan utan plugin. Enligt xeokit-dokumentationen:
+### Lösning: Proaktiv On-Demand Synk
 
-```javascript
-// Skapa section plane direkt på scenen
-const sectionPlane = viewer.scene.sectionPlanes.create({
-  id: "myPlane",
-  pos: [0, 1.2, 0],
-  dir: [0, 1, 0]
-});
-```
-
-### Ändringar i `useSectionPlaneClipping.ts`
-
-**Fil:** `src/hooks/useSectionPlaneClipping.ts`
-
-1. **Ersätt plugin-initieringen** med direkt scene API:
+**Ändra:** `src/services/asset-plus-service.ts`
+Lägg till funktion som körs automatiskt när användaren navigerar till en byggnad:
 
 ```typescript
-// Ny metod för att skapa section plane via scene API
-const createSectionPlaneViaScene = useCallback((
-  viewer: any,
-  id: string,
-  pos: [number, number, number],
-  dir: [number, number, number]
-) => {
-  const scene = viewer.scene;
-  if (!scene) return null;
+/**
+ * Ensure assets exist for a building - sync if needed.
+ * Returns immediately if assets exist, otherwise triggers background sync.
+ */
+export async function ensureBuildingAssets(
+  buildingFmGuid: string,
+  options?: { waitForSync?: boolean }
+): Promise<{ hasAssets: boolean; count: number; syncing: boolean }> {
+  // 1. Check local count
+  const { count } = await supabase
+    .from("assets")
+    .select("*", { count: "exact", head: true })
+    .eq("building_fm_guid", buildingFmGuid)
+    .eq("category", "Instance");
 
-  // Ta bort existerande plane med samma prefix
-  Object.keys(scene.sectionPlanes || {}).forEach(planeId => {
-    if (planeId.startsWith('floor-clip-')) {
-      scene.sectionPlanes[planeId].destroy?.();
-    }
+  if (count && count > 0) {
+    return { hasAssets: true, count, syncing: false };
+  }
+
+  // 2. Trigger background sync
+  console.log(`No assets for ${buildingFmGuid}, triggering sync...`);
+  
+  const syncPromise = supabase.functions.invoke("asset-plus-sync", {
+    body: { action: "sync-single-building", buildingFmGuid }
   });
 
-  // Skapa nytt section plane
-  // OBS: xeokit SectionPlane klipper i 'dir'-riktningen
-  // För 2D planritning: dir [0, 1, 0] = allt ÖVER planet klipps bort
-  const SectionPlane = scene.SectionPlane;
-  if (SectionPlane) {
-    return new SectionPlane(scene, { id, pos, dir, active: true });
+  if (options?.waitForSync) {
+    await syncPromise;
+    // Re-check count
+    const { count: newCount } = await supabase
+      .from("assets")
+      .select("*", { count: "exact", head: true })
+      .eq("building_fm_guid", buildingFmGuid)
+      .eq("category", "Instance");
+    return { hasAssets: (newCount || 0) > 0, count: newCount || 0, syncing: false };
   }
 
-  // Alternativ: Använd scene.addSectionPlane om tillgängligt
-  if (typeof scene.addSectionPlane === 'function') {
-    return scene.addSectionPlane({ id, pos, dir, active: true });
-  }
-
-  return null;
-}, []);
+  return { hasAssets: false, count: 0, syncing: true };
+}
 ```
 
-2. **Uppdatera `applySectionPlane`** för att använda den nya metoden:
+**Ändra:** `src/context/AppContext.tsx`
+Anropa `ensureBuildingAssets` när användaren väljer en byggnad i Navigator eller Portfolio:
 
 ```typescript
-const applySectionPlane = useCallback((floorId: string, mode?: ClipMode) => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene) return;
-
-  const effectiveMode = mode || clipMode;
-  const floorCutHeight = floorCutHeightRef.current;
-
-  // Beräkna klipphöjd
-  let clipHeight: number;
-  if (effectiveMode === 'floor') {
-    const bounds = calculateFloorBounds(floorId);
-    if (!bounds) return;
-    clipHeight = bounds.minY + floorCutHeight;
-  } else {
-    const boundaryHeight = calculateClipHeightFromFloorBoundary(floorId);
-    if (!boundaryHeight) return;
-    clipHeight = boundaryHeight;
-  }
-
-  // Riktning: [0, 1, 0] för 2D (klipp ovan), [0, -1, 0] för 3D tak
-  const dir: [number, number, number] = effectiveMode === 'floor' 
-    ? [0, 1, 0] 
-    : [0, -1, 0];
-
-  // Skapa section plane
-  sectionPlaneRef.current = createSectionPlaneViaScene(
-    viewer,
-    `floor-clip-${floorId}-${effectiveMode}`,
-    [0, clipHeight, 0],
-    dir
-  );
-
-  if (sectionPlaneRef.current) {
-    console.log(`✅ Section plane skapat vid Y=${clipHeight.toFixed(2)}m (${effectiveMode})`);
-  }
-}, [...]);
+// I setSelectedAsset eller liknande:
+if (asset.category === 'Building') {
+  ensureBuildingAssets(asset.fmGuid).then(result => {
+    if (result.syncing) {
+      toast({ title: 'Synkar assets...', description: 'Hämtar tillgångar för byggnaden' });
+    }
+  });
+}
 ```
-
-3. **Säkerställ att klipphöjdslidern triggar korrekt:**
-
-Slidern i `VisualizationToolbar.tsx` (rad 711-718) emittar redan `CLIP_HEIGHT_CHANGED_EVENT`. Kontrollera att listenern i `ViewerToolbar.tsx` anropar `updateFloorCutHeight` korrekt.
 
 ---
 
-## Del 2: Lägg till Rumsetiketter
+## Del 3: On-Demand XKT-synk
 
-### Teknisk Lösning
+### Nuvarande logik
+`useXktPreload.ts` preloadar XKT när en byggnad väljs, men:
+1. Hämtar från Asset+ API direkt (kräver token varje gång)
+2. Cachar till `xkt-models` bucket via `xktCacheService.storeModel()`
+3. Vid nästa laddning, kollar cache först
 
-Baserat på xeokit:s `Marker`-API kan vi skapa HTML-labels som följer rumspositioner i 3D.
+### Problem
+1. Preload kör bara 5 modeller, inte alla
+2. Om cache-miss, laddas från API varje gång
+3. Ingen synk-funktion som fyller databasen proaktivt
 
-**Strategi:**
-1. För varje `IfcSpace` i scenen, skapa en `Marker` vid rummets centrum
-2. Lyssna på `canvasPos`-uppdateringar för att positionera HTML-labels
-3. Toggle via slider i Viewer Settings
+### Lösning: XKT On-Demand Sync
 
-### Ny Hook: `useRoomLabels.ts`
-
-**Fil:** `src/hooks/useRoomLabels.ts`
+**Ändra:** `src/services/xkt-cache-service.ts`
+Lägg till funktion för att synka XKT on-demand:
 
 ```typescript
-import { useRef, useCallback, useEffect } from 'react';
+/**
+ * Ensure XKT models are cached for a building.
+ * Triggers sync if no cached models exist.
+ */
+async ensureBuildingModels(
+  buildingFmGuid: string
+): Promise<{ cached: boolean; count: number; syncing: boolean }> {
+  // 1. Check xkt_models table
+  const { count } = await supabase
+    .from("xkt_models")
+    .select("*", { count: "exact", head: true })
+    .eq("building_fm_guid", buildingFmGuid);
 
-interface RoomLabel {
-  fmGuid: string;
-  name: string;
-  number: string;
-  marker: any; // xeokit Marker
-  element: HTMLDivElement;
-}
+  if (count && count > 0) {
+    console.log(`XKT cache: ${count} models found for ${buildingFmGuid}`);
+    return { cached: true, count, syncing: false };
+  }
 
-export const ROOM_LABELS_TOGGLE_EVENT = 'ROOM_LABELS_TOGGLE';
+  // 2. Trigger XKT sync for this building
+  console.log(`XKT cache: No models for ${buildingFmGuid}, triggering sync...`);
+  
+  supabase.functions.invoke("asset-plus-sync", {
+    body: { action: "sync-xkt-building", buildingFmGuid }
+  }).catch(e => console.warn("XKT sync failed:", e));
 
-export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
-  const labelsRef = useRef<Map<string, RoomLabel>>(new Map());
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const enabledRef = useRef(false);
-
-  const getXeokitViewer = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-  }, [viewerRef]);
-
-  // Skapa label-container
-  const ensureContainer = useCallback(() => {
-    if (containerRef.current) return containerRef.current;
-
-    const canvas = getXeokitViewer()?.scene?.canvas?.canvas;
-    if (!canvas?.parentElement) return null;
-
-    const container = document.createElement('div');
-    container.id = 'room-labels-container';
-    container.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      overflow: hidden;
-      z-index: 10;
-    `;
-    canvas.parentElement.appendChild(container);
-    containerRef.current = container;
-    return container;
-  }, [getXeokitViewer]);
-
-  // Skapa labels för alla rum
-  const createLabels = useCallback(() => {
-    const viewer = getXeokitViewer();
-    if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return;
-
-    const container = ensureContainer();
-    if (!container) return;
-
-    const metaObjects = viewer.metaScene.metaObjects;
-    const scene = viewer.scene;
-    const Marker = (window as any).xeokit?.Marker || viewer.scene.Marker;
-
-    Object.values(metaObjects).forEach((metaObj: any) => {
-      if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-
-      const entity = scene.objects?.[metaObj.id];
-      if (!entity?.aabb) return;
-
-      // Beräkna centrum
-      const aabb = entity.aabb;
-      const center = [
-        (aabb[0] + aabb[3]) / 2,
-        (aabb[1] + aabb[4]) / 2,
-        (aabb[2] + aabb[5]) / 2,
-      ];
-
-      // Hämta rumsinfo
-      const fmGuid = metaObj.originalSystemId || metaObj.id;
-      const name = metaObj.name || '';
-      const number = metaObj.attributes?.LongName || 
-                     metaObj.propertySetValues?.Pset_SpaceCommon?.Reference || 
-                     '';
-
-      // Skapa HTML-label
-      const labelEl = document.createElement('div');
-      labelEl.className = 'room-label';
-      labelEl.innerHTML = `
-        <div class="room-label-number">${number || '—'}</div>
-        <div class="room-label-name">${name}</div>
-      `;
-      labelEl.style.cssText = `
-        position: absolute;
-        background: rgba(0, 0, 0, 0.75);
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        line-height: 1.3;
-        text-align: center;
-        transform: translate(-50%, -50%);
-        white-space: nowrap;
-        pointer-events: none;
-      `;
-      container.appendChild(labelEl);
-
-      // Skapa Marker för position-tracking
-      const marker = new Marker(viewer.scene, {
-        worldPos: center,
-        occludable: false, // Visa alltid (även bakom geometri)
-      });
-
-      // Uppdatera label-position när kameran rör sig
-      marker.on('canvasPos', (canvasPos: number[]) => {
-        labelEl.style.left = `${canvasPos[0]}px`;
-        labelEl.style.top = `${canvasPos[1]}px`;
-      });
-
-      marker.on('visible', (visible: boolean) => {
-        labelEl.style.display = visible ? 'block' : 'none';
-      });
-
-      labelsRef.current.set(fmGuid, { fmGuid, name, number, marker, element: labelEl });
-    });
-
-    console.log(`✅ Created ${labelsRef.current.size} room labels`);
-  }, [getXeokitViewer, ensureContainer]);
-
-  // Ta bort alla labels
-  const destroyLabels = useCallback(() => {
-    labelsRef.current.forEach(label => {
-      label.marker.destroy?.();
-      label.element.remove();
-    });
-    labelsRef.current.clear();
-    console.log('Room labels destroyed');
-  }, []);
-
-  // Toggle labels
-  const setLabelsEnabled = useCallback((enabled: boolean) => {
-    enabledRef.current = enabled;
-
-    if (enabled) {
-      createLabels();
-    } else {
-      destroyLabels();
-    }
-
-    // Visa/dölj container
-    if (containerRef.current) {
-      containerRef.current.style.display = enabled ? 'block' : 'none';
-    }
-  }, [createLabels, destroyLabels]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      destroyLabels();
-      containerRef.current?.remove();
-    };
-  }, [destroyLabels]);
-
-  return {
-    setLabelsEnabled,
-    isEnabled: enabledRef.current,
-    labelCount: labelsRef.current.size,
-  };
+  return { cached: false, count: 0, syncing: true };
 }
 ```
 
-### UI-kontroll i VisualizationToolbar
+**Ändra:** `supabase/functions/asset-plus-sync/index.ts`
+Lägg till ny action `sync-xkt-building` som synkar XKT för en specifik byggnad:
 
-**Fil:** `src/components/viewer/VisualizationToolbar.tsx`
+```typescript
+if (action === 'sync-xkt-building') {
+  if (!buildingFmGuid) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'buildingFmGuid required' }),
+      { status: 400, headers: ... }
+    );
+  }
 
-Lägg till ny switch i Viewer Settings-sektionen:
+  // Hämta modeller från Asset+ 3D API
+  const accessToken = await getAccessToken();
+  const models = await fetchModelsForBuilding(accessToken, buildingFmGuid);
+  
+  // Ladda ner och cacha varje modell
+  for (const model of models) {
+    await downloadAndCacheXkt(supabase, model, buildingFmGuid, accessToken);
+  }
+  
+  return new Response(
+    JSON.stringify({ success: true, modelCount: models.length }),
+    { headers: ... }
+  );
+}
+```
+
+**Ändra:** `src/hooks/useXktPreload.ts`
+Anropa `ensureBuildingModels` istället för att göra API-anrop direkt:
+
+```typescript
+// Ersätt nuvarande preload-logik med:
+const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
+if (result.syncing) {
+  console.log('XKT Preload: Background sync triggered');
+}
+```
+
+---
+
+## Del 4: TreeView i 3D-Viewern
+
+### Befintlig komponent
+`ViewerTreePanel.tsx` finns redan och visar BIM-hierarki baserat på xeokit metaScene. Den har:
+- Sökfunktion
+- Expandera/kollaps
+- Klick → select & fly-to
+- Hover → highlight
+
+### Önskad placering
+- Aktiveras via slider i Visningsmeny (VisualizationToolbar)
+- Ikonen ska ligga bredvid maximeraknappen uppe till vänster
+
+### Ändringar
+
+**Ändra:** `src/components/viewer/VisualizationToolbar.tsx`
+Lägg till TreeView toggle i huvudmenyn:
 
 ```tsx
 // State
-const [showRoomLabels, setShowRoomLabels] = useState(false);
+const [showTreeView, setShowTreeView] = useState(false);
 
-// I Viewer Settings collapsible (efter Klipphöjd-slidern):
+// I "Visa"-sektionen (efter Rum-toggle):
 <div className="flex items-center justify-between py-1.5 sm:py-2">
   <div className="flex items-center gap-2 sm:gap-3">
     <div className={cn(
       "p-1 sm:p-1.5 rounded-md",
-      showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+      showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
     )}>
-      <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+      <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
     </div>
-    <span className="text-xs sm:text-sm">Rumsetiketter</span>
+    <span className="text-xs sm:text-sm">Modellträd</span>
   </div>
   <Switch 
-    checked={showRoomLabels} 
+    checked={showTreeView} 
     onCheckedChange={(checked) => {
-      setShowRoomLabels(checked);
-      window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, {
-        detail: { enabled: checked }
-      }));
+      setShowTreeView(checked);
+      onToggleTreeView?.(checked);
     }} 
   />
 </div>
 ```
 
-### Integration i AssetPlusViewer
-
-**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+**Ändra:** `src/components/viewer/AssetPlusViewer.tsx`
+Placera TreeView-ikonen bredvid maximeraknappen:
 
 ```tsx
-import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT } from '@/hooks/useRoomLabels';
+// I header/toolbar-området uppe till vänster:
+<div className="absolute top-3 left-3 z-30 flex items-center gap-2">
+  {/* Existerande fullscreen-knapp */}
+  <Button variant="outline" size="icon" onClick={toggleFullscreen}>
+    {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+  </Button>
+  
+  {/* NY: TreeView toggle-knapp */}
+  <Button 
+    variant={showTreePanel ? "default" : "outline"} 
+    size="icon"
+    onClick={() => setShowTreePanel(!showTreePanel)}
+    title="Modellträd"
+  >
+    <TreeDeciduous className="h-4 w-4" />
+  </Button>
+</div>
 
-// I komponenten:
-const { setLabelsEnabled } = useRoomLabels(viewerInstanceRef);
-
-// Lyssna på toggle-event
-useEffect(() => {
-  const handleToggle = (e: CustomEvent) => {
-    setLabelsEnabled(e.detail.enabled);
-  };
-  window.addEventListener(ROOM_LABELS_TOGGLE_EVENT, handleToggle as EventListener);
-  return () => {
-    window.removeEventListener(ROOM_LABELS_TOGGLE_EVENT, handleToggle as EventListener);
-  };
-}, [setLabelsEnabled]);
+{/* TreeView panel */}
+<ViewerTreePanel
+  viewerRef={viewerInstanceRef}
+  isVisible={showTreePanel}
+  onClose={() => setShowTreePanel(false)}
+  onNodeSelect={handleTreeNodeSelect}
+/>
 ```
 
 ---
@@ -370,92 +297,72 @@ useEffect(() => {
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/hooks/useSectionPlaneClipping.ts` | Fixa section plane-skapande med direkt scene API |
-| `src/hooks/useRoomLabels.ts` | **NY FIL** - Hook för rumsetiketter med xeokit Marker |
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till Rumsetiketter-toggle i Viewer Settings |
-| `src/components/viewer/AssetPlusViewer.tsx` | Integrera useRoomLabels hook |
+| `src/components/settings/ProfileModal.tsx` | **NY FIL** - Separat profil-modal |
+| `src/components/settings/ApiSettingsModal.tsx` | Ta bort Profil-tab |
+| `src/components/layout/AppHeader.tsx` | Separata menyval för Profil/Settings |
+| `src/services/asset-plus-service.ts` | `ensureBuildingAssets()` funktion |
+| `src/services/xkt-cache-service.ts` | `ensureBuildingModels()` funktion |
+| `supabase/functions/asset-plus-sync/index.ts` | `sync-xkt-building` action |
+| `src/hooks/useXktPreload.ts` | Använd cache-service istället för direkt API |
+| `src/components/viewer/VisualizationToolbar.tsx` | TreeView toggle |
+| `src/components/viewer/AssetPlusViewer.tsx` | TreeView-knapp i header |
 
 ---
 
-## Teknisk Sammanfattning
+## Teknisk Översikt
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
-│                    2D KLIPPNING (FIXAD)                        │
+│                  ON-DEMAND ASSET SYNC                          │
 ├────────────────────────────────────────────────────────────────┤
-│  1. Användare togglar 2D i VisualizationToolbar                │
-│  2. VIEW_MODE_REQUESTED_EVENT → ViewerToolbar                  │
-│  3. handleViewModeChange('2d') anropas                         │
-│  4. applyFloorPlanClipping() i useSectionPlaneClipping         │
-│  5. Section plane skapas via scene.sectionPlanes               │
-│  6. Geometri klipps vid floorMinY + clipHeight (1.2m)          │
+│  1. Användare väljer byggnad i Navigator/Portfolio             │
+│  2. AppContext anropar ensureBuildingAssets(fmGuid)            │
+│  3. Om assets saknas → trigga sync-single-building             │
+│  4. Edge function hämtar från Asset+ API                       │
+│  5. Sparar till assets-tabell                                  │
+│  6. Nästa gång → data finns lokalt                             │
 └────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────┐
-│                    RUMSETIKETTER (NY)                          │
+│                  ON-DEMAND XKT SYNC                            │
 ├────────────────────────────────────────────────────────────────┤
-│  1. Användare aktiverar "Rumsetiketter" i Viewer Settings      │
-│  2. ROOM_LABELS_TOGGLE_EVENT dispatches                        │
-│  3. useRoomLabels.setLabelsEnabled(true)                       │
-│  4. För varje IfcSpace:                                        │
-│     - Beräkna centrum från aabb                                │
-│     - Skapa xeokit Marker vid worldPos                         │
-│     - Skapa HTML-label div                                     │
-│     - Lyssna på canvasPos för positionering                    │
-│  5. Labels visas som overlay på canvas                         │
+│  1. Användare öppnar 3D-viewer för byggnad                     │
+│  2. useXktPreload anropar ensureBuildingModels(fmGuid)         │
+│  3. Om XKT saknas → trigga sync-xkt-building                   │
+│  4. Edge function hämtar XKT från Asset+ 3D API                │
+│  5. Sparar till xkt-models bucket + tabell                     │
+│  6. Nästa gång → laddas från local cache                       │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│                  TREEVIEW I 3D                                 │
+├────────────────────────────────────────────────────────────────┤
+│  [Maximize] [TreeView]              ← Uppe till vänster        │
+│                                                                │
+│  ┌─ ViewerTreePanel ─────────────────────┐                     │
+│  │ 🔍 Sök...                             │                     │
+│  │                                       │                     │
+│  │ ▼ 🏢 Centralstationen                │                     │
+│  │   ▼ 📄 Våning 1                      │                     │
+│  │     ▶ 🚪 Rum 101                     │                     │
+│  │     ▶ 🚪 Rum 102                     │                     │
+│  │   ▶ 📄 Våning 2                      │                     │
+│  │   ▶ 📄 Våning 3                      │                     │
+│  └───────────────────────────────────────┘                     │
+│                                                                │
+│  VisualizationToolbar (höger):                                 │
+│  [x] 2D/3D                                                     │
+│  [x] Visa rum                                                  │
+│  [x] Modellträd  ← Toggle som synkar med knappen               │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Fallback-strategier
+## Förväntade Resultat
 
-### Om xeokit Marker inte finns:
-
-Använd alternativ approach med direkt canvas-projektion:
-
-```typescript
-// Projicera 3D-punkt till 2D canvas
-const worldToCanvas = (worldPos: number[], camera: any, canvas: HTMLCanvasElement) => {
-  const viewMatrix = camera.viewMatrix;
-  const projMatrix = camera.projMatrix;
-  // ... matris-multiplikation ...
-  return [canvasX, canvasY];
-};
-
-// Uppdatera alla labels på varje frame
-viewer.scene.on('tick', () => {
-  labelsRef.current.forEach(label => {
-    const canvasPos = worldToCanvas(label.worldPos, viewer.camera, canvas);
-    label.element.style.left = `${canvasPos[0]}px`;
-    label.element.style.top = `${canvasPos[1]}px`;
-  });
-});
-```
-
-### Om Section Plane fortfarande inte fungerar:
-
-Asset+ viewer-paketet kan ha egen clipping-hantering. Kontrollera:
-1. `assetViewer.setShowFloorplan(true)` - kan aktivera inbyggd 2D-vy
-2. `assetViewer.cutOutFloorByFmGuid(floorFmGuid)` - kan ge liknande effekt
-
----
-
-## Verifiering
-
-1. **2D-klippning:**
-   - Öppna 3D-viewer
-   - Välj ett våningsplan
-   - Toggla "2D" i VisualizationToolbar
-   - Verifiera att geometri klipps horisontellt
-   - Ändra klipphöjd med slider (0.5-2.5m)
-   - Verifiera att klippnivån uppdateras i realtid
-
-2. **Rumsetiketter:**
-   - Öppna 3D-viewer
-   - Gå till Viewer Settings
-   - Aktivera "Rumsetiketter"
-   - Verifiera att labels visas vid rumscentrum
-   - Navigera kameran och verifiera att labels följer
-   - Inaktivera och verifiera att labels försvinner
-
+1. **Separata modaler** - Profil och Settings är två olika modaler
+2. **Automatisk asset-laddning** - När man öppnar en byggnad, synkas assets automatiskt om de saknas
+3. **Automatisk XKT-laddning** - 3D-modeller synkas on-demand vid första besök
+4. **Progressiv cache-uppbyggnad** - Lovable fylls på med data över tid när användare navigerar
+5. **TreeView tillgänglig** - BIM-hierarki kan visas via knapp eller meny-toggle
