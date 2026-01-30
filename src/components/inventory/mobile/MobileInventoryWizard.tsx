@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ClipboardList, ChevronLeft, List, Plus } from 'lucide-react';
+import { ClipboardList, ChevronLeft, List, Plus, MapPin, Building2, LayoutGrid, Crosshair, FileEdit, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import LocationDetectionStep from './LocationDetectionStep';
 import LocationSelectionStep from './LocationSelectionStep';
@@ -263,32 +264,32 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
 
   // Step progress indicator
   const renderStepIndicator = () => {
-    const steps = [
-      { key: 'detection', label: '📍' },
-      { key: 'location', label: '🏢' },
-      { key: 'category', label: '📋' },
-      { key: 'position', label: '🎯' },
-      { key: 'registration', label: '✏️' },
+    const steps: { key: WizardStep; Icon: LucideIcon }[] = [
+      { key: 'detection', Icon: MapPin },
+      { key: 'location', Icon: Building2 },
+      { key: 'category', Icon: LayoutGrid },
+      { key: 'position', Icon: Crosshair },
+      { key: 'registration', Icon: FileEdit },
     ];
 
     return (
-      <div className="flex items-center justify-center gap-2 py-2">
+      <div className="flex items-center justify-center gap-1.5 py-2">
         {steps.map((step) => {
           const isActive = step.key === currentStep;
-          const isPast = STEP_ORDER.indexOf(step.key as WizardStep) < currentStepIndex;
+          const isPast = STEP_ORDER.indexOf(step.key) < currentStepIndex;
+          const StepIcon = step.Icon;
 
           return (
             <div
               key={step.key}
-              className={`
-                w-8 h-8 rounded-full flex items-center justify-center text-sm
-                transition-all duration-200
-                ${isActive ? 'bg-primary text-primary-foreground scale-110' : ''}
-                ${isPast ? 'bg-primary/30 text-primary' : ''}
-                ${!isActive && !isPast ? 'bg-muted text-muted-foreground' : ''}
-              `}
+              className={cn(
+                'w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200',
+                isActive && 'bg-primary text-primary-foreground scale-110',
+                isPast && 'bg-primary/30 text-primary',
+                !isActive && !isPast && 'bg-muted text-muted-foreground'
+              )}
             >
-              {step.label}
+              <StepIcon className="h-3.5 w-3.5" />
             </div>
           );
         })}
@@ -298,39 +299,43 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-3">
+      {/* Header - kompakt */}
+      <div className="flex items-center justify-between p-3 border-b">
+        <div className="flex items-center gap-2">
           {viewMode === 'wizard' && currentStep !== 'detection' && (
-            <Button variant="ghost" size="icon" onClick={goBack} className="h-10 w-10">
+            <Button variant="ghost" size="icon" onClick={goBack} className="h-9 w-9">
               <ChevronLeft className="h-5 w-5" />
             </Button>
           )}
-          <ClipboardList className="h-6 w-6 text-primary" />
-          <h1 className="text-lg font-semibold text-foreground">Inventering</h1>
+          <ClipboardList className="h-5 w-5 text-primary" />
+          <h1 className="text-base font-semibold text-foreground">Inventering</h1>
         </div>
         
-        {/* View mode toggle */}
-        <div className="flex items-center gap-2">
+        {/* View mode toggle - minimal buttons */}
+        <div className="flex items-center gap-1">
           <Button
-            variant={viewMode === 'wizard' ? 'default' : 'outline'}
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={() => setViewMode('wizard')}
-            className="h-9"
+            className={cn(
+              'h-9 w-9',
+              viewMode === 'wizard' && 'bg-primary/10 text-primary'
+            )}
           >
-            <Plus className="h-4 w-4 mr-1" />
-            Ny
+            <Plus className="h-5 w-5" />
           </Button>
           <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={() => setViewMode('list')}
-            className="h-9"
+            className={cn(
+              'h-9 w-9 relative',
+              viewMode === 'list' && 'bg-primary/10 text-primary'
+            )}
           >
-            <List className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">Lista</span>
+            <List className="h-5 w-5" />
             {savedItems.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+              <Badge variant="secondary" className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px]">
                 {savedItems.length}
               </Badge>
             )}
