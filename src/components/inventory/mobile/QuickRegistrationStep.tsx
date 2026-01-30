@@ -188,13 +188,23 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-5">
-        {/* Location summary */}
-        <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-          <span className="font-medium">{categoryInfo?.icon} {formData.categoryLabel}</span>
-          <span className="mx-2">•</span>
-          <span>{formData.buildingName}</span>
-          {formData.levelName && <span> → {formData.levelName}</span>}
-          {formData.roomName && <span> → {formData.roomName}</span>}
+        {/* Location & position summary */}
+        <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
+          <div>
+            <span className="font-medium">{categoryInfo?.icon} {formData.categoryLabel}</span>
+            <span className="mx-2">•</span>
+            <span>{formData.buildingName}</span>
+            {formData.levelName && <span> → {formData.levelName}</span>}
+            {formData.roomName && <span> → {formData.roomName}</span>}
+          </div>
+          {formData.coordinates && (
+            <div className="flex items-center gap-1.5 text-xs text-primary">
+              <span>📍 Position:</span>
+              <span>
+                ({formData.coordinates.x.toFixed(1)}, {formData.coordinates.y.toFixed(1)}, {formData.coordinates.z.toFixed(1)})
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Camera / Image capture - Large touch target */}
