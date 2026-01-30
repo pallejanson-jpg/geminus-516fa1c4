@@ -1,7 +1,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { INVENTORY_CATEGORIES } from '@/components/inventory/InventoryForm';
+import { cn } from '@/lib/utils';
+import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/components/inventory/InventoryForm';
 import type { WizardFormData } from './MobileInventoryWizard';
 
 interface CategorySelectionStepProps {
@@ -15,7 +16,7 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
   updateFormData,
   onComplete,
 }) => {
-  const handleCategorySelect = (category: { value: string; label: string }) => {
+  const handleCategorySelect = (category: InventoryCategory) => {
     updateFormData({
       category: category.value,
       categoryLabel: category.label,
@@ -37,22 +38,23 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
         </div>
 
         {/* Category grid - large touch targets */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           {INVENTORY_CATEGORIES.map((cat) => {
             const isSelected = formData.category === cat.value;
+            const CategoryIcon = cat.Icon;
 
             return (
               <Button
                 key={cat.value}
                 type="button"
                 variant={isSelected ? 'default' : 'outline'}
-                className={`
-                  h-24 flex flex-col items-center justify-center gap-2 p-2
-                  ${isSelected ? '' : 'border-2'}
-                `}
+                className={cn(
+                  'h-20 flex flex-col items-center justify-center gap-1.5 p-2',
+                  !isSelected && 'border-2'
+                )}
                 onClick={() => handleCategorySelect(cat)}
               >
-                <span className="text-3xl">{cat.icon}</span>
+                <CategoryIcon className={cn('h-7 w-7', isSelected ? '' : cat.color)} />
                 <span className="text-xs text-center leading-tight">{cat.label}</span>
               </Button>
             );
@@ -61,13 +63,19 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
 
         {/* Selected indicator */}
         {formData.category && (
-          <div className="text-center mt-4 p-3 bg-primary/10 rounded-lg">
-            <p className="text-sm font-medium">
-              Vald kategori:{' '}
-              <span className="text-primary">
-                {INVENTORY_CATEGORIES.find((c) => c.value === formData.category)?.icon}{' '}
-                {formData.categoryLabel}
-              </span>
+          <div className="text-center mt-3 p-2.5 bg-primary/10 rounded-lg">
+            <p className="text-sm font-medium flex items-center justify-center gap-2">
+              Vald:{' '}
+              {(() => {
+                const selected = INVENTORY_CATEGORIES.find((c) => c.value === formData.category);
+                const SelectedIcon = selected?.Icon;
+                return (
+                  <span className="text-primary flex items-center gap-1.5">
+                    {SelectedIcon && <SelectedIcon className="h-4 w-4" />}
+                    {formData.categoryLabel}
+                  </span>
+                );
+              })()}
             </p>
           </div>
         )}

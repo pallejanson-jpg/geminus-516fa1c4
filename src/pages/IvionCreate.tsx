@@ -332,7 +332,7 @@ const IvionCreate: React.FC = () => {
                 {INVENTORY_CATEGORIES.map((cat) => (
                   <SelectItem key={cat.value} value={cat.value}>
                     <span className="flex items-center gap-2">
-                      <span>{cat.icon}</span>
+                      <cat.Icon className={`h-4 w-4 ${cat.color}`} />
                       <span>{cat.label}</span>
                     </span>
                   </SelectItem>

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppContext } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
-import { INVENTORY_CATEGORIES } from './InventoryForm';
+import { INVENTORY_CATEGORIES, type InventoryCategory } from './InventoryForm';
 import type { InventoryItem } from '@/pages/Inventory';
 
 interface InventoryListProps {
@@ -47,11 +47,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
     return room?.commonName || room?.name || null;
   };
 
-  const getCategoryInfo = (assetType: string) => {
-    return INVENTORY_CATEGORIES.find((c) => c.value === assetType) || {
-      icon: '📦',
-      label: assetType,
-    };
+  const getCategoryInfo = (assetType: string): InventoryCategory | null => {
+    return INVENTORY_CATEGORIES.find((c) => c.value === assetType) || null;
   };
 
   if (isLoading) {
@@ -121,7 +118,11 @@ const InventoryList: React.FC<InventoryListProps> = ({ items, isLoading, onEdit,
                 onClick={() => onEdit?.(item)}
               >
                 <div className={cn("flex items-start", compact ? "gap-2" : "gap-3")}>
-                  <span className={compact ? "text-base" : "text-xl"}>{cat.icon}</span>
+                  {cat?.Icon ? (
+                    <cat.Icon className={cn(cat.color, compact ? "h-4 w-4" : "h-5 w-5")} />
+                  ) : (
+                    <Package className={cn("text-muted-foreground", compact ? "h-4 w-4" : "h-5 w-5")} />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className={cn("font-medium text-foreground truncate", compact && "text-sm")}>{item.name}</p>
