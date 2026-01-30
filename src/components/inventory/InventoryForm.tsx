@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info } from 'lucide-react';
+import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,18 +44,25 @@ interface InventoryFormProps {
   onPendingPositionConsumed?: () => void; // Called when pendingPosition has been applied
 }
 
-export const INVENTORY_CATEGORIES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: '🔥' },
-  { value: 'fire_blanket', label: 'Brandfilt', icon: '🧯' },
-  { value: 'fire_hose', label: 'Brandslang', icon: '🚒' },
-  { value: 'emergency_exit', label: 'Nödutgång', icon: '🚪' },
-  { value: 'sensor', label: 'Sensor', icon: '📡' },
-  { value: 'sprinkler', label: 'Sprinkler', icon: '💧' },
-  { value: 'hvac_unit', label: 'Luftbehandlingsaggregat', icon: '🌀' },
-  { value: 'lamp', label: 'Lampa', icon: '💡' },
-  { value: 'furniture', label: 'Möbel', icon: '🪑' },
-  { value: 'it_equipment', label: 'IT-utrustning', icon: '💻' },
-  { value: 'other', label: 'Övrigt', icon: '📦' },
+export interface InventoryCategory {
+  value: string;
+  label: string;
+  Icon: LucideIcon;
+  color: string;
+}
+
+export const INVENTORY_CATEGORIES: InventoryCategory[] = [
+  { value: 'fire_extinguisher', label: 'Brandsläckare', Icon: Flame, color: 'text-red-500' },
+  { value: 'fire_blanket', label: 'Brandfilt', Icon: ShieldAlert, color: 'text-orange-500' },
+  { value: 'fire_hose', label: 'Brandslang', Icon: Droplets, color: 'text-red-600' },
+  { value: 'emergency_exit', label: 'Nödutgång', Icon: DoorOpen, color: 'text-green-500' },
+  { value: 'sensor', label: 'Sensor', Icon: Radio, color: 'text-blue-500' },
+  { value: 'sprinkler', label: 'Sprinkler', Icon: Droplets, color: 'text-cyan-500' },
+  { value: 'hvac_unit', label: 'Luftbehandling', Icon: Fan, color: 'text-slate-500' },
+  { value: 'lamp', label: 'Lampa', Icon: Lightbulb, color: 'text-yellow-500' },
+  { value: 'furniture', label: 'Möbel', Icon: Armchair, color: 'text-amber-600' },
+  { value: 'it_equipment', label: 'IT-utrustning', Icon: Monitor, color: 'text-purple-500' },
+  { value: 'other', label: 'Övrigt', Icon: Package, color: 'text-muted-foreground' },
 ];
 
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
@@ -484,7 +491,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             {INVENTORY_CATEGORIES.map((cat) => (
               <SelectItem key={cat.value} value={cat.value}>
                 <span className="flex items-center gap-2">
-                  <span>{cat.icon}</span>
+                  <cat.Icon className={`h-4 w-4 ${cat.color}`} />
                   <span>{cat.label}</span>
                 </span>
               </SelectItem>

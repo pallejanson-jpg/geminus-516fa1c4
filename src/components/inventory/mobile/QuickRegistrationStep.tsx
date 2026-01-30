@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Save, Loader2, Plus, FileText } from 'lucide-react';
+import { Camera, Save, Loader2, Plus, FileText, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -184,22 +184,23 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
 
   const selectedSymbol = symbols.find((s) => s.id === formData.symbolId);
   const categoryInfo = INVENTORY_CATEGORIES.find((c) => c.value === formData.category);
+  const CategoryIcon = categoryInfo?.Icon;
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-4 space-y-5">
+      <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] space-y-4">
         {/* Location & position summary */}
-        <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-          <div>
-            <span className="font-medium">{categoryInfo?.icon} {formData.categoryLabel}</span>
-            <span className="mx-2">•</span>
-            <span>{formData.buildingName}</span>
-            {formData.levelName && <span> → {formData.levelName}</span>}
-            {formData.roomName && <span> → {formData.roomName}</span>}
+        <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-2.5 space-y-1">
+          <div className="flex items-center gap-1.5">
+            {CategoryIcon && <CategoryIcon className={`h-4 w-4 ${categoryInfo?.color}`} />}
+            <span className="font-medium">{formData.categoryLabel}</span>
+            <span className="mx-1">•</span>
+            <span className="truncate">{formData.buildingName}</span>
+            {formData.levelName && <span className="truncate"> → {formData.levelName}</span>}
           </div>
           {formData.coordinates && (
             <div className="flex items-center gap-1.5 text-xs text-primary">
-              <span>📍 Position:</span>
+              <MapPin className="h-3 w-3" />
               <span>
                 ({formData.coordinates.x.toFixed(1)}, {formData.coordinates.y.toFixed(1)}, {formData.coordinates.z.toFixed(1)})
               </span>
@@ -241,16 +242,16 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             <Button
               type="button"
               variant="outline"
-              className="w-full h-28 border-2 border-dashed flex flex-col gap-2"
+              className="w-full h-20 border-2 border-dashed flex flex-col gap-1"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
               {isUploading ? (
-                <Loader2 className="h-8 w-8 animate-spin" />
+                <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
                 <>
-                  <Camera className="h-8 w-8" />
-                  <span className="text-base">Ta foto</span>
+                  <Camera className="h-6 w-6" />
+                  <span className="text-sm">Ta foto</span>
                 </>
               )}
             </Button>
@@ -258,22 +259,22 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
         </div>
 
         {/* Name input */}
-        <div className="space-y-2">
-          <Label className="text-base font-medium">Namn / Beteckning *</Label>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Namn / Beteckning *</Label>
           <Input
             value={formData.name}
             onChange={(e) => updateFormData({ name: e.target.value })}
             placeholder={`t.ex. ${categoryInfo?.label || 'Tillgång'}-001`}
-            className="h-14 text-base"
+            className="h-12 text-base"
             maxLength={100}
           />
         </div>
 
         {/* Symbol selector */}
-        <div className="space-y-2">
-          <Label className="text-base font-medium">Symbol *</Label>
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Symbol *</Label>
           <Select value={formData.symbolId} onValueChange={(val) => updateFormData({ symbolId: val })}>
-            <SelectTrigger className="h-14 text-base">
+            <SelectTrigger className="h-12 text-base">
               {selectedSymbol ? (
                 <div className="flex items-center gap-3">
                   {selectedSymbol.icon_url ? (
@@ -335,26 +336,26 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           </CollapsibleContent>
         </Collapsible>
 
-        {/* Action buttons */}
-        <div className="space-y-3 pt-4">
+        {/* Action buttons - kompaktare med safe-area */}
+        <div className="space-y-2 pt-3">
           <Button
             onClick={() => handleSubmit(true)}
             disabled={isLoading || !formData.name.trim() || !formData.symbolId}
-            className="w-full h-14 text-lg"
+            className="w-full h-12 text-base"
           >
             {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
-              <Plus className="h-5 w-5 mr-2" />
+              <Plus className="h-4 w-4 mr-2" />
             )}
-            {quickLoopEnabled ? 'Spara & registrera nästa' : 'Spara & välj ny kategori'}
+            {quickLoopEnabled ? 'Spara & registrera nästa' : 'Spara & ny kategori'}
           </Button>
 
           <Button
             onClick={() => handleSubmit(false)}
             disabled={isLoading || !formData.name.trim() || !formData.symbolId}
             variant="outline"
-            className="w-full h-12"
+            className="w-full h-10"
           >
             <Save className="h-4 w-4 mr-2" />
             Spara & avsluta
