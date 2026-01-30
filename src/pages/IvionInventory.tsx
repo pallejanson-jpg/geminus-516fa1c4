@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, ChevronLeft, Building2, Loader2, Camera } from 'lucide-react';
+import { ChevronLeft, Building2, Loader2, Camera, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import IvionRegistrationPanel from '@/components/inventory/IvionRegistrationPanel';
+import UnplacedAssetsPanel from '@/components/inventory/UnplacedAssetsPanel';
 import {
   Select,
   SelectContent,
@@ -18,11 +19,19 @@ interface BuildingWithIvion {
   ivion_site_id: string;
 }
 
+interface IvionPoiData {
+  id: number;
+  titles: Record<string, string>;
+  location: { x: number; y: number; z: number };
+  pointOfView?: { imageId: number };
+}
+
 const IvionInventory: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
   const [formOpen, setFormOpen] = useState(false);
+  const [unplacedPanelOpen, setUnplacedPanelOpen] = useState(false);
   const [buildings, setBuildings] = useState<BuildingWithIvion[]>([]);
   const [selectedBuildingFmGuid, setSelectedBuildingFmGuid] = useState<string>(
     searchParams.get('building') || ''
@@ -30,6 +39,12 @@ const IvionInventory: React.FC = () => {
   const [ivionUrl, setIvionUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [savedCount, setSavedCount] = useState(0);
+
+  // POI polling state
+  const [lastSeenPoiId, setLastSeenPoiId] = useState<number | null>(null);
+  const [pollingEnabled, setPollingEnabled] = useState(true);
+  const [detectedPoi, setDetectedPoi] = useState<IvionPoiData | null>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
 
   // Load buildings with Ivion configured
   useEffect(() => {
@@ -101,19 +116,88 @@ const IvionInventory: React.FC = () => {
     setIvionUrl(`${baseUrl}/?site=${building.ivion_site_id}`);
   }, [selectedBuildingFmGuid, buildings]);
 
+  // Get the current ivion site id
+  const currentIvionSiteId = buildings.find(b => b.fm_guid === selectedBuildingFmGuid)?.ivion_site_id || null;
+
+  // POI Polling - detect new POIs created in Ivion
+  useEffect(() => {
+    if (!currentIvionSiteId || !pollingEnabled || formOpen) {
+      // Clear any existing interval
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const pollForNewPois = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('ivion-poi', {
+          body: {
+            action: 'get-latest-poi',
+            siteId: currentIvionSiteId,
+          },
+        });
+
+        // Check if we got a valid POI
+        if (!error && data?.id && data?.location) {
+          // If this is a new POI (different from last seen)
+          if (data.id !== lastSeenPoiId) {
+            console.log('New POI detected:', data.id, 'previous:', lastSeenPoiId);
+            
+            if (lastSeenPoiId !== null) {
+              // This is a genuinely new POI (not the first poll)
+              setDetectedPoi(data);
+              setFormOpen(true);
+            }
+            
+            setLastSeenPoiId(data.id);
+          }
+        }
+      } catch (err) {
+        // Silent fail - polling is a background feature
+        console.log('POI polling error (non-critical):', err);
+      }
+    };
+
+    // Initial poll to establish baseline
+    pollForNewPois();
+
+    // Poll every 3 seconds
+    pollingIntervalRef.current = window.setInterval(pollForNewPois, 3000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [currentIvionSiteId, pollingEnabled, formOpen, lastSeenPoiId]);
+
   const handleAssetSaved = () => {
     setSavedCount(prev => prev + 1);
+    setDetectedPoi(null); // Clear the detected POI
     // Keep form open for continuous registration
   };
 
   const handleAssetSavedAndClose = () => {
     setSavedCount(prev => prev + 1);
     setFormOpen(false);
+    setDetectedPoi(null);
     navigate('/inventory'); // Navigate back to main inventory page
   };
 
   const handleClose = () => {
     navigate('/inventory');
+  };
+
+  const handleFormClose = () => {
+    setFormOpen(false);
+    setDetectedPoi(null);
+  };
+
+  const handleUnplacedAssetsCreated = () => {
+    setSavedCount(prev => prev + 1);
   };
 
   if (isLoading) {
@@ -178,11 +262,25 @@ const IvionInventory: React.FC = () => {
               </div>
             )}
             
+            {/* Button to create POIs from existing assets */}
+            {!unplacedPanelOpen && ivionUrl && (
+              <Button 
+                variant="outline" 
+                onClick={() => setUnplacedPanelOpen(true)} 
+                className="gap-2"
+              >
+                <Layers className="h-4 w-4" />
+                <span className="hidden md:inline">Skapa POI från Geminus</span>
+                <span className="md:hidden">POI</span>
+              </Button>
+            )}
+            
             {/* Registration button in header */}
             {!formOpen && ivionUrl && (
               <Button onClick={() => setFormOpen(true)} className="gap-2">
                 <Camera className="h-4 w-4" />
-                Registrera tillgång
+                <span className="hidden md:inline">Registrera tillgång</span>
+                <span className="md:hidden">Registrera</span>
               </Button>
             )}
           </div>
@@ -212,10 +310,21 @@ const IvionInventory: React.FC = () => {
       {formOpen && (
         <IvionRegistrationPanel
           buildingFmGuid={selectedBuildingFmGuid}
-          ivionSiteId={buildings.find(b => b.fm_guid === selectedBuildingFmGuid)?.ivion_site_id || null}
-          onClose={() => setFormOpen(false)}
+          ivionSiteId={currentIvionSiteId}
+          onClose={handleFormClose}
           onSaved={handleAssetSaved}
           onSavedAndClose={handleAssetSavedAndClose}
+          initialPoi={detectedPoi}
+        />
+      )}
+
+      {/* Unplaced assets panel */}
+      {unplacedPanelOpen && (
+        <UnplacedAssetsPanel
+          buildingFmGuid={selectedBuildingFmGuid}
+          ivionSiteId={currentIvionSiteId}
+          onClose={() => setUnplacedPanelOpen(false)}
+          onAssetsCreated={handleUnplacedAssetsCreated}
         />
       )}
     </div>

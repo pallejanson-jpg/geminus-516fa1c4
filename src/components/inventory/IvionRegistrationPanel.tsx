@@ -41,12 +41,20 @@ interface RoomOption {
   name: string;
 }
 
+interface IvionPoiData {
+  id: number;
+  titles: Record<string, string>;
+  location: { x: number; y: number; z: number };
+  pointOfView?: { imageId: number };
+}
+
 interface IvionRegistrationPanelProps {
   buildingFmGuid: string;
   ivionSiteId: string | null;
   onClose: () => void;
   onSaved: () => void;
   onSavedAndClose?: () => void; // New: Save and navigate back to inventory
+  initialPoi?: IvionPoiData | null; // Auto-detected POI from polling
 }
 
 const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
@@ -55,6 +63,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   onClose,
   onSaved,
   onSavedAndClose,
+  initialPoi,
 }) => {
   // Dragging state - position to the left, near Ivion's panel
   const [position, setPosition] = useState({ x: 360, y: 80 });
@@ -99,13 +108,40 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
     fetchSymbols();
   }, []);
 
-  // Auto-fetch latest POI when panel opens
+  // Handle initialPoi from parent (auto-detected via polling)
   useEffect(() => {
-    if (ivionSiteId && !autoFetchAttempted) {
+    if (initialPoi) {
+      // Fill in data from the auto-detected POI
+      setFetchedCoords({
+        x: initialPoi.location.x,
+        y: initialPoi.location.y,
+        z: initialPoi.location.z,
+      });
+      setFetchedPoiId(initialPoi.id);
+      setFetchedImageId(initialPoi.pointOfView?.imageId || null);
+
+      // Auto-fill name if empty
+      if (!name && initialPoi.titles) {
+        const title = initialPoi.titles['sv'] || initialPoi.titles['en'] || initialPoi.titles[Object.keys(initialPoi.titles)[0]];
+        if (title) setName(title);
+      }
+
+      // Don't auto-fetch since we already have POI data
+      setAutoFetchAttempted(true);
+
+      toast.success('Ny POI upptäckt!', {
+        description: `Position: (${initialPoi.location.x.toFixed(2)}, ${initialPoi.location.y.toFixed(2)}, ${initialPoi.location.z.toFixed(2)})`,
+      });
+    }
+  }, [initialPoi]);
+
+  // Auto-fetch latest POI when panel opens (only if no initialPoi)
+  useEffect(() => {
+    if (ivionSiteId && !autoFetchAttempted && !initialPoi) {
       setAutoFetchAttempted(true);
       fetchLatestPoi();
     }
-  }, [ivionSiteId, autoFetchAttempted]);
+  }, [ivionSiteId, autoFetchAttempted, initialPoi]);
 
   const fetchLatestPoi = async () => {
     if (!ivionSiteId) return;
@@ -367,6 +403,30 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
       const { error } = await supabase.from('assets').insert([newAsset]);
       if (error) throw error;
+
+      // Write FMGUID back to Ivion POI if we have a POI ID
+      if (fetchedPoiId && ivionSiteId) {
+        try {
+          await supabase.functions.invoke('ivion-poi', {
+            body: {
+              action: 'update-poi',
+              siteId: ivionSiteId,
+              poiId: fetchedPoiId,
+              poiData: {
+                customData: JSON.stringify({
+                  FMGUID: newFmGuid,
+                  asset_type: category,
+                  source: 'geminus',
+                }),
+              },
+            },
+          });
+          console.log('FMGUID written back to Ivion POI:', fetchedPoiId);
+        } catch (ivionErr) {
+          console.warn('Failed to write FMGUID back to Ivion (non-critical):', ivionErr);
+          // Don't throw - asset is saved, Ivion update is optional
+        }
+      }
 
       toast.success('Tillgång sparad!');
       
