@@ -11,14 +11,20 @@ import {
 import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Helper for deterministic pseudo-random based on string
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
 
+// Truncate name for chart display
+const truncateName = (name: string, maxLen = 12) => 
+    name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
+
 export default function AssetManagementTab() {
     const { navigatorTreeData, allData } = useContext(AppContext);
+    const isMobile = useIsMobile();
 
     // Count assets from allData
     const assetStats = useMemo(() => {
@@ -30,7 +36,7 @@ export default function AssetManagementTab() {
         
         const categories: Record<string, number> = {};
         assets.forEach(asset => {
-            const cat = asset.assetType || asset.category || 'Okänd';
+            const cat = asset.assetType || asset.category || 'Unknown';
             categories[cat] = (categories[cat] || 0) + 1;
         });
 
@@ -44,13 +50,15 @@ export default function AssetManagementTab() {
     const assetsByBuilding = useMemo(() => {
         return navigatorTreeData.slice(0, 10).map((building) => {
             const hash = hashString(building.fmGuid || '');
+            const fullName = building.commonName || building.name || 'Building';
             return {
                 fmGuid: building.fmGuid,
-                name: building.commonName || building.name || 'Byggnad',
+                name: truncateName(fullName),
+                fullName,
                 assetCount: 20 + (hash % 80),
                 avgAge: 3 + (hash % 12),
                 replacementValue: 500000 + (hash % 2000000),
-                maintenanceStatus: hash % 100 > 70 ? 'Kritisk' : hash % 100 > 40 ? 'Planerad' : 'OK',
+                maintenanceStatus: hash % 100 > 70 ? 'Critical' : hash % 100 > 40 ? 'Planned' : 'OK',
             };
         });
     }, [navigatorTreeData]);
@@ -66,46 +74,46 @@ export default function AssetManagementTab() {
     // Asset category distribution
     const categoryDistribution = [
         { name: 'HVAC', value: 28, color: 'hsl(220, 80%, 55%)' },
-        { name: 'El/Belysning', value: 22, color: 'hsl(48, 96%, 53%)' },
-        { name: 'Hissar', value: 8, color: 'hsl(var(--primary))' },
-        { name: 'Säkerhet', value: 15, color: 'hsl(var(--destructive))' },
-        { name: 'VVS', value: 18, color: 'hsl(142, 71%, 45%)' },
-        { name: 'Övrigt', value: 9, color: 'hsl(var(--muted-foreground))' },
+        { name: 'Electrical', value: 22, color: 'hsl(48, 96%, 53%)' },
+        { name: 'Elevators', value: 8, color: 'hsl(var(--primary))' },
+        { name: 'Security', value: 15, color: 'hsl(var(--destructive))' },
+        { name: 'Plumbing', value: 18, color: 'hsl(142, 71%, 45%)' },
+        { name: 'Other', value: 9, color: 'hsl(var(--muted-foreground))' },
     ];
 
     // Maintenance status distribution
     const maintenanceDistribution = useMemo(() => {
         const ok = assetsByBuilding.filter(b => b.maintenanceStatus === 'OK').length;
-        const planned = assetsByBuilding.filter(b => b.maintenanceStatus === 'Planerad').length;
-        const critical = assetsByBuilding.filter(b => b.maintenanceStatus === 'Kritisk').length;
+        const planned = assetsByBuilding.filter(b => b.maintenanceStatus === 'Planned').length;
+        const critical = assetsByBuilding.filter(b => b.maintenanceStatus === 'Critical').length;
         return [
             { name: 'OK', value: ok, color: 'hsl(142, 71%, 45%)' },
-            { name: 'Planerad', value: planned, color: 'hsl(48, 96%, 53%)' },
-            { name: 'Kritisk', value: critical, color: 'hsl(var(--destructive))' },
+            { name: 'Planned', value: planned, color: 'hsl(48, 96%, 53%)' },
+            { name: 'Critical', value: critical, color: 'hsl(var(--destructive))' },
         ];
     }, [assetsByBuilding]);
 
     const kpiCards = [
         { 
-            title: 'Totalt antal tillgångar', 
-            value: totals.totalAssets.toLocaleString('sv-SE'), 
+            title: 'Total Assets', 
+            value: totals.totalAssets.toLocaleString(), 
             icon: Package, 
             color: 'text-primary'
         },
         { 
-            title: 'Genomsnittsålder (år)', 
+            title: 'Average Age (years)', 
             value: totals.avgAge, 
             icon: Clock, 
             color: 'text-blue-500'
         },
         { 
-            title: 'Återanskaffningsvärde', 
+            title: 'Replacement Value', 
             value: `${(totals.totalValue / 1000000).toFixed(1)} MSEK`, 
             icon: CircleDollarSign, 
             color: 'text-green-500'
         },
         { 
-            title: 'Kräver underhåll', 
+            title: 'Needs Maintenance', 
             value: totals.needsMaintenance, 
             icon: Wrench, 
             color: 'text-yellow-500'
@@ -116,14 +124,19 @@ export default function AssetManagementTab() {
         switch (status) {
             case 'OK':
                 return <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />OK</Badge>;
-            case 'Planerad':
-                return <Badge className="bg-yellow-600"><Clock className="h-3 w-3 mr-1" />Planerad</Badge>;
-            case 'Kritisk':
-                return <Badge variant="destructive"><AlertCircle className="h-3 w-3 mr-1" />Kritisk</Badge>;
+            case 'Planned':
+                return <Badge className="bg-yellow-600"><Clock className="h-3 w-3 mr-1" />Planned</Badge>;
+            case 'Critical':
+                return <Badge variant="destructive"><AlertCircle className="h-3 w-3 mr-1" />Critical</Badge>;
             default:
                 return <Badge variant="secondary">{status}</Badge>;
         }
     };
+
+    // Mobile-friendly pie chart label
+    const renderPieLabel = isMobile 
+        ? undefined 
+        : ({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`;
 
     return (
         <div className="space-y-6">
@@ -149,9 +162,9 @@ export default function AssetManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Package className="h-4 w-4 text-primary" />
-                            Tillgångar per kategori
+                            Assets by Category
                         </CardTitle>
-                        <CardDescription>Fördelning per typ</CardDescription>
+                        <CardDescription>Distribution by type</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -161,12 +174,12 @@ export default function AssetManagementTab() {
                                         data={categoryDistribution}
                                         cx="50%"
                                         cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
+                                        innerRadius={isMobile ? 40 : 50}
+                                        outerRadius={isMobile ? 65 : 80}
                                         paddingAngle={2}
                                         dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={false}
+                                        label={renderPieLabel}
+                                        labelLine={!isMobile}
                                     >
                                         {categoryDistribution.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -191,9 +204,9 @@ export default function AssetManagementTab() {
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-blue-500" />
-                            Tillgångar per byggnad
+                            Assets per Building
                         </CardTitle>
-                        <CardDescription>Antal registrerade tillgångar</CardDescription>
+                        <CardDescription>Registered asset count</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -204,8 +217,8 @@ export default function AssetManagementTab() {
                                     <YAxis 
                                         dataKey="name" 
                                         type="category" 
-                                        width={100}
-                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                                        width={isMobile ? 60 : 100}
+                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
                                     <Tooltip 
                                         contentStyle={{ 
@@ -213,10 +226,14 @@ export default function AssetManagementTab() {
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
+                                        formatter={(value: number, name: string, props: any) => [
+                                            `${value} assets`,
+                                            props.payload.fullName
+                                        ]}
                                     />
                                     <Bar 
                                         dataKey="assetCount" 
-                                        name="Tillgångar"
+                                        name="Assets"
                                         fill="hsl(var(--primary))"
                                         radius={[0, 4, 4, 0]}
                                     />
@@ -232,28 +249,28 @@ export default function AssetManagementTab() {
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <Wrench className="h-4 w-4 text-primary" />
-                        Tillgångsöversikt per byggnad
+                        Asset Overview per Building
                     </CardTitle>
-                    <CardDescription>Status och värdering</CardDescription>
+                    <CardDescription>Status and valuation</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Byggnad</TableHead>
-                                    <TableHead className="text-right">Antal</TableHead>
-                                    <TableHead className="text-right">Snittålder</TableHead>
-                                    <TableHead className="text-right">Värde</TableHead>
+                                    <TableHead>Building</TableHead>
+                                    <TableHead className="text-right">Count</TableHead>
+                                    <TableHead className="text-right">Avg. Age</TableHead>
+                                    <TableHead className="text-right">Value</TableHead>
                                     <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {assetsByBuilding.map((building) => (
                                     <TableRow key={building.fmGuid}>
-                                        <TableCell className="font-medium">{building.name}</TableCell>
+                                        <TableCell className="font-medium">{building.fullName}</TableCell>
                                         <TableCell className="text-right">{building.assetCount}</TableCell>
-                                        <TableCell className="text-right">{building.avgAge} år</TableCell>
+                                        <TableCell className="text-right">{building.avgAge} years</TableCell>
                                         <TableCell className="text-right">
                                             {(building.replacementValue / 1000).toFixed(0)} kSEK
                                         </TableCell>
