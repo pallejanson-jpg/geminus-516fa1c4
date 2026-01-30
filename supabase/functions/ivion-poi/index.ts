@@ -437,6 +437,15 @@ serve(async (req) => {
         if (!params.assetFmGuid) throw new Error('assetFmGuid required');
         result = await syncAssetToPoi(params.assetFmGuid);
         break;
+
+      case 'get-latest-poi':
+        // Get most recent POI from a site (useful for auto-linking)
+        if (!params.siteId) throw new Error('siteId required');
+        const allPois = await getPois(params.siteId);
+        // Sort by ID descending (higher ID = newer)
+        const sortedPois = allPois.sort((a, b) => (b.id || 0) - (a.id || 0));
+        result = sortedPois.length > 0 ? sortedPois[0] : null;
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`);
