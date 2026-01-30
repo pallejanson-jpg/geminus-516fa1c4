@@ -11,6 +11,8 @@ import NotFound from "./pages/NotFound";
 
 // Standalone page for Ivion integration (can be embedded in iframe)
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
+// Ivion 360° Inventory page
+const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <IvionCreate />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Ivion 360° Inventory page - fullscreen mode */}
+          <Route 
+            path="/ivion-inventory" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <IvionInventory />
                 </ProtectedRoute>
               </Suspense>
             } 
