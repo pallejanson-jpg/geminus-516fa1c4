@@ -268,7 +268,7 @@ async function getPois(siteId: string): Promise<IvionPoi[]> {
   
   const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'x-authorization': `Bearer ${token}`,
       'Accept': 'application/json',
     },
   });
@@ -287,7 +287,7 @@ async function getPoi(siteId: string, poiId: number): Promise<IvionPoi> {
   
   const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois/${poiId}`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'x-authorization': `Bearer ${token}`,
       'Accept': 'application/json',
     },
   });
@@ -333,7 +333,7 @@ async function updatePoi(siteId: string, poiId: number, updates: Partial<IvionPo
   const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois/${poiId}`, {
     method: 'PUT',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'x-authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(updatedPoi),
@@ -353,7 +353,7 @@ async function getPoiTypes(siteId: string): Promise<any[]> {
   
   const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/poi_types`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'x-authorization': `Bearer ${token}`,
       'Accept': 'application/json',
     },
   });
@@ -373,7 +373,7 @@ async function createPoi(siteId: string, poiData: Partial<IvionPoi>): Promise<Iv
   const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'x-authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify([poiData]), // API expects an array
