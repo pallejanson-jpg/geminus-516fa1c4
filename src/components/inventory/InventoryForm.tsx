@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, type LucideIcon } from 'lucide-react';
+import { Loader2, Crosshair, Eye, X, Pencil, RefreshCw, Info, Flame, ShieldAlert, Droplets, DoorOpen, Radio, Fan, Lightbulb, Armchair, Monitor, Package, Camera, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import BuildingSelector from './selectors/BuildingSelector';
 import FloorSelector from './selectors/FloorSelector';
@@ -66,6 +67,7 @@ export const INVENTORY_CATEGORIES: InventoryCategory[] = [
 ];
 
 const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefill, editItem, onClearEdit, onOpen360, onOpen3d, pendingPosition, onPendingPositionConsumed }) => {
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -623,18 +625,18 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             
             {buildingSettings?.ivion_site_id ? (
               <>
-                {/* Recommended: Ivion Inventory Mode */}
+                {/* Primary: Ivion Inventory Mode - Full screen 360° registration */}
                 <Button
                   type="button"
                   variant="default"
-                  onClick={() => window.open(`/ivion-inventory?building=${buildingFmGuid}`, '_blank')}
-                  className="w-full h-12"
+                  onClick={() => navigate(`/ivion-inventory?building=${buildingFmGuid}`)}
+                  className="w-full h-14 text-base gap-3"
                 >
-                  <Eye className="h-4 w-4 mr-2" />
+                  <Camera className="h-5 w-5" />
                   Starta inventering i 360°
                 </Button>
 
-                <div className="text-xs text-muted-foreground text-center">
+                <div className="text-xs text-muted-foreground text-center pt-1">
                   eller använd manuell synk:
                 </div>
 
