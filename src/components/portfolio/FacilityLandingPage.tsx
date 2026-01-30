@@ -1,7 +1,7 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useRef } from 'react';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,8 @@ import { NavigatorNode } from '@/components/navigator/TreeNode';
 import KpiCard from './KpiCard';
 import QuickActions from './QuickActions';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface FacilityLandingPageProps {
   facility: Facility;
@@ -57,6 +59,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [latitudeInput, setLatitudeInput] = useState('');
   const [longitudeInput, setLongitudeInput] = useState('');
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
+  const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const heroInputRef = useRef<HTMLInputElement>(null);
 
   // Use building settings hook
   const { 
@@ -65,7 +69,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     isSaving, 
     toggleFavorite, 
     updateIvionSiteId,
-    updateMapPosition
+    updateMapPosition,
+    updateHeroImage
   } = useBuildingSettings(facility.fmGuid || null);
 
   // Sync ivion input with settings
@@ -183,9 +188,57 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     openEntityInsights(facility);
   };
 
+  // Handler for hero image upload
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !facility.fmGuid) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Endast bilder tillåtna');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Bilden får max vara 5 MB');
+      return;
+    }
+
+    setIsUploadingHero(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `heroes/${facility.fmGuid}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('inventory-images')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('inventory-images')
+        .getPublicUrl(fileName);
+
+      await updateHeroImage(urlData.publicUrl);
+      toast.success('Hero-bild uppladdad!');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error('Kunde inte ladda upp bild', {
+        description: error.message,
+      });
+    } finally {
+      setIsUploadingHero(false);
+      e.target.value = '';
+    }
+  };
+
   const title = facility.commonName || facility.name || 'Unnamed Object';
   const subTitle = facility.designation || (isBuilding ? facility.address : 'No Designation') || facility.category || 'No Category';
-  const heroImage = facility.image || (isSpace 
+  const heroImage = settings?.heroImageUrl || facility.image || (isSpace 
     ? 'https://images.unsplash.com/photo-1611048264355-27a69db69042?q=80&w=1600' 
     : 'https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=1600'
   );
@@ -375,6 +428,63 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                         {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
                       </Button>
                     </div>
+                  </div>
+
+                  {/* Hero Image Settings */}
+                  <div className="border-t pt-4">
+                    <Label className="text-xs flex items-center gap-2 mb-3">
+                      <Image size={12} />
+                      Hero Image
+                    </Label>
+                    
+                    {settings?.heroImageUrl ? (
+                      <div className="relative rounded-lg overflow-hidden border mb-2">
+                        <img 
+                          src={settings.heroImageUrl} 
+                          alt="Building hero" 
+                          className="w-full h-32 object-cover"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7"
+                          onClick={() => updateHeroImage(null)}
+                          disabled={isSaving}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 mb-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 h-16 flex-col gap-1"
+                          onClick={() => heroInputRef.current?.click()}
+                          disabled={isUploadingHero}
+                        >
+                          {isUploadingHero ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <>
+                              <Upload className="h-5 w-5" />
+                              <span className="text-xs">Ladda upp bild</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <p className="text-[10px] text-muted-foreground">
+                      Visas som bakgrundsbild på byggnadens landningssida
+                    </p>
+                    
+                    <input
+                      ref={heroInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleHeroImageUpload}
+                    />
                   </div>
                 </CardContent>
               </Card>
