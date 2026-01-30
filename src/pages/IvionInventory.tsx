@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, X, ChevronLeft, Building2, Loader2 } from 'lucide-react';
+import { Plus, ChevronLeft, Building2, Loader2, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import IvionRegistrationPanel from '@/components/inventory/IvionRegistrationPanel';
@@ -106,8 +106,14 @@ const IvionInventory: React.FC = () => {
     // Keep form open for continuous registration
   };
 
+  const handleAssetSavedAndClose = () => {
+    setSavedCount(prev => prev + 1);
+    setFormOpen(false);
+    navigate('/inventory'); // Navigate back to main inventory page
+  };
+
   const handleClose = () => {
-    navigate(-1);
+    navigate('/inventory');
   };
 
   if (isLoading) {
@@ -164,11 +170,22 @@ const IvionInventory: React.FC = () => {
               </Select>
             </div>
           </div>
-          {savedCount > 0 && (
-            <div className="text-sm text-muted-foreground">
-              {savedCount} tillgång{savedCount > 1 ? 'ar' : ''} sparade
-            </div>
-          )}
+          
+          <div className="flex items-center gap-3">
+            {savedCount > 0 && (
+              <div className="text-sm text-muted-foreground bg-primary/10 px-2 py-1 rounded">
+                {savedCount} sparade
+              </div>
+            )}
+            
+            {/* Registration button in header */}
+            {!formOpen && ivionUrl && (
+              <Button onClick={() => setFormOpen(true)} className="gap-2">
+                <Camera className="h-4 w-4" />
+                Registrera tillgång
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -191,17 +208,6 @@ const IvionInventory: React.FC = () => {
         </div>
       )}
 
-      {/* Floating registration button (FAB) */}
-      {!formOpen && ivionUrl && (
-        <Button
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50 hover:scale-105 transition-transform"
-          size="icon"
-          onClick={() => setFormOpen(true)}
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
-      )}
-
       {/* Floating registration form */}
       {formOpen && (
         <IvionRegistrationPanel
@@ -209,6 +215,7 @@ const IvionInventory: React.FC = () => {
           ivionSiteId={buildings.find(b => b.fm_guid === selectedBuildingFmGuid)?.ivion_site_id || null}
           onClose={() => setFormOpen(false)}
           onSaved={handleAssetSaved}
+          onSavedAndClose={handleAssetSavedAndClose}
         />
       )}
     </div>
