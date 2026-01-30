@@ -368,16 +368,40 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         // Update section plane clipping based on visible floors
         updateClipping(Array.from(newSet));
         
+        // ALWAYS emit floor selection event for consistent 2D mode behavior
+        if (newSet.size === 1) {
+          const soloFloorId = Array.from(newSet)[0];
+          const floor = floors.find(f => f.id === soloFloorId);
+          const bounds = calculateFloorBounds(soloFloorId);
+          
+          // Auto-enable clipping in solo mode
+          setClippingEnabled(true);
+          
+          const eventDetail: FloorSelectionEventDetail = {
+            floorId: soloFloorId,
+            floorName: floor?.name || null,
+            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+          };
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        } else {
+          // Multiple floors visible - emit null selection
+          const eventDetail: FloorSelectionEventDetail = {
+            floorId: null,
+            floorName: null,
+            bounds: null,
+          };
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        }
+        
         if (onVisibleFloorsChange) {
           const visibleFloors = floors.filter(f => newSet.has(f.id));
-          // Collect all fmGuids from all visible floors
           const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
           onVisibleFloorsChange(allFmGuids);
         }
         
         return newSet;
       });
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
+    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);

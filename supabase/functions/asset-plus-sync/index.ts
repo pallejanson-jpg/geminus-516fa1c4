@@ -63,6 +63,133 @@ async function getAccessToken(): Promise<string> {
   throw new Error("Keycloak auth failed");
 }
 
+// ============ ROBUST 3D ENDPOINT DISCOVERY ============
+interface EndpointDiscoveryResult {
+  url: string | null;
+  fromCache: boolean;
+  models?: any[];
+}
+
+async function discover3dModelsEndpoint(
+  supabase: any,
+  accessToken: string,
+  apiUrl: string,
+  apiKey: string,
+  buildingFmGuid: string
+): Promise<EndpointDiscoveryResult> {
+  const CACHE_KEY = 'getmodels_url';
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Check cache first
+  const { data: cached } = await supabase
+    .from('asset_plus_endpoint_cache')
+    .select('value, updated_at')
+    .eq('key', CACHE_KEY)
+    .maybeSingle();
+
+  if (cached?.value) {
+    const cacheAge = Date.now() - new Date(cached.updated_at).getTime();
+    if (cacheAge < CACHE_TTL_MS) {
+      // Use cached endpoint
+      const cachedUrl = `${cached.value}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+      console.log(`Using cached 3D endpoint: ${cached.value}`);
+      
+      try {
+        const res = await fetch(cachedUrl, {
+          headers: { "Authorization": `Bearer ${accessToken}` }
+        });
+        if (res.ok) {
+          const models = await res.json();
+          if (Array.isArray(models)) {
+            return { url: cached.value, fromCache: true, models };
+          }
+        }
+      } catch (e) {
+        console.log('Cached endpoint failed, will re-discover');
+      }
+    }
+  }
+
+  // Build candidate URLs to try
+  const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+  const assetDbUrl = apiUrl.replace(/\/+$/, '');
+  
+  const candidatePaths = [
+    `${baseUrl}/api/threed/GetModels`,
+    `${baseUrl}/threed/GetModels`,
+    `${assetDbUrl}/api/threed/GetModels`,
+    `${assetDbUrl}/threed/GetModels`,
+    `${assetDbUrl}/GetModels`,
+    `${baseUrl}/api/v1/threed/GetModels`,
+  ];
+
+  // Try each candidate with different parameter styles
+  for (const basePath of candidatePaths) {
+    // Try with apiKey in query
+    const urlWithQuery = `${basePath}?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+    
+    try {
+      console.log(`Trying: ${basePath}`);
+      const res = await fetch(urlWithQuery, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          console.log(`✅ Found working 3D endpoint: ${basePath}`);
+          
+          // Cache the working base path
+          await supabase
+            .from('asset_plus_endpoint_cache')
+            .upsert({ 
+              key: CACHE_KEY, 
+              value: basePath,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'key' });
+          
+          return { url: basePath, fromCache: false, models: data };
+        }
+      }
+    } catch (e) {
+      console.debug(`Endpoint failed: ${basePath}`, e);
+    }
+
+    // Try with x-api-key header instead
+    try {
+      const urlWithFmGuid = `${basePath}?fmGuid=${buildingFmGuid}`;
+      const res = await fetch(urlWithFmGuid, {
+        headers: { 
+          "Authorization": `Bearer ${accessToken}`,
+          "x-api-key": apiKey
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          console.log(`✅ Found working 3D endpoint (header auth): ${basePath}`);
+          
+          await supabase
+            .from('asset_plus_endpoint_cache')
+            .upsert({ 
+              key: CACHE_KEY, 
+              value: basePath,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'key' });
+          
+          return { url: basePath, fromCache: false, models: data };
+        }
+      }
+    } catch (e) {
+      // Continue to next candidate
+    }
+  }
+
+  console.log('❌ No working 3D endpoint found');
+  return { url: null, fromCache: false };
+}
+
 // Fetch objects from Asset+ API
 async function fetchAssetPlusObjects(
   accessToken: string, 
@@ -252,6 +379,34 @@ function getSubtreeName(subtreeId: string): string {
   return names[subtreeId] || subtreeId;
 }
 
+// Auto-detect and mark stale "running" syncs as interrupted
+async function markStaleRunningAsInterrupted(supabase: any) {
+  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+  const now = Date.now();
+
+  const { data: runningSyncs } = await supabase
+    .from('asset_sync_state')
+    .select('*')
+    .eq('sync_status', 'running');
+
+  if (!runningSyncs) return;
+
+  for (const sync of runningSyncs) {
+    const updatedAt = new Date(sync.updated_at).getTime();
+    if (now - updatedAt > STALE_THRESHOLD_MS) {
+      console.log(`Marking stale sync as interrupted: ${sync.subtree_id}`);
+      await supabase
+        .from('asset_sync_state')
+        .update({
+          sync_status: 'interrupted',
+          error_message: 'Previous run timed out. Click sync button to resume.',
+          updated_at: new Date().toISOString()
+        })
+        .eq('subtree_id', sync.subtree_id);
+    }
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -272,7 +427,7 @@ serve(async (req) => {
     const { action = 'full-sync', buildingFmGuid } = body;
     
     // Only admins can run full sync operations
-    const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-all-xkt'];
+    const adminOnlyActions = ['full-sync', 'sync-structure', 'sync-assets-chunked', 'sync-assets-resumable', 'sync-xkt', 'sync-xkt-resumable'];
     if (adminOnlyActions.includes(action) && !auth.isAdmin) {
       return forbiddenResponse("Only admins can run full sync operations");
     }
@@ -282,6 +437,9 @@ serve(async (req) => {
 
     // ============ CHECK SYNC STATUS ============
     if (action === 'check-sync-status') {
+      // Auto-mark stale syncs
+      await markStaleRunningAsInterrupted(supabase);
+      
       const accessToken = await getAccessToken();
       
       // Get local counts by category
@@ -390,6 +548,160 @@ serve(async (req) => {
       );
     }
 
+    // ============ SYNC ASSETS RESUMABLE (replaces sync-assets-chunked) ============
+    if (action === 'sync-assets-resumable' || action === 'sync-assets-chunked') {
+      const MAX_EXECUTION_TIME = 45000; // 45 seconds (conservative for 60s limit)
+      const startTime = Date.now();
+      
+      const accessToken = await getAccessToken();
+      console.log('Starting sync-assets-resumable');
+
+      // Get all buildings from local DB
+      const { data: buildings, error: buildingsError } = await supabase
+        .from('assets')
+        .select('fm_guid, common_name')
+        .eq('category', 'Building')
+        .order('common_name');
+
+      if (buildingsError) throw buildingsError;
+
+      if (!buildings || buildings.length === 0) {
+        await updateSyncState(supabase, 'assets', 'failed', 0, 'No buildings found. Run structure sync first.');
+        return new Response(
+          JSON.stringify({ success: false, error: 'No buildings found. Run structure sync first.', interrupted: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Load progress cursor
+      const { data: progress } = await supabase
+        .from('asset_sync_progress')
+        .select('*')
+        .eq('job', 'assets_instances')
+        .maybeSingle();
+
+      let currentBuildingIndex = progress?.current_building_index || 0;
+      let currentSkip = progress?.skip || 0;
+      let totalSynced = progress?.total_synced || 0;
+      const totalBuildings = buildings.length;
+
+      // If we're past the last building, we're done
+      if (currentBuildingIndex >= totalBuildings) {
+        // Clear progress
+        await supabase.from('asset_sync_progress').delete().eq('job', 'assets_instances');
+        await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
+          subtree_name: 'Alla Tillgångar'
+        });
+        return new Response(
+          JSON.stringify({ success: true, message: `Completed: ${totalSynced} assets`, totalSynced, interrupted: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await updateSyncState(supabase, 'assets', 'running', totalSynced);
+      let interrupted = false;
+
+      while (currentBuildingIndex < totalBuildings && !interrupted) {
+        const building = buildings[currentBuildingIndex];
+        console.log(`Syncing assets for building ${currentBuildingIndex + 1}/${totalBuildings}: ${building.common_name || building.fm_guid}`);
+
+        const filter = [
+          ["buildingFmGuid", "=", building.fm_guid],
+          "and",
+          ["objectType", "=", 4]
+        ];
+
+        let hasMore = true;
+
+        while (hasMore) {
+          // Check timeout before each batch
+          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+            console.log(`Timeout approaching at building ${currentBuildingIndex + 1}/${totalBuildings}, skip=${currentSkip}`);
+            interrupted = true;
+            break;
+          }
+
+          const result = await fetchAssetPlusObjects(accessToken, filter, currentSkip, 500);
+          
+          if (result.data.length > 0) {
+            const synced = await upsertAssets(supabase, result.data);
+            totalSynced += synced;
+          }
+
+          hasMore = result.hasMore;
+          currentSkip += 500;
+
+          // Save progress after each batch
+          await supabase
+            .from('asset_sync_progress')
+            .upsert({
+              job: 'assets_instances',
+              building_fm_guid: building.fm_guid,
+              current_building_index: currentBuildingIndex,
+              skip: currentSkip,
+              total_buildings: totalBuildings,
+              total_synced: totalSynced,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'job' });
+
+          // Update sync state (heartbeat)
+          await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
+            subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings})`
+          });
+        }
+
+        if (!interrupted) {
+          // Move to next building
+          currentBuildingIndex++;
+          currentSkip = 0;
+          
+          // Save progress
+          await supabase
+            .from('asset_sync_progress')
+            .upsert({
+              job: 'assets_instances',
+              building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
+              current_building_index: currentBuildingIndex,
+              skip: 0,
+              total_buildings: totalBuildings,
+              total_synced: totalSynced,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'job' });
+        }
+      }
+
+      if (!interrupted && currentBuildingIndex >= totalBuildings) {
+        // Clear progress on completion
+        await supabase.from('asset_sync_progress').delete().eq('job', 'assets_instances');
+        await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
+          subtree_name: 'Alla Tillgångar'
+        });
+      } else {
+        await updateSyncState(supabase, 'assets', 'running', totalSynced, `Progress: building ${currentBuildingIndex + 1}/${totalBuildings}`, {
+          subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings})`
+        });
+      }
+
+      console.log(`Assets sync ${interrupted ? 'paused' : 'completed'}: ${totalSynced} items`);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: interrupted 
+            ? `Synced ${totalSynced} assets (${currentBuildingIndex + 1}/${totalBuildings} buildings). Call again to continue.`
+            : `Completed: ${totalSynced} assets from ${totalBuildings} buildings`, 
+          totalSynced,
+          interrupted,
+          progress: {
+            currentBuildingIndex,
+            totalBuildings,
+            currentSkip
+          }
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ SYNC SINGLE BUILDING ASSETS (ObjectType 4 for one building) ============
     if (action === 'sync-single-building') {
       if (!buildingFmGuid) {
@@ -439,196 +751,88 @@ serve(async (req) => {
       );
     }
 
-    // ============ SYNC ASSETS CHUNKED (ObjectType 4 per building with timeout guard) ============
-    if (action === 'sync-assets-chunked') {
-      const MAX_EXECUTION_TIME = 50000; // 50 seconds (Supabase limit is 60s)
+    // ============ SYNC XKT MODELS RESUMABLE ============
+    if (action === 'sync-xkt' || action === 'sync-xkt-resumable' || action === 'cache-all-xkt') {
+      const MAX_EXECUTION_TIME = 45000; // 45 seconds
       const startTime = Date.now();
       
-      await updateSyncState(supabase, 'assets', 'running');
       const accessToken = await getAccessToken();
-      console.log('Starting sync-assets-chunked (ObjectType 4 by building)');
-
-      // Get all buildings from local DB
-      const { data: buildings, error: buildingsError } = await supabase
-        .from('assets')
-        .select('fm_guid, common_name')
-        .eq('category', 'Building');
-
-      if (buildingsError) throw buildingsError;
-
-      if (!buildings || buildings.length === 0) {
-        await updateSyncState(supabase, 'assets', 'failed', 0, 'No buildings found. Run structure sync first.');
-        return new Response(
-          JSON.stringify({ success: false, error: 'No buildings found. Run structure sync first.' }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      let totalSynced = 0;
-      const totalBuildings = buildings.length;
-      let interrupted = false;
-
-      for (let i = 0; i < buildings.length; i++) {
-        // Check timeout before processing each building
-        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
-          console.log(`Timeout guard triggered at building ${i + 1}/${totalBuildings}`);
-          interrupted = true;
-          await updateSyncState(supabase, 'assets', 'interrupted', totalSynced, `Interrupted at building ${i + 1}/${totalBuildings}. Run again to continue.`);
-          break;
-        }
-
-        const building = buildings[i];
-        console.log(`Syncing assets for building ${i + 1}/${totalBuildings}: ${building.common_name || building.fm_guid}`);
-
-        const filter = [
-          ["buildingFmGuid", "=", building.fm_guid],
-          "and",
-          ["objectType", "=", 4]
-        ];
-
-        let skip = 0;
-        const take = 500;
-        let hasMore = true;
-        let buildingSynced = 0;
-
-        while (hasMore) {
-          // Check timeout before each batch
-          if (Date.now() - startTime > MAX_EXECUTION_TIME) {
-            console.log(`Timeout guard triggered during building ${building.common_name}`);
-            interrupted = true;
-            break;
-          }
-
-          const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
-          
-          if (result.data.length > 0) {
-            const synced = await upsertAssets(supabase, result.data);
-            buildingSynced += synced;
-            totalSynced += synced;
-          }
-
-          hasMore = result.hasMore;
-          skip += take;
-        }
-
-        if (interrupted) break;
-
-        console.log(`Building ${building.common_name}: ${buildingSynced} assets`);
-        await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
-          subtree_name: `Alla Tillgångar (${i + 1}/${totalBuildings})`
-        });
-      }
-
-      if (!interrupted) {
-        await updateSyncState(supabase, 'assets', 'completed', totalSynced, undefined, {
-          subtree_name: 'Alla Tillgångar'
-        });
-      }
-      console.log(`Assets sync ${interrupted ? 'interrupted' : 'completed'}: ${totalSynced} items from ${totalBuildings} buildings`);
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: interrupted 
-            ? `Partial sync: ${totalSynced} assets. Run again to continue.`
-            : `Synced ${totalSynced} assets from ${totalBuildings} buildings`, 
-          totalSynced,
-          interrupted 
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============ SYNC XKT MODELS (stores in database + storage) ============
-    if (action === 'sync-xkt' || action === 'cache-all-xkt') {
-      await updateSyncState(supabase, 'xkt', 'running');
-      const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
       
-      console.log('Starting sync-xkt (syncing to database + storage)');
+      console.log('Starting sync-xkt-resumable');
 
       // Get all buildings from local DB
       const { data: buildings, error: buildingsError } = await supabase
         .from('assets')
         .select('fm_guid, common_name')
-        .eq('category', 'Building');
+        .eq('category', 'Building')
+        .order('common_name');
 
       if (buildingsError) throw buildingsError;
 
       if (!buildings || buildings.length === 0) {
         await updateSyncState(supabase, 'xkt', 'failed', 0, 'No buildings found.');
         return new Response(
-          JSON.stringify({ success: false, error: 'No buildings found.' }),
+          JSON.stringify({ success: false, error: 'No buildings found.', interrupted: false }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      let synced = 0;
-      let skipped = 0;
+      // Load progress cursor
+      const { data: progress } = await supabase
+        .from('asset_sync_progress')
+        .select('*')
+        .eq('job', 'xkt_models')
+        .maybeSingle();
+
+      let currentBuildingIndex = progress?.current_building_index || 0;
+      let totalSynced = progress?.total_synced || 0;
       const totalBuildings = buildings.length;
+
+      // If we're past the last building, we're done
+      if (currentBuildingIndex >= totalBuildings) {
+        await supabase.from('asset_sync_progress').delete().eq('job', 'xkt_models');
+        await updateSyncState(supabase, 'xkt', 'completed', totalSynced, undefined, {
+          subtree_name: 'XKT-filer'
+        });
+        return new Response(
+          JSON.stringify({ success: true, message: `Completed: ${totalSynced} models`, synced: totalSynced, interrupted: false }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await updateSyncState(supabase, 'xkt', 'running', totalSynced);
+      let interrupted = false;
       const errors: string[] = [];
 
-      for (let i = 0; i < buildings.length; i++) {
-        const building = buildings[i];
+      while (currentBuildingIndex < totalBuildings && !interrupted) {
+        // Check timeout
+        if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+          console.log(`Timeout approaching at building ${currentBuildingIndex + 1}/${totalBuildings}`);
+          interrupted = true;
+          break;
+        }
+
+        const building = buildings[currentBuildingIndex];
         const buildingFmGuid = building.fm_guid;
         const buildingName = building.common_name || buildingFmGuid;
 
         try {
-          // Try multiple API paths - the threed API endpoint might differ between environments
-          const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
+          // Use robust endpoint discovery
+          const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
           
-          // Try the primary path
-          let modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
-          
-          // Debug logging for first building
-          if (i === 0) {
-            console.log(`DEBUG: apiUrl = ${apiUrl}`);
-            console.log(`DEBUG: baseUrl = ${baseUrl}`);
-            console.log(`DEBUG: modelsUrl = ${modelsUrl}`);
-          }
-          
-          let modelsRes = await fetch(modelsUrl, {
-            headers: { "Authorization": `Bearer ${accessToken}` }
-          });
-
-          // If 404, try alternate path without /api prefix
-          if (modelsRes.status === 404) {
-            const altUrl = `${baseUrl}/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
-            console.log(`Primary path 404, trying alternate: ${altUrl}`);
-            modelsRes = await fetch(altUrl, {
-              headers: { "Authorization": `Bearer ${accessToken}` }
-            });
-          }
-
-          // If still 404, try with v1/AssetDB path (some APIs use this)
-          if (modelsRes.status === 404) {
-            const altUrl2 = `${apiUrl?.replace(/\/+$/, '')}/GetModels?fmGuid=${buildingFmGuid}`;
-            console.log(`Alternate path 404, trying AssetDB path: ${altUrl2}`);
-            modelsRes = await fetch(altUrl2, {
-              headers: { 
-                "Authorization": `Bearer ${accessToken}`,
-                "x-api-key": apiKey || ''
-              }
-            });
-          }
-
-          if (!modelsRes.ok) {
-            console.log(`Building ${buildingName}: No models endpoint available (${modelsRes.status})`);
-            // This is not an error - some buildings may not have 3D models
+          if (!discovery.url) {
+            console.log(`Building ${buildingName}: No 3D models endpoint available`);
+            currentBuildingIndex++;
             continue;
           }
 
-          let models: any[];
-          try {
-            models = await modelsRes.json();
-          } catch {
-            console.log(`Building ${buildingName}: Invalid JSON response from models endpoint`);
-            continue;
-          }
+          const models = discovery.models || [];
           
-          if (!Array.isArray(models) || models.length === 0) {
+          if (models.length === 0) {
             console.log(`Building ${buildingName}: No XKT models available`);
+            currentBuildingIndex++;
             continue;
           }
 
@@ -636,16 +840,24 @@ serve(async (req) => {
 
           // Process each model
           for (const model of models) {
-            if (!model.xktFileUrl) {
-              console.log(`Model ${model.id || 'unknown'}: No xktFileUrl`);
+            // Check timeout between models
+            if (Date.now() - startTime > MAX_EXECUTION_TIME) {
+              interrupted = true;
+              break;
+            }
+
+            // Accept multiple possible URL field names
+            const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
+            if (!xktUrl) {
+              console.log(`Model ${model.id || 'unknown'}: No xkt URL found`);
               continue;
             }
 
-            const modelId = model.id || model.modelId || model.xktFileUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
-            const fileName = model.xktFileUrl.split('/').pop() || `${modelId}.xkt`;
+            const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
+            const fileName = xktUrl.split('/').pop() || `${modelId}.xkt`;
             const storagePath = `${buildingFmGuid}/${fileName}`;
 
-            // Check if already synced in database
+            // Check if already synced
             const { data: existingModel } = await supabase
               .from('xkt_models')
               .select('id')
@@ -655,17 +867,29 @@ serve(async (req) => {
 
             if (existingModel) {
               console.log(`Model ${modelId} already synced`);
-              skipped++;
               continue;
             }
 
             try {
-              console.log(`Fetching XKT: ${model.xktFileUrl}`);
+              // Resolve relative URLs
+              let fullXktUrl = xktUrl;
+              if (xktUrl.startsWith('/')) {
+                const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+                fullXktUrl = baseUrl + xktUrl;
+              }
+
+              console.log(`Fetching XKT: ${fullXktUrl}`);
               
-              // Fetch XKT file - may need auth
-              const xktRes = await fetch(model.xktFileUrl, {
-                headers: { "Authorization": `Bearer ${accessToken}` }
+              // Fetch with timeout
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000);
+              
+              const xktRes = await fetch(fullXktUrl, {
+                headers: { "Authorization": `Bearer ${accessToken}` },
+                signal: controller.signal
               });
+              
+              clearTimeout(timeoutId);
 
               if (!xktRes.ok) {
                 console.log(`Failed to fetch model ${modelId}: ${xktRes.status}`);
@@ -675,8 +899,8 @@ serve(async (req) => {
               const xktData = await xktRes.arrayBuffer();
               const fileSize = xktData.byteLength;
               
-              if (fileSize === 0) {
-                console.log(`Model ${modelId}: Empty XKT data (0 bytes), skipping`);
+              if (fileSize < 1024) { // Skip files < 1KB (likely invalid)
+                console.log(`Model ${modelId}: File too small (${fileSize} bytes), skipping`);
                 continue;
               }
               
@@ -690,18 +914,14 @@ serve(async (req) => {
                   upsert: true
                 });
 
-              if (uploadError) {
-                console.log(`Storage upload failed for ${modelId}:`, uploadError.message);
-                // Continue anyway to save the record pointing to source
-              }
-
-              // Get signed URL for storage (if upload succeeded)
               let signedUrl: string | null = null;
               if (!uploadError) {
                 const { data: urlData } = await supabase.storage
                   .from('xkt-models')
-                  .createSignedUrl(storagePath, 86400 * 365); // 1 year
+                  .createSignedUrl(storagePath, 86400 * 365);
                 signedUrl = urlData?.signedUrl || null;
+              } else {
+                console.log(`Storage upload failed for ${modelId}:`, uploadError.message);
               }
 
               // Insert into database
@@ -716,7 +936,7 @@ serve(async (req) => {
                   file_url: signedUrl,
                   file_size: fileSize,
                   storage_path: storagePath,
-                  source_url: model.xktFileUrl,
+                  source_url: fullXktUrl,
                   synced_at: new Date().toISOString(),
                 }, { onConflict: 'building_fm_guid,model_id' });
 
@@ -726,37 +946,80 @@ serve(async (req) => {
                 continue;
               }
 
-              synced++;
-              console.log(`Synced model ${modelId} for ${buildingName} (${fileSize} bytes)`);
+              totalSynced++;
+              console.log(`✅ Synced model ${modelId} for ${buildingName}`);
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : String(e);
-              console.log(`Failed to sync model ${modelId}: ${errMsg}`);
+              if (errMsg.includes('aborted')) {
+                console.log(`Model ${modelId}: Fetch timeout, skipping`);
+              } else {
+                console.log(`Failed to sync model ${modelId}: ${errMsg}`);
+              }
             }
           }
-          
-          await updateSyncState(supabase, 'xkt', 'running', synced, undefined, {
-            subtree_name: `XKT-filer (${i + 1}/${totalBuildings})`
-          });
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
           console.error(`Error syncing building ${buildingName}:`, errMsg);
           errors.push(`${buildingName}: ${errMsg}`);
         }
+
+        if (!interrupted) {
+          currentBuildingIndex++;
+          
+          // Save progress
+          await supabase
+            .from('asset_sync_progress')
+            .upsert({
+              job: 'xkt_models',
+              building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
+              current_building_index: currentBuildingIndex,
+              skip: 0,
+              total_buildings: totalBuildings,
+              total_synced: totalSynced,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'job' });
+
+          await updateSyncState(supabase, 'xkt', 'running', totalSynced, undefined, {
+            subtree_name: `XKT-filer (${currentBuildingIndex}/${totalBuildings})`
+          });
+        }
       }
 
-      const status = errors.length > 0 && synced === 0 ? 'failed' : 'completed';
-      await updateSyncState(supabase, 'xkt', status, synced, errors.length > 0 ? errors.slice(0, 5).join('; ') : undefined, {
-        subtree_name: 'XKT-filer'
-      });
-      
-      console.log(`XKT sync completed: ${synced} models synced, ${skipped} already synced`);
+      if (!interrupted && currentBuildingIndex >= totalBuildings) {
+        await supabase.from('asset_sync_progress').delete().eq('job', 'xkt_models');
+        await updateSyncState(supabase, 'xkt', 'completed', totalSynced, 
+          errors.length > 0 ? errors.slice(0, 5).join('; ') : undefined, {
+          subtree_name: 'XKT-filer'
+        });
+      } else if (interrupted) {
+        // Save progress for resume
+        await supabase
+          .from('asset_sync_progress')
+          .upsert({
+            job: 'xkt_models',
+            building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
+            current_building_index: currentBuildingIndex,
+            skip: 0,
+            total_buildings: totalBuildings,
+            total_synced: totalSynced,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'job' });
+      }
+
+      console.log(`XKT sync ${interrupted ? 'paused' : 'completed'}: ${totalSynced} models`);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: `Synkade ${synced} modeller, ${skipped} redan synkade`, 
-          synced,
-          skipped,
+          message: interrupted 
+            ? `Synced ${totalSynced} models (${currentBuildingIndex}/${totalBuildings} buildings). Call again to continue.`
+            : `Completed: ${totalSynced} models`,
+          synced: totalSynced,
+          interrupted,
+          progress: {
+            currentBuildingIndex,
+            totalBuildings
+          },
           errors: errors.length > 0 ? errors : undefined 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -773,8 +1036,8 @@ serve(async (req) => {
       }
 
       const accessToken = await getAccessToken();
-      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
-      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
+      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
       
       console.log(`Starting sync-xkt-building for: ${buildingFmGuid}`);
 
@@ -789,40 +1052,19 @@ serve(async (req) => {
       const buildingName = building?.common_name || buildingFmGuid;
 
       try {
-        const baseUrl = apiUrl?.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '') || '';
-        let modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
+        // Use robust endpoint discovery
+        const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
         
-        let modelsRes = await fetch(modelsUrl, {
-          headers: { "Authorization": `Bearer ${accessToken}` }
-        });
-
-        // Try alternate paths if 404
-        if (modelsRes.status === 404) {
-          const altUrl = `${baseUrl}/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`;
-          modelsRes = await fetch(altUrl, {
-            headers: { "Authorization": `Bearer ${accessToken}` }
-          });
-        }
-
-        if (!modelsRes.ok) {
-          console.log(`Building ${buildingName}: No models endpoint available (${modelsRes.status})`);
+        if (!discovery.url) {
           return new Response(
-            JSON.stringify({ success: true, message: 'No 3D models available', modelCount: 0 }),
+            JSON.stringify({ success: true, message: 'No 3D models endpoint available', modelCount: 0 }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        let models: any[];
-        try {
-          models = await modelsRes.json();
-        } catch {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Invalid models response' }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+        const models = discovery.models || [];
         
-        if (!Array.isArray(models) || models.length === 0) {
+        if (models.length === 0) {
           return new Response(
             JSON.stringify({ success: true, message: 'No models found', modelCount: 0 }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -833,10 +1075,11 @@ serve(async (req) => {
         let synced = 0;
 
         for (const model of models) {
-          if (!model.xktFileUrl) continue;
+          const xktUrl = model.xktFileUrl || model.xkt_file_url || model.fileUrl || model.url;
+          if (!xktUrl) continue;
 
-          const modelId = model.id || model.modelId || model.xktFileUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
-          const fileName = model.xktFileUrl.split('/').pop() || `${modelId}.xkt`;
+          const modelId = model.id || model.modelId || xktUrl.split('/').pop()?.replace('.xkt', '') || `model_${Date.now()}`;
+          const fileName = xktUrl.split('/').pop() || `${modelId}.xkt`;
           const storagePath = `${buildingFmGuid}/${fileName}`;
 
           // Check if already synced
@@ -853,8 +1096,14 @@ serve(async (req) => {
           }
 
           try {
-            console.log(`Fetching XKT: ${model.xktFileUrl}`);
-            const xktRes = await fetch(model.xktFileUrl, {
+            let fullXktUrl = xktUrl;
+            if (xktUrl.startsWith('/')) {
+              const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+              fullXktUrl = baseUrl + xktUrl;
+            }
+
+            console.log(`Fetching XKT: ${fullXktUrl}`);
+            const xktRes = await fetch(fullXktUrl, {
               headers: { "Authorization": `Bearer ${accessToken}` }
             });
 
@@ -863,7 +1112,7 @@ serve(async (req) => {
             const xktData = await xktRes.arrayBuffer();
             const fileSize = xktData.byteLength;
             
-            if (fileSize === 0) continue;
+            if (fileSize < 1024) continue;
             
             console.log(`Model ${modelId}: Downloaded ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
@@ -895,26 +1144,24 @@ serve(async (req) => {
                 file_url: signedUrl,
                 file_size: fileSize,
                 storage_path: storagePath,
-                source_url: model.xktFileUrl,
+                source_url: fullXktUrl,
                 synced_at: new Date().toISOString(),
               }, { onConflict: 'building_fm_guid,model_id' });
 
             synced++;
-            console.log(`Synced model ${modelId}`);
+            console.log(`✅ Synced model ${modelId} for ${buildingName}`);
           } catch (e) {
-            console.log(`Failed to sync model ${modelId}: ${e}`);
+            const errMsg = e instanceof Error ? e.message : String(e);
+            console.log(`Failed to sync model ${modelId}: ${errMsg}`);
           }
         }
 
-        console.log(`XKT sync for building completed: ${synced} models`);
-
         return new Response(
-          JSON.stringify({ success: true, modelCount: synced }),
+          JSON.stringify({ success: true, message: `Synced ${synced} models`, synced, buildingFmGuid }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
-        console.error(`Error syncing XKT for building ${buildingName}:`, errMsg);
         return new Response(
           JSON.stringify({ success: false, error: errMsg }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -922,188 +1169,17 @@ serve(async (req) => {
       }
     }
 
-    // ============ BUILDING SYNC (legacy - single building hierarchy) ============
-    if (action === 'building-sync') {
-      if (!buildingFmGuid) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'buildingFmGuid is required for building-sync' }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      await updateSyncState(supabase, buildingFmGuid, 'running');
-      const accessToken = await getAccessToken();
-      console.log(`Building sync for: ${buildingFmGuid}`);
-
-      // First, sync the building itself (objectType 1)
-      const buildingFilter = [
-        ["fmGuid", "=", buildingFmGuid],
-        "and",
-        ["objectType", "=", 1]
-      ];
-
-      let totalSynced = 0;
-      const buildingResult = await fetchAssetPlusObjects(accessToken, buildingFilter, 0, 1);
-      if (buildingResult.data.length > 0) {
-        const synced = await upsertAssets(supabase, buildingResult.data);
-        totalSynced += synced;
-        console.log(`Synced building: ${synced} items`);
-      }
-
-      // Then sync Building Storeys (objectType 2) for this building
-      const storeyFilter = [
-        ["buildingFmGuid", "=", buildingFmGuid],
-        "and",
-        ["objectType", "=", 2]
-      ];
-
-      let skip = 0;
-      const take = 500;
-      let hasMore = true;
-
-      while (hasMore) {
-        console.log(`Fetching storeys at skip=${skip}...`);
-        const result = await fetchAssetPlusObjects(accessToken, storeyFilter, skip, take);
-        
-        if (result.data.length > 0) {
-          const synced = await upsertAssets(supabase, result.data);
-          totalSynced += synced;
-          console.log(`Synced ${synced} storeys (total: ${totalSynced})`);
-        }
-
-        hasMore = result.hasMore;
-        skip += take;
-        await updateSyncState(supabase, buildingFmGuid, 'running', totalSynced);
-      }
-
-      // Finally sync Spaces (objectType 3) for this building
-      const spaceFilter = [
-        ["buildingFmGuid", "=", buildingFmGuid],
-        "and",
-        ["objectType", "=", 3]
-      ];
-
-      skip = 0;
-      hasMore = true;
-
-      while (hasMore) {
-        console.log(`Fetching spaces at skip=${skip}...`);
-        const result = await fetchAssetPlusObjects(accessToken, spaceFilter, skip, take);
-        
-        if (result.data.length > 0) {
-          const synced = await upsertAssets(supabase, result.data);
-          totalSynced += synced;
-          console.log(`Synced ${synced} spaces (total: ${totalSynced})`);
-        }
-
-        hasMore = result.hasMore;
-        skip += take;
-        await updateSyncState(supabase, buildingFmGuid, 'running', totalSynced);
-      }
-
-      await updateSyncState(supabase, buildingFmGuid, 'completed', totalSynced);
-      console.log(`Building sync completed: ${totalSynced} assets`);
-
-      return new Response(
-        JSON.stringify({ success: true, message: `Synced ${totalSynced} assets for building`, totalSynced }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============ SYNC ALL BUILDINGS (only objectType 1) ============
-    if (action === 'sync-all-buildings') {
-      await updateSyncState(supabase, 'buildings', 'running');
-      const accessToken = await getAccessToken();
-      console.log('Starting sync-all-buildings');
-
-      const buildingFilter = [["objectType", "=", 1]];
-      let totalSynced = 0;
-      let skip = 0;
-      const take = 500;
-      let hasMore = true;
-
-      while (hasMore) {
-        console.log(`Fetching buildings at skip=${skip}...`);
-        const result = await fetchAssetPlusObjects(accessToken, buildingFilter, skip, take);
-        
-        if (result.data.length > 0) {
-          const synced = await upsertAssets(supabase, result.data);
-          totalSynced += synced;
-          console.log(`Synced ${synced} buildings (total: ${totalSynced})`);
-        }
-
-        hasMore = result.hasMore;
-        skip += take;
-        await updateSyncState(supabase, 'buildings', 'running', totalSynced);
-      }
-
-      await updateSyncState(supabase, 'buildings', 'completed', totalSynced);
-      console.log(`All buildings sync completed: ${totalSynced} buildings`);
-
-      return new Response(
-        JSON.stringify({ success: true, message: `Synced ${totalSynced} buildings`, totalSynced }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ============ FULL SYNC (legacy) ============
-    await updateSyncState(supabase, 'full', 'running');
-    const accessToken = await getAccessToken();
-    console.log('Got access token');
-
-    const filter = [
-      ["objectType", "=", 1], "or",
-      ["objectType", "=", 2], "or",
-      ["objectType", "=", 3], "or",
-      ["objectType", "=", 4]
-    ];
-
-    let totalSynced = 0;
-    let skip = 0;
-    const take = 500;
-    let hasMore = true;
-    let consecutiveEmptyBatches = 0;
-
-    while (hasMore && consecutiveEmptyBatches < 3) {
-      console.log(`Fetching batch at skip=${skip}...`);
-      const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
-      
-      if (result.data.length > 0) {
-        const synced = await upsertAssets(supabase, result.data);
-        totalSynced += synced;
-        console.log(`Synced ${synced} items (total: ${totalSynced})`);
-        consecutiveEmptyBatches = 0;
-      } else {
-        consecutiveEmptyBatches++;
-      }
-
-      hasMore = result.hasMore;
-      skip += take;
-      await updateSyncState(supabase, 'full', 'running', totalSynced);
-    }
-
-    await updateSyncState(supabase, 'full', 'completed', totalSynced);
-    console.log(`Sync completed: ${totalSynced} assets`);
-
+    // ============ DEFAULT: Unknown action ============
     return new Response(
-      JSON.stringify({ success: true, message: `Synced ${totalSynced} assets`, totalSynced }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Sync error:", errorMessage);
-    
-    try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      await updateSyncState(supabase, 'full', 'failed', undefined, errorMessage);
-    } catch {}
-
+  } catch (error) {
+    console.error("asset-plus-sync error:", error);
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

@@ -94,40 +94,76 @@ serve(async (req) => {
       );
     }
 
-    // Action: Test 3D API endpoint
+    // Action: Test 3D API endpoint with robust discovery
     if (action === "test3DApi") {
       try {
         const accessToken = await getAccessToken();
         const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
         const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
         
-        // Test with Småviken building
         const testBuildingGuid = body.buildingFmGuid || "a8fe5835-e293-4ba3-92c6-c7e36f675f23";
         
-        // Normalize URL for 3D API
+        // Build candidate URLs to try
         const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-        const modelsUrl = `${baseUrl}/api/threed/GetModels?fmGuid=${testBuildingGuid}&apiKey=${apiKey}`;
+        const assetDbUrl = apiUrl.replace(/\/+$/, '');
         
-        console.log(`Testing 3D API: ${modelsUrl}`);
-        
-        const modelsRes = await fetch(modelsUrl, {
-          headers: { "Authorization": `Bearer ${accessToken}` }
-        });
-        
-        const responseText = await modelsRes.text();
-        let responseData;
-        try {
-          responseData = JSON.parse(responseText);
-        } catch {
-          responseData = responseText;
+        const candidatePaths = [
+          `${baseUrl}/api/threed/GetModels`,
+          `${baseUrl}/threed/GetModels`,
+          `${assetDbUrl}/api/threed/GetModels`,
+          `${assetDbUrl}/threed/GetModels`,
+          `${assetDbUrl}/GetModels`,
+        ];
+
+        const results: any[] = [];
+        let workingEndpoint: string | null = null;
+        let workingData: any = null;
+
+        for (const basePath of candidatePaths) {
+          const urlWithQuery = `${basePath}?fmGuid=${testBuildingGuid}&apiKey=${apiKey}`;
+          
+          try {
+            const res = await fetch(urlWithQuery, {
+              headers: { "Authorization": `Bearer ${accessToken}` }
+            });
+            
+            const status = res.status;
+            let data: any = null;
+            
+            if (res.ok) {
+              try {
+                data = await res.json();
+                if (Array.isArray(data) && !workingEndpoint) {
+                  workingEndpoint = basePath;
+                  workingData = data;
+                }
+              } catch {
+                data = 'Invalid JSON';
+              }
+            }
+            
+            results.push({
+              url: basePath,
+              status,
+              success: res.ok && Array.isArray(data),
+              modelCount: Array.isArray(data) ? data.length : 0
+            });
+          } catch (e) {
+            results.push({
+              url: basePath,
+              status: 'error',
+              error: String(e)
+            });
+          }
         }
         
         return new Response(
           JSON.stringify({ 
-            success: modelsRes.ok,
-            status: modelsRes.status,
-            url: modelsUrl,
-            data: responseData
+            success: !!workingEndpoint,
+            workingEndpoint,
+            modelCount: Array.isArray(workingData) ? workingData.length : 0,
+            models: workingData,
+            testedEndpoints: results
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
