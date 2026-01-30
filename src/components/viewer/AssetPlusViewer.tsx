@@ -147,6 +147,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [inventoryPendingPosition, setInventoryPendingPosition] = useState<{x: number; y: number; z: number} | null>(null);
   const inventoryPickModeRef = useRef(false);
   
+  // XKT sync status for visual feedback
+  const [xktSyncStatus, setXktSyncStatus] = useState<'idle' | 'checking' | 'syncing' | 'done' | 'error'>('idle');
+  
   // Ref for local annotations plugin
   const localAnnotationsPluginRef = useRef<any>(null);
   
@@ -171,16 +174,30 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
 
-  // On-demand XKT sync: ensure models are cached for this building
+  // On-demand XKT sync: ensure models are cached for this building with visual feedback
   useEffect(() => {
     if (!buildingFmGuid) return;
     
     const ensureModels = async () => {
-      const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
-      if (result.syncing) {
-        console.log('On-demand XKT sync triggered for building:', buildingFmGuid);
-      } else if (result.cached) {
-        console.log(`Building ${buildingFmGuid} has ${result.count} cached XKT models`);
+      setXktSyncStatus('checking');
+      
+      try {
+        const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
+        
+        if (result.syncing) {
+          console.log('On-demand XKT sync triggered for building:', buildingFmGuid);
+          setXktSyncStatus('syncing');
+          // Keep syncing status - it will naturally resolve when models are loaded
+        } else if (result.cached && result.count > 0) {
+          console.log(`Building ${buildingFmGuid} has ${result.count} cached XKT models`);
+          setXktSyncStatus('done');
+        } else {
+          // No models cached and not syncing - either no models exist or sync will happen later
+          setXktSyncStatus('idle');
+        }
+      } catch (error) {
+        console.error('XKT sync error:', error);
+        setXktSyncStatus('error');
       }
     };
     
@@ -2368,6 +2385,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           {(state.isLoading && !state.isInitialized) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+          )}
+          
+          {/* XKT Sync Status Indicator - shows when syncing models in background */}
+          {xktSyncStatus === 'syncing' && state.isInitialized && (
+            <div className="absolute top-2 left-2 z-40 bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 shadow-lg border border-amber-200 dark:border-amber-700 animate-pulse">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Synkar 3D-modeller...</span>
+            </div>
+          )}
+          {xktSyncStatus === 'checking' && state.isInitialized && (
+            <div className="absolute top-2 left-2 z-40 bg-blue-100 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 shadow-lg border border-blue-200 dark:border-blue-700">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Kontrollerar modeller...</span>
             </div>
           )}
           
