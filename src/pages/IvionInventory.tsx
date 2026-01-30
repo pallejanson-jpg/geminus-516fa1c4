@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Building2, Loader2, Camera, Layers } from 'lucide-react';
+import { ChevronLeft, Building2, Loader2, Camera, Layers, Wifi, WifiOff, AlertCircle, Info, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import IvionRegistrationPanel from '@/components/inventory/IvionRegistrationPanel';
 import UnplacedAssetsPanel from '@/components/inventory/UnplacedAssetsPanel';
@@ -12,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface BuildingWithIvion {
   fm_guid: string;
@@ -25,6 +34,8 @@ interface IvionPoiData {
   location: { x: number; y: number; z: number };
   pointOfView?: { imageId: number };
 }
+
+type ConnectionStatus = 'unknown' | 'connected' | 'error' | 'expired';
 
 const IvionInventory: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -40,11 +51,17 @@ const IvionInventory: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [savedCount, setSavedCount] = useState(0);
 
-  // POI polling state
+  // POI polling state - IMPROVED
   const [lastSeenPoiId, setLastSeenPoiId] = useState<number | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(true);
   const [detectedPoi, setDetectedPoi] = useState<IvionPoiData | null>(null);
+  const [pendingPoi, setPendingPoi] = useState<IvionPoiData | null>(null); // NEW: POI waiting while form is open
   const pollingIntervalRef = useRef<number | null>(null);
+
+  // Connection status - NEW
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
 
   // Load buildings with Ivion configured
   useEffect(() => {
@@ -114,15 +131,58 @@ const IvionInventory: React.FC = () => {
     // Build Ivion URL
     const baseUrl = 'https://swg.iv.navvis.com';
     setIvionUrl(`${baseUrl}/?site=${building.ivion_site_id}`);
+    
+    // Reset connection status when building changes
+    setConnectionStatus('unknown');
+    setLastSeenPoiId(null);
   }, [selectedBuildingFmGuid, buildings]);
 
   // Get the current ivion site id
   const currentIvionSiteId = buildings.find(b => b.fm_guid === selectedBuildingFmGuid)?.ivion_site_id || null;
 
-  // POI Polling - detect new POIs created in Ivion
+  // Test API connection
+  const testConnection = useCallback(async () => {
+    if (!currentIvionSiteId) return;
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'get-latest-poi',
+          siteId: currentIvionSiteId,
+        },
+      });
+
+      if (error) {
+        setConnectionStatus('error');
+        setConnectionError(error.message || 'API-fel');
+        return false;
+      }
+
+      if (data?.error) {
+        // Check for auth-related errors
+        if (data.error.includes('401') || data.error.includes('token') || data.error.includes('auth')) {
+          setConnectionStatus('expired');
+          setConnectionError('Access token har gått ut');
+        } else {
+          setConnectionStatus('error');
+          setConnectionError(data.error);
+        }
+        return false;
+      }
+
+      setConnectionStatus('connected');
+      setConnectionError(null);
+      return true;
+    } catch (err: any) {
+      setConnectionStatus('error');
+      setConnectionError(err.message || 'Kunde inte ansluta');
+      return false;
+    }
+  }, [currentIvionSiteId]);
+
+  // POI Polling - IMPROVED: continues even when form is open
   useEffect(() => {
-    if (!currentIvionSiteId || !pollingEnabled || formOpen) {
-      // Clear any existing interval
+    if (!currentIvionSiteId || !pollingEnabled) {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
@@ -139,16 +199,47 @@ const IvionInventory: React.FC = () => {
           },
         });
 
+        setLastPollTime(new Date());
+
+        // Handle errors
+        if (error || data?.error) {
+          if (data?.error?.includes('401') || data?.error?.includes('token')) {
+            setConnectionStatus('expired');
+            setConnectionError('Access token har gått ut');
+          } else if (connectionStatus === 'connected') {
+            // Only show error if we were previously connected
+            setConnectionStatus('error');
+            setConnectionError(data?.error || error?.message || 'Polling misslyckades');
+          }
+          return;
+        }
+
+        // Update connection status
+        if (connectionStatus !== 'connected') {
+          setConnectionStatus('connected');
+          setConnectionError(null);
+        }
+
         // Check if we got a valid POI
-        if (!error && data?.id && data?.location) {
+        if (data?.id && data?.location) {
           // If this is a new POI (different from last seen)
           if (data.id !== lastSeenPoiId) {
             console.log('New POI detected:', data.id, 'previous:', lastSeenPoiId);
             
             if (lastSeenPoiId !== null) {
               // This is a genuinely new POI (not the first poll)
-              setDetectedPoi(data);
-              setFormOpen(true);
+              if (formOpen) {
+                // Form is open - queue the POI and notify user
+                setPendingPoi(data);
+                toast.info('Ny POI upptäckt!', {
+                  description: 'Klicka på "Ladda ny POI" för att använda den',
+                  duration: 5000,
+                });
+              } else {
+                // Form is closed - open it with the new POI
+                setDetectedPoi(data);
+                setFormOpen(true);
+              }
             }
             
             setLastSeenPoiId(data.id);
@@ -160,7 +251,7 @@ const IvionInventory: React.FC = () => {
       }
     };
 
-    // Initial poll to establish baseline
+    // Initial poll to establish baseline and test connection
     pollForNewPois();
 
     // Poll every 3 seconds
@@ -172,19 +263,33 @@ const IvionInventory: React.FC = () => {
         pollingIntervalRef.current = null;
       }
     };
-  }, [currentIvionSiteId, pollingEnabled, formOpen, lastSeenPoiId]);
+  }, [currentIvionSiteId, pollingEnabled, lastSeenPoiId, formOpen, connectionStatus]);
+
+  // Handle loading pending POI into form
+  const handleLoadPendingPoi = () => {
+    if (pendingPoi) {
+      setDetectedPoi(pendingPoi);
+      setPendingPoi(null);
+    }
+  };
 
   const handleAssetSaved = () => {
     setSavedCount(prev => prev + 1);
-    setDetectedPoi(null); // Clear the detected POI
-    // Keep form open for continuous registration
+    setDetectedPoi(null);
+    // Check if there's a pending POI to load
+    if (pendingPoi) {
+      toast.info('Det finns en väntande POI', {
+        description: 'Klicka på "Ladda ny POI" för att registrera den',
+      });
+    }
   };
 
   const handleAssetSavedAndClose = () => {
     setSavedCount(prev => prev + 1);
     setFormOpen(false);
     setDetectedPoi(null);
-    navigate('/inventory'); // Navigate back to main inventory page
+    setPendingPoi(null);
+    navigate('/inventory');
   };
 
   const handleClose = () => {
@@ -194,10 +299,71 @@ const IvionInventory: React.FC = () => {
   const handleFormClose = () => {
     setFormOpen(false);
     setDetectedPoi(null);
+    // Don't clear pending POI - user might want to open form again
   };
 
   const handleUnplacedAssetsCreated = () => {
     setSavedCount(prev => prev + 1);
+  };
+
+  // Connection status indicator component
+  const ConnectionIndicator = () => {
+    const getStatusColor = () => {
+      switch (connectionStatus) {
+        case 'connected': return 'bg-green-500';
+        case 'error': return 'bg-red-500';
+        case 'expired': return 'bg-amber-500';
+        default: return 'bg-muted-foreground';
+      }
+    };
+
+    const getStatusIcon = () => {
+      switch (connectionStatus) {
+        case 'connected': return <Wifi className="h-3.5 w-3.5" />;
+        case 'error': return <WifiOff className="h-3.5 w-3.5" />;
+        case 'expired': return <AlertCircle className="h-3.5 w-3.5" />;
+        default: return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
+      }
+    };
+
+    const getStatusText = () => {
+      switch (connectionStatus) {
+        case 'connected': return 'Ansluten';
+        case 'error': return 'Anslutningsfel';
+        case 'expired': return 'Token utgått';
+        default: return 'Ansluter...';
+      }
+    };
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
+              connectionStatus === 'connected' ? 'text-green-600 bg-green-100/80 dark:bg-green-900/30' :
+              connectionStatus === 'error' ? 'text-red-600 bg-red-100/80 dark:bg-red-900/30' :
+              connectionStatus === 'expired' ? 'text-amber-600 bg-amber-100/80 dark:bg-amber-900/30' :
+              'text-muted-foreground bg-muted'
+            )}>
+              <span className={cn("h-2 w-2 rounded-full animate-pulse", getStatusColor())} />
+              {getStatusIcon()}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-sm">
+              <p className="font-medium">{getStatusText()}</p>
+              {connectionError && <p className="text-xs text-muted-foreground mt-1">{connectionError}</p>}
+              {lastPollTime && connectionStatus === 'connected' && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Senaste poll: {lastPollTime.toLocaleTimeString('sv-SE')}
+                </p>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   if (isLoading) {
@@ -253,6 +419,9 @@ const IvionInventory: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Connection status indicator */}
+            {ivionUrl && <ConnectionIndicator />}
           </div>
           
           <div className="flex items-center gap-3">
@@ -260,6 +429,20 @@ const IvionInventory: React.FC = () => {
               <div className="text-sm text-muted-foreground bg-primary/10 px-2 py-1 rounded">
                 {savedCount} sparade
               </div>
+            )}
+            
+            {/* Pending POI notification */}
+            {pendingPoi && formOpen && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleLoadPendingPoi}
+                className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden md:inline">Ladda ny POI</span>
+                <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">1</Badge>
+              </Button>
             )}
             
             {/* Button to create POIs from existing assets */}
@@ -285,13 +468,43 @@ const IvionInventory: React.FC = () => {
             )}
           </div>
         </div>
+        
+        {/* Instruction banner */}
+        {ivionUrl && !formOpen && (
+          <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/50 border-t border-blue-100 dark:border-blue-900 flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+            <Info className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>Arbetsflöde:</strong> Skapa en POI i Ivions 360°-vy (använd +) → Registreringsformuläret öppnas automatiskt
+            </span>
+          </div>
+        )}
+        
+        {/* Connection error banner */}
+        {connectionStatus === 'expired' && (
+          <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/50 border-t border-amber-100 dark:border-amber-900 flex items-center justify-between text-sm text-amber-700 dark:text-amber-300">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>Ivion access token har gått ut. POI-detektion fungerar inte automatiskt.</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={testConnection} className="shrink-0">
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              Försök igen
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Fullscreen Ivion iframe */}
       {ivionUrl ? (
         <iframe
           src={ivionUrl}
-          className="w-full h-full border-0 pt-14"
+          className={cn(
+            "w-full h-full border-0",
+            // Adjust padding based on whether banners are shown
+            !formOpen && connectionStatus !== 'expired' ? 'pt-[104px]' :
+            connectionStatus === 'expired' ? 'pt-[144px]' :
+            'pt-14'
+          )}
           allow="fullscreen; accelerometer; gyroscope"
           title="Ivion 360° View"
         />
@@ -315,6 +528,9 @@ const IvionInventory: React.FC = () => {
           onSaved={handleAssetSaved}
           onSavedAndClose={handleAssetSavedAndClose}
           initialPoi={detectedPoi}
+          connectionStatus={connectionStatus}
+          onLoadPendingPoi={pendingPoi ? handleLoadPendingPoi : undefined}
+          hasPendingPoi={!!pendingPoi}
         />
       )}
 
