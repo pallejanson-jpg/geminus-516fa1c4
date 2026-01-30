@@ -12,6 +12,7 @@ import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Facility } from '@/lib/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const energyDistribution = [
     { name: 'Heating', value: 45, color: 'hsl(var(--destructive))' },
@@ -40,8 +41,13 @@ interface PerformanceTabProps {
     onSelectBuilding: (building: Facility) => void;
 }
 
+// Truncate name for chart display
+const truncateName = (name: string, maxLen = 12) => 
+    name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
+
 export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps) {
     const { navigatorTreeData } = useContext(AppContext);
+    const isMobile = useIsMobile();
 
     // Calculate actual stats from tree data
     const stats = useMemo(() => {
@@ -84,9 +90,11 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             else if (kwhPerSqm < 140) { rating = 'D'; color = 'hsl(24, 95%, 53%)'; }
             else { rating = 'E'; color = 'hsl(var(--destructive))'; }
             
+            const fullName = building.commonName || building.name || 'Building';
             return {
                 fmGuid: building.fmGuid,
-                name: building.commonName || building.name || `Building`,
+                name: truncateName(fullName),
+                fullName,
                 kwhPerSqm,
                 rating,
                 color
@@ -111,7 +119,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
 
     const kpiCards = [
         { 
-            title: 'Antal byggnader', 
+            title: 'Building Count', 
             value: stats.buildingCount, 
             icon: Building2, 
             trend: '+2', 
@@ -119,7 +127,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             color: 'text-primary'
         },
         { 
-            title: 'Snitt energi (kWh/m²)', 
+            title: 'Avg. Energy (kWh/m²)', 
             value: energyByBuilding.length > 0 
                 ? Math.round(energyByBuilding.reduce((s, b) => s + b.kwhPerSqm, 0) / energyByBuilding.length)
                 : 'N/A', 
@@ -129,18 +137,18 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             color: 'text-yellow-500'
         },
         { 
-            title: 'CO₂-utsläpp (ton)', 
-            value: Math.round(stats.totalArea * 0.012).toLocaleString('sv-SE'), 
+            title: 'CO₂ Emissions (tons)', 
+            value: Math.round(stats.totalArea * 0.012).toLocaleString(), 
             icon: Leaf, 
             trend: '-12%', 
             trendUp: false,
             color: 'text-green-500'
         },
         { 
-            title: 'Snitt energiklass', 
+            title: 'Avg. Energy Rating', 
             value: 'B+', 
             icon: Gauge, 
-            trend: 'Förbättrad', 
+            trend: 'Improved', 
             trendUp: true,
             color: 'text-primary'
         },
@@ -154,6 +162,11 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             }
         }
     };
+
+    // Mobile-friendly pie chart label
+    const renderPieLabel = isMobile 
+        ? undefined 
+        : ({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`;
 
     return (
         <div className="space-y-6">
@@ -184,9 +197,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-primary" />
-                        Byggnader
+                        Buildings
                     </CardTitle>
-                    <CardDescription>Klicka på en byggnad för detaljerade insikter</CardDescription>
+                    <CardDescription>Click a building for detailed insights</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -231,9 +244,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Zap className="h-4 w-4 text-yellow-500" />
-                            Energiförbrukning per byggnad
+                            Energy Consumption per Building
                         </CardTitle>
-                        <CardDescription>kWh per m² (lägre är bättre)</CardDescription>
+                        <CardDescription>kWh per m² (lower is better)</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -244,9 +257,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                     <YAxis 
                                         dataKey="name" 
                                         type="category" 
-                                        width={100} 
+                                        width={isMobile ? 60 : 100} 
                                         className="text-xs"
-                                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
                                     <Tooltip 
                                         contentStyle={{ 
@@ -255,6 +268,10 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                             borderRadius: '8px'
                                         }}
                                         labelStyle={{ color: 'hsl(var(--foreground))' }}
+                                        formatter={(value: number, name: string, props: any) => [
+                                            `${value} kWh/m²`, 
+                                            props.payload.fullName
+                                        ]}
                                     />
                                     <Bar 
                                         dataKey="kwhPerSqm" 
@@ -278,9 +295,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <ThermometerSun className="h-4 w-4 text-orange-500" />
-                            Energifördelning per kategori
+                            Energy Distribution by Category
                         </CardTitle>
-                        <CardDescription>Nedbrytning av energianvändning</CardDescription>
+                        <CardDescription>Breakdown of energy usage</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -290,12 +307,12 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                         data={energyDistribution}
                                         cx="50%"
                                         cy="50%"
-                                        innerRadius={50}
-                                        outerRadius={80}
+                                        innerRadius={isMobile ? 40 : 50}
+                                        outerRadius={isMobile ? 65 : 80}
                                         paddingAngle={2}
                                         dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={false}
+                                        label={renderPieLabel}
+                                        labelLine={!isMobile}
                                     >
                                         {energyDistribution.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -322,9 +339,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Droplets className="h-4 w-4 text-blue-500" />
-                            Månatlig energitrend
+                            Monthly Energy Trend
                         </CardTitle>
-                        <CardDescription>Faktisk vs målförbrukning (MWh)</CardDescription>
+                        <CardDescription>Actual vs Target consumption (MWh)</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -351,7 +368,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                     <Line 
                                         type="monotone" 
                                         dataKey="consumption" 
-                                        name="Faktisk"
+                                        name="Actual"
                                         stroke="hsl(var(--primary))" 
                                         strokeWidth={2}
                                         dot={{ fill: 'hsl(var(--primary))' }}
@@ -359,7 +376,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                     <Line 
                                         type="monotone" 
                                         dataKey="target" 
-                                        name="Mål"
+                                        name="Target"
                                         stroke="hsl(142, 71%, 45%)" 
                                         strokeWidth={2}
                                         strokeDasharray="5 5"
@@ -376,9 +393,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Gauge className="h-4 w-4 text-primary" />
-                            Energiklasser
+                            Energy Ratings
                         </CardTitle>
-                        <CardDescription>Byggnader per klass</CardDescription>
+                        <CardDescription>Buildings per rating</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
@@ -399,14 +416,14 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                                 minWidth: '40px'
                                             }}
                                         >
-                                            {item.count} byggnader
+                                            {item.count} {item.count === 1 ? 'building' : 'buildings'}
                                         </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                         <p className="text-xs text-muted-foreground mt-4">
-                            Mål: Alla byggnader klass B eller bättre till 2030
+                            Goal: All buildings rating B or better by 2030
                         </p>
                     </CardContent>
                 </Card>

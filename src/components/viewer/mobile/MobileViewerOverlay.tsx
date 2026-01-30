@@ -79,7 +79,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           </h1>
           {isViewerReady && floors.length > 0 && (
             <p className="text-[10px] text-muted-foreground">
-              {visibleFloorCount} av {floors.length} våningar
+              {visibleFloorCount} of {floors.length} floors
             </p>
           )}
         </div>
@@ -109,7 +109,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <div className="flex items-center justify-between p-3 border-b">
               <div className="flex items-center gap-2">
                 <TreeDeciduous className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Modellträd</span>
+                <span className="font-medium text-sm">Model Tree</span>
               </div>
               <Button 
                 variant="ghost" 
@@ -146,7 +146,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           disabled={!isViewerReady}
         >
           {showSpaces ? <Eye className="h-4 w-4 mr-1.5" /> : <EyeOff className="h-4 w-4 mr-1.5" />}
-          <span className="text-xs">Rum</span>
+          <span className="text-xs">Spaces</span>
         </Button>
         
         <Button 
@@ -157,7 +157,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           disabled={!isViewerReady || floors.length === 0}
         >
           <Layers className="h-4 w-4 mr-1.5" />
-          <span className="text-xs">Våningar</span>
+          <span className="text-xs">Floors</span>
           {floors.length > 0 && visibleFloorCount < floors.length && (
             <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
               {visibleFloorCount}
@@ -173,7 +173,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           disabled={!isViewerReady}
         >
           <Home className="h-4 w-4 mr-1.5" />
-          <span className="text-xs">Återställ</span>
+          <span className="text-xs">Reset</span>
         </Button>
       </div>
 
@@ -182,21 +182,21 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         <DrawerContent className="max-h-[70vh]">
           <DrawerHeader className="pb-2">
             <DrawerTitle className="flex items-center justify-between">
-              <span>Välj våningar</span>
+              <span>Select Floors</span>
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
                   size="sm"
                   onClick={() => handleToggleAllFloors(true)}
                 >
-                  Visa alla
+                  Show All
                 </Button>
                 <Button 
                   variant="outline" 
                   size="sm"
                   onClick={() => handleToggleAllFloors(false)}
                 >
-                  Dölj alla
+                  Hide All
                 </Button>
               </div>
             </DrawerTitle>
@@ -227,7 +227,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
               {floors.length === 0 && (
                 <div className="text-center text-muted-foreground py-8">
                   <Layers className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Inga våningar hittades</p>
+                  <p className="text-sm">No floors found</p>
                 </div>
               )}
             </div>
