@@ -1,164 +1,206 @@
 
-# Plan: Förbättra Mobil Inventering UI/UX
+# Plan: Förbättrad UniversalPropertiesDialog & Hero Image Upload
 
 ## Sammanfattning
 
-Användaren har identifierat flera UI/UX-problem med den mobila inventeringsvyn:
-
-1. **"Ny"-knappen** har en för "fet" lila bakgrund - vill ha bara plus-tecknet
-2. **Spara-knappen** hamnar under iPhones browser-navigering och är svår att nå
-3. **Färgglada emoji-ikoner** ser oprofessionella ut - ska ersättas med Lucide-ikoner
-4. **Allt känns för stort** - behöver kompaktare layout
+Användaren vill göra tre förbättringar:
+1. **Göra dialogen resizable** - Lägg till en resize-handle i nedre högra hörnet (desktop)
+2. **Ta bort dubbel redigeraknapp** - Behåll endast "Redigera"-knappen längst ner, ta bort "Redigerbar"-badge vid sektioner
+3. **Hero image upload** - Ny funktion i Building Settings för att ladda upp herobild, placerad under Map Position
 
 ---
 
-## Ändringar
+## Del 1: Resizable Dialog
 
-### 1. "Ny"-knappen - Ta bort bakgrund
+### Problem
+Dialogen har fast storlek (`max-w-[400px]`) och kan inte justeras av användaren.
 
-**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
+### Lösning
+Lägg till en resize-handle i nedre högra hörnet som tillåter användaren att dra för att ändra storlek.
 
-Ändra knappstilen från solid bakgrund till ghost/minimal:
+**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
+
+```typescript
+// Lägg till resize state
+const [size, setSize] = useState({ width: 400, height: 500 });
+const [isResizing, setIsResizing] = useState(false);
+const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
+// Resize handlers
+const handleResizeStart = (e: React.MouseEvent) => {
+  e.preventDefault();
+  setIsResizing(true);
+  setResizeStart({
+    x: e.clientX,
+    y: e.clientY,
+    width: size.width,
+    height: size.height,
+  });
+};
+
+useEffect(() => {
+  if (!isResizing) return;
+
+  const handleMouseMove = (e: MouseEvent) => {
+    const newWidth = Math.max(320, Math.min(800, resizeStart.width + (e.clientX - resizeStart.x)));
+    const newHeight = Math.max(300, Math.min(window.innerHeight - 100, resizeStart.height + (e.clientY - resizeStart.y)));
+    setSize({ width: newWidth, height: newHeight });
+  };
+
+  const handleMouseUp = () => setIsResizing(false);
+
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('mouseup', handleMouseUp);
+  return () => {
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  };
+}, [isResizing, resizeStart]);
+
+// I huvudkomponenten, lägg till resize handle:
+<div
+  className="hidden sm:block absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+  onMouseDown={handleResizeStart}
+>
+  {/* Resize grip icon */}
+  <svg className="w-3 h-3 absolute bottom-1 right-1 text-muted-foreground" viewBox="0 0 10 10">
+    <path d="M0 10 L10 0 M4 10 L10 4 M7 10 L10 7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+  </svg>
+</div>
+
+// Uppdatera container style:
+style={{ 
+  left: position.x, 
+  top: position.y,
+  width: size.width,
+  height: isCollapsed ? 'auto' : size.height,
+}}
+```
+
+---
+
+## Del 2: Ta bort dubbel redigeraknapp
+
+### Problem
+Det finns en "Redigerbar"-badge vid "Lokala inställningar"-sektionen (rad 446-451) OCH en "Redigera"-knapp längst ner i dialogen (rad 495-498).
+
+### Lösning
+Ta bort "Redigerbar"-badge från sektionshuvudet och behåll endast "Redigera"-knappen i footer.
+
+**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
+
+Ta bort rad 446-451:
+```diff
+- {hasEditable && (
+-   <Badge variant="outline" className="text-[10px]">
+-     <Pencil className="h-2.5 w-2.5 mr-1" />
+-     Redigerbar
+-   </Badge>
+- )}
+```
+
+---
+
+## Del 3: Hero Image Upload för Byggnader
+
+### Databasändring
+Lägg till `hero_image_url`-kolumn i `building_settings`-tabellen:
+
+```sql
+ALTER TABLE public.building_settings 
+ADD COLUMN hero_image_url TEXT DEFAULT NULL;
+```
+
+### Hook-uppdatering
+**Fil:** `src/hooks/useBuildingSettings.ts`
+
+```typescript
+interface BuildingSettings {
+  fmGuid: string;
+  isFavorite: boolean;
+  ivionSiteId: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  heroImageUrl: string | null; // NY
+}
+
+// Uppdatera fetch, save, och lägg till:
+const updateHeroImage = useCallback(async (url: string | null) => {
+  await saveSettings({ heroImageUrl: url });
+}, [saveSettings]);
+```
+
+### UI-uppdatering
+**Fil:** `src/components/portfolio/FacilityLandingPage.tsx`
+
+Lägg till Hero Image-sektion i Building Settings (efter Map Position, rad ~378):
 
 ```tsx
-// FÖRE (rad 315-323):
-<Button
-  variant={viewMode === 'wizard' ? 'default' : 'outline'}
-  size="sm"
-  onClick={() => setViewMode('wizard')}
-  className="h-9"
->
-  <Plus className="h-4 w-4 mr-1" />
-  Ny
-</Button>
-
-// EFTER:
-<Button
-  variant="ghost"
-  size="icon"
-  onClick={() => setViewMode('wizard')}
-  className={cn(
-    "h-9 w-9",
-    viewMode === 'wizard' && "bg-primary/10 text-primary"
+{/* Hero Image Settings */}
+<div className="border-t pt-4">
+  <Label className="text-xs flex items-center gap-2 mb-3">
+    <Image size={12} />
+    Hero Image
+  </Label>
+  
+  {settings?.heroImageUrl ? (
+    <div className="relative rounded-lg overflow-hidden border mb-2">
+      <img 
+        src={settings.heroImageUrl} 
+        alt="Building hero" 
+        className="w-full h-32 object-cover"
+      />
+      <Button
+        variant="destructive"
+        size="icon"
+        className="absolute top-2 right-2 h-7 w-7"
+        onClick={() => updateHeroImage(null)}
+        disabled={isSaving}
+      >
+        <X className="h-3 w-3" />
+      </Button>
+    </div>
+  ) : (
+    <div className="flex gap-2 mb-2">
+      <Button
+        variant="outline"
+        className="flex-1 h-16 flex-col gap-1"
+        onClick={() => heroInputRef.current?.click()}
+        disabled={isUploadingHero}
+      >
+        {isUploadingHero ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <>
+            <Upload className="h-5 w-5" />
+            <span className="text-xs">Ladda upp bild</span>
+          </>
+        )}
+      </Button>
+    </div>
   )}
->
-  <Plus className="h-5 w-5" />
-</Button>
-```
-
-### 2. Spara-knappen - Fixa iOS safe-area
-
-**Problem:** Knappen hamnar under iPhones browser-navigering (home indicator, toolbar).
-
-**Fil:** `src/components/inventory/mobile/QuickRegistrationStep.tsx`
-
-Lägg till `pb-safe` (safe-area-inset-bottom) och minska storlek:
-
-```tsx
-// FÖRE (rad 339-362):
-<div className="space-y-3 pt-4">
-  <Button className="w-full h-14 text-lg">...</Button>
-  <Button className="w-full h-12">...</Button>
-</div>
-
-// EFTER:
-<div className="space-y-2 pt-3 pb-[env(safe-area-inset-bottom,0px)]">
-  <Button className="w-full h-12 text-base">...</Button>
-  <Button className="w-full h-10">...</Button>
+  
+  <p className="text-[10px] text-muted-foreground">
+    Visas som bakgrundsbild på byggnadens landningssida
+  </p>
+  
+  <input
+    ref={heroInputRef}
+    type="file"
+    accept="image/*"
+    className="hidden"
+    onChange={handleHeroImageUpload}
+  />
 </div>
 ```
 
-Säkerställ också att `ScrollArea` har rätt padding i botten.
-
-### 3. Ersätt Emoji-ikoner med Lucide-ikoner
-
-**Fil:** `src/components/inventory/InventoryForm.tsx`
-
-Ändra `INVENTORY_CATEGORIES` från emojis till Lucide-ikoner:
-
+Uppdatera också `heroImage`-variabeln (rad 188) för att använda sparad bild:
 ```tsx
-// FÖRE:
-export const INVENTORY_CATEGORIES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: '🔥' },
-  { value: 'fire_blanket', label: 'Brandfilt', icon: '🧯' },
-  // ...
-];
-
-// EFTER:
-import { Flame, Siren, Hose, DoorOpen, Radio, Droplets, 
-         Fan, Lightbulb, Armchair, Monitor, Package } from 'lucide-react';
-
-export const INVENTORY_CATEGORIES = [
-  { value: 'fire_extinguisher', label: 'Brandsläckare', icon: Flame, color: 'text-red-500' },
-  { value: 'fire_blanket', label: 'Brandfilt', icon: Siren, color: 'text-orange-500' },
-  { value: 'fire_hose', label: 'Brandslang', icon: Hose, color: 'text-red-600' },
-  { value: 'emergency_exit', label: 'Nödutgång', icon: DoorOpen, color: 'text-green-500' },
-  { value: 'sensor', label: 'Sensor', icon: Radio, color: 'text-blue-500' },
-  { value: 'sprinkler', label: 'Sprinkler', icon: Droplets, color: 'text-cyan-500' },
-  { value: 'hvac_unit', label: 'Luftbehandling', icon: Fan, color: 'text-slate-500' },
-  { value: 'lamp', label: 'Lampa', icon: Lightbulb, color: 'text-yellow-500' },
-  { value: 'furniture', label: 'Möbel', icon: Armchair, color: 'text-amber-600' },
-  { value: 'it_equipment', label: 'IT-utrustning', icon: Monitor, color: 'text-purple-500' },
-  { value: 'other', label: 'Övrigt', icon: Package, color: 'text-gray-500' },
-];
+const heroImage = settings?.heroImageUrl || facility.image || (isSpace 
+  ? 'https://images.unsplash.com/photo-1611048264355-27a69db69042?q=80&w=1600' 
+  : 'https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=1600'
+);
 ```
-
-**Fil:** `src/components/inventory/mobile/CategorySelectionStep.tsx`
-
-Uppdatera renderingen för att använda Lucide-komponenter:
-
-```tsx
-// FÖRE (rad 55):
-<span className="text-3xl">{cat.icon}</span>
-
-// EFTER:
-const IconComponent = cat.icon;
-<IconComponent className={cn("h-8 w-8", cat.color)} />
-```
-
-**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
-
-Ersätt step-indicator emojis med Lucide-ikoner:
-
-```tsx
-// FÖRE (rad 266-272):
-const steps = [
-  { key: 'detection', label: '📍' },
-  { key: 'location', label: '🏢' },
-  { key: 'category', label: '📋' },
-  { key: 'position', label: '🎯' },
-  { key: 'registration', label: '✏️' },
-];
-
-// EFTER:
-import { MapPin, Building2, LayoutGrid, Crosshair, FileEdit } from 'lucide-react';
-
-const steps = [
-  { key: 'detection', icon: MapPin },
-  { key: 'location', icon: Building2 },
-  { key: 'category', icon: LayoutGrid },
-  { key: 'position', icon: Crosshair },
-  { key: 'registration', icon: FileEdit },
-];
-
-// I renderingen:
-const StepIcon = step.icon;
-<StepIcon className="h-4 w-4" />
-```
-
-### 4. Kompaktare Layout
-
-**Fil:** `src/components/inventory/mobile/MobileInventoryWizard.tsx`
-
-- Minska header padding: `p-4` → `p-3`
-- Minska step-indicator storlek: `w-8 h-8` → `w-7 h-7`
-- Minska gap mellan element
-
-**Fil:** `src/components/inventory/mobile/QuickRegistrationStep.tsx`
-
-- Minska input-höjd: `h-14` → `h-12`
-- Minska "Ta foto"-knappens höjd: `h-28` → `h-20`
-- Minska space mellan sektioner: `space-y-5` → `space-y-4`
 
 ---
 
@@ -166,66 +208,71 @@ const StepIcon = step.icon;
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/inventory/InventoryForm.tsx` | Ersätt emoji med Lucide-ikoner i INVENTORY_CATEGORIES |
-| `src/components/inventory/mobile/MobileInventoryWizard.tsx` | Minimal "Ny"-knapp, Lucide step-ikoner, kompaktare layout |
-| `src/components/inventory/mobile/CategorySelectionStep.tsx` | Rendera Lucide-ikoner istället för emojis |
-| `src/components/inventory/mobile/QuickRegistrationStep.tsx` | iOS safe-area, kompaktare knappar |
+| `src/components/common/UniversalPropertiesDialog.tsx` | Resize-funktionalitet, ta bort "Redigerbar"-badge |
+| `src/hooks/useBuildingSettings.ts` | Lägg till `heroImageUrl` i interface och funktioner |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Hero image upload-sektion, använd sparad bild |
+| **Databasmigrering** | Lägg till `hero_image_url`-kolumn |
 
 ---
 
-## Visuell Jämförelse
+## Visuell Översikt
 
 ```text
-FÖRE                              EFTER
-┌─────────────────────────┐      ┌─────────────────────────┐
-│ 📋 Inventering  [■ Ny] │      │ 📋 Inventering    [+]   │
-├─────────────────────────┤      ├─────────────────────────┤
-│ 📍 🏢 📋 🎯 ✏️         │      │ ○  ○  ●  ○  ○           │
-├─────────────────────────┤      ├─────────────────────────┤
-│                         │      │                         │
-│ 🔥 Brandsläckare       │      │ [🔥] Brandsläckare      │
-│ 🧯 Brandfilt           │      │ [⚠️] Brandfilt          │
-│ 🚒 Brandslang          │      │ [💧] Brandslang         │
-│                         │      │                         │
-├─────────────────────────┤      ├─────────────────────────┤
-│ [████ SPARA ████]      │      │ [   SPARA   ]           │
-│ (dold under browser)   │      │ ← Synlig med safe-area  │
-└─────────────────────────┘      └─────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ ⋮⋮ Centralstationen  [Building]     [^] [×]   │
+├─────────────────────────────────────────────────┤
+│ 🔍 Sök egenskaper...                           │
+├─────────────────────────────────────────────────┤
+│ ▼ System                              (4)      │  ← Ingen "Redigerbar"-badge
+│   FM GUID: 755950d9-f235...                    │
+│   Kategori: Building                           │
+│                                                │
+│ ▼ Lokala inställningar                (4)      │  ← Ingen "Redigerbar"-badge
+│   Visningsnamn: Centralstationen               │
+│   Favorit: Ja                                  │
+│                                                │
+│ ▼ Användardefinierade                 (36)     │
+│   ...                                          │
+├─────────────────────────────────────────────────┤
+│                              [✏️ Redigera]     │  ← Enda redigeraknappen
+│                                          ⟋     │  ← Resize handle
+└─────────────────────────────────────────────────┘
+
+Building Settings Panel:
+┌─────────────────────────────────────────────────┐
+│ ⚙️ Building Settings                            │
+├─────────────────────────────────────────────────┤
+│ Ivion Site ID: [____________] [Save]           │
+│ Show on Home Page: [⭐ In Favorites]            │
+├─────────────────────────────────────────────────┤
+│ 🌍 Map Position                                │
+│ ┌───────────────────────────────────┐          │
+│ │        [Interactive Map]          │          │
+│ └───────────────────────────────────┘          │
+│ 59.3359, 18.0126                    [Spara]    │
+├─────────────────────────────────────────────────┤
+│ 🖼️ Hero Image                        ← NY      │
+│ ┌───────────────────────────────────┐          │
+│ │     [Upload bild] / Preview       │          │
+│ └───────────────────────────────────┘          │
+│ Visas som bakgrundsbild på landningssidan      │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Tekniska Detaljer
 
-### iOS Safe Area
+### Resize-logik
+- Min bredd: 320px, Max bredd: 800px
+- Min höjd: 300px, Max höjd: viewport - 100px
+- Endast synlig på desktop (`hidden sm:block`)
+- Använder standard SE-resize cursor
 
-CSS-variabeln `env(safe-area-inset-bottom)` ger oss höjden på iPhones "home indicator" bar. Genom att lägga till denna som padding-bottom säkerställer vi att innehållet alltid är synligt.
+### Hero Image Upload
+- Återanvänd samma logik som `ImageUpload.tsx`
+- Lagras i `inventory-images` bucket med sökvägen `heroes/{fm_guid}.{ext}`
+- Uppdaterar `building_settings.hero_image_url` via hook
 
-```css
-/* Tailwind custom utility (om det inte redan finns) */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-```
-
-Om Tailwind inte har denna utility inbyggd, kan vi använda inline style:
-```tsx
-style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
-```
-
-### Lucide-ikoner
-
-Lucide React har ingen inbyggd `Hose`-ikon, så vi använder närmaste alternativ:
-- `Hose` → `Droplet` eller custom
-- `Siren` → `AlertTriangle` eller `Bell`
-
-Om specifika ikoner saknas, använd generella alternativ från Lucide-biblioteket.
-
----
-
-## Förväntade Resultat
-
-1. **Minimal "Ny"-knapp** - Bara ett plus-tecken, inget "fett" bakgrund
-2. **Synlig Spara-knapp** - Alltid ovanför iPhones browser-navigering
-3. **Professionella ikoner** - Lucide-ikoner istället för emojis
-4. **Kompaktare layout** - Mindre storlek på element, bättre utnyttjande av skärmutrymme
+### Databasmigrering
+Migration behövs för att lägga till kolumnen - detta kommer hanteras automatiskt.
