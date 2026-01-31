@@ -261,57 +261,82 @@ async function getIvionDatasets(siteId: string): Promise<IvionDataset[]> {
   return response.json();
 }
 
-// Get images from a specific dataset
-async function getDatasetImages(siteId: string, datasetId: number | string): Promise<IvionImage[]> {
+// Parse poses.csv to extract image metadata
+function parsePosesCsv(csvText: string): IvionImage[] {
+  const lines = csvText.split('\n').filter(line => line.trim() && !line.startsWith('#'));
+  
+  return lines.map(line => {
+    const parts = line.split(';').map(s => s.trim());
+    const [id, filename, timestamp, posX, posY, posZ, oriW, oriX, oriY, oriZ] = parts;
+    
+    return {
+      id: parseInt(id) || 0,
+      filePath: filename,
+      name: filename,
+      pose: {
+        position: { 
+          x: parseFloat(posX) || 0, 
+          y: parseFloat(posY) || 0, 
+          z: parseFloat(posZ) || 0 
+        },
+        orientation: { 
+          x: parseFloat(oriX) || 0, 
+          y: parseFloat(oriY) || 0, 
+          z: parseFloat(oriZ) || 0, 
+          w: parseFloat(oriW) || 1 
+        }
+      },
+      timestamp: parseFloat(timestamp) || 0
+    };
+  }).filter(img => img.filePath); // Filter out any malformed entries
+}
+
+// Get images from a dataset by reading poses.csv
+async function getDatasetImages(siteId: string, datasetName: string): Promise<IvionImage[]> {
   const token = await getIvionToken();
   
-  const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/datasets/${datasetId}/images`, {
+  // Fetch poses.csv from NavVis static file structure
+  const posesUrl = `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/poses.csv`;
+  
+  console.log(`Fetching poses.csv from: ${posesUrl}`);
+  
+  const response = await fetch(posesUrl, {
     headers: {
       'x-authorization': `Bearer ${token}`,
-      'Accept': 'application/json',
+      'Accept': 'text/csv, text/plain, */*',
     },
   });
   
   if (!response.ok) {
-    console.log(`Failed to get images for dataset ${datasetId}: ${response.status}`);
+    console.log(`Failed to get poses.csv for dataset ${datasetName}: ${response.status}`);
     return [];
   }
   
-  const data = await response.json();
+  const csvText = await response.text();
+  const images = parsePosesCsv(csvText);
   
-  // Handle different response formats
-  if (Array.isArray(data)) {
-    return data;
-  }
+  console.log(`Parsed ${images.length} images from poses.csv for dataset ${datasetName}`);
   
-  if (data.images && Array.isArray(data.images)) {
-    return data.images;
-  }
-  
-  if (data.data && Array.isArray(data.data)) {
-    return data.data;
-  }
-  
-  console.log('Unexpected images response format:', JSON.stringify(data).slice(0, 200));
-  return [];
+  return images;
 }
 
-// Try to get panorama image URL - probe multiple patterns
+// Get panorama image URL using filename from poses.csv
 async function getPanoramaImageUrl(
   siteId: string,
   datasetName: string,
-  imageId: number
+  imageFilename: string
 ): Promise<string | null> {
   const token = await getIvionToken();
   
-  // Pattern candidates for panorama image access
+  // URL patterns based on NavVis file structure
   const patterns = [
-    // Pattern 1: storage/redirect with datasets_web
-    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano_high/${imageId}-pano.jpg`,
-    // Pattern 2: Alternative pano path
-    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/images/high/${imageId}.jpg`,
-    // Pattern 3: Direct data path
-    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano_high/${imageId}-pano.jpg`,
+    // Primary: pano directory with exact filename from poses.csv
+    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano/${imageFilename}`,
+    // Alternative: pano_high directory for higher resolution
+    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano_high/${imageFilename}`,
+    // Fallback: via storage redirect API
+    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${imageFilename}`,
+    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano_high/${imageFilename}`,
   ];
   
   for (const url of patterns) {
@@ -322,8 +347,9 @@ async function getPanoramaImageUrl(
         redirect: 'manual',
       });
       
-      // 302 redirect means we found the right URL pattern
-      if (response.status === 302 || response.status === 200) {
+      // 200 = direct access, 302 = redirect to storage
+      if (response.status === 200 || response.status === 302) {
+        console.log(`Found valid image URL: ${url.slice(0, 100)}...`);
         return url;
       }
     } catch (e) {
@@ -331,6 +357,7 @@ async function getPanoramaImageUrl(
     }
   }
   
+  console.log(`No valid URL found for image ${imageFilename} in dataset ${datasetName}`);
   return null;
 }
 
@@ -617,13 +644,13 @@ async function processBatch(params: {
   // 6. Process datasets
   for (let di = startDatasetIndex; di < datasets.length && imagesInBatch < batchSize; di++) {
     const dataset = datasets[di];
-    const datasetId = dataset.id || dataset.name;
     
     console.log(`Processing dataset ${di + 1}/${datasets.length}: ${dataset.name}`);
     
     let images: IvionImage[];
     try {
-      images = await getDatasetImages(job.ivion_site_id, datasetId);
+      // Use dataset.name to fetch poses.csv
+      images = await getDatasetImages(job.ivion_site_id, dataset.name);
     } catch (e: any) {
       console.error(`Failed to get images for dataset ${dataset.name}:`, e);
       errorMessages.push(`Dataset ${dataset.name}: ${e.message}`);
@@ -643,7 +670,7 @@ async function processBatch(params: {
       let estimatedTotal = 0;
       for (const ds of datasets) {
         try {
-          const dsImages = await getDatasetImages(job.ivion_site_id, ds.id || ds.name);
+          const dsImages = await getDatasetImages(job.ivion_site_id, ds.name);
           estimatedTotal += dsImages.length;
         } catch {
           estimatedTotal += 100; // Fallback estimate
@@ -658,13 +685,16 @@ async function processBatch(params: {
     for (let ii = imageStart; ii < images.length && imagesInBatch < batchSize; ii++) {
       const image = images[ii];
       
-      console.log(`Processing image ${ii + 1}/${images.length} (ID: ${image.id})`);
+      // Use filePath from poses.csv, fallback to generated filename pattern
+      const imageFilename = image.filePath || `${String(image.id).padStart(5, '0')}-pano.jpg`;
+      
+      console.log(`Processing image ${ii + 1}/${images.length} (file: ${imageFilename})`);
       
       try {
-        // Download image
-        const imageUrl = await getPanoramaImageUrl(job.ivion_site_id, dataset.name, image.id);
+        // Download image using filename
+        const imageUrl = await getPanoramaImageUrl(job.ivion_site_id, dataset.name, imageFilename);
         if (!imageUrl) {
-          console.log(`No URL found for image ${image.id}, skipping`);
+          console.log(`No URL found for image ${imageFilename}, skipping`);
           totalProcessed++;
           imagesInBatch++;
           continue;
@@ -971,9 +1001,15 @@ async function testImageAccess(siteId: string): Promise<{
       return { success: false, message: 'No datasets found in site' };
     }
     
-    // Try to find a working image URL pattern
+    // Try to find a working image URL pattern by getting poses.csv first
     const testDataset = datasets[0];
-    const imageUrl = await getPanoramaImageUrl(siteId, testDataset.name, 1);
+    const testImages = await getDatasetImages(siteId, testDataset.name);
+    
+    // Use first image filename if available, else use default pattern
+    const testFilename = testImages.length > 0 && testImages[0].filePath 
+      ? testImages[0].filePath 
+      : '00000-pano.jpg';
+    const imageUrl = await getPanoramaImageUrl(siteId, testDataset.name, testFilename);
     
     if (imageUrl) {
       return {
