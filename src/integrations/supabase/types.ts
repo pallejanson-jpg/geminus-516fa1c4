@@ -366,6 +366,36 @@ export type Database = {
         }
         Relationships: []
       }
+      onboarding_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          goals: string[] | null
+          id: string
+          role: string | null
+          script_content: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          goals?: string[] | null
+          id?: string
+          role?: string | null
+          script_content?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          goals?: string[] | null
+          id?: string
+          role?: string | null
+          script_content?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       pending_detections: {
         Row: {
           ai_description: string | null
