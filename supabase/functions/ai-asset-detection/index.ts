@@ -749,6 +749,7 @@ async function updateTemplate(params: {
   description?: string | null;
   ai_prompt?: string;
   default_category?: string | null;
+  default_symbol_id?: string | null;
   is_active?: boolean;
 }): Promise<{ success: boolean }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -762,6 +763,7 @@ async function updateTemplate(params: {
   if (params.description !== undefined) updates.description = params.description;
   if (params.ai_prompt !== undefined) updates.ai_prompt = params.ai_prompt;
   if (params.default_category !== undefined) updates.default_category = params.default_category;
+  if (params.default_symbol_id !== undefined) updates.default_symbol_id = params.default_symbol_id;
   if (params.is_active !== undefined) updates.is_active = params.is_active;
   
   const { error } = await supabase
@@ -780,6 +782,7 @@ async function createTemplate(params: {
   ai_prompt: string;
   description?: string | null;
   default_category?: string | null;
+  default_symbol_id?: string | null;
   is_active?: boolean;
 }): Promise<{ success: boolean; id: string }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -792,6 +795,7 @@ async function createTemplate(params: {
       ai_prompt: params.ai_prompt,
       description: params.description || null,
       default_category: params.default_category || null,
+      default_symbol_id: params.default_symbol_id || null,
       is_active: params.is_active ?? true,
     })
     .select('id')
@@ -811,6 +815,53 @@ async function deleteTemplate(templateId: string): Promise<{ success: boolean }>
     .eq('id', templateId);
   
   if (error) throw new Error(`Failed to delete template: ${error.message}`);
+  return { success: true };
+}
+
+// Delete a scan job and its associated detections
+async function deleteScanJob(scanJobId: string): Promise<{ success: boolean }> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // Verify job exists and is not running
+  const { data: job, error: jobError } = await supabase
+    .from('scan_jobs')
+    .select('status')
+    .eq('id', scanJobId)
+    .maybeSingle();
+  
+  if (jobError) {
+    throw new Error(`Failed to get scan job: ${jobError.message}`);
+  }
+  
+  if (!job) {
+    throw new Error('Scan job not found');
+  }
+  
+  if (job.status === 'running' || job.status === 'queued') {
+    throw new Error('Cannot delete a running or queued scan job');
+  }
+  
+  // Delete related pending_detections first
+  const { error: detectionsError } = await supabase
+    .from('pending_detections')
+    .delete()
+    .eq('scan_job_id', scanJobId);
+  
+  if (detectionsError) {
+    console.error('Failed to delete detections:', detectionsError);
+    // Continue anyway, main goal is to delete the job
+  }
+  
+  // Delete the scan job
+  const { error: deleteError } = await supabase
+    .from('scan_jobs')
+    .delete()
+    .eq('id', scanJobId);
+  
+  if (deleteError) {
+    throw new Error(`Failed to delete scan job: ${deleteError.message}`);
+  }
+  
   return { success: true };
 }
 
@@ -1579,6 +1630,11 @@ serve(async (req) => {
       case 'cancel-scan':
         if (!params.scanJobId) throw new Error('scanJobId required');
         result = await cancelScan(params.scanJobId);
+        break;
+
+      case 'delete-scan-job':
+        if (!params.scanJobId) throw new Error('scanJobId required');
+        result = await deleteScanJob(params.scanJobId);
         break;
 
       case 'update-template':

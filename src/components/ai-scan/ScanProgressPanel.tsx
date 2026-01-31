@@ -1,11 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, Pause, Play, StopCircle } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, Pause, Play, StopCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ScanJob {
   id: string;
@@ -41,6 +51,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   const [currentJob, setCurrentJob] = useState<ScanJob | null>(activeScanJob);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update current job when prop changes
@@ -159,6 +171,34 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     }
   };
 
+  // Delete scan job
+  const deleteScanJob = async (jobId: string) => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.functions.invoke('ai-asset-detection', {
+        body: { action: 'delete-scan-job', scanJobId: jobId }
+      });
+
+      if (error) throw error;
+      
+      toast({
+        title: 'Skanning borttagen',
+        description: 'Skanningsjobbet och relaterade detektioner har tagits bort.',
+      });
+      
+      onRefresh();
+    } catch (error: any) {
+      toast({
+        title: 'Fel vid borttagning',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteJobId(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'queued':
@@ -190,6 +230,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     const minutes = Math.floor(diffSec / 60);
     const seconds = diffSec % 60;
     return `${minutes} min ${seconds} sek`;
+  };
+
+  const canDeleteJob = (status: string) => {
+    return status !== 'running' && status !== 'queued';
   };
 
   return (
@@ -319,10 +363,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   key={job.id} 
                   className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {getStatusBadge(job.status)}
-                      <span className="text-sm font-medium">
+                      <span className="text-sm font-medium truncate">
                         {job.templates.join(', ')}
                       </span>
                     </div>
@@ -330,13 +374,25 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                       {new Date(job.created_at).toLocaleString('sv-SE')}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium">
-                      {job.detections_found} hittade
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-sm font-medium">
+                        {job.detections_found} hittade
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {job.processed_images} bilder
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {job.processed_images} bilder
-                    </div>
+                    {canDeleteJob(job.status) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteJobId(job.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -344,6 +400,36 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteJobId} onOpenChange={() => setDeleteJobId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ta bort skanning?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Denna åtgärd tar bort skanningsjobbet och alla relaterade detektioner som 
+              ännu inte har granskats. Godkända objekt påverkas inte.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Avbryt</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => deleteJobId && deleteScanJob(deleteJobId)}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Tar bort...
+                </>
+              ) : (
+                'Ta bort'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

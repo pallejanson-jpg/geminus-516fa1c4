@@ -27,6 +27,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface DetectionTemplate {
   id: string;
@@ -41,6 +48,14 @@ interface DetectionTemplate {
   updated_at: string;
 }
 
+interface AnnotationSymbol {
+  id: string;
+  name: string;
+  icon_url: string | null;
+  category: string;
+  color: string;
+}
+
 interface TemplateManagementProps {
   onTemplatesChanged?: () => void;
 }
@@ -48,6 +63,7 @@ interface TemplateManagementProps {
 const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChanged }) => {
   const { toast } = useToast();
   const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
+  const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState<DetectionTemplate | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -61,23 +77,34 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
     description: '',
     ai_prompt: '',
     default_category: '',
+    default_symbol_id: '',
     is_active: true,
   });
 
   useEffect(() => {
-    loadTemplates();
+    loadData();
   }, []);
 
-  const loadTemplates = async () => {
+  const loadData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('detection_templates')
-        .select('*')
-        .order('name');
+      // Load templates and symbols in parallel
+      const [templatesResult, symbolsResult] = await Promise.all([
+        supabase
+          .from('detection_templates')
+          .select('*')
+          .order('name'),
+        supabase
+          .from('annotation_symbols')
+          .select('id, name, icon_url, category, color')
+          .order('name'),
+      ]);
 
-      if (error) throw error;
-      setTemplates(data || []);
+      if (templatesResult.error) throw templatesResult.error;
+      if (symbolsResult.error) throw symbolsResult.error;
+      
+      setTemplates(templatesResult.data || []);
+      setSymbols(symbolsResult.data || []);
     } catch (error: any) {
       toast({
         title: 'Fel vid laddning',
@@ -97,6 +124,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       description: '',
       ai_prompt: '',
       default_category: '',
+      default_symbol_id: '',
       is_active: true,
     });
     setIsDialogOpen(true);
@@ -110,6 +138,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       description: template.description || '',
       ai_prompt: template.ai_prompt,
       default_category: template.default_category || '',
+      default_symbol_id: template.default_symbol_id || '',
       is_active: template.is_active,
     });
     setIsDialogOpen(true);
@@ -138,6 +167,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             description: formData.description || null,
             ai_prompt: formData.ai_prompt,
             default_category: formData.default_category || null,
+            default_symbol_id: formData.default_symbol_id || null,
             is_active: formData.is_active,
           }
         });
@@ -158,6 +188,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             description: formData.description || null,
             ai_prompt: formData.ai_prompt,
             default_category: formData.default_category || null,
+            default_symbol_id: formData.default_symbol_id || null,
             is_active: formData.is_active,
           }
         });
@@ -171,7 +202,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       }
 
       setIsDialogOpen(false);
-      loadTemplates();
+      loadData();
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
@@ -197,7 +228,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         description: 'Mallen har tagits bort.',
       });
 
-      loadTemplates();
+      loadData();
       onTemplatesChanged?.();
     } catch (error: any) {
       toast({
@@ -239,6 +270,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
         variant: 'destructive',
       });
     }
+  };
+
+  const getSymbolName = (symbolId: string | null) => {
+    if (!symbolId) return null;
+    const symbol = symbols.find(s => s.id === symbolId);
+    return symbol?.name || null;
   };
 
   if (isLoading) {
@@ -315,10 +352,13 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         {template.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span>Typ: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
                       {template.default_category && (
                         <span>Kategori: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
+                      )}
+                      {getSymbolName(template.default_symbol_id) && (
+                        <span>Symbol: <code className="bg-muted px-1 rounded">{getSymbolName(template.default_symbol_id)}</code></span>
                       )}
                     </div>
                     <div className="mt-3 p-3 bg-muted/50 rounded-lg">
@@ -353,7 +393,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
 
       {/* Edit/Create Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTemplate ? 'Redigera mall' : 'Ny detektionsmall'}
@@ -397,14 +437,51 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="default_category">Standardkategori</Label>
-              <Input
-                id="default_category"
-                value={formData.default_category}
-                onChange={e => setFormData({ ...formData, default_category: e.target.value })}
-                placeholder="Brandredskap"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="default_category">Standardkategori</Label>
+                <Input
+                  id="default_category"
+                  value={formData.default_category}
+                  onChange={e => setFormData({ ...formData, default_category: e.target.value })}
+                  placeholder="Brandredskap"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="default_symbol_id">Symbol</Label>
+                <Select
+                  value={formData.default_symbol_id}
+                  onValueChange={value => setFormData({ ...formData, default_symbol_id: value === '_none' ? '' : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Välj symbol..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">
+                      <span className="text-muted-foreground">Ingen symbol</span>
+                    </SelectItem>
+                    {symbols.map(symbol => (
+                      <SelectItem key={symbol.id} value={symbol.id}>
+                        <div className="flex items-center gap-2">
+                          {symbol.icon_url ? (
+                            <img 
+                              src={symbol.icon_url} 
+                              alt="" 
+                              className="h-4 w-4 object-contain"
+                            />
+                          ) : (
+                            <div 
+                              className="h-4 w-4 rounded-full" 
+                              style={{ backgroundColor: symbol.color }}
+                            />
+                          )}
+                          <span>{symbol.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
