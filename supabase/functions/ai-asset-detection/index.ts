@@ -58,9 +58,12 @@ interface IvionDataset {
 interface IvionImage {
   id: number;
   filePath?: string;
+  name?: string;
   pose?: {
     position: { x: number; y: number; z: number };
+    orientation?: { x: number; y: number; z: number; w: number };
   };
+  timestamp?: number;
 }
 
 // Cached Ivion token
@@ -199,6 +202,41 @@ async function getIvionDatasets(siteId: string): Promise<IvionDataset[]> {
   }
   
   return response.json();
+}
+
+// Get images from a specific dataset
+async function getDatasetImages(siteId: string, datasetId: number | string): Promise<IvionImage[]> {
+  const token = await getIvionToken();
+  
+  const response = await fetch(`${IVION_API_URL}/api/site/${siteId}/datasets/${datasetId}/images`, {
+    headers: {
+      'x-authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    console.log(`Failed to get images for dataset ${datasetId}: ${response.status}`);
+    return [];
+  }
+  
+  const data = await response.json();
+  
+  // Handle different response formats
+  if (Array.isArray(data)) {
+    return data;
+  }
+  
+  if (data.images && Array.isArray(data.images)) {
+    return data.images;
+  }
+  
+  if (data.data && Array.isArray(data.data)) {
+    return data.data;
+  }
+  
+  console.log('Unexpected images response format:', JSON.stringify(data).slice(0, 200));
+  return [];
 }
 
 // Try to get panorama image URL - probe multiple patterns
@@ -355,6 +393,47 @@ function imageToWorldCoords(
   };
 }
 
+// Save thumbnail to Supabase Storage
+async function saveThumbnail(
+  imageBase64: string,
+  boundingBox: { ymin: number; xmin: number; ymax: number; xmax: number },
+  detectionId: string
+): Promise<string | null> {
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Decode base64 to bytes
+    const binaryStr = atob(imageBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    
+    const fileName = `${detectionId}.jpg`;
+    
+    const { error } = await supabase.storage
+      .from('detection-thumbnails')
+      .upload(fileName, bytes, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+    
+    if (error) {
+      console.error('Failed to save thumbnail:', error);
+      return null;
+    }
+    
+    const { data } = supabase.storage
+      .from('detection-thumbnails')
+      .getPublicUrl(fileName);
+    
+    return data.publicUrl;
+  } catch (e) {
+    console.error('Thumbnail save error:', e);
+    return null;
+  }
+}
+
 // Start a new scan job
 async function startScan(params: {
   buildingFmGuid: string;
@@ -382,7 +461,7 @@ async function startScan(params: {
   return job;
 }
 
-// Process a batch of images
+// Process a batch of images - Full Phase 2 implementation
 async function processBatch(params: {
   scanJobId: string;
   batchSize?: number;
@@ -393,9 +472,9 @@ async function processBatch(params: {
   message: string;
 }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const batchSize = params.batchSize || 5;
+  const batchSize = params.batchSize || 3; // Smaller batch for memory with large panoramas
   
-  // Get scan job
+  // 1. Get scan job
   const { data: job, error: jobError } = await supabase
     .from('scan_jobs')
     .select('*')
@@ -408,14 +487,14 @@ async function processBatch(params: {
   
   if (job.status === 'completed' || job.status === 'failed') {
     return {
-      processed: job.processed_images,
-      detections: job.detections_found,
+      processed: job.processed_images || 0,
+      detections: job.detections_found || 0,
       status: job.status,
       message: `Job already ${job.status}`
     };
   }
   
-  // Update status to running
+  // 2. Set to running
   if (job.status === 'queued') {
     await supabase
       .from('scan_jobs')
@@ -423,7 +502,7 @@ async function processBatch(params: {
       .eq('id', job.id);
   }
   
-  // Get templates
+  // 3. Get templates
   const templates = await getTemplates();
   const activeTemplates = templates.filter(t => job.templates.includes(t.object_type));
   
@@ -435,7 +514,7 @@ async function processBatch(params: {
     throw new Error('No active templates found for selected types');
   }
   
-  // Get datasets from Ivion
+  // 4. Get datasets from Ivion
   let datasets: IvionDataset[];
   try {
     datasets = await getIvionDatasets(job.ivion_site_id);
@@ -464,25 +543,208 @@ async function processBatch(params: {
     };
   }
   
-  // For now, return a placeholder - full implementation requires probing image endpoints
-  // This will be expanded in Phase 2
-  const result = {
-    processed: job.processed_images,
-    detections: job.detections_found,
-    status: 'running',
-    message: `Found ${datasets.length} datasets. Image access probe pending.`
-  };
+  // 5. Find resume point
+  let startDatasetIndex = job.current_dataset 
+    ? datasets.findIndex(d => d.name === job.current_dataset) 
+    : 0;
+  if (startDatasetIndex < 0) startDatasetIndex = 0;
+  let startImageIndex = job.current_image_index || 0;
   
-  // Update job with dataset count
-  await supabase
+  let totalProcessed = job.processed_images || 0;
+  let totalDetections = job.detections_found || 0;
+  let imagesInBatch = 0;
+  let errorMessages: string[] = [];
+  
+  console.log(`Starting batch processing: ${datasets.length} datasets, resume at dataset ${startDatasetIndex}, image ${startImageIndex}`);
+  
+  // 6. Process datasets
+  for (let di = startDatasetIndex; di < datasets.length && imagesInBatch < batchSize; di++) {
+    const dataset = datasets[di];
+    const datasetId = dataset.id || dataset.name;
+    
+    console.log(`Processing dataset ${di + 1}/${datasets.length}: ${dataset.name}`);
+    
+    let images: IvionImage[];
+    try {
+      images = await getDatasetImages(job.ivion_site_id, datasetId);
+    } catch (e: any) {
+      console.error(`Failed to get images for dataset ${dataset.name}:`, e);
+      errorMessages.push(`Dataset ${dataset.name}: ${e.message}`);
+      continue;
+    }
+    
+    if (images.length === 0) {
+      console.log(`No images in dataset ${dataset.name}`);
+      continue;
+    }
+    
+    console.log(`Dataset ${dataset.name} has ${images.length} images`);
+    
+    // Update total count on first pass of first dataset
+    if (di === 0 && startImageIndex === 0 && (job.total_images === 0 || job.total_images === null)) {
+      // Calculate actual total across all datasets
+      let estimatedTotal = 0;
+      for (const ds of datasets) {
+        try {
+          const dsImages = await getDatasetImages(job.ivion_site_id, ds.id || ds.name);
+          estimatedTotal += dsImages.length;
+        } catch {
+          estimatedTotal += 100; // Fallback estimate
+        }
+      }
+      await supabase.from('scan_jobs').update({ total_images: estimatedTotal }).eq('id', job.id);
+      console.log(`Estimated total images: ${estimatedTotal}`);
+    }
+    
+    const imageStart = di === startDatasetIndex ? startImageIndex : 0;
+    
+    for (let ii = imageStart; ii < images.length && imagesInBatch < batchSize; ii++) {
+      const image = images[ii];
+      
+      console.log(`Processing image ${ii + 1}/${images.length} (ID: ${image.id})`);
+      
+      try {
+        // Download image
+        const imageUrl = await getPanoramaImageUrl(job.ivion_site_id, dataset.name, image.id);
+        if (!imageUrl) {
+          console.log(`No URL found for image ${image.id}, skipping`);
+          totalProcessed++;
+          imagesInBatch++;
+          continue;
+        }
+        
+        console.log(`Downloading image from: ${imageUrl.slice(0, 100)}...`);
+        const base64 = await downloadImageAsBase64(imageUrl);
+        console.log(`Downloaded image, size: ${Math.round(base64.length / 1024)}KB base64`);
+        
+        // Analyze with AI
+        console.log(`Analyzing with AI, ${activeTemplates.length} templates`);
+        let detections: Detection[] = [];
+        
+        try {
+          detections = await analyzeImageWithAI(base64, activeTemplates);
+          console.log(`AI found ${detections.length} detections`);
+        } catch (aiError: any) {
+          // Handle rate limits
+          if (aiError.message?.includes('429') || aiError.message?.includes('rate')) {
+            console.log('AI rate limited, waiting 5 seconds...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            try {
+              detections = await analyzeImageWithAI(base64, activeTemplates);
+            } catch (retryError) {
+              console.error('AI retry failed:', retryError);
+            }
+          } else {
+            console.error('AI analysis error:', aiError);
+          }
+        }
+        
+        // Save detections
+        for (const det of detections) {
+          const bbox = {
+            ymin: det.bounding_box[0],
+            xmin: det.bounding_box[1],
+            ymax: det.bounding_box[2],
+            xmax: det.bounding_box[3]
+          };
+          
+          const coords = imageToWorldCoords(
+            bbox,
+            image.pose?.position || { x: 0, y: 0, z: 0 }
+          );
+          
+          const detectionId = crypto.randomUUID();
+          const template = activeTemplates.find(t => t.object_type === det.object_type);
+          
+          // Save thumbnail
+          let thumbnailUrl: string | null = null;
+          try {
+            thumbnailUrl = await saveThumbnail(base64, bbox, detectionId);
+          } catch (thumbError) {
+            console.error('Thumbnail save failed:', thumbError);
+          }
+          
+          const { error: insertError } = await supabase.from('pending_detections').insert({
+            id: detectionId,
+            scan_job_id: job.id,
+            building_fm_guid: job.building_fm_guid,
+            ivion_site_id: job.ivion_site_id,
+            ivion_dataset_name: dataset.name,
+            ivion_image_id: image.id,
+            detection_template_id: template?.id || null,
+            object_type: det.object_type,
+            confidence: det.confidence,
+            bounding_box: bbox,
+            coordinate_x: coords.x,
+            coordinate_y: coords.y,
+            coordinate_z: coords.z,
+            thumbnail_url: thumbnailUrl,
+            ai_description: det.description,
+            status: 'pending',
+          });
+          
+          if (insertError) {
+            console.error('Failed to save detection:', insertError);
+          } else {
+            totalDetections++;
+            console.log(`Saved detection: ${det.object_type} (${Math.round(det.confidence * 100)}%)`);
+          }
+        }
+        
+        totalProcessed++;
+        imagesInBatch++;
+        
+      } catch (e: any) {
+        console.error(`Error processing image ${image.id}:`, e);
+        errorMessages.push(`Image ${image.id}: ${e.message?.slice(0, 100)}`);
+        totalProcessed++;
+        imagesInBatch++;
+        // Continue with next image
+      }
+      
+      // Update progress after each image
+      await supabase.from('scan_jobs').update({
+        current_dataset: dataset.name,
+        current_image_index: ii + 1,
+        processed_images: totalProcessed,
+        detections_found: totalDetections,
+      }).eq('id', job.id);
+    }
+    
+    // Reset image index for next dataset
+    startImageIndex = 0;
+  }
+  
+  // 7. Check if we've processed all images
+  const { data: updatedJob } = await supabase
     .from('scan_jobs')
-    .update({ 
-      total_images: datasets.length * 100, // Estimate 100 images per dataset
-      current_dataset: datasets[0]?.name || null
-    })
-    .eq('id', job.id);
+    .select('total_images')
+    .eq('id', job.id)
+    .single();
   
-  return result;
+  const totalImages = updatedJob?.total_images || 0;
+  const allDone = totalProcessed >= totalImages;
+  
+  if (allDone && totalImages > 0) {
+    await supabase.from('scan_jobs').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      error_message: errorMessages.length > 0 ? errorMessages.join('; ').slice(0, 500) : null,
+    }).eq('id', job.id);
+  }
+  
+  const message = allDone 
+    ? `Completed. Processed ${totalProcessed} images, found ${totalDetections} detections.`
+    : `Processed ${imagesInBatch} images in this batch. ${totalProcessed}/${totalImages} total.`;
+  
+  console.log(message);
+  
+  return {
+    processed: totalProcessed,
+    detections: totalDetections,
+    status: allDone ? 'completed' : 'running',
+    message
+  };
 }
 
 // Get scan status
