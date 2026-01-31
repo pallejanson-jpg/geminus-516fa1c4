@@ -713,14 +713,42 @@ Return ONLY a JSON array. If nothing found, return []. Do not include any other 
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content || '[]';
   
-  // Parse JSON from response (handle markdown code blocks)
-  const jsonMatch = content.match(/\[[\s\S]*?\]/);
-  if (!jsonMatch) return [];
+  console.log('AI raw response (first 500 chars):', content.slice(0, 500));
+  console.log('AI response length:', content.length);
+  
+  // Robust JSON array extraction that handles nested arrays (e.g., bounding_box: [1,2,3,4])
+  // The old regex /\[[\s\S]*?\]/ was non-greedy and broke on nested arrays
+  function extractJsonArray(text: string): string | null {
+    const start = text.indexOf('[');
+    if (start === -1) return null;
+    
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === '[') depth++;
+      else if (text[i] === ']') {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
+  }
+  
+  const jsonString = extractJsonArray(content);
+  if (!jsonString) {
+    console.log('No JSON array found in AI response!');
+    console.log('Full response:', content);
+    return [];
+  }
+  
+  console.log('Extracted JSON length:', jsonString.length);
   
   try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    console.log('Failed to parse AI response:', content.slice(0, 500));
+    const parsed = JSON.parse(jsonString);
+    console.log('Parsed detections count:', parsed.length);
+    return parsed;
+  } catch (e) {
+    console.log('Failed to parse JSON:', e);
+    console.log('Extracted JSON (first 500):', jsonString.slice(0, 500));
     return [];
   }
 }
