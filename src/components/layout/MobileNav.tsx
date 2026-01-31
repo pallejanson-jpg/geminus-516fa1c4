@@ -1,5 +1,6 @@
 import React, { useContext } from 'react';
-import { Box, LayoutGrid, Globe, Network, Cuboid, Home, X, ClipboardList } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Box, LayoutGrid, Globe, Network, Cuboid, Home, X, ClipboardList, Scan } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
 import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -16,6 +17,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
 }) => {
     const { theme, activeApp, setActiveApp } = useContext(AppContext);
     const isMobile = useIsMobile();
+    const navigate = useNavigate();
     const t = THEMES[theme];
     
     const handleAppClick = (key: string) => {
@@ -101,7 +103,19 @@ const MobileNav: React.FC<MobileNavProps> = ({
                                 <span className="text-[10px] mt-1">Inventering</span>
                             </AppButton>
                             
-                            {Object.entries(DEFAULT_APP_CONFIGS).slice(0, 2).map(([key, cfg]: [string, any]) => {
+                            <AppButton 
+                                onClick={() => {
+                                    navigate('/inventory/ai-scan');
+                                    setIsMobileMenuOpen(false);
+                                }} 
+                                variant="ghost" 
+                                className="flex-col !h-auto !w-auto !p-2 text-primary"
+                            >
+                                <Scan size={22} />
+                                <span className="text-[10px] mt-1">AI Skanning</span>
+                            </AppButton>
+                            
+                            {Object.entries(DEFAULT_APP_CONFIGS).slice(0, 1).map(([key, cfg]: [string, any]) => {
                                 const IconComp = cfg.icon || Box;
                                 return (
                                     <AppButton 
