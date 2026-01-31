@@ -15,6 +15,8 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 // AI Asset Scan page
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
+// Mobile 3D Viewer page (fullscreen)
+const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
 
 const queryClient = new QueryClient();
 
@@ -59,6 +61,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <AiAssetScan />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Mobile 3D Viewer - fullscreen mode */}
+          <Route 
+            path="/viewer" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <Mobile3DViewer />
                 </ProtectedRoute>
               </Suspense>
             } 

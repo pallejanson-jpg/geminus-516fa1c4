@@ -86,9 +86,12 @@ const MobileNav: React.FC<MobileNavProps> = ({
                         
                         <div className="grid grid-cols-4 gap-4 text-center mt-4">
                             <AppButton 
-                                onClick={() => handleAppClick('assetplus_viewer')} 
+                                onClick={() => {
+                                    navigate('/viewer');
+                                    setIsMobileMenuOpen(false);
+                                }} 
                                 variant="ghost" 
-                                className={`flex-col !h-auto !w-auto !p-2 ${activeApp === 'assetplus_viewer' ? 'text-primary' : t.textSec}`}
+                                className={`flex-col !h-auto !w-auto !p-2 ${t.textSec}`}
                             >
                                 <Cuboid size={22} />
                                 <span className="text-[10px] mt-1">3D Viewer</span>
