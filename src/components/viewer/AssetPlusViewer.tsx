@@ -1022,6 +1022,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     setModelLoadState('loaded');
     setInitStep('ready');
     
+    // CRITICAL: Clear XKT sync status to hide the loading spinner
+    setXktSyncStatus('done');
+    
     // Update cache status if we had a cache interaction
     if (cacheStatus === 'checking') {
       setCacheStatus('stored');
@@ -2381,24 +2384,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             }}
           />
 
-          {/* Loading spinner overlay (shows while init is running - single spinner) */}
-          {(state.isLoading && !state.isInitialized) && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            </div>
-          )}
-          
-          {/* XKT Sync Status Indicator - shows when syncing models in background */}
-          {xktSyncStatus === 'syncing' && state.isInitialized && (
-            <div className="absolute top-2 left-2 z-40 bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 shadow-lg border border-amber-200 dark:border-amber-700 animate-pulse">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Synkar 3D-modeller...</span>
-            </div>
-          )}
-          {xktSyncStatus === 'checking' && state.isInitialized && (
-            <div className="absolute top-2 left-2 z-40 bg-blue-100 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 shadow-lg border border-blue-200 dark:border-blue-700">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Kontrollerar modeller...</span>
+          {/* Loading spinner overlay - modern centered spinner with theme colors */}
+          {((state.isLoading && !state.isInitialized) || (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized) && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <div className="relative">
+                {/* Outer glow ring */}
+                <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" style={{ width: '80px', height: '80px', margin: '-16px' }} />
+                {/* Modern spinner with gradient */}
+                <div className="relative w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+              </div>
             </div>
           )}
           
