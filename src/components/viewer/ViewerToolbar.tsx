@@ -84,6 +84,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [isViewerReady, setIsViewerReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+  const [settingsKey, setSettingsKey] = useState(0); // Force re-render key
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
   
   const isMobile = useIsMobile();
@@ -103,9 +104,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   // Reload settings when they change (both cross-tab and same-tab)
   useEffect(() => {
     const handleSettingsChange = () => {
-      // Create new array reference to force re-render
+      // Force complete re-render by updating both settings and key
       const newSettings = getNavigationToolSettings();
-      setToolSettings([...newSettings]);
+      console.log('[ViewerToolbar] Settings changed, overflow tools:', newSettings.filter(t => t.inOverflow).map(t => t.id));
+      setToolSettings(newSettings);
+      setSettingsKey(prev => prev + 1); // Force re-render
     };
     // Listen for storage events (cross-tab)
     window.addEventListener('storage', handleSettingsChange);
@@ -116,6 +119,20 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
     };
   }, []);
+
+  // Safety reset for isProcessing - prevent toolbar from getting stuck
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isProcessing) {
+      timeoutId = setTimeout(() => {
+        console.warn('[ViewerToolbar] isProcessing stuck, resetting...');
+        setIsProcessing(false);
+      }, 2000); // 2 second safety reset
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isProcessing]);
 
   // Get AssetView reference with safety checks
   const getAssetView = useCallback(() => {
@@ -522,10 +539,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   ToolButton.displayName = 'ToolButton';
 
   // Get overflow items for menu (navigation tools only - flash/hover shown as direct buttons)
-  const getOverflowItems = () => {
+  const getOverflowItems = useCallback(() => {
     const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
     
-    toolSettings.filter(t => t.visible && t.inOverflow).forEach(tool => {
+    const overflowTools = toolSettings.filter(t => t.visible && t.inOverflow);
+    console.log('[ViewerToolbar] Building overflow menu, tools:', overflowTools.map(t => t.id));
+    
+    overflowTools.forEach(tool => {
       switch (tool.id) {
         case 'orbit':
           items.push({ id: tool.id, label: 'Orbit (rotera)', icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleNavModeChange('orbit'), active: navMode === 'orbit' });
@@ -563,11 +583,33 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             active: viewMode === '2d'
           });
           break;
+        case 'flashOnSelect':
+          if (onToggleFlashOnSelect) {
+            items.push({ 
+              id: tool.id, 
+              label: 'Flash vid markering', 
+              icon: <Sparkles className="h-4 w-4" />, 
+              onClick: () => onToggleFlashOnSelect(!flashOnSelectEnabled),
+              active: flashOnSelectEnabled
+            });
+          }
+          break;
+        case 'hoverHighlight':
+          if (onToggleHoverHighlight) {
+            items.push({ 
+              id: tool.id, 
+              label: 'Hover-highlight', 
+              icon: <Hand className="h-4 w-4" />, 
+              onClick: () => onToggleHoverHighlight(!hoverHighlightEnabled),
+              active: hoverHighlightEnabled
+            });
+          }
+          break;
       }
     });
     
     return items;
-  };
+  }, [toolSettings, navMode, activeTool, viewMode, flashOnSelectEnabled, hoverHighlightEnabled, onToggleFlashOnSelect, onToggleHoverHighlight, handleNavModeChange, handleToolChange, handleZoomIn, handleZoomOut, handleViewFit, handleResetView, handleViewModeChange]);
 
   // Overflow menu
   const OverflowMenu = () => {
@@ -621,12 +663,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   if (isMobile) {
     return (
       <TooltipProvider delayDuration={300}>
-        <div className={cn(
-          "absolute bottom-3 left-1/2 -translate-x-1/2 z-20",
-          "flex items-center gap-1 p-1.5 rounded-lg",
-          "bg-card/95 backdrop-blur-sm border shadow-lg",
-          className
-        )}>
+        <div 
+          key={`mobile-toolbar-${settingsKey}`}
+          className={cn(
+            "absolute bottom-3 left-1/2 -translate-x-1/2 z-20",
+            "flex items-center gap-1 p-1.5 rounded-lg",
+            "bg-card/95 backdrop-blur-sm border shadow-lg",
+            className
+          )}
+        >
           <ToolButton
             icon={<ZoomIn className="h-4 w-4" />}
             label="Zooma in"
@@ -821,12 +866,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className={cn(
-        "absolute bottom-4 left-1/2 -translate-x-1/2 z-20",
-        "flex items-center gap-1 p-1.5 rounded-lg",
-        "bg-card/95 backdrop-blur-sm border shadow-lg",
-        className
-      )}>
+      <div 
+        key={`toolbar-${settingsKey}`}
+        className={cn(
+          "absolute bottom-4 left-1/2 -translate-x-1/2 z-20",
+          "flex items-center gap-1 p-1.5 rounded-lg",
+          "bg-card/95 backdrop-blur-sm border shadow-lg",
+          className
+        )}
+      >
         {/* Render tools in user-defined order */}
         <div className="flex items-center gap-0.5">
           {orderedTools.map((toolId, index) => (
