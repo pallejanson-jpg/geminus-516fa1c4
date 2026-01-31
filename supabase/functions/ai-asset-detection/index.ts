@@ -492,24 +492,73 @@ async function getPanoramaImageUrl(
   return null;
 }
 
-// Download image and convert to base64 - handles NavVis redirect chain
+// Download image and convert to base64 - handles NavVis redirect chain with improved fallbacks
 async function downloadImageAsBase64(url: string): Promise<string> {
   const token = await getIvionToken();
   
-  // NavVis uses: storage/redirect -> signed/callback -> Azure Blob
-  // We need to follow all redirects, the final one may be to external storage
+  console.log(`Attempting to download: ${url.slice(0, 120)}...`);
   
+  // Method 1: Try with redirect: 'follow' to let Deno handle redirects automatically
+  try {
+    const directResponse = await fetch(url, {
+      headers: { 'x-authorization': `Bearer ${token}` },
+      redirect: 'follow',
+    });
+    
+    if (directResponse.ok) {
+      const contentType = directResponse.headers.get('content-type') || 'unknown';
+      console.log(`Direct download successful! Type: ${contentType}`);
+      return bufferToBase64(await directResponse.arrayBuffer());
+    }
+    console.log(`Direct download returned: ${directResponse.status}`);
+  } catch (e) {
+    console.log(`Direct download failed: ${e}`);
+  }
+  
+  // Method 2: Try alternative URL patterns
+  const alternativePatterns: string[] = [];
+  
+  // If URL uses storage/redirect, try /data/ path instead
+  if (url.includes('/storage/redirect/')) {
+    const dataUrl = url.replace('/api/site/', '/data/').replace('/storage/redirect/', '/');
+    alternativePatterns.push(dataUrl);
+  }
+  
+  // If URL uses /api/site/, try direct /data/ path
+  if (url.includes('/api/site/')) {
+    const siteMatch = url.match(/\/api\/site\/([^/]+)\/(.*)/);
+    if (siteMatch) {
+      alternativePatterns.push(`${IVION_API_URL}/data/${siteMatch[1]}/${siteMatch[2]}`);
+    }
+  }
+  
+  for (const altUrl of alternativePatterns) {
+    console.log(`Trying alternative URL: ${altUrl.slice(0, 100)}...`);
+    try {
+      const response = await fetch(altUrl, {
+        headers: { 'x-authorization': `Bearer ${token}` },
+        redirect: 'follow',
+      });
+      
+      if (response.ok) {
+        console.log(`Alternative URL worked!`);
+        return bufferToBase64(await response.arrayBuffer());
+      }
+      console.log(`Alternative returned: ${response.status}`);
+    } catch (e) {
+      console.log(`Alternative failed: ${e}`);
+    }
+  }
+  
+  // Method 3: Manual redirect following with auth on each hop
   let currentUrl = url;
   let depth = 0;
   const maxDepth = 5;
   
   while (depth < maxDepth) {
-    const isFirstHop = depth === 0;
-    const headers: Record<string, string> = isFirstHop 
-      ? { 'x-authorization': `Bearer ${token}` }
-      : {}; // External storage URLs don't need auth
+    const headers: Record<string, string> = { 'x-authorization': `Bearer ${token}` };
     
-    console.log(`Download hop ${depth + 1}: ${currentUrl.slice(0, 120)}...`);
+    console.log(`Manual hop ${depth + 1}: ${currentUrl.slice(0, 100)}...`);
     
     const response = await fetch(currentUrl, {
       headers,
@@ -528,7 +577,7 @@ async function downloadImageAsBase64(url: string): Promise<string> {
         throw new Error('Redirect without location header');
       }
       
-      // Resolve relative URLs against the current URL (important for chain)
+      // Resolve relative URLs against the current URL
       currentUrl = location.startsWith('http') 
         ? location 
         : new URL(location, currentUrl).href;
@@ -540,48 +589,15 @@ async function downloadImageAsBase64(url: string): Promise<string> {
     // Success - download the image
     if (response.ok) {
       const contentType = response.headers.get('content-type') || 'unknown';
-      const contentLength = response.headers.get('content-length') || 'unknown';
-      console.log(`Image found! Type: ${contentType}, Size: ${contentLength}`);
+      console.log(`Image found via manual redirect! Type: ${contentType}`);
       return bufferToBase64(await response.arrayBuffer());
     }
     
-    // Error - but try with auth on callback URLs
-    if (response.status >= 400 && currentUrl.includes('/signed/callback/')) {
-      console.log(`Callback URL returned ${response.status}, trying with auth...`);
-      await response.text();
-      
-      const authResponse = await fetch(currentUrl, {
-        headers: { 'x-authorization': `Bearer ${token}` },
-        redirect: 'manual',
-      });
-      
-      console.log(`With auth: ${authResponse.status}`);
-      
-      // Maybe this redirects to the final blob URL?
-      if (authResponse.status === 302) {
-        const location = authResponse.headers.get('location');
-        await authResponse.text();
-        if (location) {
-          currentUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
-          console.log(`Auth redirect to: ${currentUrl.slice(0, 120)}...`);
-          depth++;
-          continue;
-        }
-      }
-      
-      // Try direct download with auth
-      if (authResponse.ok) {
-        console.log(`Got image with auth on callback!`);
-        return bufferToBase64(await authResponse.arrayBuffer());
-      }
-      
-      throw new Error(`Callback URL failed: ${authResponse.status}`);
-    }
-    
-    throw new Error(`Failed to download image: ${response.status}`);
+    // Not a redirect and not OK - failed
+    throw new Error(`Download failed with status: ${response.status}`);
   }
   
-  throw new Error(`Failed to download after ${depth} redirects`);
+  throw new Error(`Failed to download after ${maxDepth} redirects`);
 }
 
 function bufferToBase64(buffer: ArrayBuffer): string {
@@ -978,7 +994,7 @@ async function processBatch(params: {
   message: string;
 }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const batchSize = params.batchSize || 3; // Smaller batch for memory with large panoramas
+  const batchSize = params.batchSize || 25; // Increased batch size for fewer manual clicks
   
   // 1. Get scan job
   const { data: job, error: jobError } = await supabase

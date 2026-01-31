@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, Pause, Play, StopCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,9 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [autoProcess, setAutoProcess] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoProcessRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update current job when prop changes
   useEffect(() => {
@@ -73,6 +75,36 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
 
     return () => stopPolling();
   }, [currentJob?.id, currentJob?.status]);
+
+  // Auto-process effect
+  useEffect(() => {
+    if (autoProcessRef.current) {
+      clearTimeout(autoProcessRef.current);
+      autoProcessRef.current = null;
+    }
+
+    if (autoProcess && currentJob && 
+        (currentJob.status === 'running' || currentJob.status === 'queued') && 
+        !isProcessing) {
+      // Wait a bit between batches
+      autoProcessRef.current = setTimeout(() => {
+        processBatch();
+      }, 1500);
+    }
+
+    return () => {
+      if (autoProcessRef.current) {
+        clearTimeout(autoProcessRef.current);
+      }
+    };
+  }, [autoProcess, currentJob?.processed_images, isProcessing, currentJob?.status]);
+
+  // Stop auto-process when job completes
+  useEffect(() => {
+    if (currentJob && (currentJob.status === 'completed' || currentJob.status === 'failed' || currentJob.status === 'cancelled')) {
+      setAutoProcess(false);
+    }
+  }, [currentJob?.status]);
 
   const startPolling = () => {
     if (pollIntervalRef.current) return;
@@ -106,8 +138,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   };
 
   // Process next batch
-  const processBatch = async () => {
-    if (!currentJob) return;
+  const processBatch = useCallback(async () => {
+    if (!currentJob || isProcessing) return;
     
     setIsProcessing(true);
     try {
@@ -126,6 +158,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         setCurrentJob(jobData);
         
         if (jobData.status === 'completed') {
+          setAutoProcess(false);
           onScanCompleted(jobData);
           toast({
             title: 'Skanning klar!',
@@ -134,6 +167,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         }
       }
     } catch (error: any) {
+      setAutoProcess(false);
       toast({
         title: 'Fel vid bearbetning',
         description: error.message,
@@ -142,13 +176,14 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [currentJob, isProcessing, onScanCompleted, toast]);
 
   // Cancel scan
   const cancelScan = async () => {
     if (!currentJob) return;
     
     setIsCancelling(true);
+    setAutoProcess(false);
     try {
       const { error } = await supabase.functions.invoke('ai-asset-detection', {
         body: { action: 'cancel-scan', scanJobId: currentJob.id }
@@ -289,6 +324,14 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               </div>
             </div>
 
+            {/* Auto-process indicator */}
+            {autoProcess && (
+              <div className="flex items-center gap-2 p-2 bg-primary/10 text-primary rounded-lg">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span className="text-sm font-medium">Automatisk bearbetning pågår...</span>
+              </div>
+            )}
+
             {/* Error message */}
             {currentJob.error_message && (
               <div className="flex items-start gap-2 p-2 md:p-3 bg-destructive/10 text-destructive rounded-lg">
@@ -299,30 +342,54 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
 
             {/* Actions - Stack vertically on mobile */}
             {(currentJob.status === 'queued' || currentJob.status === 'running') && (
-              <div className="flex flex-col md:flex-row gap-2">
+              <div className="flex flex-col gap-2">
+                {/* Auto-process toggle */}
                 <Button 
-                  onClick={processBatch} 
-                  disabled={isProcessing || isCancelling}
-                  className="flex-1"
-                  size={isMobile ? "default" : "default"}
+                  onClick={() => setAutoProcess(!autoProcess)} 
+                  disabled={isCancelling}
+                  variant={autoProcess ? "secondary" : "default"}
+                  className="w-full"
                 >
-                  {isProcessing ? (
+                  {autoProcess ? (
                     <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Bearbetar...
+                      <Pause className="h-4 w-4 mr-2" />
+                      Pausa automatisk körning
                     </>
                   ) : (
                     <>
                       <Play className="h-4 w-4 mr-2" />
-                      Bearbeta nästa batch
+                      Kör automatiskt
                     </>
                   )}
                 </Button>
+
+                {/* Manual batch button (only show if not auto-processing) */}
+                {!autoProcess && (
+                  <Button 
+                    onClick={processBatch} 
+                    disabled={isProcessing || isCancelling}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Bearbetar batch...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Bearbeta nästa batch (25 bilder)
+                      </>
+                    )}
+                  </Button>
+                )}
+
                 <Button 
                   variant="destructive"
                   onClick={() => setCancelDialogOpen(true)} 
                   disabled={isProcessing || isCancelling}
-                  className="flex-1 md:flex-initial"
+                  className="w-full"
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
                   Avbryt skanning
@@ -354,38 +421,41 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               Inga tidigare skanningar
             </p>
           ) : (
-            <div className="space-y-2 md:space-y-3">
+            <div className="space-y-3">
               {recentJobs.map(job => (
                 <div 
                   key={job.id} 
-                  className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 p-2 md:p-3 bg-muted/50 rounded-lg"
+                  className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg"
                 >
-                  {/* Top row: Status badge + templates */}
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {/* Row 1: Status + templates */}
+                  <div className="flex items-center gap-2 min-w-0">
                     {getStatusBadge(job.status)}
                     <span className="text-xs md:text-sm font-medium truncate flex-1">
                       {job.templates.join(', ')}
                     </span>
                   </div>
                   
-                  {/* Bottom row on mobile: date, stats, delete button */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
-                      <span className="text-foreground font-medium">{job.detections_found} hittade</span>
-                      <span>{job.processed_images} bilder</span>
-                    </div>
-                    {canDeleteJob(job.status) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteJobId(job.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                  {/* Row 2: Date + stats */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                    <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
+                    <span>•</span>
+                    <span className="text-foreground font-medium">{job.detections_found} hittade</span>
+                    <span>•</span>
+                    <span>{job.processed_images}/{job.total_images || '?'} bilder</span>
                   </div>
+                  
+                  {/* Row 3: Delete button - full width on mobile */}
+                  {canDeleteJob(job.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleteJobId(job.id)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Ta bort skanning
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
