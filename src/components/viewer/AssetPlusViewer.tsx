@@ -139,6 +139,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const [showSpaces, setShowSpaces] = useState(false);
   const [flashOnSelectEnabled, setFlashOnSelectEnabledState] = useState(true);
   const [hoverHighlightEnabled, setHoverHighlightEnabled] = useState(false);
+  
+  // Mobile overlay state for room labels and BIM models
+  const [showRoomLabels, setShowRoomLabels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<{id: string; name: string; visible: boolean}[]>([]);
   const pickModeListenerRef = useRef<(() => void) | null>(null);
   const hoverListenerRef = useRef<(() => void) | null>(null);
   
@@ -313,6 +317,51 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       filterSpacesToVisibleFloors(floorIds, showSpaces);
     }
   }, [showSpaces, filterSpacesToVisibleFloors]);
+
+  // Handler for 2D mode toggle from mobile overlay
+  const handleToggle2DMode = useCallback((is2D: boolean) => {
+    const mode = is2D ? '2d' : '3d';
+    window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
+      detail: { mode }
+    }));
+  }, []);
+
+  // Handler for room labels toggle
+  const handleRoomLabelsToggle = useCallback((enabled: boolean) => {
+    setShowRoomLabels(enabled);
+    setRoomLabelsEnabled(enabled);
+  }, [setRoomLabelsEnabled]);
+
+  // Handler for annotations toggle from mobile overlay
+  const handleAnnotationsChange = useCallback((show: boolean) => {
+    setShowAnnotations(show);
+    // Trigger annotation visibility update in viewer
+    try {
+      const viewer = viewerInstanceRef.current?.assetViewer;
+      if (viewer && typeof viewer.onToggleAnnotation === 'function') {
+        viewer.onToggleAnnotation(show);
+      }
+    } catch (e) {
+      console.debug('Could not toggle annotations:', e);
+    }
+  }, []);
+
+  // Handler for individual model visibility toggle from mobile overlay
+  const handleModelToggle = useCallback((modelId: string, visible: boolean) => {
+    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) return;
+    
+    // Toggle model visibility in xeokit
+    const model = xeokitViewer.scene.models[modelId];
+    if (model) {
+      model.visible = visible;
+    }
+    
+    // Update state
+    setAvailableModels(prev => 
+      prev.map(m => m.id === modelId ? { ...m, visible } : m)
+    );
+  }, []);
 
   // Helper: Get item IDs by FmGuid
   const getItemIdsByFmGuid = useCallback((fmGuidToFind: string) => {
@@ -1777,7 +1826,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       buildingName: assetData?.commonName || assetData?.name,
       viewMode: currentViewMode,
       visibleFloorFmGuids: visibleFloorFmGuids,
-      visibleModelIds: [], // Could be expanded if model visibility state is tracked
+      visibleModelIds: availableModels.filter(m => m.visible).map(m => m.id),
       selectedFmGuids: selectedFmGuids,
       clipHeight: clipHeight,
     };
@@ -1785,7 +1834,29 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     window.dispatchEvent(new CustomEvent(VIEWER_CONTEXT_CHANGED_EVENT, {
       detail: contextDetail
     }));
-  }, [state.isInitialized, modelLoadState, buildingFmGuid, fmGuid, assetData, currentViewMode, visibleFloorFmGuids, selectedFmGuids, clipHeight]);
+  }, [state.isInitialized, modelLoadState, buildingFmGuid, fmGuid, assetData, currentViewMode, visibleFloorFmGuids, availableModels, selectedFmGuids, clipHeight]);
+
+  // Extract available models when viewer loads
+  useEffect(() => {
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+    
+    const extractModels = () => {
+      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xeokitViewer?.scene?.models) return;
+      
+      const models = Object.entries(xeokitViewer.scene.models).map(([id, model]: [string, any]) => ({
+        id,
+        name: model.id || id,
+        visible: model.visible !== false
+      }));
+      
+      setAvailableModels(models);
+    };
+    
+    // Small delay to ensure models are fully loaded
+    const timer = setTimeout(extractModels, 500);
+    return () => clearTimeout(timer);
+  }, [modelLoadState, initStep]);
 
   // Listen for Gunnar commands
   useEffect(() => {
@@ -2408,6 +2479,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
               onFloorToggle={handleMobileFloorToggle}
               onResetCamera={handleResetCamera}
               isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
+              is2DMode={currentViewMode === '2d'}
+              onToggle2DMode={handleToggle2DMode}
+              showAnnotations={showAnnotations}
+              onShowAnnotationsChange={handleAnnotationsChange}
+              showRoomLabels={showRoomLabels}
+              onShowRoomLabelsChange={handleRoomLabelsToggle}
+              onOpenVisualizationPanel={() => setShowVisualizationPanel(true)}
+              models={availableModels}
+              onModelToggle={handleModelToggle}
             />
           )}
           
