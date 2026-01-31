@@ -1,264 +1,343 @@
 
-# Plan: English AI Onboarding Wizard & Mobile 3D Viewer Menu Fix
+# Plan: Mobile 3D Viewer Improvements & Onboarding Access
 
 ## Overview
 
-This plan implements two major features:
-1. **English AI Onboarding Wizard** - Interactive questionnaire with AI-generated personalized welcome
-2. **Mobile 3D Viewer Menu Fix** - Resolve overlapping menus by hiding visualization controls behind a hamburger
+This plan addresses five issues:
+1. **Onboarding access** - Add automatic redirect for new users + link in UI
+2. **Missing tools in mobile right drawer** - Add all VisualizationToolbar features
+3. **Collapsible floor selector** - Use accordion pattern
+4. **Persist Tree selections during session** - Lift state to parent component
+5. **Select All in Tree** - Add header buttons
 
 ---
 
-## Part 1: Mobile 3D Viewer Menu Layout Fix
+## Part 1: Onboarding Access
 
-### Current Problem
+### Current Behavior
+The onboarding page exists at `/onboarding` but users must navigate manually.
 
-On mobile, two UI elements compete for bottom screen space:
-- **MobileViewerOverlay** (line 2400-2412): Bottom action bar with `Spaces`, `Floors`, `Reset` buttons
-- **ViewerToolbar** (line 2548-2556): Bottom toolbar with zoom/select/measure tools
-
-Both render with absolute positioning at the bottom, causing overlap.
-
-### Solution: Hidden Right-Side Visualization Drawer
-
-**Before (overlapping):**
-```
-+-----------------------------------+
-|  [<] Building Name (2/5) [Tree]   |
-|                                   |
-|           3D Canvas               |
-|                    [NavCube]      |
-+-----------------------------------+
-|  [Spaces] [Floors] [Reset]        |  ← MobileViewerOverlay
-|  [+]  [-]  [Focus] [Select] [...] |  ← ViewerToolbar (OVERLAPPING!)
-+-----------------------------------+
-```
-
-**After (clean layout):**
-```
-+-----------------------------------+
-|  [<] Building Name (2/5) [Tree] ☰ | ← Hamburger for visualization
-|                                   |
-|           3D Canvas               |
-|                    [NavCube]      |
-+-----------------------------------+
-|  [+]  [-]  [Focus] [Select] [...] |  ← ViewerToolbar only
-+-----------------------------------+
-
-When hamburger tapped - right drawer slides in:
-+----------------------+------------+
-|                      | Settings   |
-|    3D Canvas         | [x] Spaces |
-|                      | [Floors]   |
-|                      | [Reset]    |
-+----------------------+------------+
-```
-
-### Technical Changes
-
-**File: `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
-
-Transform from bottom bar to right-side drawer:
-- Remove the `absolute bottom-0` action bar
-- Add hamburger button to header (top-right, after Tree button)
-- Create right-side sliding drawer with controls
-- Include Spaces toggle, Floors drawer trigger, Reset button
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-
-Minor adjustments:
-- Ensure ViewerToolbar is the only bottom element on mobile
-- Pass new props to MobileViewerOverlay for drawer state
-
----
-
-## Part 2: English AI Onboarding Wizard
-
-### User Flow
-
-```
-Step 1: Welcome          Step 2: Role            Step 3: Goals
-+------------------+     +------------------+     +------------------+
-| Welcome to       |     | What's your      |     | What would you   |
-| Geminus!         |     | role?            |     | like to do?      |
-|                  |     |                  |     |                  |
-| Let's create a   |     | ○ FM Technician  |     | □ Register       |
-| personalized     |     | ○ Property Mgr   |     |   inventory      |
-| experience.      |     | ○ Consultant     |     | □ Explore 3D     |
-|                  |     | ○ Other          |     |   models         |
-|                  |     |                  |     | □ View insights  |
-|   [Get Started]  |     |    [Continue]    |     |    [Finish]      |
-+------------------+     +------------------+     +------------------+
-
-Step 4: AI Welcome (generates personalized message)
-+--------------------------------------------------+
-| Your Personal Welcome                             |
-|                                                  |
-| "Welcome to Geminus! As an FM Technician,        |
-| you'll find our inventory tools invaluable       |
-| for tracking fire safety equipment..."           |
-|                                                  |
-| 🔊 [Listen] (text-to-speech via Web Speech API)  |
-|                                                  |
-|               [Start Exploring →]                |
-+--------------------------------------------------+
-```
-
-### Files to Create
-
-| File | Description |
-|------|-------------|
-| `src/pages/Onboarding.tsx` | Main onboarding page with step navigation |
-| `src/components/onboarding/WelcomeStep.tsx` | Welcome screen |
-| `src/components/onboarding/RoleSelector.tsx` | Role selection (radio buttons with icons) |
-| `src/components/onboarding/GoalsSelector.tsx` | Goals multi-select (checkboxes) |
-| `src/components/onboarding/OnboardingComplete.tsx` | AI-generated welcome with TTS |
-| `supabase/functions/generate-onboarding/index.ts` | Lovable AI script generation |
-
-### Database Schema
-
-```sql
--- Table: onboarding_sessions
-CREATE TABLE onboarding_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT, -- 'fm_technician', 'property_manager', 'consultant', 'other'
-  goals TEXT[], -- ['inventory', 'viewer', 'insights', 'navigate']
-  script_content TEXT, -- AI-generated welcome message
-  completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- RLS Policy
-ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can manage own onboarding"
-  ON onboarding_sessions
-  FOR ALL
-  USING (auth.uid() = user_id);
-```
-
-### Edge Function: generate-onboarding
-
-Uses Lovable AI (google/gemini-3-flash-preview) to generate personalized welcome:
-
-```typescript
-// Key prompt structure
-const systemPrompt = `You are a friendly onboarding assistant for Geminus, 
-a digital twin platform for facility management.
-
-Generate a short, warm welcome message (2-3 paragraphs) for a new user.
-Tailor the message to their role and selected goals.
-Include 2-3 specific tips for getting started.
-Be professional but friendly.
-Write in English.`;
-
-const userPrompt = `User profile:
-- Role: ${role}
-- Goals: ${goals.join(', ')}
-
-Generate a personalized welcome message.`;
-```
-
-### Text-to-Speech (Free)
-
-Uses Web Speech API for audio playback:
-
-```typescript
-const speak = (text: string) => {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
-  utterance.rate = 0.95;
-  speechSynthesis.speak(utterance);
-};
-```
-
-### Route Integration
-
-```typescript
-// In App.tsx
-<Route 
-  path="/onboarding" 
-  element={
-    <ProtectedRoute>
-      <Onboarding />
-    </ProtectedRoute>
-  } 
-/>
-```
-
-### Navigation Logic
-
-After login, check if user has completed onboarding:
-- If no `onboarding_sessions` record exists with `completed_at` → redirect to `/onboarding`
-- If completed → proceed to home
-
----
-
-## Technical Summary
-
-### New Files
-
-| File | Description |
-|------|-------------|
-| `src/pages/Onboarding.tsx` | Main onboarding page (step wizard) |
-| `src/components/onboarding/WelcomeStep.tsx` | Welcome screen with illustration |
-| `src/components/onboarding/RoleSelector.tsx` | Role selection with icons |
-| `src/components/onboarding/GoalsSelector.tsx` | Multi-select goals |
-| `src/components/onboarding/OnboardingComplete.tsx` | AI message + TTS |
-| `supabase/functions/generate-onboarding/index.ts` | Lovable AI integration |
+### Solution
+1. Add a "Skip to onboarding" button in the Login page
+2. Modify `ProtectedRoute` or home redirect to check if user has completed onboarding
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Add `/onboarding` route |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Convert bottom bar to right drawer |
-| `src/components/viewer/AssetPlusViewer.tsx` | Simplify mobile rendering |
-| `supabase/config.toml` | Add generate-onboarding function config |
+| `src/pages/Login.tsx` | Add link to onboarding after login |
+| `src/components/auth/ProtectedRoute.tsx` | Check onboarding status, redirect if needed |
 
-### Database Migration
+---
 
-```sql
--- Create onboarding_sessions table
-CREATE TABLE onboarding_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT,
-  goals TEXT[],
-  script_content TEXT,
-  completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+## Part 2: Add Missing Tools to Mobile Right Drawer
 
--- Enable RLS
-ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
+### Current State (MobileViewerOverlay)
+```
+┌─────────────────────┐
+│ View Settings    [x]│
+├─────────────────────┤
+│ [x] Show Spaces     │
+│ ─────────────────── │
+│ Floors (3/5)        │
+│ [Show All][Hide All]│
+│ [Floor 1 - visible] │
+│ [Floor 2 - visible] │
+│ [Floor 3 - hidden]  │
+│ ─────────────────── │
+│ [Reset Camera]      │
+└─────────────────────┘
+```
 
--- Policy: users can only access their own onboarding data
-CREATE POLICY "Users can manage own onboarding"
-  ON onboarding_sessions
-  FOR ALL
-  USING (auth.uid() = user_id);
+### Target State (matching VisualizationToolbar features)
+```
+┌───────────────────────────────┐
+│ View Settings              [x]│
+├───────────────────────────────┤
+│ ▼ Display                     │
+│   [ ] 2D / 3D                 │
+│   [x] Show Spaces             │
+│   [ ] Show Annotations        │
+│   [ ] Room Labels             │
+│   [ ] Room Visualization  [>] │
+├───────────────────────────────┤
+│ ▶ Floors (3/5)                │ ← Collapsible
+│   (collapsed by default)      │
+├───────────────────────────────┤
+│ ▶ BIM Models                  │ ← Collapsible
+│   (collapsed by default)      │
+├───────────────────────────────┤
+│ ▶ Viewer Settings             │ ← Collapsible
+│   Theme: [dropdown]           │
+│   Background: [palette]       │
+├───────────────────────────────┤
+│ [Reset Camera]                │
+└───────────────────────────────┘
+```
+
+### Implementation
+
+**File: `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+
+Add new props and sections:
+- `is2DMode`, `onToggle2DMode` - for 2D/3D toggle
+- `showAnnotations`, `onShowAnnotationsChange`
+- `showRoomLabels`, `onShowRoomLabelsChange`
+- `onOpenVisualizationPanel` - to launch room visualization
+- `visibleModelIds`, `onModelVisibilityChange` - for BIM models
+
+Reorganize with Collapsible components:
+- Display section (always visible toggles)
+- Floors section (collapsible, closed by default)
+- BIM Models section (collapsible, closed by default)
+- Viewer Settings section (collapsible, closed by default)
+
+**File: `src/components/viewer/AssetPlusViewer.tsx`**
+
+Pass additional props to MobileViewerOverlay:
+- Connect 2D/3D state
+- Connect annotations state
+- Connect model visibility state
+- Connect room labels state
+
+---
+
+## Part 3: Collapsible Floor Selector
+
+### Current Implementation
+```tsx
+<div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+  {floors.map((floor) => (
+    <Button ...>{floor.name}</Button>
+  ))}
+</div>
+```
+
+### New Implementation with Collapsible
+```tsx
+<Collapsible defaultOpen={false}>
+  <CollapsibleTrigger asChild>
+    <Button variant="ghost" className="w-full justify-between">
+      <div className="flex items-center gap-2">
+        <Layers className="h-4 w-4" />
+        <span>Floors</span>
+        <Badge>{visibleFloorCount}/{floors.length}</Badge>
+      </div>
+      <ChevronDown className="h-4 w-4 transition-transform data-[state=open]:rotate-180" />
+    </Button>
+  </CollapsibleTrigger>
+  <CollapsibleContent>
+    <div className="pl-6 space-y-1.5">
+      <div className="flex gap-2 mb-2">
+        <Button size="sm" onClick={() => handleToggleAllFloors(true)}>
+          Show All
+        </Button>
+        <Button size="sm" onClick={() => handleToggleAllFloors(false)}>
+          Hide All
+        </Button>
+      </div>
+      {floors.map((floor) => (...))}
+    </div>
+  </CollapsibleContent>
+</Collapsible>
 ```
 
 ---
 
-## Implementation Order
+## Part 4: Persist Tree Selections During Session
 
-1. **Mobile 3D Viewer fix** - Transform MobileViewerOverlay to right drawer
-2. **Database migration** - Create onboarding_sessions table
-3. **Edge function** - Create generate-onboarding with Lovable AI
-4. **Onboarding components** - Build step-by-step wizard UI
-5. **Route integration** - Add /onboarding route and redirect logic
+### Problem
+`ViewerTreePanel` maintains state internally:
+```tsx
+const [selectedId, setSelectedId] = useState<string | null>(null);
+const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+```
+
+When the panel closes, this state is lost.
+
+### Solution
+Lift state to `AssetPlusViewer` parent:
+
+**File: `src/components/viewer/AssetPlusViewer.tsx`**
+```tsx
+// New state in AssetPlusViewer
+const [treeSelectedId, setTreeSelectedId] = useState<string | null>(null);
+const [treeExpandedIds, setTreeExpandedIds] = useState<Set<string>>(new Set());
+
+// Pass to ViewerTreePanel
+<ViewerTreePanel
+  ...
+  selectedId={treeSelectedId}
+  onSelectedIdChange={setTreeSelectedId}
+  expandedIds={treeExpandedIds}
+  onExpandedIdsChange={setTreeExpandedIds}
+/>
+```
+
+**File: `src/components/viewer/ViewerTreePanel.tsx`**
+
+Add props for controlled state:
+```tsx
+interface ViewerTreePanelProps {
+  ...
+  selectedId?: string | null;
+  onSelectedIdChange?: (id: string | null) => void;
+  expandedIds?: Set<string>;
+  onExpandedIdsChange?: (ids: Set<string>) => void;
+}
+```
+
+Use controlled state when props provided, fallback to internal state otherwise.
 
 ---
 
-## Free Video Alternative Note
+## Part 5: Select All / Deselect All in Tree
 
-For the jury pitch, the plan uses:
-- **Text-to-Speech** via Web Speech API (completely free, browser-native)
-- **AI Script Generation** via Lovable AI (already configured)
+### Current Header
+```
+┌──────────────────────────────┐
+│ ⋮⋮ 🌳 Modellträd  [1,234] [x]│
+└──────────────────────────────┘
+```
 
-Future enhancement options:
-- **Google Veo 3.1** - For ambient background videos (free tier available)
-- **HeyGen/Synthesia** - For avatar talking-head videos (paid)
+### New Header with Actions
+```
+┌────────────────────────────────────┐
+│ ⋮⋮ 🌳 Modellträd  [1,234]      [x] │
+│ ─────────────────────────────────  │
+│ [✓ All] [✗ None] [Expand] [Fold]  │
+└────────────────────────────────────┘
+```
+
+### Implementation
+
+**File: `src/components/viewer/ViewerTreePanel.tsx`**
+
+Add action buttons below header:
+```tsx
+<div className="flex items-center gap-1 px-2 pb-2 border-b">
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="h-6 text-xs flex-1"
+    onClick={() => handleVisibilityAll(true)}
+  >
+    <Check className="h-3 w-3 mr-1" /> All
+  </Button>
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="h-6 text-xs flex-1"
+    onClick={() => handleVisibilityAll(false)}
+  >
+    <X className="h-3 w-3 mr-1" /> None
+  </Button>
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="h-6 text-xs"
+    onClick={handleExpandAll}
+    title="Expand all"
+  >
+    <ChevronDown className="h-3 w-3" />
+  </Button>
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="h-6 text-xs"
+    onClick={handleCollapseAll}
+    title="Collapse all"
+  >
+    <ChevronUp className="h-3 w-3" />
+  </Button>
+</div>
+```
+
+Add handler functions:
+```tsx
+const handleVisibilityAll = useCallback((visible: boolean) => {
+  const xeokitViewer = getXeokitViewer();
+  const scene = xeokitViewer?.scene;
+  if (!scene) return;
+  
+  // Toggle all objects
+  scene.setObjectsVisible(scene.objectIds, visible);
+  refreshVisibilityState();
+}, [getXeokitViewer, refreshVisibilityState]);
+
+const handleExpandAll = useCallback(() => {
+  const allIds = new Set<string>();
+  const collectIds = (nodes: TreeNode[]) => {
+    nodes.forEach(node => {
+      allIds.add(node.id);
+      if (node.children) collectIds(node.children);
+    });
+  };
+  collectIds(treeData);
+  setExpandedIds(allIds);
+}, [treeData]);
+
+const handleCollapseAll = useCallback(() => {
+  setExpandedIds(new Set());
+}, []);
+```
+
+---
+
+## Technical Summary
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Add all visualization features, use Collapsible for floors/models |
+| `src/components/viewer/ViewerTreePanel.tsx` | Add Select All/None, Expand/Collapse buttons; add controlled state props |
+| `src/components/viewer/AssetPlusViewer.tsx` | Pass additional props to MobileViewerOverlay; lift tree state |
+| `src/components/auth/ProtectedRoute.tsx` | Add onboarding check and redirect |
+
+### Implementation Order
+
+1. **MobileViewerOverlay enhancements** - Add missing tools + collapsible sections
+2. **Tree Select All/None** - Add action buttons
+3. **Tree state persistence** - Lift state to parent
+4. **Onboarding redirect** - Add automatic navigation for new users
+
+---
+
+## Visual Summary
+
+### Mobile Right Drawer (After)
+```
+┌─────────────────────────────────┐
+│ View Settings               [x] │
+├─────────────────────────────────┤
+│ DISPLAY                         │
+│ [x] 2D / 3D                     │
+│ [x] Show Spaces                 │
+│ [ ] Annotations                 │
+│ [ ] Room Labels                 │
+│ [ ] Room Visualization      [>] │
+├─────────────────────────────────┤
+│ ▶ FLOORS (3/5)              [v] │  ← Collapsed
+├─────────────────────────────────┤
+│ ▶ BIM MODELS (2)            [v] │  ← Collapsed
+├─────────────────────────────────┤
+│ ▶ VIEWER SETTINGS           [v] │  ← Collapsed
+├─────────────────────────────────┤
+│     [Reset Camera]              │
+└─────────────────────────────────┘
+```
+
+### Tree Panel Header (After)
+```
+┌────────────────────────────────────────┐
+│ ⋮⋮ 🌳 Modellträd       [1,234]     [x] │
+│ [✓ All] [✗ None]     [Expand][Fold]    │
+│ [🔍 Sök...                          ]  │
+├────────────────────────────────────────┤
+│ ▼ Våning 2                        [25] │
+│   ▶ Väggar                         [8] │
+│   ▶ Dörrar                         [4] │
+│   ...                                  │
+└────────────────────────────────────────┘
+```
