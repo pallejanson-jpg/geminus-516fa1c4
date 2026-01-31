@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react';
-import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, GripVertical, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, GripVertical, Loader2, Check, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +28,11 @@ interface ViewerTreePanelProps {
   embedded?: boolean;
   showVisibilityCheckboxes?: boolean;
   startFromStoreys?: boolean;
+  // Controlled state for persistence
+  selectedId?: string | null;
+  onSelectedIdChange?: (id: string | null) => void;
+  expandedIds?: Set<string>;
+  onExpandedIdsChange?: (ids: Set<string>) => void;
 }
 
 // IFC type labels in Swedish
@@ -278,10 +283,47 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   embedded = false,
   showVisibilityCheckboxes = true,
   startFromStoreys = true,
+  // Controlled state props
+  selectedId: externalSelectedId,
+  onSelectedIdChange,
+  expandedIds: externalExpandedIds,
+  onExpandedIdsChange,
 }, ref) => {
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // Use external state if provided, otherwise use local state
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [internalExpandedIds, setInternalExpandedIds] = useState<Set<string>>(new Set());
+  
+  // Determine which state to use (controlled vs uncontrolled)
+  const selectedId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
+  const expandedIds = externalExpandedIds !== undefined ? externalExpandedIds : internalExpandedIds;
+  
+  const setSelectedId = useCallback((id: string | null) => {
+    if (onSelectedIdChange) {
+      onSelectedIdChange(id);
+    } else {
+      setInternalSelectedId(id);
+    }
+  }, [onSelectedIdChange]);
+  
+  const setExpandedIds = useCallback((idsOrFn: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    const updateFn = (prev: Set<string>) => {
+      const newIds = typeof idsOrFn === 'function' ? idsOrFn(prev) : idsOrFn;
+      if (onExpandedIdsChange) {
+        onExpandedIdsChange(newIds);
+      } else {
+        setInternalExpandedIds(newIds);
+      }
+      return newIds;
+    };
+    if (typeof idsOrFn === 'function') {
+      const currentIds = externalExpandedIds !== undefined ? externalExpandedIds : internalExpandedIds;
+      updateFn(currentIds);
+    } else {
+      updateFn(new Set());
+    }
+  }, [onExpandedIdsChange, externalExpandedIds, internalExpandedIds]);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -713,6 +755,38 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     }
   }, [viewerRef, onNodeHover]);
 
+  // Handle visibility all - show/hide all objects
+  const handleVisibilityAll = useCallback((visible: boolean) => {
+    const xeokitViewer = getXeokitViewer();
+    const scene = xeokitViewer?.scene;
+    if (!scene) return;
+
+    try {
+      scene.setObjectsVisible(scene.objectIds, visible);
+      refreshVisibilityState();
+    } catch (e) {
+      console.debug('ViewerTreePanel: Error toggling all visibility:', e);
+    }
+  }, [getXeokitViewer, refreshVisibilityState]);
+
+  // Handle expand all
+  const handleExpandAll = useCallback(() => {
+    const allIds = new Set<string>();
+    const collectIds = (nodes: TreeNode[]) => {
+      nodes.forEach(node => {
+        allIds.add(node.id);
+        if (node.children) collectIds(node.children);
+      });
+    };
+    collectIds(treeData);
+    setExpandedIds(allIds);
+  }, [treeData, setExpandedIds]);
+
+  // Handle collapse all
+  const handleCollapseAll = useCallback(() => {
+    setExpandedIds(new Set());
+  }, [setExpandedIds]);
+
   // Count total nodes
   const nodeCount = useMemo(() => {
     const countNodes = (nodes: TreeNode[]): number => {
@@ -738,10 +812,59 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     </div>
   );
 
+  // Action buttons row component
+  const ActionButtons = () => (
+    <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1.5 border-b">
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="h-6 text-[10px] sm:text-xs flex-1 px-1.5"
+        onClick={() => handleVisibilityAll(true)}
+        disabled={isLoading || treeData.length === 0}
+        title="Show all objects"
+      >
+        <Check className="h-3 w-3 mr-0.5" /> All
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="h-6 text-[10px] sm:text-xs flex-1 px-1.5"
+        onClick={() => handleVisibilityAll(false)}
+        disabled={isLoading || treeData.length === 0}
+        title="Hide all objects"
+      >
+        <Minus className="h-3 w-3 mr-0.5" /> None
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="h-6 text-[10px] sm:text-xs px-1.5"
+        onClick={handleExpandAll}
+        disabled={isLoading || treeData.length === 0}
+        title="Expand all"
+      >
+        <ChevronDown className="h-3 w-3" />
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="h-6 text-[10px] sm:text-xs px-1.5"
+        onClick={handleCollapseAll}
+        disabled={isLoading || treeData.length === 0}
+        title="Collapse all"
+      >
+        <ChevronUp className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+
   // Embedded mode: render without positioning, header, border
   if (embedded) {
     return (
       <div ref={ref} className="flex flex-col h-full max-h-[40vh]">
+        {/* Action buttons */}
+        <ActionButtons />
+        
         {/* Search */}
         <div className="p-1.5 sm:p-2 border-b">
           <div className="relative">
@@ -828,6 +951,9 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
           <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         </Button>
       </div>
+      
+      {/* Action buttons */}
+      <ActionButtons />
 
       {/* Search */}
       <div className="p-1.5 sm:p-2 border-b">
