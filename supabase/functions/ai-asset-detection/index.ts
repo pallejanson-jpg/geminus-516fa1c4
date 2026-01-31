@@ -699,6 +699,95 @@ async function startScan(params: {
   return job;
 }
 
+// Cancel a scan job
+async function cancelScan(scanJobId: string): Promise<{ success: boolean }> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  const { error } = await supabase
+    .from('scan_jobs')
+    .update({ 
+      status: 'cancelled',
+      completed_at: new Date().toISOString()
+    })
+    .eq('id', scanJobId);
+  
+  if (error) throw new Error(`Failed to cancel scan: ${error.message}`);
+  return { success: true };
+}
+
+// Update a detection template
+async function updateTemplate(params: {
+  templateId: string;
+  name?: string;
+  object_type?: string;
+  description?: string | null;
+  ai_prompt?: string;
+  default_category?: string | null;
+  is_active?: boolean;
+}): Promise<{ success: boolean }> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  const updates: Record<string, any> = {
+    updated_at: new Date().toISOString()
+  };
+  
+  if (params.name !== undefined) updates.name = params.name;
+  if (params.object_type !== undefined) updates.object_type = params.object_type;
+  if (params.description !== undefined) updates.description = params.description;
+  if (params.ai_prompt !== undefined) updates.ai_prompt = params.ai_prompt;
+  if (params.default_category !== undefined) updates.default_category = params.default_category;
+  if (params.is_active !== undefined) updates.is_active = params.is_active;
+  
+  const { error } = await supabase
+    .from('detection_templates')
+    .update(updates)
+    .eq('id', params.templateId);
+  
+  if (error) throw new Error(`Failed to update template: ${error.message}`);
+  return { success: true };
+}
+
+// Create a new detection template
+async function createTemplate(params: {
+  name: string;
+  object_type: string;
+  ai_prompt: string;
+  description?: string | null;
+  default_category?: string | null;
+  is_active?: boolean;
+}): Promise<{ success: boolean; id: string }> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  const { data, error } = await supabase
+    .from('detection_templates')
+    .insert({
+      name: params.name,
+      object_type: params.object_type,
+      ai_prompt: params.ai_prompt,
+      description: params.description || null,
+      default_category: params.default_category || null,
+      is_active: params.is_active ?? true,
+    })
+    .select('id')
+    .single();
+  
+  if (error) throw new Error(`Failed to create template: ${error.message}`);
+  return { success: true, id: data.id };
+}
+
+// Delete a detection template
+async function deleteTemplate(templateId: string): Promise<{ success: boolean }> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  const { error } = await supabase
+    .from('detection_templates')
+    .delete()
+    .eq('id', templateId);
+  
+  if (error) throw new Error(`Failed to delete template: ${error.message}`);
+  return { success: true };
+}
+
 // Process a batch of images - Full Phase 2 implementation
 async function processBatch(params: {
   scanJobId: string;
@@ -1431,6 +1520,28 @@ serve(async (req) => {
       case 'test-image-download':
         if (!params.siteId) throw new Error('siteId required');
         result = await testImageDownload(params.siteId, params.datasetName, params.imageFilename);
+        break;
+
+      case 'cancel-scan':
+        if (!params.scanJobId) throw new Error('scanJobId required');
+        result = await cancelScan(params.scanJobId);
+        break;
+
+      case 'update-template':
+        if (!params.templateId) throw new Error('templateId required');
+        result = await updateTemplate(params);
+        break;
+
+      case 'create-template':
+        if (!params.name || !params.object_type || !params.ai_prompt) {
+          throw new Error('name, object_type, and ai_prompt are required');
+        }
+        result = await createTemplate(params);
+        break;
+
+      case 'delete-template':
+        if (!params.templateId) throw new Error('templateId required');
+        result = await deleteTemplate(params.templateId);
         break;
 
       default:
