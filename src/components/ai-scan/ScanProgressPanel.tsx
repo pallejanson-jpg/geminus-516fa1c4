@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, Pause, Play } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, Pause, Play, StopCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,7 @@ interface ScanProgressPanelProps {
   activeScanJob: ScanJob | null;
   recentJobs: ScanJob[];
   onScanCompleted: (job: ScanJob) => void;
+  onScanCancelled: () => void;
   onRefresh: () => void;
 }
 
@@ -33,11 +34,13 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   activeScanJob,
   recentJobs,
   onScanCompleted,
+  onScanCancelled,
   onRefresh,
 }) => {
   const { toast } = useToast();
   const [currentJob, setCurrentJob] = useState<ScanJob | null>(activeScanJob);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update current job when prop changes
@@ -126,6 +129,36 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
     }
   };
 
+  // Cancel scan
+  const cancelScan = async () => {
+    if (!currentJob) return;
+    
+    setIsCancelling(true);
+    try {
+      const { error } = await supabase.functions.invoke('ai-asset-detection', {
+        body: { action: 'cancel-scan', scanJobId: currentJob.id }
+      });
+
+      if (error) throw error;
+      
+      stopPolling();
+      toast({
+        title: 'Skanning avbruten',
+        description: 'Skanningen har avbrutits. Hittade objekt finns kvar för granskning.',
+      });
+      
+      onScanCancelled();
+    } catch (error: any) {
+      toast({
+        title: 'Fel vid avbrytning',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'queued':
@@ -136,6 +169,8 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Pausad</Badge>;
       case 'completed':
         return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Klar</Badge>;
+      case 'cancelled':
+        return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Avbruten</Badge>;
       case 'failed':
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Misslyckades</Badge>;
       default:
@@ -220,7 +255,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               <div className="flex gap-2">
                 <Button 
                   onClick={processBatch} 
-                  disabled={isProcessing}
+                  disabled={isProcessing || isCancelling}
                 >
                   {isProcessing ? (
                     <>
@@ -231,6 +266,23 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                     <>
                       <Play className="h-4 w-4 mr-2" />
                       Bearbeta nästa batch
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={cancelScan} 
+                  disabled={isProcessing || isCancelling}
+                >
+                  {isCancelling ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Avbryter...
+                    </>
+                  ) : (
+                    <>
+                      <StopCircle className="h-4 w-4 mr-2" />
+                      Avbryt
                     </>
                   )}
                 </Button>
