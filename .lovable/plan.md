@@ -1,308 +1,281 @@
 
+# Plan: Responsivitet, AI-skanning fix & IoT Labels i 3D
 
-# Plan: Fixa AI-skanning - 0 detektioner, batchstorlek och mobilt UI
+## Översikt
 
-## Identifierade problem
-
-### Problem 1: AI-skanningen hittar ingenting
-**Orsak:** Bildnedladdningen misslyckas med "Callback URL failed: 404"
-
-Loggarna visar:
-```
-Download hop 2: https://swg.iv.navvis.com/api/storage/signed/callback/.../00047-pano.jpg
-Status: 302
-Callback URL returned 404, trying with auth...
-With auth: 404
-Error processing image 47: Error: Callback URL failed: 404
-```
-
-Ivion returnerar en redirect (302) till en callback-URL, men denna URL ger sedan 404. Detta är troligen ett autentiserings- eller åtkomstproblem med Ivion.
-
-**Lösning:** Uppdatera `downloadImageAsBase64()` för att:
-1. Följa redirect-kedjan korrekt
-2. Logga mer detaljerad felsökning
-3. Hoppa över felaktiga bilder utan att stoppa hela batchen
-
-### Problem 2: Batchstorleken är för liten (3 bilder)
-**Orsak:** `batchSize = 3` på rad 981
-
-**Lösning:** Öka batchstorleken från 3 till **25** bilder per batch. Med ~100 bilder behövs då bara 4 klick istället för 33.
-
-Alternativt: Implementera **automatisk batch-fortsättning** som kör tills allt är klart.
-
-### Problem 3: total_images är 10000 (fel)
-**Orsak:** Standardvärdet är för högt och uppskattningen körs inte korrekt.
-
-**Lösning:** 
-1. Sätt bättre initial uppskattning baserat på verkligt probing
-2. Uppdatera `total_images` från faktiska bilder hittade, inte multiplikation
-
-### Problem 4: Delete-knappen svår att se på mobil
-**Orsak:** Knappen är liten (8x8) och grå mot grå bakgrund.
-
-**Lösning:** Gör knappen större på mobil och med tydligare färg/kontrast.
+Denna plan åtgärdar tre områden:
+1. **Mallsidans responsivitet** - Det lila/överlappande layouten
+2. **AI-skanning 0 detektioner** - Regex-bugg som bryter JSON-parsning
+3. **IoT-labels i 3D** - Hover-labels med sensordata i rumsvisualiseringen
 
 ---
 
-## Del 1: Förbättra bildnedladdning
+## Del 1: Fixa mallsidans responsivitet
 
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
+### Problem
+På mobil (lila skärmdump) överlappar kontrollerna (Switch, Pencil, Trash2) med mallnamn och Badge. Layouten `flex items-start justify-between gap-4` på rad 349 i `TemplateManagement.tsx` fungerar inte på smala skärmar.
 
-**Uppdatera `downloadImageAsBase64()`:**
+### Lösning
+Ändra till staplad layout på mobil med `useIsMobile` hook:
+
+```text
+Desktop:                          Mobil:
+┌─────────────────────────────────┐   ┌─────────────────────┐
+│ Brandsläckare [Aktiv] [⚡][✏️][🗑️]│   │ Brandsläckare       │
+│ Beskrivning...                  │   │ [Aktiv]             │
+└─────────────────────────────────┘   │ Beskrivning...      │
+                                      │ ┌─[⚡]─┬─[✏️]─┬─[🗑️]─┐│
+                                      │ │ På  │Ändra│ Ta  ││
+                                      │ └─────┴─────┴─bort─┘│
+                                      └─────────────────────┘
+```
+
+### Teknisk implementation
+- Importera `useIsMobile` hook
+- På mobil: flytta kontrollerna till en egen rad under AI-prompt-rutan
+- Gör knapparna större och mer touch-vänliga
+- Lägg till textlabels på mobil för tydlighet
+
+---
+
+## Del 2: Fixa AI-skanning (0 detektioner)
+
+### Problemanalys
+Jag hittade buggen! På rad 717 i `ai-asset-detection/index.ts`:
+
+```javascript
+const jsonMatch = content.match(/\[[\s\S]*?\]/);
+```
+
+Denna regex är **non-greedy** (`*?`) vilket gör att den bara matchar till den första `]`. Om AI:n returnerar:
+```json
+[{"object_type":"fire_extinguisher","bounding_box":[1,2,3,4]}]
+```
+Så fångar den bara `[{"object_type":"fire_extinguisher","bounding_box":[1,2,3,4]` - avbruten mitt i nested array!
+
+### Lösning
+Byt till en mer robust JSON-extraktion som räknar brackets:
 
 ```typescript
-async function downloadImageAsBase64(url: string): Promise<string> {
-  const token = await getIvionToken();
+// Hitta det första "[" och matcha till motsvarande "]"
+function extractJsonArray(text: string): string | null {
+  const start = text.indexOf('[');
+  if (start === -1) return null;
   
-  // Try direct download first without following redirects manually
-  console.log(`Attempting direct download: ${url.slice(0, 100)}...`);
-  
-  try {
-    // Method 1: Let fetch handle redirects automatically
-    const directResponse = await fetch(url, {
-      headers: { 'x-authorization': `Bearer ${token}` },
-      redirect: 'follow', // Let browser/deno handle redirects
-    });
-    
-    if (directResponse.ok) {
-      console.log(`Direct download successful! Type: ${directResponse.headers.get('content-type')}`);
-      return bufferToBase64(await directResponse.arrayBuffer());
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '[') depth++;
+    else if (text[i] === ']') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
     }
-  } catch (e) {
-    console.log(`Direct download failed: ${e}`);
   }
-  
-  // Method 2: Try alternative URL patterns
-  const alternativePatterns = [
-    url.replace('/storage/redirect/', '/data/'),
-    url.replace('/api/site/', '/data/'),
-  ];
-  
-  for (const altUrl of alternativePatterns) {
-    try {
-      const response = await fetch(altUrl, {
-        headers: { 'x-authorization': `Bearer ${token}` },
-      });
-      if (response.ok) {
-        console.log(`Alternative URL worked: ${altUrl.slice(0, 80)}...`);
-        return bufferToBase64(await response.arrayBuffer());
-      }
-    } catch {}
-  }
-  
-  throw new Error(`Failed to download image from any URL pattern`);
+  return null;
 }
 ```
 
----
-
-## Del 2: Öka batchstorlek och lägg till auto-fortsättning
-
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
-
-**Ändra standardbatchstorlek:**
-
-```typescript
-// Rad 981
-const batchSize = params.batchSize || 25; // Ökat från 3 till 25
-```
-
-### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
-
-**Lägg till automatisk batch-fortsättning:**
-
-```typescript
-// Ny state
-const [autoProcess, setAutoProcess] = useState(false);
-
-// Modifiera processBatch för att fortsätta automatiskt
-useEffect(() => {
-  if (autoProcess && currentJob && currentJob.status === 'running' && !isProcessing) {
-    // Vänta lite mellan batchar
-    const timer = setTimeout(() => {
-      processBatch();
-    }, 1000);
-    return () => clearTimeout(timer);
-  }
-}, [autoProcess, currentJob?.processed_images, isProcessing]);
-
-// Uppdatera knapp-UI
-<Button onClick={() => setAutoProcess(!autoProcess)}>
-  {autoProcess ? (
-    <>
-      <Pause className="h-4 w-4 mr-2" />
-      Pausa automatisk körning
-    </>
-  ) : (
-    <>
-      <Play className="h-4 w-4 mr-2" />
-      Kör automatiskt
-    </>
-  )}
-</Button>
-```
+### Utökad loggning
+Lägg till detaljerad loggning för felsökning:
+- Logga AI:ns råsvar (första 500 tecken)
+- Logga om JSON-extraktionen lyckades
+- Logga antal parsade detektioner
 
 ---
 
-## Del 3: Fixa total_images-uppskattning
+## Del 3: IoT-labels i 3D rumsvisualisering
 
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
+### Koncept (inspirerat av Autodesk Tandem)
+När användaren har aktiverat en rumsvisualisering (t.ex. Temperatur) och hovrar över ett färglagt rum, ska en label visas med:
+- Rumsnamn
+- Aktuellt värde med enhet (t.ex. "22.5°C")
+- Färgindikator som matchar rumsfärgen
 
-**Uppdatera startScan:**
+### Teknisk approach
 
-Sätt `total_images` till 0 initialt och låt probing-logiken uppdatera det:
-
-```typescript
-// I startScan()
-const { data: job, error } = await supabase
-  .from('scan_jobs')
-  .insert({
-    building_fm_guid: params.buildingFmGuid,
-    ivion_site_id: params.ivionSiteId,
-    templates: params.templates,
-    status: 'queued',
-    created_by: params.userId,
-    total_images: 0,  // Startar på 0, uppdateras vid probing
-  })
-  .select()
-  .single();
+```text
+┌─────────────────────────────────────────┐
+│              3D Viewer                   │
+│                                         │
+│     ┌──────────────────┐                │
+│     │ 🌡️ Kontor 301    │  ← Hover-label │
+│     │ 21.8°C           │                │
+│     └──────────────────┘                │
+│          ▼                              │
+│    [Färglagt rum]                       │
+│                                         │
+└─────────────────────────────────────────┘
 ```
 
-**Förbättra uppdateringslogiken i processBatch:**
+### Implementation
 
-```typescript
-// Efter att ha probat första dataset
-if (job.total_images === 0 && images.length > 0) {
-  // Snabb scan av ALLA datasets för att få rätt totalantal
-  let totalEstimate = 0;
-  for (const ds of datasets) {
-    // Quick HEAD probe to estimate
-    const count = await quickProbeDatasetCount(job.ivion_site_id, ds.name);
-    totalEstimate += count;
-  }
-  await supabase.from('scan_jobs').update({ total_images: totalEstimate }).eq('id', job.id);
-}
-```
+1. **Skapa `IoTHoverLabel` komponent** - En CSS-positionerad label som följer musen
+2. **Utöka `RoomVisualizationPanel`** - Lägg till hover-detektering via xeokit `cameraControl.on('hover')`
+3. **Koppla till sensordata** - Hämta värde från `allData` baserat på hovrat rum
 
----
+### Dataflöde
 
-## Del 4: Förbättra mobilt UI för delete-knappen
-
-### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
-
-**Gör delete-knappen tydligare på mobil:**
-
-```typescript
-{canDeleteJob(job.status) && (
-  <Button
-    variant="ghost"
-    size="icon"
-    className={cn(
-      "shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-      isMobile ? "h-10 w-10" : "h-8 w-8"  // Större på mobil
-    )}
-    onClick={() => setDeleteJobId(job.id)}
-  >
-    <Trash2 className={cn(isMobile ? "h-5 w-5" : "h-4 w-4")} />
-  </Button>
-)}
-```
-
-**Förbättra listan med tydligare struktur:**
-
-```typescript
-// Tidigare skanningar på mobil
-<div className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg">
-  {/* Rad 1: Status + mallar */}
-  <div className="flex items-center gap-2">
-    {getStatusBadge(job.status)}
-    <span className="text-sm font-medium truncate flex-1">
-      {job.templates.join(', ')}
-    </span>
-  </div>
-  
-  {/* Rad 2: Datum + statistik */}
-  <div className="flex items-center text-xs text-muted-foreground gap-2">
-    <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
-    <span>•</span>
-    <span className="font-medium text-foreground">{job.detections_found} hittade</span>
-    <span>•</span>
-    <span>{job.processed_images}/{job.total_images || '?'} bilder</span>
-  </div>
-  
-  {/* Rad 3: Knappar (endast på mobil för tydlighet) */}
-  {canDeleteJob(job.status) && (
-    <Button
-      variant="outline"
-      size="sm"
-      className="w-full mt-1 text-destructive border-destructive/30 hover:bg-destructive/10"
-      onClick={() => setDeleteJobId(job.id)}
-    >
-      <Trash2 className="h-4 w-4 mr-2" />
-      Ta bort skanning
-    </Button>
-  )}
-</div>
+```text
+1. Användaren väljer "Temperatur" i RoomVisualizationPanel
+2. Rum färgläggs baserat på sensor-/mockdata
+3. Användaren hovrar över ett rum i 3D
+4. xeokit emittar hover-event med entity ID
+5. Vi slår upp rummet i allData via fmGuid
+6. Vi extraherar sensorvärde med extractSensorValue()
+7. Vi visar label med namn + värde + enhet
 ```
 
 ---
 
 ## Teknisk sammanfattning
 
+### Filer som ändras
+
 | Fil | Åtgärd | Beskrivning |
 |-----|--------|-------------|
-| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Förbättra bildnedladdning, öka batch till 25 |
-| `src/components/ai-scan/ScanProgressPanel.tsx` | Ändra | Automatisk körning, tydligare mobilt UI |
+| `src/components/ai-scan/TemplateManagement.tsx` | Ändra | Responsiv layout för mallkort |
+| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Fixa JSON-parsning + loggning |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Ändra | Lägg till hover-label för sensordata |
 
-### Batchstorlek
+### Ny komponent
 
-| Nuvarande | Nytt |
-|-----------|------|
-| 3 bilder/batch | 25 bilder/batch |
-| ~33 klick för 100 bilder | ~4 klick för 100 bilder |
-| Ingen auto-fortsättning | Auto-fortsättning tillgänglig |
+| Fil | Beskrivning |
+|-----|-------------|
+| `src/components/viewer/IoTHoverLabel.tsx` | Hover-label komponent för 3D-vyn |
 
-### Felsökning av bildnedladdning
+---
 
-Problemet är att NavVis/Ivion returnerar redirect-kedjor som leder till 404. Lösningen provar flera URL-mönster:
-1. Direktnedladdning med `redirect: 'follow'`
-2. Alternativa URL-mönster (`/data/` istället för `/storage/redirect/`)
-3. Detaljerad loggning för att identifiera exakt var felet uppstår
+## Del 3a: IoT-label implementation
 
-### Mobilt UI
+### IoTHoverLabel.tsx (ny fil)
 
-Innan:
+Skapar en flyttbar, CSS-positionerad label:
+
+```typescript
+interface IoTHoverLabelProps {
+  visible: boolean;
+  position: { x: number; y: number };
+  roomName: string;
+  value: number;
+  unit: string;
+  color: [number, number, number];
+}
+
+const IoTHoverLabel: React.FC<IoTHoverLabelProps> = ({
+  visible, position, roomName, value, unit, color
+}) => {
+  if (!visible) return null;
+  
+  return (
+    <div 
+      className="absolute pointer-events-none z-50 bg-card/95 backdrop-blur-sm 
+                 border rounded-lg shadow-lg px-3 py-2 text-sm"
+      style={{ 
+        left: position.x + 12, 
+        top: position.y - 20,
+        borderLeftColor: `rgb(${color.join(',')})`,
+        borderLeftWidth: 3
+      }}
+    >
+      <div className="font-medium text-foreground">{roomName}</div>
+      <div className="text-lg font-bold" style={{ color: `rgb(${color.join(',')})` }}>
+        {value.toFixed(1)}{unit}
+      </div>
+    </div>
+  );
+};
 ```
-[Badge] Templates...     [🗑️ liten grå]
-```
 
-Efter:
-```
-┌─────────────────────────────────────┐
-│ [Badge: Klar] Brandsläckare         │
-│ 2026-01-31 • 45 hittade • 120 bilder│
-│ ┌─────────────────────────────────┐ │
-│ │ 🗑️ Ta bort skanning            │ │
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
+### Hover-integration i RoomVisualizationPanel
+
+Lägger till hover-lyssnare på xeokit viewer:
+
+```typescript
+// Ny state för hover-label
+const [hoverLabel, setHoverLabel] = useState<{
+  visible: boolean;
+  position: { x: number; y: number };
+  roomName: string;
+  value: number;
+  unit: string;
+  color: [number, number, number];
+} | null>(null);
+
+// Hover-lyssnare på viewer
+useEffect(() => {
+  const viewer = viewerRef.current;
+  const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (!xeokitViewer) return;
+  
+  const onHover = (hit: any, coords: number[]) => {
+    if (!hit?.entity?.id || visualizationType === 'none') {
+      setHoverLabel(null);
+      return;
+    }
+    
+    // Hitta rum via entity ID → fmGuid mappning
+    const fmGuid = getRoomFmGuidFromEntity(hit.entity.id);
+    if (!fmGuid) {
+      setHoverLabel(null);
+      return;
+    }
+    
+    // Hämta rumsdata och sensorvärde
+    const room = rooms.find(r => r.fmGuid.toLowerCase() === fmGuid.toLowerCase());
+    if (!room) return;
+    
+    const value = useMockData 
+      ? generateMockSensorData(room.fmGuid, visualizationType)
+      : extractSensorValue(room.attributes, visualizationType);
+    
+    if (value === null) {
+      setHoverLabel(null);
+      return;
+    }
+    
+    const color = getVisualizationColor(value, visualizationType);
+    const config = VISUALIZATION_CONFIGS[visualizationType];
+    
+    setHoverLabel({
+      visible: true,
+      position: { x: coords[0], y: coords[1] },
+      roomName: room.name || 'Okänt rum',
+      value,
+      unit: config.unit,
+      color: color || [128, 128, 128]
+    });
+  };
+  
+  xeokitViewer.cameraControl.on('hover', onHover);
+  return () => xeokitViewer.cameraControl.off('hover', onHover);
+}, [viewerRef, visualizationType, rooms, useMockData]);
 ```
 
 ---
 
 ## Testplan
 
-1. **Bildnedladdning**
-   - Starta en ny skanning
-   - Kontrollera loggarna för nedladdningsframgång
-   - Verifiera att AI-analysen körs och hittar objekt
+### 1. Mallsidans responsivitet
+- Öppna AI-skanning på mobil (390px)
+- Verifiera att kontroller inte överlappar mallnamn
+- Verifiera att knappar är touch-vänliga
 
-2. **Batchstorlek**
-   - Klicka "Bearbeta nästa batch"
-   - Verifiera att 25 bilder bearbetas (inte 3)
-   - Testa "Kör automatiskt" för kontinuerlig bearbetning
+### 2. AI-skanning detektioner
+- Starta ny skanning med existerande mallar
+- Kontrollera loggar för AI-svarsutskrifter
+- Verifiera att detektioner hittas och sparas
 
-3. **Mobilt UI**
-   - Öppna på mobil (390px)
-   - Verifiera att "Ta bort skanning"-knappen är tydlig
-   - Klicka och bekräfta borttagning
+### 3. IoT hover-labels
+- Öppna 3D-viewer för en byggnad
+- Aktivera RoomVisualizationPanel
+- Välj "Temperatur" (med simulerad data om nödvändigt)
+- Hovra över färglagda rum
+- Verifiera att label visas med namn + temperatur
 
+---
+
+## Framtida förbättringar (ej i denna plan)
+
+1. **SensorURL-embed** - Bädda in Senslinc-dashboard via IOT+-knappen
+2. **Realtidsdata** - Koppla till Senslinc API för live-sensorvärden
+3. **Timeline-kontroll** - Scrubba genom historisk sensordata
+4. **3D-heatmap overlay** - Färglägg golv/väggar som i Tandem
