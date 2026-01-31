@@ -17,6 +17,8 @@ const IvionInventory = lazy(() => import("@/pages/IvionInventory"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 // Mobile 3D Viewer page (fullscreen)
 const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
+// Onboarding wizard
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
 
 const queryClient = new QueryClient();
 
@@ -73,6 +75,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <Mobile3DViewer />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* AI Onboarding wizard */}
+          <Route 
+            path="/onboarding" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <Onboarding />
                 </ProtectedRoute>
               </Suspense>
             } 
