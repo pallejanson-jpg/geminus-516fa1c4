@@ -1,88 +1,251 @@
 
-# Plan: Förbättra AI-skanningssidan med navigation och avbryt-funktion
+# Plan: Utökad AI-analys med fabrikat, modell och storlek
 
 ## Översikt
 
-Denna plan åtgärdar de identifierade UX-problemen på AI-skanningssidan och lägger grunden för framtida AI-träning.
+Denna plan utökar AI-bildanalysen för att automatiskt identifiera och extrahera detaljerade egenskaper från detekterade objekt, såsom fabrikat, modell, storlek, typ och teknisk information. Dessa egenskaper sparas i pending_detections och överförs automatiskt till assets vid godkännande.
 
-## Problem att lösa
-
-1. **Ingen tillbaka-knapp** – användare kan inte lämna sidan
-2. **Ingen avbryt-funktion** – pågående skanningar kan inte stoppas
-3. **Ingen möjlighet att förbättra AI:n** – inga verktyg för att justera promptar eller lägga till mallar
-
----
-
-## Del 1: Lägg till tillbaka-knapp i header
-
-### Fil: `src/pages/AiAssetScan.tsx`
-
-Lägg till en tydlig tillbaka-knapp i headern som navigerar användaren tillbaka till inventering.
-
-**Ändringar:**
-- Importera `ArrowLeft` och `useNavigate`
-- Lägg till en tillbaka-knapp längst till vänster i headern
-- Knappen navigerar till föregående sida eller `/inventory` som fallback
+## Nuvarande flöde
 
 ```text
-Header-layout efter ändring:
-┌─────────────────────────────────────────────────────────────┐
-│ [←] [AI-ikon] AI-assisterad inventering          [Uppdatera]│
-└─────────────────────────────────────────────────────────────┘
+Panoramabild → AI (Gemini) → Detection
+                              ├── object_type: "fire_extinguisher"
+                              ├── confidence: 0.92
+                              ├── bounding_box: [y1, x1, y2, x2]
+                              └── description: "Red fire extinguisher on wall"
+
+Detection → Approve → Asset
+                      ├── name: "Brandsläckare"
+                      ├── category: "Instance"
+                      ├── coordinates: x, y, z
+                      └── attributes: { ai_description: "..." }
+```
+
+## Nytt flöde med utökad analys
+
+```text
+Panoramabild → AI (Gemini) → Detection
+                              ├── object_type: "fire_extinguisher"
+                              ├── confidence: 0.92
+                              ├── bounding_box: [y1, x1, y2, x2]
+                              ├── description: "Red 6kg ABC fire extinguisher..."
+                              └── extracted_properties:      ← NY
+                                  ├── brand: "Gloria"
+                                  ├── model: "PD6GA"
+                                  ├── size: "6 kg"
+                                  ├── type: "Pulver ABC"
+                                  ├── color: "Röd"
+                                  ├── mounting: "Väggmonterad"
+                                  └── condition: "God"
+
+Detection → Approve → Asset
+                      ├── name: "Gloria PD6GA"       ← Automatiskt format
+                      ├── common_name: "Pulversläckare 6kg"
+                      └── attributes: {
+                            ai_description: "...",
+                            brand: "Gloria",
+                            model: "PD6GA",
+                            size: "6 kg",
+                            type: "Pulver ABC",
+                            ...
+                          }
 ```
 
 ---
 
-## Del 2: Lägg till avbryt-funktion för pågående skanning
+## Del 1: Databasuppdatering
 
-### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
+### Ny kolumn i pending_detections
 
-Lägg till en "Avbryt skanning"-knapp som sätter jobbstatus till "cancelled".
+Lägg till en JSONB-kolumn för att lagra de extraherade egenskaperna:
+
+```sql
+ALTER TABLE pending_detections 
+ADD COLUMN extracted_properties JSONB DEFAULT '{}';
+```
+
+---
+
+## Del 2: Uppdatera AI-prompten
 
 ### Fil: `supabase/functions/ai-asset-detection/index.ts`
 
-Lägg till en ny action `cancel-scan` som uppdaterar jobbstatus.
+Uppdatera `analyzeImageWithAI()` för att be Gemini extrahera detaljerade egenskaper:
 
-**Ändringar i ScanProgressPanel:**
-- Ny `cancelScan()` funktion
-- Ny knapp "Avbryt" bredvid "Bearbeta nästa batch"
-- Visuell bekräftelse via toast
+**Nuvarande prompt (förenklad):**
+```typescript
+"Detect these objects... Return JSON with object_type, confidence, bounding_box, description"
+```
+
+**Ny prompt (utökad):**
+```typescript
+"Detect safety equipment and extract detailed properties.
+
+For each object, return:
+- object_type: the type code
+- confidence: 0.0 to 1.0
+- bounding_box: [ymin, xmin, ymax, xmax] normalized 0-1000
+- description: what you observe
+- extracted_properties: {
+    brand: manufacturer name if visible (e.g., 'Gloria', 'Ansul', 'Presto')
+    model: model number/name if visible
+    size: capacity/size (e.g., '6 kg', '2 kg', 'A3')
+    type: specific type (e.g., 'Pulver ABC', 'CO2', 'Skum')
+    color: primary color
+    mounting: how it's mounted ('Väggmonterad', 'Golvstående', 'I skåp')
+    condition: visible condition ('God', 'Sliten', 'Okänd')
+    text_visible: any readable text on the object
+  }
+
+Read and OCR any visible text, labels, or stickers to extract brand/model.
+If a property cannot be determined, omit it from the object."
+```
+
+### Uppdaterad typning
+
+```typescript
+interface Detection {
+  object_type: string;
+  confidence: number;
+  bounding_box: [number, number, number, number];
+  description: string;
+  extracted_properties?: {
+    brand?: string;
+    model?: string;
+    size?: string;
+    type?: string;
+    color?: string;
+    mounting?: string;
+    condition?: string;
+    text_visible?: string;
+  };
+}
+```
 
 ---
 
-## Del 3: Skapa gränssnitt för mallhantering (framtida AI-träning)
+## Del 3: Spara extraherade egenskaper
 
-### Ny fil: `src/components/ai-scan/TemplateManagement.tsx`
+### I `processBatch()` - spara till pending_detections
 
-Ett nytt gränssnitt för att hantera och förbättra detektionsmallar:
-
-**Funktioner:**
-- Lista alla mallar med namn, beskrivning och AI-prompt
-- Redigera AI-promptar direkt i gränssnittet
-- Lägg till nya mallar för nya objekttyper
-- Förhandsgranska/testa en mall mot en uppladdad bild
-
-**Layout:**
-```text
-┌──────────────────────────────────────────────────┐
-│ Detektionsmallar                      [+ Ny mall]│
-├──────────────────────────────────────────────────┤
-│ ┌────────────────────────────────────────────┐   │
-│ │ 🧯 Brandsläckare                   [Redigera]  │
-│ │ "Look for red fire extinguisher..."        │   │
-│ │ Kategori: fire_extinguisher               │   │
-│ └────────────────────────────────────────────┘   │
-│ ┌────────────────────────────────────────────┐   │
-│ │ 🚪 Nödutgångsskylt               [Redigera]   │
-│ │ "Look for green emergency exit signs..."   │   │
-│ │ Kategori: emergency_exit                  │   │
-│ └────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────┘
+```typescript
+const { error: insertError } = await supabase.from('pending_detections').insert({
+  // ... befintliga fält ...
+  ai_description: det.description,
+  extracted_properties: det.extracted_properties || {},  // ← NY
+});
 ```
 
-### Fil: `src/pages/AiAssetScan.tsx`
+---
 
-Lägg till en fjärde tab "Mallar" för mallhantering.
+## Del 4: Visa egenskaper i granskning
+
+### Fil: `src/components/ai-scan/DetectionReviewQueue.tsx`
+
+Visa de extraherade egenskaperna i detektionskortet och detaljdialogen:
+
+**I kortvy:**
+```typescript
+{detection.extracted_properties?.brand && (
+  <Badge variant="outline" className="text-xs">
+    {detection.extracted_properties.brand}
+  </Badge>
+)}
+```
+
+**I detaljdialog:**
+```typescript
+<div className="grid grid-cols-2 gap-2 text-sm">
+  {detection.extracted_properties?.brand && (
+    <div>
+      <span className="text-muted-foreground">Fabrikat:</span>
+      <span className="ml-2 font-medium">{detection.extracted_properties.brand}</span>
+    </div>
+  )}
+  {detection.extracted_properties?.model && (
+    <div>
+      <span className="text-muted-foreground">Modell:</span>
+      <span className="ml-2 font-medium">{detection.extracted_properties.model}</span>
+    </div>
+  )}
+  {/* ... fler egenskaper ... */}
+</div>
+```
+
+---
+
+## Del 5: Överför egenskaper vid godkännande
+
+### I `approveDetection()` - skapa smartare asset
+
+```typescript
+// Bygg namn från extraherade egenskaper
+const props = detection.extracted_properties || {};
+const baseName = detection.detection_templates?.name || detection.object_type;
+
+// Generera beskrivande namn: "Gloria PD6GA 6kg" eller fallback
+const assetName = [props.brand, props.model, props.size]
+  .filter(Boolean)
+  .join(' ') || baseName;
+
+// Generera common_name: "Pulversläckare 6kg ABC"
+const commonName = [props.type, props.size]
+  .filter(Boolean)
+  .join(' ') || baseName;
+
+// Skapa asset med alla egenskaper i attributes
+const { error: assetError } = await supabase.from('assets').insert({
+  fm_guid: assetFmGuid,
+  name: assetName,                    // ← Smartare namn
+  common_name: commonName,            // ← Beskrivande namn
+  category: 'Instance',
+  asset_type: detection.detection_templates?.default_category || detection.object_type,
+  // ... koordinater ...
+  attributes: {
+    ai_detected: true,
+    ai_confidence: detection.confidence,
+    ai_description: detection.ai_description,
+    // Extraherade egenskaper direkt i attributes
+    brand: props.brand || null,
+    model: props.model || null,
+    size: props.size || null,
+    type: props.type || null,
+    color: props.color || null,
+    mounting: props.mounting || null,
+    condition: props.condition || null,
+    text_visible: props.text_visible || null,
+  },
+});
+```
+
+---
+
+## Del 6: Uppdatera TypeScript-typer
+
+### Interface för pending_detections
+
+```typescript
+interface PendingDetection {
+  id: string;
+  object_type: string;
+  confidence: number;
+  bounding_box: any;
+  thumbnail_url: string | null;
+  ai_description: string | null;
+  extracted_properties: {           // ← NY
+    brand?: string;
+    model?: string;
+    size?: string;
+    type?: string;
+    color?: string;
+    mounting?: string;
+    condition?: string;
+    text_visible?: string;
+  } | null;
+  status: string;
+  // ...
+}
+```
 
 ---
 
@@ -92,91 +255,65 @@ Lägg till en fjärde tab "Mallar" för mallhantering.
 
 | Fil | Åtgärd | Beskrivning |
 |-----|--------|-------------|
-| `src/pages/AiAssetScan.tsx` | Ändra | Lägg till tillbaka-knapp och Mallar-tab |
-| `src/components/ai-scan/ScanProgressPanel.tsx` | Ändra | Lägg till avbryt-funktion |
-| `src/components/ai-scan/TemplateManagement.tsx` | **Ny fil** | Gränssnitt för mallhantering |
-| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Lägg till `cancel-scan` och `update-template` actions |
+| Databas | Migration | Lägg till `extracted_properties` JSONB-kolumn |
+| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Utökad AI-prompt + spara/överföra egenskaper |
+| `src/components/ai-scan/DetectionReviewQueue.tsx` | Ändra | Visa fabrikat/modell i kort och dialog |
 
-### Edge function-ändringar
+### Exempeldata efter implementering
 
-**Ny action: `cancel-scan`**
-```typescript
-if (action === 'cancel-scan') {
-  const { scanJobId } = body;
-  await supabase.from('scan_jobs')
-    .update({ status: 'cancelled' })
-    .eq('id', scanJobId);
-  return new Response(JSON.stringify({ success: true }));
+```json
+{
+  "object_type": "fire_extinguisher",
+  "confidence": 0.94,
+  "description": "Red powder fire extinguisher mounted on wall",
+  "extracted_properties": {
+    "brand": "Gloria",
+    "model": "PD6GA",
+    "size": "6 kg",
+    "type": "Pulver ABC",
+    "color": "Röd",
+    "mounting": "Väggmonterad",
+    "condition": "God",
+    "text_visible": "GLORIA PD6GA PULVER ABC 6KG"
+  }
 }
 ```
 
-**Ny action: `update-template`**
-```typescript
-if (action === 'update-template') {
-  const { templateId, ai_prompt, name, description } = body;
-  await supabase.from('detection_templates')
-    .update({ ai_prompt, name, description, updated_at: new Date().toISOString() })
-    .eq('id', templateId);
-  return new Response(JSON.stringify({ success: true }));
+### Asset efter godkännande
+
+```json
+{
+  "fm_guid": "uuid...",
+  "name": "Gloria PD6GA 6kg",
+  "common_name": "Pulver ABC 6kg",
+  "category": "Instance",
+  "asset_type": "fire_extinguisher",
+  "attributes": {
+    "ai_detected": true,
+    "ai_confidence": 0.94,
+    "brand": "Gloria",
+    "model": "PD6GA",
+    "size": "6 kg",
+    "type": "Pulver ABC"
+  }
 }
 ```
 
 ---
 
-## Framtida: Few-shot learning med referensbilder
+## Framtida förbättringar
 
-En framtida förbättring skulle vara att låta användare ladda upp referensbilder för varje mall. Dessa bilder inkluderas sedan i AI-prompten som visuella exempel.
-
-**Databasändring (framtid):**
-```sql
-CREATE TABLE template_examples (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_id UUID REFERENCES detection_templates(id),
-  image_url TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**AI-prompt med exempel (framtid):**
-```typescript
-{
-  role: "user",
-  content: [
-    { type: "text", text: "Here is an example of what to look for:" },
-    { type: "image_url", image_url: { url: exampleImageUrl } },
-    { type: "text", text: "Now detect similar objects in this panorama:" },
-    { type: "image_url", image_url: { url: panoramaImageUrl } }
-  ]
-}
-```
+| Förbättring | Beskrivning |
+|-------------|-------------|
+| **Redigera före godkännande** | Låt användaren justera fabrikat/modell i granskningen innan godkännande |
+| **Automatisk klassificering** | Matcha fabrikat mot produktdatabas för att få certifieringar, nästa serviceintervall etc. |
+| **Validering** | Varna om AI:n inte kunde läsa texten eller är osäker på modell |
 
 ---
 
 ## Testplan
 
-1. **Tillbaka-knapp**
-   - Navigera till `/inventory/ai-scan`
-   - Klicka på tillbaka-knappen
-   - Verifiera att du återvänder till inventering
-
-2. **Avbryt skanning**
-   - Starta en skanning
-   - Klicka på "Avbryt"
-   - Verifiera att status ändras till "Avbruten"
-
-3. **Mallhantering**
-   - Öppna Mallar-tabben
-   - Redigera en AI-prompt
-   - Spara och verifiera att ändringen bevaras
-
----
-
-## Sammanfattning
-
-| Problem | Lösning |
-|---------|---------|
-| Kan inte lämna sidan | Tillbaka-knapp i header |
-| Kan inte avbryta skanning | Avbryt-knapp + ny backend-action |
-| Kan inte förbättra AI | Mallhanteringsgränssnitt för AI-promptar |
-| Framtida AI-träning | Few-shot learning med referensbilder (planerat) |
+1. Starta en ny skanning på en byggnad
+2. Verifiera att nya detektioner har `extracted_properties` med fabrikat/modell
+3. Öppna detaljdialogen och se att egenskaperna visas
+4. Godkänn en detektion och verifiera att asset skapas med rätt namn och attributes
