@@ -29,6 +29,7 @@ interface DetectionTemplate {
   default_symbol_id: string | null;
   default_category: string | null;
   is_active: boolean;
+  example_images: string[] | null; // URLs to example images for few-shot learning
 }
 
 interface ExtractedProperties {
@@ -592,14 +593,57 @@ function bufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-// Analyze image with Gemini Vision - Enhanced with property extraction
+// Analyze image with Gemini Vision - Enhanced with property extraction and few-shot learning
 async function analyzeImageWithAI(
   imageBase64: string,
   templates: DetectionTemplate[]
 ): Promise<Detection[]> {
+  // Build content array with example images for few-shot learning
+  const userContent: any[] = [];
+  
+  // Add example images for each template that has them
+  const templatesWithExamples = templates.filter(t => t.example_images && t.example_images.length > 0);
+  if (templatesWithExamples.length > 0) {
+    userContent.push({
+      type: "text",
+      text: "Here are example images of objects you should look for:"
+    });
+    
+    for (const template of templatesWithExamples) {
+      userContent.push({
+        type: "text",
+        text: `Examples of ${template.object_type} (${template.name}):`
+      });
+      
+      for (const exampleUrl of template.example_images!) {
+        userContent.push({
+          type: "image_url",
+          image_url: { url: exampleUrl }
+        });
+      }
+    }
+    
+    userContent.push({
+      type: "text",
+      text: "\nNow analyze the following 360° panorama and find these objects:"
+    });
+  }
+  
+  // Add object descriptions
   const objectDescriptions = templates.map(t => 
     `- ${t.object_type}: ${t.ai_prompt}`
   ).join('\n');
+  
+  userContent.push({ 
+    type: "text", 
+    text: `Detect these objects in this 360° panorama and extract detailed properties:\n${objectDescriptions}` 
+  });
+  
+  // Add the panorama image to analyze
+  userContent.push({ 
+    type: "image_url", 
+    image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+  });
   
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -633,21 +677,13 @@ For each object you find, return JSON with:
 IMPORTANT: Use OCR to read ALL visible text on labels, stickers, and equipment. 
 Extract brand and model from visible text when possible.
 If a property cannot be determined with reasonable confidence, omit it.
+When example images are provided, use them to better understand what each object type looks like.
 
 Return ONLY a JSON array. If nothing found, return []. Do not include any other text or markdown.`
         },
         {
           role: "user",
-          content: [
-            { 
-              type: "text", 
-              text: `Detect these objects in this 360° panorama and extract detailed properties:\n${objectDescriptions}` 
-            },
-            { 
-              type: "image_url", 
-              image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
-            }
-          ]
+          content: userContent
         }
       ]
     })
@@ -813,6 +849,7 @@ async function updateTemplate(params: {
   default_category?: string | null;
   default_symbol_id?: string | null;
   is_active?: boolean;
+  example_images?: string[];
 }): Promise<{ success: boolean }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
@@ -827,6 +864,7 @@ async function updateTemplate(params: {
   if (params.default_category !== undefined) updates.default_category = params.default_category;
   if (params.default_symbol_id !== undefined) updates.default_symbol_id = params.default_symbol_id;
   if (params.is_active !== undefined) updates.is_active = params.is_active;
+  if (params.example_images !== undefined) updates.example_images = params.example_images;
   
   const { error } = await supabase
     .from('detection_templates')
@@ -846,6 +884,7 @@ async function createTemplate(params: {
   default_category?: string | null;
   default_symbol_id?: string | null;
   is_active?: boolean;
+  example_images?: string[];
 }): Promise<{ success: boolean; id: string }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
@@ -859,6 +898,7 @@ async function createTemplate(params: {
       default_category: params.default_category || null,
       default_symbol_id: params.default_symbol_id || null,
       is_active: params.is_active ?? true,
+      example_images: params.example_images || [],
     })
     .select('id')
     .single();

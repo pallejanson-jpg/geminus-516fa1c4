@@ -287,6 +287,7 @@ export type Database = {
           default_category: string | null
           default_symbol_id: string | null
           description: string | null
+          example_images: string[] | null
           id: string
           is_active: boolean | null
           name: string
@@ -299,6 +300,7 @@ export type Database = {
           default_category?: string | null
           default_symbol_id?: string | null
           description?: string | null
+          example_images?: string[] | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -311,6 +313,7 @@ export type Database = {
           default_category?: string | null
           default_symbol_id?: string | null
           description?: string | null
+          example_images?: string[] | null
           id?: string
           is_active?: boolean | null
           name?: string
