@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings2, Plus, Pencil, Trash2, Save, X, RefreshCw, AlertCircle } from 'lucide-react';
+import { Settings2, Plus, Pencil, Trash2, Save, X, RefreshCw, AlertCircle, ImageIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import ExampleImagesUpload from './ExampleImagesUpload';
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,7 @@ interface DetectionTemplate {
   default_category: string | null;
   default_symbol_id: string | null;
   is_active: boolean;
+  example_images: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +81,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
     default_category: '',
     default_symbol_id: '',
     is_active: true,
+    example_images: [] as string[],
   });
 
   useEffect(() => {
@@ -126,6 +129,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       default_category: '',
       default_symbol_id: '',
       is_active: true,
+      example_images: [],
     });
     setIsDialogOpen(true);
   };
@@ -140,6 +144,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
       default_category: template.default_category || '',
       default_symbol_id: template.default_symbol_id || '',
       is_active: template.is_active,
+      example_images: template.example_images || [],
     });
     setIsDialogOpen(true);
   };
@@ -169,6 +174,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             default_category: formData.default_category || null,
             default_symbol_id: formData.default_symbol_id || null,
             is_active: formData.is_active,
+            example_images: formData.example_images,
           }
         });
 
@@ -190,6 +196,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             default_category: formData.default_category || null,
             default_symbol_id: formData.default_symbol_id || null,
             is_active: formData.is_active,
+            example_images: formData.example_images,
           }
         });
 
@@ -360,6 +367,12 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       {getSymbolName(template.default_symbol_id) && (
                         <span>Symbol: <code className="bg-muted px-1 rounded">{getSymbolName(template.default_symbol_id)}</code></span>
                       )}
+                      {template.example_images && template.example_images.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          <ImageIcon className="h-3 w-3" />
+                          {template.example_images.length} exempelbilder
+                        </span>
+                      )}
                     </div>
                     <div className="mt-3 p-3 bg-muted/50 rounded-lg">
                       <p className="text-xs text-muted-foreground mb-1">AI-prompt:</p>
@@ -498,6 +511,14 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 skiljer det från liknande objekt.
               </p>
             </div>
+
+            {/* Example Images Upload */}
+            <ExampleImagesUpload
+              templateId={editingTemplate?.id}
+              value={formData.example_images}
+              onChange={(urls) => setFormData({ ...formData, example_images: urls })}
+              disabled={isSaving}
+            />
 
             <div className="flex items-center gap-2">
               <Switch
