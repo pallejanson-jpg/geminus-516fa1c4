@@ -291,33 +291,108 @@ function parsePosesCsv(csvText: string): IvionImage[] {
   }).filter(img => img.filePath); // Filter out any malformed entries
 }
 
-// Get images from a dataset by reading poses.csv
+// Probe for images in a dataset by testing sequential filenames
+async function probeDatasetImages(
+  siteId: string,
+  datasetName: string,
+  maxImages: number = 500
+): Promise<IvionImage[]> {
+  const token = await getIvionToken();
+  const images: IvionImage[] = [];
+  const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano`;
+  
+  const batchSize = 10;
+  let index = 0;
+  let consecutiveFailures = 0;
+  
+  console.log(`Probing for images in dataset ${datasetName}...`);
+  
+  while (index < maxImages && consecutiveFailures < 3) {
+    // Create batch of probe requests
+    const batch: { index: number; filename: string }[] = [];
+    for (let i = 0; i < batchSize && (index + i) < maxImages; i++) {
+      const filename = `${String(index + i).padStart(5, '0')}-pano.jpg`;
+      batch.push({ index: index + i, filename });
+    }
+    
+    // Execute batch in parallel
+    const results = await Promise.all(
+      batch.map(async ({ index: idx, filename }) => {
+        const url = `${baseUrl}/${filename}`;
+        try {
+          const response = await fetch(url, {
+            method: 'HEAD',
+            headers: { 'x-authorization': `Bearer ${token}` },
+            redirect: 'manual',
+          });
+          return { index: idx, filename, exists: response.status === 200 || response.status === 302 };
+        } catch {
+          return { index: idx, filename, exists: false };
+        }
+      })
+    );
+    
+    // Process results - check batch sequentially for proper failure detection
+    let batchHadSuccess = false;
+    for (const result of results) {
+      if (result.exists) {
+        images.push({
+          id: result.index,
+          filePath: result.filename,
+          name: result.filename,
+        });
+        consecutiveFailures = 0;
+        batchHadSuccess = true;
+      } else {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) break;
+      }
+    }
+    
+    // If entire batch failed, stop
+    if (!batchHadSuccess) {
+      break;
+    }
+    
+    index += batchSize;
+  }
+  
+  console.log(`Probed ${images.length} images for dataset ${datasetName}`);
+  return images;
+}
+
+// Get images from a dataset - tries poses.csv first, falls back to probing
 async function getDatasetImages(siteId: string, datasetName: string): Promise<IvionImage[]> {
   const token = await getIvionToken();
   
-  // Fetch poses.csv from NavVis static file structure
+  // Try poses.csv first (for future compatibility)
   const posesUrl = `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/poses.csv`;
   
-  console.log(`Fetching poses.csv from: ${posesUrl}`);
-  
-  const response = await fetch(posesUrl, {
-    headers: {
-      'x-authorization': `Bearer ${token}`,
-      'Accept': 'text/csv, text/plain, */*',
-    },
-  });
-  
-  if (!response.ok) {
-    console.log(`Failed to get poses.csv for dataset ${datasetName}: ${response.status}`);
-    return [];
+  try {
+    const response = await fetch(posesUrl, {
+      headers: {
+        'x-authorization': `Bearer ${token}`,
+        'Accept': 'text/csv, text/plain, */*',
+      },
+    });
+    
+    if (response.ok) {
+      const csvText = await response.text();
+      const images = parsePosesCsv(csvText);
+      if (images.length > 0) {
+        console.log(`Found ${images.length} images via poses.csv for ${datasetName}`);
+        return images;
+      }
+    } else {
+      // Consume body to avoid resource leak
+      await response.text();
+    }
+  } catch (e) {
+    console.log(`poses.csv not available for ${datasetName}, falling back to probing`);
   }
   
-  const csvText = await response.text();
-  const images = parsePosesCsv(csvText);
-  
-  console.log(`Parsed ${images.length} images from poses.csv for dataset ${datasetName}`);
-  
-  return images;
+  // Fallback: probe for images
+  return await probeDatasetImages(siteId, datasetName, 200);
 }
 
 // Get panorama image URL using filename from poses.csv
@@ -361,20 +436,99 @@ async function getPanoramaImageUrl(
   return null;
 }
 
-// Download image and convert to base64
+// Download image and convert to base64 - handles NavVis redirect chain
 async function downloadImageAsBase64(url: string): Promise<string> {
   const token = await getIvionToken();
   
-  const response = await fetch(url, {
-    headers: { 'x-authorization': `Bearer ${token}` },
-    redirect: 'follow',
-  });
+  // NavVis uses: storage/redirect -> signed/callback -> Azure Blob
+  // We need to follow all redirects, the final one may be to external storage
   
-  if (!response.ok) {
+  let currentUrl = url;
+  let depth = 0;
+  const maxDepth = 5;
+  
+  while (depth < maxDepth) {
+    const isFirstHop = depth === 0;
+    const headers: Record<string, string> = isFirstHop 
+      ? { 'x-authorization': `Bearer ${token}` }
+      : {}; // External storage URLs don't need auth
+    
+    console.log(`Download hop ${depth + 1}: ${currentUrl.slice(0, 120)}...`);
+    
+    const response = await fetch(currentUrl, {
+      headers,
+      redirect: 'manual',
+    });
+    
+    console.log(`Status: ${response.status}`);
+    
+    // Follow redirects
+    if (response.status === 301 || response.status === 302 || 
+        response.status === 307 || response.status === 308) {
+      const location = response.headers.get('location');
+      await response.text(); // consume body
+      
+      if (!location) {
+        throw new Error('Redirect without location header');
+      }
+      
+      // Resolve relative URLs against the current URL (important for chain)
+      currentUrl = location.startsWith('http') 
+        ? location 
+        : new URL(location, currentUrl).href;
+      
+      depth++;
+      continue;
+    }
+    
+    // Success - download the image
+    if (response.ok) {
+      const contentType = response.headers.get('content-type') || 'unknown';
+      const contentLength = response.headers.get('content-length') || 'unknown';
+      console.log(`Image found! Type: ${contentType}, Size: ${contentLength}`);
+      return bufferToBase64(await response.arrayBuffer());
+    }
+    
+    // Error - but try with auth on callback URLs
+    if (response.status >= 400 && currentUrl.includes('/signed/callback/')) {
+      console.log(`Callback URL returned ${response.status}, trying with auth...`);
+      await response.text();
+      
+      const authResponse = await fetch(currentUrl, {
+        headers: { 'x-authorization': `Bearer ${token}` },
+        redirect: 'manual',
+      });
+      
+      console.log(`With auth: ${authResponse.status}`);
+      
+      // Maybe this redirects to the final blob URL?
+      if (authResponse.status === 302) {
+        const location = authResponse.headers.get('location');
+        await authResponse.text();
+        if (location) {
+          currentUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
+          console.log(`Auth redirect to: ${currentUrl.slice(0, 120)}...`);
+          depth++;
+          continue;
+        }
+      }
+      
+      // Try direct download with auth
+      if (authResponse.ok) {
+        console.log(`Got image with auth on callback!`);
+        return bufferToBase64(await authResponse.arrayBuffer());
+      }
+      
+      throw new Error(`Callback URL failed: ${authResponse.status}`);
+    }
+    
     throw new Error(`Failed to download image: ${response.status}`);
   }
   
-  const buffer = await response.arrayBuffer();
+  throw new Error(`Failed to download after ${depth} redirects`);
+}
+
+function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -664,20 +818,12 @@ async function processBatch(params: {
     
     console.log(`Dataset ${dataset.name} has ${images.length} images`);
     
-    // Update total count on first pass of first dataset
-    if (di === 0 && startImageIndex === 0 && (job.total_images === 0 || job.total_images === null)) {
-      // Calculate actual total across all datasets
-      let estimatedTotal = 0;
-      for (const ds of datasets) {
-        try {
-          const dsImages = await getDatasetImages(job.ivion_site_id, ds.name);
-          estimatedTotal += dsImages.length;
-        } catch {
-          estimatedTotal += 100; // Fallback estimate
-        }
-      }
+    // Update total count estimate on first dataset with images (quick estimate to avoid probing all)
+    if ((job.total_images === 0 || job.total_images === null) && images.length > 0) {
+      // Estimate based on first dataset's image count × number of datasets with similar names
+      const estimatedTotal = images.length * Math.min(datasets.length, 50);
       await supabase.from('scan_jobs').update({ total_images: estimatedTotal }).eq('id', job.id);
-      console.log(`Estimated total images: ${estimatedTotal}`);
+      console.log(`Estimated total images: ~${estimatedTotal} (based on ${images.length} in first dataset)`);
     }
     
     const imageStart = di === startDatasetIndex ? startImageIndex : 0;
