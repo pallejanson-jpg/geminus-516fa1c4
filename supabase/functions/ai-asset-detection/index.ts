@@ -14,6 +14,8 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 
 // Ivion credentials
 const IVION_API_URL = (Deno.env.get('IVION_API_URL') || '').trim().replace(/\/+$/, '');
+const IVION_USERNAME = (Deno.env.get('IVION_USERNAME') || '').trim();
+const IVION_PASSWORD = (Deno.env.get('IVION_PASSWORD') || '').trim();
 const IVION_ACCESS_TOKEN = (Deno.env.get('IVION_ACCESS_TOKEN') || '').trim();
 const IVION_REFRESH_TOKEN = (Deno.env.get('IVION_REFRESH_TOKEN') || '').trim();
 
@@ -84,15 +86,21 @@ function isTokenExpired(token: string): boolean {
 }
 
 async function getIvionToken(): Promise<string> {
+  // 1. Check cached token first
   if (cachedToken && !isTokenExpired(cachedToken)) {
+    console.log('Using cached Ivion token');
     return cachedToken;
   }
   
+  // 2. Try existing access token if still valid
   if (IVION_ACCESS_TOKEN && !isTokenExpired(IVION_ACCESS_TOKEN)) {
+    console.log('Using provided IVION_ACCESS_TOKEN (still valid)');
     return IVION_ACCESS_TOKEN;
   }
   
+  // 3. Try to refresh using IVION_REFRESH_TOKEN
   if (IVION_REFRESH_TOKEN) {
+    console.log('Attempting to refresh access token using IVION_REFRESH_TOKEN...');
     try {
       const refreshResponse = await fetch(`${IVION_API_URL}/api/auth/refresh_access_token`, {
         method: 'POST',
@@ -103,16 +111,65 @@ async function getIvionToken(): Promise<string> {
       if (refreshResponse.ok) {
         const data = await refreshResponse.json();
         if (data.access_token) {
+          console.log('Successfully refreshed access token via refresh_token');
           cachedToken = data.access_token;
           return data.access_token;
         }
+      } else {
+        const errorText = await refreshResponse.text();
+        console.log(`Refresh token request failed: ${refreshResponse.status} - ${errorText.slice(0, 200)}`);
       }
     } catch (e) {
       console.log(`Refresh token error: ${e}`);
     }
   }
   
-  throw new Error('Ivion access token expired or not configured');
+  // 4. NEW: Login with username/password via /api/auth/generate_tokens
+  if (IVION_USERNAME && IVION_PASSWORD) {
+    console.log('Attempting login with username/password via /api/auth/generate_tokens...');
+    try {
+      const loginResponse = await fetch(`${IVION_API_URL}/api/auth/generate_tokens`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username: IVION_USERNAME,
+          password: IVION_PASSWORD,
+        }),
+      });
+      
+      if (loginResponse.ok) {
+        const data = await loginResponse.json();
+        if (data.access_token) {
+          console.log('Successfully obtained access token via username/password login');
+          cachedToken = data.access_token;
+          return data.access_token;
+        }
+      } else {
+        const errorText = await loginResponse.text();
+        console.log(`Username/password login failed: ${loginResponse.status} - ${errorText.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.log(`Username/password login error: ${e}`);
+    }
+  }
+  
+  // All methods failed
+  const hasCredentials = IVION_USERNAME && IVION_PASSWORD;
+  const hasTokens = IVION_ACCESS_TOKEN || IVION_REFRESH_TOKEN;
+  
+  throw new Error(
+    `Ivion authentication failed. ` +
+    (hasCredentials 
+      ? 'Username/password login was attempted but failed - ensure credentials are for a LOCAL account (not SSO/OAuth). '
+      : 'No IVION_USERNAME/IVION_PASSWORD configured. ') +
+    (hasTokens
+      ? 'Provided tokens are expired or invalid. '
+      : 'No IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN configured. ') +
+    'Ensure the Ivion instance supports local authentication.'
+  );
 }
 
 // Get detection templates
