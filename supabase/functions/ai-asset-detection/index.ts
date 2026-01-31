@@ -1133,6 +1133,165 @@ async function bulkReject(params: {
   return { rejected: count || params.detectionIds.length, failed: 0 };
 }
 
+// Test downloading an image through the complete redirect chain
+async function testImageDownload(
+  siteId: string, 
+  datasetName?: string, 
+  imageFilename?: string
+): Promise<{
+  success: boolean;
+  attempts: { method: string; url: string; status: number; contentType?: string; size?: number }[];
+  imageSize?: number;
+  contentType?: string;
+  error?: string;
+}> {
+  const attempts: { method: string; url: string; status: number; contentType?: string; size?: number }[] = [];
+  
+  try {
+    const token = await getIvionToken();
+    
+    // Use provided dataset or get first available
+    const datasets = await getIvionDatasets(siteId);
+    if (datasets.length === 0) {
+      return { success: false, attempts, error: 'No datasets found' };
+    }
+    
+    const testDataset = datasetName || datasets[0].name;
+    const filename = imageFilename || '00000-pano.jpg';
+    const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${testDataset}/pano/${filename}`;
+    
+    // Method 1: Let fetch follow redirects automatically (with auth on first request)
+    console.log('Method 1: Auto-follow redirects with auth header');
+    try {
+      const resp1 = await fetch(baseUrl, {
+        headers: { 'x-authorization': `Bearer ${token}` },
+        redirect: 'follow',
+      });
+      attempts.push({ 
+        method: 'auto-follow-with-auth', 
+        url: baseUrl.slice(0, 150), 
+        status: resp1.status,
+        contentType: resp1.headers.get('content-type') || undefined,
+      });
+      if (resp1.ok) {
+        const buffer = await resp1.arrayBuffer();
+        return {
+          success: true,
+          attempts,
+          imageSize: buffer.byteLength,
+          contentType: resp1.headers.get('content-type') || 'unknown',
+        };
+      }
+      await resp1.text(); // consume
+    } catch (e: any) {
+      attempts.push({ method: 'auto-follow-with-auth', url: baseUrl.slice(0, 150), status: -1 });
+      console.log(`Method 1 error: ${e.message}`);
+    }
+    
+    // Method 2: Manual first redirect, then auto-follow WITHOUT auth
+    console.log('Method 2: Manual first hop, then auto-follow without auth');
+    try {
+      const resp2a = await fetch(baseUrl, {
+        headers: { 'x-authorization': `Bearer ${token}` },
+        redirect: 'manual',
+      });
+      if (resp2a.status === 302) {
+        const location = resp2a.headers.get('location');
+        await resp2a.text();
+        if (location) {
+          const signedUrl = location.startsWith('/') ? `${IVION_API_URL}${location}` : location;
+          console.log(`Got signed URL: ${signedUrl.slice(0, 150)}...`);
+          
+          // Try following this without auth (signed URLs often don't need it)
+          const resp2b = await fetch(signedUrl, { redirect: 'follow' });
+          attempts.push({ 
+            method: 'signed-url-no-auth', 
+            url: signedUrl.slice(0, 150), 
+            status: resp2b.status,
+            contentType: resp2b.headers.get('content-type') || undefined,
+          });
+          if (resp2b.ok) {
+            const buffer = await resp2b.arrayBuffer();
+            return {
+              success: true,
+              attempts,
+              imageSize: buffer.byteLength,
+              contentType: resp2b.headers.get('content-type') || 'unknown',
+            };
+          }
+          await resp2b.text();
+        }
+      }
+    } catch (e: any) {
+      console.log(`Method 2 error: ${e.message}`);
+    }
+    
+    // Method 3: Try direct /data/ path (static files, not via storage API)
+    console.log('Method 3: Direct /data/ path');
+    const directUrl = `${IVION_API_URL}/data/${siteId}/datasets_web/${testDataset}/pano/${filename}`;
+    try {
+      const resp3 = await fetch(directUrl, {
+        headers: { 'x-authorization': `Bearer ${token}` },
+        redirect: 'follow',
+      });
+      attempts.push({ 
+        method: 'direct-data-path', 
+        url: directUrl.slice(0, 150), 
+        status: resp3.status,
+        contentType: resp3.headers.get('content-type') || undefined,
+      });
+      if (resp3.ok) {
+        const buffer = await resp3.arrayBuffer();
+        return {
+          success: true,
+          attempts,
+          imageSize: buffer.byteLength,
+          contentType: resp3.headers.get('content-type') || 'unknown',
+        };
+      }
+      await resp3.text();
+    } catch (e: any) {
+      attempts.push({ method: 'direct-data-path', url: directUrl.slice(0, 150), status: -1 });
+    }
+    
+    // Method 4: Try x-api-key instead of x-authorization
+    console.log('Method 4: Try Authorization header instead of x-authorization');
+    try {
+      const resp4 = await fetch(baseUrl, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        redirect: 'follow',
+      });
+      attempts.push({ 
+        method: 'standard-auth-header', 
+        url: baseUrl.slice(0, 150), 
+        status: resp4.status,
+        contentType: resp4.headers.get('content-type') || undefined,
+      });
+      if (resp4.ok) {
+        const buffer = await resp4.arrayBuffer();
+        return {
+          success: true,
+          attempts,
+          imageSize: buffer.byteLength,
+          contentType: resp4.headers.get('content-type') || 'unknown',
+        };
+      }
+      await resp4.text();
+    } catch (e: any) {
+      attempts.push({ method: 'standard-auth-header', url: baseUrl.slice(0, 150), status: -1 });
+    }
+    
+    return { 
+      success: false, 
+      attempts, 
+      error: 'All download methods failed - check NavVis account permissions for image access' 
+    };
+    
+  } catch (e: any) {
+    return { success: false, attempts, error: e.message };
+  }
+}
+
 // Test Ivion image access
 async function testImageAccess(siteId: string): Promise<{
   success: boolean;
@@ -1267,6 +1426,11 @@ serve(async (req) => {
       case 'test-image-access':
         if (!params.siteId) throw new Error('siteId required');
         result = await testImageAccess(params.siteId);
+        break;
+
+      case 'test-image-download':
+        if (!params.siteId) throw new Error('siteId required');
+        result = await testImageDownload(params.siteId, params.datasetName, params.imageFilename);
         break;
 
       default:
