@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Scan, Building2, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Scan, Building2, CheckCircle2, RefreshCw, ArrowLeft, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import ScanConfigPanel from '@/components/ai-scan/ScanConfigPanel';
 import ScanProgressPanel from '@/components/ai-scan/ScanProgressPanel';
 import DetectionReviewQueue from '@/components/ai-scan/DetectionReviewQueue';
+import TemplateManagement from '@/components/ai-scan/TemplateManagement';
 
 interface DetectionTemplate {
   id: string;
@@ -39,6 +41,7 @@ interface Building {
 
 const AiAssetScan: React.FC = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
   const [scanJobs, setScanJobs] = useState<ScanJob[]>([]);
@@ -46,6 +49,14 @@ const AiAssetScan: React.FC = () => {
   const [activeScanJob, setActiveScanJob] = useState<ScanJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('configure');
+
+  const handleBack = () => {
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else {
+      navigate('/inventory');
+    }
+  };
 
   // Load templates, scan jobs, and buildings on mount
   useEffect(() => {
@@ -130,6 +141,14 @@ const AiAssetScan: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleBack}
+            className="shrink-0"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div className="p-2 bg-primary/10 rounded-lg">
             <Scan className="h-6 w-6 text-primary" />
           </div>
@@ -148,7 +167,7 @@ const AiAssetScan: React.FC = () => {
 
       {/* Main content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
           <TabsTrigger value="configure" disabled={!!activeScanJob}>
             <Building2 className="h-4 w-4 mr-2" />
             Konfigurera
@@ -166,6 +185,10 @@ const AiAssetScan: React.FC = () => {
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Granska
           </TabsTrigger>
+          <TabsTrigger value="templates">
+            <Settings2 className="h-4 w-4 mr-2" />
+            Mallar
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="configure" className="flex-1 overflow-auto mt-0">
@@ -181,6 +204,10 @@ const AiAssetScan: React.FC = () => {
             activeScanJob={activeScanJob}
             recentJobs={scanJobs.slice(0, 5)}
             onScanCompleted={handleScanCompleted}
+            onScanCancelled={() => {
+              setActiveScanJob(null);
+              loadData();
+            }}
             onRefresh={loadData}
           />
         </TabsContent>
@@ -190,6 +217,10 @@ const AiAssetScan: React.FC = () => {
             scanJobs={scanJobs}
             onDetectionProcessed={loadData}
           />
+        </TabsContent>
+
+        <TabsContent value="templates" className="flex-1 overflow-auto mt-0">
+          <TemplateManagement onTemplatesChanged={loadData} />
         </TabsContent>
       </Tabs>
     </div>
