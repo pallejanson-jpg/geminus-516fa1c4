@@ -1,96 +1,154 @@
 
 
-# Plan: Ta bort skanningar och utöka mallhantering
+# Plan: Fixa AI-skanningssidan för mobil och lägg till automatiskt foto
 
-## Översikt
+## Identifierade problem
 
-Denna plan implementerar tre funktioner:
-1. Möjlighet att ta bort gamla skanningsjobb från listan
-2. Lägga till nya detektionsmallar för fler objekttyper
-3. Utöka mallformulär med kategori och symbolval
+Efter undersökning av koden och databasen har jag hittat följande:
+
+### 1. Gamla skanningar fastnar på "Pågår"
+Det finns 10 gamla scan_jobs i databasen med `status: 'running'` som aldrig avslutades. Dessa visas som pågående trots att ingen bearbetning sker. Problemet är att:
+- Systemet saknar logik för att automatiskt markera gamla jobb som övergivna
+- Avbryt-knappen finns men syns kanske inte på mobil
+
+### 2. Mobilt UI överlappar
+- Tab-raden med 4 tabs (`Konfigurera`, `Skanning`, `Granska`, `Mallar`) blir för trång på 390px bredd
+- Text och badges överlappar varandra
+- Korten i `Tidigare skanningar` är för trånga
+
+### 3. Avbryt/Ta bort syns inte på mobil
+- Avbryt-knappen finns i koden men layouten gör den svår att se/nå
+- Papperskorgen för att ta bort gamla skanningar finns men syns dåligt
+
+### 4. Inget automatiskt foto sparas
+- AI:n identifierar objekt och sparar en thumbnail
+- Men denna thumbnail länkas inte till tillgången när den godkänns
+- Användaren vill ha ett beskuret foto med marginal automatiskt sparat
 
 ---
 
-## Del 1: Ta bort skanningsjobb
+## Del 1: Åtgärda mobilt UI
+
+### Fil: `src/pages/AiAssetScan.tsx`
+
+**Ändringar:**
+- Gör tabs responsiva med ikoner utan text på mobil
+- Använd `useIsMobile()` för att anpassa layout
+- Komprimera header på mobil
+
+```text
+Desktop tabs:
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│ 🏢 Konfigurera│ 🔄 Skanning  │ ✓ Granska   │ ⚙ Mallar    │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+
+Mobil tabs:
+┌──────────┬──────────┬──────────┬──────────┐
+│    🏢    │    🔄    │    ✓     │    ⚙    │
+│Konfigurera│ Skanning │ Granska  │  Mallar  │
+└──────────┴──────────┴──────────┴──────────┘
+```
 
 ### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
 
-Lägg till en borttagningsknapp för varje jobb i listan "Tidigare skanningar".
-
 **Ändringar:**
-- Importera `Trash2` och `AlertDialog`-komponenter
-- Lägg till `deleteScanJob()` funktion som anropar edge function
-- Ny `delete-scan-job` action med bekräftelsedialog
-- Endast avslutade jobb kan raderas (completed, cancelled, failed)
+- Responsiv layout för aktiv skanning-kortet
+- Stapla knappar vertikalt på mobil
+- Responsiv layout för "Tidigare skanningar"-listan
+- Tydligare papperskorg för borttagning
 
-**Layout:**
 ```text
-┌─────────────────────────────────────────────────────────┐
-│ [Badge: Klar] Brandsläckare                    [🗑] │
-│ 2026-01-31 10:30               45 hittade, 120 bilder │
-└─────────────────────────────────────────────────────────┘
+Mobil layout för tidigare skanningar:
+┌─────────────────────────────────────────┐
+│ [Badge: Klar] Brandsläckare, Nöduggång │
+│ 2026-01-31 10:30                        │
+│ 45 hittade | 120 bilder         [🗑️]   │
+└─────────────────────────────────────────┘
 ```
-
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
-
-Ny action `delete-scan-job`:
-- Ta bort alla pending_detections kopplade till jobbet
-- Ta bort scan_job-raden
-- Returnera bekräftelse
 
 ---
 
-## Del 2: Nya detektionsmallar
-
-### Databasinlägg
-
-Följande 8 nya mallar ska skapas:
-
-| Namn | Object Type | Kategori | Symbol | AI-prompt |
-|------|-------------|----------|--------|-----------|
-| Larmknapp | alarm_button | Fire | Brandlarmsknapp | Look for red fire alarm pull stations or manual call points mounted on walls... |
-| Brandslang | fire_hose | Fire | Brandslang | Look for fire hose cabinets, fire hose reels, or wall-mounted fire hose compartments... |
-| Röklucka | smoke_vent | Fire | null | Look for smoke ventilation hatches on ceilings or walls, roof smoke vents... |
-| Hiss | elevator | Byggnadsdel | null | Look for elevator doors, lift entrances. They are tall rectangular metal doors... |
-| Rulltrappa | escalator | Byggnadsdel | null | Look for escalators, moving stairs. They have steps, handrails... |
-| Dörr | door | Byggnadsdel | null | Look for doors including fire doors, emergency exits, security doors... |
-| Elskåp | electrical_cabinet | Installation | null | Look for electrical distribution cabinets, fuse boxes, power panels... |
-| Trappa | staircase | Byggnadsdel | null | Look for staircases, stairwells, emergency stairways... |
-
----
-
-## Del 3: Utöka mallformulär med symbol
-
-### Fil: `src/components/ai-scan/TemplateManagement.tsx`
-
-Uppdatera formuläret för att inkludera en dropdown för symbolval:
-
-**Ändringar:**
-- Hämta alla tillgängliga symboler från `annotation_symbols`
-- Lägg till `Select`-komponent för symbolval
-- Visa symbol-ikon om tillgänglig
-- Skicka `default_symbol_id` vid sparning
-
-**Uppdaterat formulär:**
-```text
-┌─────────────────────────────────────────────────────┐
-│ Namn *              │ Objekttyp *                   │
-│ [Brandsläckare    ] │ [fire_extinguisher          ] │
-├─────────────────────────────────────────────────────┤
-│ Beskrivning                                         │
-│ [Röda brandsläckare monterade på väggar           ] │
-├─────────────────────────────────────────────────────┤
-│ Kategori            │ Symbol                        │
-│ [Brandredskap     ] │ [🔴 Brandsläckare CO2 ▼    ] │  ← NY
-├─────────────────────────────────────────────────────┤
-│ AI-prompt *                                         │
-│ [Look for red fire extinguishers...               ] │
-└─────────────────────────────────────────────────────┘
-```
+## Del 2: Automatisk avslutning av övergivna skanningar
 
 ### Fil: `supabase/functions/ai-asset-detection/index.ts`
 
-Uppdatera `update-template` och `create-template` för att hantera `default_symbol_id`.
+**Ny funktion: `cleanupStaleScanJobs()`**
+
+Körs automatiskt vid `get-scan-jobs` för att markera gamla jobb som övergivna:
+- Skanningar med status `running` som inte uppdaterats på >30 minuter → sätt till `failed`
+- Skanningar med status `queued` som skapats för >1 timme sedan → sätt till `cancelled`
+
+```typescript
+async function cleanupStaleScanJobs(): Promise<number> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // Mark stale running jobs as failed (no update in 30 min)
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  
+  const { data: staleRunning } = await supabase
+    .from('scan_jobs')
+    .update({ 
+      status: 'failed', 
+      error_message: 'Automatiskt avbruten - ingen aktivitet på 30 minuter',
+      completed_at: new Date().toISOString()
+    })
+    .eq('status', 'running')
+    .lt('started_at', thirtyMinAgo)
+    .is('completed_at', null)
+    .select('id');
+  
+  return staleRunning?.length || 0;
+}
+```
+
+---
+
+## Del 3: Förbättra avbryt-funktionen på mobil
+
+### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
+
+**Ändringar:**
+- Gör Avbryt-knappen tydligare och röd på mobil
+- Placera den på en egen rad under progress
+- Lägg till bekräftelse-dialog innan avbrytning
+
+```text
+Mobil layout för aktiv skanning:
+┌─────────────────────────────────────────┐
+│ 🔄 Aktiv skanning          [Badge: Pågår]│
+│ Söker efter: Brandsläckare              │
+├─────────────────────────────────────────┤
+│ ▓▓▓▓▓▓▓▓░░░░░░░░░░░ 45%               │
+│ 45 / 100 bilder                         │
+├─────────────────────────────────────────┤
+│ [▶ Bearbeta nästa batch]                │
+│ [⏹ Avbryt skanning] (röd)              │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Del 4: Spara beskuret foto automatiskt
+
+### Fil: `supabase/functions/ai-asset-detection/index.ts`
+
+**Ändring i `saveThumbnail()`:**
+- Lägg till 20% marginal runt bounding box
+- Spara som högre kvalitet för användning som asset-foto
+
+**Ändring i `approveDetection()`:**
+- Kopiera `thumbnail_url` från `pending_detections` till `assets.attributes.imageUrl`
+- Detta gör att fotot automatiskt visas i tillgångsvisningen
+
+```typescript
+// I approveDetection()
+const attributes: Record<string, any> = {
+  ai_detected: true,
+  ai_confidence: detection.confidence,
+  ai_description: detection.ai_description,
+  imageUrl: detection.thumbnail_url, // <-- NY: Automatiskt foto
+};
+```
 
 ---
 
@@ -100,134 +158,73 @@ Uppdatera `update-template` och `create-template` för att hantera `default_symb
 
 | Fil | Åtgärd | Beskrivning |
 |-----|--------|-------------|
-| `src/components/ai-scan/ScanProgressPanel.tsx` | Ändra | Lägg till borttagningsfunktion för skanningsjobb |
-| `src/components/ai-scan/TemplateManagement.tsx` | Ändra | Lägg till symbolväljare i formuläret |
-| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Ny action `delete-scan-job` |
-| Databas | Insert | 8 nya detektionsmallar |
+| `src/pages/AiAssetScan.tsx` | Ändra | Responsiv header och tabs för mobil |
+| `src/components/ai-scan/ScanProgressPanel.tsx` | Ändra | Responsiv layout + tydligare avbryt/ta bort |
+| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Auto-cleanup + spara thumbnail till asset |
 
-### Nya detektionsmallar - SQL
+### Marginalbeskärning för thumbnail
 
-```sql
-INSERT INTO detection_templates (name, object_type, description, default_category, default_symbol_id, ai_prompt, is_active)
-VALUES 
-  ('Larmknapp', 'alarm_button', 'Manuella brandlarmsknappar på väggar', 'Fire', 
-   '8bdb82e0-92ba-4dd5-a3a7-0e355a5fd8a1',
-   'Look for red fire alarm pull stations or manual call points mounted on walls. They are typically small red boxes with a handle or button, often with a glass panel that needs to be broken. They may have text like "FIRE" or "BRAND" and an alarm symbol.', true),
-  
-  ('Brandslang', 'fire_hose', 'Brandslangsskåp och slangrullar', 'Fire',
-   '14c4b20b-3a4a-4647-aa75-a406fa5846e9',
-   'Look for fire hose cabinets, fire hose reels, or wall-mounted fire hose compartments. They are typically red or white cabinets with glass doors, containing a rolled-up hose. Look for labels saying "FIRE HOSE" or fire hose symbols.', true),
-  
-  ('Röklucka', 'smoke_vent', 'Rökluckor i tak eller väggar', 'Fire', NULL,
-   'Look for smoke ventilation hatches on ceilings or walls, roof smoke vents, or AOV (Automatic Opening Vent) panels. They may have control buttons nearby or be integrated into the ceiling. Look for smoke ventilation signs or labels.', true),
-  
-  ('Hiss', 'elevator', 'Hissdörrar och hissentréer', 'Byggnadsdel', NULL,
-   'Look for elevator doors, lift entrances, or service lifts. They are typically tall rectangular metal doors (often stainless steel or painted) with call buttons nearby. Look for floor indicators above the doors and accessibility signs.', true),
-  
-  ('Rulltrappa', 'escalator', 'Rulltrappor', 'Byggnadsdel', NULL,
-   'Look for escalators or moving stairs. They have metal steps, rubber handrails on both sides, and typically connect different floor levels. Look for the characteristic diagonal slope and the comb plates at entry/exit points.', true),
-  
-  ('Dörr', 'door', 'Dörrar inklusive branddörrar', 'Byggnadsdel', NULL,
-   'Look for doors including fire doors, emergency exits, security doors, and access-controlled doors. Focus on doors with signage (fire door, keep closed, emergency exit), door closers, card readers, or special markings. Skip normal office or room doors.', true),
-  
-  ('Elskåp', 'electrical_cabinet', 'Elcentraler och ställverk', 'Installation', NULL,
-   'Look for electrical distribution cabinets, fuse boxes, power panels, or electrical switchboards. They are typically grey or beige metal cabinets with warning signs (lightning bolt symbol, "DANGER HIGH VOLTAGE"). They may have meters or indicators visible.', true),
-  
-  ('Trappa', 'staircase', 'Trappor och trapphus', 'Byggnadsdel', NULL,
-   'Look for staircases, stairwells, emergency stairways, or fire escape stairs. Focus on main access points and entrances to stairwells. Look for stairway signs, handrails, and emergency lighting. Include both interior and exterior staircases.', true);
+Nuvarande kod:
+```typescript
+saveThumbnail(base64, bbox, detectionId)
 ```
 
-### Edge function-ändringar
-
-**Ny action: `delete-scan-job`**
+Ny logik med marginal:
 ```typescript
-async function deleteScanJob(scanJobId: string): Promise<{ success: boolean }> {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  
-  // Verify job exists and is not running
-  const { data: job, error: jobError } = await supabase
-    .from('scan_jobs')
-    .select('status')
-    .eq('id', scanJobId)
-    .single();
-  
-  if (jobError || !job) {
-    throw new Error('Scan job not found');
+// Lägg till 20% marginal runt objektet
+const margin = 0.2;
+const expandedBbox = {
+  ymin: Math.max(0, bbox.ymin - (bbox.ymax - bbox.ymin) * margin),
+  xmin: Math.max(0, bbox.xmin - (bbox.xmax - bbox.xmin) * margin),
+  ymax: Math.min(1000, bbox.ymax + (bbox.ymax - bbox.ymin) * margin),
+  xmax: Math.min(1000, bbox.xmax + (bbox.xmax - bbox.xmin) * margin),
+};
+saveThumbnail(base64, expandedBbox, detectionId)
+```
+
+### Asset med automatiskt foto
+
+```json
+{
+  "fm_guid": "uuid...",
+  "name": "Gloria PD6GA 6kg",
+  "attributes": {
+    "ai_detected": true,
+    "ai_confidence": 0.94,
+    "imageUrl": "https://.../detection-thumbnails/uuid.jpg",  // <-- NYTT
+    "brand": "Gloria",
+    "model": "PD6GA"
   }
-  
-  if (job.status === 'running' || job.status === 'queued') {
-    throw new Error('Cannot delete a running or queued scan job');
-  }
-  
-  // Delete related pending_detections first
-  await supabase
-    .from('pending_detections')
-    .delete()
-    .eq('scan_job_id', scanJobId);
-  
-  // Delete the scan job
-  const { error: deleteError } = await supabase
-    .from('scan_jobs')
-    .delete()
-    .eq('id', scanJobId);
-  
-  if (deleteError) throw new Error(`Failed to delete: ${deleteError.message}`);
-  
-  return { success: true };
 }
 ```
 
 ---
 
-## Befintliga symboler som kan kopplas
+## Databasen: Rensa gamla skanningar
 
-| Symbol | ID | Förslag för mall |
-|--------|-----|-----------------|
-| Brandlarmsknapp | 8bdb82e0-92ba-4dd5-a3a7-0e355a5fd8a1 | Larmknapp |
-| Brandslang | 14c4b20b-3a4a-4647-aa75-a406fa5846e9 | Brandslang |
-| Brandsläckare CO2 | 22e0c759-1c47-4b74-917c-9e090351a6cc | Fire Extinguisher |
-| Branddörr | e165e79d-5da8-4ec7-88a1-563cef18f0b0 | Dörr (branddörrar) |
-
----
-
-## Databas-migration för DELETE-behörighet
-
-RLS-policy för att tillåta delete på `scan_jobs`:
-
-```sql
--- Allow deletion of non-active scan jobs
-ALTER TABLE scan_jobs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "scan_jobs_delete" ON scan_jobs
-FOR DELETE
-USING (
-  auth.uid() IS NOT NULL 
-  AND status NOT IN ('running', 'queued')
-);
-
--- Allow deletion of pending_detections by authenticated users
-CREATE POLICY "pending_detections_delete" ON pending_detections
-FOR DELETE
-USING (auth.uid() IS NOT NULL);
-```
+Jag kommer också automatiskt markera de 10 gamla "running"-jobben som misslyckade vid första anropet till `get-scan-jobs`.
 
 ---
 
 ## Testplan
 
-1. **Ta bort skanning**
-   - Gå till Skanning-fliken
-   - Klicka på papperskorgen på en avslutad skanning
-   - Bekräfta i dialogen
-   - Verifiera att skanningen försvinner från listan
+1. **Mobilt UI**
+   - Öppna `/inventory/ai-scan` på mobilvy (390px)
+   - Verifiera att tabs inte överlappar
+   - Verifiera att tidigare skanningar-listan är läsbar
 
-2. **Nya mallar**
-   - Gå till Mallar-fliken
-   - Verifiera att de 8 nya mallarna visas
-   - Kontrollera att symboler visas för de som har koppling
+2. **Avbryt skanning**
+   - Starta en skanning
+   - Verifiera att Avbryt-knappen är tydlig och röd
+   - Klicka Avbryt och bekräfta att jobbet avslutas
 
-3. **Symbolval i formulär**
-   - Redigera en befintlig mall
-   - Välj en symbol från dropdown
-   - Spara och verifiera att symbolen sparas
+3. **Ta bort gamla skanningar**
+   - Verifiera att gamla skanningar nu visas som "Misslyckades"
+   - Klicka på papperskorgen för att ta bort
+   - Verifiera borttagning
+
+4. **Automatiskt foto**
+   - Kör en skanning på en byggnad
+   - Godkänn en detektion
+   - Verifiera att den skapade tillgången har ett foto i `attributes.imageUrl`
 
