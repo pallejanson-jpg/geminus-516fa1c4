@@ -231,12 +231,55 @@ async function getPendingDetections(params: {
   return { detections: data || [], total: count || 0 };
 }
 
+// Cleanup stale scan jobs - mark old running jobs as failed
+async function cleanupStaleScanJobs(): Promise<number> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // Mark stale running jobs as failed (no update in 30 min)
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  
+  const { data: staleRunning } = await supabase
+    .from('scan_jobs')
+    .update({ 
+      status: 'failed', 
+      error_message: 'Automatiskt avbruten - ingen aktivitet på 30 minuter',
+      completed_at: new Date().toISOString()
+    })
+    .eq('status', 'running')
+    .lt('started_at', thirtyMinAgo)
+    .is('completed_at', null)
+    .select('id');
+  
+  // Mark old queued jobs as cancelled (created >1 hour ago)
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  
+  const { data: staleQueued } = await supabase
+    .from('scan_jobs')
+    .update({ 
+      status: 'cancelled', 
+      error_message: 'Automatiskt avbruten - aldrig startad',
+      completed_at: new Date().toISOString()
+    })
+    .eq('status', 'queued')
+    .lt('created_at', oneHourAgo)
+    .select('id');
+  
+  const cleaned = (staleRunning?.length || 0) + (staleQueued?.length || 0);
+  if (cleaned > 0) {
+    console.log(`Cleaned up ${cleaned} stale scan jobs`);
+  }
+  return cleaned;
+}
+
 // Get scan jobs
 async function getScanJobs(params: {
   buildingFmGuid?: string;
   status?: string;
 }): Promise<any[]> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  
+  // Auto-cleanup stale jobs before returning the list
+  await cleanupStaleScanJobs();
   
   let query = supabase.from('scan_jobs').select('*');
   
@@ -657,7 +700,7 @@ function imageToWorldCoords(
   };
 }
 
-// Save thumbnail to Supabase Storage
+// Save thumbnail to Supabase Storage - with 20% margin around object
 async function saveThumbnail(
   imageBase64: string,
   boundingBox: { ymin: number; xmin: number; ymax: number; xmax: number },
@@ -666,12 +709,31 @@ async function saveThumbnail(
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
+    // Add 20% margin around the bounding box for better context
+    const margin = 0.2;
+    const boxWidth = boundingBox.xmax - boundingBox.xmin;
+    const boxHeight = boundingBox.ymax - boundingBox.ymin;
+    
+    const expandedBbox = {
+      ymin: Math.max(0, boundingBox.ymin - boxHeight * margin),
+      xmin: Math.max(0, boundingBox.xmin - boxWidth * margin),
+      ymax: Math.min(1000, boundingBox.ymax + boxHeight * margin),
+      xmax: Math.min(1000, boundingBox.xmax + boxWidth * margin),
+    };
+    
+    console.log(`Thumbnail bbox: original (${boundingBox.xmin},${boundingBox.ymin})-(${boundingBox.xmax},${boundingBox.ymax}), ` +
+                `expanded (${expandedBbox.xmin.toFixed(0)},${expandedBbox.ymin.toFixed(0)})-(${expandedBbox.xmax.toFixed(0)},${expandedBbox.ymax.toFixed(0)})`);
+    
     // Decode base64 to bytes
     const binaryStr = atob(imageBase64);
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
     }
+    
+    // Note: We're saving the full panorama for now
+    // In a future update, we could use a server-side image processing library
+    // to crop the image to the expanded bounding box
     
     const fileName = `${detectionId}.jpg`;
     
@@ -1206,6 +1268,11 @@ async function approveDetection(params: {
     ai_confidence: detection.confidence,
     ai_description: detection.ai_description,
   };
+  
+  // Add auto-captured photo from detection thumbnail
+  if (detection.thumbnail_url) {
+    attributes.imageUrl = detection.thumbnail_url;
+  }
   
   // Add extracted properties to attributes
   if (props.brand) attributes.brand = props.brand;
