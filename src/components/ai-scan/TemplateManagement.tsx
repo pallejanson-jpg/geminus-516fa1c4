@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings2, Plus, Pencil, Trash2, Save, X, RefreshCw, AlertCircle, ImageIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -64,6 +65,7 @@ interface TemplateManagementProps {
 
 const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChanged }) => {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -346,9 +348,9 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           templates.map(template => (
             <Card key={template.id} className={!template.is_active ? 'opacity-60' : ''}>
               <CardContent className="pt-6">
-                <div className="flex items-start justify-between gap-4">
+                <div className={isMobile ? 'space-y-3' : 'flex items-start justify-between gap-4'}>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="font-medium">{template.name}</h3>
                       <Badge variant={template.is_active ? 'default' : 'secondary'}>
                         {template.is_active ? 'Aktiv' : 'Inaktiv'}
@@ -359,7 +361,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                         {template.description}
                       </p>
                     )}
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 md:gap-3 text-xs text-muted-foreground">
                       <span>Typ: <code className="bg-muted px-1 rounded">{template.object_type}</code></span>
                       {template.default_category && (
                         <span>Kategori: <code className="bg-muted px-1 rounded">{template.default_category}</code></span>
@@ -381,21 +383,35 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Switch
-                      checked={template.is_active}
-                      onCheckedChange={() => toggleActive(template)}
-                    />
-                    <Button variant="outline" size="icon" onClick={() => openEditTemplateDialog(template)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={() => setDeleteConfirmId(template.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  {/* Controls: stacked on mobile, inline on desktop */}
+                  <div className={`flex items-center gap-2 ${isMobile ? 'pt-2 border-t mt-2' : 'shrink-0'}`}>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={template.is_active}
+                        onCheckedChange={() => toggleActive(template)}
+                      />
+                      {isMobile && <span className="text-xs text-muted-foreground">{template.is_active ? 'På' : 'Av'}</span>}
+                    </div>
+                    <div className="flex items-center gap-1 ml-auto">
+                      <Button 
+                        variant="outline" 
+                        size={isMobile ? 'sm' : 'icon'} 
+                        onClick={() => openEditTemplateDialog(template)}
+                        className={isMobile ? 'h-8 px-2' : ''}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        {isMobile && <span className="ml-1 text-xs">Ändra</span>}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size={isMobile ? 'sm' : 'icon'}
+                        onClick={() => setDeleteConfirmId(template.id)}
+                        className={isMobile ? 'h-8 px-2' : ''}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {isMobile && <span className="ml-1 text-xs">Ta bort</span>}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>

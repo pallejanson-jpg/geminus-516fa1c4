@@ -21,6 +21,7 @@ import {
   generateMockSensorData,
 } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
+import IoTHoverLabel from './IoTHoverLabel';
 
 interface RoomVisualizationPanelProps {
   viewerRef: React.MutableRefObject<any>;
@@ -100,6 +101,15 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Hover label state for IoT visualization
+  const [hoverLabel, setHoverLabel] = useState<{
+    visible: boolean;
+    position: { x: number; y: number };
+    roomName: string;
+    value: number;
+    color: [number, number, number];
+  } | null>(null);
 
   const config = VISUALIZATION_CONFIGS[visualizationType];
 
@@ -405,6 +415,88 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Hover listener for IoT labels on rooms - displays sensor value on hover
+  useEffect(() => {
+    if (visualizationType === 'none') {
+      setHoverLabel(null);
+      return;
+    }
+
+    const viewer = viewerRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.cameraControl) return;
+
+    // Helper to find room by entity ID
+    const getRoomFromEntityId = (entityId: string): RoomData | null => {
+      // Try to find the fmGuid from entity's metadata
+      const metaObj = xeokitViewer.metaScene?.metaObjects?.[entityId];
+      if (!metaObj) return null;
+
+      // Get fmGuid from originalSystemId or traverse up to find parent IfcSpace
+      let currentMeta = metaObj;
+      while (currentMeta) {
+        if (currentMeta.type?.toLowerCase() === 'ifcspace') {
+          const fmGuid = (currentMeta.originalSystemId || currentMeta.id || '').toLowerCase();
+          return rooms.find(r => r.fmGuid.toLowerCase() === fmGuid) || null;
+        }
+        currentMeta = currentMeta.parent;
+      }
+      return null;
+    };
+
+    const handleHover = (entityId: string | null, canvasCoords: number[]) => {
+      if (!entityId) {
+        setHoverLabel(null);
+        return;
+      }
+
+      const room = getRoomFromEntityId(entityId);
+      if (!room) {
+        setHoverLabel(null);
+        return;
+      }
+
+      const value = useMockData
+        ? generateMockSensorData(room.fmGuid, visualizationType)
+        : extractSensorValue(room.attributes, visualizationType);
+
+      if (value === null) {
+        setHoverLabel(null);
+        return;
+      }
+
+      const color = getVisualizationColor(value, visualizationType);
+      if (!color) {
+        setHoverLabel(null);
+        return;
+      }
+
+      setHoverLabel({
+        visible: true,
+        position: { x: canvasCoords[0], y: canvasCoords[1] },
+        roomName: room.name || 'Okänt rum',
+        value,
+        color,
+      });
+    };
+
+    // xeokit hover event
+    const onHover = (canvasCoords: number[], hit: any) => {
+      if (hit?.entity?.id) {
+        handleHover(hit.entity.id, canvasCoords);
+      } else {
+        setHoverLabel(null);
+      }
+    };
+
+    xeokitViewer.cameraControl.on('hover', onHover);
+
+    return () => {
+      xeokitViewer.cameraControl?.off?.('hover', onHover);
+      setHoverLabel(null);
+    };
+  }, [viewerRef, visualizationType, rooms, useMockData]);
+
   // Generate legend gradient
   const legendGradient = useMemo(() => {
     if (!config || config.colorStops.length === 0) return '';
@@ -526,6 +618,18 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* IoT Hover Label - rendered outside panel but associated with it */}
+      {hoverLabel && (
+        <IoTHoverLabel
+          visible={hoverLabel.visible}
+          position={hoverLabel.position}
+          roomName={hoverLabel.roomName}
+          value={hoverLabel.value}
+          visualizationType={visualizationType}
+          color={hoverLabel.color}
+        />
+      )}
     </div>
   );
 };
