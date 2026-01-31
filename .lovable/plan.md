@@ -1,281 +1,264 @@
 
-# Plan: Responsivitet, AI-skanning fix & IoT Labels i 3D
+# Plan: English AI Onboarding Wizard & Mobile 3D Viewer Menu Fix
 
-## Översikt
+## Overview
 
-Denna plan åtgärdar tre områden:
-1. **Mallsidans responsivitet** - Det lila/överlappande layouten
-2. **AI-skanning 0 detektioner** - Regex-bugg som bryter JSON-parsning
-3. **IoT-labels i 3D** - Hover-labels med sensordata i rumsvisualiseringen
-
----
-
-## Del 1: Fixa mallsidans responsivitet
-
-### Problem
-På mobil (lila skärmdump) överlappar kontrollerna (Switch, Pencil, Trash2) med mallnamn och Badge. Layouten `flex items-start justify-between gap-4` på rad 349 i `TemplateManagement.tsx` fungerar inte på smala skärmar.
-
-### Lösning
-Ändra till staplad layout på mobil med `useIsMobile` hook:
-
-```text
-Desktop:                          Mobil:
-┌─────────────────────────────────┐   ┌─────────────────────┐
-│ Brandsläckare [Aktiv] [⚡][✏️][🗑️]│   │ Brandsläckare       │
-│ Beskrivning...                  │   │ [Aktiv]             │
-└─────────────────────────────────┘   │ Beskrivning...      │
-                                      │ ┌─[⚡]─┬─[✏️]─┬─[🗑️]─┐│
-                                      │ │ På  │Ändra│ Ta  ││
-                                      │ └─────┴─────┴─bort─┘│
-                                      └─────────────────────┘
-```
-
-### Teknisk implementation
-- Importera `useIsMobile` hook
-- På mobil: flytta kontrollerna till en egen rad under AI-prompt-rutan
-- Gör knapparna större och mer touch-vänliga
-- Lägg till textlabels på mobil för tydlighet
+This plan implements two major features:
+1. **English AI Onboarding Wizard** - Interactive questionnaire with AI-generated personalized welcome
+2. **Mobile 3D Viewer Menu Fix** - Resolve overlapping menus by hiding visualization controls behind a hamburger
 
 ---
 
-## Del 2: Fixa AI-skanning (0 detektioner)
+## Part 1: Mobile 3D Viewer Menu Layout Fix
 
-### Problemanalys
-Jag hittade buggen! På rad 717 i `ai-asset-detection/index.ts`:
+### Current Problem
 
-```javascript
-const jsonMatch = content.match(/\[[\s\S]*?\]/);
+On mobile, two UI elements compete for bottom screen space:
+- **MobileViewerOverlay** (line 2400-2412): Bottom action bar with `Spaces`, `Floors`, `Reset` buttons
+- **ViewerToolbar** (line 2548-2556): Bottom toolbar with zoom/select/measure tools
+
+Both render with absolute positioning at the bottom, causing overlap.
+
+### Solution: Hidden Right-Side Visualization Drawer
+
+**Before (overlapping):**
+```
++-----------------------------------+
+|  [<] Building Name (2/5) [Tree]   |
+|                                   |
+|           3D Canvas               |
+|                    [NavCube]      |
++-----------------------------------+
+|  [Spaces] [Floors] [Reset]        |  ← MobileViewerOverlay
+|  [+]  [-]  [Focus] [Select] [...] |  ← ViewerToolbar (OVERLAPPING!)
++-----------------------------------+
 ```
 
-Denna regex är **non-greedy** (`*?`) vilket gör att den bara matchar till den första `]`. Om AI:n returnerar:
-```json
-[{"object_type":"fire_extinguisher","bounding_box":[1,2,3,4]}]
+**After (clean layout):**
 ```
-Så fångar den bara `[{"object_type":"fire_extinguisher","bounding_box":[1,2,3,4]` - avbruten mitt i nested array!
++-----------------------------------+
+|  [<] Building Name (2/5) [Tree] ☰ | ← Hamburger for visualization
+|                                   |
+|           3D Canvas               |
+|                    [NavCube]      |
++-----------------------------------+
+|  [+]  [-]  [Focus] [Select] [...] |  ← ViewerToolbar only
++-----------------------------------+
 
-### Lösning
-Byt till en mer robust JSON-extraktion som räknar brackets:
+When hamburger tapped - right drawer slides in:
++----------------------+------------+
+|                      | Settings   |
+|    3D Canvas         | [x] Spaces |
+|                      | [Floors]   |
+|                      | [Reset]    |
++----------------------+------------+
+```
+
+### Technical Changes
+
+**File: `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
+
+Transform from bottom bar to right-side drawer:
+- Remove the `absolute bottom-0` action bar
+- Add hamburger button to header (top-right, after Tree button)
+- Create right-side sliding drawer with controls
+- Include Spaces toggle, Floors drawer trigger, Reset button
+
+**File: `src/components/viewer/AssetPlusViewer.tsx`**
+
+Minor adjustments:
+- Ensure ViewerToolbar is the only bottom element on mobile
+- Pass new props to MobileViewerOverlay for drawer state
+
+---
+
+## Part 2: English AI Onboarding Wizard
+
+### User Flow
+
+```
+Step 1: Welcome          Step 2: Role            Step 3: Goals
++------------------+     +------------------+     +------------------+
+| Welcome to       |     | What's your      |     | What would you   |
+| Geminus!         |     | role?            |     | like to do?      |
+|                  |     |                  |     |                  |
+| Let's create a   |     | ○ FM Technician  |     | □ Register       |
+| personalized     |     | ○ Property Mgr   |     |   inventory      |
+| experience.      |     | ○ Consultant     |     | □ Explore 3D     |
+|                  |     | ○ Other          |     |   models         |
+|                  |     |                  |     | □ View insights  |
+|   [Get Started]  |     |    [Continue]    |     |    [Finish]      |
++------------------+     +------------------+     +------------------+
+
+Step 4: AI Welcome (generates personalized message)
++--------------------------------------------------+
+| Your Personal Welcome                             |
+|                                                  |
+| "Welcome to Geminus! As an FM Technician,        |
+| you'll find our inventory tools invaluable       |
+| for tracking fire safety equipment..."           |
+|                                                  |
+| 🔊 [Listen] (text-to-speech via Web Speech API)  |
+|                                                  |
+|               [Start Exploring →]                |
++--------------------------------------------------+
+```
+
+### Files to Create
+
+| File | Description |
+|------|-------------|
+| `src/pages/Onboarding.tsx` | Main onboarding page with step navigation |
+| `src/components/onboarding/WelcomeStep.tsx` | Welcome screen |
+| `src/components/onboarding/RoleSelector.tsx` | Role selection (radio buttons with icons) |
+| `src/components/onboarding/GoalsSelector.tsx` | Goals multi-select (checkboxes) |
+| `src/components/onboarding/OnboardingComplete.tsx` | AI-generated welcome with TTS |
+| `supabase/functions/generate-onboarding/index.ts` | Lovable AI script generation |
+
+### Database Schema
+
+```sql
+-- Table: onboarding_sessions
+CREATE TABLE onboarding_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT, -- 'fm_technician', 'property_manager', 'consultant', 'other'
+  goals TEXT[], -- ['inventory', 'viewer', 'insights', 'navigate']
+  script_content TEXT, -- AI-generated welcome message
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS Policy
+ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own onboarding"
+  ON onboarding_sessions
+  FOR ALL
+  USING (auth.uid() = user_id);
+```
+
+### Edge Function: generate-onboarding
+
+Uses Lovable AI (google/gemini-3-flash-preview) to generate personalized welcome:
 
 ```typescript
-// Hitta det första "[" och matcha till motsvarande "]"
-function extractJsonArray(text: string): string | null {
-  const start = text.indexOf('[');
-  if (start === -1) return null;
-  
-  let depth = 0;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '[') depth++;
-    else if (text[i] === ']') {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
+// Key prompt structure
+const systemPrompt = `You are a friendly onboarding assistant for Geminus, 
+a digital twin platform for facility management.
+
+Generate a short, warm welcome message (2-3 paragraphs) for a new user.
+Tailor the message to their role and selected goals.
+Include 2-3 specific tips for getting started.
+Be professional but friendly.
+Write in English.`;
+
+const userPrompt = `User profile:
+- Role: ${role}
+- Goals: ${goals.join(', ')}
+
+Generate a personalized welcome message.`;
 ```
 
-### Utökad loggning
-Lägg till detaljerad loggning för felsökning:
-- Logga AI:ns råsvar (första 500 tecken)
-- Logga om JSON-extraktionen lyckades
-- Logga antal parsade detektioner
+### Text-to-Speech (Free)
 
----
-
-## Del 3: IoT-labels i 3D rumsvisualisering
-
-### Koncept (inspirerat av Autodesk Tandem)
-När användaren har aktiverat en rumsvisualisering (t.ex. Temperatur) och hovrar över ett färglagt rum, ska en label visas med:
-- Rumsnamn
-- Aktuellt värde med enhet (t.ex. "22.5°C")
-- Färgindikator som matchar rumsfärgen
-
-### Teknisk approach
-
-```text
-┌─────────────────────────────────────────┐
-│              3D Viewer                   │
-│                                         │
-│     ┌──────────────────┐                │
-│     │ 🌡️ Kontor 301    │  ← Hover-label │
-│     │ 21.8°C           │                │
-│     └──────────────────┘                │
-│          ▼                              │
-│    [Färglagt rum]                       │
-│                                         │
-└─────────────────────────────────────────┘
-```
-
-### Implementation
-
-1. **Skapa `IoTHoverLabel` komponent** - En CSS-positionerad label som följer musen
-2. **Utöka `RoomVisualizationPanel`** - Lägg till hover-detektering via xeokit `cameraControl.on('hover')`
-3. **Koppla till sensordata** - Hämta värde från `allData` baserat på hovrat rum
-
-### Dataflöde
-
-```text
-1. Användaren väljer "Temperatur" i RoomVisualizationPanel
-2. Rum färgläggs baserat på sensor-/mockdata
-3. Användaren hovrar över ett rum i 3D
-4. xeokit emittar hover-event med entity ID
-5. Vi slår upp rummet i allData via fmGuid
-6. Vi extraherar sensorvärde med extractSensorValue()
-7. Vi visar label med namn + värde + enhet
-```
-
----
-
-## Teknisk sammanfattning
-
-### Filer som ändras
-
-| Fil | Åtgärd | Beskrivning |
-|-----|--------|-------------|
-| `src/components/ai-scan/TemplateManagement.tsx` | Ändra | Responsiv layout för mallkort |
-| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Fixa JSON-parsning + loggning |
-| `src/components/viewer/RoomVisualizationPanel.tsx` | Ändra | Lägg till hover-label för sensordata |
-
-### Ny komponent
-
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/components/viewer/IoTHoverLabel.tsx` | Hover-label komponent för 3D-vyn |
-
----
-
-## Del 3a: IoT-label implementation
-
-### IoTHoverLabel.tsx (ny fil)
-
-Skapar en flyttbar, CSS-positionerad label:
+Uses Web Speech API for audio playback:
 
 ```typescript
-interface IoTHoverLabelProps {
-  visible: boolean;
-  position: { x: number; y: number };
-  roomName: string;
-  value: number;
-  unit: string;
-  color: [number, number, number];
-}
-
-const IoTHoverLabel: React.FC<IoTHoverLabelProps> = ({
-  visible, position, roomName, value, unit, color
-}) => {
-  if (!visible) return null;
-  
-  return (
-    <div 
-      className="absolute pointer-events-none z-50 bg-card/95 backdrop-blur-sm 
-                 border rounded-lg shadow-lg px-3 py-2 text-sm"
-      style={{ 
-        left: position.x + 12, 
-        top: position.y - 20,
-        borderLeftColor: `rgb(${color.join(',')})`,
-        borderLeftWidth: 3
-      }}
-    >
-      <div className="font-medium text-foreground">{roomName}</div>
-      <div className="text-lg font-bold" style={{ color: `rgb(${color.join(',')})` }}>
-        {value.toFixed(1)}{unit}
-      </div>
-    </div>
-  );
+const speak = (text: string) => {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.95;
+  speechSynthesis.speak(utterance);
 };
 ```
 
-### Hover-integration i RoomVisualizationPanel
-
-Lägger till hover-lyssnare på xeokit viewer:
+### Route Integration
 
 ```typescript
-// Ny state för hover-label
-const [hoverLabel, setHoverLabel] = useState<{
-  visible: boolean;
-  position: { x: number; y: number };
-  roomName: string;
-  value: number;
-  unit: string;
-  color: [number, number, number];
-} | null>(null);
+// In App.tsx
+<Route 
+  path="/onboarding" 
+  element={
+    <ProtectedRoute>
+      <Onboarding />
+    </ProtectedRoute>
+  } 
+/>
+```
 
-// Hover-lyssnare på viewer
-useEffect(() => {
-  const viewer = viewerRef.current;
-  const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-  if (!xeokitViewer) return;
-  
-  const onHover = (hit: any, coords: number[]) => {
-    if (!hit?.entity?.id || visualizationType === 'none') {
-      setHoverLabel(null);
-      return;
-    }
-    
-    // Hitta rum via entity ID → fmGuid mappning
-    const fmGuid = getRoomFmGuidFromEntity(hit.entity.id);
-    if (!fmGuid) {
-      setHoverLabel(null);
-      return;
-    }
-    
-    // Hämta rumsdata och sensorvärde
-    const room = rooms.find(r => r.fmGuid.toLowerCase() === fmGuid.toLowerCase());
-    if (!room) return;
-    
-    const value = useMockData 
-      ? generateMockSensorData(room.fmGuid, visualizationType)
-      : extractSensorValue(room.attributes, visualizationType);
-    
-    if (value === null) {
-      setHoverLabel(null);
-      return;
-    }
-    
-    const color = getVisualizationColor(value, visualizationType);
-    const config = VISUALIZATION_CONFIGS[visualizationType];
-    
-    setHoverLabel({
-      visible: true,
-      position: { x: coords[0], y: coords[1] },
-      roomName: room.name || 'Okänt rum',
-      value,
-      unit: config.unit,
-      color: color || [128, 128, 128]
-    });
-  };
-  
-  xeokitViewer.cameraControl.on('hover', onHover);
-  return () => xeokitViewer.cameraControl.off('hover', onHover);
-}, [viewerRef, visualizationType, rooms, useMockData]);
+### Navigation Logic
+
+After login, check if user has completed onboarding:
+- If no `onboarding_sessions` record exists with `completed_at` → redirect to `/onboarding`
+- If completed → proceed to home
+
+---
+
+## Technical Summary
+
+### New Files
+
+| File | Description |
+|------|-------------|
+| `src/pages/Onboarding.tsx` | Main onboarding page (step wizard) |
+| `src/components/onboarding/WelcomeStep.tsx` | Welcome screen with illustration |
+| `src/components/onboarding/RoleSelector.tsx` | Role selection with icons |
+| `src/components/onboarding/GoalsSelector.tsx` | Multi-select goals |
+| `src/components/onboarding/OnboardingComplete.tsx` | AI message + TTS |
+| `supabase/functions/generate-onboarding/index.ts` | Lovable AI integration |
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add `/onboarding` route |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Convert bottom bar to right drawer |
+| `src/components/viewer/AssetPlusViewer.tsx` | Simplify mobile rendering |
+| `supabase/config.toml` | Add generate-onboarding function config |
+
+### Database Migration
+
+```sql
+-- Create onboarding_sessions table
+CREATE TABLE onboarding_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT,
+  goals TEXT[],
+  script_content TEXT,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Policy: users can only access their own onboarding data
+CREATE POLICY "Users can manage own onboarding"
+  ON onboarding_sessions
+  FOR ALL
+  USING (auth.uid() = user_id);
 ```
 
 ---
 
-## Testplan
+## Implementation Order
 
-### 1. Mallsidans responsivitet
-- Öppna AI-skanning på mobil (390px)
-- Verifiera att kontroller inte överlappar mallnamn
-- Verifiera att knappar är touch-vänliga
-
-### 2. AI-skanning detektioner
-- Starta ny skanning med existerande mallar
-- Kontrollera loggar för AI-svarsutskrifter
-- Verifiera att detektioner hittas och sparas
-
-### 3. IoT hover-labels
-- Öppna 3D-viewer för en byggnad
-- Aktivera RoomVisualizationPanel
-- Välj "Temperatur" (med simulerad data om nödvändigt)
-- Hovra över färglagda rum
-- Verifiera att label visas med namn + temperatur
+1. **Mobile 3D Viewer fix** - Transform MobileViewerOverlay to right drawer
+2. **Database migration** - Create onboarding_sessions table
+3. **Edge function** - Create generate-onboarding with Lovable AI
+4. **Onboarding components** - Build step-by-step wizard UI
+5. **Route integration** - Add /onboarding route and redirect logic
 
 ---
 
-## Framtida förbättringar (ej i denna plan)
+## Free Video Alternative Note
 
-1. **SensorURL-embed** - Bädda in Senslinc-dashboard via IOT+-knappen
-2. **Realtidsdata** - Koppla till Senslinc API för live-sensorvärden
-3. **Timeline-kontroll** - Scrubba genom historisk sensordata
-4. **3D-heatmap overlay** - Färglägg golv/väggar som i Tandem
+For the jury pitch, the plan uses:
+- **Text-to-Speech** via Web Speech API (completely free, browser-native)
+- **AI Script Generation** via Lovable AI (already configured)
+
+Future enhancement options:
+- **Google Veo 3.1** - For ambient background videos (free tier available)
+- **HeyGen/Synthesia** - For avatar talking-head videos (paid)
