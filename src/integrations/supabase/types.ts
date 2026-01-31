@@ -376,6 +376,7 @@ export type Database = {
           created_at: string | null
           created_ivion_poi_id: number | null
           detection_template_id: string | null
+          extracted_properties: Json | null
           id: string
           ivion_dataset_name: string | null
           ivion_image_id: number | null
@@ -400,6 +401,7 @@ export type Database = {
           created_at?: string | null
           created_ivion_poi_id?: number | null
           detection_template_id?: string | null
+          extracted_properties?: Json | null
           id?: string
           ivion_dataset_name?: string | null
           ivion_image_id?: number | null
@@ -424,6 +426,7 @@ export type Database = {
           created_at?: string | null
           created_ivion_poi_id?: number | null
           detection_template_id?: string | null
+          extracted_properties?: Json | null
           id?: string
           ivion_dataset_name?: string | null
           ivion_image_id?: number | null

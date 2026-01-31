@@ -9,6 +9,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+interface ExtractedProperties {
+  brand?: string;
+  model?: string;
+  size?: string;
+  type?: string;
+  color?: string;
+  mounting?: string;
+  condition?: string;
+  text_visible?: string;
+}
+
 interface PendingDetection {
   id: string;
   object_type: string;
@@ -16,6 +27,7 @@ interface PendingDetection {
   bounding_box: any;
   thumbnail_url: string | null;
   ai_description: string | null;
+  extracted_properties: ExtractedProperties | null;
   status: string;
   building_fm_guid: string;
   ivion_image_id: number | null;
@@ -372,6 +384,27 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                   {getConfidenceBadge(detection.confidence)}
                 </div>
 
+                {/* Show extracted brand/model badges */}
+                {detection.extracted_properties && (
+                  <div className="flex flex-wrap gap-1">
+                    {detection.extracted_properties.brand && (
+                      <Badge variant="outline" className="text-xs">
+                        {detection.extracted_properties.brand}
+                      </Badge>
+                    )}
+                    {detection.extracted_properties.model && (
+                      <Badge variant="outline" className="text-xs">
+                        {detection.extracted_properties.model}
+                      </Badge>
+                    )}
+                    {detection.extracted_properties.size && (
+                      <Badge variant="secondary" className="text-xs">
+                        {detection.extracted_properties.size}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
                 {detection.ai_description && (
                   <p className="text-xs text-muted-foreground line-clamp-2">
                     {detection.ai_description}
@@ -455,16 +488,78 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Konfidens:</span>
-                  <span className="ml-2 font-medium">{Math.round(detailDialog.confidence * 100)}%</span>
+              <div className="space-y-4 text-sm">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-muted-foreground">Konfidens:</span>
+                    <span className="ml-2 font-medium">{Math.round(detailDialog.confidence * 100)}%</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Bild ID:</span>
+                    <span className="ml-2 font-medium">{detailDialog.ivion_image_id || '-'}</span>
+                  </div>
                 </div>
+
+                {/* Extracted Properties Section */}
+                {detailDialog.extracted_properties && Object.keys(detailDialog.extracted_properties).length > 0 && (
+                  <div className="border rounded-lg p-3 bg-muted/30">
+                    <h4 className="font-medium mb-2 text-foreground">Extraherade egenskaper</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {detailDialog.extracted_properties.brand && (
+                        <div>
+                          <span className="text-muted-foreground">Fabrikat:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.brand}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.model && (
+                        <div>
+                          <span className="text-muted-foreground">Modell:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.model}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.size && (
+                        <div>
+                          <span className="text-muted-foreground">Storlek:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.size}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.type && (
+                        <div>
+                          <span className="text-muted-foreground">Typ:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.type}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.color && (
+                        <div>
+                          <span className="text-muted-foreground">Färg:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.color}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.mounting && (
+                        <div>
+                          <span className="text-muted-foreground">Montering:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.mounting}</span>
+                        </div>
+                      )}
+                      {detailDialog.extracted_properties.condition && (
+                        <div>
+                          <span className="text-muted-foreground">Skick:</span>
+                          <span className="ml-2 font-medium">{detailDialog.extracted_properties.condition}</span>
+                        </div>
+                      )}
+                    </div>
+                    {detailDialog.extracted_properties.text_visible && (
+                      <div className="mt-2 pt-2 border-t">
+                        <span className="text-muted-foreground">Synlig text:</span>
+                        <p className="mt-1 font-mono text-xs bg-background p-2 rounded">
+                          {detailDialog.extracted_properties.text_visible}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <span className="text-muted-foreground">Bild ID:</span>
-                  <span className="ml-2 font-medium">{detailDialog.ivion_image_id || '-'}</span>
-                </div>
-                <div className="col-span-2">
                   <span className="text-muted-foreground">AI-beskrivning:</span>
                   <p className="mt-1">{detailDialog.ai_description || 'Ingen beskrivning'}</p>
                 </div>
