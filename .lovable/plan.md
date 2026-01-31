@@ -1,153 +1,88 @@
 
 
-# Plan: Fixa AI-skanningssidan för mobil och lägg till automatiskt foto
+# Plan: Optimera AI-skanning med exempelbilder
 
-## Identifierade problem
+## Sammanfattning av dina frågor
 
-Efter undersökning av koden och databasen har jag hittat följande:
+### 1. Varför tar skanningen lång tid?
+Processen per bild tar ~20-30 sekunder:
+- Nedladdning av panorama (2-10 MB): ~3-5 sek
+- AI-analys med Gemini: ~5-10 sek  
+- Spara thumbnail: ~1 sek
+- Databas + nätverksoverhead: ~2 sek
 
-### 1. Gamla skanningar fastnar på "Pågår"
-Det finns 10 gamla scan_jobs i databasen med `status: 'running'` som aldrig avslutades. Dessa visas som pågående trots att ingen bearbetning sker. Problemet är att:
-- Systemet saknar logik för att automatiskt markera gamla jobb som övergivna
-- Avbryt-knappen finns men syns kanske inte på mobil
+**Med 100 bilder = ~30-50 minuter** (om allt körs automatiskt)
 
-### 2. Mobilt UI överlappar
-- Tab-raden med 4 tabs (`Konfigurera`, `Skanning`, `Granska`, `Mallar`) blir för trång på 390px bredd
-- Text och badges överlappar varandra
-- Korten i `Tidigare skanningar` är för trånga
+### 2. Kostnad i credits
+Lovable AI (Gemini 2.5 Flash) prissättning:
+- Input: ~$0.075 / miljon tokens
+- Stora panoramabilder = ~$0.02-0.05 per bild
+- **100 bilder ≈ $2-5 i AI-kostnader**
 
-### 3. Avbryt/Ta bort syns inte på mobil
-- Avbryt-knappen finns i koden men layouten gör den svår att se/nå
-- Papperskorgen för att ta bort gamla skanningar finns men syns dåligt
-
-### 4. Inget automatiskt foto sparas
-- AI:n identifierar objekt och sparar en thumbnail
-- Men denna thumbnail länkas inte till tillgången när den godkänns
-- Användaren vill ha ett beskuret foto med marginal automatiskt sparat
-
----
-
-## Del 1: Åtgärda mobilt UI
-
-### Fil: `src/pages/AiAssetScan.tsx`
-
-**Ändringar:**
-- Gör tabs responsiva med ikoner utan text på mobil
-- Använd `useIsMobile()` för att anpassa layout
-- Komprimera header på mobil
-
-```text
-Desktop tabs:
-┌──────────────┬──────────────┬──────────────┬──────────────┐
-│ 🏢 Konfigurera│ 🔄 Skanning  │ ✓ Granska   │ ⚙ Mallar    │
-└──────────────┴──────────────┴──────────────┴──────────────┘
-
-Mobil tabs:
-┌──────────┬──────────┬──────────┬──────────┐
-│    🏢    │    🔄    │    ✓     │    ⚙    │
-│Konfigurera│ Skanning │ Granska  │  Mallar  │
-└──────────┴──────────┴──────────┴──────────┘
-```
-
-### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
-
-**Ändringar:**
-- Responsiv layout för aktiv skanning-kortet
-- Stapla knappar vertikalt på mobil
-- Responsiv layout för "Tidigare skanningar"-listan
-- Tydligare papperskorg för borttagning
-
-```text
-Mobil layout för tidigare skanningar:
-┌─────────────────────────────────────────┐
-│ [Badge: Klar] Brandsläckare, Nöduggång │
-│ 2026-01-31 10:30                        │
-│ 45 hittade | 120 bilder         [🗑️]   │
-└─────────────────────────────────────────┘
-```
+### 3. Skulle exempelbilder hjälpa?
+**Ja, definitivt!** "Few-shot learning" där vi visar AI:n exempelbilder förbättrar:
+- ✅ **Precision** - Färre felaktiga detektioner
+- ✅ **Hastighet** - AI:n vet exakt vad den letar efter
+- ✅ **Konsistens** - Samma typ identifieras likt varje gång
 
 ---
 
-## Del 2: Automatisk avslutning av övergivna skanningar
+## Lösning: Exempelbilder i mallarna
 
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
+### Databasändring
 
-**Ny funktion: `cleanupStaleScanJobs()`**
+Lägg till stöd för exempelbilder i `detection_templates`:
 
-Körs automatiskt vid `get-scan-jobs` för att markera gamla jobb som övergivna:
-- Skanningar med status `running` som inte uppdaterats på >30 minuter → sätt till `failed`
-- Skanningar med status `queued` som skapats för >1 timme sedan → sätt till `cancelled`
+```sql
+ALTER TABLE detection_templates 
+ADD COLUMN example_images TEXT[] DEFAULT '{}';
+-- Array med URLs till exempelbilder
+```
 
-```typescript
-async function cleanupStaleScanJobs(): Promise<number> {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  
-  // Mark stale running jobs as failed (no update in 30 min)
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-  
-  const { data: staleRunning } = await supabase
-    .from('scan_jobs')
-    .update({ 
-      status: 'failed', 
-      error_message: 'Automatiskt avbruten - ingen aktivitet på 30 minuter',
-      completed_at: new Date().toISOString()
-    })
-    .eq('status', 'running')
-    .lt('started_at', thirtyMinAgo)
-    .is('completed_at', null)
-    .select('id');
-  
-  return staleRunning?.length || 0;
+### Uppdaterad mallhantering
+
+Lägg till bilduppladdning i mallformuläret:
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│ Brandsläckare                                           │
+├─────────────────────────────────────────────────────────┤
+│ AI-prompt:                                              │
+│ [Look for red fire extinguishers...]                    │
+├─────────────────────────────────────────────────────────┤
+│ Exempelbilder: (rekommenderas 2-4 bilder)               │
+│ ┌─────┐ ┌─────┐ ┌─────┐ ┌───────┐                       │
+│ │ 📷  │ │ 📷  │ │ 📷  │ │ + Lägg│                       │
+│ │     │ │     │ │     │ │  till │                       │
+│ └──🗑─┘ └──🗑─┘ └──🗑─┘ └───────┘                       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Uppdaterad AI-prompt med few-shot
+
+Istället för:
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "Detect fire_extinguisher: Look for red..." },
+    { "type": "image_url", "image_url": { "url": "panorama.jpg" } }
+  ]
 }
 ```
 
----
-
-## Del 3: Förbättra avbryt-funktionen på mobil
-
-### Fil: `src/components/ai-scan/ScanProgressPanel.tsx`
-
-**Ändringar:**
-- Gör Avbryt-knappen tydligare och röd på mobil
-- Placera den på en egen rad under progress
-- Lägg till bekräftelse-dialog innan avbrytning
-
-```text
-Mobil layout för aktiv skanning:
-┌─────────────────────────────────────────┐
-│ 🔄 Aktiv skanning          [Badge: Pågår]│
-│ Söker efter: Brandsläckare              │
-├─────────────────────────────────────────┤
-│ ▓▓▓▓▓▓▓▓░░░░░░░░░░░ 45%               │
-│ 45 / 100 bilder                         │
-├─────────────────────────────────────────┤
-│ [▶ Bearbeta nästa batch]                │
-│ [⏹ Avbryt skanning] (röd)              │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Del 4: Spara beskuret foto automatiskt
-
-### Fil: `supabase/functions/ai-asset-detection/index.ts`
-
-**Ändring i `saveThumbnail()`:**
-- Lägg till 20% marginal runt bounding box
-- Spara som högre kvalitet för användning som asset-foto
-
-**Ändring i `approveDetection()`:**
-- Kopiera `thumbnail_url` från `pending_detections` till `assets.attributes.imageUrl`
-- Detta gör att fotot automatiskt visas i tillgångsvisningen
-
-```typescript
-// I approveDetection()
-const attributes: Record<string, any> = {
-  ai_detected: true,
-  ai_confidence: detection.confidence,
-  ai_description: detection.ai_description,
-  imageUrl: detection.thumbnail_url, // <-- NY: Automatiskt foto
-};
+Med exempelbilder (few-shot):
+```json
+{
+  "role": "user", 
+  "content": [
+    { "type": "text", "text": "Here are examples of fire_extinguisher:" },
+    { "type": "image_url", "image_url": { "url": "example1.jpg" } },
+    { "type": "image_url", "image_url": { "url": "example2.jpg" } },
+    { "type": "text", "text": "Now detect fire_extinguisher in this panorama:" },
+    { "type": "image_url", "image_url": { "url": "panorama.jpg" } }
+  ]
+}
 ```
 
 ---
@@ -158,73 +93,133 @@ const attributes: Record<string, any> = {
 
 | Fil | Åtgärd | Beskrivning |
 |-----|--------|-------------|
-| `src/pages/AiAssetScan.tsx` | Ändra | Responsiv header och tabs för mobil |
-| `src/components/ai-scan/ScanProgressPanel.tsx` | Ändra | Responsiv layout + tydligare avbryt/ta bort |
-| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Auto-cleanup + spara thumbnail till asset |
+| Databas | Migration | Lägg till `example_images TEXT[]` kolumn |
+| `src/components/ai-scan/TemplateManagement.tsx` | Ändra | Lägg till bilduppladdning för exempelbilder |
+| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Inkludera exempelbilder i AI-prompten |
 
-### Marginalbeskärning för thumbnail
+### Ny datastruktur
 
-Nuvarande kod:
 ```typescript
-saveThumbnail(base64, bbox, detectionId)
+interface DetectionTemplate {
+  id: string;
+  name: string;
+  object_type: string;
+  ai_prompt: string;
+  example_images: string[];  // ← NYTT: URLs till exempelbilder
+  // ...
+}
 ```
 
-Ny logik med marginal:
-```typescript
-// Lägg till 20% marginal runt objektet
-const margin = 0.2;
-const expandedBbox = {
-  ymin: Math.max(0, bbox.ymin - (bbox.ymax - bbox.ymin) * margin),
-  xmin: Math.max(0, bbox.xmin - (bbox.xmax - bbox.xmin) * margin),
-  ymax: Math.min(1000, bbox.ymax + (bbox.ymax - bbox.ymin) * margin),
-  xmax: Math.min(1000, bbox.xmax + (bbox.xmax - bbox.xmin) * margin),
-};
-saveThumbnail(base64, expandedBbox, detectionId)
+### Bilduppladdning
+
+Exempelbilder laddas upp till:
+```
+Supabase Storage: template-examples/{template_id}/{filename}
 ```
 
-### Asset med automatiskt foto
+### Förbättrad AI-analys
 
-```json
-{
-  "fm_guid": "uuid...",
-  "name": "Gloria PD6GA 6kg",
-  "attributes": {
-    "ai_detected": true,
-    "ai_confidence": 0.94,
-    "imageUrl": "https://.../detection-thumbnails/uuid.jpg",  // <-- NYTT
-    "brand": "Gloria",
-    "model": "PD6GA"
+```typescript
+async function analyzeImageWithAI(
+  imageBase64: string,
+  templates: DetectionTemplate[]
+): Promise<Detection[]> {
+  
+  // Bygg content array med exempelbilder först
+  const content: any[] = [];
+  
+  for (const template of templates) {
+    if (template.example_images?.length > 0) {
+      content.push({ 
+        type: "text", 
+        text: `Examples of ${template.object_type}:` 
+      });
+      
+      for (const exampleUrl of template.example_images) {
+        content.push({ 
+          type: "image_url", 
+          image_url: { url: exampleUrl } 
+        });
+      }
+    }
+    
+    content.push({ 
+      type: "text", 
+      text: `${template.object_type}: ${template.ai_prompt}` 
+    });
   }
+  
+  // Sist: panoramabilden att analysera
+  content.push({ 
+    type: "text", 
+    text: "Now analyze this 360° panorama and find these objects:" 
+  });
+  content.push({ 
+    type: "image_url", 
+    image_url: { url: `data:image/jpeg;base64,${imageBase64}` } 
+  });
+  
+  // Anropa AI
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // ...
+  });
 }
 ```
 
 ---
 
-## Databasen: Rensa gamla skanningar
+## Bonus: Prestandaoptimering
 
-Jag kommer också automatiskt markera de 10 gamla "running"-jobben som misslyckade vid första anropet till `get-scan-jobs`.
+### Parallell bildnedladdning
+Istället för sekventiell nedladdning, ladda ner nästa bild medan AI analyserar:
+
+```typescript
+// Nuvarande: sekventiellt
+for (image of images) {
+  const base64 = await download(image);
+  const result = await analyze(base64);
+}
+
+// Optimerat: pipeline
+let nextImagePromise = download(images[0]);
+for (let i = 0; i < images.length; i++) {
+  const base64 = await nextImagePromise;
+  if (i + 1 < images.length) {
+    nextImagePromise = download(images[i + 1]); // Starta nästa
+  }
+  const result = await analyze(base64);
+}
+```
+
+**Uppskattad tidsbesparing:** ~30-40%
+
+---
+
+## Rekommenderade exempelbilder per mall
+
+| Mall | Antal exempel | Rekommendation |
+|------|---------------|----------------|
+| Brandsläckare | 3-4 | Olika storlekar, vägg + golv |
+| Nödutgång | 2-3 | Olika ljusförhållanden |
+| Larmknapp | 2-3 | Med/utan glas, olika märken |
+| Brandslang | 2-3 | Skåp + rulle |
+| Elskåp | 2-3 | Olika storlekar |
 
 ---
 
 ## Testplan
 
-1. **Mobilt UI**
-   - Öppna `/inventory/ai-scan` på mobilvy (390px)
-   - Verifiera att tabs inte överlappar
-   - Verifiera att tidigare skanningar-listan är läsbar
+1. **Lägg till exempelbilder**
+   - Gå till Mallar-fliken
+   - Redigera "Brandsläckare"
+   - Ladda upp 3 exempelbilder
+   - Spara
 
-2. **Avbryt skanning**
-   - Starta en skanning
-   - Verifiera att Avbryt-knappen är tydlig och röd
-   - Klicka Avbryt och bekräfta att jobbet avslutas
+2. **Kör skanning**
+   - Starta en ny skanning med mallen
+   - Jämför precision mot tidigare körningar
 
-3. **Ta bort gamla skanningar**
-   - Verifiera att gamla skanningar nu visas som "Misslyckades"
-   - Klicka på papperskorgen för att ta bort
-   - Verifiera borttagning
-
-4. **Automatiskt foto**
-   - Kör en skanning på en byggnad
-   - Godkänn en detektion
-   - Verifiera att den skapade tillgången har ett foto i `attributes.imageUrl`
+3. **Mät förbättring**
+   - Confidence-nivåer bör vara högre
+   - Färre "falska positiva" (felaktiga detektioner)
 
