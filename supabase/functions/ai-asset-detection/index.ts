@@ -31,11 +31,23 @@ interface DetectionTemplate {
   is_active: boolean;
 }
 
+interface ExtractedProperties {
+  brand?: string;
+  model?: string;
+  size?: string;
+  type?: string;
+  color?: string;
+  mounting?: string;
+  condition?: string;
+  text_visible?: string;
+}
+
 interface Detection {
   object_type: string;
   confidence: number;
   bounding_box: [number, number, number, number]; // [ymin, xmin, ymax, xmax]
   description: string;
+  extracted_properties?: ExtractedProperties;
 }
 
 interface ScanJob {
@@ -537,7 +549,7 @@ function bufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-// Analyze image with Gemini Vision
+// Analyze image with Gemini Vision - Enhanced with property extraction
 async function analyzeImageWithAI(
   imageBase64: string,
   templates: DetectionTemplate[]
@@ -558,12 +570,26 @@ async function analyzeImageWithAI(
         {
           role: "system",
           content: `You are an expert at detecting safety equipment in 360° equirectangular panorama images.
+You have excellent OCR capabilities and can read text on labels, stickers, and equipment.
 
 For each object you find, return JSON with:
 - object_type: the type code from the list below
 - confidence: your confidence level (0.0 to 1.0)
 - bounding_box: [ymin, xmin, ymax, xmax] normalized to 0-1000 scale
-- description: brief description of what you see
+- description: detailed description of what you see including any visible text
+- extracted_properties: an object with these fields (include only if you can determine them):
+  - brand: manufacturer name if visible (e.g., 'Gloria', 'Ansul', 'Presto', 'Housegard')
+  - model: model number or name if visible on labels/stickers
+  - size: capacity or size (e.g., '6 kg', '2 kg', 'A3', '9L')
+  - type: specific type (e.g., 'Pulver ABC', 'CO2', 'Skum', 'Vatten')
+  - color: primary color of the object
+  - mounting: how it's installed ('Väggmonterad', 'Golvstående', 'I skåp', 'Takmontering')
+  - condition: visible condition ('God', 'Sliten', 'Ny', 'Okänd')
+  - text_visible: all readable text you can see on labels, stickers, or the object itself
+
+IMPORTANT: Use OCR to read ALL visible text on labels, stickers, and equipment. 
+Extract brand and model from visible text when possible.
+If a property cannot be determined with reasonable confidence, omit it.
 
 Return ONLY a JSON array. If nothing found, return []. Do not include any other text or markdown.`
         },
@@ -572,7 +598,7 @@ Return ONLY a JSON array. If nothing found, return []. Do not include any other 
           content: [
             { 
               type: "text", 
-              text: `Detect these objects in this 360° panorama:\n${objectDescriptions}` 
+              text: `Detect these objects in this 360° panorama and extract detailed properties:\n${objectDescriptions}` 
             },
             { 
               type: "image_url", 
@@ -1002,6 +1028,7 @@ async function processBatch(params: {
             coordinate_z: coords.z,
             thumbnail_url: thumbnailUrl,
             ai_description: det.description,
+            extracted_properties: det.extracted_properties || {},
             status: 'pending',
           });
           
@@ -1083,7 +1110,7 @@ async function getScanStatus(scanJobId: string): Promise<any> {
   return job;
 }
 
-// Approve a detection - create asset and POI
+// Approve a detection - create asset and POI with smart naming from extracted properties
 async function approveDetection(params: {
   detectionId: string;
   userId: string;
@@ -1108,13 +1135,44 @@ async function approveDetection(params: {
   // Generate FMGUID for new asset
   const assetFmGuid = crypto.randomUUID();
   
-  // Create asset
+  // Extract properties for smart naming
+  const props = (detection.extracted_properties as ExtractedProperties) || {};
+  const baseName = detection.detection_templates?.name || detection.object_type;
+  
+  // Generate descriptive name: "Gloria PD6GA 6kg" or fallback to template name
+  const assetName = [props.brand, props.model, props.size]
+    .filter(Boolean)
+    .join(' ') || baseName;
+  
+  // Generate common_name: "Pulver ABC 6kg" or fallback
+  const commonName = [props.type, props.size]
+    .filter(Boolean)
+    .join(' ') || baseName;
+  
+  // Build attributes with all extracted properties
+  const attributes: Record<string, any> = {
+    ai_detected: true,
+    ai_confidence: detection.confidence,
+    ai_description: detection.ai_description,
+  };
+  
+  // Add extracted properties to attributes
+  if (props.brand) attributes.brand = props.brand;
+  if (props.model) attributes.model = props.model;
+  if (props.size) attributes.size = props.size;
+  if (props.type) attributes.type = props.type;
+  if (props.color) attributes.color = props.color;
+  if (props.mounting) attributes.mounting = props.mounting;
+  if (props.condition) attributes.condition = props.condition;
+  if (props.text_visible) attributes.text_visible = props.text_visible;
+  
+  // Create asset with smart naming and extracted properties
   const { error: assetError } = await supabase
     .from('assets')
     .insert({
       fm_guid: assetFmGuid,
-      name: detection.detection_templates?.name || detection.object_type,
-      common_name: detection.detection_templates?.name || detection.object_type,
+      name: assetName,
+      common_name: commonName,
       category: 'Instance',
       asset_type: detection.detection_templates?.default_category || detection.object_type,
       building_fm_guid: detection.building_fm_guid,
@@ -1127,11 +1185,7 @@ async function approveDetection(params: {
       is_local: true,
       created_in_model: false,
       annotation_placed: true,
-      attributes: {
-        ai_detected: true,
-        ai_confidence: detection.confidence,
-        ai_description: detection.ai_description,
-      },
+      attributes,
     });
   
   if (assetError) {
