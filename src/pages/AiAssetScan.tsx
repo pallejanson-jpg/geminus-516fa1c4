@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 import ScanConfigPanel from '@/components/ai-scan/ScanConfigPanel';
 import ScanProgressPanel from '@/components/ai-scan/ScanProgressPanel';
 import DetectionReviewQueue from '@/components/ai-scan/DetectionReviewQueue';
@@ -42,6 +43,7 @@ interface Building {
 const AiAssetScan: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
   const [scanJobs, setScanJobs] = useState<ScanJob[]>([]);
@@ -137,57 +139,75 @@ const AiAssetScan: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-4 md:p-6 overflow-hidden">
+    <div className="h-full flex flex-col p-3 md:p-6 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between mb-4 md:mb-6 gap-2">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={handleBack}
-            className="shrink-0"
+            className="shrink-0 h-8 w-8 md:h-10 md:w-10"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
           </Button>
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Scan className="h-6 w-6 text-primary" />
+          <div className="p-1.5 md:p-2 bg-primary/10 rounded-lg shrink-0">
+            <Scan className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
-          <div>
-            <h1 className="text-xl font-semibold">AI-assisterad inventering</h1>
-            <p className="text-sm text-muted-foreground">
-              Automatisk detektion av brandsläckare och nödutgångsskyltar i 360°-bilder
-            </p>
+          <div className="min-w-0">
+            <h1 className="text-base md:text-xl font-semibold truncate">AI-assisterad inventering</h1>
+            {!isMobile && (
+              <p className="text-sm text-muted-foreground">
+                Automatisk detektion av brandsläckare och nödutgångsskyltar i 360°-bilder
+              </p>
+            )}
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadData}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Uppdatera
+        <Button variant="outline" size="sm" onClick={loadData} className="shrink-0">
+          <RefreshCw className="h-4 w-4" />
+          {!isMobile && <span className="ml-2">Uppdatera</span>}
         </Button>
       </div>
 
       {/* Main content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="configure" disabled={!!activeScanJob}>
-            <Building2 className="h-4 w-4 mr-2" />
-            Konfigurera
+        <TabsList className="grid w-full grid-cols-4 mb-3 md:mb-4 h-auto p-1">
+          <TabsTrigger 
+            value="configure" 
+            disabled={!!activeScanJob}
+            className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
+          >
+            <Building2 className="h-4 w-4 shrink-0" />
+            <span className="truncate">{isMobile ? 'Konfig.' : 'Konfigurera'}</span>
           </TabsTrigger>
-          <TabsTrigger value="progress">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Skanning
+          <TabsTrigger 
+            value="progress"
+            className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm relative"
+          >
+            <RefreshCw className="h-4 w-4 shrink-0" />
+            <span className="truncate">Skanning</span>
             {activeScanJob && (
-              <Badge variant="secondary" className="ml-2 text-xs">
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full md:hidden" />
+            )}
+            {activeScanJob && !isMobile && (
+              <Badge variant="secondary" className="ml-1 text-xs">
                 Aktiv
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="review">
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            Granska
+          <TabsTrigger 
+            value="review"
+            className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span className="truncate">Granska</span>
           </TabsTrigger>
-          <TabsTrigger value="templates">
-            <Settings2 className="h-4 w-4 mr-2" />
-            Mallar
+          <TabsTrigger 
+            value="templates"
+            className="flex flex-col md:flex-row items-center gap-0.5 md:gap-2 py-2 px-1 md:px-3 text-xs md:text-sm"
+          >
+            <Settings2 className="h-4 w-4 shrink-0" />
+            <span className="truncate">Mallar</span>
           </TabsTrigger>
         </TabsList>
 
