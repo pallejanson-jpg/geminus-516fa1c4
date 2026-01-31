@@ -1,343 +1,204 @@
 
-# Plan: Mobile 3D Viewer Improvements & Onboarding Access
+
+# Plan: Wire MobileViewerOverlay to Existing AssetPlusViewer State
 
 ## Overview
 
-This plan addresses five issues:
-1. **Onboarding access** - Add automatic redirect for new users + link in UI
-2. **Missing tools in mobile right drawer** - Add all VisualizationToolbar features
-3. **Collapsible floor selector** - Use accordion pattern
-4. **Persist Tree selections during session** - Lift state to parent component
-5. **Select All in Tree** - Add header buttons
+The `MobileViewerOverlay` component already has the UI for 2D/3D toggle, annotations, room labels, and BIM models, but the props are currently set to defaults because `AssetPlusViewer` doesn't pass the actual state values. This plan connects the existing state in `AssetPlusViewer` to the mobile overlay.
 
 ---
 
-## Part 1: Onboarding Access
+## Current State Analysis
 
-### Current Behavior
-The onboarding page exists at `/onboarding` but users must navigate manually.
-
-### Solution
-1. Add a "Skip to onboarding" button in the Login page
-2. Modify `ProtectedRoute` or home redirect to check if user has completed onboarding
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/pages/Login.tsx` | Add link to onboarding after login |
-| `src/components/auth/ProtectedRoute.tsx` | Check onboarding status, redirect if needed |
-
----
-
-## Part 2: Add Missing Tools to Mobile Right Drawer
-
-### Current State (MobileViewerOverlay)
-```
-┌─────────────────────┐
-│ View Settings    [x]│
-├─────────────────────┤
-│ [x] Show Spaces     │
-│ ─────────────────── │
-│ Floors (3/5)        │
-│ [Show All][Hide All]│
-│ [Floor 1 - visible] │
-│ [Floor 2 - visible] │
-│ [Floor 3 - hidden]  │
-│ ─────────────────── │
-│ [Reset Camera]      │
-└─────────────────────┘
-```
-
-### Target State (matching VisualizationToolbar features)
-```
-┌───────────────────────────────┐
-│ View Settings              [x]│
-├───────────────────────────────┤
-│ ▼ Display                     │
-│   [ ] 2D / 3D                 │
-│   [x] Show Spaces             │
-│   [ ] Show Annotations        │
-│   [ ] Room Labels             │
-│   [ ] Room Visualization  [>] │
-├───────────────────────────────┤
-│ ▶ Floors (3/5)                │ ← Collapsible
-│   (collapsed by default)      │
-├───────────────────────────────┤
-│ ▶ BIM Models                  │ ← Collapsible
-│   (collapsed by default)      │
-├───────────────────────────────┤
-│ ▶ Viewer Settings             │ ← Collapsible
-│   Theme: [dropdown]           │
-│   Background: [palette]       │
-├───────────────────────────────┤
-│ [Reset Camera]                │
-└───────────────────────────────┘
-```
-
-### Implementation
-
-**File: `src/components/viewer/mobile/MobileViewerOverlay.tsx`**
-
-Add new props and sections:
-- `is2DMode`, `onToggle2DMode` - for 2D/3D toggle
-- `showAnnotations`, `onShowAnnotationsChange`
-- `showRoomLabels`, `onShowRoomLabelsChange`
-- `onOpenVisualizationPanel` - to launch room visualization
-- `visibleModelIds`, `onModelVisibilityChange` - for BIM models
-
-Reorganize with Collapsible components:
-- Display section (always visible toggles)
-- Floors section (collapsible, closed by default)
-- BIM Models section (collapsible, closed by default)
-- Viewer Settings section (collapsible, closed by default)
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-
-Pass additional props to MobileViewerOverlay:
-- Connect 2D/3D state
-- Connect annotations state
-- Connect model visibility state
-- Connect room labels state
-
----
-
-## Part 3: Collapsible Floor Selector
-
-### Current Implementation
+### What MobileViewerOverlay expects (already defined):
 ```tsx
-<div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-  {floors.map((floor) => (
-    <Button ...>{floor.name}</Button>
-  ))}
-</div>
-```
-
-### New Implementation with Collapsible
-```tsx
-<Collapsible defaultOpen={false}>
-  <CollapsibleTrigger asChild>
-    <Button variant="ghost" className="w-full justify-between">
-      <div className="flex items-center gap-2">
-        <Layers className="h-4 w-4" />
-        <span>Floors</span>
-        <Badge>{visibleFloorCount}/{floors.length}</Badge>
-      </div>
-      <ChevronDown className="h-4 w-4 transition-transform data-[state=open]:rotate-180" />
-    </Button>
-  </CollapsibleTrigger>
-  <CollapsibleContent>
-    <div className="pl-6 space-y-1.5">
-      <div className="flex gap-2 mb-2">
-        <Button size="sm" onClick={() => handleToggleAllFloors(true)}>
-          Show All
-        </Button>
-        <Button size="sm" onClick={() => handleToggleAllFloors(false)}>
-          Hide All
-        </Button>
-      </div>
-      {floors.map((floor) => (...))}
-    </div>
-  </CollapsibleContent>
-</Collapsible>
-```
-
----
-
-## Part 4: Persist Tree Selections During Session
-
-### Problem
-`ViewerTreePanel` maintains state internally:
-```tsx
-const [selectedId, setSelectedId] = useState<string | null>(null);
-const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-```
-
-When the panel closes, this state is lost.
-
-### Solution
-Lift state to `AssetPlusViewer` parent:
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-```tsx
-// New state in AssetPlusViewer
-const [treeSelectedId, setTreeSelectedId] = useState<string | null>(null);
-const [treeExpandedIds, setTreeExpandedIds] = useState<Set<string>>(new Set());
-
-// Pass to ViewerTreePanel
-<ViewerTreePanel
-  ...
-  selectedId={treeSelectedId}
-  onSelectedIdChange={setTreeSelectedId}
-  expandedIds={treeExpandedIds}
-  onExpandedIdsChange={setTreeExpandedIds}
-/>
-```
-
-**File: `src/components/viewer/ViewerTreePanel.tsx`**
-
-Add props for controlled state:
-```tsx
-interface ViewerTreePanelProps {
-  ...
-  selectedId?: string | null;
-  onSelectedIdChange?: (id: string | null) => void;
-  expandedIds?: Set<string>;
-  onExpandedIdsChange?: (ids: Set<string>) => void;
+interface MobileViewerOverlayProps {
+  is2DMode?: boolean;                    // Currently defaults to false
+  onToggle2DMode?: (is2D: boolean) => void;
+  showAnnotations?: boolean;             // Currently defaults to false  
+  onShowAnnotationsChange?: (show: boolean) => void;
+  showRoomLabels?: boolean;              // Currently defaults to false
+  onShowRoomLabelsChange?: (show: boolean) => void;
+  onOpenVisualizationPanel?: () => void;
+  models?: MobileModelInfo[];            // Currently defaults to []
+  onModelToggle?: (modelId: string, visible: boolean) => void;
 }
 ```
 
-Use controlled state when props provided, fallback to internal state otherwise.
+### What AssetPlusViewer already has:
+| State | Location | Current Usage |
+|-------|----------|---------------|
+| `currentViewMode` ('2d'/'3d') | Line 1752 | Used for Gunnar context |
+| `showAnnotations` | Line 133 | Passed to VisualizationToolbar |
+| `showVisualizationPanel` | Line 130 | Opens room visualization |
+| Room labels | Via `setRoomLabelsEnabled` hook | Line 169 |
+| Model visibility | Not currently tracked in state | Only in VisualizationToolbar |
 
 ---
 
-## Part 5: Select All / Deselect All in Tree
+## Implementation
 
-### Current Header
-```
-┌──────────────────────────────┐
-│ ⋮⋮ 🌳 Modellträd  [1,234] [x]│
-└──────────────────────────────┘
-```
+### File: `src/components/viewer/AssetPlusViewer.tsx`
 
-### New Header with Actions
-```
-┌────────────────────────────────────┐
-│ ⋮⋮ 🌳 Modellträd  [1,234]      [x] │
-│ ─────────────────────────────────  │
-│ [✓ All] [✗ None] [Expand] [Fold]  │
-└────────────────────────────────────┘
-```
+#### 1. Add missing state for models and room labels
 
-### Implementation
-
-**File: `src/components/viewer/ViewerTreePanel.tsx`**
-
-Add action buttons below header:
 ```tsx
-<div className="flex items-center gap-1 px-2 pb-2 border-b">
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="h-6 text-xs flex-1"
-    onClick={() => handleVisibilityAll(true)}
-  >
-    <Check className="h-3 w-3 mr-1" /> All
-  </Button>
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="h-6 text-xs flex-1"
-    onClick={() => handleVisibilityAll(false)}
-  >
-    <X className="h-3 w-3 mr-1" /> None
-  </Button>
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="h-6 text-xs"
-    onClick={handleExpandAll}
-    title="Expand all"
-  >
-    <ChevronDown className="h-3 w-3" />
-  </Button>
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="h-6 text-xs"
-    onClick={handleCollapseAll}
-    title="Collapse all"
-  >
-    <ChevronUp className="h-3 w-3" />
-  </Button>
-</div>
+// Around line 140-142 (after other state declarations)
+const [showRoomLabels, setShowRoomLabels] = useState(false);
+const [visibleModelIds, setVisibleModelIds] = useState<string[]>([]);
+const [availableModels, setAvailableModels] = useState<{id: string; name: string; visible: boolean}[]>([]);
 ```
 
-Add handler functions:
+#### 2. Create handler for 2D mode toggle (mobile-friendly)
+
 ```tsx
-const handleVisibilityAll = useCallback((visible: boolean) => {
-  const xeokitViewer = getXeokitViewer();
-  const scene = xeokitViewer?.scene;
-  if (!scene) return;
-  
-  // Toggle all objects
-  scene.setObjectsVisible(scene.objectIds, visible);
-  refreshVisibilityState();
-}, [getXeokitViewer, refreshVisibilityState]);
-
-const handleExpandAll = useCallback(() => {
-  const allIds = new Set<string>();
-  const collectIds = (nodes: TreeNode[]) => {
-    nodes.forEach(node => {
-      allIds.add(node.id);
-      if (node.children) collectIds(node.children);
-    });
-  };
-  collectIds(treeData);
-  setExpandedIds(allIds);
-}, [treeData]);
-
-const handleCollapseAll = useCallback(() => {
-  setExpandedIds(new Set());
+// After line 315 (after handleVisibleFloorsChange)
+const handleToggle2DMode = useCallback((is2D: boolean) => {
+  const mode = is2D ? '2d' : '3d';
+  window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
+    detail: { mode }
+  }));
 }, []);
 ```
 
+#### 3. Create handlers for room labels and annotations
+
+```tsx
+// Handle room labels toggle
+const handleRoomLabelsToggle = useCallback((enabled: boolean) => {
+  setShowRoomLabels(enabled);
+  setRoomLabelsEnabled(enabled);
+}, [setRoomLabelsEnabled]);
+
+// Handle annotations toggle - using existing showAnnotations state
+const handleAnnotationsChange = useCallback((show: boolean) => {
+  setShowAnnotations(show);
+  // Trigger annotation visibility update in viewer
+  const assetView = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+  assetView?.setAnnotationsVisible?.(show);
+}, []);
+```
+
+#### 4. Create model visibility handler
+
+```tsx
+// Handle individual model visibility toggle
+const handleModelToggle = useCallback((modelId: string, visible: boolean) => {
+  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (!xeokitViewer?.scene) return;
+  
+  // Toggle model visibility in xeokit
+  const model = xeokitViewer.scene.models[modelId];
+  if (model) {
+    model.visible = visible;
+  }
+  
+  // Update state
+  setAvailableModels(prev => 
+    prev.map(m => m.id === modelId ? { ...m, visible } : m)
+  );
+}, []);
+```
+
+#### 5. Update MobileViewerOverlay props (around line 2400-2412)
+
+```tsx
+{isMobile && state.isInitialized && (
+  <MobileViewerOverlay
+    onClose={onClose}
+    viewerInstanceRef={viewerInstanceRef}
+    buildingName={assetData?.commonName || assetData?.name}
+    showSpaces={showSpaces}
+    onShowSpacesChange={handleShowSpacesChange}
+    floors={mobileFloors}
+    onFloorToggle={handleMobileFloorToggle}
+    onResetCamera={handleResetCamera}
+    isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
+    // NEW PROPS - connect to existing state
+    is2DMode={currentViewMode === '2d'}
+    onToggle2DMode={handleToggle2DMode}
+    showAnnotations={showAnnotations}
+    onShowAnnotationsChange={handleAnnotationsChange}
+    showRoomLabels={showRoomLabels}
+    onShowRoomLabelsChange={handleRoomLabelsToggle}
+    onOpenVisualizationPanel={() => setShowVisualizationPanel(true)}
+    models={availableModels}
+    onModelToggle={handleModelToggle}
+  />
+)}
+```
+
+#### 6. Populate models list when viewer loads
+
+Add effect to extract available models from xeokit scene:
+
+```tsx
+// After model load completes, extract model list
+useEffect(() => {
+  if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+  
+  const extractModels = () => {
+    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene?.models) return;
+    
+    const models = Object.entries(xeokitViewer.scene.models).map(([id, model]: [string, any]) => ({
+      id,
+      name: model.id || id,
+      visible: model.visible !== false
+    }));
+    
+    setAvailableModels(models);
+  };
+  
+  // Small delay to ensure models are fully loaded
+  const timer = setTimeout(extractModels, 500);
+  return () => clearTimeout(timer);
+}, [modelLoadState, initStep]);
+```
+
 ---
 
-## Technical Summary
+## Visual Result
 
-### Files to Modify
+After wiring, the mobile drawer will have fully functional controls:
 
-| File | Changes |
-|------|---------|
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Add all visualization features, use Collapsible for floors/models |
-| `src/components/viewer/ViewerTreePanel.tsx` | Add Select All/None, Expand/Collapse buttons; add controlled state props |
-| `src/components/viewer/AssetPlusViewer.tsx` | Pass additional props to MobileViewerOverlay; lift tree state |
-| `src/components/auth/ProtectedRoute.tsx` | Add onboarding check and redirect |
-
-### Implementation Order
-
-1. **MobileViewerOverlay enhancements** - Add missing tools + collapsible sections
-2. **Tree Select All/None** - Add action buttons
-3. **Tree state persistence** - Lift state to parent
-4. **Onboarding redirect** - Add automatic navigation for new users
-
----
-
-## Visual Summary
-
-### Mobile Right Drawer (After)
 ```
 ┌─────────────────────────────────┐
 │ View Settings               [x] │
 ├─────────────────────────────────┤
 │ DISPLAY                         │
-│ [x] 2D / 3D                     │
-│ [x] Show Spaces                 │
-│ [ ] Annotations                 │
-│ [ ] Room Labels                 │
-│ [ ] Room Visualization      [>] │
+│ [x] 2D View          [toggle] ← ← Connected to currentViewMode
+│ [x] Show Spaces      [toggle] ← ← Already connected
+│ [ ] Annotations      [toggle] ← ← Connected to showAnnotations
+│ [ ] Room Labels      [toggle] ← ← Connected to showRoomLabels
+│ [ ] Room Visualization   [>] ← ← Opens showVisualizationPanel
 ├─────────────────────────────────┤
-│ ▶ FLOORS (3/5)              [v] │  ← Collapsed
+│ ▶ FLOORS (3/5)               ▼  │  ← Already connected
 ├─────────────────────────────────┤
-│ ▶ BIM MODELS (2)            [v] │  ← Collapsed
-├─────────────────────────────────┤
-│ ▶ VIEWER SETTINGS           [v] │  ← Collapsed
+│ ▶ BIM MODELS (2/3)           ▼  │  ← Connected to availableModels
+│   [✓] A-Arkitektur              │
+│   [✓] V-VVS                     │
+│   [ ] E-El                      │
 ├─────────────────────────────────┤
 │     [Reset Camera]              │
 └─────────────────────────────────┘
 ```
 
-### Tree Panel Header (After)
-```
-┌────────────────────────────────────────┐
-│ ⋮⋮ 🌳 Modellträd       [1,234]     [x] │
-│ [✓ All] [✗ None]     [Expand][Fold]    │
-│ [🔍 Sök...                          ]  │
-├────────────────────────────────────────┤
-│ ▼ Våning 2                        [25] │
-│   ▶ Väggar                         [8] │
-│   ▶ Dörrar                         [4] │
-│   ...                                  │
-└────────────────────────────────────────┘
-```
+---
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/viewer/AssetPlusViewer.tsx` | Add state for models/labels, create handlers, wire props to MobileViewerOverlay |
+
+---
+
+## Technical Notes
+
+1. **Event-Based 2D Toggle**: Uses `VIEW_MODE_REQUESTED_EVENT` which ViewerToolbar already listens for - this ensures the actual section plane clipping logic is triggered correctly.
+
+2. **Model Visibility**: Directly manipulates xeokit `scene.models[id].visible` property, same pattern used by ModelVisibilitySelector.
+
+3. **No Breaking Changes**: All new props to MobileViewerOverlay are optional with sensible defaults, so existing functionality is preserved.
+
