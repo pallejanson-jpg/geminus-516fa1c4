@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,11 +49,13 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   onRefresh,
 }) => {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [currentJob, setCurrentJob] = useState<ScanJob | null>(activeScanJob);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update current job when prop changes
@@ -237,18 +240,18 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Active Scan */}
       {currentJob ? (
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <RefreshCw className={`h-5 w-5 ${currentJob.status === 'running' ? 'animate-spin' : ''}`} />
-                  Aktiv skanning
+          <CardHeader className="pb-3 md:pb-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                  <RefreshCw className={`h-4 w-4 md:h-5 md:w-5 shrink-0 ${currentJob.status === 'running' ? 'animate-spin' : ''}`} />
+                  <span className="truncate">Aktiv skanning</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs md:text-sm mt-1 line-clamp-2">
                   Söker efter: {currentJob.templates.join(', ')}
                 </CardDescription>
               </div>
@@ -258,7 +261,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
           <CardContent className="space-y-4">
             {/* Progress bar */}
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs md:text-sm">
                 <span>Bearbetade bilder</span>
                 <span>{currentJob.processed_images} / {currentJob.total_images || '?'}</span>
               </div>
@@ -270,36 +273,38 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
               />
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="text-2xl font-bold">{currentJob.processed_images}</div>
-                <div className="text-xs text-muted-foreground">Bilder</div>
+            {/* Stats - Compact on mobile */}
+            <div className="grid grid-cols-3 gap-2 md:gap-4 text-center">
+              <div className="p-2 md:p-3 bg-muted rounded-lg">
+                <div className="text-lg md:text-2xl font-bold">{currentJob.processed_images}</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Bilder</div>
               </div>
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="text-2xl font-bold text-primary">{currentJob.detections_found}</div>
-                <div className="text-xs text-muted-foreground">Hittade</div>
+              <div className="p-2 md:p-3 bg-muted rounded-lg">
+                <div className="text-lg md:text-2xl font-bold text-primary">{currentJob.detections_found}</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Hittade</div>
               </div>
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="text-2xl font-bold">{formatDuration(currentJob.started_at, currentJob.completed_at)}</div>
-                <div className="text-xs text-muted-foreground">Tid</div>
+              <div className="p-2 md:p-3 bg-muted rounded-lg">
+                <div className="text-lg md:text-2xl font-bold">{formatDuration(currentJob.started_at, currentJob.completed_at)}</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Tid</div>
               </div>
             </div>
 
             {/* Error message */}
             {currentJob.error_message && (
-              <div className="flex items-start gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
-                <AlertCircle className="h-5 w-5 mt-0.5" />
-                <span className="text-sm">{currentJob.error_message}</span>
+              <div className="flex items-start gap-2 p-2 md:p-3 bg-destructive/10 text-destructive rounded-lg">
+                <AlertCircle className="h-4 w-4 md:h-5 md:w-5 mt-0.5 shrink-0" />
+                <span className="text-xs md:text-sm">{currentJob.error_message}</span>
               </div>
             )}
 
-            {/* Actions */}
+            {/* Actions - Stack vertically on mobile */}
             {(currentJob.status === 'queued' || currentJob.status === 'running') && (
-              <div className="flex gap-2">
+              <div className="flex flex-col md:flex-row gap-2">
                 <Button 
                   onClick={processBatch} 
                   disabled={isProcessing || isCancelling}
+                  className="flex-1"
+                  size={isMobile ? "default" : "default"}
                 >
                   {isProcessing ? (
                     <>
@@ -314,21 +319,13 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
                   )}
                 </Button>
                 <Button 
-                  variant="outline"
-                  onClick={cancelScan} 
+                  variant="destructive"
+                  onClick={() => setCancelDialogOpen(true)} 
                   disabled={isProcessing || isCancelling}
+                  className="flex-1 md:flex-initial"
                 >
-                  {isCancelling ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Avbryter...
-                    </>
-                  ) : (
-                    <>
-                      <StopCircle className="h-4 w-4 mr-2" />
-                      Avbryt
-                    </>
-                  )}
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  Avbryt skanning
                 </Button>
               </div>
             )}
@@ -336,10 +333,10 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
         </Card>
       ) : (
         <Card>
-          <CardContent className="py-12 text-center">
-            <RefreshCw className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="text-lg font-medium mb-2">Ingen aktiv skanning</h3>
-            <p className="text-sm text-muted-foreground">
+          <CardContent className="py-8 md:py-12 text-center">
+            <RefreshCw className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 md:mb-4 text-muted-foreground/50" />
+            <h3 className="text-base md:text-lg font-medium mb-2">Ingen aktiv skanning</h3>
+            <p className="text-xs md:text-sm text-muted-foreground">
               Gå till "Konfigurera" för att starta en ny AI-skanning
             </p>
           </CardContent>
@@ -348,46 +345,41 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
 
       {/* Recent Jobs */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Tidigare skanningar</CardTitle>
+        <CardHeader className="pb-2 md:pb-4">
+          <CardTitle className="text-sm md:text-base">Tidigare skanningar</CardTitle>
         </CardHeader>
         <CardContent>
           {recentJobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
+            <p className="text-xs md:text-sm text-muted-foreground text-center py-4">
               Inga tidigare skanningar
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2 md:space-y-3">
               {recentJobs.map(job => (
                 <div 
                   key={job.id} 
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                  className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 p-2 md:p-3 bg-muted/50 rounded-lg"
                 >
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(job.status)}
-                      <span className="text-sm font-medium truncate">
-                        {job.templates.join(', ')}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(job.created_at).toLocaleString('sv-SE')}
-                    </div>
+                  {/* Top row: Status badge + templates */}
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {getStatusBadge(job.status)}
+                    <span className="text-xs md:text-sm font-medium truncate flex-1">
+                      {job.templates.join(', ')}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="text-sm font-medium">
-                        {job.detections_found} hittade
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {job.processed_images} bilder
-                      </div>
+                  
+                  {/* Bottom row on mobile: date, stats, delete button */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{new Date(job.created_at).toLocaleDateString('sv-SE')}</span>
+                      <span className="text-foreground font-medium">{job.detections_found} hittade</span>
+                      <span>{job.processed_images} bilder</span>
                     </div>
                     {canDeleteJob(job.status) && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setDeleteJobId(job.id)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -400,6 +392,38 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
           )}
         </CardContent>
       </Card>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Avbryt skanning?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vill du avbryta den pågående skanningen? Hittade objekt som ännu inte granskats finns kvar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancelling}>Fortsätt skanna</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                setCancelDialogOpen(false);
+                await cancelScan();
+              }}
+              disabled={isCancelling}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isCancelling ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Avbryter...
+                </>
+              ) : (
+                'Avbryt skanning'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteJobId} onOpenChange={() => setDeleteJobId(null)}>
