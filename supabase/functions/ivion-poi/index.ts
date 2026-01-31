@@ -84,18 +84,19 @@ let cachedTokenExpiry: number = 0;
 
 // Get auth token from Ivion - try multiple auth methods
 async function getIvionToken(): Promise<string> {
-  // Check cached token first
+  // 1. Check cached token first
   if (cachedToken && !isTokenExpired(cachedToken)) {
+    console.log('Using cached Ivion token');
     return cachedToken;
   }
   
-  // If IVION_ACCESS_TOKEN is provided and not expired, use it
+  // 2. If IVION_ACCESS_TOKEN is provided and not expired, use it
   if (IVION_ACCESS_TOKEN && !isTokenExpired(IVION_ACCESS_TOKEN)) {
     console.log('Using provided IVION_ACCESS_TOKEN (still valid)');
     return IVION_ACCESS_TOKEN;
   }
   
-  // Try to refresh using IVION_REFRESH_TOKEN if available
+  // 3. Try to refresh using IVION_REFRESH_TOKEN if available
   if (IVION_REFRESH_TOKEN) {
     console.log('Attempting to refresh access token using IVION_REFRESH_TOKEN...');
     try {
@@ -124,219 +125,51 @@ async function getIvionToken(): Promise<string> {
     }
   }
   
-  if (IVION_ACCESS_TOKEN && isTokenExpired(IVION_ACCESS_TOKEN)) {
-    console.log('IVION_ACCESS_TOKEN has expired and no valid refresh token available');
-  }
-
-  // NavVis IVION requires OAuth mandate-based login which needs user interaction.
-  // Username/password login is NOT supported directly via API.
-  if (!IVION_REFRESH_TOKEN && !IVION_ACCESS_TOKEN) {
-    throw new Error(
-      'Ivion tokens not configured. NavVis IVION requires OAuth mandate-based login. ' +
-      'Provide IVION_REFRESH_TOKEN (7 day validity) for automatic renewal, or IVION_ACCESS_TOKEN (30 min validity) as fallback. ' +
-      'Username/password login is not supported by NavVis IVION REST API.'
-    );
+  // 4. NEW: Login with username/password via /api/auth/generate_tokens
+  if (IVION_USERNAME && IVION_PASSWORD) {
+    console.log('Attempting login with username/password via /api/auth/generate_tokens...');
+    try {
+      const loginResponse = await fetch(`${IVION_API_URL}/api/auth/generate_tokens`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          username: IVION_USERNAME,
+          password: IVION_PASSWORD,
+        }),
+      });
+      
+      if (loginResponse.ok) {
+        const data = await loginResponse.json();
+        if (data.access_token) {
+          console.log('Successfully obtained access token via username/password login');
+          cachedToken = data.access_token;
+          return data.access_token;
+        }
+      } else {
+        const errorText = await loginResponse.text();
+        console.log(`Username/password login failed: ${loginResponse.status} - ${errorText.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.log(`Username/password login error: ${e}`);
+    }
   }
   
+  // All methods failed
+  const hasCredentials = IVION_USERNAME && IVION_PASSWORD;
+  const hasTokens = IVION_ACCESS_TOKEN || IVION_REFRESH_TOKEN;
+  
   throw new Error(
-    'Ivion access token has expired. Please provide a fresh IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN. ' +
-    'To get tokens, log in to Ivion and extract them from browser developer tools (Network tab > api/auth/mandate/exchange response).'
-  );
-
-  console.log('Attempting Ivion auth to:', IVION_API_URL);
-
-  const attempts: AuthAttempt[] = [];
-  const recordAttempt = (a: AuthAttempt) => {
-    attempts.push(a);
-    // keep logs short but useful
-    console.log(`Auth attempt: ${a.method} -> ${a.status ?? 'ERR'}${a.redirectedTo ? ` (redirect ${a.redirectedTo})` : ''}`);
-  };
-
-  const commonJsonHeaders = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    // Some Spring Security setups expect this header for API login
-    'X-Requested-With': 'XMLHttpRequest',
-  };
-
-  // Method 1: Try /api/auth/local with x-authorization Basic header (NavVis local auth)
-  try {
-    console.log('Trying auth method 1: /api/auth/local with x-authorization Basic');
-    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
-    const url = `${IVION_API_URL}/api/auth/local`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'x-authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      redirect: 'manual',
-      body: JSON.stringify({
-        username: IVION_USERNAME,
-        password: IVION_PASSWORD,
-      }),
-    });
-
-    const redirectedTo = response.headers.get('location');
-    if (response.ok) {
-      const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 1 succeeded - token obtained');
-      cachedToken = data.access_token;
-      return data.access_token;
-    }
-
-    const text = await response.text();
-    recordAttempt({
-      method: 'method_1_api_auth_local',
-      url,
-      status: response.status,
-      redirectedTo,
-      bodyPreview: text?.slice(0, 300),
-    });
-  } catch (e) {
-    recordAttempt({
-      method: 'method_1_api_auth_local',
-      url: `${IVION_API_URL}/api/auth/local`,
-      error: String(e),
-    });
-  }
-
-  // Method 2: Try /api/auth/login with x-authorization Basic header
-  try {
-    console.log('Trying auth method 2: /api/auth/login with x-authorization Basic');
-    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
-    const url = `${IVION_API_URL}/api/auth/login`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'x-authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      redirect: 'manual',
-      body: JSON.stringify({
-        username: IVION_USERNAME,
-        password: IVION_PASSWORD,
-      }),
-    });
-
-    const redirectedTo = response.headers.get('location');
-    if (response.ok) {
-      const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 2 succeeded - token obtained');
-      cachedToken = data.access_token;
-      return data.access_token;
-    }
-
-    const text = await response.text();
-    recordAttempt({
-      method: 'method_2_api_auth_login',
-      url,
-      status: response.status,
-      redirectedTo,
-      bodyPreview: text?.slice(0, 300),
-    });
-  } catch (e) {
-    recordAttempt({
-      method: 'method_2_api_auth_login',
-      url: `${IVION_API_URL}/api/auth/login`,
-      error: String(e),
-    });
-  }
-
-  // Method 3: Try x-authorization Basic Auth for token endpoint
-  try {
-    console.log('Trying auth method 3: x-authorization Basic for /api/auth/token');
-    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
-    const url = `${IVION_API_URL}/api/auth/token`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 
-        'x-authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      redirect: 'manual',
-      body: 'grant_type=client_credentials',
-    });
-
-    const redirectedTo = response.headers.get('location');
-    if (response.ok) {
-      const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 3 succeeded - token obtained');
-      cachedToken = data.access_token;
-      return data.access_token;
-    }
-
-    const text = await response.text();
-    recordAttempt({
-      method: 'method_3_x_auth_token',
-      url,
-      status: response.status,
-      redirectedTo,
-      bodyPreview: text?.slice(0, 300),
-    });
-  } catch (e) {
-    recordAttempt({
-      method: 'method_3_x_auth_token',
-      url: `${IVION_API_URL}/api/auth/token`,
-      error: String(e),
-    });
-  }
-
-  // Method 4: Try OAuth2 token endpoint with x-authorization Basic
-  try {
-    console.log('Trying auth method 4: OAuth2 token endpoint with x-authorization');
-    const basicAuth = btoa(`${IVION_USERNAME}:${IVION_PASSWORD}`);
-    const url = `${IVION_API_URL}/oauth/token`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 
-        'x-authorization': `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      redirect: 'manual',
-      body: new URLSearchParams({
-        grant_type: 'password',
-        username: IVION_USERNAME,
-        password: IVION_PASSWORD,
-      }),
-    });
-
-    const redirectedTo = response.headers.get('location');
-    if (response.ok) {
-      const data: IvionTokenResponse = await response.json();
-      console.log('Auth method 4 succeeded - token obtained');
-      cachedToken = data.access_token;
-      return data.access_token;
-    }
-
-    const text = await response.text();
-    recordAttempt({
-      method: 'method_4_oauth_x_auth',
-      url,
-      status: response.status,
-      redirectedTo,
-      bodyPreview: text?.slice(0, 300),
-    });
-  } catch (e) {
-    recordAttempt({
-      method: 'method_4_oauth_x_auth',
-      url: `${IVION_API_URL}/oauth/token`,
-      error: String(e),
-    });
-  }
-
-  // If all methods fail, this is commonly caused by SSO/OAuth being enabled on the Ivion instance.
-  // In that case, username/password login is not available and a JWT must be provided.
-  throw new Error(
-    `Ivion auth failed. This Ivion instance likely requires SSO/OAuth (or the credentials are not local Ivion accounts). ` +
-      `Provide IVION_ACCESS_TOKEN (JWT) in backend secrets, or ensure the instance supports local login via /api/auth/login. ` +
-      `Attempts: ${JSON.stringify(attempts)}`
+    `Ivion authentication failed. ` +
+    (hasCredentials 
+      ? 'Username/password login was attempted but failed - ensure credentials are for a LOCAL account (not SSO/OAuth). '
+      : 'No IVION_USERNAME/IVION_PASSWORD configured. ') +
+    (hasTokens
+      ? 'Provided tokens are expired or invalid. '
+      : 'No IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN configured. ') +
+    'Ensure the Ivion instance supports local authentication.'
   );
 }
 
