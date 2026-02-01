@@ -82,6 +82,33 @@ Get started by exploring the 3D viewer to navigate your building models, or chec
   const handleBackToWelcome = () => setStep('welcome');
   const handleBackToRole = () => setStep('role');
 
+  // Handle skip onboarding
+  const handleSkip = async () => {
+    if (!userId) {
+      navigate('/');
+      return;
+    }
+    
+    try {
+      await supabase
+        .from('onboarding_sessions')
+        .upsert({
+          user_id: userId,
+          role: null,
+          goals: [],
+          script_content: null,
+          completed_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        });
+      
+      navigate('/', { replace: true });
+    } catch (err) {
+      console.error('Skip onboarding error:', err);
+      navigate('/', { replace: true });
+    }
+  };
+
   // Handle completion of goals step - generate script and move to complete
   const handleFinishGoals = async () => {
     setStep('complete');
@@ -139,7 +166,7 @@ Get started by exploring the 3D viewer to navigate your building models, or chec
       {/* Content */}
       <div className="flex-1 flex flex-col max-w-lg mx-auto w-full">
         {step === 'welcome' && (
-          <WelcomeStep onNext={handleGoToRole} />
+          <WelcomeStep onNext={handleGoToRole} onSkip={handleSkip} />
         )}
         
         {step === 'role' && (

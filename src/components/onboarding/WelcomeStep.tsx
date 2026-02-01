@@ -4,9 +4,10 @@ import { Sparkles, Building2, BarChart3, Package } from 'lucide-react';
 
 interface WelcomeStepProps {
   onNext: () => void;
+  onSkip?: () => void;
 }
 
-const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext }) => {
+const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext, onSkip }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
       {/* Animated icon cluster */}
@@ -66,6 +67,16 @@ const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext }) => {
         Get Started
         <Sparkles className="w-4 h-4 ml-2" />
       </Button>
+
+      {/* Skip link */}
+      {onSkip && (
+        <button
+          onClick={onSkip}
+          className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Skip for now
+        </button>
+      )}
     </div>
   );
 };
