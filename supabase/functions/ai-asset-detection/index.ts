@@ -451,7 +451,36 @@ async function getDatasetImages(siteId: string, datasetName: string): Promise<Iv
   return await probeDatasetImages(siteId, datasetName, 200);
 }
 
-// Get panorama image URL using filename from poses.csv
+// Verify URL with mini-GET (Range request) to ensure image is actually downloadable
+async function verifyImageUrlWithGet(url: string, token: string): Promise<boolean> {
+  try {
+    // Use Range request to only fetch first 1KB - enough to verify access
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 
+        'x-authorization': `Bearer ${token}`,
+        'Range': 'bytes=0-1023'
+      },
+      redirect: 'follow',
+    });
+    
+    // 200 = full content (server doesn't support range), 206 = partial content (range worked)
+    if (response.status === 200 || response.status === 206) {
+      const contentType = response.headers.get('content-type') || '';
+      // Verify it's actually an image
+      if (contentType.startsWith('image/')) {
+        await response.arrayBuffer(); // consume
+        return true;
+      }
+    }
+    await response.text(); // consume body
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Get panorama image URL using filename from poses.csv - now with GET verification
 async function getPanoramaImageUrl(
   siteId: string,
   datasetName: string,
@@ -461,34 +490,25 @@ async function getPanoramaImageUrl(
   
   // URL patterns based on NavVis file structure
   const patterns = [
-    // Primary: pano directory with exact filename from poses.csv
+    // Primary: via storage redirect API (most common working pattern)
+    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${imageFilename}`,
+    // Direct data paths
     `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano/${imageFilename}`,
     // Alternative: pano_high directory for higher resolution
-    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano_high/${imageFilename}`,
-    // Fallback: via storage redirect API
-    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${imageFilename}`,
     `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano_high/${imageFilename}`,
+    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano_high/${imageFilename}`,
   ];
   
   for (const url of patterns) {
-    try {
-      const response = await fetch(url, {
-        method: 'HEAD',
-        headers: { 'x-authorization': `Bearer ${token}` },
-        redirect: 'manual',
-      });
-      
-      // 200 = direct access, 302 = redirect to storage
-      if (response.status === 200 || response.status === 302) {
-        console.log(`Found valid image URL: ${url.slice(0, 100)}...`);
-        return url;
-      }
-    } catch (e) {
-      // Continue to next pattern
+    // Use mini-GET verification instead of HEAD to ensure actual download works
+    const isValid = await verifyImageUrlWithGet(url, token);
+    if (isValid) {
+      console.log(`Verified image URL (GET): ${url.slice(0, 100)}...`);
+      return url;
     }
   }
   
-  console.log(`No valid URL found for image ${imageFilename} in dataset ${datasetName}`);
+  console.log(`No downloadable URL found for image ${imageFilename} in dataset ${datasetName}`);
   return null;
 }
 
@@ -1011,7 +1031,7 @@ async function deleteScanJob(scanJobId: string): Promise<{ success: boolean }> {
   return { success: true };
 }
 
-// Process a batch of images - Full Phase 2 implementation
+// Process a batch of images - Full Phase 2 implementation with fail-fast
 async function processBatch(params: {
   scanJobId: string;
   batchSize?: number;
@@ -1022,7 +1042,11 @@ async function processBatch(params: {
   message: string;
 }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const batchSize = params.batchSize || 25; // Increased batch size for fewer manual clicks
+  const batchSize = params.batchSize || 25;
+  
+  // Fail-fast configuration
+  const MAX_CONSECUTIVE_DOWNLOAD_FAILURES = 10;
+  const MAX_CONSECUTIVE_AI_FAILURES = 5;
   
   // 1. Get scan job
   const { data: job, error: jobError } = await supabase
@@ -1059,7 +1083,11 @@ async function processBatch(params: {
   if (activeTemplates.length === 0) {
     await supabase
       .from('scan_jobs')
-      .update({ status: 'failed', error_message: 'No active templates found' })
+      .update({ 
+        status: 'failed', 
+        error_message: 'No active templates found',
+        completed_at: new Date().toISOString()
+      })
       .eq('id', job.id);
     throw new Error('No active templates found for selected types');
   }
@@ -1071,7 +1099,11 @@ async function processBatch(params: {
   } catch (e: any) {
     await supabase
       .from('scan_jobs')
-      .update({ status: 'failed', error_message: e.message })
+      .update({ 
+        status: 'failed', 
+        error_message: `Ivion-anslutning misslyckades: ${e.message}`,
+        completed_at: new Date().toISOString()
+      })
       .eq('id', job.id);
     throw e;
   }
@@ -1104,6 +1136,14 @@ async function processBatch(params: {
   let totalDetections = job.detections_found || 0;
   let imagesInBatch = 0;
   let errorMessages: string[] = [];
+  
+  // Fail-fast counters
+  let consecutiveDownloadFailures = 0;
+  let consecutiveAiFailures = 0;
+  let downloadFailures = 0;
+  let noUrlSkips = 0;
+  let aiSuccesses = 0;
+  let lastDownloadError = '';
   
   console.log(`Starting batch processing: ${datasets.length} datasets, resume at dataset ${startDatasetIndex}, image ${startImageIndex}`);
   
@@ -1143,6 +1183,46 @@ async function processBatch(params: {
     for (let ii = imageStart; ii < images.length && imagesInBatch < batchSize; ii++) {
       const image = images[ii];
       
+      // Check fail-fast: too many consecutive download failures
+      if (consecutiveDownloadFailures >= MAX_CONSECUTIVE_DOWNLOAD_FAILURES) {
+        const failMessage = `Skanning avbruten: ${consecutiveDownloadFailures} bildnedladdningar misslyckades i rad. Senaste fel: ${lastDownloadError}. Kontrollera NavVis/Ivion behörigheter.`;
+        console.error(failMessage);
+        await supabase.from('scan_jobs').update({
+          status: 'failed',
+          error_message: failMessage,
+          completed_at: new Date().toISOString(),
+          processed_images: totalProcessed,
+          detections_found: totalDetections,
+        }).eq('id', job.id);
+        
+        return {
+          processed: totalProcessed,
+          detections: totalDetections,
+          status: 'failed',
+          message: failMessage
+        };
+      }
+      
+      // Check fail-fast: too many consecutive AI failures
+      if (consecutiveAiFailures >= MAX_CONSECUTIVE_AI_FAILURES) {
+        const failMessage = `Skanning avbruten: ${consecutiveAiFailures} AI-analyser misslyckades i rad. Kan vara rate-limit eller API-problem.`;
+        console.error(failMessage);
+        await supabase.from('scan_jobs').update({
+          status: 'failed',
+          error_message: failMessage,
+          completed_at: new Date().toISOString(),
+          processed_images: totalProcessed,
+          detections_found: totalDetections,
+        }).eq('id', job.id);
+        
+        return {
+          processed: totalProcessed,
+          detections: totalDetections,
+          status: 'failed',
+          message: failMessage
+        };
+      }
+      
       // Use filePath from poses.csv, fallback to generated filename pattern
       const imageFilename = image.filePath || `${String(image.id).padStart(5, '0')}-pano.jpg`;
       
@@ -1153,14 +1233,40 @@ async function processBatch(params: {
         const imageUrl = await getPanoramaImageUrl(job.ivion_site_id, dataset.name, imageFilename);
         if (!imageUrl) {
           console.log(`No URL found for image ${imageFilename}, skipping`);
+          noUrlSkips++;
+          consecutiveDownloadFailures++;
+          lastDownloadError = 'Ingen giltig URL hittades';
           totalProcessed++;
           imagesInBatch++;
           continue;
         }
         
         console.log(`Downloading image from: ${imageUrl.slice(0, 100)}...`);
-        const base64 = await downloadImageAsBase64(imageUrl);
-        console.log(`Downloaded image, size: ${Math.round(base64.length / 1024)}KB base64`);
+        let base64: string;
+        try {
+          base64 = await downloadImageAsBase64(imageUrl);
+          console.log(`Downloaded image, size: ${Math.round(base64.length / 1024)}KB base64`);
+          consecutiveDownloadFailures = 0; // Reset on success
+        } catch (dlError: any) {
+          console.error(`Download failed for ${imageFilename}:`, dlError.message);
+          downloadFailures++;
+          consecutiveDownloadFailures++;
+          lastDownloadError = dlError.message?.slice(0, 100) || 'Nedladdning misslyckades';
+          errorMessages.push(`Image ${imageFilename}: ${lastDownloadError}`);
+          totalProcessed++;
+          imagesInBatch++;
+          
+          // Update error_message in real-time
+          const statusMsg = `Nedladdningsfel: ${downloadFailures}/${totalProcessed}. Senaste: ${lastDownloadError}`;
+          await supabase.from('scan_jobs').update({
+            error_message: statusMsg,
+            current_dataset: dataset.name,
+            current_image_index: ii + 1,
+            processed_images: totalProcessed,
+          }).eq('id', job.id);
+          
+          continue;
+        }
         
         // Analyze with AI
         console.log(`Analyzing with AI, ${activeTemplates.length} templates`);
@@ -1169,6 +1275,8 @@ async function processBatch(params: {
         try {
           detections = await analyzeImageWithAI(base64, activeTemplates);
           console.log(`AI found ${detections.length} detections`);
+          aiSuccesses++;
+          consecutiveAiFailures = 0; // Reset on success
         } catch (aiError: any) {
           // Handle rate limits
           if (aiError.message?.includes('429') || aiError.message?.includes('rate')) {
@@ -1176,11 +1284,15 @@ async function processBatch(params: {
             await new Promise(resolve => setTimeout(resolve, 5000));
             try {
               detections = await analyzeImageWithAI(base64, activeTemplates);
-            } catch (retryError) {
+              aiSuccesses++;
+              consecutiveAiFailures = 0;
+            } catch (retryError: any) {
               console.error('AI retry failed:', retryError);
+              consecutiveAiFailures++;
             }
           } else {
             console.error('AI analysis error:', aiError);
+            consecutiveAiFailures++;
           }
         }
         
