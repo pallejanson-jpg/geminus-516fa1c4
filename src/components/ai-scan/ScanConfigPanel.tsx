@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Scan, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { Building2, Scan, AlertCircle, CheckCircle2, Info, Download, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,6 +27,22 @@ interface BuildingSettings {
   ivion_site_id: string | null;
 }
 
+interface DownloadAttempt {
+  method: string;
+  url: string;
+  status: number;
+  contentType?: string;
+  size?: number;
+}
+
+interface DownloadTestResult {
+  success: boolean;
+  attempts: DownloadAttempt[];
+  imageSize?: number;
+  contentType?: string;
+  error?: string;
+}
+
 interface ScanConfigPanelProps {
   templates: DetectionTemplate[];
   buildings: Building[];
@@ -44,10 +60,12 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [isStarting, setIsStarting] = useState(false);
   const [isTestingAccess, setIsTestingAccess] = useState(false);
+  const [isTestingDownload, setIsTestingDownload] = useState(false);
   const [accessTestResult, setAccessTestResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
+  const [downloadTestResult, setDownloadTestResult] = useState<DownloadTestResult | null>(null);
   const [buildingSettings, setBuildingSettings] = useState<Record<string, BuildingSettings>>({});
   const [loadingSettings, setLoadingSettings] = useState(true);
 
@@ -92,7 +110,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     return buildingSettings[selectedBuilding]?.ivion_site_id || null;
   };
 
-  // Test image access for selected building
+  // Test image access for selected building (HEAD-based, quick check)
   const testImageAccess = async () => {
     const siteId = getIvionSiteId();
     if (!siteId) {
@@ -122,6 +140,53 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     } finally {
       setIsTestingAccess(false);
     }
+  };
+
+  // Test actual image download (GET-based, real download verification)
+  const testImageDownload = async () => {
+    const siteId = getIvionSiteId();
+    if (!siteId) {
+      toast({
+        title: 'Ivion ej konfigurerat',
+        description: 'Vald byggnad har ingen Ivion-site konfigurerad',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsTestingDownload(true);
+    setDownloadTestResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
+        body: { action: 'test-image-download', siteId }
+      });
+
+      if (error) throw error;
+      setDownloadTestResult(data);
+      
+      if (!data.success) {
+        toast({
+          title: 'Bildnedladdning misslyckades',
+          description: data.error || 'Kontrollera NavVis/Ivion behörigheter',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      setDownloadTestResult({
+        success: false,
+        attempts: [],
+        error: error.message || 'Kunde inte testa bildnedladdning',
+      });
+    } finally {
+      setIsTestingDownload(false);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   // Start scan
@@ -216,25 +281,96 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
               </Select>
 
               {selectedBuilding && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={testImageAccess}
-                    disabled={isTestingAccess}
-                  >
-                    {isTestingAccess ? 'Testar...' : 'Testa bildåtkomst'}
-                  </Button>
-                  {accessTestResult && (
-                    <div className={`flex items-center gap-1 text-sm ${
-                      accessTestResult.success ? 'text-green-600' : 'text-destructive'
+                <div className="space-y-3">
+                  {/* Quick access test */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testImageAccess}
+                      disabled={isTestingAccess || isTestingDownload}
+                    >
+                      {isTestingAccess ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                      {isTestingAccess ? 'Testar...' : 'Testa åtkomst (snabb)'}
+                    </Button>
+                    {accessTestResult && (
+                      <div className={`flex items-center gap-1 text-sm ${
+                        accessTestResult.success ? 'text-green-600' : 'text-destructive'
+                      }`}>
+                        {accessTestResult.success ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4" />
+                        )}
+                        <span className="truncate max-w-xs">{accessTestResult.message}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Full download test */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testImageDownload}
+                      disabled={isTestingAccess || isTestingDownload}
+                    >
+                      {isTestingDownload ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+                      {isTestingDownload ? 'Laddar ner...' : 'Testa bildnedladdning (GET)'}
+                    </Button>
+                  </div>
+
+                  {/* Download test result */}
+                  {downloadTestResult && (
+                    <div className={`p-3 rounded-lg text-sm ${
+                      downloadTestResult.success 
+                        ? 'bg-green-50 border border-green-200 dark:bg-green-950/20 dark:border-green-900' 
+                        : 'bg-destructive/10 border border-destructive/30'
                     }`}>
-                      {accessTestResult.success ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4" />
+                      <div className="flex items-center gap-2 font-medium mb-2">
+                        {downloadTestResult.success ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <span className="text-green-700 dark:text-green-400">
+                              Bildnedladdning OK ({downloadTestResult.contentType}, {formatBytes(downloadTestResult.imageSize || 0)})
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                            <span className="text-destructive">
+                              {downloadTestResult.error || 'Bildnedladdning misslyckades'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Show attempts for debugging */}
+                      {downloadTestResult.attempts.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Försök:</p>
+                          {downloadTestResult.attempts.map((attempt, i) => (
+                            <div key={i} className="text-xs font-mono bg-background/50 p-1 rounded flex items-center gap-2">
+                              <span className={`px-1 rounded ${
+                                attempt.status >= 200 && attempt.status < 300 
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' 
+                                  : 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                              }`}>
+                                {attempt.status}
+                              </span>
+                              <span className="text-muted-foreground">{attempt.method}</span>
+                              {attempt.contentType && <span className="text-muted-foreground">({attempt.contentType})</span>}
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      <span>{accessTestResult.message}</span>
+                      
+                      {!downloadTestResult.success && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Detta indikerar att NavVis/Ivion-kontot kan lista datasets men saknar behörighet att ladda ner bilddata. 
+                          Kontrollera kontots behörigheter i NavVis.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
