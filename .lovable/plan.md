@@ -1,121 +1,103 @@
 
-# Plan: Add "Skip Onboarding" Button
 
-## Overview
+# Plan: Flytta onboarding till användarmenyn
 
-Add a discrete "Skip" button to the WelcomeStep that allows users to bypass the onboarding flow entirely while still marking their session as complete in the database.
+## Översikt
+
+Ta bort den automatiska onboarding-redirecten efter inloggning och lägg istället till ett menyval "Starta introduktion" i användarmenyn (dropdown i headern).
 
 ---
 
-## Implementation
+## Ändringar
 
-### File: `src/components/onboarding/WelcomeStep.tsx`
+### 1. Ta bort automatisk redirect i ProtectedRoute
 
-**Changes:**
-1. Add `onSkip` prop to interface
-2. Add a subtle "Skip" link below the main CTA button
+**Fil:** `src/components/auth/ProtectedRoute.tsx`
+
+**Ändring:** Ta bort hela onboarding-kontrollen och redirecten
 
 ```tsx
-interface WelcomeStepProps {
-  onNext: () => void;
-  onSkip?: () => void;  // NEW
+// TA BORT: Rad 15-16 (state för onboarding)
+const [onboardingChecked, setOnboardingChecked] = useState(false);
+const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+// TA BORT: Rad 18-58 (hela useEffect för onboarding-kontroll)
+
+// TA BORT: Rad 82-85 (onboarding redirect)
+if (needsOnboarding && location.pathname !== '/onboarding') {
+  return <Navigate to="/onboarding" replace />;
 }
 
-const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext, onSkip }) => {
-  return (
-    <div className="flex flex-col items-center ...">
-      {/* ... existing content ... */}
-      
-      {/* CTA Button */}
-      <Button size="lg" onClick={onNext} ...>
-        Get Started
-        <Sparkles className="w-4 h-4 ml-2" />
-      </Button>
-      
-      {/* NEW: Skip link */}
-      {onSkip && (
-        <button
-          onClick={onSkip}
-          className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Skip for now
-        </button>
-      )}
-    </div>
-  );
-};
+// FÖRENKLAD loading-kontroll (behöver inte vänta på onboardingChecked)
+if (isLoading) { ... }
 ```
 
 ---
 
-### File: `src/pages/Onboarding.tsx`
+### 2. Lägg till onboarding-länk i användarmenyn
 
-**Changes:**
-1. Add `handleSkip` function that saves a minimal onboarding session and navigates to home
+**Fil:** `src/components/layout/AppHeader.tsx`
+
+**Ändring:** Lägg till menyval för att starta introduktionen
 
 ```tsx
-// Add skip handler
-const handleSkip = async () => {
-  if (!userId) {
-    navigate('/');
-    return;
-  }
-  
-  try {
-    await supabase
-      .from('onboarding_sessions')
-      .upsert({
-        user_id: userId,
-        role: null,
-        goals: [],
-        script_content: null,
-        completed_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      });
-    
-    navigate('/', { replace: true });
-  } catch (err) {
-    console.error('Skip onboarding error:', err);
-    navigate('/', { replace: true });
-  }
-};
+// Importera Sparkles-ikonen
+import { ..., Sparkles } from 'lucide-react';
 
-// Pass to WelcomeStep
-{step === 'welcome' && (
-  <WelcomeStep 
-    onNext={handleGoToRole} 
-    onSkip={handleSkip}  // NEW
-  />
-)}
+// I DropdownMenuContent, efter "Inställningar" och före separator:
+<DropdownMenuItem onClick={() => navigate('/onboarding')}>
+  <Sparkles className="mr-2 h-4 w-4" />
+  Starta introduktion
+</DropdownMenuItem>
+<DropdownMenuSeparator />
 ```
 
 ---
 
-## Visual Result
+## Resultat
 
+### Före (nuvarande flöde):
 ```
-┌─────────────────────────────────────┐
-│                                     │
-│        [🏢] [📦]                    │
-│        [📊] [✨]                    │
-│                                     │
-│      Welcome to Geminus             │
-│   Your digital twin platform...     │
-│                                     │
-│    ┌─────────────────────┐          │
-│    │   Get Started  ✨   │          │
-│    └─────────────────────┘          │
-│         Skip for now                │  ← NEW
-│                                     │
-└─────────────────────────────────────┘
+Inloggning → Automatisk redirect till /onboarding → Landningssida
+```
+
+### Efter (nytt flöde):
+```
+Inloggning → Landningssida (direkt)
+                   ↓
+           Användarmeny → "Starta introduktion" (valfritt)
+```
+
+### Användarmeny efter ändring:
+```
+┌─────────────────────────────┐
+│ Anders Andersson     Admin  │
+│ anders@example.com          │
+├─────────────────────────────┤
+│ 👤 Profil                   │
+│ ⚙️ Inställningar            │
+│ ✨ Starta introduktion      │  ← NY
+├─────────────────────────────┤
+│ 🚪 Logga ut                 │
+└─────────────────────────────┘
 ```
 
 ---
 
-## Files Modified
+## Tekniska noteringar
 
-| File | Changes |
-|------|---------|
-| `src/components/onboarding/WelcomeStep.tsx` | Add `onSkip` prop and "Skip for now" button |
-| `src/pages/Onboarding.tsx` | Add `handleSkip` function, pass to WelcomeStep |
+1. **Onboarding-sidan förblir skyddad** - Den finns kvar på `/onboarding` och kräver inloggning via ProtectedRoute
+
+2. **Skip-funktionen behålls** - Användare kan fortfarande hoppa över onboarding om de startar den
+
+3. **Ingen databasändring krävs** - Vi tar bara bort redirecten, inte funktionaliteten
+
+---
+
+## Filer som ändras
+
+| Fil | Ändring |
+|-----|---------|
+| `src/components/auth/ProtectedRoute.tsx` | Ta bort onboarding-kontroll och redirect |
+| `src/components/layout/AppHeader.tsx` | Lägg till "Starta introduktion" i användarmenyn |
+
