@@ -1,187 +1,114 @@
 
-
-# Plan: Wire MobileViewerOverlay to Existing AssetPlusViewer State
+# Plan: Add "Skip Onboarding" Button
 
 ## Overview
 
-The `MobileViewerOverlay` component already has the UI for 2D/3D toggle, annotations, room labels, and BIM models, but the props are currently set to defaults because `AssetPlusViewer` doesn't pass the actual state values. This plan connects the existing state in `AssetPlusViewer` to the mobile overlay.
-
----
-
-## Current State Analysis
-
-### What MobileViewerOverlay expects (already defined):
-```tsx
-interface MobileViewerOverlayProps {
-  is2DMode?: boolean;                    // Currently defaults to false
-  onToggle2DMode?: (is2D: boolean) => void;
-  showAnnotations?: boolean;             // Currently defaults to false  
-  onShowAnnotationsChange?: (show: boolean) => void;
-  showRoomLabels?: boolean;              // Currently defaults to false
-  onShowRoomLabelsChange?: (show: boolean) => void;
-  onOpenVisualizationPanel?: () => void;
-  models?: MobileModelInfo[];            // Currently defaults to []
-  onModelToggle?: (modelId: string, visible: boolean) => void;
-}
-```
-
-### What AssetPlusViewer already has:
-| State | Location | Current Usage |
-|-------|----------|---------------|
-| `currentViewMode` ('2d'/'3d') | Line 1752 | Used for Gunnar context |
-| `showAnnotations` | Line 133 | Passed to VisualizationToolbar |
-| `showVisualizationPanel` | Line 130 | Opens room visualization |
-| Room labels | Via `setRoomLabelsEnabled` hook | Line 169 |
-| Model visibility | Not currently tracked in state | Only in VisualizationToolbar |
+Add a discrete "Skip" button to the WelcomeStep that allows users to bypass the onboarding flow entirely while still marking their session as complete in the database.
 
 ---
 
 ## Implementation
 
-### File: `src/components/viewer/AssetPlusViewer.tsx`
+### File: `src/components/onboarding/WelcomeStep.tsx`
 
-#### 1. Add missing state for models and room labels
+**Changes:**
+1. Add `onSkip` prop to interface
+2. Add a subtle "Skip" link below the main CTA button
 
 ```tsx
-// Around line 140-142 (after other state declarations)
-const [showRoomLabels, setShowRoomLabels] = useState(false);
-const [visibleModelIds, setVisibleModelIds] = useState<string[]>([]);
-const [availableModels, setAvailableModels] = useState<{id: string; name: string; visible: boolean}[]>([]);
+interface WelcomeStepProps {
+  onNext: () => void;
+  onSkip?: () => void;  // NEW
+}
+
+const WelcomeStep: React.FC<WelcomeStepProps> = ({ onNext, onSkip }) => {
+  return (
+    <div className="flex flex-col items-center ...">
+      {/* ... existing content ... */}
+      
+      {/* CTA Button */}
+      <Button size="lg" onClick={onNext} ...>
+        Get Started
+        <Sparkles className="w-4 h-4 ml-2" />
+      </Button>
+      
+      {/* NEW: Skip link */}
+      {onSkip && (
+        <button
+          onClick={onSkip}
+          className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Skip for now
+        </button>
+      )}
+    </div>
+  );
+};
 ```
 
-#### 2. Create handler for 2D mode toggle (mobile-friendly)
+---
+
+### File: `src/pages/Onboarding.tsx`
+
+**Changes:**
+1. Add `handleSkip` function that saves a minimal onboarding session and navigates to home
 
 ```tsx
-// After line 315 (after handleVisibleFloorsChange)
-const handleToggle2DMode = useCallback((is2D: boolean) => {
-  const mode = is2D ? '2d' : '3d';
-  window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, {
-    detail: { mode }
-  }));
-}, []);
-```
-
-#### 3. Create handlers for room labels and annotations
-
-```tsx
-// Handle room labels toggle
-const handleRoomLabelsToggle = useCallback((enabled: boolean) => {
-  setShowRoomLabels(enabled);
-  setRoomLabelsEnabled(enabled);
-}, [setRoomLabelsEnabled]);
-
-// Handle annotations toggle - using existing showAnnotations state
-const handleAnnotationsChange = useCallback((show: boolean) => {
-  setShowAnnotations(show);
-  // Trigger annotation visibility update in viewer
-  const assetView = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView;
-  assetView?.setAnnotationsVisible?.(show);
-}, []);
-```
-
-#### 4. Create model visibility handler
-
-```tsx
-// Handle individual model visibility toggle
-const handleModelToggle = useCallback((modelId: string, visible: boolean) => {
-  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-  if (!xeokitViewer?.scene) return;
-  
-  // Toggle model visibility in xeokit
-  const model = xeokitViewer.scene.models[modelId];
-  if (model) {
-    model.visible = visible;
+// Add skip handler
+const handleSkip = async () => {
+  if (!userId) {
+    navigate('/');
+    return;
   }
   
-  // Update state
-  setAvailableModels(prev => 
-    prev.map(m => m.id === modelId ? { ...m, visible } : m)
-  );
-}, []);
-```
+  try {
+    await supabase
+      .from('onboarding_sessions')
+      .upsert({
+        user_id: userId,
+        role: null,
+        goals: [],
+        script_content: null,
+        completed_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+      });
+    
+    navigate('/', { replace: true });
+  } catch (err) {
+    console.error('Skip onboarding error:', err);
+    navigate('/', { replace: true });
+  }
+};
 
-#### 5. Update MobileViewerOverlay props (around line 2400-2412)
-
-```tsx
-{isMobile && state.isInitialized && (
-  <MobileViewerOverlay
-    onClose={onClose}
-    viewerInstanceRef={viewerInstanceRef}
-    buildingName={assetData?.commonName || assetData?.name}
-    showSpaces={showSpaces}
-    onShowSpacesChange={handleShowSpacesChange}
-    floors={mobileFloors}
-    onFloorToggle={handleMobileFloorToggle}
-    onResetCamera={handleResetCamera}
-    isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
-    // NEW PROPS - connect to existing state
-    is2DMode={currentViewMode === '2d'}
-    onToggle2DMode={handleToggle2DMode}
-    showAnnotations={showAnnotations}
-    onShowAnnotationsChange={handleAnnotationsChange}
-    showRoomLabels={showRoomLabels}
-    onShowRoomLabelsChange={handleRoomLabelsToggle}
-    onOpenVisualizationPanel={() => setShowVisualizationPanel(true)}
-    models={availableModels}
-    onModelToggle={handleModelToggle}
+// Pass to WelcomeStep
+{step === 'welcome' && (
+  <WelcomeStep 
+    onNext={handleGoToRole} 
+    onSkip={handleSkip}  // NEW
   />
 )}
-```
-
-#### 6. Populate models list when viewer loads
-
-Add effect to extract available models from xeokit scene:
-
-```tsx
-// After model load completes, extract model list
-useEffect(() => {
-  if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
-  
-  const extractModels = () => {
-    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.scene?.models) return;
-    
-    const models = Object.entries(xeokitViewer.scene.models).map(([id, model]: [string, any]) => ({
-      id,
-      name: model.id || id,
-      visible: model.visible !== false
-    }));
-    
-    setAvailableModels(models);
-  };
-  
-  // Small delay to ensure models are fully loaded
-  const timer = setTimeout(extractModels, 500);
-  return () => clearTimeout(timer);
-}, [modelLoadState, initStep]);
 ```
 
 ---
 
 ## Visual Result
 
-After wiring, the mobile drawer will have fully functional controls:
-
 ```
-┌─────────────────────────────────┐
-│ View Settings               [x] │
-├─────────────────────────────────┤
-│ DISPLAY                         │
-│ [x] 2D View          [toggle] ← ← Connected to currentViewMode
-│ [x] Show Spaces      [toggle] ← ← Already connected
-│ [ ] Annotations      [toggle] ← ← Connected to showAnnotations
-│ [ ] Room Labels      [toggle] ← ← Connected to showRoomLabels
-│ [ ] Room Visualization   [>] ← ← Opens showVisualizationPanel
-├─────────────────────────────────┤
-│ ▶ FLOORS (3/5)               ▼  │  ← Already connected
-├─────────────────────────────────┤
-│ ▶ BIM MODELS (2/3)           ▼  │  ← Connected to availableModels
-│   [✓] A-Arkitektur              │
-│   [✓] V-VVS                     │
-│   [ ] E-El                      │
-├─────────────────────────────────┤
-│     [Reset Camera]              │
-└─────────────────────────────────┘
+┌─────────────────────────────────────┐
+│                                     │
+│        [🏢] [📦]                    │
+│        [📊] [✨]                    │
+│                                     │
+│      Welcome to Geminus             │
+│   Your digital twin platform...     │
+│                                     │
+│    ┌─────────────────────┐          │
+│    │   Get Started  ✨   │          │
+│    └─────────────────────┘          │
+│         Skip for now                │  ← NEW
+│                                     │
+└─────────────────────────────────────┘
 ```
 
 ---
@@ -190,15 +117,5 @@ After wiring, the mobile drawer will have fully functional controls:
 
 | File | Changes |
 |------|---------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Add state for models/labels, create handlers, wire props to MobileViewerOverlay |
-
----
-
-## Technical Notes
-
-1. **Event-Based 2D Toggle**: Uses `VIEW_MODE_REQUESTED_EVENT` which ViewerToolbar already listens for - this ensures the actual section plane clipping logic is triggered correctly.
-
-2. **Model Visibility**: Directly manipulates xeokit `scene.models[id].visible` property, same pattern used by ModelVisibilitySelector.
-
-3. **No Breaking Changes**: All new props to MobileViewerOverlay are optional with sensible defaults, so existing functionality is preserved.
-
+| `src/components/onboarding/WelcomeStep.tsx` | Add `onSkip` prop and "Skip for now" button |
+| `src/pages/Onboarding.tsx` | Add `handleSkip` function, pass to WelcomeStep |
