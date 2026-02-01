@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useContext, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
@@ -222,6 +222,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
                             <Settings className="mr-2 h-4 w-4" />
                             Inställningar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate('/onboarding')}>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            Starta introduktion
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
