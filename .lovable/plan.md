@@ -1,423 +1,355 @@
 
-# Plan: Asset+ Återskrivning, API-dokumentation & Congeria Integration
+# Plan: DocumentsTab and Congeria Sync Integration
 
-## Översikt
+## Overview
 
-Denna plan adresserar tre områden:
-
-1. **Asset+ återskrivning** - Implementera `UpdateBimObjectsPropertiesData` för att skriva tillbaka ändringar till Asset+
-2. **Geminus API-dokumentation** - Skapa en central dokumentationssamling för alla integrerade system
-3. **Congeria dokumentsynk** - Hämta dokument via session-baserad inloggning (ingen API tillgänglig)
+This plan adds:
+1. **DocumentsView component** - A panel to display synced documents for a building
+2. **Docs+ Quick Action** - Link the FileText button to open DocumentsView instead of switching apps
+3. **Congeria Sync Tab** - Add manual document sync controls in ApiSettingsModal under the Sync tab
 
 ---
 
-## Del 1: Asset+ Återskrivning (Write-back)
+## Current Behavior Analysis
 
-### API-analys från dokumentationen
+| Component | Current Behavior |
+|-----------|------------------|
+| QuickActions → Docs+ button | Calls `onShowDocs(facility)` which switches to `original_archive` app |
+| PortfolioView | `handleShowDocs` just does `setActiveApp('original_archive')` |
+| ApiSettingsModal → Sync tab | Has Asset+, XKT, FM Access, Senslinc, Ivion sync sections - no Congeria |
 
-Asset+ använder **separata endpoints** för olika operationer:
+---
 
-| Operation | Endpoint | Användning |
-|-----------|----------|------------|
-| Skapa objekt | `POST /AddObjectList` | Nya assets (redan implementerat via `asset-plus-create`) |
-| Uppdatera properties | `POST /UpdateBimObjectsPropertiesData` | Ändra `commonName`, `designation`, user parameters |
-| Flytta objekt | `POST /UpsertRelationships` | Ändra förälder (endast om `createdInModel = false`) |
-| Radera objekt | `POST /ExpireObject` | Markera som utgånget med datum |
-
-**Viktigt från dokumentationen:**
+## Proposed Architecture
 
 ```text
-Updating System and User Parameters:
-- System parameters: Endast `designation` och `commonName` kan redigeras
-- User parameters: Alla värden kan redigeras
-- Key: Använd parameterns "Name" (inte flatPropertyName) vid uppdatering
+┌─────────────────────────────────────────────────────────────┐
+│                    PortfolioView                            │
+│                                                             │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │ FacilityCard    │    │ FacilityLandingPage             │ │
+│  │                 │    │                                 │ │
+│  │                 │    │  QuickActions                   │ │
+│  │                 │    │    └─ Docs+ → onShowDocs()      │ │
+│  └─────────────────┘    └─────────────────────────────────┘ │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────────┤
+│  │ DocumentsView (NEW)                                      │
+│  │ - Shows when showDocsFor is set                          │
+│  │ - Lists documents from `documents` table                 │
+│  │ - Download links to Supabase Storage                     │
+│  │ - Shows metadata (type, size, sync date)                 │
+│  └──────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ ApiSettingsModal → Sync Tab                                 │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Asset+ Synkronisering (existing)                        ││
+│  │ - Structure, Assets, XKT                                ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Congeria Dokument Sync (NEW)                            ││
+│  │ - Per-building config: URL mapping                      ││
+│  │ - Sync button                                           ││
+│  │ - Status display                                        ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Payload-format för UpdateBimObjectsPropertiesData
-
-```json
-{
-  "APIKey": "xxx",
-  "UpdateBimObjectProperties": [{
-    "FmGuid": "asset-fm-guid-here",
-    "UpdateProperties": [
-      { "Name": "commonName", "Type": 0, "Value": "Nytt namn" },
-      { "Name": "designation", "Type": 0, "Value": "D-001" },
-      { "Name": "MyCustomParam", "Type": 0, "Value": "Custom value" }
-    ]
-  }]
-}
-```
-
-### Implementation
-
-**Ny Edge Function: `supabase/functions/asset-plus-update/index.ts`**
-
-```typescript
-// Stöd för:
-// - Batch-uppdatering av flera assets
-// - Synkar BÅDE till Asset+ (för is_local=false) OCH lokal databas
-// - Returnerar success per asset
-
-interface UpdateAssetRequest {
-  fmGuids: string[];  // Array för batch-stöd
-  properties: Array<{
-    name: string;      // "commonName", "designation", eller user parameter
-    value: string | number | boolean;
-    dataType?: number; // Default: 0 (String)
-  }>;
-}
-
-async function updateAssets(request: UpdateAssetRequest) {
-  // 1. Hämta assets från lokal DB för att avgöra is_local status
-  // 2. Gruppera: locals → endast lokal uppdatering, synced → Asset+ + lokal
-  // 3. Anropa Asset+ API för synced assets
-  // 4. Uppdatera lokal databas för alla
-}
-```
-
-**Uppdatera service: `src/services/asset-plus-service.ts`**
-
-```typescript
-export async function updateAssetProperties(
-  fmGuids: string[],
-  properties: AssetProperty[]
-): Promise<{ success: boolean; results: UpdateResult[] }> {
-  const { data, error } = await supabase.functions.invoke("asset-plus-update", {
-    body: { fmGuids, properties },
-  });
-  // ...
-}
-```
-
-**Koppla till UniversalPropertiesDialog**
-
-Vid spara i `handleSave()`:
-1. Om samtliga assets är `is_local = true` → endast lokal uppdatering
-2. Om någon är `is_local = false` → anropa `asset-plus-update` Edge Function
-3. Visa progress och resultat
-
-### Filer att skapa/ändra
-
-| Fil | Åtgärd |
-|-----|--------|
-| `supabase/functions/asset-plus-update/index.ts` | **NY** - Edge Function för återskrivning |
-| `src/services/asset-plus-service.ts` | **ÄNDRA** - Implementera `updateAssetProperties()` |
-| `src/components/common/UniversalPropertiesDialog.tsx` | **ÄNDRA** - Anropa update-service vid spara |
 
 ---
 
-## Del 2: Geminus API-dokumentation
+## Implementation Details
 
-### Syfte
+### Part 1: DocumentsView Component
 
-Skapa en central plats för att samla API-dokumentation från alla system som Geminus integrerar med. Detta underlättar framtida utveckling och felsökning.
+**New file: `src/components/portfolio/DocumentsView.tsx`**
 
-### Struktur
+```typescript
+interface DocumentsViewProps {
+  facility: Facility;
+  onClose: () => void;
+  onSelectDocument?: (doc: Document) => void;
+}
 
-```
-docs/
-├── api/
-│   ├── README.md                    # Översikt över alla integrationer
-│   ├── asset-plus/
-│   │   ├── overview.md              # Sammanfattning och auth-flöde
-│   │   ├── sync-api.md              # FMGUID sync-dokumentation
-│   │   └── openapi.yaml             # OpenAPI-specifikation
-│   ├── ivion/
-│   │   ├── overview.md              # POI-hantering
-│   │   └── endpoints.md             # Dokumenterade endpoints
-│   ├── fm-access/
-│   │   └── overview.md              # FM Access integration
-│   ├── senslinc/
-│   │   └── overview.md              # Sensor-data API
-│   └── congeria/
-│       └── overview.md              # Dokumenthantering (session-baserat)
+// Features:
+// - Header with building name and close button
+// - Document list from Supabase `documents` table
+// - Group by folder/category from metadata
+// - Download button for each document
+// - External link to original Congeria URL
+// - Sync status indicator
+// - Empty state if no documents
 ```
 
-### Innehåll för Asset+ dokumentation
-
-**`docs/api/asset-plus/overview.md`**
-
-```markdown
-# Asset+ API Integration
-
-## Autentisering
-- OAuth2 Password Grant via Keycloak
-- API Key krävs för alla anrop
-
-## Endpoints
-
-### Läsa data
-- `POST /PublishDataServiceGetMerged` - Hämta objekt med alla properties
-
-### Skriva data  
-- `POST /AddObjectList` - Skapa nya objekt
-- `POST /UpdateBimObjectsPropertiesData` - Uppdatera properties
-- `POST /UpsertRelationships` - Flytta objekt
-- `POST /ExpireObject` - Markera som utgånget
-
-## Object Types
-| Type | Namn | Beskrivning |
-|------|------|-------------|
-| 0 | Complex | Fastighetsportfölj |
-| 1 | Building | Byggnad |
-| 2 | Level | Våningsplan |
-| 3 | Space | Rum |
-| 4 | Instance | Asset/Komponent |
-
-## Begränsningar
-- Objekt skapade i BIM-modell (`createdInModel = true`) kan inte flyttas
-- Endast `designation` och `commonName` kan uppdateras för system-parametrar
-```
-
-### Filer att skapa
-
-| Fil | Beskrivning |
-|-----|-------------|
-| `docs/api/README.md` | Huvudöversikt för alla API:er |
-| `docs/api/asset-plus/overview.md` | Asset+ sammanfattning |
-| `docs/api/asset-plus/sync-api.md` | Detaljerad sync-dokumentation |
-| `docs/api/asset-plus/openapi.yaml` | Kopia av OpenAPI-spec |
-| `docs/api/ivion/overview.md` | Ivion POI-integration |
-| `docs/api/congeria/overview.md` | Congeria dokumenthantering |
+**Document list columns:**
+| Column | Source |
+|--------|--------|
+| Name | `file_name` |
+| Type | `mime_type` or metadata |
+| Size | `file_size` (formatted) |
+| Synced | `synced_at` |
+| Actions | Download / Open Original |
 
 ---
 
-## Del 3: Congeria Dokumentsynkronisering
+### Part 2: Wire Up in PortfolioView
 
-### Situation
+**File: `src/components/portfolio/PortfolioView.tsx`**
 
-- Ingen dokumenterad API tillgänglig
-- Inloggning: Username/password
-- URL-struktur: `https://fms.congeria.com/` med mappning per byggnad
-
-### Strategi: Session-baserad hämtning
-
-Eftersom det saknas API kommer vi använda en **webb-scraping-approach**:
-
-1. **Logga in** och få session-cookie
-2. **Navigera** till mappstruktur för aktuell byggnad
-3. **Hämta** dokumentlista med metadata
-4. **Ladda ner** dokument till Supabase Storage
-
-### Mappning Geminus → Congeria
-
-Baserat på skärmdumpen (`3272 - Småviken`):
-
-| Geminus Byggnad | Congeria Mapp-URL |
-|-----------------|-------------------|
-| Småviken | `https://fms.congeria.com/.../3272 - Småviken/DoU/` |
-
-**Förslag:** Lägg till ett fält i `assets`-tabellen eller en ny mappningstabell:
-
-```sql
-CREATE TABLE building_external_links (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  building_fm_guid UUID NOT NULL REFERENCES assets(fm_guid),
-  system_name TEXT NOT NULL,  -- 'congeria', 'ivion', etc
-  external_url TEXT NOT NULL, -- Full URL till mappen
-  external_id TEXT,           -- Om systemet har ID (t.ex. "3272")
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### Edge Function: `congeria-sync`
+Add state and handler similar to AssetsView/RoomsView pattern:
 
 ```typescript
-// supabase/functions/congeria-sync/index.ts
+// Add state (around line 45)
+const [showDocsFor, setShowDocsFor] = useState<Facility | null>(null);
 
-interface CongeriaSyncRequest {
-  buildingFmGuid: string;
-  congeriaUrl: string;  // Full URL till dokumentmappen
-}
+// Replace handler (line 183)
+const handleShowDocs = (facility: Facility) => {
+  setShowDocsFor(facility);  // Instead of setActiveApp('original_archive')
+};
 
-async function syncDocuments(request: CongeriaSyncRequest) {
-  const username = Deno.env.get("CONGERIA_USERNAME");
-  const password = Deno.env.get("CONGERIA_PASSWORD");
-  
-  // 1. Login - få session cookie
-  const loginRes = await fetch("https://fms.congeria.com/login", {
-    method: "POST",
-    body: new URLSearchParams({ username, password }),
-    redirect: "manual",
-  });
-  const cookies = loginRes.headers.get("set-cookie");
-  
-  // 2. Navigera till dokumentmapp
-  const docListRes = await fetch(request.congeriaUrl, {
-    headers: { Cookie: cookies },
-  });
-  
-  // 3. Parsa HTML för att hitta dokument och metadata
-  const html = await docListRes.text();
-  const documents = parseDocumentList(html);
-  
-  // 4. Ladda ner varje dokument
-  for (const doc of documents) {
-    const fileData = await fetch(doc.downloadUrl, { headers: { Cookie: cookies } });
-    // Spara till Supabase Storage
-  }
-}
+// Add render condition (after AssetsView around line 395)
+{showDocsFor && (
+  <DocumentsView
+    facility={showDocsFor}
+    onClose={() => setShowDocsFor(null)}
+  />
+)}
 ```
 
-### Databastabell för dokument
+---
 
-```sql
-CREATE TABLE documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  building_fm_guid UUID NOT NULL,
-  file_name TEXT NOT NULL,
-  file_path TEXT NOT NULL,       -- Sökväg i Supabase Storage
-  file_size INTEGER,
-  mime_type TEXT,
-  source_system TEXT DEFAULT 'congeria',
-  source_url TEXT,               -- Original URL
-  metadata JSONB DEFAULT '{}',   -- Congeria metadatafält
-  synced_at TIMESTAMPTZ DEFAULT now(),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+### Part 3: Congeria Sync in ApiSettingsModal
 
--- Index för snabb lookup per byggnad
-CREATE INDEX idx_documents_building ON documents(building_fm_guid);
-```
+**File: `src/components/settings/ApiSettingsModal.tsx`**
 
-### UI-komponenter
+Add a new Congeria sync section in the Sync tab (after line ~1500):
 
-**DocumentsTab i FacilityLandingPage**
-
-```tsx
-// src/components/portfolio/DocumentsTab.tsx
-const DocumentsTab = ({ buildingFmGuid }: { buildingFmGuid: string }) => {
-  const [documents, setDocuments] = useState([]);
-  
-  // Hämta dokument från lokal databas
-  useEffect(() => {
-    supabase
-      .from("documents")
-      .select("*")
-      .eq("building_fm_guid", buildingFmGuid)
-      .then(({ data }) => setDocuments(data || []));
-  }, [buildingFmGuid]);
-  
-  return (
-    <div>
-      <h3>Dokument</h3>
-      <DocumentList documents={documents} />
-      <SyncFromCongeriaButton buildingFmGuid={buildingFmGuid} />
+```typescript
+{/* Congeria Document Sync Section */}
+<div className="border rounded-lg p-4 space-y-4">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <FileText className="h-5 w-5 text-blue-500" />
+      <div>
+        <h4 className="font-medium">Congeria Dokument</h4>
+        <p className="text-xs text-muted-foreground">
+          {documentCount} dokument synkade
+        </p>
+      </div>
     </div>
-  );
+    <div className="flex items-center gap-2">
+      {connectionStatus}
+      <Button onClick={handleSyncCongeria}>
+        Synka dokument
+      </Button>
+    </div>
+  </div>
+  
+  {/* Building URL mapping table */}
+  <div className="space-y-2">
+    {buildings.map(building => (
+      <div key={building.fmGuid} className="flex items-center gap-2">
+        <span>{building.name}</span>
+        <Input 
+          placeholder="https://fms.congeria.com/..."
+          value={congeriaUrls[building.fmGuid] || ''}
+          onChange={...}
+        />
+        <Button size="sm" onClick={() => syncBuilding(building.fmGuid)}>
+          Synka
+        </Button>
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+**State additions:**
+```typescript
+const [congeriaUrls, setCongeriaUrls] = useState<Record<string, string>>({});
+const [isSyncingCongeria, setIsSyncingCongeria] = useState(false);
+const [documentCount, setDocumentCount] = useState(0);
+```
+
+**Functions to add:**
+```typescript
+// Fetch building external links for Congeria
+const fetchCongeriaLinks = async () => {
+  const { data } = await supabase
+    .from('building_external_links')
+    .select('*')
+    .eq('system_name', 'congeria');
+  // Map to state
+};
+
+// Save Congeria URL for building
+const saveCongeriaUrl = async (buildingFmGuid: string, url: string) => {
+  await supabase.from('building_external_links').upsert({
+    building_fm_guid: buildingFmGuid,
+    system_name: 'congeria',
+    external_url: url,
+    display_name: 'Document Archive'
+  }, { onConflict: 'building_fm_guid,system_name' });
+};
+
+// Trigger sync for specific building
+const handleSyncCongeria = async (buildingFmGuid?: string) => {
+  setIsSyncingCongeria(true);
+  const { data, error } = await supabase.functions.invoke('congeria-sync', {
+    body: { buildingFmGuid, action: 'sync' }
+  });
+  // Handle response
+  setIsSyncingCongeria(false);
+  await fetchDocumentCount();
 };
 ```
 
-### Secrets att konfigurera
+---
 
+### Part 4: Edge Function for Congeria Sync
+
+**New file: `supabase/functions/congeria-sync/index.ts`**
+
+This is a placeholder/skeleton that will be expanded when we understand Congeria's auth flow better:
+
+```typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const { buildingFmGuid, action } = await req.json();
+  
+  const username = Deno.env.get("CONGERIA_USERNAME");
+  const password = Deno.env.get("CONGERIA_PASSWORD");
+  
+  // 1. Login to Congeria (session-based)
+  // 2. Navigate to building folder URL
+  // 3. Parse document list from HTML
+  // 4. Download each document to Supabase Storage
+  // 5. Insert/update documents table
+  
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      message: 'Congeria sync not yet implemented - placeholder' 
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+});
 ```
-CONGERIA_USERNAME = [ditt användarnamn]
-CONGERIA_PASSWORD = [ditt lösenord]
-```
-
-### Filer att skapa/ändra
-
-| Fil | Åtgärd |
-|-----|--------|
-| `supabase/functions/congeria-sync/index.ts` | **NY** - Session-baserad dokumenthämtning |
-| `supabase/migrations/xxx_create_documents_table.sql` | **NY** - Databastabell |
-| `supabase/migrations/xxx_create_building_links_table.sql` | **NY** - Mappningstabell |
-| `src/components/portfolio/DocumentsTab.tsx` | **NY** - UI för dokumentlista |
-| `src/components/portfolio/FacilityLandingPage.tsx` | **ÄNDRA** - Lägg till Documents-flik |
 
 ---
 
-## Implementeringsordning
+## Database Usage
 
-### Fas 1: Asset+ återskrivning (prioritet)
-1. Skapa `asset-plus-update` Edge Function
-2. Implementera `updateAssetProperties()` i service
-3. Koppla till UniversalPropertiesDialog
-4. Testa med både lokala och synkade assets
+**Existing tables (created in previous migration):**
 
-### Fas 2: API-dokumentation
-1. Skapa docs/api/ struktur
-2. Kopiera och bearbeta Asset+ dokumentation
-3. Dokumentera befintliga integrationer (Ivion, FM Access)
+```sql
+-- Already exists: documents table
+SELECT * FROM documents WHERE building_fm_guid = 'xxx';
 
-### Fas 3: Congeria (efter Fas 1 & 2)
-1. Konfigurera secrets
-2. Skapa byggnadsmappning
-3. Implementera Edge Function
-4. Skapa databastabeller
-5. Bygga UI
+-- Already exists: building_external_links table  
+SELECT * FROM building_external_links 
+WHERE system_name = 'congeria' AND building_fm_guid = 'xxx';
+```
 
 ---
 
-## Tekniska detaljer
+## File Changes Summary
 
-### Asset+ Write-back flöde
+| File | Action | Description |
+|------|--------|-------------|
+| `src/components/portfolio/DocumentsView.tsx` | **NEW** | Document list component |
+| `src/components/portfolio/PortfolioView.tsx` | **MODIFY** | Add showDocsFor state, render DocumentsView |
+| `src/components/settings/ApiSettingsModal.tsx` | **MODIFY** | Add Congeria sync section in Sync tab |
+| `supabase/functions/congeria-sync/index.ts` | **NEW** | Edge function placeholder for document sync |
 
-```text
-┌─────────────────────────────┐
-│ UniversalPropertiesDialog   │
-│ handleSave()                │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ Check: is_local status      │
-│ för valda assets            │
-└──────────────┬──────────────┘
-               │
-       ┌───────┴───────┐
-       ▼               ▼
-┌─────────────┐  ┌─────────────────────┐
-│ is_local    │  │ is_local = false    │
-│ = true      │  │ (synkade assets)    │
-└──────┬──────┘  └──────────┬──────────┘
-       │                    │
-       ▼                    ▼
-┌─────────────┐  ┌─────────────────────┐
-│ Lokal DB    │  │ asset-plus-update   │
-│ uppdatering │  │ Edge Function       │
-└─────────────┘  └──────────┬──────────┘
-                            │
-                ┌───────────┼───────────┐
-                ▼           ▼           ▼
-         ┌──────────┐ ┌──────────┐ ┌──────────┐
-         │Asset+ API│ │Lokal DB  │ │Response  │
-         │UpdateBim │ │uppdatera │ │till UI   │
-         └──────────┘ └──────────┘ └──────────┘
-```
+---
 
-### Congeria Login-flöde
+## UI Mockup: DocumentsView
 
 ```text
-┌─────────────────────────────┐
-│ congeria-sync Edge Function │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ POST /login                 │
-│ username + password         │
-│ → Session cookie            │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ GET /path/to/folder         │
-│ Cookie: session=xxx         │
-│ → HTML med dokumentlista    │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ Parse HTML                  │
-│ → [{ name, url, meta }]     │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ Download varje fil          │
-│ → Supabase Storage          │
-│ → documents tabell          │
-└─────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ [←] Dokument - Småviken                          [Synka] [X] │
+├──────────────────────────────────────────────────────────────┤
+│ 🔍 Sök dokument...                                           │
+├──────────────────────────────────────────────────────────────┤
+│ 📁 DoU (Drift & Underhåll)                                   │
+│ ├── 📄 Radon-protokoll 2023.pdf          2.1 MB    [⬇️]     │
+│ ├── 📄 OVK-protokoll Plan 1.pdf          1.5 MB    [⬇️]     │
+│ ├── 📄 Bruksanvisning VVS.pdf            4.2 MB    [⬇️]     │
+│ └── 📄 Produktblad Ventilation.pdf       892 KB    [⬇️]     │
+│                                                              │
+│ 📁 Ritningar                                                 │
+│ ├── 📄 A-40-01 Plan 1.pdf                12.3 MB   [⬇️]     │
+│ └── 📄 A-40-02 Plan 2.pdf                11.8 MB   [⬇️]     │
+├──────────────────────────────────────────────────────────────┤
+│ Senast synkad: 2026-02-02 21:45                              │
+│ Källa: Congeria                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## UI Mockup: Congeria Section in Sync Tab
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ 📄 Congeria Dokument                                         │
+│ 12 dokument synkade                               [Synka]    │
+├──────────────────────────────────────────────────────────────┤
+│ Byggnad          │ Congeria URL                   │ Status   │
+│ ─────────────────┼────────────────────────────────┼──────────│
+│ Småviken         │ https://fms.congeria.com/...   │ ✓ Synkad │
+│ Norrmalm 12      │ [Ange URL...]                  │ Ej konf. │
+│ Vasahuset        │ [Ange URL...]                  │ Ej konf. │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Implementation Order
+
+1. **Create DocumentsView.tsx** - Basic UI to list documents from database
+2. **Update PortfolioView.tsx** - Add state and render DocumentsView when Docs+ clicked
+3. **Update ApiSettingsModal.tsx** - Add Congeria section with URL mapping UI
+4. **Create congeria-sync Edge Function** - Placeholder ready for real implementation
+
+---
+
+## Technical Notes
+
+### Document Storage Path
+Documents will be stored in Supabase Storage bucket `documents`:
+```
+documents/{building_fm_guid}/{file_name}
+```
+
+### Metadata JSONB
+The `metadata` field in documents table stores Congeria-specific fields:
+```json
+{
+  "01_Enhet": "Stockholm",
+  "02_Fastighet": "Småviken",
+  "congeria_path": "/Demo/Arkiv/3272 - Småviken/DoU/",
+  "original_url": "https://fms.congeria.com/..."
+}
+```
+
+### Empty State
+When no documents exist for a building, show a call-to-action:
+- "Inga dokument synkade"
+- Link to settings to configure Congeria URL
+- Manual upload option (future feature)
