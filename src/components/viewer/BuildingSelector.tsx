@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Building2, Search, Layers, MapPin, Box, Camera, Trash2, Calendar } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail } from '@/lib/viewer-events';
@@ -200,10 +201,7 @@ const BuildingSelector: React.FC = () => {
   if (isLoadingData) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3" />
-          <p className="text-sm">Laddar byggnader...</p>
-        </div>
+        <Spinner size="lg" label="Laddar byggnader..." />
       </div>
     );
   }
