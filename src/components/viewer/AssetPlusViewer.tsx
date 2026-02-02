@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
-import { Loader2, AlertCircle, X, Maximize2, Minimize2, TreeDeciduous } from 'lucide-react';
+import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AppContext } from '@/context/AppContext';
@@ -2492,15 +2493,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
             }}
           />
 
-          {/* Loading spinner overlay - modern centered spinner with theme colors */}
+          {/* Loading spinner overlay */}
           {((state.isLoading && !state.isInitialized) || (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized) && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              <div className="relative">
-                {/* Outer glow ring */}
-                <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" style={{ width: '80px', height: '80px', margin: '-16px' }} />
-                {/* Modern spinner with gradient */}
-                <div className="relative w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              </div>
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
+              <Spinner 
+                size="xl" 
+                label={xktSyncStatus === 'syncing' ? 'Synkar 3D-modeller...' : undefined} 
+              />
             </div>
           )}
           
