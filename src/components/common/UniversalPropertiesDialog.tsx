@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
-  Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle
+  Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { supabase } from '@/integrations/supabase/client';
+import { updateAssetProperties, UpdatePropertyItem } from '@/services/asset-plus-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -466,12 +467,19 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     try {
       // Build update payload (only changed fields)
       const updatePayload: Record<string, any> = {};
+      const assetPlusProperties: UpdatePropertyItem[] = [];
       
       if (formData.common_name !== undefined && formData.common_name !== '') {
         updatePayload.common_name = formData.common_name || null;
+        assetPlusProperties.push({
+          name: 'commonName',
+          value: formData.common_name || '',
+          dataType: 0, // String
+        });
       }
       if (formData.asset_type !== undefined && formData.asset_type !== '') {
         updatePayload.asset_type = formData.asset_type || null;
+        // asset_type is a Lovable-only field, not synced to Asset+
       }
       if (formData.coordinate_x !== undefined && formData.coordinate_x !== '') {
         updatePayload.coordinate_x = parseFloat(formData.coordinate_x) || 0;
@@ -483,14 +491,44 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         updatePayload.coordinate_z = parseFloat(formData.coordinate_z) || 0;
       }
 
-      if (Object.keys(updatePayload).length > 0) {
-        // Batch update all selected assets
+      // Check if any assets need Asset+ sync (is_local = false)
+      const syncedAssets = assets.filter(a => a.is_local === false);
+      const hasSyncedAssets = syncedAssets.length > 0 && assetPlusProperties.length > 0;
+
+      if (hasSyncedAssets) {
+        // Use Edge Function for synced assets (updates both Asset+ and local DB)
+        const response = await updateAssetProperties(fmGuids, assetPlusProperties);
+        
+        if (!response.success) {
+          const failedCount = response.summary.failed;
+          if (failedCount > 0) {
+            toast.warning(`${response.summary.success} updated, ${failedCount} failed to sync to Asset+`);
+          }
+        } else {
+          toast.success(`${response.summary.success} items updated (${response.summary.syncedToAssetPlus} synced to Asset+)`);
+        }
+
+        // Update remaining local-only fields (coordinates, asset_type) directly
+        const localOnlyPayload: Record<string, any> = {};
+        if (updatePayload.coordinate_x !== undefined) localOnlyPayload.coordinate_x = updatePayload.coordinate_x;
+        if (updatePayload.coordinate_y !== undefined) localOnlyPayload.coordinate_y = updatePayload.coordinate_y;
+        if (updatePayload.coordinate_z !== undefined) localOnlyPayload.coordinate_z = updatePayload.coordinate_z;
+        if (updatePayload.asset_type !== undefined) localOnlyPayload.asset_type = updatePayload.asset_type;
+
+        if (Object.keys(localOnlyPayload).length > 0) {
+          await supabase.from('assets').update(localOnlyPayload).in('fm_guid', fmGuids);
+        }
+      } else if (Object.keys(updatePayload).length > 0) {
+        // All assets are local - just update database directly
         const { error } = await supabase
           .from('assets')
           .update(updatePayload)
           .in('fm_guid', fmGuids);
 
         if (error) throw error;
+        
+        const message = isMultiMode ? `Updated ${fmGuids.length} items` : 'Properties saved';
+        toast.success(message);
       }
 
       // Update building_settings if applicable (single building only)
@@ -508,8 +546,6 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         if (settingsError) throw settingsError;
       }
 
-      const message = isMultiMode ? `Updated ${fmGuids.length} items` : 'Properties saved';
-      toast.success(message);
       setIsEditing(false);
       onUpdate?.();
     } catch (error: any) {
