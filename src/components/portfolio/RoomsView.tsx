@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   X,
   Search,
@@ -186,8 +186,17 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   
-  // Properties dialog state
-  const [showPropertiesFor, setShowPropertiesFor] = useState<string | null>(null);
+  // Properties dialog state - supports multiple selection
+  const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
+
+  // Auto-show properties dialog when items are selected
+  useEffect(() => {
+    if (selectedRows.size > 0) {
+      setShowPropertiesFor(Array.from(selectedRows));
+    } else {
+      setShowPropertiesFor(null);
+    }
+  }, [selectedRows]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -401,17 +410,12 @@ const RoomsView: React.FC<RoomsViewProps> = ({
     });
   }, []);
 
-  // Batch action handlers
+  // Batch action handlers - now supports multi-select
   const handleShowSelectedProperties = useCallback(() => {
-    if (selectedRows.size === 1) {
-      setShowPropertiesFor(Array.from(selectedRows)[0]);
-    } else {
-      toast({
-        title: 'Välj ett objekt',
-        description: 'Välj exakt ett objekt för att visa egenskaper',
-      });
+    if (selectedRows.size > 0) {
+      setShowPropertiesFor(Array.from(selectedRows));
     }
-  }, [selectedRows, toast]);
+  }, [selectedRows]);
 
   // Sync column order with visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -739,12 +743,19 @@ const RoomsView: React.FC<RoomsViewProps> = ({
         )}
       </ScrollArea>
 
-      {/* Properties dialog */}
-      {showPropertiesFor && (
+      {/* Properties dialog - supports multi-select */}
+      {showPropertiesFor && showPropertiesFor.length > 0 && (
         <UniversalPropertiesDialog
           isOpen={true}
-          fmGuid={showPropertiesFor}
-          onClose={() => setShowPropertiesFor(null)}
+          fmGuids={showPropertiesFor}
+          onClose={() => {
+            setShowPropertiesFor(null);
+            setSelectedRows(new Set());
+          }}
+          onUpdate={() => {
+            setShowPropertiesFor(null);
+            setSelectedRows(new Set());
+          }}
         />
       )}
     </div>
