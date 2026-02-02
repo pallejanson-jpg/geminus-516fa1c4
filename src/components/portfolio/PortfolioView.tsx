@@ -29,7 +29,7 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext } = useContext(AppContext);
   
   // Preload XKT when a building is selected
   useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
@@ -145,7 +145,7 @@ const PortfolioView: React.FC = () => {
   const handleOpenMap = () => setActiveApp('map');
   const handleOpenNavigator = (facility: Facility) => setActiveApp('navigation');
   const handleOpen360 = (siteId?: string) => {
-    if (siteId) {
+    if (siteId && selectedFacility) {
       // Get app config from localStorage to check openMode
       // Note: Ivion is stored under 'radar' key in appConfigs
       const savedConfigs = localStorage.getItem('appConfigs');
@@ -162,9 +162,13 @@ const PortfolioView: React.FC = () => {
       console.log('[360+] Opening Ivion:', { siteId, openMode: ivionConfig.openMode, baseUrl, fullUrl });
       
       if (ivionConfig.openMode === 'internal') {
-        // Store the URL and switch to internal 360 view
-        localStorage.setItem('ivion360Url', fullUrl);
-        setActiveApp('radar');
+        // Use context-aware 360 viewer with building information
+        open360WithContext({
+          buildingFmGuid: selectedFacility.fmGuid || selectedFacility.buildingFmGuid,
+          buildingName: selectedFacility.commonName || selectedFacility.name,
+          ivionSiteId: siteId,
+          ivionUrl: fullUrl,
+        });
       } else {
         // Open in new browser tab (external mode)
         window.open(fullUrl, '_blank');

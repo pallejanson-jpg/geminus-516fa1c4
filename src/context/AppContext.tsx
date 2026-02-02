@@ -32,6 +32,14 @@ export interface AnnotationPlacementContext {
     buildingFmGuid: string;
 }
 
+// 360+ viewer context for context-aware inventory tools
+export interface Ivion360Context {
+    buildingFmGuid: string;
+    buildingName?: string;
+    ivionSiteId: string;
+    ivionUrl: string;
+}
+
 export type ThemeType = 'dark' | 'light' | 'swg';
 
 interface AppContextType {
@@ -82,10 +90,15 @@ interface AppContextType {
     completeAnnotationPlacement: (coordinates: { x: number; y: number; z: number }) => void;
     cancelAnnotationPlacement: () => void;
 
-    // Entity insights - for viewing insights at any hierarchy level
+// Entity insights - for viewing insights at any hierarchy level
     insightsFacility: any | null;
     setInsightsFacility: (facility: any | null) => void;
     openEntityInsights: (facility: any) => void;
+
+    // 360+ viewer context - for context-aware inventory tools
+    ivion360Context: Ivion360Context | null;
+    setIvion360Context: (context: Ivion360Context | null) => void;
+    open360WithContext: (context: Ivion360Context) => void;
 
     // 3D Viewer diagnostics (for RightSidebar)
     viewerDiagnostics: {
@@ -154,6 +167,10 @@ export const AppContext = createContext<AppContextType>({
     insightsFacility: null,
     setInsightsFacility: () => {},
     openEntityInsights: () => {},
+
+    ivion360Context: null,
+    setIvion360Context: () => {},
+    open360WithContext: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -273,6 +290,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const openEntityInsights = useCallback((facility: any) => {
         setInsightsFacility(facility);
         setActiveApp('entity_insights');
+    }, []);
+
+    // 360+ viewer context state and actions
+    const [ivion360Context, setIvion360Context] = useState<Ivion360Context | null>(null);
+
+    const open360WithContext = useCallback((context: Ivion360Context) => {
+        setIvion360Context(context);
+        // Also store in localStorage for backward compatibility
+        localStorage.setItem('ivion360Url', context.ivionUrl);
+        setActiveApp('radar');
     }, []);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
@@ -554,6 +581,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 insightsFacility,
                 setInsightsFacility,
                 openEntityInsights,
+
+                ivion360Context,
+                setIvion360Context,
+                open360WithContext,
 
                 viewerDiagnostics,
                 setViewerDiagnostics,
