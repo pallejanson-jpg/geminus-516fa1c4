@@ -1,241 +1,375 @@
 
-# Plan: Kostnadsfri AI Avatar-video för Onboarding
+# Plan: BCF-baserad Modellärende­hantering
 
 ## Sammanfattning
-Skapa en "talande AI-avatar"-upplevelse för onboarding helt utan externa kostnader genom att kombinera:
 
-1. **Lovable AI (google/gemini-2.5-flash-image)** - Generera en personlig avatar-bild baserad på användarens roll
-2. **Web Speech API** - Redan implementerat för text-to-speech
-3. **CSS-animationer** - "Talking head"-effekt med pulsering och ljuseffekter
-4. **Canvas/SVG ljudvågor** - Visuell feedback när avataren "pratar"
+Implementera ett ärendehanteringssystem baserat på **BCF-standarden** (BIM Collaboration Format) som låter användare rapportera problem och önskemål direkt från 3D-viewern. Systemet fångar automatiskt viewpoints, skärmdumpar och position - precis som när ni sparar vyer idag, men med ett arbetsflöde för rapportering, hantering och återkoppling.
 
-Detta ger en videokänsla utan att faktiskt generera video - helt gratis!
+---
+
+## Vad är BCF?
+
+BCF (BIM Collaboration Format) är en öppen standard för att utbyta problem och frågor kopplat till BIM-modeller. Varje "issue" innehåller:
+
+- **Viewpoint**: Kameraposition, synliga objekt, sektionsplan
+- **Skärmdump**: Bild av vad användaren såg
+- **Markerade objekt**: Vilka BIM-objekt som berörs
+- **Metadata**: Titel, beskrivning, status, prioritet
+
+xeokit har inbyggt stöd via `BCFViewpointsPlugin`.
 
 ---
 
 ## Arkitektur
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                      Onboarding Flow                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   1. Användare väljer roll + mål                                │
-│                    │                                            │
-│                    ▼                                            │
-│   2. Edge Function: generate-onboarding-avatar                  │
-│      ├── Anropar Gemini för manus (befintligt)                  │
-│      └── Anropar Gemini Image för avatar-bild                   │
-│                    │                                            │
-│                    ▼                                            │
-│   3. Frontend: OnboardingComplete                               │
-│      ├── Visar genererad avatar-bild                            │
-│      ├── Animerar avatar med CSS när TTS spelar                 │
-│      ├── Visar ljudvågor/visualizer                             │
-│      └── Synkad text-highlight (karaoke-stil)                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         BCF Ärendehantering                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ANVÄNDARE (i 3D-viewer)                                                   │
+│   ─────────────────────────                                                 │
+│   1. Klickar "Skapa ärende" i VisualizationToolbar                          │
+│   2. BCF viewpoint + skärmdump fångas automatiskt                           │
+│   3. Fyller i formulär: Titel, Beskrivning, Typ, Prioritet                  │
+│   4. Skickar ärendet                                                        │
+│                    │                                                        │
+│                    ▼                                                        │
+│   ┌────────────────────────────────────────────────┐                        │
+│   │              bcf_issues (databas)              │                        │
+│   │  • Viewpoint (JSON med kamera, synliga objekt) │                        │
+│   │  • Skärmdump (Storage URL)                     │                        │
+│   │  • Status: open → in_progress → resolved       │                        │
+│   │  • Kommentarer (bcf_comments)                  │                        │
+│   └────────────────────────────────────────────────┘                        │
+│                    │                                                        │
+│                    ▼                                                        │
+│   ADMIN/UTVECKLARE                                                          │
+│   ─────────────────                                                         │
+│   1. Ser lista över inkomna ärenden i admin-vy                              │
+│   2. Klickar på ärende → 3D-viewer öppnas med exakt samma vy                │
+│   3. Utför åtgärd, skriver kommentar                                        │
+│   4. Sätter status till "Utförd"                                            │
+│                    │                                                        │
+│                    ▼                                                        │
+│   NOTIFIKATION                                                              │
+│   ─────────────────                                                         │
+│   • Användaren ser att ärendet är löst (i app-notis eller e-post)           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Del 1: Edge Function för Avatar-generering
+## Del 1: Databasstruktur
 
-### Ny fil: `supabase/functions/generate-onboarding-avatar/index.ts`
+### Ny tabell: `bcf_issues`
 
-Genererar BÅDE manus och avatar-bild i samma anrop:
+Följer BCF-standarden men anpassad för era behov:
+
+| Kolumn | Typ | Beskrivning |
+|--------|-----|-------------|
+| id | UUID | Primärnyckel |
+| title | TEXT | Rubrik (obligatorisk) |
+| description | TEXT | Detaljerad beskrivning |
+| issue_type | TEXT | `fault`, `improvement`, `question`, `observation` |
+| priority | TEXT | `low`, `medium`, `high`, `critical` |
+| status | TEXT | `open`, `in_progress`, `resolved`, `closed` |
+| viewpoint_json | JSONB | BCF-viewpoint (kamera, synliga objekt, sektioner) |
+| screenshot_url | TEXT | URL till skärmdump i Storage |
+| building_fm_guid | TEXT | Koppling till byggnad |
+| building_name | TEXT | Byggnadsnamn för visning |
+| selected_object_ids | TEXT[] | Markerade objekt i scenen |
+| reported_by | UUID | Användare som skapade ärendet |
+| assigned_to | UUID | Ansvarig för ärendet |
+| created_at | TIMESTAMPTZ | Skapad tidpunkt |
+| updated_at | TIMESTAMPTZ | Senast uppdaterad |
+| resolved_at | TIMESTAMPTZ | När ärendet löstes |
+| resolved_by | UUID | Vem som löste ärendet |
+
+### Ny tabell: `bcf_comments`
+
+Kommentarer/konversation på ett ärende:
+
+| Kolumn | Typ | Beskrivning |
+|--------|-----|-------------|
+| id | UUID | Primärnyckel |
+| issue_id | UUID | FK till bcf_issues |
+| user_id | UUID | Vem som skrev |
+| comment | TEXT | Kommentarstext |
+| viewpoint_json | JSONB | Valfri: ny viewpoint kopplad till kommentar |
+| screenshot_url | TEXT | Valfri: ny skärmdump |
+| created_at | TIMESTAMPTZ | Skapad tidpunkt |
+
+### RLS-policies
+
+- Alla autentiserade användare kan läsa ärenden
+- Alla autentiserade användare kan skapa ärenden
+- Admins kan uppdatera alla ärenden
+- Användare kan uppdatera egna ärenden (men inte status till resolved)
+- Admins kan ta bort ärenden
+
+---
+
+## Del 2: BCF Viewpoints med xeokit
+
+### Ny hook: `useBcfViewpoints.ts`
+
+xeokit har inbyggt `BCFViewpointsPlugin` som vi kan använda:
 
 ```typescript
-// Prompt för avatar-generering baserat på roll
-const avatarPrompts: Record<string, string> = {
-  fm_technician: "Professional-looking facility manager avatar, wearing safety vest, friendly smile, digital twin theme, futuristic office background, soft lighting, portrait style",
-  property_manager: "Professional property manager avatar, business attire, confident expression, modern office with city view, warm lighting, portrait style",
-  consultant: "Expert consultant avatar, smart casual attire, approachable demeanor, technology-focused background, professional lighting, portrait style",
-  other: "Friendly professional avatar, neutral business attire, welcoming expression, modern workspace background, balanced lighting, portrait style"
+// Fånga viewpoint (kamera, synliga objekt, sektionsplan)
+const getViewpoint = () => {
+  const bcfPlugin = new BCFViewpointsPlugin(viewer);
+  return bcfPlugin.getViewpoint({
+    snapshot: false, // Vi tar skärmdump separat
+    defaultInvisible: false,
+    reverseClippingPlanes: false,
+  });
 };
 
-// Anropa Lovable AI med bildgenerering
-const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    model: "google/gemini-2.5-flash-image",
-    messages: [{ role: "user", content: avatarPrompt }],
-    modalities: ["image", "text"]
-  }),
-});
-
-// Extrahera base64-bild från svaret
-const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+// Återställ viewpoint (när admin öppnar ett ärende)
+const setViewpoint = (viewpointJson: any) => {
+  const bcfPlugin = new BCFViewpointsPlugin(viewer);
+  bcfPlugin.setViewpoint(viewpointJson, {
+    duration: 1.0, // Animerad övergång
+  });
+};
 ```
 
-Returnerar:
-- `script` - AI-genererat manus (befintligt)
-- `avatarImage` - Base64-bild av avataren
+Viewpoint-objektet innehåller:
+- Camera position (eye, look, up)
+- Field of view
+- Visible components (IFC GUIDs)
+- Hidden components
+- Selected components
+- Section planes
 
 ---
 
-## Del 2: Uppdaterad OnboardingComplete-komponent
+## Del 3: UI-komponenter
 
-### Visuell layout
+### 3.1 Knapp i VisualizationToolbar
+
+Ny knapp "Skapa ärende" (MessageSquarePlus-ikon) i verktygsfältet:
 
 ```text
-┌─────────────────────────────────────┐
-│         Your AI Guide               │
-│                                     │
-│      ┌───────────────────┐          │
-│      │                   │          │
-│      │   [Avatar-bild]   │  ← Pulserar vid tal
-│      │    (animerad)     │          │
-│      │                   │          │
-│      └───────────────────┘          │
-│                                     │
-│      ════════════════════           │  ← Ljudvåg-visualizer
-│                                     │
-│      "Welcome to Geminus!           │  ← Text med highlight
-│       As a Property Manager..."     │     på aktuell mening
-│                                     │
-│      [▶ Play] [⏸ Pause] [🔄 Replay] │
-│                                     │
-│      [Start Exploring →]            │
-│                                     │
-└─────────────────────────────────────┘
+┌──────────────────────────────┐
+│  Visning                     │
+│  ────────────────────────    │
+│  📷 Spara vy                 │
+│  📩 Skapa ärende  ← NY       │
+│  ...                         │
+└──────────────────────────────┘
 ```
 
-### Nya funktioner
+### 3.2 CreateIssueDialog
 
-**2.1 Avatar-bild med animationer:**
-```tsx
-<div className={cn(
-  "relative w-32 h-32 rounded-full overflow-hidden mx-auto",
-  isSpeaking && "animate-pulse ring-4 ring-primary/50"
-)}>
-  <img src={avatarImage} alt="AI Guide" className="w-full h-full object-cover" />
-  {isSpeaking && (
-    <div className="absolute inset-0 bg-primary/10 animate-ping" />
-  )}
-</div>
+Dialogruta för att skapa ett ärende:
+
+```text
+┌─────────────────────────────────────────┐
+│  📩 Skapa ärende                    [X] │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ [Skärmdump av vyn]              │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Byggnad: Karolinska Sjukhuset          │
+│                                         │
+│  Typ *                                  │
+│  ┌─────────────────────────────────┐    │
+│  │ Fel/Problem              ▼      │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Prioritet                              │
+│  ○ Låg  ● Medel  ○ Hög  ○ Kritisk      │
+│                                         │
+│  Rubrik *                               │
+│  ┌─────────────────────────────────┐    │
+│  │ Ventilationsdon saknas plan 3   │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Beskrivning                            │
+│  ┌─────────────────────────────────┐    │
+│  │ Jag ser att det saknas...       │    │
+│  │                                 │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│           [Avbryt]    [Skicka ärende]   │
+└─────────────────────────────────────────┘
 ```
 
-**2.2 Ljudvåg-visualizer:**
-```tsx
-const AudioVisualizer: React.FC<{ isActive: boolean }> = ({ isActive }) => (
-  <div className="flex items-center justify-center gap-1 h-8">
-    {[...Array(5)].map((_, i) => (
-      <div 
-        key={i}
-        className={cn(
-          "w-1 bg-primary rounded-full transition-all",
-          isActive ? "animate-sound-wave" : "h-1"
-        )}
-        style={{ animationDelay: `${i * 0.1}s` }}
-      />
-    ))}
-  </div>
-);
+### 3.3 IssueListPanel (i sidopanelen)
+
+Lista över ärenden kopplat till aktuell byggnad:
+
+```text
+┌─────────────────────────────────────────┐
+│  Ärenden (3)                       [+]  │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌─────────────────────────────────────┐│
+│  │ 🔴 Ventilationsdon saknas          ││
+│  │    Hög prioritet • 2 timmar sedan  ││
+│  └─────────────────────────────────────┘│
+│                                         │
+│  ┌─────────────────────────────────────┐│
+│  │ 🟡 Uppdatera rumsindelning         ││
+│  │    Medel • Igår                    ││
+│  └─────────────────────────────────────┘│
+│                                         │
+│  ┌─────────────────────────────────────┐│
+│  │ ✅ Dörrplacering justerad          ││
+│  │    Löst • 3 dagar sedan            ││
+│  └─────────────────────────────────────┘│
+│                                         │
+└─────────────────────────────────────────┘
 ```
 
-**2.3 Mening-för-mening highlight:**
-Dela upp scriptet i meningar och highlighta den som just talas (synkad med Web Speech API:s `boundary`-events).
+### 3.4 IssueDetailSheet
+
+Detaljvy för ett ärende med möjlighet att:
+- Se skärmdump och klicka för att öppna viewpoint i 3D
+- Läsa/skriva kommentarer
+- Ändra status (endast admin)
+- Se historik
 
 ---
 
-## Del 3: CSS-animationer
+## Del 4: Admin-vy för ärendehantering
 
-### Nya Tailwind-animationer i `tailwind.config.ts`:
+### Ny route: `/issues`
 
-```javascript
-keyframes: {
-  'sound-wave': {
-    '0%, 100%': { height: '4px' },
-    '50%': { height: '24px' },
+En dedikerad sida för att hantera alla ärenden:
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│  Ärendehantering                                                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Filter:  [Alla byggnader ▼]  [Alla typer ▼]  [Öppna ▼]  🔍        │
+│                                                                     │
+│  ┌─────┬───────────────────────┬────────────┬────────┬───────────┐  │
+│  │  #  │ Rubrik                │ Byggnad    │ Status │ Skapad    │  │
+│  ├─────┼───────────────────────┼────────────┼────────┼───────────┤  │
+│  │ 001 │ Ventilationsdon sakn. │ Karolinska │ 🔴 Ny  │ 2h sedan  │  │
+│  │ 002 │ Rumsindelning         │ Södersjukh.│ 🟡 Pgn │ Igår      │  │
+│  │ 003 │ Dörrplacering         │ Karolinska │ ✅ Löst│ 3d sedan  │  │
+│  └─────┴───────────────────────┴────────────┴────────┴───────────┘  │
+│                                                                     │
+│  [Klicka på rad för att öppna ärende i 3D-vy]                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Del 5: Notifikationssystem
+
+### Enkel första version
+
+1. **Realtime-uppdateringar** via Supabase Realtime
+2. **In-app notifikation** när ett ärende uppdateras
+3. **E-postnotis** (fas 2) via Edge Function + Resend/SendGrid
+
+### Notifikationsflöde
+
+```text
+Ärende skapas → Admin får notis
+Admin svarar → Användare får notis
+Status ändras → Användare får notis
+```
+
+---
+
+## Filer som skapas/ändras
+
+| Fil | Typ | Beskrivning |
+|-----|-----|-------------|
+| `supabase/migrations/xxx_bcf_issues.sql` | NY | Databasschema för BCF-ärenden |
+| `src/hooks/useBcfViewpoints.ts` | NY | Hook för BCF viewpoint-hantering |
+| `src/components/viewer/CreateIssueDialog.tsx` | NY | Dialog för att skapa ärende |
+| `src/components/viewer/IssueListPanel.tsx` | NY | Panel som visar ärenden i viewer |
+| `src/components/viewer/IssueDetailSheet.tsx` | NY | Detaljvy för enskilt ärende |
+| `src/pages/Issues.tsx` | NY | Admin-sida för ärendehantering |
+| `src/components/viewer/VisualizationToolbar.tsx` | ÄNDRA | Lägg till knapp för ärenderapportering |
+| `src/components/layout/AppLayout.tsx` | ÄNDRA | Lägg till route för Issues |
+
+---
+
+## Fasindelning
+
+### Fas 1: Grundfunktionalitet (denna plan)
+- Databasstruktur
+- Skapa ärende från 3D-viewer
+- Lista ärenden i viewer
+- Öppna ärende → ladda viewpoint
+
+### Fas 2: Admin-flöde
+- Admin-sida med filtrering
+- Statushantering
+- Kommentarsfunktion
+
+### Fas 3: Notifikationer
+- In-app notiser
+- E-postnotiser
+- Realtime-uppdateringar
+
+### Fas 4: BCF-export (valfritt)
+- Exportera ärenden som .bcfzip
+- Kompatibilitet med andra BCF-verktyg (Solibri, BIMcollab, etc.)
+
+---
+
+## Tekniska detaljer
+
+### BCF Viewpoint JSON-struktur
+
+```json
+{
+  "perspective_camera": {
+    "camera_view_point": { "x": 10.5, "y": 20.3, "z": 15.2 },
+    "camera_direction": { "x": -0.5, "y": -0.3, "z": -0.8 },
+    "camera_up_vector": { "x": 0, "y": 0, "z": 1 },
+    "field_of_view": 60
   },
-  'avatar-glow': {
-    '0%, 100%': { boxShadow: '0 0 20px rgba(var(--primary), 0.3)' },
-    '50%': { boxShadow: '0 0 40px rgba(var(--primary), 0.6)' },
-  }
-},
-animation: {
-  'sound-wave': 'sound-wave 0.5s ease-in-out infinite',
-  'avatar-glow': 'avatar-glow 1.5s ease-in-out infinite',
+  "components": {
+    "visibility": {
+      "default_visibility": true,
+      "exceptions": [
+        { "ifc_guid": "ABC123...", "visible": false }
+      ]
+    },
+    "selection": [
+      { "ifc_guid": "XYZ789..." }
+    ]
+  },
+  "clipping_planes": [
+    {
+      "location": { "x": 0, "y": 0, "z": 5 },
+      "direction": { "x": 0, "y": 0, "z": 1 }
+    }
+  ]
 }
 ```
 
----
+### Återanvändning av befintlig kod
 
-## Del 4: Förbättrad Speech Sync
+Mycket av logiken för att fånga viewstate finns redan i `VisualizationToolbar.tsx` (rad 240-299). Vi kan återanvända:
+- Screenshot-logik
+- Camera state capture
+- Visible models/floors tracking
 
-### Boundary Events för text-highlight
-
-```typescript
-const utterance = new SpeechSynthesisUtterance(script);
-
-// Split script into sentences
-const sentences = script.match(/[^.!?]+[.!?]+/g) || [script];
-let currentSentenceIndex = 0;
-
-utterance.onboundary = (event) => {
-  if (event.name === 'sentence') {
-    setHighlightedSentence(currentSentenceIndex);
-    currentSentenceIndex++;
-  }
-};
-```
-
----
-
-## Filer som ändras/skapas
-
-| Fil | Ändring |
-|-----|---------|
-| `supabase/functions/generate-onboarding-avatar/index.ts` | **NY** - Kombinerad manus + avatar-generering |
-| `src/components/onboarding/OnboardingComplete.tsx` | Lägg till avatar-bild, animationer, visualizer |
-| `src/components/onboarding/AudioVisualizer.tsx` | **NY** - Ljudvåg-komponent |
-| `src/pages/Onboarding.tsx` | Uppdatera för att hantera avatarImage |
-| `tailwind.config.ts` | Lägg till nya animationer |
-| `supabase/config.toml` | Registrera ny edge function |
-
----
-
-## Fördelar med denna lösning
-
-| Aspekt | Fördel |
-|--------|--------|
-| **Kostnad** | Helt gratis - använder endast Lovable AI (ingår) |
-| **Hastighet** | Snabbare än videogenerering (~2-5 sek vs minuter) |
-| **Personalisering** | Unik avatar per roll |
-| **Interaktivitet** | Användaren kan pausa/återuppta |
-| **Tillgänglighet** | Text alltid synlig, inte beroende av video |
-| **Offline-fallback** | Fungerar även om bild misslyckas |
-
----
-
-## Fallback-strategi
-
-Om bildgenerering misslyckas:
-1. Visa en stiliserad ikon-avatar (sparkles/robot-ikon)
-2. TTS och text fungerar fortfarande
-3. Logga fel för debugging
-
----
-
-## Framtida förbättringar (valfritt)
-
-Om ni senare vill uppgradera till riktig video:
-- **Synthesia** - Skapa templates för varje roll
-- **HeyGen** - Alternativ videoplattform
-- Denna lösning kan enkelt bytas ut eftersom gränssnittet redan är video-liknande
+Skillnaden är att vi lägger till BCF-plugin för standardiserat format och markerade objekt.
 
 ---
 
 ## Testning efter implementation
 
-1. **Avatar-generering:** Kör onboarding som olika roller → verifiera att unika avatarer genereras
-2. **TTS + Animation:** Klicka Play → verifiera att avatar pulserar och ljudvågor animeras
-3. **Text-highlight:** Verifiera att meningar highlightas i takt med talet
-4. **Fallback:** Testa med skapad avatar-generering misslyckad → verifiera att fallback-ikon visas
-5. **Performance:** Kontrollera att total laddningstid < 5 sekunder
-
+1. **Skapa ärende**: Från 3D-viewern, skapa ett ärende och verifiera att viewpoint + skärmdump sparas
+2. **Öppna ärende**: Klicka på ett ärende i listan och verifiera att 3D-vyn återställs exakt
+3. **Statusflöde**: Testa statusändringar (open → in_progress → resolved)
+4. **RLS**: Verifiera att vanliga användare inte kan ändra status till resolved
+5. **Mobil**: Testa formuläret på mobil
