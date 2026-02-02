@@ -521,7 +521,8 @@ serve(async (req) => {
 
       let totalSynced = 0;
       let skip = 0;
-      const take = 500;
+      // Keep batches small to avoid Asset+ backend Mongo sort memory limits
+      const take = 200;
       let hasMore = true;
 
       while (hasMore) {
@@ -600,6 +601,8 @@ serve(async (req) => {
 
       await updateSyncState(supabase, 'assets', 'running', totalSynced);
       let interrupted = false;
+      // Keep batches small to avoid Asset+ backend Mongo sort memory limits
+      const take = 200;
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         const building = buildings[currentBuildingIndex];
@@ -621,7 +624,7 @@ serve(async (req) => {
             break;
           }
 
-          const result = await fetchAssetPlusObjects(accessToken, filter, currentSkip, 500);
+          const result = await fetchAssetPlusObjects(accessToken, filter, currentSkip, take);
           
           if (result.data.length > 0) {
             const synced = await upsertAssets(supabase, result.data);
@@ -629,7 +632,7 @@ serve(async (req) => {
           }
 
           hasMore = result.hasMore;
-          currentSkip += 500;
+          currentSkip += take;
 
           // Save progress after each batch
           await supabase
@@ -724,7 +727,8 @@ serve(async (req) => {
 
       let totalSynced = 0;
       let skip = 0;
-      const take = 500;
+      // Keep batches small to avoid Asset+ backend Mongo sort memory limits
+      const take = 200;
       let hasMore = true;
 
       while (hasMore) {
