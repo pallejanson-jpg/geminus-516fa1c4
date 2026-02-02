@@ -1,289 +1,245 @@
 
-
-# Plan: Konfigurerbar rumsetikettering med nytt "Viewer Settings"-flik
+# Plan: Gör alla sektioner i Settings till Collapse/Expand
 
 ## Sammanfattning
-Implementera ett flexibelt system för rumsetiketter med:
-1. **Ny "Viewer Settings"-flik** i ApiSettingsModal som samlar Teman + ny Etikettkonfiguration
-2. **Konfigurerbar etikettvisning** baserad på rumsegenskaper (namn, nummer, area, etc.)
-3. **Sparade etikettmallar** som kan väljas i VisualizationToolbar
-4. **Förbättrad 2D-klippning** som faktiskt fungerar
+Ändra alla sektioner i App & API Settings-modalen till att använda konsekvent collapse/expand-mönster med Radix Accordion-komponenten. Alla sektioner ska vara **ihopvecklade som standard** för ett renare gränssnitt.
 
----
+## Ändringar per flik
 
-## 1. Databasstruktur (ny tabell)
-
-Skapa tabell `room_label_configs` i Lovable Cloud för att spara användarens etikettmallar:
+### 1. Viewer-fliken (ViewerThemeSettings.tsx)
+**Nuvarande:** Teman visas som kort med "Redigera/Ta bort"-knappar
+**Nytt:** Varje tema blir ett eget AccordionItem som kan veckas ut
 
 ```text
-room_label_configs
-├── id (uuid, PK)
-├── name (text)             -- "Namn + Area", "Endast nummer"
-├── fields (jsonb)          -- ["commonName", "designation", "nta"]
-├── height_offset (float)   -- höjd ovanför golv, t.ex. 1.2
-├── font_size (float)       -- basklocka storlek
-├── scale_with_distance (bool) -- dynamisk skala
-├── click_action (text)     -- 'none' | 'flyto' | 'roomcard'
-├── is_default (bool)
-├── created_at, updated_at
+┌─────────────────────────────────────────────────┐
+│ [▶] Standard (System)                           │
+│ [▶] Arkitektvy (System)                         │  
+│ [▶] Påls tema                              [🗑] │
+│     └── (utfälld: färgpaletter, redigering)     │
+│ [+ Nytt tema]                                   │
+└─────────────────────────────────────────────────┘
 ```
 
----
+Ändringar:
+- Wrap temalistan i `<Accordion type="single" collapsible>`
+- Varje tema blir `<AccordionItem>` med preview-swatches i triggern
+- Redigeringsformulär (färgmappningar, opacity-slider) visas inuti `<AccordionContent>`
 
-## 2. Nya/ändrade filer
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/settings/ApiSettingsModal.tsx` | Byt ut "Teman"-flik mot "Viewer"-flik som innehåller både Teman och Etiketter |
-| `src/components/settings/RoomLabelSettings.tsx` | **NY** - UI för att skapa/redigera etikettmallar |
-| `src/hooks/useRoomLabelConfigs.ts` | **NY** - Hook för CRUD mot `room_label_configs` |
-| `src/hooks/useRoomLabels.ts` | Utöka med stöd för dynamiska fält, klickhantering, distansskalning |
-| `src/components/viewer/VisualizationToolbar.tsx` | Ersätt enkel switch med etikettmall-väljare |
-| `src/hooks/useSectionPlaneClipping.ts` | **Fixa** - uppdatera planet istället för att återskapa det |
-| `src/components/viewer/FloatingRoomCard.tsx` | **NY** - Mindre, flytande rumskort vid klick |
-
----
-
-## 3. Detaljerad implementation
-
-### 3.1 Ny "Viewer Settings"-flik i ApiSettingsModal
-
-Ersätt:
-```
-Teman (tabindex 4)
-```
-Med:
-```
-Viewer (tabindex 4, ikon: View)
-  └── Accordion/Collapsible:
-      ├── Viewer-teman (befintlig ViewerThemeSettings)
-      └── Rumsetiketter (ny RoomLabelSettings)
-```
-
-### 3.2 RoomLabelSettings-komponenten
+### 2. Viewer-fliken (RoomLabelSettings.tsx)
+**Nuvarande:** Etikettkonfigurationer som kort
+**Nytt:** Varje konfiguration blir ihopveckningsbar
 
 ```text
-┌──────────────────────────────────────────────────────────┐
-│ Rumsetiketter                                            │
-│ Konfigurera hur etiketter visas på rum i 3D-viewern    │
-├──────────────────────────────────────────────────────────┤
-│ [+ Ny etikettkonfiguration]                              │
-│                                                          │
-│ ┌────────────────────────────────────────────────────┐  │
-│ │ 📋 Namn och Area                          [Redigera] │  │
-│ │    Fält: commonName, nta                            │  │
-│ │    Höjd: 1.2m | Klick: Rumskort                     │  │
-│ └────────────────────────────────────────────────────┘  │
-│                                                          │
-│ ┌────────────────────────────────────────────────────┐  │
-│ │ 📋 Endast rumsnummer                     [Redigera] │  │
-│ │    Fält: designation                                │  │
-│ │    Höjd: 1.0m | Klick: Flytta kameran              │  │
-│ └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ [▶] Rumsnamn (Standard)                         │
+│ [▶] Namn och nummer                             │
+│ [▶] Namn och area                          [🗑] │
+│     └── (utfälld: fält, höjd, klickåtgärd)      │
+│ [+ Ny konfiguration]                            │
+└─────────────────────────────────────────────────┘
 ```
 
-**Redigeringsformulär:**
-- **Namn**: Textruta
-- **Fält att visa**: Multi-select chips från tillgängliga rumsegenskaper:
-  - `commonName` (Rumsnamn)
-  - `designation` (Rumsnummer)
-  - `longName` (Långt namn)
-  - `nta` (Nettoyta)
-  - `bta` (Bruttoyta)
-  - `function` (Funktion)
-  - Custom property keys från PropertySet
-- **Höjd ovanför golv**: Slider 0.1 - 2.5m
-- **Skalas med avstånd**: Toggle
-- **Klickåtgärd**: Select dropdown
-  - "Ingen"
-  - "Flytta kamera till rum" (CameraFlightAnimation)
-  - "Visa rumskort"
-
-### 3.3 Uppdatering av useRoomLabels.ts
-
-Utöka hooken med:
-
-```typescript
-interface RoomLabelConfig {
-  id: string;
-  name: string;
-  fields: string[];
-  heightOffset: number;
-  fontSize: number;
-  scaleWithDistance: boolean;
-  clickAction: 'none' | 'flyto' | 'roomcard';
-}
-
-// Ny funktion: Applicera konfiguration
-const applyConfig = useCallback((config: RoomLabelConfig) => {
-  activeConfigRef.current = config;
-  if (enabledRef.current) {
-    destroyLabels();
-    createLabels();
-  }
-}, []);
-
-// Ny funktion: Extrahera fältvärden från metaObject
-const extractFieldValue = (metaObj: any, fieldKey: string): string => {
-  // Checka attributes, propertySetValues, etc.
-};
-
-// Ny: Distance-based scaling i updateLabelPositions
-const distance = vec3.distance(camera.eye, label.worldPos);
-const scale = Math.max(0.5, Math.min(1.5, 20 / distance));
-label.element.style.transform = `translate(-50%, -50%) scale(${scale})`;
-
-// Ny: Klickhantering
-label.element.style.pointerEvents = 'auto';
-label.element.addEventListener('click', () => handleLabelClick(label));
-```
-
-### 3.4 Uppdatering av VisualizationToolbar
-
-Ersätt nuvarande switch för "Rumsetiketter" med en expanderbar sektion:
+### 3. Apps-fliken (ApiSettingsModal.tsx)
+**Nuvarande:** Varje app (Insights, FMA Plus, Asset+, etc.) är en öppen `<div>` med border
+**Nytt:** Varje app blir ett ihopvecklat AccordionItem
 
 ```text
-┌─────────────────────────────────────┐
-│ [Type-ikon] Rumsetiketter      [▼]  │  <-- Klick öppnar lista
-│   ├─ ◉ Av                           │
-│   ├─ ○ Namn och Area                │
-│   ├─ ○ Endast rumsnummer            │
-│   └─ ○ [+ Hantera i inställningar]  │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ [▶] Insights                    [New Tab ⬜]    │
+│ [▶] FMA Plus                    [In App ⬜]    │
+│ [▶] Asset+                      [New Tab ⬜]    │
+│ [▶] IoT                                         │
+│ [▶] Original Archive                            │
+│ [▶] Radar                                       │
+│     └── (utfälld: URL, username, password)      │
+└─────────────────────────────────────────────────┘
 ```
 
-### 3.5 FloatingRoomCard-komponent
+### 4. API's-fliken
+**Nuvarande:** Använder HTML `<details>` element
+**Nytt:** Byt till Accordion för konsekvent stil och animation
 
-En mindre, icke-modal version av UniversalPropertiesDialog som:
-- Visar rummets nyckeldata (namn, nummer, area)
-- Är draggbar
-- Har en "stäng" X-knapp
-- INTE blockerar 3D-interaktion (kameran kan fortfarande rotera)
-
-### 3.6 Fixa 2D-klippning (useSectionPlaneClipping.ts)
-
-**Problemet:** Funktionen `updateFloorCutHeight` återskapar planet varje gång slidern ändras, istället för att uppdatera det befintliga.
-
-**Lösning:**
-
-```typescript
-const updateFloorCutHeight = useCallback((newHeight: number) => {
-  floorCutHeightRef.current = newHeight;
-  
-  if (currentClipModeRef.current !== 'floor') return;
-  if (!topPlaneRef.current) return;
-  
-  const topClipY = currentFloorMinYRef.current + newHeight;
-  
-  // RÄTT: Uppdatera befintligt plan direkt
-  topPlaneRef.current.pos = [0, topClipY, 0];
-  
-  console.log(`2D top plane pos updated to Y=${topClipY.toFixed(2)}`);
-}, []);
+```text
+┌─────────────────────────────────────────────────┐
+│ [▶] Asset+                      [Konfigurerad] │
+│ [▶] FM Access                   [Konfigurerad] │
+│ [▶] Ivion (360+)                               │
+│ [▶] Senslinc                                   │
+└─────────────────────────────────────────────────┘
 ```
 
-Om xeokit inte tillåter direkt `pos`-uppdatering, fallback till:
-```typescript
-if (typeof topPlaneRef.current.pos === 'object' && 'set' in topPlaneRef.current.pos) {
-  topPlaneRef.current.pos.set([0, topClipY, 0]);
-} else {
-  // Fallback: recreate but with unique stable ID
-  destroyPlane(topPlaneRef);
-  topPlaneRef.current = createSectionPlaneOnScene(viewer, '2d-top-clip', [0, topClipY, 0], [0, 1, 0]);
-}
+### 5. Sync-fliken
+**Nuvarande:** Öppna kort för varje synkkategori
+**Nytt:** Ihopvecklade sektioner
+
+```text
+┌─────────────────────────────────────────────────┐
+│ [▶] Asset+ Synkronisering    [Kontrollera ⟳]   │
+│     ├─ [▶] Byggnad/Plan/Rum        [I synk ✓]  │
+│     ├─ [▶] Alla Tillgångar         [Ej synkad] │
+│     └─ [▶] XKT-filer               [I synk ✓]  │
+│ [▶] FM Access                  [Kommer snart]  │
+│ [▶] Senslinc                   [Kommer snart]  │
+│ [▶] Ivion                      [Kommer snart]  │
+│ [▶] Congeria Dokument                          │
+└─────────────────────────────────────────────────┘
+```
+
+### 6. Symboler-fliken (SymbolSettings.tsx)
+**Nuvarande:** Lista med symbolkort
+**Nytt:** Ihopvecklade symboler
+
+### 7. Röst-fliken (VoiceSettings.tsx)
+**Nuvarande:** Öppna sektioner
+**Nytt:** Grupperade i Accordion
+
+### 8. Gunnar-fliken (GunnarSettings.tsx)
+**Nuvarande:** Öppna sektioner
+**Nytt:** Grupperade i Accordion
+
+---
+
+## Teknisk implementation
+
+### Fil: src/components/settings/ViewerThemeSettings.tsx
+Ändra temalistan från Cards till Accordion:
+
+```tsx
+// Innan
+{themes.map((theme) => (
+  <Card key={theme.id}>...</Card>
+))}
+
+// Efter
+<Accordion type="single" collapsible className="space-y-2">
+  {themes.map((theme) => (
+    <AccordionItem key={theme.id} value={theme.id} className="border rounded-lg">
+      <AccordionTrigger className="px-4 py-3 hover:no-underline">
+        <div className="flex items-center gap-2">
+          <Palette className="h-4 w-4" />
+          <span>{theme.name}</span>
+          {theme.is_system && <Badge variant="secondary">System</Badge>}
+          {/* Color swatches preview */}
+          <div className="flex gap-0.5 ml-2">
+            {Object.values(theme.color_mappings).slice(0, 5).map((m, i) => (
+              <div key={i} className="w-3 h-3 rounded" style={{backgroundColor: m.color}} />
+            ))}
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="px-4 pb-4">
+        {/* Edit form: color pickers, sliders, save/delete buttons */}
+      </AccordionContent>
+    </AccordionItem>
+  ))}
+</Accordion>
+```
+
+### Fil: src/components/settings/RoomLabelSettings.tsx
+Samma pattern - varje config blir AccordionItem.
+
+### Fil: src/components/settings/ApiSettingsModal.tsx
+
+**Apps-fliken (~rad 1066):**
+```tsx
+// Byt ut:
+{Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]) => (
+  <div className="border rounded-lg p-4">...</div>
+))}
+
+// Till:
+<Accordion type="multiple" className="space-y-2">
+  {Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]) => (
+    <AccordionItem key={key} value={key} className="border rounded-lg">
+      <AccordionTrigger className="px-4 py-3 hover:no-underline">
+        <div className="flex items-center gap-2">
+          <IconComp className="h-5 w-5 text-primary" />
+          <span>{cfg.label}</span>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="px-4 pb-4">
+        {/* URL, username, password inputs */}
+      </AccordionContent>
+    </AccordionItem>
+  ))}
+</Accordion>
+```
+
+**API's-fliken (~rad 1162):**
+```tsx
+// Byt ut <details> till:
+<Accordion type="multiple" className="space-y-2">
+  <AccordionItem value="assetplus" className="border rounded-lg">
+    <AccordionTrigger>Asset+</AccordionTrigger>
+    <AccordionContent>...</AccordionContent>
+  </AccordionItem>
+  {/* FM Access, Ivion, Senslinc */}
+</Accordion>
+```
+
+**Sync-fliken (~rad 1400):**
+```tsx
+<Accordion type="multiple" className="space-y-2">
+  <AccordionItem value="assetplus-sync">
+    <AccordionTrigger>
+      <div className="flex items-center gap-2">
+        <Box className="h-5 w-5 text-primary" />
+        Asset+ Synkronisering
+        <Badge>...</Badge>
+      </div>
+    </AccordionTrigger>
+    <AccordionContent>
+      {/* Nested accordion for Structure/Assets/XKT */}
+      <Accordion type="multiple" className="space-y-2">
+        <AccordionItem value="structure">...</AccordionItem>
+        <AccordionItem value="assets">...</AccordionItem>
+        <AccordionItem value="xkt">...</AccordionItem>
+      </Accordion>
+    </AccordionContent>
+  </AccordionItem>
+  {/* FM Access, Senslinc, Ivion, Congeria */}
+</Accordion>
 ```
 
 ---
 
-## 4. Svar på dina frågor
+## Styling-principer
 
-### Kan labels skalas med avstånd?
-**Ja, absolut.** Vi beräknar avståndet från kameran till etikettens 3D-position och applicerar en CSS `scale()` transform. Detta gör att etiketter är läsbara på nära håll men inte blockerar hela vyn när man zoomar ut.
+1. **Konsekvent trigger-stil:**
+   - Ikon + Rubrik till vänster
+   - Status-badge till höger (före pilen)
+   - `hover:no-underline` för cleaner look
 
-```typescript
-const distance = Math.sqrt(
-  (camera.eye[0] - worldPos[0]) ** 2 +
-  (camera.eye[1] - worldPos[1]) ** 2 +
-  (camera.eye[2] - worldPos[2]) ** 2
-);
-const scale = Math.max(0.4, Math.min(1.2, 15 / distance));
-```
+2. **Animerad expansion:**
+   - Radix Accordion har inbyggd smooth animation
+   - `data-[state=open]:rotate-180` på chevron
 
-### Kan man klicka på labels?
-**Ja.** Vi sätter `pointer-events: auto` på label-elementen och lägger till event listeners. Två åtgärder:
+3. **Ihopvecklade som standard:**
+   - `<Accordion type="multiple">` utan `defaultValue`
+   - Eller `<Accordion type="single" collapsible>` för en-i-taget
 
-1. **Flytta kamera till rummet** - Använder xeokit CameraFlightAnimation:
-```typescript
-viewer.cameraFlight.flyTo({
-  aabb: entity.aabb,
-  duration: 0.8
-});
-```
-
-2. **Visa rumskort** - Öppnar FloatingRoomCard med rumsdata
-
-### Annotation vs. HTML-labels?
-**Rekommendation: Behåll nuvarande HTML-labels.**
-
-Fördelar:
-- Full kontroll över styling (CSS)
-- Enkel klickhantering med standard DOM-events
-- Flexibel innehållsrendering (ikoner, flera rader)
-- Redan implementerat och testat
-
-Nackdelar med xeokit AnnotationsPlugin:
-- Begränsad styling
-- Komplex integration med Asset+ wrapper-paketet
-- Mindre flexibelt för dynamiskt innehåll
-
-### Varför fungerar inte 2D-klippning?
-**Identifierat problem:** I `updateFloorCutHeight` skapas ett nytt SectionPlane med dynamiskt ID (`2d-top-dynamic-${Date.now()}`) varje gång slidern ändras. Detta kan orsaka:
-- Race conditions vid snabb slider-rörelse
-- Gammalt plan tas inte alltid bort korrekt
-- xeokit kanske inte hinner synkronisera
-
-**Lösningen** är att antingen uppdatera det befintliga planets position direkt (`plane.pos = [...]`) eller använda ett stabilt ID så att samma plan återanvänds.
+4. **Touch-vänligt:**
+   - Minst 44px touch target på triggers
+   - `py-3 px-4` för god klickyta
 
 ---
 
-## 5. Migrations-SQL
+## Filer som ändras
 
-```sql
-CREATE TABLE public.room_label_configs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  fields JSONB NOT NULL DEFAULT '["commonName", "designation"]',
-  height_offset REAL NOT NULL DEFAULT 1.2,
-  font_size REAL NOT NULL DEFAULT 10,
-  scale_with_distance BOOLEAN NOT NULL DEFAULT true,
-  click_action TEXT NOT NULL DEFAULT 'none' CHECK (click_action IN ('none', 'flyto', 'roomcard')),
-  is_default BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- RLS
-ALTER TABLE public.room_label_configs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all for now" ON public.room_label_configs FOR ALL USING (true);
-
--- Seed default configs
-INSERT INTO public.room_label_configs (name, fields, height_offset, click_action, is_default) VALUES
-  ('Rumsnamn', '["commonName"]', 1.2, 'none', true),
-  ('Namn och nummer', '["commonName", "designation"]', 1.2, 'none', false),
-  ('Namn och area', '["commonName", "nta"]', 1.2, 'roomcard', false);
-```
+| Fil | Förändring |
+|-----|------------|
+| `src/components/settings/ViewerThemeSettings.tsx` | Tema-lista → Accordion |
+| `src/components/settings/RoomLabelSettings.tsx` | Config-lista → Accordion |
+| `src/components/settings/ApiSettingsModal.tsx` | Apps, API's, Sync → Accordion |
+| `src/components/settings/SymbolSettings.tsx` | Symbol-lista → Accordion |
+| `src/components/settings/VoiceSettings.tsx` | Sektioner → Accordion |
+| `src/components/settings/GunnarSettings.tsx` | Sektioner → Accordion |
 
 ---
 
-## 6. Testplan
+## Förväntad effekt
 
-1. Öppna "Inställningar" -> "Viewer"-fliken
-2. Verifiera att Teman fortfarande fungerar
-3. Skapa ny etikettkonfiguration med fält "commonName" + "nta"
-4. Gå till 3D-viewer, välj etikettmallan i Visning-menyn
-5. Verifiera att etiketter visar rätt fält
-6. Zooma in/ut - verifiera att etiketter skalas
-7. Klicka på etikett - verifiera flyto/rumskort
-8. Testa 2D-läge med klipphöjd-slider - verifiera att snittet uppdateras smidigt
-
+- **Renare UI:** Alla sektioner kollapade ger kompakt översikt
+- **Konsekvent UX:** Samma interaktionsmönster överallt
+- **Bättre prestanda:** Mindre DOM renderas initialt
+- **Tillgänglighet:** Radix Accordion har inbyggd a11y (keyboard nav, ARIA)
