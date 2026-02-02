@@ -1,305 +1,258 @@
 
-# Plan: 3D Viewer-förbättringar - Startproblem, Dubbla Spinners, Modellnamn och Träd
+# Plan: Fixa Asset-namngivning och POI-skapande i Ivion
 
 ## Översikt
 
-Denna plan åtgärdar fem identifierade problem med 3D-viewern:
+Det finns två problem som behöver åtgärdas:
 
-1. **Ibland kommer inte Byggnader/Sparade Vyer upp** - användaren kastas direkt in i viewern
-2. **Två spinners vid öppning** - behöver stänga av den orangea (eller lila)
-3. **Felaktigt modellnamn** - visar "myModel undefined" istället för "A-model"
-4. **Saknade modeller i listan** - B-modell, E-modell, V-modell visas inte
-5. **Modellträd fungerar dåligt** - selektion/avselektion propagerar inte korrekt
-6. **Prestanda-diskussion** - partiell laddning av objekt
+1. **Assets visar GUID istället för vänligt namn** - När assets från Asset+ saknar både `name` och `common_name`, visas GUID:en istället för något mer läsbart
+2. **POI-skapande misslyckas** - Ivion API kräver obligatoriska fält som saknas i anropet
 
 ---
 
-## Problem 1: Byggnadsväljaren visas inte
+## Problem 1: Bättre namngivning av assets
 
-### Rotorsak
-I `src/pages/Viewer.tsx` (rad 14-20) kontrolleras `viewer3dFmGuid` för att avgöra om BuildingSelector eller AssetPlusViewer ska visas:
-
+### Nuvarande kod (UnplacedAssetsPanel.tsx rad 61-69)
 ```tsx
-if (viewer3dFmGuid) {
-  return <AssetPlusViewer fmGuid={viewer3dFmGuid} ... />
-}
-return <BuildingSelector />
-```
-
-Om `viewer3dFmGuid` inte återställs korrekt vid föregående session eller av andra skäl har ett gammalt värde, hoppar användaren direkt in i viewern.
-
-### Lösning
-Lägg till en `useEffect` som rensar `viewer3dFmGuid` vid unmount av Viewer-komponenten, samt validerar att den valda byggnaden faktiskt existerar i `allData`.
-
-**Fil: `src/pages/Viewer.tsx`**
-
-```tsx
-// Add validation that selected building exists
-const validBuilding = allData.find(
-  (item: any) => item.fmGuid === viewer3dFmGuid && item.category === 'Building'
+setAssets(
+  (data || []).map((a) => ({
+    id: a.id,
+    fm_guid: a.fm_guid,
+    name: a.name || a.common_name || a.fm_guid,  // Fallback till GUID
+    asset_type: a.asset_type,
+    category: a.category,
+  }))
 );
-
-// If GUID is set but building doesn't exist (data not loaded), show selector
-if (viewer3dFmGuid && !isLoadingData && !validBuilding) {
-  return <BuildingSelector />;
-}
 ```
 
----
-
-## Problem 2: Två spinners - stänga av den orangea
-
-### Rotorsak
-Den **lila** spinnern kommer från React-komponenten `<Spinner />` i `AssetPlusViewer.tsx` (rad 2494-2502).
-
-Den **orangea** spinnern kommer från Asset+ bibliotekets interna DevExtreme `dx-loadindicator` med färgen `#ff5722` definierad i `public/lib/assetplus/assetplusviewer.css` (rad 528-532).
+### Problem
+- `name = NULL` och `common_name = NULL` för många BIM-assets
+- Fallback till GUID ger oläsbara namn som `23d71dd2-af15-401e-aae6-663876af78e6`
 
 ### Lösning
-Lägg till CSS-override i `src/index.css` för att dölja den interna Asset+ loadern:
-
-**Fil: `src/index.css`**
-
-```css
-/* Dölj Asset+ interna orange spinner för att undvika dubbla indikatorer */
-.dx-loadindicator {
-  display: none !important;
-}
-
-.dx-loadpanel-content,
-.dx-loadpanel-wrapper {
-  display: none !important;
-  visibility: hidden !important;
-}
-```
-
----
-
-## Problem 3: Felaktigt modellnamn ("myModel undefined")
-
-### Rotorsak
-I `ModelVisibilitySelector.tsx` hämtas modellnamn från `xkt_models` databastabellen eller Asset+ API. Problemet uppstår när:
-1. `modelNamesMap` är tom under initialiseringen
-2. Det finns en timing-mismatch mellan när modeller laddas i xeokit och när API-namn hämtas
-3. Fallback-logiken (rad 242) visar raw model ID om ingen match hittas
-
-### Lösning
-1. **Vänta på modellnamn innan modellista visas** - Lägg till explicit beroende på `modelNamesMap.size > 0`
-2. **Förbättra fallback-namnet** - Om ingen match, visa "Laddar..." istället av raw ID under hämtning
-3. **Uppdatera listan när namn laddas** - Säkerställ att `extractModels` anropas igen efter att `modelNamesMap` fyllts
-
-**Fil: `src/components/viewer/ModelVisibilitySelector.tsx`**
+Utöka fallback-kedjan för att använda `asset_type` (t.ex. "IfcBeam", "IfcDoor") med formatering:
 
 ```tsx
-// Rad 200-250: Förbättra extractModels med bättre fallback
-const extractModels = useCallback(() => {
-  // ... existing code ...
-  
-  // Förbättrad fallback som respekterar laddningstillstånd
-  const friendlyName = matchedName || 
-    (isLoadingNames ? 'Laddar...' : fileNameWithoutExt.replace(/-/g, ' '));
-  
-  // ... rest of code
-}, [getXeokitViewer, modelNamesMap, isLoadingNames]);
+// Hjälpfunktion för att formatera asset_type
+const formatAssetType = (type: string | null): string => {
+  if (!type) return '';
+  // "IfcBeam" → "Beam", "IfcWallStandardCase" → "Wall Standard Case"
+  return type
+    .replace(/^Ifc/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2');
+};
 
-// Rad 289-348: Vänta tills modelNamesMap är klar (om laddning pågår)
-useEffect(() => {
-  // Don't initialize until model names are loaded (or loading failed)
-  if (isInitialized || isLoadingNames) return;
-  
-  // Kräv att modelNamesMap har data om buildingFmGuid finns
-  if (buildingFmGuid && modelNamesMap.size === 0) {
-    // Names still loading, wait
-    return;
+// Förbättrad namnlogik
+const displayName = 
+  a.name || 
+  a.common_name || 
+  formatAssetType(a.asset_type) ||
+  `Okänd (${a.fm_guid.slice(0, 8)}...)`;
+```
+
+### Filer att ändra
+- **`src/components/inventory/UnplacedAssetsPanel.tsx`** - Uppdatera namnlogik på rad 61-69 och rad 164-172
+
+---
+
+## Problem 2: POI-skapande misslyckas - saknade obligatoriska fält
+
+### Felmeddelande från Ivion API
+```
+Validation failed with 6 errors:
+- scsLocation: must not be null
+- scsOrientation: must not be null
+- poiTypeId: must not be null
+- security.groupRead: must not be null
+- security.groupWrite: must not be null
+- visibilityCheck: must not be null
+```
+
+### Nuvarande kod skickar (ivion-poi/index.ts rad 429-444)
+```typescript
+const poiData: Partial<IvionPoi> = {
+  titles: { sv: asset.name || asset.common_name || 'Unnamed' },
+  descriptions: { sv: asset.attributes?.description || '' },
+  location: { x: ..., y: ..., z: ... },  // ❌ Fel fältnamn
+  orientation: { x: 0, y: 0, z: 0, w: 1 }, // ❌ Fel fältnamn
+  importance: 1,
+  customData: JSON.stringify({...}),
+  // ❌ Saknar: scsLocation, scsOrientation, poiTypeId, security, visibilityCheck
+};
+```
+
+### Lösning
+Uppdatera `syncAssetToPoi` och `createPoi` för att skicka alla obligatoriska fält:
+
+1. **Hämta POI-typer** från siten för att få ett giltigt `poiTypeId`
+2. **Hämta säkerhetsgrupper** (eller använd standardvärden)
+3. **Använd rätt fältnamn** (`scsLocation`, `scsOrientation`)
+4. **Lägg till `visibilityCheck`**
+
+### Uppdaterad POI-struktur
+```typescript
+const poiData = {
+  titles: { sv: displayName },
+  descriptions: { sv: '' },
+  scsLocation: {
+    type: 'Point',
+    coordinates: [asset.coordinate_x || 0, asset.coordinate_y || 0, asset.coordinate_z || 0]
+  },
+  scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
+  poiTypeId: defaultPoiTypeId,  // Hämta från site's POI types
+  security: {
+    groupRead: 0,   // 0 = alla kan läsa (public)
+    groupWrite: 0   // 0 = alla kan skriva
+  },
+  visibilityCheck: false,
+  importance: 1,
+  customData: JSON.stringify({
+    fm_guid: asset.fm_guid,
+    asset_type: asset.asset_type,
+    source: 'geminus',
+  }),
+};
+```
+
+### Filer att ändra
+- **`supabase/functions/ivion-poi/index.ts`**
+  - Uppdatera `IvionPoi` interface med korrekta fält
+  - Uppdatera `syncAssetToPoi` för att hämta POI-typ och inkludera alla obligatoriska fält
+  - Lägg till logik för att hämta default POI-typ från siten
+
+---
+
+## Implementeringsdetaljer
+
+### Del 1: UnplacedAssetsPanel.tsx ändringar
+
+Rad 61-69 och 164-172 ändras till:
+```tsx
+// Hjälpfunktion
+const getDisplayName = (asset: any): string => {
+  if (asset.name) return asset.name;
+  if (asset.common_name) return asset.common_name;
+  if (asset.asset_type) {
+    return asset.asset_type
+      .replace(/^Ifc/, '')
+      .replace(/([a-z])([A-Z])/g, '$1 $2');
   }
-  
-  // ... rest of initialization
-}, [extractModels, isInitialized, applyModelVisibility, isLoadingNames, buildingFmGuid, modelNamesMap.size]);
+  return `Okänd (${asset.fm_guid.slice(0, 8)}...)`;
+};
+
+setAssets(
+  (data || []).map((a) => ({
+    id: a.id,
+    fm_guid: a.fm_guid,
+    name: getDisplayName(a),
+    asset_type: a.asset_type,
+    category: a.category,
+  }))
+);
 ```
 
----
+### Del 2: ivion-poi Edge Function ändringar
 
-## Problem 4: Saknade modeller i listan
+**Steg 1: Uppdatera interface (rad 45-61)**
+```typescript
+interface IvionPoi {
+  id?: number;
+  titles: Record<string, string>;
+  descriptions: Record<string, string>;
+  scsLocation: {
+    type: 'Point';
+    coordinates: [number, number, number];
+  };
+  scsOrientation: { x: number; y: number; z: number; w: number };
+  poiTypeId: number;
+  security: {
+    groupRead: number;
+    groupWrite: number;
+  };
+  visibilityCheck: boolean;
+  importance: number;
+  customData?: string;
+  icon?: string;
+  // Legacy fields for reading existing POIs
+  location?: { x: number; y: number; z: number };
+  orientation?: { x: number; y: number; z: number; w: number };
+  poiType?: { id: number };
+}
+```
 
-### Rotorsak
-Modeller laddas bara till xeokit efter att XKT-filer hämtats. Om synkronisering av XKT-modeller inte slutförts, finns modellerna inte i `viewer.scene.models`.
-
-`extractModels()` itererar endast över `sceneModels` - modeller som faktiskt laddats in i xeokit-scenen.
-
-### Lösning
-Kombinera två datakällor:
-1. **Laddade modeller** från xeokit scene
-2. **Tillgängliga modeller** från `xkt_models` databastabellen
-
-**Fil: `src/components/viewer/ModelVisibilitySelector.tsx`**
-
-```tsx
-// Ny state för databas-modeller
-const [dbModels, setDbModels] = useState<{id: string; name: string}[]>([]);
-
-// Hämta alla modeller för byggnaden från databasen
-useEffect(() => {
-  if (!buildingFmGuid) return;
-  
-  const fetchDbModels = async () => {
-    const { data } = await supabase
-      .from('xkt_models')
-      .select('model_id, model_name, file_name')
-      .eq('building_fm_guid', buildingFmGuid);
-    
-    if (data) {
-      setDbModels(data.map(m => ({
-        id: m.file_name || m.model_id,
-        name: m.model_name || m.file_name || m.model_id
-      })));
+**Steg 2: Lägg till funktion för att hämta default POI-typ**
+```typescript
+async function getDefaultPoiTypeId(siteId: string): Promise<number> {
+  try {
+    const types = await getPoiTypes(siteId);
+    if (types.length > 0) {
+      // Försök hitta en "generic" eller "default" typ, annars första
+      const genericType = types.find(t => 
+        t.name?.toLowerCase().includes('generic') ||
+        t.name?.toLowerCase().includes('default') ||
+        t.name?.toLowerCase().includes('other')
+      );
+      return genericType?.id || types[0].id;
     }
+  } catch (e) {
+    console.log('Could not fetch POI types, using default 1');
+  }
+  return 1; // Fallback
+}
+```
+
+**Steg 3: Uppdatera syncAssetToPoi (rad 394-463)**
+```typescript
+async function syncAssetToPoi(assetFmGuid: string): Promise<...> {
+  // ... existing asset fetch code ...
+  
+  // Get default POI type for this site
+  const poiTypeId = await getDefaultPoiTypeId(siteId);
+  
+  // Get display name
+  const displayName = asset.name || asset.common_name || 
+    (asset.asset_type?.replace(/^Ifc/, '') || 'Unnamed');
+  
+  const poiData = {
+    titles: { sv: displayName },
+    descriptions: { sv: asset.attributes?.description || '' },
+    scsLocation: {
+      type: 'Point',
+      coordinates: [
+        asset.coordinate_x || 0,
+        asset.coordinate_y || 0,
+        asset.coordinate_z || 0
+      ]
+    },
+    scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
+    poiTypeId,
+    security: { groupRead: 0, groupWrite: 0 },
+    visibilityCheck: false,
+    importance: 1,
+    customData: JSON.stringify({
+      fm_guid: asset.fm_guid,
+      asset_type: asset.asset_type,
+      source: 'geminus',
+    }),
   };
   
-  fetchDbModels();
-}, [buildingFmGuid]);
-
-// Modifiera extractModels för att kombinera med dbModels
-const extractModels = useCallback(() => {
-  // ... hämta laddade modeller från scene
-  
-  // Lägg till databas-modeller som inte finns i scene (visas som "ej laddade")
-  dbModels.forEach(dbModel => {
-    if (!extractedModels.find(m => m.id === dbModel.id)) {
-      extractedModels.push({
-        id: dbModel.id,
-        name: dbModel.name,
-        shortName: dbModel.name.length > 30 ? dbModel.name.substring(0, 27) + '...' : dbModel.name,
-        loaded: false, // Ny flagga för att markera ej laddade modeller
-      });
-    }
-  });
-  
-  return extractedModels;
-}, [getXeokitViewer, modelNamesMap, dbModels]);
+  // ... create POI ...
+}
 ```
 
 ---
 
-## Problem 5: Modellträd - selektion propagerar inte
+## Sammanfattning av ändringar
 
-### Rotorsak
-I `ViewerTreePanel.tsx` hanterar `handleVisibilityChange` (rad 462-484) endast synlighetsändringar för en nod och dess barn, men funktionen anropas med `visible: boolean` som alltid sätter samma värde - den hanterar inte propagering uppåt till förälder eller korrekt selektionssynkronisering.
-
-### Lösning
-1. **Propagera nedåt** - Redan implementerat (rad 472-481)
-2. **Propagera uppåt** - Lägg till uppdatering av förälderns indeterminate-status
-3. **Fixa expand/collapse** - Se till att `onToggle` är korrekt kopplat
-
-**Fil: `src/components/viewer/ViewerTreePanel.tsx`**
-
-```tsx
-// Rad 462-484: Förbättra handleVisibilityChange för att propagera korrekt
-const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
-  const xeokitViewer = getXeokitViewer();
-  const scene = xeokitViewer?.scene;
-  if (!scene) return;
-
-  // Rekursiv funktion för att sätta synlighet på alla barn
-  const setVisibilityRecursive = (n: TreeNode, vis: boolean) => {
-    const entity = scene.objects?.[n.id];
-    if (entity) {
-      entity.visible = vis;
-    }
-    n.children?.forEach(child => setVisibilityRecursive(child, vis));
-  };
-
-  // Sätt synlighet på noden och alla dess barn
-  setVisibilityRecursive(node, visible);
-
-  // Uppdatera trädets visuella state
-  refreshVisibilityState();
-}, [getXeokitViewer, refreshVisibilityState]);
-```
-
-**Fixa TreeNodeComponent checkbox onClick**:
-```tsx
-// Rad 201-204: Korrigera event-hantering
-<Checkbox
-  checked={node.visible && !node.indeterminate}
-  ref={(el) => {
-    if (el && node.indeterminate) {
-      // Sätt indeterminate-attribut på underliggande input
-      const input = el.querySelector('input');
-      if (input) input.indeterminate = node.indeterminate;
-    }
-  }}
-  onCheckedChange={(checked) => {
-    onVisibilityChange?.(node, !!checked);
-  }}
-  onClick={(e) => e.stopPropagation()}
-/>
-```
+| Fil | Ändring |
+|-----|---------|
+| `src/components/inventory/UnplacedAssetsPanel.tsx` | Förbättrad namnlogik med fallback till formaterad `asset_type` |
+| `supabase/functions/ivion-poi/index.ts` | Uppdaterat interface och `syncAssetToPoi` med alla obligatoriska Ivion-fält |
 
 ---
 
-## Problem 6: Prestanda och partiell laddning
+## Testplan
 
-### Analys
-XEOkits demo-sidor är snabba för att de:
-1. **Laddar endast BIM-strukturen först** (hierarchy metadata)
-2. **Laddar geometri on-demand** när användaren navigerar
-3. **Använder WebGL-instancing** för duplicerade objekt
-
-### Rekommendation
-Detta är en större arkitekturell förändring som bör hanteras separat. En mellanlösning:
-
-1. **Fördröj trädbygge** - ViewerTreePanel bygger redan trädet i chunks med `requestIdleCallback`
-2. **Lazy-load barn** - Expandera inte trädnoder förrän användaren klickar
-3. **Virtualisering** - Implementera react-window för stora träd
-
-Notera: Dessa optimeringar bör dokumenteras för framtida implementation men ligger utanför denna plans scope.
-
----
-
-## Filer som ändras
-
-| Fil | Typ | Beskrivning |
-|-----|-----|-------------|
-| `src/pages/Viewer.tsx` | Ändra | Validering av vald byggnad |
-| `src/index.css` | Ändra | Dölj Asset+ interna orange spinner |
-| `src/components/viewer/ModelVisibilitySelector.tsx` | Ändra | Fixa modellnamn och visa alla tillgängliga modeller |
-| `src/components/viewer/ViewerTreePanel.tsx` | Ändra | Förbättra checkbox-propagering |
-
----
-
-## Tekniska detaljer
-
-### Spinner-arkitektur efter fix
-```text
-┌───────────────────────────────────────┐
-│ 3D Viewer Container                   │
-│                                       │
-│  ┌─────────────────────────────────┐  │
-│  │ React Spinner (lila)            │  │  ← Kontrolleras av state.isLoading
-│  │ Spinner component               │  │
-│  └─────────────────────────────────┘  │
-│                                       │
-│  ┌─────────────────────────────────┐  │
-│  │ Asset+ Internal Spinner (orange)│  │  ← DOLD via CSS
-│  │ dx-loadindicator                │  │
-│  └─────────────────────────────────┘  │
-│                                       │
-└───────────────────────────────────────┘
-```
-
-### Modellsynlighet dataflöde
-```text
-xkt_models (DB)  ────┐
-                     ├──> Combined Model List ──> UI
-scene.models     ────┘
-     │
-     └──> För laddade modeller: visibility control
-```
-
----
-
-## Implementeringsordning
-
-1. **CSS-fix för orange spinner** - Snabb fix med omedelbar effekt
-2. **Viewer.tsx validering** - Säkerställ att BuildingSelector visas
-3. **ModelVisibilitySelector fixes** - Kombinera datakällor och förbättra namnvisning
-4. **ViewerTreePanel checkbox-fix** - Korrekt propagering av visibility
+1. Öppna Ivion-inventering och verifiera att assets utan namn nu visar formaterad asset_type (t.ex. "Beam" istället för GUID)
+2. Välj en asset och klicka "Skapa POI" - verifiera att POI skapas utan fel
+3. Kontrollera i Ivion att den skapade POI:n har korrekt namn och FMGUID i custom attributes
