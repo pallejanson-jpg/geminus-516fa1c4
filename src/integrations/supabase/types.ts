@@ -254,6 +254,7 @@ export type Database = {
           ivion_site_id: string | null
           latitude: number | null
           longitude: number | null
+          start_view_id: string | null
           updated_at: string
         }
         Insert: {
@@ -265,6 +266,7 @@ export type Database = {
           ivion_site_id?: string | null
           latitude?: number | null
           longitude?: number | null
+          start_view_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -276,9 +278,18 @@ export type Database = {
           ivion_site_id?: string | null
           latitude?: number | null
           longitude?: number | null
+          start_view_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "building_settings_start_view_id_fkey"
+            columns: ["start_view_id"]
+            isOneToOne: false
+            referencedRelation: "saved_views"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       detection_templates: {
         Row: {

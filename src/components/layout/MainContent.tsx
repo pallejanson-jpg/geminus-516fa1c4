@@ -1,4 +1,4 @@
-import React, { useContext, lazy, Suspense } from "react";
+import React, { useContext, useState, lazy, Suspense } from "react";
 import { Loader2, Box, Archive } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
@@ -20,6 +20,8 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp } = useContext(AppContext);
     const t = THEMES[theme];
+    // Track previous app for 360 view close navigation
+    const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
     const renderContent = () => {
         switch (activeApp) {
@@ -86,7 +88,13 @@ const MainContent: React.FC = () => {
                     />
                 );
             case 'radar':
-                return <Ivion360View onClose={() => {}} />;
+                return (
+                    <Ivion360View 
+                        onClose={() => {
+                            setActiveApp(previousAppBefore360 || 'portfolio');
+                        }} 
+                    />
+                );
             case 'inventory':
                 return (
                     <Suspense fallback={

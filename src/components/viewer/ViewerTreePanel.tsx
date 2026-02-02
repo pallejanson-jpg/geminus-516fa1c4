@@ -209,9 +209,11 @@ const TreeNodeComponent = React.memo<{
           <button
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onToggle(node.id);
             }}
-            className="p-0.5 hover:bg-muted rounded"
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-0.5 hover:bg-muted rounded shrink-0"
           >
             {isExpanded ? (
               <ChevronDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -645,19 +647,8 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
 
         setTreeData(tree);
         
-        // Auto-expand first 2 levels
-        const autoExpandIds = new Set<string>();
-        const expandToDepth = (nodes: TreeNode[], depth: number, maxDepth: number) => {
-          if (depth >= maxDepth) return;
-          nodes.forEach(node => {
-            autoExpandIds.add(node.id);
-            if (node.children) {
-              expandToDepth(node.children, depth + 1, maxDepth);
-            }
-          });
-        };
-        expandToDepth(tree, 0, 2);
-        setExpandedIds(autoExpandIds);
+        // All nodes collapsed by default - no auto-expand
+        setExpandedIds(new Set<string>());
         
         const totalCount = tree.reduce((sum, node) => sum + 1 + (node.objectCount || 0), 0);
         console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes,', totalCount, 'total objects');
@@ -769,7 +760,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     }
   }, [viewerRef, onNodeHover]);
 
-  // Handle visibility all - show/hide all objects
+  // Handle visibility all - show/hide all objects AND sync tree checkboxes
   const handleVisibilityAll = useCallback((visible: boolean) => {
     const xeokitViewer = getXeokitViewer();
     const scene = xeokitViewer?.scene;
@@ -777,23 +768,44 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
 
     try {
       scene.setObjectsVisible(scene.objectIds, visible);
-      refreshVisibilityState();
+      
+      // Sync tree state with visibility change
+      setTreeData(prevTree => {
+        const updateAllNodes = (nodes: TreeNode[]): TreeNode[] => {
+          return nodes.map(node => ({
+            ...node,
+            visible: visible,
+            indeterminate: false,
+            children: node.children ? updateAllNodes(node.children) : undefined,
+          }));
+        };
+        return updateAllNodes(prevTree);
+      });
     } catch (e) {
       console.debug('ViewerTreePanel: Error toggling all visibility:', e);
     }
-  }, [getXeokitViewer, refreshVisibilityState]);
+  }, [getXeokitViewer]);
 
-  // Handle expand all
+  // Handle expand all - use requestIdleCallback for performance
   const handleExpandAll = useCallback(() => {
-    const allIds = new Set<string>();
-    const collectIds = (nodes: TreeNode[]) => {
-      nodes.forEach(node => {
-        allIds.add(node.id);
-        if (node.children) collectIds(node.children);
-      });
+    const doExpand = () => {
+      const allIds = new Set<string>();
+      const collectIds = (nodes: TreeNode[]) => {
+        nodes.forEach(node => {
+          allIds.add(node.id);
+          if (node.children) collectIds(node.children);
+        });
+      };
+      collectIds(treeData);
+      setExpandedIds(allIds);
     };
-    collectIds(treeData);
-    setExpandedIds(allIds);
+    
+    // Use requestIdleCallback to prevent UI blocking on large trees
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(doExpand, { timeout: 500 });
+    } else {
+      setTimeout(doExpand, 0);
+    }
   }, [treeData, setExpandedIds]);
 
   // Handle collapse all
