@@ -170,22 +170,34 @@ serve(async (req) => {
       if (!scrapeResponse.ok) {
         // Consume body before retry
         await scrapeResponse.text();
-        scrapeResponse = await runScrape({ waitFor: 10000, timeout: 180000 });
+        console.log('[Congeria Sync] Fast scrape failed, trying with waitFor...');
+        scrapeResponse = await runScrape({ waitFor: 8000, timeout: 90000 });
       }
 
+      // If still failing, return user-friendly error suggesting manual upload
       if (!scrapeResponse.ok) {
         const errorText = await scrapeResponse.text();
         console.error('[Congeria Sync] Firecrawl error:', errorText);
-        // Preserve Firecrawl status (408 is a timeout)
+        
+        // Parse error for user-friendly message
+        let userMessage = 'Congeria-sidan kunde inte hämtas automatiskt.';
+        try {
+          const errJson = JSON.parse(errorText);
+          if (errJson.code === 'SCRAPE_TIMEOUT') {
+            userMessage = 'Congeria-sidan tog för lång tid att ladda. Använd manuell uppladdning istället.';
+          }
+        } catch { /* ignore parse error */ }
+
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Firecrawl scraping failed: ${scrapeResponse.status}`,
-            details: errorText,
+            error: userMessage,
+            code: 'SCRAPE_TIMEOUT',
+            suggestion: 'manual_upload',
             folderUrl,
           }),
           {
-            status: scrapeResponse.status,
+            status: 200, // Return 200 so frontend can show friendly message
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           }
         );
@@ -206,7 +218,8 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             success: true, 
-            message: 'No documents found on the page',
+            message: 'Inga dokument hittades på sidan. Prova manuell uppladdning.',
+            suggestion: 'manual_upload',
             scrapedLinksCount: links.length,
             documentsFound: 0,
           }),

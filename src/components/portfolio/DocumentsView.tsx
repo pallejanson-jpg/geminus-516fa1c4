@@ -123,10 +123,34 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
 
       if (error) throw error;
 
+      // Check if the response suggests manual upload
+      if (data?.suggestion === 'manual_upload') {
+        toast({
+          title: 'Automatisk synk misslyckades',
+          description: data.error || 'Använd manuell uppladdning istället.',
+          variant: 'default',
+        });
+      } else if (data?.syncedCount > 0) {
+        toast({
+          title: 'Synkronisering klar',
+          description: `${data.syncedCount} dokument synkade.`,
+        });
+      } else if (data?.documentsFound === 0) {
+        toast({
+          title: 'Inga dokument hittades',
+          description: 'Prova manuell uppladdning.',
+        });
+      }
+
       // Refetch documents after sync
       await fetchDocuments();
     } catch (error) {
       console.error('Sync failed:', error);
+      toast({
+        title: 'Synkronisering misslyckades',
+        description: 'Ett oväntat fel uppstod. Prova manuell uppladdning.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSyncing(false);
     }
