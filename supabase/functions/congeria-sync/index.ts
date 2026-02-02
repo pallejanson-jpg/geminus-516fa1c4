@@ -6,6 +6,80 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+interface ParsedDocument {
+  name: string;
+  url: string;
+  size?: number;
+  mimeType?: string;
+  folder?: string;
+}
+
+// Parse document links from HTML content
+function parseDocumentLinks(html: string, links: string[]): ParsedDocument[] {
+  const documents: ParsedDocument[] = [];
+  
+  // Filter links that look like document downloads
+  const docExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip'];
+  
+  for (const link of links) {
+    const lowerLink = link.toLowerCase();
+    const isDocument = docExtensions.some(ext => lowerLink.includes(ext));
+    
+    if (isDocument) {
+      // Extract filename from URL
+      const urlParts = link.split('/');
+      let name = urlParts[urlParts.length - 1];
+      
+      // Decode URL-encoded characters
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        // Keep original if decoding fails
+      }
+      
+      // Remove query parameters from filename
+      name = name.split('?')[0];
+      
+      // Determine mime type from extension
+      let mimeType = 'application/octet-stream';
+      if (lowerLink.includes('.pdf')) mimeType = 'application/pdf';
+      else if (lowerLink.includes('.doc')) mimeType = 'application/msword';
+      else if (lowerLink.includes('.docx')) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (lowerLink.includes('.xls')) mimeType = 'application/vnd.ms-excel';
+      else if (lowerLink.includes('.xlsx')) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      
+      documents.push({
+        name,
+        url: link,
+        mimeType,
+      });
+    }
+  }
+  
+  return documents;
+}
+
+// Download a document from URL
+async function downloadDocument(url: string): Promise<ArrayBuffer | null> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`Failed to download ${url}: ${response.status}`);
+      return null;
+    }
+    
+    return await response.arrayBuffer();
+  } catch (error) {
+    console.error(`Error downloading ${url}:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -15,25 +89,11 @@ serve(async (req) => {
   try {
     const { buildingFmGuid, action } = await req.json();
 
-    const username = Deno.env.get("CONGERIA_USERNAME");
-    const password = Deno.env.get("CONGERIA_PASSWORD");
+    const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-
-    if (!username || !password) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Congeria credentials not configured' 
-        }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
 
     if (action === 'sync' && buildingFmGuid) {
       // Get the Congeria URL for this building
@@ -58,39 +118,176 @@ serve(async (req) => {
         );
       }
 
-      // TODO: Implement actual Congeria session-based sync
-      // 1. Login to Congeria with credentials
-      // 2. Navigate to the folder URL
-      // 3. Parse HTML to extract document list
-      // 4. Download each document
-      // 5. Upload to Supabase Storage
-      // 6. Insert/update documents table
+      // Check if Firecrawl is configured
+      if (!firecrawlKey) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Firecrawl connector not configured. Please enable it in Settings → Connectors.',
+          }),
+          { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
 
-      // For now, return placeholder response
-      console.log(`[Congeria Sync] Would sync building ${buildingFmGuid} from ${linkData.external_url}`);
+      console.log(`[Congeria Sync] Scraping ${linkData.external_url} for building ${buildingFmGuid}`);
+
+      // Use Firecrawl to scrape the Congeria page
+      const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: linkData.external_url,
+          formats: ['html', 'links'],
+          waitFor: 5000, // Wait for JS rendering (Congeria uses hash routing)
+        }),
+      });
+
+      if (!scrapeResponse.ok) {
+        const errorText = await scrapeResponse.text();
+        console.error('[Congeria Sync] Firecrawl error:', errorText);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Firecrawl scraping failed: ${scrapeResponse.status}`,
+            details: errorText
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+
+      const scraped = await scrapeResponse.json();
+      const html = scraped.data?.html || '';
+      const links = scraped.data?.links || [];
+
+      console.log(`[Congeria Sync] Found ${links.length} links on page`);
+
+      // Parse document links from the scraped content
+      const documents = parseDocumentLinks(html, links);
+      
+      console.log(`[Congeria Sync] Identified ${documents.length} documents`);
+
+      if (documents.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'No documents found on the page',
+            scrapedLinksCount: links.length,
+            documentsFound: 0,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Extract folder path from Congeria URL for metadata
+      const urlPath = linkData.external_url.split('#/')[1] || '';
+      const folderPath = decodeURIComponent(urlPath);
+
+      // Process each document
+      let syncedCount = 0;
+      let failedCount = 0;
+      const errors: string[] = [];
+
+      for (const doc of documents) {
+        try {
+          console.log(`[Congeria Sync] Processing: ${doc.name}`);
+          
+          // Download the document
+          const fileData = await downloadDocument(doc.url);
+          
+          if (!fileData) {
+            failedCount++;
+            errors.push(`Failed to download: ${doc.name}`);
+            continue;
+          }
+
+          const storagePath = `${buildingFmGuid}/${doc.name}`;
+          
+          // Upload to Supabase Storage (upsert by removing first if exists)
+          await supabase.storage.from('documents').remove([storagePath]);
+          
+          const { error: uploadError } = await supabase.storage
+            .from('documents')
+            .upload(storagePath, fileData, {
+              contentType: doc.mimeType,
+              upsert: true,
+            });
+
+          if (uploadError) {
+            console.error(`[Congeria Sync] Upload error for ${doc.name}:`, uploadError);
+            failedCount++;
+            errors.push(`Upload failed: ${doc.name}`);
+            continue;
+          }
+
+          // Upsert document metadata
+          const { error: dbError } = await supabase
+            .from('documents')
+            .upsert({
+              building_fm_guid: buildingFmGuid,
+              file_name: doc.name,
+              file_path: storagePath,
+              file_size: fileData.byteLength,
+              mime_type: doc.mimeType,
+              source_system: 'congeria',
+              source_url: doc.url,
+              synced_at: new Date().toISOString(),
+              metadata: {
+                congeria_path: folderPath,
+                original_url: doc.url,
+              },
+            }, {
+              onConflict: 'building_fm_guid,file_path',
+            });
+
+          if (dbError) {
+            console.error(`[Congeria Sync] DB error for ${doc.name}:`, dbError);
+            // Document is in storage but metadata failed - still count as partial success
+          }
+
+          syncedCount++;
+          console.log(`[Congeria Sync] Successfully synced: ${doc.name}`);
+        } catch (docError) {
+          console.error(`[Congeria Sync] Error processing ${doc.name}:`, docError);
+          failedCount++;
+          errors.push(`Error: ${doc.name}`);
+        }
+      }
 
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Congeria sync initiated (placeholder - actual implementation pending)',
+          message: `Synced ${syncedCount} documents${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
           buildingFmGuid,
           folderUrl: linkData.external_url,
-          note: 'Session-based scraping requires additional implementation for Congeria auth flow'
+          documentsFound: documents.length,
+          syncedCount,
+          failedCount,
+          errors: errors.length > 0 ? errors : undefined,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (action === 'test-connection') {
-      // Test if we can connect to Congeria
-      // This would attempt a login and verify credentials work
-      console.log('[Congeria] Testing connection...');
+      // Test if Firecrawl is configured
+      const hasFirecrawl = !!firecrawlKey;
       
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: 'Connection test placeholder - credentials exist',
-          hasCredentials: !!(username && password)
+          message: hasFirecrawl 
+            ? 'Firecrawl connector is configured and ready'
+            : 'Firecrawl connector not configured',
+          hasFirecrawl,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
