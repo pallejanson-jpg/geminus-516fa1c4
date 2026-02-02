@@ -1,1 +1,4 @@
 project_id = "diqfthpfncdojlnqnicq"
+
+[functions.senslinc-query]
+verify_jwt = false
