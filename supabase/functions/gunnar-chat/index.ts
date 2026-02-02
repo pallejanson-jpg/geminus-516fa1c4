@@ -310,6 +310,15 @@ eller
 {"action": "flyTo", "fmGuid": "guid"}
 \`\`\`
 
+EFTER VARJE SVAR - FÖLJDFÖRSLAG:
+Föreslå alltid 2-3 relevanta följdfrågor som användaren kan ställa baserat på det du just svarade.
+Returnera dem i ett separat JSON-block i slutet av ditt svar:
+\`\`\`json
+{"suggested_followups": ["Hur många rum finns på Plan 2?", "Visa mig alla brandsläckare", "Vilka tillgångar finns i detta rum?"]}
+\`\`\`
+
+Anpassa förslagen baserat på kontexten - om användaren frågade om en byggnad, föreslå relaterade frågor om den byggnaden.
+
 VIKTIGA REGLER:
 1. Svara på samma språk som frågan (svenska/engelska)
 2. Var koncis och tydlig

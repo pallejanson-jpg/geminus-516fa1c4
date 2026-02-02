@@ -1,0 +1,131 @@
+import React, { useState, useEffect } from 'react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Sparkles, RotateCcw } from 'lucide-react';
+
+const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
+export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
+
+export interface GunnarSettingsData {
+  visible: boolean;
+  buttonPosition: { x: number; y: number } | null;
+}
+
+const DEFAULT_SETTINGS: GunnarSettingsData = {
+  visible: true,
+  buttonPosition: null,
+};
+
+export function getGunnarSettings(): GunnarSettingsData {
+  try {
+    const stored = localStorage.getItem(GUNNAR_SETTINGS_KEY);
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.error('Failed to load Gunnar settings:', e);
+  }
+  return DEFAULT_SETTINGS;
+}
+
+export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void {
+  try {
+    const current = getGunnarSettings();
+    const updated = { ...current, ...settings };
+    localStorage.setItem(GUNNAR_SETTINGS_KEY, JSON.stringify(updated));
+    window.dispatchEvent(
+      new CustomEvent(GUNNAR_SETTINGS_CHANGED_EVENT, { detail: updated })
+    );
+  } catch (e) {
+    console.error('Failed to save Gunnar settings:', e);
+  }
+}
+
+const GunnarSettings: React.FC = () => {
+  const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
+
+  // Reload on external changes
+  useEffect(() => {
+    const handler = (e: CustomEvent<GunnarSettingsData>) => {
+      setSettings(e.detail);
+    };
+    window.addEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handler as EventListener);
+  }, []);
+
+  const handleVisibilityChange = (visible: boolean) => {
+    setSettings(prev => ({ ...prev, visible }));
+    saveGunnarSettings({ visible });
+  };
+
+  const handleResetPosition = () => {
+    setSettings(prev => ({ ...prev, buttonPosition: null }));
+    saveGunnarSettings({ buttonPosition: null });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 pb-3 border-b">
+        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+          <Sparkles className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold">Gunnar AI</h3>
+          <p className="text-sm text-muted-foreground">AI-assistent för fastighetsfrågor</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Visibility toggle */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="gunnar-visible" className="text-sm font-medium">
+              Visa Gunnar-knappen
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Visar den flytande AI-assistentknappen i applikationen
+            </p>
+          </div>
+          <Switch
+            id="gunnar-visible"
+            checked={settings.visible}
+            onCheckedChange={handleVisibilityChange}
+          />
+        </div>
+
+        {/* Reset position */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">
+              Knappposition
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {settings.buttonPosition 
+                ? `Anpassad position (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
+                : 'Standardposition (nedre höger)'
+              }
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetPosition}
+            disabled={!settings.buttonPosition}
+            className="gap-1.5"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Återställ
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground mb-1">Tips</p>
+        <p>Du kan dra Gunnar-knappen till valfri position på skärmen. Positionen sparas automatiskt.</p>
+      </div>
+    </div>
+  );
+};
+
+export default GunnarSettings;

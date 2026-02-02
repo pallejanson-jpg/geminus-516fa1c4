@@ -689,6 +689,20 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     }
   }, [isVisible, buildTree]);
 
+  // Listen for preload event to build tree in background
+  useEffect(() => {
+    const handlePreload = () => {
+      if (treeData.length === 0 && !isLoading) {
+        console.log('ViewerTreePanel: Preloading tree in background');
+        buildAttempts.current = 0;
+        buildCancelledRef.current = false;
+        buildTree();
+      }
+    };
+    window.addEventListener('PRELOAD_VIEWER_TREE', handlePreload);
+    return () => window.removeEventListener('PRELOAD_VIEWER_TREE', handlePreload);
+  }, [buildTree, treeData.length, isLoading]);
+
   // Handle node toggle
   const handleToggle = useCallback((id: string) => {
     setExpandedIds(prev => {
