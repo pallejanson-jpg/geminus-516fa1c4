@@ -887,7 +887,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   // Embedded mode: render without positioning, header, border
   if (embedded) {
     return (
-      <div ref={ref} className="flex flex-col h-full max-h-[40vh]">
+      <div ref={ref} className="flex flex-col h-full max-h-[80vh]">
         {/* Action buttons */}
         <ActionButtons />
         

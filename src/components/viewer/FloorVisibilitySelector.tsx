@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, forwardRef, useRef } from 'react';
 import { Layers, ChevronDown, Scissors } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -45,6 +45,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
     const [clippingEnabled, setClippingEnabled] = useState(false);
     const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
+    
+    // Ref to track if initial visibility has been applied (prevents re-triggering)
+    const initialVisibilityAppliedRef = useRef(false);
     
     // Stable refs to preserve selection across re-renders
     const visibleFloorIdsRef = React.useRef<Set<string>>(new Set());
@@ -353,6 +356,39 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         });
       }
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
+
+    // Apply initial floor visibility when initialization completes
+    // This ensures the 3D scene matches the saved selection from localStorage
+    useEffect(() => {
+      if (!isInitialized || floors.length === 0 || visibleFloorIds.size === 0) return;
+      if (initialVisibilityAppliedRef.current) return;
+      
+      initialVisibilityAppliedRef.current = true;
+      
+      const timeoutId = setTimeout(() => {
+        console.log('Applying initial floor visibility:', Array.from(visibleFloorIds));
+        applyFloorVisibility(visibleFloorIds);
+        
+        // Also emit the appropriate event based on selection
+        if (visibleFloorIds.size === 1) {
+          const soloFloorId = Array.from(visibleFloorIds)[0];
+          const floor = floors.find(f => f.id === soloFloorId);
+          const bounds = calculateFloorBounds(soloFloorId);
+          
+          // Auto-enable clipping in solo mode
+          setClippingEnabled(true);
+          
+          const eventDetail: FloorSelectionEventDetail = {
+            floorId: soloFloorId,
+            floorName: floor?.name || null,
+            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+          };
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        }
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }, [isInitialized, floors, visibleFloorIds, applyFloorVisibility, calculateFloorBounds]);
 
     const handleFloorToggle = useCallback((floorId: string, checked: boolean) => {
       setVisibleFloorIds(prev => {
