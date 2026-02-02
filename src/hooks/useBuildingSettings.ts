@@ -100,6 +100,9 @@ export function useBuildingSettings(fmGuid: string | null) {
             // Update local state
             setSettings(prev => prev ? { ...prev, ...updates } : null);
             
+            // Dispatch global event to notify other components
+            window.dispatchEvent(new Event('building-settings-changed'));
+            
             toast({
                 title: 'Settings saved',
                 description: 'Building settings have been updated.',
