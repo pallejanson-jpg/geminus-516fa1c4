@@ -25,6 +25,7 @@ import { DEFAULT_APP_CONFIGS, SENSLINC_POLL_OPTIONS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
+import RoomLabelSettings from './RoomLabelSettings';
 import ProfileSettings from './ProfileSettings';
 import GunnarSettings from './GunnarSettings';
 
@@ -1021,9 +1022,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Symboler</span>
                         </TabsTrigger>
-                        <TabsTrigger value="themes" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
-                            <Palette className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Teman</span>
+                        <TabsTrigger value="viewer" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                            <View className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Viewer</span>
                         </TabsTrigger>
                         <TabsTrigger value="voice" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1775,9 +1776,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         <SymbolSettings />
                     </TabsContent>
 
-                    {/* Viewer Themes Settings Tab */}
-                    <TabsContent value="themes" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <ViewerThemeSettings />
+                    {/* Viewer Settings Tab (Themes + Room Labels) */}
+                    <TabsContent value="viewer" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <Accordion type="multiple" defaultValue={['themes', 'labels']} className="space-y-2">
+                            <AccordionItem value="themes" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Palette className="h-4 w-4" />
+                                        <span>Viewer-teman</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <ViewerThemeSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="labels" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Layers className="h-4 w-4" />
+                                        <span>Rumsetiketter</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <RoomLabelSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </TabsContent>
 
                     {/* Voice Settings Tab */}
