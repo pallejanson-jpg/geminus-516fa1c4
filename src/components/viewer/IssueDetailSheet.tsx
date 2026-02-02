@@ -1,0 +1,358 @@
+import React, { useState, useEffect } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertCircle,
+  Lightbulb,
+  HelpCircle,
+  Eye,
+  Clock,
+  MapPin,
+  Send,
+  CheckCircle,
+  Loader2,
+  User,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { formatDistanceToNow, format } from "date-fns";
+import { sv } from "date-fns/locale";
+import type { BcfIssue } from "./IssueListPanel";
+
+interface BcfComment {
+  id: string;
+  user_id: string;
+  comment: string;
+  created_at: string;
+  profile?: {
+    display_name: string | null;
+    avatar_url: string | null;
+  };
+}
+
+const ISSUE_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  fault: { label: 'Fel/Problem', icon: AlertCircle, color: 'text-destructive' },
+  improvement: { label: 'Förbättring', icon: Lightbulb, color: 'text-amber-500' },
+  question: { label: 'Fråga', icon: HelpCircle, color: 'text-blue-500' },
+  observation: { label: 'Observation', icon: Eye, color: 'text-muted-foreground' },
+};
+
+const STATUS_OPTIONS = [
+  { value: 'open', label: 'Öppen' },
+  { value: 'in_progress', label: 'Pågående' },
+  { value: 'resolved', label: 'Löst' },
+  { value: 'closed', label: 'Stängd' },
+];
+
+interface IssueDetailSheetProps {
+  issue: BcfIssue | null;
+  open: boolean;
+  onClose: () => void;
+  onGoToViewpoint?: (viewpoint: any) => void;
+  isAdmin?: boolean;
+}
+
+const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
+  issue,
+  open,
+  onClose,
+  onGoToViewpoint,
+  isAdmin = false,
+}) => {
+  const { user } = useAuth();
+  const [comments, setComments] = useState<BcfComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(issue?.status || 'open');
+
+  useEffect(() => {
+    if (issue) {
+      setCurrentStatus(issue.status);
+      fetchComments(issue.id);
+    }
+  }, [issue?.id]);
+
+  const fetchComments = async (issueId: string) => {
+    setIsLoadingComments(true);
+    try {
+      const { data, error } = await supabase
+        .from('bcf_comments')
+        .select(`
+          id,
+          user_id,
+          comment,
+          created_at
+        `)
+        .eq('issue_id', issueId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Fetch profiles for comments
+      const userIds = [...new Set((data || []).map(c => c.user_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, display_name, avatar_url')
+        .in('user_id', userIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+      
+      const commentsWithProfiles = (data || []).map(c => ({
+        ...c,
+        profile: profileMap.get(c.user_id),
+      }));
+
+      setComments(commentsWithProfiles);
+    } catch (err) {
+      console.error('Failed to fetch comments:', err);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!newComment.trim() || !issue || !user) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const { error } = await supabase.from('bcf_comments').insert({
+        issue_id: issue.id,
+        user_id: user.id,
+        comment: newComment.trim(),
+      });
+
+      if (error) throw error;
+
+      setNewComment("");
+      await fetchComments(issue.id);
+      toast({ title: "Kommentar skickad" });
+    } catch (err) {
+      console.error('Failed to submit comment:', err);
+      toast({ title: "Kunde inte skicka kommentar", variant: "destructive" });
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!issue || !isAdmin) return;
+
+    setIsUpdatingStatus(true);
+    try {
+      const updateData: any = { status: newStatus };
+      
+      if (newStatus === 'resolved') {
+        updateData.resolved_at = new Date().toISOString();
+        updateData.resolved_by = user?.id;
+      }
+
+      const { error } = await supabase
+        .from('bcf_issues')
+        .update(updateData)
+        .eq('id', issue.id);
+
+      if (error) throw error;
+
+      setCurrentStatus(newStatus);
+      toast({ title: "Status uppdaterad" });
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      toast({ title: "Kunde inte uppdatera status", variant: "destructive" });
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  if (!issue) return null;
+
+  const typeConfig = ISSUE_TYPE_CONFIG[issue.issue_type] || ISSUE_TYPE_CONFIG.observation;
+  const TypeIcon = typeConfig.icon;
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="sm:max-w-lg w-full flex flex-col">
+        <SheetHeader className="flex-shrink-0">
+          <div className="flex items-start gap-3">
+            <div className={cn("p-2 rounded-lg bg-muted", typeConfig.color)}>
+              <TypeIcon className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <SheetTitle className="text-left">{issue.title}</SheetTitle>
+              <SheetDescription className="text-left flex items-center gap-2 mt-1">
+                <Badge variant="outline">{typeConfig.label}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(issue.created_at), 'PPP', { locale: sv })}
+                </span>
+              </SheetDescription>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <ScrollArea className="flex-1 -mx-6 px-6">
+          <div className="space-y-4 py-4">
+            {/* Screenshot */}
+            {issue.screenshot_url && (
+              <div 
+                className="rounded-lg overflow-hidden border cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => issue.viewpoint_json && onGoToViewpoint?.(issue.viewpoint_json)}
+              >
+                <img
+                  src={issue.screenshot_url}
+                  alt="Skärmdump"
+                  className="w-full h-40 object-cover"
+                />
+                {issue.viewpoint_json && (
+                  <div className="bg-muted/80 p-2 text-xs text-center flex items-center justify-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    Klicka för att gå till positionen
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Description */}
+            {issue.description && (
+              <div>
+                <h4 className="text-sm font-medium mb-1">Beskrivning</h4>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {issue.description}
+                </p>
+              </div>
+            )}
+
+            {/* Status selector (admin only) */}
+            {isAdmin && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Status</h4>
+                <Select
+                  value={currentStatus}
+                  onValueChange={handleStatusChange}
+                  disabled={isUpdatingStatus}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Comments */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                Kommentarer
+                {comments.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {comments.length}
+                  </Badge>
+                )}
+              </h4>
+
+              {isLoadingComments ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : comments.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Inga kommentarer ännu
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-2">
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                        {comment.profile?.avatar_url ? (
+                          <img
+                            src={comment.profile.avatar_url}
+                            alt=""
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm font-medium">
+                            {comment.profile?.display_name || 'Användare'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(comment.created_at), {
+                              addSuffix: true,
+                              locale: sv,
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          {comment.comment}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+
+        {/* Comment input */}
+        <div className="flex-shrink-0 pt-4 border-t space-y-2">
+          <Textarea
+            placeholder="Skriv en kommentar..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            rows={2}
+            disabled={isSubmittingComment}
+          />
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={handleSubmitComment}
+              disabled={!newComment.trim() || isSubmittingComment}
+            >
+              {isSubmittingComment ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-1" />
+                  Skicka
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+export default IssueDetailSheet;
