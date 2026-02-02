@@ -1,149 +1,99 @@
 
-# Plan: Implementera Congeria Dokumentsynkronisering
+# Plan: XKT-modellcachning via "Cache-on-Load" i 3D-viewern
 
-## Problemanalys
+## Sammanfattning
+Implementera en strategi där 3D-viewern automatiskt sparar nedladdade XKT-modeller till backend första gången de laddas. Detta ger:
+- **Session-cache**: Modeller hålls i minnet under sessionen
+- **Persistent cache**: Modeller sparas till Lovable Cloud för framtida laddningar
+- **Fallback för synk**: Om Edge-funktionen inte kan nå Asset+ 3D API, finns modellerna ändå cachade efter första visningen
 
-Den nuvarande `congeria-sync` Edge Function är endast en placeholder. För att synka dokument från Congeria behöver vi:
+## Bakgrund
 
-1. **Logga in** på Congeria (session-baserad auth)
-2. **Navigera** till dokumentmappen för byggnaden
-3. **Parsa HTML** för att extrahera dokumentlista med metadata
-4. **Ladda ner** varje dokument
-5. **Ladda upp** till Supabase Storage
-6. **Spara metadata** i `documents`-tabellen
+### Varför synkdialogen misslyckas
+Edge-funktionen får ett HTML-svar (`<!doctype`) istället för JSON från Asset+ `/threed/GetModels` endpoint. Detta tyder på att:
+1. 3D API kräver annan autentisering än Bearer-token
+2. Eller så är endpointen skyddad med IP-filter/cookies som Edge-miljön saknar
 
-## Lösningsalternativ
+### Varför 3D-viewern fungerar
+Asset+ viewerpaketet (`assetplusviewer.umd.min.js`) har egen fetch-logik och kommunicerar direkt med Asset+ API från användarens webbläsare, med rätt sessionsdata.
 
-### Alternativ A: Firecrawl Connector (Rekommenderat)
-Firecrawl finns tillgängligt som connector och hanterar web scraping professionellt:
-- Hanterar JavaScript-rendering
-- Extraherar strukturerad data
-- Bypassa anti-bot-åtgärder
+## Teknisk implementation
 
-**Nackdel:** Kräver att du aktiverar Firecrawl-connector
+### Steg 1: Återaktivera fetch-interceptor med säker implementation
+Uppdatera `setupCacheInterceptor` i `AssetPlusViewer.tsx` för att:
+1. Intercepta utgående XKT-förfrågningar
+2. Kontrollera om modellen finns i minnet eller i databasen först
+3. Vid cache-miss: hämta från Asset+ och spara till backend i bakgrunden
 
-### Alternativ B: Direkt Web Scraping i Edge Function
-Implementera session-baserad login och HTML-parsing direkt:
-- Mer kontroll över processen
-- Ingen extern beroende
-
-**Nackdel:** Congeria kan ha JavaScript-renderade sidor som kräver browser
-
-### Alternativ C: Manuell uppladdning (Fallback)
-Lägg till UI för manuell dokumentuppladdning:
-- Fungerar alltid
-- Ingen komplexitet med scraping
-
-**Nackdel:** Kräver manuellt arbete
-
----
-
-## Vald Strategi: Kombination A + C
-
-1. **Primärt:** Använd Firecrawl för att scrapa dokumentlistor
-2. **Backup:** Lägg till manuell uppladdning som fallback
-
----
-
-## Implementation
-
-### Steg 1: Aktivera Firecrawl Connector
-Du behöver koppla Firecrawl till projektet via Settings → Connectors.
-
-### Steg 2: Uppdatera Edge Function
-
-**Fil: `supabase/functions/congeria-sync/index.ts`**
-
-```typescript
-// Flöde:
-// 1. Använd Firecrawl för att scrapa Congeria-sidan
-// 2. Extrahera dokumentlänkar och metadata från HTML
-// 3. Ladda ner varje dokument
-// 4. Ladda upp till Supabase Storage
-// 5. Spara i documents-tabellen
-
-async function syncDocuments(buildingFmGuid: string, folderUrl: string) {
-  const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
-  
-  // Scrapa Congeria-sidan med Firecrawl
-  const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${firecrawlKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: folderUrl,
-      formats: ['html', 'links'],
-      waitFor: 3000, // Vänta på JS-rendering
-    }),
-  });
-  
-  const scraped = await scrapeResponse.json();
-  
-  // Parsa dokumentlänkar från HTML
-  const documents = parseDocumentLinks(scraped.data.html, scraped.data.links);
-  
-  // Ladda ner och ladda upp varje dokument
-  for (const doc of documents) {
-    const fileData = await downloadDocument(doc.url);
-    const storagePath = `${buildingFmGuid}/${doc.name}`;
-    
-    await supabase.storage.from('documents').upload(storagePath, fileData);
-    
-    await supabase.from('documents').upsert({
-      building_fm_guid: buildingFmGuid,
-      file_name: doc.name,
-      file_path: storagePath,
-      file_size: doc.size,
-      mime_type: doc.mimeType,
-      source_system: 'congeria',
-      source_url: doc.url,
-      metadata: doc.metadata,
-    });
-  }
-}
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    XKT Request Flow                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────┐    ┌──────────────┐    ┌─────────────────┐   │
+│  │ Viewer   │───>│ Memory Cache │───>│ Database/Storage│   │
+│  │ Request  │    │ (session)    │    │ (persistent)    │   │
+│  └──────────┘    └──────────────┘    └─────────────────┘   │
+│       │                │                     │              │
+│       │                │                     │              │
+│       ▼                ▼                     ▼              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              Om cache-miss                           │  │
+│  │                                                      │  │
+│  │  ┌──────────┐    ┌──────────────────────────────┐   │  │
+│  │  │ Asset+   │───>│ Spara till Memory + Backend  │   │  │
+│  │  │ API      │    │ (i bakgrunden)               │   │  │
+│  │  └──────────┘    └──────────────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Steg 3: Lägg till Manuell Uppladdning i DocumentsView
+### Steg 2: Uppdatera minneshantering
+Förbättra `useXktPreload.ts`:
+1. Exponera funktioner för att kontrollera/hämta från minnet
+2. Öka gränsen för samtidiga modeller i minnet
+3. Automatisk cleanup vid lågt minne
 
-**Fil: `src/components/portfolio/DocumentsView.tsx`**
+### Steg 3: Uppdatera xkt-cache-service
+1. Lägg till en `saveModelFromViewer`-metod optimerad för bakgrundssparning
+2. Hantera signerade URL-förnyelse
+3. Bättre felhantering och retry-logik
 
-Lägg till en "Ladda upp dokument"-knapp som fallback:
-- Dropzone för filuppladdning
-- Sparar direkt till Supabase Storage och documents-tabellen
-- Fungerar även utan Congeria-koppling
+### Steg 4: Förbättra synk-UI med feedback
+Uppdatera synkdialogen för att visa:
+- "XKT-synk stöds ej från servern - modeller cachas automatiskt när du öppnar 3D"
+- Visa antal cachade modeller per byggnad
 
----
+## Filer som ändras
 
-## Filändringar
+| Fil | Förändring |
+|-----|------------|
+| `src/components/viewer/AssetPlusViewer.tsx` | Återaktivera och förbättra `setupCacheInterceptor` |
+| `src/hooks/useXktPreload.ts` | Exponera minnescache-funktioner, förbättra preload |
+| `src/services/xkt-cache-service.ts` | Lägg till `saveModelFromViewer` metod |
+| `supabase/functions/asset-plus-sync/index.ts` | Förbättra felmeddelanden vid 3D API-misslyckande |
+| UI-komponent för synkdialog | Visa förklaring om cache-on-load strategi |
 
-| Fil | Åtgärd |
-|-----|--------|
-| `supabase/functions/congeria-sync/index.ts` | **ÄNDRA** - Implementera riktig sync-logik |
-| `src/components/portfolio/DocumentsView.tsx` | **ÄNDRA** - Lägg till manuell uppladdning |
+## Fördelar
 
----
+1. **Ingen manuell synk krävs** - Modeller cachas automatiskt vid första laddning
+2. **Snabbare efter första gången** - Efterföljande laddningar hämtar från Lovable Cloud
+3. **Fungerar oavsett Asset+ API-restriktioner** - Viewern har redan rätt behörigheter
+4. **Session-prestanda** - Modeller hålls i minnet under sessionen
 
-## Förväntade krav
+## Risker och mitigation
 
-1. **Firecrawl API Key** - Du behöver aktivera Firecrawl-connector
-2. **Congeria credentials** - Redan konfigurerade ✓
+| Risk | Mitigation |
+|------|------------|
+| Stora XKT-filer kan ta tid att spara | Spara i bakgrunden utan att blockera viewern |
+| Minnescache kan bli stor | Begränsa till 200 MB per session, prioritera arkitekturmodeller |
+| Interceptor kan störa Asset+ paket | Använd passiv interceptor som klonar response istället för att modifiera |
 
----
-
-## Nästa steg efter implementation
-
-1. Testa sync genom att klicka "Synka" i Settings → Sync → Congeria
-2. Verifiera att dokument dyker upp i DocumentsView för Småviken
-3. Testa manuell uppladdning som backup
-
----
-
-## Teknisk not: Congeria URL-struktur
-
-Nuvarande URL: `https://fms.congeria.com/#/Demo/Arkiv/3272%20-%20Småviken/DoU/PDF`
-
-Denna URL använder hash-routing (`#/`), vilket innebär att innehållet renderas via JavaScript. Firecrawl med `waitFor`-parameter hanterar detta genom att vänta på rendering.
-
-Vill du att jag aktiverar Firecrawl-connector och implementerar denna lösning?
+## Testplan
+1. Öppna 3D för en byggnad som aldrig visats
+2. Verifiera att modellerna laddas från Asset+
+3. Verifiera att modellerna sparas till backend (kolla `xkt_models` tabell)
+4. Stäng och öppna 3D igen
+5. Verifiera att laddningen går snabbare (från cache)
+6. Byt byggnad och upprepa
