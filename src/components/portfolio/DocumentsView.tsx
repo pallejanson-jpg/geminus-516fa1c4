@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Download, ExternalLink, FileText, Folder, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Download, ExternalLink, FileText, Folder, Loader2, RefreshCw, Search, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Facility } from '@/lib/types';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
 
 interface Document {
   id: string;
@@ -49,12 +50,16 @@ const getFileIcon = (mimeType: string | null): string => {
 };
 
 const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [lastSyncDate, setLastSyncDate] = useState<string | null>(null);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Build the correct buildingFmGuid based on facility category
   const buildingFmGuid = facility.category === 'Building' 
@@ -146,7 +151,94 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download failed:', error);
+      toast({
+        title: 'Nedladdning misslyckades',
+        description: 'Kunde inte ladda ner dokumentet.',
+        variant: 'destructive',
+      });
     }
+  };
+
+  // Handle manual file upload
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !buildingFmGuid) return;
+    
+    setIsUploading(true);
+    let uploadedCount = 0;
+    let failedCount = 0;
+
+    for (const file of Array.from(files)) {
+      try {
+        const storagePath = `${buildingFmGuid}/${file.name}`;
+        
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(storagePath, file, {
+            upsert: true,
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Insert into documents table
+        const { error: dbError } = await supabase
+          .from('documents')
+          .upsert({
+            building_fm_guid: buildingFmGuid,
+            file_name: file.name,
+            file_path: storagePath,
+            file_size: file.size,
+            mime_type: file.type || 'application/octet-stream',
+            source_system: 'manual',
+            synced_at: new Date().toISOString(),
+            metadata: {
+              congeria_path: 'Manuellt uppladdade',
+              uploaded_by: 'user',
+            },
+          }, {
+            onConflict: 'building_fm_guid,file_path',
+          });
+
+        if (dbError) throw dbError;
+        uploadedCount++;
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+        failedCount++;
+      }
+    }
+
+    setIsUploading(false);
+    
+    if (uploadedCount > 0) {
+      toast({
+        title: 'Uppladdning klar',
+        description: `${uploadedCount} dokument uppladdade${failedCount > 0 ? `, ${failedCount} misslyckades` : ''}.`,
+      });
+      await fetchDocuments();
+    } else {
+      toast({
+        title: 'Uppladdning misslyckades',
+        description: 'Inga dokument kunde laddas upp.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFileUpload(e.dataTransfer.files);
   };
 
   // Filter and group documents
@@ -201,6 +293,19 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
           <Button 
             variant="outline" 
             size="sm" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Upload className="h-4 w-4 mr-2" />
+            )}
+            Ladda upp
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
             onClick={handleSync}
             disabled={isSyncing}
           >
@@ -231,7 +336,22 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div 
+        className={`flex-1 overflow-y-auto p-4 ${isDragOver ? 'bg-primary/5 border-2 border-dashed border-primary' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileUpload(e.target.files)}
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+        />
+        
         {isLoading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -239,18 +359,32 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ facility, onClose }) => {
         ) : documents.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="font-medium mb-2">Inga dokument synkade</h3>
+            <h3 className="font-medium mb-2">Inga dokument</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Konfigurera Congeria-länk i inställningar och klicka på Synka.
+              Synka från Congeria eller ladda upp dokument manuellt.
             </p>
-            <Button variant="outline" onClick={handleSync} disabled={isSyncing}>
-              {isSyncing ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Synka nu
-            </Button>
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" onClick={handleSync} disabled={isSyncing}>
+                {isSyncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Synka
+              </Button>
+              <Button 
+                variant="default" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Ladda upp
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
