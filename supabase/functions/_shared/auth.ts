@@ -31,18 +31,15 @@ export async function verifyAuth(req: Request): Promise<AuthResult> {
     global: { headers: { Authorization: authHeader } },
   });
 
-  // Use getClaims for faster validation
+  // Use getUser for reliable user validation (works with all signing methods)
   const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
 
-  if (error || !data?.claims) {
+  if (error || !user) {
     return { authenticated: false, userId: null, isAdmin: false, error: error?.message || "Invalid token" };
   }
 
-  const userId = data.claims.sub;
-  if (!userId) {
-    return { authenticated: false, userId: null, isAdmin: false, error: "No user ID in token" };
-  }
+  const userId = user.id;
 
   // Check admin role using service role client
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
