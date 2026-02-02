@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/components/inventory/InventoryForm';
 import type { WizardFormData } from './MobileInventoryWizard';
+import { CheckSquare, Square } from 'lucide-react';
 
 interface CategorySelectionStepProps {
   formData: WizardFormData;
@@ -16,19 +18,68 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
   updateFormData,
   onComplete,
 }) => {
-  const handleCategorySelect = (category: InventoryCategory) => {
-    updateFormData({
-      category: category.value,
-      categoryLabel: category.label,
+  // Initialize with all categories selected by default
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => {
+    // If formData already has a category, use just that one
+    if (formData.category) {
+      return new Set([formData.category]);
+    }
+    // Otherwise select all by default
+    return new Set(INVENTORY_CATEGORIES.map(c => c.value));
+  });
+
+  const allSelected = selectedCategories.size === INVENTORY_CATEGORIES.length;
+  const noneSelected = selectedCategories.size === 0;
+
+  const handleCategoryToggle = (category: InventoryCategory) => {
+    setSelectedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category.value)) {
+        next.delete(category.value);
+      } else {
+        next.add(category.value);
+      }
+      return next;
     });
-    // Auto-advance after selection
-    setTimeout(() => onComplete(), 150);
+  };
+
+  const handleSelectAll = () => {
+    setSelectedCategories(new Set(INVENTORY_CATEGORIES.map(c => c.value)));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedCategories(new Set());
+  };
+
+  const handleContinue = () => {
+    // If exactly one category is selected, use it directly
+    if (selectedCategories.size === 1) {
+      const value = Array.from(selectedCategories)[0];
+      const cat = INVENTORY_CATEGORIES.find(c => c.value === value);
+      if (cat) {
+        updateFormData({
+          category: cat.value,
+          categoryLabel: cat.label,
+        });
+      }
+    } else if (selectedCategories.size > 1) {
+      // Multiple categories - use first one for now (could be extended to multi-select flow)
+      const value = Array.from(selectedCategories)[0];
+      const cat = INVENTORY_CATEGORIES.find(c => c.value === value);
+      if (cat) {
+        updateFormData({
+          category: cat.value,
+          categoryLabel: cat.label,
+        });
+      }
+    }
+    onComplete();
   };
 
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
-        <div className="text-center mb-4">
+        <div className="text-center mb-2">
           <h2 className="text-lg font-semibold">Välj kategori</h2>
           <p className="text-sm text-muted-foreground">
             {formData.buildingName}
@@ -37,48 +88,83 @@ const CategorySelectionStep: React.FC<CategorySelectionStepProps> = ({
           </p>
         </div>
 
-        {/* Category grid - large touch targets */}
+        {/* Select all / Deselect all buttons */}
+        <div className="flex justify-center gap-2 pb-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleSelectAll}
+            disabled={allSelected}
+            className="gap-1.5"
+          >
+            <CheckSquare className="h-4 w-4" />
+            Välj alla
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDeselectAll}
+            disabled={noneSelected}
+            className="gap-1.5"
+          >
+            <Square className="h-4 w-4" />
+            Avmarkera alla
+          </Button>
+        </div>
+
+        {/* Category grid - large touch targets with checkboxes */}
         <div className="grid grid-cols-3 gap-2">
           {INVENTORY_CATEGORIES.map((cat) => {
-            const isSelected = formData.category === cat.value;
+            const isSelected = selectedCategories.has(cat.value);
             const CategoryIcon = cat.Icon;
 
             return (
-              <Button
+              <button
                 key={cat.value}
                 type="button"
-                variant={isSelected ? 'default' : 'outline'}
                 className={cn(
-                  'h-20 flex flex-col items-center justify-center gap-1.5 p-2',
-                  !isSelected && 'border-2'
+                  'h-20 flex flex-col items-center justify-center gap-1.5 p-2 rounded-md border-2 transition-colors',
+                  isSelected 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-muted hover:border-muted-foreground/30'
                 )}
-                onClick={() => handleCategorySelect(cat)}
+                onClick={() => handleCategoryToggle(cat)}
               >
-                <CategoryIcon className={cn('h-7 w-7', isSelected ? '' : cat.color)} />
-                <span className="text-xs text-center leading-tight">{cat.label}</span>
-              </Button>
+                <div className="relative">
+                  <CategoryIcon className={cn('h-7 w-7', isSelected ? 'text-primary' : cat.color)} />
+                  {isSelected && (
+                    <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-primary rounded-full flex items-center justify-center">
+                      <CheckSquare className="h-2.5 w-2.5 text-primary-foreground" />
+                    </div>
+                  )}
+                </div>
+                <span className={cn(
+                  'text-xs text-center leading-tight',
+                  isSelected && 'font-medium'
+                )}>
+                  {cat.label}
+                </span>
+              </button>
             );
           })}
         </div>
 
-        {/* Selected indicator */}
-        {formData.category && (
-          <div className="text-center mt-3 p-2.5 bg-primary/10 rounded-lg">
-            <p className="text-sm font-medium flex items-center justify-center gap-2">
-              Vald:{' '}
-              {(() => {
-                const selected = INVENTORY_CATEGORIES.find((c) => c.value === formData.category);
-                const SelectedIcon = selected?.Icon;
-                return (
-                  <span className="text-primary flex items-center gap-1.5">
-                    {SelectedIcon && <SelectedIcon className="h-4 w-4" />}
-                    {formData.categoryLabel}
-                  </span>
-                );
-              })()}
-            </p>
-          </div>
-        )}
+        {/* Selected count */}
+        <div className="text-center text-sm text-muted-foreground">
+          {selectedCategories.size} av {INVENTORY_CATEGORIES.length} kategorier valda
+        </div>
+
+        {/* Continue button */}
+        <Button
+          type="button"
+          className="w-full"
+          disabled={noneSelected}
+          onClick={handleContinue}
+        >
+          Fortsätt
+        </Button>
       </div>
     </ScrollArea>
   );

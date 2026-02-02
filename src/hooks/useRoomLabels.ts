@@ -17,6 +17,7 @@ export interface RoomLabelsToggleDetail {
 /**
  * Hook for displaying room labels (name + number) in the 3D viewer.
  * Uses xeokit camera events to project 3D positions to screen coordinates.
+ * Now supports floor filtering to only show labels for visible floors.
  */
 export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
   const labelsRef = useRef<Map<string, RoomLabel>>(new Map());
@@ -24,6 +25,7 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
   const enabledRef = useRef(false);
   const tickListenerRef = useRef<(() => void) | null>(null);
   const cameraListenerRef = useRef<(() => void) | null>(null);
+  const visibleFloorGuidsRef = useRef<string[]>([]);
 
   // Get XEOkit viewer instance
   const getXeokitViewer = useCallback(() => {
@@ -129,29 +131,57 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
     });
   }, [getXeokitViewer, worldToCanvas]);
 
-  // Create labels for all IfcSpace entities
-  const createLabels = useCallback(() => {
+  // Create labels for all IfcSpace entities, filtering by visible floors
+  const createLabels = useCallback((floorGuids?: string[]) => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return;
 
     const container = ensureContainer();
     if (!container) return;
 
+    // Update ref for future position updates
+    if (floorGuids !== undefined) {
+      visibleFloorGuidsRef.current = floorGuids;
+    }
+
     const metaObjects = viewer.metaScene.metaObjects;
     const scene = viewer.scene;
+    const visibleLower = new Set((floorGuids || visibleFloorGuidsRef.current).map(g => g.toLowerCase()));
+    const hasFloorFilter = visibleLower.size > 0;
     let createdCount = 0;
+    let filteredCount = 0;
 
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
 
+      // Find parent storey for floor filtering
+      let parentStorey: any = null;
+      let current = metaObj;
+      while (current?.parent) {
+        current = current.parent;
+        if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
+          parentStorey = current;
+          break;
+        }
+      }
+
+      // Floor filtering - skip rooms not on visible floors
+      if (hasFloorFilter && parentStorey) {
+        const storeyGuid = (parentStorey.originalSystemId || parentStorey.id || '').toLowerCase();
+        if (!visibleLower.has(storeyGuid)) {
+          filteredCount++;
+          return; // Skip this room
+        }
+      }
+
       const entity = scene.objects?.[metaObj.id];
       if (!entity?.aabb) return;
 
-      // Calculate center position
+      // Calculate center position - 1.2m above floor level
       const aabb = entity.aabb;
       const center = [
         (aabb[0] + aabb[3]) / 2,
-        (aabb[1] + aabb[4]) / 2 + 0.5, // Slightly above center
+        aabb[1] + 1.2, // 1.2m above floor level
         (aabb[2] + aabb[5]) / 2,
       ];
 
@@ -206,7 +236,7 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
       createdCount++;
     });
 
-    console.log(`✅ Created ${createdCount} room labels`);
+    console.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
 
     // Set up camera change listener for position updates
     const scene2 = viewer.scene;
@@ -254,12 +284,12 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
     console.log('Room labels destroyed');
   }, []);
 
-  // Toggle labels on/off
-  const setLabelsEnabled = useCallback((enabled: boolean) => {
+  // Toggle labels on/off with optional floor filtering
+  const setLabelsEnabled = useCallback((enabled: boolean, floorGuids?: string[]) => {
     enabledRef.current = enabled;
 
     if (enabled) {
-      createLabels();
+      createLabels(floorGuids);
     } else {
       destroyLabels();
     }
@@ -267,6 +297,16 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
     // Show/hide container
     if (containerRef.current) {
       containerRef.current.style.display = enabled ? 'block' : 'none';
+    }
+  }, [createLabels, destroyLabels]);
+
+  // Update floor filter and recreate labels
+  const updateFloorFilter = useCallback((floorGuids: string[]) => {
+    visibleFloorGuidsRef.current = floorGuids;
+    if (enabledRef.current) {
+      // Destroy and recreate with new filter
+      destroyLabels();
+      createLabels(floorGuids);
     }
   }, [createLabels, destroyLabels]);
 
@@ -281,6 +321,7 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
 
   return {
     setLabelsEnabled,
+    updateFloorFilter,
     isEnabled: enabledRef.current,
     labelCount: labelsRef.current.size,
     refreshLabels: createLabels,
