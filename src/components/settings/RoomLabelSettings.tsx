@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, Tag, GripVertical, Check, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Tag, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,10 +7,9 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useRoomLabelConfigs, RoomLabelConfig, AVAILABLE_LABEL_FIELDS } from '@/hooks/useRoomLabelConfigs';
-import { cn } from '@/lib/utils';
 
 const RoomLabelSettings: React.FC = () => {
   const {
@@ -56,6 +55,12 @@ const RoomLabelSettings: React.FC = () => {
     setEditForm({ ...config });
   };
 
+  // Cancel editing
+  const cancelEdit = () => {
+    setIsEditing(null);
+    setEditForm({});
+  };
+
   // Toggle field selection
   const toggleField = (field: string) => {
     const currentFields = editForm.fields || [];
@@ -98,139 +103,146 @@ const RoomLabelSettings: React.FC = () => {
         </Button>
       </div>
 
-      {/* Config list */}
-      <div className="space-y-3">
-        {configs.map((config) => (
-          <Card key={config.id} className={cn(
-            "transition-all",
-            isEditing === config.id && "ring-2 ring-primary"
-          )}>
-            <CardHeader className="py-3 px-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+      {/* Config list as Accordion */}
+      {configs.length > 0 ? (
+        <Accordion type="single" collapsible className="space-y-2">
+          {configs.map((config) => (
+            <AccordionItem 
+              key={config.id} 
+              value={config.id}
+              className="border rounded-lg bg-muted/30 overflow-hidden"
+            >
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50 [&[data-state=open]]:bg-muted/50">
+                <div className="flex items-center gap-2 flex-1">
                   <Tag className="h-4 w-4 text-primary" />
-                  {isEditing === config.id ? (
-                    <Input
-                      value={editForm.name || ''}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="h-7 w-48"
-                    />
-                  ) : (
-                    <CardTitle className="text-sm font-medium">{config.name}</CardTitle>
-                  )}
+                  <span className="text-sm font-medium">{config.name}</span>
                   {config.is_default && (
                     <Badge variant="secondary" className="text-xs">Standard</Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  {isEditing === config.id ? (
-                    <>
-                      <Button size="sm" variant="ghost" onClick={() => handleUpdate(config.id)}>
-                        <Check className="h-4 w-4 text-green-600" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setIsEditing(null); setEditForm({}); }}>
-                        <X className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button size="sm" variant="ghost" onClick={() => startEdit(config)}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => deleteConfig(config.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            
-            {isEditing === config.id ? (
-              <CardContent className="pt-0 pb-4 px-4 space-y-4">
-                {/* Fields selection */}
-                <div className="space-y-2">
-                  <Label className="text-xs">Fält att visa</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_LABEL_FIELDS.map((field) => (
-                      <Badge
-                        key={field.key}
-                        variant={(editForm.fields || []).includes(field.key) ? 'default' : 'outline'}
-                        className="cursor-pointer"
-                        onClick={() => toggleField(field.key)}
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-2">
+                {isEditing === config.id ? (
+                  // Editing mode
+                  <div className="space-y-4">
+                    {/* Name input */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Namn</Label>
+                      <Input
+                        value={editForm.name || ''}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        className="h-8"
+                      />
+                    </div>
+
+                    {/* Fields selection */}
+                    <div className="space-y-2">
+                      <Label className="text-xs">Fält att visa</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {AVAILABLE_LABEL_FIELDS.map((field) => (
+                          <Badge
+                            key={field.key}
+                            variant={(editForm.fields || []).includes(field.key) ? 'default' : 'outline'}
+                            className="cursor-pointer"
+                            onClick={() => toggleField(field.key)}
+                          >
+                            {field.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Height slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label className="text-xs">Höjd ovanför golv</Label>
+                        <span className="text-xs text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+                      </div>
+                      <Slider
+                        value={[editForm.height_offset || 1.2]}
+                        onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
+                        min={0.1}
+                        max={2.5}
+                        step={0.1}
+                      />
+                    </div>
+
+                    {/* Scale with distance */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Skala med avstånd</Label>
+                      <Switch
+                        checked={editForm.scale_with_distance ?? true}
+                        onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
+                      />
+                    </div>
+
+                    {/* Click action */}
+                    <div className="space-y-2">
+                      <Label className="text-xs">Klickåtgärd</Label>
+                      <Select
+                        value={editForm.click_action || 'none'}
+                        onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
                       >
-                        {field.label}
-                      </Badge>
-                    ))}
+                        <SelectTrigger className="h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Ingen</SelectItem>
+                          <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
+                          <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                        <X className="h-4 w-4 mr-1" />
+                        Avbryt
+                      </Button>
+                      <Button size="sm" onClick={() => handleUpdate(config.id)}>
+                        <Check className="h-4 w-4 mr-1" />
+                        Spara
+                      </Button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Height slider */}
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label className="text-xs">Höjd ovanför golv</Label>
-                    <span className="text-xs text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+                ) : (
+                  // View mode
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Fält: {config.fields.map(f => 
+                        AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
+                      ).join(', ')} • 
+                      Höjd: {config.height_offset}m • 
+                      Klick: {getClickActionLabel(config.click_action)}
+                    </p>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(config)}>
+                        <Edit2 className="h-4 w-4 mr-1" />
+                        Redigera
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteConfig(config.id)}>
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Ta bort
+                      </Button>
+                    </div>
                   </div>
-                  <Slider
-                    value={[editForm.height_offset || 1.2]}
-                    onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
-                    min={0.1}
-                    max={2.5}
-                    step={0.1}
-                  />
-                </div>
-
-                {/* Scale with distance */}
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Skala med avstånd</Label>
-                  <Switch
-                    checked={editForm.scale_with_distance ?? true}
-                    onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
-                  />
-                </div>
-
-                {/* Click action */}
-                <div className="space-y-2">
-                  <Label className="text-xs">Klickåtgärd</Label>
-                  <Select
-                    value={editForm.click_action || 'none'}
-                    onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Ingen</SelectItem>
-                      <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
-                      <SelectItem value="roomcard">Visa rumskort</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            ) : (
-              <CardContent className="pt-0 pb-3 px-4">
-                <CardDescription className="text-xs">
-                  Fält: {config.fields.map(f => 
-                    AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
-                  ).join(', ')} • 
-                  Höjd: {config.height_offset}m • 
-                  Klick: {getClickActionLabel(config.click_action)}
-                </CardDescription>
-              </CardContent>
-            )}
-          </Card>
-        ))}
-
-        {configs.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
-            <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Inga etikettkonfigurationer ännu</p>
-            <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
-              Skapa din första
-            </Button>
-          </div>
-        )}
-      </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
+          <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>Inga etikettkonfigurationer ännu</p>
+          <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
+            Skapa din första
+          </Button>
+        </div>
+      )}
 
       {/* Create dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
