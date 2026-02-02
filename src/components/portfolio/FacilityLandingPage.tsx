@@ -595,7 +595,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       <UniversalPropertiesDialog
         isOpen={showPropertiesDialog}
         onClose={() => setShowPropertiesDialog(false)}
-        fmGuid={facility.fmGuid || ''}
+        fmGuids={facility.fmGuid || ''}
         category={facility.category}
         onUpdate={() => {
           // Refresh data if needed

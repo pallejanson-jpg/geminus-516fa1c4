@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
-  Building2, Layers, DoorOpen, Box, Database, Search
+  Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 interface UniversalPropertiesDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  fmGuid: string;
+  fmGuids: string | string[];  // Support both single GUID and array
   category?: string;
   onUpdate?: () => void;
 }
@@ -31,6 +31,8 @@ interface PropertyItem {
   source: 'lovable' | 'asset-plus';
   type: 'text' | 'number' | 'boolean' | 'coordinates';
   section: 'system' | 'local' | 'area' | 'user-defined' | 'coordinates';
+  isDifferent?: boolean;
+  differentCount?: number;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -52,15 +54,27 @@ const SECTION_LABELS: Record<string, string> = {
 // Fields that belong to Area section
 const AREA_FIELDS = ['nta', 'bra', 'bta', 'area', 'atemp', 'volym', 'omkrets', 'rumshöjd'];
 
+// Editable fields
+const EDITABLE_KEYS = ['common_name', 'asset_type', 'coordinate_x', 'coordinate_y', 'coordinate_z', 'ivion_site_id', 'is_favorite'];
+
 const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   isOpen,
   onClose,
-  fmGuid,
+  fmGuids: fmGuidsProp,
   category,
   onUpdate,
 }) => {
   const isMobile = useIsMobile();
-  const [asset, setAsset] = useState<any>(null);
+  
+  // Normalize fmGuids to always be an array
+  const fmGuids = useMemo(() => 
+    Array.isArray(fmGuidsProp) ? fmGuidsProp : [fmGuidsProp],
+    [fmGuidsProp]
+  );
+  
+  const isMultiMode = fmGuids.length > 1;
+  
+  const [assets, setAssets] = useState<any[]>([]);
   const [buildingSettings, setBuildingSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -80,43 +94,46 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
 
-  // Fetch data
+  // Fetch data for all selected items
   useEffect(() => {
-    if (!isOpen || !fmGuid) return;
+    if (!isOpen || fmGuids.length === 0) return;
 
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch asset from local DB - case-insensitive search
+        // Fetch all assets matching the fmGuids
         const { data: assetData, error: assetError } = await supabase
           .from('assets')
           .select('*')
-          .or(`fm_guid.eq.${fmGuid},fm_guid.eq.${fmGuid.toLowerCase()},fm_guid.eq.${fmGuid.toUpperCase()}`)
-          .maybeSingle();
+          .in('fm_guid', fmGuids);
 
         if (assetError) throw assetError;
-        setAsset(assetData);
+        setAssets(assetData || []);
 
-        // If it's a building, also fetch building_settings
-        if (assetData?.category === 'Building' || category === 'Building') {
+        // If single building, also fetch building_settings
+        if (assetData?.length === 1 && (assetData[0]?.category === 'Building' || category === 'Building')) {
           const { data: settingsData } = await supabase
             .from('building_settings')
             .select('*')
-            .eq('fm_guid', fmGuid)
+            .eq('fm_guid', fmGuids[0])
             .maybeSingle();
           
           setBuildingSettings(settingsData);
         }
 
-        // Initialize form data
-        if (assetData) {
+        // Initialize form data for single item
+        if (assetData?.length === 1) {
+          const asset = assetData[0];
           setFormData({
-            common_name: assetData.common_name || '',
-            asset_type: assetData.asset_type || '',
-            coordinate_x: assetData.coordinate_x ?? '',
-            coordinate_y: assetData.coordinate_y ?? '',
-            coordinate_z: assetData.coordinate_z ?? '',
+            common_name: asset.common_name || '',
+            asset_type: asset.asset_type || '',
+            coordinate_x: asset.coordinate_x ?? '',
+            coordinate_y: asset.coordinate_y ?? '',
+            coordinate_z: asset.coordinate_z ?? '',
           });
+        } else {
+          // For multi-select, start with empty form data
+          setFormData({});
         }
       } catch (error: any) {
         console.error('Failed to fetch data:', error);
@@ -127,7 +144,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     };
 
     fetchData();
-  }, [isOpen, fmGuid, category]);
+  }, [isOpen, fmGuids, category]);
 
   // Drag handlers (desktop only)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -190,51 +207,190 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     };
   }, [isResizing, resizeStart, isMobile]);
 
-  // Parse all properties into a unified list
+  // Helper to get property value from asset
+  const getPropertyValue = useCallback((asset: any, key: string): any => {
+    if (key.startsWith('attr_')) {
+      const attrKey = key.replace('attr_', '');
+      const attrs = asset.attributes || {};
+      const val = attrs[attrKey];
+      if (val && typeof val === 'object' && 'value' in val) {
+        return val.value;
+      }
+      return val;
+    }
+    return asset[key];
+  }, []);
+
+  // Parse all properties into a unified list with merge support
   const allProperties = useMemo((): PropertyItem[] => {
-    if (!asset) return [];
+    if (assets.length === 0) return [];
 
     const props: PropertyItem[] = [];
+    const firstAsset = assets[0];
+    
+    // Helper to check if values differ across assets
+    const checkDifference = (key: string): { isDifferent: boolean; differentCount: number; value: any } => {
+      if (assets.length === 1) {
+        return { isDifferent: false, differentCount: 1, value: getPropertyValue(firstAsset, key) };
+      }
+      
+      const values = assets.map(a => JSON.stringify(getPropertyValue(a, key)));
+      const uniqueValues = [...new Set(values)];
+      
+      return {
+        isDifferent: uniqueValues.length > 1,
+        differentCount: uniqueValues.length,
+        value: uniqueValues.length === 1 ? getPropertyValue(firstAsset, key) : null,
+      };
+    };
     
     // System properties
-    props.push({ key: 'fm_guid', label: 'FM GUID', value: asset.fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
-    props.push({ key: 'category', label: 'Category', value: asset.category, editable: false, source: 'lovable', type: 'text', section: 'system' });
-    if (asset.name) {
-      props.push({ key: 'name', label: 'Name (IFC)', value: asset.name, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    const fmGuidDiff = checkDifference('fm_guid');
+    props.push({ 
+      key: 'fm_guid', 
+      label: 'FM GUID', 
+      value: fmGuidDiff.value, 
+      editable: false, 
+      source: 'lovable', 
+      type: 'text', 
+      section: 'system',
+      isDifferent: fmGuidDiff.isDifferent,
+      differentCount: fmGuidDiff.differentCount,
+    });
+    
+    const categoryDiff = checkDifference('category');
+    props.push({ 
+      key: 'category', 
+      label: 'Category', 
+      value: categoryDiff.value, 
+      editable: false, 
+      source: 'lovable', 
+      type: 'text', 
+      section: 'system',
+      isDifferent: categoryDiff.isDifferent,
+      differentCount: categoryDiff.differentCount,
+    });
+    
+    if (firstAsset.name || assets.some(a => a.name)) {
+      const nameDiff = checkDifference('name');
+      props.push({ 
+        key: 'name', 
+        label: 'Name (IFC)', 
+        value: nameDiff.value, 
+        editable: false, 
+        source: 'lovable', 
+        type: 'text', 
+        section: 'system',
+        isDifferent: nameDiff.isDifferent,
+        differentCount: nameDiff.differentCount,
+      });
     }
     
     // Local editable properties
-    props.push({ key: 'common_name', label: 'Display Name', value: asset.common_name, editable: true, source: 'lovable', type: 'text', section: 'local' });
-    props.push({ key: 'asset_type', label: 'Asset Type', value: asset.asset_type, editable: true, source: 'lovable', type: 'text', section: 'local' });
+    const commonNameDiff = checkDifference('common_name');
+    props.push({ 
+      key: 'common_name', 
+      label: 'Display Name', 
+      value: commonNameDiff.value, 
+      editable: true, 
+      source: 'lovable', 
+      type: 'text', 
+      section: 'local',
+      isDifferent: commonNameDiff.isDifferent,
+      differentCount: commonNameDiff.differentCount,
+    });
     
-    // Building settings
-    if (buildingSettings || asset.category === 'Building') {
+    const assetTypeDiff = checkDifference('asset_type');
+    props.push({ 
+      key: 'asset_type', 
+      label: 'Asset Type', 
+      value: assetTypeDiff.value, 
+      editable: true, 
+      source: 'lovable', 
+      type: 'text', 
+      section: 'local',
+      isDifferent: assetTypeDiff.isDifferent,
+      differentCount: assetTypeDiff.differentCount,
+    });
+    
+    // Building settings (only for single building)
+    if (!isMultiMode && (buildingSettings || firstAsset.category === 'Building')) {
       props.push({ key: 'ivion_site_id', label: 'Ivion Site ID', value: buildingSettings?.ivion_site_id, editable: true, source: 'lovable', type: 'text', section: 'local' });
       props.push({ key: 'is_favorite', label: 'Favorite', value: buildingSettings?.is_favorite, editable: true, source: 'lovable', type: 'boolean', section: 'local' });
     }
     
     // Coordinates
-    if (asset.coordinate_x !== null || asset.coordinate_y !== null || asset.coordinate_z !== null) {
-      props.push({ key: 'coordinate_x', label: 'X', value: asset.coordinate_x, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
-      props.push({ key: 'coordinate_y', label: 'Y', value: asset.coordinate_y, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
-      props.push({ key: 'coordinate_z', label: 'Z', value: asset.coordinate_z, editable: true, source: 'lovable', type: 'number', section: 'coordinates' });
+    const hasCoordinates = assets.some(a => a.coordinate_x !== null || a.coordinate_y !== null || a.coordinate_z !== null);
+    if (hasCoordinates) {
+      const xDiff = checkDifference('coordinate_x');
+      const yDiff = checkDifference('coordinate_y');
+      const zDiff = checkDifference('coordinate_z');
+      
+      props.push({ key: 'coordinate_x', label: 'X', value: xDiff.value, editable: true, source: 'lovable', type: 'number', section: 'coordinates', isDifferent: xDiff.isDifferent, differentCount: xDiff.differentCount });
+      props.push({ key: 'coordinate_y', label: 'Y', value: yDiff.value, editable: true, source: 'lovable', type: 'number', section: 'coordinates', isDifferent: yDiff.isDifferent, differentCount: yDiff.differentCount });
+      props.push({ key: 'coordinate_z', label: 'Z', value: zDiff.value, editable: true, source: 'lovable', type: 'number', section: 'coordinates', isDifferent: zDiff.isDifferent, differentCount: zDiff.differentCount });
     }
 
     // Status flags
-    props.push({ key: 'is_local', label: 'Locally Created', value: asset.is_local, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
-    props.push({ key: 'annotation_placed', label: 'Annotation Placed', value: asset.annotation_placed, editable: false, source: 'lovable', type: 'boolean', section: 'system' });
+    const isLocalDiff = checkDifference('is_local');
+    props.push({ 
+      key: 'is_local', 
+      label: 'Locally Created', 
+      value: isLocalDiff.value, 
+      editable: false, 
+      source: 'lovable', 
+      type: 'boolean', 
+      section: 'system',
+      isDifferent: isLocalDiff.isDifferent,
+      differentCount: isLocalDiff.differentCount,
+    });
+    
+    const annotationDiff = checkDifference('annotation_placed');
+    props.push({ 
+      key: 'annotation_placed', 
+      label: 'Annotation Placed', 
+      value: annotationDiff.value, 
+      editable: false, 
+      source: 'lovable', 
+      type: 'boolean', 
+      section: 'system',
+      isDifferent: annotationDiff.isDifferent,
+      differentCount: annotationDiff.differentCount,
+    });
 
     // Hierarchy references
-    if (asset.building_fm_guid) {
-      props.push({ key: 'building_fm_guid', label: 'Building (GUID)', value: asset.building_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    if (assets.some(a => a.building_fm_guid)) {
+      const buildingDiff = checkDifference('building_fm_guid');
+      props.push({ 
+        key: 'building_fm_guid', 
+        label: 'Building (GUID)', 
+        value: buildingDiff.value, 
+        editable: false, 
+        source: 'lovable', 
+        type: 'text', 
+        section: 'system',
+        isDifferent: buildingDiff.isDifferent,
+        differentCount: buildingDiff.differentCount,
+      });
     }
-    if (asset.level_fm_guid) {
-      props.push({ key: 'level_fm_guid', label: 'Floor (GUID)', value: asset.level_fm_guid, editable: false, source: 'lovable', type: 'text', section: 'system' });
+    if (assets.some(a => a.level_fm_guid)) {
+      const levelDiff = checkDifference('level_fm_guid');
+      props.push({ 
+        key: 'level_fm_guid', 
+        label: 'Floor (GUID)', 
+        value: levelDiff.value, 
+        editable: false, 
+        source: 'lovable', 
+        type: 'text', 
+        section: 'system',
+        isDifferent: levelDiff.isDifferent,
+        differentCount: levelDiff.differentCount,
+      });
     }
 
-    // Asset+ properties from attributes JSONB
-    if (asset.attributes) {
-      const attrs = asset.attributes as Record<string, any>;
+    // Asset+ properties from attributes JSONB (only for single item to avoid complexity)
+    if (!isMultiMode && firstAsset.attributes) {
+      const attrs = firstAsset.attributes as Record<string, any>;
       
       Object.entries(attrs).forEach(([key, value]) => {
         // Skip already-mapped system fields
@@ -266,7 +422,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
 
     return props;
-  }, [asset, buildingSettings]);
+  }, [assets, buildingSettings, isMultiMode, getPropertyValue]);
 
   // Filter properties based on search
   const filteredProperties = useMemo(() => {
@@ -304,32 +460,43 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   };
 
   const handleSave = async () => {
-    if (!asset) return;
+    if (assets.length === 0) return;
     setIsSaving(true);
 
     try {
-      // Update asset table
+      // Build update payload (only changed fields)
       const updatePayload: Record<string, any> = {};
-      if (formData.common_name !== asset.common_name) {
+      
+      if (formData.common_name !== undefined && formData.common_name !== '') {
         updatePayload.common_name = formData.common_name || null;
       }
-      if (formData.asset_type !== asset.asset_type) {
+      if (formData.asset_type !== undefined && formData.asset_type !== '') {
         updatePayload.asset_type = formData.asset_type || null;
+      }
+      if (formData.coordinate_x !== undefined && formData.coordinate_x !== '') {
+        updatePayload.coordinate_x = parseFloat(formData.coordinate_x) || 0;
+      }
+      if (formData.coordinate_y !== undefined && formData.coordinate_y !== '') {
+        updatePayload.coordinate_y = parseFloat(formData.coordinate_y) || 0;
+      }
+      if (formData.coordinate_z !== undefined && formData.coordinate_z !== '') {
+        updatePayload.coordinate_z = parseFloat(formData.coordinate_z) || 0;
       }
 
       if (Object.keys(updatePayload).length > 0) {
+        // Batch update all selected assets
         const { error } = await supabase
           .from('assets')
           .update(updatePayload)
-          .eq('fm_guid', asset.fm_guid);
+          .in('fm_guid', fmGuids);
 
         if (error) throw error;
       }
 
-      // Update building_settings if applicable
-      if (asset.category === 'Building' && formData.ivion_site_id !== undefined) {
+      // Update building_settings if applicable (single building only)
+      if (!isMultiMode && assets[0]?.category === 'Building' && formData.ivion_site_id !== undefined) {
         const settingsPayload = {
-          fm_guid: asset.fm_guid,
+          fm_guid: assets[0].fm_guid,
           ivion_site_id: formData.ivion_site_id || null,
           is_favorite: formData.is_favorite ?? false,
         };
@@ -341,7 +508,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         if (settingsError) throw settingsError;
       }
 
-      toast.success('Properties saved');
+      const message = isMultiMode ? `Updated ${fmGuids.length} items` : 'Properties saved';
+      toast.success(message);
       setIsEditing(false);
       onUpdate?.();
     } catch (error: any) {
@@ -351,33 +519,71 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     }
   };
 
-  const displayCategory = asset?.category || category || 'Object';
+  const displayCategory = assets[0]?.category || category || 'Object';
+  
+  // Title for header
+  const headerTitle = useMemo(() => {
+    if (isMultiMode) {
+      return `${fmGuids.length} items selected`;
+    }
+    return assets[0]?.common_name || assets[0]?.name || fmGuids[0]?.slice(0, 8);
+  }, [isMultiMode, fmGuids, assets]);
 
   const renderPropertyValue = (prop: PropertyItem) => {
     const isEditingThis = isEditing && prop.editable;
     
+    // Show "Different values" for multi-select with differing values
+    if (prop.isDifferent && !isEditing) {
+      return (
+        <span className="text-muted-foreground italic flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          Different values ({prop.differentCount})
+        </span>
+      );
+    }
+    
     if (isEditingThis && prop.type === 'text') {
       return (
-        <Input
-          value={formData[prop.key] ?? prop.value ?? ''}
-          onChange={(e) => setFormData({ ...formData, [prop.key]: e.target.value })}
-          className="h-8 text-sm"
-        />
+        <div className="flex flex-col gap-1">
+          {prop.isDifferent && (
+            <span className="text-xs text-amber-500">Will overwrite all</span>
+          )}
+          <Input
+            value={formData[prop.key] ?? prop.value ?? ''}
+            placeholder={prop.isDifferent ? 'Enter new value for all...' : undefined}
+            onChange={(e) => setFormData({ ...formData, [prop.key]: e.target.value })}
+            className="h-8 text-sm"
+          />
+        </div>
       );
     }
     
     if (isEditingThis && prop.type === 'number') {
       return (
-        <Input
-          type="number"
-          value={formData[prop.key] ?? prop.value ?? ''}
-          onChange={(e) => setFormData({ ...formData, [prop.key]: parseFloat(e.target.value) || 0 })}
-          className="h-8 text-sm"
-        />
+        <div className="flex flex-col gap-1">
+          {prop.isDifferent && (
+            <span className="text-xs text-amber-500">Will overwrite all</span>
+          )}
+          <Input
+            type="number"
+            value={formData[prop.key] ?? prop.value ?? ''}
+            placeholder={prop.isDifferent ? 'Enter new value for all...' : undefined}
+            onChange={(e) => setFormData({ ...formData, [prop.key]: parseFloat(e.target.value) || 0 })}
+            className="h-8 text-sm"
+          />
+        </div>
       );
     }
     
     if (prop.type === 'boolean') {
+      if (prop.isDifferent) {
+        return (
+          <span className="text-muted-foreground italic flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            Different values
+          </span>
+        );
+      }
       return (
         <Badge variant={prop.value ? 'default' : 'secondary'} className="text-xs">
           {prop.value ? 'Yes' : 'No'}
@@ -401,6 +607,16 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // Content shared between mobile and desktop
   const renderContent = () => (
     <>
+      {/* Multi-select indicator */}
+      {isMultiMode && (
+        <div className="p-3 border-b bg-amber-500/10 shrink-0">
+          <p className="text-xs text-amber-600 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            Editing {fmGuids.length} items. Changes will apply to all selected.
+          </p>
+        </div>
+      )}
+      
       {/* Search field */}
       <div className="p-3 border-b shrink-0">
         <div className="relative">
@@ -421,10 +637,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : !asset ? (
+          ) : assets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               <p>No data found</p>
-              <p className="text-xs mt-1 font-mono">{fmGuid}</p>
+              <p className="text-xs mt-1 font-mono">{fmGuids[0]}</p>
             </div>
           ) : filteredProperties.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
@@ -480,7 +696,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       </ScrollArea>
 
       {/* Footer actions */}
-      {asset && (
+      {assets.length > 0 && (
         <div className="p-3 border-t flex justify-end gap-2 shrink-0">
           {isEditing ? (
             <>
@@ -489,7 +705,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               </Button>
               <Button size="sm" onClick={handleSave} disabled={isSaving}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                Save
+                {isMultiMode ? `Save All (${fmGuids.length})` : 'Save'}
               </Button>
             </>
           ) : (
@@ -514,7 +730,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             <SheetTitle className="flex items-center gap-2 text-left">
               {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
               <span className="font-medium text-sm truncate flex-1">
-                {asset?.common_name || asset?.name || fmGuid.slice(0, 8)}
+                {headerTitle}
               </span>
               <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
             </SheetTitle>
@@ -551,7 +767,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
           {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
           <span className="font-medium text-sm truncate">
-            {asset?.common_name || asset?.name || fmGuid.slice(0, 8)}
+            {headerTitle}
           </span>
           <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
         </div>

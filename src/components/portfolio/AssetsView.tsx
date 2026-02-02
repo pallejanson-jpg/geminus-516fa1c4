@@ -78,6 +78,7 @@ interface AssetsViewProps {
   onClose: () => void;
   onOpen3D?: (fmGuid: string, levelFmGuid?: string) => void;
   onPlaceAnnotation?: (asset: any) => void;
+  onSelectAsset?: (fmGuid: string) => void;
 }
 
 interface ColumnDef {
@@ -173,6 +174,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   onClose,
   onOpen3D,
   onPlaceAnnotation,
+  onSelectAsset,
 }) => {
   const { toast } = useToast();
   const { startAnnotationPlacement } = useContext(AppContext);
@@ -194,8 +196,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   // Multi-selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   
-  // Properties dialog state
-  const [showPropertiesFor, setShowPropertiesFor] = useState<string | null>(null);
+  // Properties dialog state - supports multiple selection
+  const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
+
+  // Auto-show properties dialog when items are selected
+  useEffect(() => {
+    if (selectedRows.size > 0) {
+      setShowPropertiesFor(Array.from(selectedRows));
+    } else {
+      setShowPropertiesFor(null);
+    }
+  }, [selectedRows]);
 
   // Sync localAssets when props change
   useEffect(() => {
@@ -535,17 +546,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     });
   }, []);
 
-  // Batch action handlers
+  // Batch action handlers - now supports multi-select
   const handleShowSelectedProperties = useCallback(() => {
-    if (selectedRows.size === 1) {
-      setShowPropertiesFor(Array.from(selectedRows)[0]);
-    } else {
-      toast({
-        title: 'Välj ett objekt',
-        description: 'Välj exakt ett objekt för att visa egenskaper',
-      });
+    if (selectedRows.size > 0) {
+      setShowPropertiesFor(Array.from(selectedRows));
     }
-  }, [selectedRows, toast]);
+  }, [selectedRows]);
 
   const handleBatchPlaceAnnotation = useCallback(() => {
     const selectedAssets = filteredAssets.filter(a => 
@@ -864,10 +870,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                   {filteredAssets.map((asset) => (
                     <TableRow 
                       key={asset.fmGuid} 
-                      className={`hover:bg-muted/30 ${selectedRows.has(asset.fmGuid) ? 'bg-muted/50' : ''}`}
+                      className={`hover:bg-muted/30 cursor-pointer ${selectedRows.has(asset.fmGuid) ? 'bg-muted/50' : ''}`}
+                      onClick={() => onSelectAsset?.(asset.fmGuid)}
                     >
                       {/* Checkbox cell */}
-                      <TableCell className="py-2 w-10">
+                      <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedRows.has(asset.fmGuid)}
                           onCheckedChange={(checked) => handleSelectRow(asset.fmGuid, !!checked)}
@@ -1014,12 +1021,20 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         )}
       </ScrollArea>
 
-      {/* Properties dialog */}
-      {showPropertiesFor && (
+      {/* Properties dialog - supports multi-select */}
+      {showPropertiesFor && showPropertiesFor.length > 0 && (
         <UniversalPropertiesDialog
           isOpen={true}
-          fmGuid={showPropertiesFor}
-          onClose={() => setShowPropertiesFor(null)}
+          fmGuids={showPropertiesFor}
+          onClose={() => {
+            setShowPropertiesFor(null);
+            setSelectedRows(new Set());
+          }}
+          onUpdate={() => {
+            // Refresh assets after update
+            setShowPropertiesFor(null);
+            setSelectedRows(new Set());
+          }}
         />
       )}
     </div>
