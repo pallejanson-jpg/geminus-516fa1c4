@@ -66,7 +66,16 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
     fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'external', username: '', password: '' },
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
-    iot: { label: 'Sensor Dashboard', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'external', username: '', password: '' },
+    iot: { label: 'Sensor Dashboard', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'external', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
     radar: { label: '360+ (Ivion)', url: 'https://ivion.se', icon: Radar, openMode: 'external', username: '', password: '' },
 };
+
+export const SENSLINC_POLL_OPTIONS = [
+    { value: 1, label: '1 timme' },
+    { value: 6, label: '6 timmar' },
+    { value: 12, label: '12 timmar' },
+    { value: 24, label: '24 timmar (rekommenderat)' },
+    { value: 48, label: '48 timmar' },
+    { value: 0, label: 'Manuellt (ingen automatisk polling)' },
+];
