@@ -183,8 +183,8 @@ const PortfolioView: React.FC = () => {
   const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
   
-  // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes
-  const handleOpenIoT = (facility: Facility) => {
+  // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes or fetch from Senslinc API
+  const handleOpenIoT = async (facility: Facility) => {
     const attrs = (facility as any).attributes || {};
     
     // Look for sensorDashboard or sensorURL in attributes
@@ -193,9 +193,28 @@ const PortfolioView: React.FC = () => {
       k.toLowerCase().includes('sensorurl')
     );
     
-    if (dashboardKey && attrs[dashboardKey]?.value) {
-      const dashboardUrl = attrs[dashboardKey].value;
-      const iotConfig = appConfigs.iot || { openMode: 'external' };
+    let dashboardUrl = dashboardKey && attrs[dashboardKey]?.value ? attrs[dashboardKey].value : null;
+    
+    // If no URL in attributes, try to fetch from Senslinc API using FM GUID
+    if (!dashboardUrl && facility.fmGuid) {
+      try {
+        console.log('[IoT] Fetching dashboard URL from Senslinc for:', facility.fmGuid);
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data, error } = await supabase.functions.invoke('senslinc-query', {
+          body: { action: 'get-dashboard-url', fmGuid: facility.fmGuid }
+        });
+        
+        if (!error && data?.success && data?.data?.dashboardUrl) {
+          dashboardUrl = data.data.dashboardUrl;
+          console.log('[IoT] Found dashboard URL via API:', dashboardUrl);
+        }
+      } catch (err) {
+        console.log('[IoT] Failed to fetch dashboard URL from Senslinc:', err);
+      }
+    }
+    
+    if (dashboardUrl) {
+      const iotConfig = appConfigs.iot || { openMode: 'internal' };
       
       if (iotConfig.openMode === 'internal') {
         // Open in internal iframe view
@@ -209,9 +228,12 @@ const PortfolioView: React.FC = () => {
         window.open(dashboardUrl, '_blank');
       }
     } else {
-      // No dashboard URL found - show toast
+      // No dashboard URL found - show info
       console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
-      // Could add a toast here to inform user
+      const { toast } = await import('sonner');
+      toast.info('Ingen IoT-dashboard', {
+        description: 'Detta objekt har ingen kopplad sensor-dashboard i Asset+ eller Senslinc.'
+      });
     }
   };
   const handleToggleFavorite = () => {

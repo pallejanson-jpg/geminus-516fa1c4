@@ -20,7 +20,7 @@ const ASSISTANTS: Array<{
   available: boolean;
 }> = [
   { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Fråga om byggnader, rum och tillgångar", icon: Database, available: true },
-  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Sök i dokument och ritningar", icon: FileQuestion, available: false },
+  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Sök i dokument och ritningar", icon: FileQuestion, available: true },
   { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration med FM Access", icon: Sparkles, available: false },
 ];
 
@@ -118,7 +118,7 @@ export default function HomeLanding() {
 
       <div className="relative z-10 min-h-full flex flex-col items-center px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight">Welcome to My SWG</h1>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight">Welcome to My Geminus</h1>
           <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Your digital backbone for digital twins</p>
         </header>
 
