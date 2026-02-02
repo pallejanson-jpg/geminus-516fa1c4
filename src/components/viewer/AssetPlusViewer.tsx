@@ -18,7 +18,7 @@ import VisualizationToolbar from './VisualizationToolbar';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import MobileViewerOverlay, { MobileFloorInfo } from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { isModelInMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
+import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
@@ -2076,19 +2076,125 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     }
   }, []);
 
-  // XKT cache interceptor - DISABLED due to initialization conflicts
-  // The interceptor was causing 'nextSibling' errors and sending empty data to cache
-  // Models will load directly from Asset+ API for now
+  // XKT cache interceptor - Cache-on-Load implementation
+  // Passively captures XKT model responses and saves them to backend
+  // Does NOT block or modify the viewer's loading - just clones and saves in background
   const setupCacheInterceptor = useCallback(() => {
-    console.log('XKT cache: Interceptor disabled (direct loading mode)');
-    // No-op - don't override fetch
-  }, []);
+    // Skip if already set up
+    if (originalFetchRef.current) {
+      console.log('XKT cache: Interceptor already active');
+      return;
+    }
+    
+    const resolvedBuildingGuid = buildingFmGuid;
+    if (!resolvedBuildingGuid) {
+      console.log('XKT cache: No building GUID, skipping interceptor');
+      return;
+    }
+    
+    console.log('XKT cache: Setting up Cache-on-Load interceptor');
+    originalFetchRef.current = window.fetch;
+    
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+      
+      // Check if this is an XKT model request
+      const isXktRequest = url.includes('.xkt') || 
+                           url.toLowerCase().includes('getxktdata') ||
+                           url.toLowerCase().includes('threed');
+      
+      if (!isXktRequest) {
+        // Not an XKT request, pass through
+        return originalFetchRef.current!(input, init);
+      }
+      
+      // Extract model ID for caching
+      const modelId = xktCacheService.extractModelIdFromUrl(url);
+      
+      if (modelId) {
+        // Check memory cache first
+        const memoryData = getModelFromMemory(modelId, resolvedBuildingGuid);
+        if (memoryData) {
+          console.log(`XKT cache: Memory hit for ${modelId}`);
+          // Return cached data as a Response
+          return new Response(memoryData.slice(0), {
+            status: 200,
+            headers: { 'Content-Type': 'application/octet-stream' }
+          });
+        }
+        
+        // Check database cache
+        try {
+          const cachedUrl = await xktCacheService.interceptModelRequest(url, resolvedBuildingGuid);
+          if (cachedUrl) {
+            console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+            const cachedResponse = await originalFetchRef.current!(cachedUrl, init);
+            if (cachedResponse.ok) {
+              // Clone and store in memory
+              const data = await cachedResponse.clone().arrayBuffer();
+              storeModelInMemory(modelId, resolvedBuildingGuid, data);
+              return new Response(data, {
+                status: 200,
+                headers: { 'Content-Type': 'application/octet-stream' }
+              });
+            }
+          }
+        } catch (e) {
+          console.debug('XKT cache: Database check failed, fetching from source', e);
+        }
+      }
+      
+      // Fetch from Asset+ API
+      const response = await originalFetchRef.current!(input, init);
+      
+      // Only process successful XKT responses
+      if (response.ok && modelId) {
+        // Clone the response so we can read it without consuming the original
+        const responseClone = response.clone();
+        
+        // Process in background - don't await
+        (async () => {
+          try {
+            const data = await responseClone.arrayBuffer();
+            
+            // Validate it's actual XKT data (should start with specific bytes)
+            if (data.byteLength > 100) {
+              // Store in memory cache
+              storeModelInMemory(modelId, resolvedBuildingGuid, data);
+              
+              // Save to backend storage in background
+              xktCacheService.saveModelFromViewer(
+                modelId,
+                data,
+                resolvedBuildingGuid,
+                modelId // Use modelId as name for now
+              ).then(saved => {
+                if (saved) {
+                  console.log(`XKT cache: Saved ${modelId} to backend`);
+                }
+              }).catch(e => {
+                console.debug(`XKT cache: Failed to save ${modelId} to backend:`, e);
+              });
+            }
+          } catch (e) {
+            console.debug('XKT cache: Failed to process response for caching:', e);
+          }
+        })();
+      }
+      
+      return response;
+    };
+    
+    const stats = getMemoryStats();
+    console.log(`XKT cache: Interceptor active (memory: ${stats.modelCount} models, ${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB)`);
+  }, [buildingFmGuid]);
 
   // Restore original fetch
   const restoreFetch = useCallback(() => {
     if (originalFetchRef.current) {
       window.fetch = originalFetchRef.current;
       originalFetchRef.current = null;
+      console.log('XKT cache: Interceptor removed');
     }
   }, []);
 
