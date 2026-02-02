@@ -119,8 +119,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [selectedIssue, setSelectedIssue] = useState<BcfIssue | null>(null);
   const [showIssueDetail, setShowIssueDetail] = useState(false);
   
+  // Independent issue list state - stays open even when main menu closes
+  const [showIssueList, setShowIssueList] = useState(false);
+  
   // Active side-pop submenu state
-  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | 'issues' | null>(null);
+  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
   
   // Clipping height state (for 2D floor plan view)
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
@@ -480,15 +483,30 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     
     restoreViewpoint(viewpoint, { duration: 1.0 });
     
-    // Flash the selected objects after camera animation completes
+    // Ensure objects are visible, selected, and flashed after camera animation completes
     if (viewpoint.components?.selection?.length > 0) {
       const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+      
       setTimeout(() => {
         const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
         if (xeokitViewer?.scene) {
-          flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
+          const scene = xeokitViewer.scene;
+          
+          // 1. Ensure objects are visible
+          scene.setObjectsVisible(selectedIds, true);
+          
+          // 2. Select the objects in 3D (clear previous selection first)
+          scene.setObjectsSelected(scene.selectedObjectIds, false);
+          scene.setObjectsSelected(selectedIds, true);
+          
+          // 3. Flash for visual feedback
+          flashEntitiesByIds(scene, selectedIds, { 
+            duration: 3000,
+            color1: [1, 0.2, 0.2],  // Red
+            color2: [1, 1, 1],       // White
+          });
         }
-      }, 1100); // Slightly after camera animation
+      }, 1100); // After camera animation
     }
   }, [restoreViewpoint, viewerRef, flashEntitiesByIds]);
 
@@ -1008,21 +1026,24 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     <span className="text-xs sm:text-sm">Skapa ärende</span>
                   </Button>
 
-                  {/* Issues list button - opens side panel */}
+                  {/* Issues list button - independent toggle */}
                   <Button
-                    variant={activeSubMenu === 'issues' ? "secondary" : "outline"}
+                    variant={showIssueList ? "secondary" : "outline"}
                     className="w-full justify-between h-9 sm:h-10"
-                    onClick={() => setActiveSubMenu(activeSubMenu === 'issues' ? null : 'issues')}
+                    onClick={() => setShowIssueList(!showIssueList)}
                   >
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
                         <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                       <span className="text-xs sm:text-sm">Visa ärenden</span>
                     </div>
                     <ChevronRight className={cn(
                       "h-3 w-3 transition-transform",
-                      activeSubMenu === 'issues' && "rotate-180"
+                      showIssueList && "rotate-180"
                     )} />
                   </Button>
 
@@ -1095,13 +1116,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
-          {/* Floating Issue List Panel - draggable */}
+          {/* Floating Issue List Panel - independent, positioned next to toolbar */}
           <FloatingIssueListPanel
-            isOpen={activeSubMenu === 'issues'}
-            onClose={() => setActiveSubMenu(null)}
+            isOpen={showIssueList}
+            onClose={() => setShowIssueList(false)}
             buildingFmGuid={buildingFmGuid}
             onSelectIssue={handleSelectIssue}
             onCreateIssue={captureIssueState}
+            parentPosition={position}
+            parentWidth={panelWidth}
           />
           
           {/* Create View Dialog */}

@@ -10,6 +10,10 @@ interface FloatingIssueListPanelProps {
   buildingFmGuid?: string;
   onSelectIssue?: (issue: BcfIssue) => void;
   onCreateIssue?: () => void;
+  /** Parent toolbar position for relative placement */
+  parentPosition?: { x: number; y: number };
+  /** Parent toolbar width */
+  parentWidth?: number;
 }
 
 /**
@@ -22,11 +26,13 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
   buildingFmGuid,
   onSelectIssue,
   onCreateIssue,
+  parentPosition,
+  parentWidth,
 }) => {
   const panelWidth = 280;
   const panelHeight = 400;
 
-  // Position state - initialize on right side of screen
+  // Position state - initialize to the left of parent toolbar
   const [position, setPosition] = useState({ 
     x: typeof window !== 'undefined' ? window.innerWidth - panelWidth - 20 : 200, 
     y: 80 
@@ -34,15 +40,20 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Reset position when panel opens
+  // Position to the left of parent toolbar when panel opens
   useEffect(() => {
     if (isOpen) {
+      // Calculate position to the left of parent toolbar with 10px gap
+      const x = parentPosition && parentWidth
+        ? parentPosition.x - panelWidth - 10
+        : window.innerWidth - panelWidth - 20;
+      
       setPosition({
-        x: Math.max(20, window.innerWidth - panelWidth - 20),
-        y: 80,
+        x: Math.max(10, x),
+        y: parentPosition?.y ?? 80,
       });
     }
-  }, [isOpen]);
+  }, [isOpen, parentPosition, parentWidth]);
 
   // Drag start handler
   const handleDragStart = useCallback((e: React.MouseEvent) => {
