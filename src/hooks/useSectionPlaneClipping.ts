@@ -434,6 +434,7 @@ export function useSectionPlaneClipping(
 
   /**
    * Update floor cut height dynamically (for 2D mode slider)
+   * FIX: Update existing plane position directly instead of recreating
    */
   const updateFloorCutHeight = useCallback((newHeight: number) => {
     floorCutHeightRef.current = newHeight;
@@ -447,23 +448,33 @@ export function useSectionPlaneClipping(
       return;
     }
     
-    console.log('Updating 2D clip height to:', newHeight);
-    
     // Calculate new top clip position using stored floor base
     const topClipY = currentFloorMinYRef.current + newHeight;
     
-    // Update or recreate the top plane
+    // Try to update existing plane position directly (preferred method)
+    if (topPlaneRef.current) {
+      try {
+        // xeokit SectionPlane pos is settable directly
+        topPlaneRef.current.pos = [0, topClipY, 0];
+        console.log(`✅ 2D top plane pos updated to Y=${topClipY.toFixed(2)} (height: ${newHeight}m)`);
+        return;
+      } catch (e) {
+        console.debug('Direct pos update failed, recreating plane:', e);
+      }
+    }
+    
+    // Fallback: recreate with stable ID if direct update fails or plane doesn't exist
     destroyPlane(topPlaneRef);
     
     topPlaneRef.current = createSectionPlaneOnScene(
       viewer,
-      `2d-top-dynamic-${Date.now()}`,
+      `2d-top-stable`,  // Use stable ID instead of dynamic timestamp
       [0, topClipY, 0],
       [0, 1, 0]
     );
 
     if (topPlaneRef.current) {
-      console.log(`✅ 2D top plane updated to Y=${topClipY.toFixed(2)} (height: ${newHeight}m)`);
+      console.log(`✅ 2D top plane recreated at Y=${topClipY.toFixed(2)} (height: ${newHeight}m)`);
     }
   }, [getXeokitViewer, createSectionPlaneOnScene, destroyPlane]);
 
