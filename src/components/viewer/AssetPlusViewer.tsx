@@ -170,7 +170,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const { toggleArchitectMode, isActive: isArchitectModeActive, setBackgroundPreset, applyBackgroundPreset } = useArchitectViewMode();
   
   // Room labels hook
-  const { setLabelsEnabled: setRoomLabelsEnabled } = useRoomLabels(viewerInstanceRef);
+  const { setLabelsEnabled: setRoomLabelsEnabled, updateViewMode: updateLabelsViewMode } = useRoomLabels(viewerInstanceRef);
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -331,6 +331,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     setShowRoomLabels(enabled);
     setRoomLabelsEnabled(enabled);
   }, [setRoomLabelsEnabled]);
+
+  // Listen for view mode changes to update room label heights
+  useEffect(() => {
+    const handleViewModeChange = (e: CustomEvent) => {
+      const mode = e.detail?.mode as '2d' | '3d';
+      if (mode && updateLabelsViewMode) {
+        console.log('AssetPlusViewer: View mode changed to', mode, '- updating room labels');
+        updateLabelsViewMode(mode);
+      }
+    };
+    
+    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    return () => {
+      window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    };
+  }, [updateLabelsViewMode]);
 
   // Handler for annotations toggle from mobile overlay
   const handleAnnotationsChange = useCallback((show: boolean) => {
