@@ -17,6 +17,24 @@ interface UnplacedAsset {
   category: string;
 }
 
+// Helper function to format IFC asset type to readable name
+const formatAssetType = (type: string | null): string => {
+  if (!type) return '';
+  // "IfcBeam" → "Beam", "IfcWallStandardCase" → "Wall Standard Case"
+  return type
+    .replace(/^Ifc/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2');
+};
+
+// Get a display name for an asset with intelligent fallbacks
+const getDisplayName = (asset: { name?: string | null; common_name?: string | null; asset_type?: string | null; fm_guid: string }): string => {
+  if (asset.name) return asset.name;
+  if (asset.common_name) return asset.common_name;
+  const formattedType = formatAssetType(asset.asset_type || null);
+  if (formattedType) return formattedType;
+  return `Okänd (${asset.fm_guid.slice(0, 8)}...)`;
+};
+
 interface UnplacedAssetsPanelProps {
   buildingFmGuid: string;
   ivionSiteId: string | null;
@@ -62,7 +80,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
           (data || []).map((a) => ({
             id: a.id,
             fm_guid: a.fm_guid,
-            name: a.name || a.common_name || a.fm_guid,
+            name: getDisplayName(a),
             asset_type: a.asset_type,
             category: a.category,
           }))
@@ -165,7 +183,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
         (data || []).map((a) => ({
           id: a.id,
           fm_guid: a.fm_guid,
-          name: a.name || a.common_name || a.fm_guid,
+          name: getDisplayName(a),
           asset_type: a.asset_type,
           category: a.category,
         }))
