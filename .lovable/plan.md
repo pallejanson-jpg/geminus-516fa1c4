@@ -1,327 +1,423 @@
 
-# Plan: Grid Navigation and Multi-Select Properties Dialog
+# Plan: Asset+ Återskrivning, API-dokumentation & Congeria Integration
 
-## Overview
+## Översikt
 
-This plan implements three key behaviors for the detailed grid views (Assets and Rooms):
+Denna plan adresserar tre områden:
 
-1. **Row click → Landing page**: Clicking a row navigates to that object's FacilityLandingPage
-2. **Checkbox selection → Properties dialog**: Selecting one or more checkboxes shows the UniversalPropertiesDialog
-3. **Multi-select editing**: When multiple items are selected, show "Different values" for mismatched fields and allow batch editing
-
----
-
-## Current Behavior Analysis
-
-| Action | RoomsView | AssetsView |
-|--------|-----------|------------|
-| Row click | Opens landing page | Does nothing |
-| Checkbox | Toggles selection | Toggles selection |
-| "Egenskaper" button | Only works for single selection | Only works for single selection |
+1. **Asset+ återskrivning** - Implementera `UpdateBimObjectsPropertiesData` för att skriva tillbaka ändringar till Asset+
+2. **Geminus API-dokumentation** - Skapa en central dokumentationssamling för alla integrerade system
+3. **Congeria dokumentsynk** - Hämta dokument via session-baserad inloggning (ingen API tillgänglig)
 
 ---
 
-## Proposed UX Flow
+## Del 1: Asset+ Återskrivning (Write-back)
+
+### API-analys från dokumentationen
+
+Asset+ använder **separata endpoints** för olika operationer:
+
+| Operation | Endpoint | Användning |
+|-----------|----------|------------|
+| Skapa objekt | `POST /AddObjectList` | Nya assets (redan implementerat via `asset-plus-create`) |
+| Uppdatera properties | `POST /UpdateBimObjectsPropertiesData` | Ändra `commonName`, `designation`, user parameters |
+| Flytta objekt | `POST /UpsertRelationships` | Ändra förälder (endast om `createdInModel = false`) |
+| Radera objekt | `POST /ExpireObject` | Markera som utgånget med datum |
+
+**Viktigt från dokumentationen:**
 
 ```text
-+------------------------------------------+
-| ☐ | Name      | Type   | Floor | Actions |
-+------------------------------------------+
-| ☑ | Door-001  | Door   | Plan 1| [3D]    |  ← Checkbox = select
-| ☐ | Window-02 | Window | Plan 1| [3D]    |  ← Row click = landing page
-| ☑ | Beam-03   | Beam   | Plan 2| [3D]    |
-+------------------------------------------+
-
-When 2 items selected → Properties dialog shows:
-+--------------------------------------------+
-| Properties (2 items selected)              |
-+--------------------------------------------+
-| Name:        | Different values        [▼] |
-| Type:        | Door                    [▼] |  ← Same value, editable
-| Floor:       | Different values        [▼] |
-| Category:    | Instance                    |  ← Read-only, grayed out
-+--------------------------------------------+
-| [Cancel]                      [Save All]   |
-+--------------------------------------------+
+Updating System and User Parameters:
+- System parameters: Endast `designation` och `commonName` kan redigeras
+- User parameters: Alla värden kan redigeras
+- Key: Använd parameterns "Name" (inte flatPropertyName) vid uppdatering
 ```
 
----
+### Payload-format för UpdateBimObjectsPropertiesData
 
-## Implementation Details
-
-### Part 1: Row Click → Landing Page
-
-**File: `src/components/portfolio/AssetsView.tsx`**
-
-Add `onSelectAsset` prop and onClick handler:
-
-```tsx
-interface AssetsViewProps {
-  // ... existing props
-  onSelectAsset?: (fmGuid: string) => void;
-}
-
-// In TableRow (line ~865):
-<TableRow 
-  key={asset.fmGuid} 
-  className={`hover:bg-muted/30 cursor-pointer ${...}`}
-  onClick={() => onSelectAsset?.(asset.fmGuid)}  // NEW
->
-```
-
-**File: `src/components/portfolio/PortfolioView.tsx`**
-
-Add handler similar to `handleSelectRoom`:
-
-```tsx
-const handleSelectAsset = (fmGuid: string) => {
-  const asset = allData.find((a: any) => a.fmGuid === fmGuid);
-  if (asset) {
-    setSelectedFacility({
-      fmGuid: asset.fmGuid,
-      name: asset.name,
-      commonName: asset.commonName,
-      category: asset.category || 'Instance',
-      levelFmGuid: asset.levelFmGuid,
-      buildingFmGuid: asset.buildingFmGuid,
-      attributes: asset.attributes,
-    });
-    setShowAssetsFor(null);
-  }
-};
-
-// Pass to AssetsView:
-<AssetsView
-  ...
-  onSelectAsset={handleSelectAsset}
-/>
-```
-
----
-
-### Part 2: Auto-Show Properties on Selection
-
-**File: `src/components/portfolio/AssetsView.tsx`**
-
-Replace manual "Egenskaper" button with automatic dialog when selection changes:
-
-```tsx
-// Show properties dialog automatically when items are selected
-useEffect(() => {
-  if (selectedRows.size > 0) {
-    setShowPropertiesFor(Array.from(selectedRows));
-  } else {
-    setShowPropertiesFor(null);
-  }
-}, [selectedRows]);
-
-// Change state type
-const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
-```
-
----
-
-### Part 3: Multi-Select UniversalPropertiesDialog
-
-**File: `src/components/common/UniversalPropertiesDialog.tsx`**
-
-Major refactoring to support multiple items:
-
-#### 3.1 Update Props Interface
-
-```tsx
-interface UniversalPropertiesDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  fmGuids: string[];  // Changed from fmGuid: string
-  category?: string;
-  onUpdate?: () => void;
+```json
+{
+  "APIKey": "xxx",
+  "UpdateBimObjectProperties": [{
+    "FmGuid": "asset-fm-guid-here",
+    "UpdateProperties": [
+      { "Name": "commonName", "Type": 0, "Value": "Nytt namn" },
+      { "Name": "designation", "Type": 0, "Value": "D-001" },
+      { "Name": "MyCustomParam", "Type": 0, "Value": "Custom value" }
+    ]
+  }]
 }
 ```
 
-#### 3.2 New State for Multi-Item Data
+### Implementation
 
-```tsx
-const [assets, setAssets] = useState<any[]>([]);
-const [isMultiMode, setIsMultiMode] = useState(false);
+**Ny Edge Function: `supabase/functions/asset-plus-update/index.ts`**
 
-// Computed merged properties
-const mergedProperties = useMemo(() => {
-  if (assets.length === 0) return [];
-  if (assets.length === 1) return computePropertiesForSingleAsset(assets[0]);
-  
-  return computeMergedProperties(assets);
-}, [assets]);
+```typescript
+// Stöd för:
+// - Batch-uppdatering av flera assets
+// - Synkar BÅDE till Asset+ (för is_local=false) OCH lokal databas
+// - Returnerar success per asset
+
+interface UpdateAssetRequest {
+  fmGuids: string[];  // Array för batch-stöd
+  properties: Array<{
+    name: string;      // "commonName", "designation", eller user parameter
+    value: string | number | boolean;
+    dataType?: number; // Default: 0 (String)
+  }>;
+}
+
+async function updateAssets(request: UpdateAssetRequest) {
+  // 1. Hämta assets från lokal DB för att avgöra is_local status
+  // 2. Gruppera: locals → endast lokal uppdatering, synced → Asset+ + lokal
+  // 3. Anropa Asset+ API för synced assets
+  // 4. Uppdatera lokal databas för alla
+}
 ```
 
-#### 3.3 Merge Logic Function
+**Uppdatera service: `src/services/asset-plus-service.ts`**
 
-```tsx
-function computeMergedProperties(assets: any[]): MergedPropertyItem[] {
-  // Get all property keys from all assets
-  const allKeys = new Set<string>();
-  assets.forEach(asset => {
-    Object.keys(asset).forEach(key => allKeys.add(key));
-    // Also iterate attributes
-    if (asset.attributes) {
-      Object.keys(asset.attributes).forEach(key => allKeys.add(`attr_${key}`));
-    }
+```typescript
+export async function updateAssetProperties(
+  fmGuids: string[],
+  properties: AssetProperty[]
+): Promise<{ success: boolean; results: UpdateResult[] }> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-update", {
+    body: { fmGuids, properties },
   });
-
-  const merged: MergedPropertyItem[] = [];
-  
-  allKeys.forEach(key => {
-    const values = assets.map(a => getPropertyValue(a, key));
-    const uniqueValues = [...new Set(values.map(v => JSON.stringify(v)))];
-    
-    merged.push({
-      key,
-      label: getPropertyLabel(key),
-      value: uniqueValues.length === 1 ? values[0] : null,
-      isDifferent: uniqueValues.length > 1,
-      editable: EDITABLE_KEYS.includes(key),
-      differentCount: uniqueValues.length,
-    });
-  });
-
-  return merged;
+  // ...
 }
 ```
 
-#### 3.4 Updated UI for "Different values"
+**Koppla till UniversalPropertiesDialog**
+
+Vid spara i `handleSave()`:
+1. Om samtliga assets är `is_local = true` → endast lokal uppdatering
+2. Om någon är `is_local = false` → anropa `asset-plus-update` Edge Function
+3. Visa progress och resultat
+
+### Filer att skapa/ändra
+
+| Fil | Åtgärd |
+|-----|--------|
+| `supabase/functions/asset-plus-update/index.ts` | **NY** - Edge Function för återskrivning |
+| `src/services/asset-plus-service.ts` | **ÄNDRA** - Implementera `updateAssetProperties()` |
+| `src/components/common/UniversalPropertiesDialog.tsx` | **ÄNDRA** - Anropa update-service vid spara |
+
+---
+
+## Del 2: Geminus API-dokumentation
+
+### Syfte
+
+Skapa en central plats för att samla API-dokumentation från alla system som Geminus integrerar med. Detta underlättar framtida utveckling och felsökning.
+
+### Struktur
+
+```
+docs/
+├── api/
+│   ├── README.md                    # Översikt över alla integrationer
+│   ├── asset-plus/
+│   │   ├── overview.md              # Sammanfattning och auth-flöde
+│   │   ├── sync-api.md              # FMGUID sync-dokumentation
+│   │   └── openapi.yaml             # OpenAPI-specifikation
+│   ├── ivion/
+│   │   ├── overview.md              # POI-hantering
+│   │   └── endpoints.md             # Dokumenterade endpoints
+│   ├── fm-access/
+│   │   └── overview.md              # FM Access integration
+│   ├── senslinc/
+│   │   └── overview.md              # Sensor-data API
+│   └── congeria/
+│       └── overview.md              # Dokumenthantering (session-baserat)
+```
+
+### Innehåll för Asset+ dokumentation
+
+**`docs/api/asset-plus/overview.md`**
+
+```markdown
+# Asset+ API Integration
+
+## Autentisering
+- OAuth2 Password Grant via Keycloak
+- API Key krävs för alla anrop
+
+## Endpoints
+
+### Läsa data
+- `POST /PublishDataServiceGetMerged` - Hämta objekt med alla properties
+
+### Skriva data  
+- `POST /AddObjectList` - Skapa nya objekt
+- `POST /UpdateBimObjectsPropertiesData` - Uppdatera properties
+- `POST /UpsertRelationships` - Flytta objekt
+- `POST /ExpireObject` - Markera som utgånget
+
+## Object Types
+| Type | Namn | Beskrivning |
+|------|------|-------------|
+| 0 | Complex | Fastighetsportfölj |
+| 1 | Building | Byggnad |
+| 2 | Level | Våningsplan |
+| 3 | Space | Rum |
+| 4 | Instance | Asset/Komponent |
+
+## Begränsningar
+- Objekt skapade i BIM-modell (`createdInModel = true`) kan inte flyttas
+- Endast `designation` och `commonName` kan uppdateras för system-parametrar
+```
+
+### Filer att skapa
+
+| Fil | Beskrivning |
+|-----|-------------|
+| `docs/api/README.md` | Huvudöversikt för alla API:er |
+| `docs/api/asset-plus/overview.md` | Asset+ sammanfattning |
+| `docs/api/asset-plus/sync-api.md` | Detaljerad sync-dokumentation |
+| `docs/api/asset-plus/openapi.yaml` | Kopia av OpenAPI-spec |
+| `docs/api/ivion/overview.md` | Ivion POI-integration |
+| `docs/api/congeria/overview.md` | Congeria dokumenthantering |
+
+---
+
+## Del 3: Congeria Dokumentsynkronisering
+
+### Situation
+
+- Ingen dokumenterad API tillgänglig
+- Inloggning: Username/password
+- URL-struktur: `https://fms.congeria.com/` med mappning per byggnad
+
+### Strategi: Session-baserad hämtning
+
+Eftersom det saknas API kommer vi använda en **webb-scraping-approach**:
+
+1. **Logga in** och få session-cookie
+2. **Navigera** till mappstruktur för aktuell byggnad
+3. **Hämta** dokumentlista med metadata
+4. **Ladda ner** dokument till Supabase Storage
+
+### Mappning Geminus → Congeria
+
+Baserat på skärmdumpen (`3272 - Småviken`):
+
+| Geminus Byggnad | Congeria Mapp-URL |
+|-----------------|-------------------|
+| Småviken | `https://fms.congeria.com/.../3272 - Småviken/DoU/` |
+
+**Förslag:** Lägg till ett fält i `assets`-tabellen eller en ny mappningstabell:
+
+```sql
+CREATE TABLE building_external_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  building_fm_guid UUID NOT NULL REFERENCES assets(fm_guid),
+  system_name TEXT NOT NULL,  -- 'congeria', 'ivion', etc
+  external_url TEXT NOT NULL, -- Full URL till mappen
+  external_id TEXT,           -- Om systemet har ID (t.ex. "3272")
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### Edge Function: `congeria-sync`
+
+```typescript
+// supabase/functions/congeria-sync/index.ts
+
+interface CongeriaSyncRequest {
+  buildingFmGuid: string;
+  congeriaUrl: string;  // Full URL till dokumentmappen
+}
+
+async function syncDocuments(request: CongeriaSyncRequest) {
+  const username = Deno.env.get("CONGERIA_USERNAME");
+  const password = Deno.env.get("CONGERIA_PASSWORD");
+  
+  // 1. Login - få session cookie
+  const loginRes = await fetch("https://fms.congeria.com/login", {
+    method: "POST",
+    body: new URLSearchParams({ username, password }),
+    redirect: "manual",
+  });
+  const cookies = loginRes.headers.get("set-cookie");
+  
+  // 2. Navigera till dokumentmapp
+  const docListRes = await fetch(request.congeriaUrl, {
+    headers: { Cookie: cookies },
+  });
+  
+  // 3. Parsa HTML för att hitta dokument och metadata
+  const html = await docListRes.text();
+  const documents = parseDocumentList(html);
+  
+  // 4. Ladda ner varje dokument
+  for (const doc of documents) {
+    const fileData = await fetch(doc.downloadUrl, { headers: { Cookie: cookies } });
+    // Spara till Supabase Storage
+  }
+}
+```
+
+### Databastabell för dokument
+
+```sql
+CREATE TABLE documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  building_fm_guid UUID NOT NULL,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,       -- Sökväg i Supabase Storage
+  file_size INTEGER,
+  mime_type TEXT,
+  source_system TEXT DEFAULT 'congeria',
+  source_url TEXT,               -- Original URL
+  metadata JSONB DEFAULT '{}',   -- Congeria metadatafält
+  synced_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Index för snabb lookup per byggnad
+CREATE INDEX idx_documents_building ON documents(building_fm_guid);
+```
+
+### UI-komponenter
+
+**DocumentsTab i FacilityLandingPage**
 
 ```tsx
-const renderPropertyValue = (prop: MergedPropertyItem) => {
-  if (prop.isDifferent && !isEditing) {
-    return (
-      <span className="text-muted-foreground italic flex items-center gap-1">
-        <AlertCircle className="h-3 w-3" />
-        Different values ({prop.differentCount})
-      </span>
-    );
-  }
+// src/components/portfolio/DocumentsTab.tsx
+const DocumentsTab = ({ buildingFmGuid }: { buildingFmGuid: string }) => {
+  const [documents, setDocuments] = useState([]);
   
-  if (isEditing && prop.editable) {
-    return (
-      <div className="flex flex-col gap-1">
-        {prop.isDifferent && (
-          <span className="text-xs text-amber-500">Will overwrite all</span>
-        )}
-        <Input
-          value={formData[prop.key] ?? ''}
-          placeholder={prop.isDifferent ? 'Enter new value for all...' : undefined}
-          onChange={(e) => setFormData({...formData, [prop.key]: e.target.value})}
-        />
-      </div>
-    );
-  }
+  // Hämta dokument från lokal databas
+  useEffect(() => {
+    supabase
+      .from("documents")
+      .select("*")
+      .eq("building_fm_guid", buildingFmGuid)
+      .then(({ data }) => setDocuments(data || []));
+  }, [buildingFmGuid]);
   
-  // ... existing render logic
+  return (
+    <div>
+      <h3>Dokument</h3>
+      <DocumentList documents={documents} />
+      <SyncFromCongeriaButton buildingFmGuid={buildingFmGuid} />
+    </div>
+  );
 };
 ```
 
-#### 3.5 Batch Save Handler
+### Secrets att konfigurera
 
-```tsx
-const handleSave = async () => {
-  setIsSaving(true);
-  
-  try {
-    // Build update payload (only changed fields)
-    const updatePayload: Record<string, any> = {};
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') {
-        updatePayload[key] = value;
-      }
-    });
-
-    if (Object.keys(updatePayload).length === 0) {
-      toast.info('No changes to save');
-      setIsEditing(false);
-      return;
-    }
-
-    // Batch update all selected assets
-    const { error } = await supabase
-      .from('assets')
-      .update(updatePayload)
-      .in('fm_guid', fmGuids);
-
-    if (error) throw error;
-
-    toast.success(`Updated ${fmGuids.length} items`);
-    setIsEditing(false);
-    onUpdate?.();
-  } catch (error: any) {
-    toast.error('Error saving: ' + error.message);
-  } finally {
-    setIsSaving(false);
-  }
-};
+```
+CONGERIA_USERNAME = [ditt användarnamn]
+CONGERIA_PASSWORD = [ditt lösenord]
 ```
 
----
+### Filer att skapa/ändra
 
-### Part 4: Same Changes for RoomsView
-
-Apply identical changes to `src/components/portfolio/RoomsView.tsx`:
-- Auto-show properties dialog on selection
-- Update state type to `string[]`
-- Pass array to UniversalPropertiesDialog
-
----
-
-## File Changes Summary
-
-| File | Changes |
-|------|---------|
-| `src/components/common/UniversalPropertiesDialog.tsx` | Support multi-select, "Different values" UI, batch save |
-| `src/components/portfolio/AssetsView.tsx` | Row click → landing page, auto-show properties on selection |
-| `src/components/portfolio/RoomsView.tsx` | Auto-show properties on selection, pass array to dialog |
-| `src/components/portfolio/PortfolioView.tsx` | Add `handleSelectAsset` handler, pass to AssetsView |
+| Fil | Åtgärd |
+|-----|--------|
+| `supabase/functions/congeria-sync/index.ts` | **NY** - Session-baserad dokumenthämtning |
+| `supabase/migrations/xxx_create_documents_table.sql` | **NY** - Databastabell |
+| `supabase/migrations/xxx_create_building_links_table.sql` | **NY** - Mappningstabell |
+| `src/components/portfolio/DocumentsTab.tsx` | **NY** - UI för dokumentlista |
+| `src/components/portfolio/FacilityLandingPage.tsx` | **ÄNDRA** - Lägg till Documents-flik |
 
 ---
 
-## Editable vs Read-Only Fields
+## Implementeringsordning
 
-| Field | Editable | Notes |
-|-------|----------|-------|
-| `common_name` | Yes | Display name |
-| `asset_type` | Yes | Classification |
-| `coordinate_x/y/z` | Yes | Position |
-| `fm_guid` | No | System identifier |
-| `category` | No | IFC category |
-| `building_fm_guid` | No | Hierarchy reference |
-| `level_fm_guid` | No | Hierarchy reference |
-| `is_local` | No | System status |
-| `created_in_model` | No | System status |
-| Attributes from Asset+ | No | External system data |
+### Fas 1: Asset+ återskrivning (prioritet)
+1. Skapa `asset-plus-update` Edge Function
+2. Implementera `updateAssetProperties()` i service
+3. Koppla till UniversalPropertiesDialog
+4. Testa med både lokala och synkade assets
 
----
+### Fas 2: API-dokumentation
+1. Skapa docs/api/ struktur
+2. Kopiera och bearbeta Asset+ dokumentation
+3. Dokumentera befintliga integrationer (Ivion, FM Access)
 
-## Implementation Order
-
-1. **UniversalPropertiesDialog** - Multi-select support with "Different values"
-2. **PortfolioView** - Add `handleSelectAsset` handler
-3. **AssetsView** - Row click navigation + auto-show dialog
-4. **RoomsView** - Auto-show dialog on selection
+### Fas 3: Congeria (efter Fas 1 & 2)
+1. Konfigurera secrets
+2. Skapa byggnadsmappning
+3. Implementera Edge Function
+4. Skapa databastabeller
+5. Bygga UI
 
 ---
 
-## Technical Notes
+## Tekniska detaljer
 
-### Backward Compatibility
-The dialog should support both single GUID (legacy) and array:
-```tsx
-// Accept both formats
-fmGuids: string | string[];
+### Asset+ Write-back flöde
 
-// Normalize internally
-const normalizedGuids = Array.isArray(fmGuids) ? fmGuids : [fmGuids];
+```text
+┌─────────────────────────────┐
+│ UniversalPropertiesDialog   │
+│ handleSave()                │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ Check: is_local status      │
+│ för valda assets            │
+└──────────────┬──────────────┘
+               │
+       ┌───────┴───────┐
+       ▼               ▼
+┌─────────────┐  ┌─────────────────────┐
+│ is_local    │  │ is_local = false    │
+│ = true      │  │ (synkade assets)    │
+└──────┬──────┘  └──────────┬──────────┘
+       │                    │
+       ▼                    ▼
+┌─────────────┐  ┌─────────────────────┐
+│ Lokal DB    │  │ asset-plus-update   │
+│ uppdatering │  │ Edge Function       │
+└─────────────┘  └──────────┬──────────┘
+                            │
+                ┌───────────┼───────────┐
+                ▼           ▼           ▼
+         ┌──────────┐ ┌──────────┐ ┌──────────┐
+         │Asset+ API│ │Lokal DB  │ │Response  │
+         │UpdateBim │ │uppdatera │ │till UI   │
+         └──────────┘ └──────────┘ └──────────┘
 ```
 
-### Performance Consideration
-For large selections (>50 items), consider:
-- Pagination in the fetch query
-- Limiting editable fields in multi-mode
-- Adding a warning about batch operations
+### Congeria Login-flöde
+
+```text
+┌─────────────────────────────┐
+│ congeria-sync Edge Function │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ POST /login                 │
+│ username + password         │
+│ → Session cookie            │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ GET /path/to/folder         │
+│ Cookie: session=xxx         │
+│ → HTML med dokumentlista    │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ Parse HTML                  │
+│ → [{ name, url, meta }]     │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ Download varje fil          │
+│ → Supabase Storage          │
+│ → documents tabell          │
+└─────────────────────────────┘
+```
