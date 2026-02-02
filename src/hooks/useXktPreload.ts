@@ -8,6 +8,10 @@ const globalPreloadedBuildings = new Set<string>();
 // In-memory cache for loaded XKT data to avoid re-fetching
 const xktMemoryCache = new Map<string, ArrayBuffer>();
 
+// Track total memory usage (approximate)
+let totalMemoryBytes = 0;
+const MAX_MEMORY_BYTES = 200 * 1024 * 1024; // 200 MB limit
+
 /**
  * Check if a model is already loaded in memory
  */
@@ -25,12 +29,31 @@ export function getModelFromMemory(modelId: string, buildingFmGuid: string): Arr
 }
 
 /**
- * Store model in memory cache
+ * Store model in memory cache with memory limit enforcement
  */
 export function storeModelInMemory(modelId: string, buildingFmGuid: string, data: ArrayBuffer): void {
   const key = `${buildingFmGuid}/${modelId}`;
+  
+  // Skip if already cached
+  if (xktMemoryCache.has(key)) {
+    return;
+  }
+  
+  // Check if adding this would exceed memory limit
+  if (totalMemoryBytes + data.byteLength > MAX_MEMORY_BYTES) {
+    // Evict oldest entries until we have space
+    const entries = Array.from(xktMemoryCache.entries());
+    while (totalMemoryBytes + data.byteLength > MAX_MEMORY_BYTES && entries.length > 0) {
+      const [oldKey, oldData] = entries.shift()!;
+      xktMemoryCache.delete(oldKey);
+      totalMemoryBytes -= oldData.byteLength;
+      console.log(`XKT Memory: Evicted ${oldKey} to make room`);
+    }
+  }
+  
   xktMemoryCache.set(key, data);
-  console.log(`XKT Memory: Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+  totalMemoryBytes += data.byteLength;
+  console.log(`XKT Memory: Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB, total: ${(totalMemoryBytes / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 /**
@@ -38,13 +61,34 @@ export function storeModelInMemory(modelId: string, buildingFmGuid: string, data
  */
 export function clearBuildingFromMemory(buildingFmGuid: string): void {
   const keysToDelete: string[] = [];
-  xktMemoryCache.forEach((_, key) => {
+  xktMemoryCache.forEach((data, key) => {
     if (key.startsWith(`${buildingFmGuid}/`)) {
       keysToDelete.push(key);
+      totalMemoryBytes -= data.byteLength;
     }
   });
   keysToDelete.forEach(key => xktMemoryCache.delete(key));
   console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}...`);
+}
+
+/**
+ * Get current memory usage stats
+ */
+export function getMemoryStats(): { usedBytes: number; maxBytes: number; modelCount: number } {
+  return {
+    usedBytes: totalMemoryBytes,
+    maxBytes: MAX_MEMORY_BYTES,
+    modelCount: xktMemoryCache.size,
+  };
+}
+
+/**
+ * Clear all memory cache
+ */
+export function clearAllMemory(): void {
+  xktMemoryCache.clear();
+  totalMemoryBytes = 0;
+  console.log('XKT Memory: Cleared all cached models');
 }
 
 /**
@@ -73,22 +117,16 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
       console.log(`XKT Preload: Starting background preload for building ${buildingFmGuid.substring(0, 8)}...`);
       
       try {
-        // Use the on-demand cache service which triggers sync if needed
+        // Check what's already cached in database
         const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
         
-        if (result.syncing) {
-          console.log('XKT Preload: Background sync triggered, models will be available on next load');
-          globalPreloadedBuildings.add(buildingFmGuid);
-          return;
-        }
-
         if (!result.cached || result.count === 0) {
-          console.log('XKT Preload: No cached models available');
+          console.log('XKT Preload: No cached models - will cache on first 3D view');
           globalPreloadedBuildings.add(buildingFmGuid);
           return;
         }
 
-        console.log(`XKT Preload: ${result.count} models found in cache, fetching binary data...`);
+        console.log(`XKT Preload: ${result.count} models found in database, fetching binary data...`);
 
         // Actually fetch model data into memory for faster loading
         const { data: models } = await supabase
@@ -98,7 +136,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
         if (models && models.length > 0) {
           // Preload model binaries into memory cache (limit concurrent fetches)
-          const fetchPromises = models.slice(0, 3).map(async (model) => {
+          const fetchPromises = models.slice(0, 5).map(async (model) => {
             try {
               // Skip if already in memory
               if (isModelInMemory(model.model_id, buildingFmGuid)) {
