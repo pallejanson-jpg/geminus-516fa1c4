@@ -244,6 +244,104 @@ export type Database = {
           },
         ]
       }
+      bcf_comments: {
+        Row: {
+          comment: string
+          created_at: string
+          id: string
+          issue_id: string
+          screenshot_url: string | null
+          user_id: string
+          viewpoint_json: Json | null
+        }
+        Insert: {
+          comment: string
+          created_at?: string
+          id?: string
+          issue_id: string
+          screenshot_url?: string | null
+          user_id: string
+          viewpoint_json?: Json | null
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          id?: string
+          issue_id?: string
+          screenshot_url?: string | null
+          user_id?: string
+          viewpoint_json?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bcf_comments_issue_id_fkey"
+            columns: ["issue_id"]
+            isOneToOne: false
+            referencedRelation: "bcf_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bcf_issues: {
+        Row: {
+          assigned_to: string | null
+          building_fm_guid: string | null
+          building_name: string | null
+          created_at: string
+          description: string | null
+          id: string
+          issue_type: string
+          priority: string
+          reported_by: string
+          resolved_at: string | null
+          resolved_by: string | null
+          screenshot_url: string | null
+          selected_object_ids: string[] | null
+          status: string
+          title: string
+          updated_at: string
+          viewpoint_json: Json | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          issue_type?: string
+          priority?: string
+          reported_by: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          selected_object_ids?: string[] | null
+          status?: string
+          title: string
+          updated_at?: string
+          viewpoint_json?: Json | null
+        }
+        Update: {
+          assigned_to?: string | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          issue_type?: string
+          priority?: string
+          reported_by?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          selected_object_ids?: string[] | null
+          status?: string
+          title?: string
+          updated_at?: string
+          viewpoint_json?: Json | null
+        }
+        Relationships: []
+      }
       building_settings: {
         Row: {
           created_at: string
