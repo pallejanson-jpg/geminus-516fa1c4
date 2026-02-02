@@ -23,6 +23,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 interface AnnotationSymbol {
   id: string;
@@ -235,74 +241,96 @@ const SymbolSettings: React.FC = () => {
       </div>
 
       <ScrollArea className="h-[350px]">
-        <div className="space-y-2">
-          {symbols.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Circle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Inga symboler konfigurerade</p>
-              <p className="text-xs mt-1">Klicka "Ny symbol" för att skapa en</p>
-            </div>
-          ) : (
-            symbols.map((symbol) => (
-              <div
-                key={symbol.id}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+        {symbols.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Circle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p>Inga symboler konfigurerade</p>
+            <p className="text-xs mt-1">Klicka "Ny symbol" för att skapa en</p>
+          </div>
+        ) : (
+          <Accordion type="single" collapsible className="space-y-2">
+            {symbols.map((symbol) => (
+              <AccordionItem 
+                key={symbol.id} 
+                value={symbol.id}
+                className="border rounded-lg bg-muted/30 overflow-hidden"
               >
-                <div className="flex items-center gap-3">
-                  {/* Color indicator or icon */}
-                  {symbol.icon_url ? (
-                    <img
-                      src={symbol.icon_url}
-                      alt={symbol.name}
-                      className="w-6 h-6 rounded"
-                    />
-                  ) : (
-                    <div
-                      className="w-6 h-6 rounded-full border-2"
-                      style={{ backgroundColor: symbol.color, borderColor: symbol.color }}
-                    />
-                  )}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{symbol.name}</span>
-                      {symbol.symbol_id && (
-                        <Badge variant="outline" className="text-xs font-mono">
-                          #{symbol.symbol_id}
-                        </Badge>
-                      )}
-                      {symbol.is_default && (
-                        <Badge variant="secondary" className="text-xs">
-                          Standard
-                        </Badge>
-                      )}
+                <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                  <div className="flex items-center gap-3 flex-1">
+                    {/* Color indicator or icon */}
+                    {symbol.icon_url ? (
+                      <img
+                        src={symbol.icon_url}
+                        alt={symbol.name}
+                        className="w-6 h-6 rounded"
+                      />
+                    ) : (
+                      <div
+                        className="w-6 h-6 rounded-full border-2"
+                        style={{ backgroundColor: symbol.color, borderColor: symbol.color }}
+                      />
+                    )}
+                    <div className="text-left">
+                      <span className="font-medium text-sm">{symbol.name}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {symbol.symbol_id && (
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            #{symbol.symbol_id}
+                          </Badge>
+                        )}
+                        {symbol.is_default && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Standard
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      Kategori: {symbol.category}
-                    </span>
                   </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => handleOpenEdit(symbol)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(symbol)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4 pt-2">
+                  <div className="space-y-3">
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium">Kategori:</span> {symbol.category}
+                    </div>
+                    
+                    {symbol.icon_url && (
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={symbol.icon_url}
+                          alt={symbol.name}
+                          className="w-10 h-10 object-contain rounded border"
+                        />
+                        <span className="text-xs text-muted-foreground truncate flex-1">
+                          {symbol.icon_url.split('/').pop()}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEdit(symbol)}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Redigera
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(symbol)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Ta bort
+                      </Button>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
       </ScrollArea>
 
       {/* Create/Edit Dialog */}

@@ -1063,87 +1063,94 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 </Button>
                             </div>
                             
-                            {Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]: [string, any]) => {
-                                const cfg = appConfigs[key] || defaultCfg;
-                                const IconComp = getAppIcon(key);
-                                
-                                return (
-                                    <div key={key} className="border rounded-lg p-4 space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <IconComp className="h-5 w-5 text-primary" />
-                                                <h4 className="font-medium">{cfg.label}</h4>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-muted-foreground">
-                                                    {cfg.openMode === 'external' ? 'New Tab' : 'In App'}
-                                                </span>
-                                                <Switch
-                                                    checked={cfg.openMode === 'external'}
-                                                    onCheckedChange={(checked) => {
-                                                        setAppConfigs({
-                                                            ...appConfigs,
-                                                            [key]: { 
-                                                                ...cfg, 
-                                                                openMode: checked ? 'external' : 'internal' 
-                                                            }
-                                                        });
-                                                    }}
-                                                />
-                                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm font-medium">URL</Label>
-                                                <Input
-                                                    value={cfg.url || ''}
-                                                    onChange={(e) => {
-                                                        setAppConfigs({
-                                                            ...appConfigs,
-                                                            [key]: { ...cfg, url: e.target.value }
-                                                        });
-                                                    }}
-                                                    placeholder="https://app.example.com"
-                                                    className="h-11 text-base"
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-3">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-sm font-medium">Username</Label>
-                                                    <Input
-                                                        value={cfg.username || ''}
-                                                        onChange={(e) => {
-                                                            setAppConfigs({
-                                                                ...appConfigs,
-                                                                [key]: { ...cfg, username: e.target.value }
-                                                            });
-                                                        }}
-                                                        placeholder="user@example.com"
-                                                        className="h-11 text-base"
-                                                    />
+                            <Accordion type="multiple" className="space-y-2">
+                                {Object.entries(DEFAULT_APP_CONFIGS).map(([key, defaultCfg]: [string, any]) => {
+                                    const cfg = appConfigs[key] || defaultCfg;
+                                    const IconComp = getAppIcon(key);
+                                    
+                                    return (
+                                        <AccordionItem key={key} value={key} className="border rounded-lg">
+                                            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <IconComp className="h-5 w-5 text-primary" />
+                                                    <span className="font-medium">{cfg.label}</span>
+                                                    <span className="text-xs text-muted-foreground ml-auto mr-2">
+                                                        {cfg.openMode === 'external' ? 'New Tab' : 'In App'}
+                                                    </span>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-sm font-medium">Password</Label>
-                                                    <Input
-                                                        type="password"
-                                                        value={cfg.password || ''}
-                                                        onChange={(e) => {
-                                                            setAppConfigs({
-                                                                ...appConfigs,
-                                                                [key]: { ...cfg, password: e.target.value }
-                                                            });
-                                                        }}
-                                                        placeholder="••••••••"
-                                                        className="h-11 text-base"
-                                                    />
+                                            </AccordionTrigger>
+                                            <AccordionContent className="px-4 pb-4 pt-2">
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center justify-end gap-2 pb-2 border-b">
+                                                        <span className="text-xs text-muted-foreground">Öppna i ny flik</span>
+                                                        <Switch
+                                                            checked={cfg.openMode === 'external'}
+                                                            onCheckedChange={(checked) => {
+                                                                setAppConfigs({
+                                                                    ...appConfigs,
+                                                                    [key]: { 
+                                                                        ...cfg, 
+                                                                        openMode: checked ? 'external' : 'internal' 
+                                                                    }
+                                                                });
+                                                            }}
+                                                        />
+                                                        <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                                    </div>
+                                                    
+                                                    <div className="grid gap-3">
+                                                        <div className="space-y-1.5">
+                                                            <Label className="text-sm font-medium">URL</Label>
+                                                            <Input
+                                                                value={cfg.url || ''}
+                                                                onChange={(e) => {
+                                                                    setAppConfigs({
+                                                                        ...appConfigs,
+                                                                        [key]: { ...cfg, url: e.target.value }
+                                                                    });
+                                                                }}
+                                                                placeholder="https://app.example.com"
+                                                                className="h-11 text-base"
+                                                            />
+                                                        </div>
+                                                        <div className="grid grid-cols-1 gap-3">
+                                                            <div className="space-y-1.5">
+                                                                <Label className="text-sm font-medium">Username</Label>
+                                                                <Input
+                                                                    value={cfg.username || ''}
+                                                                    onChange={(e) => {
+                                                                        setAppConfigs({
+                                                                            ...appConfigs,
+                                                                            [key]: { ...cfg, username: e.target.value }
+                                                                        });
+                                                                    }}
+                                                                    placeholder="user@example.com"
+                                                                    className="h-11 text-base"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1.5">
+                                                                <Label className="text-sm font-medium">Password</Label>
+                                                                <Input
+                                                                    type="password"
+                                                                    value={cfg.password || ''}
+                                                                    onChange={(e) => {
+                                                                        setAppConfigs({
+                                                                            ...appConfigs,
+                                                                            [key]: { ...cfg, password: e.target.value }
+                                                                        });
+                                                                    }}
+                                                                    placeholder="••••••••"
+                                                                    className="h-11 text-base"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    );
+                                })}
+                            </Accordion>
                         </div>
                     </TabsContent>
 
@@ -1158,238 +1165,256 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     API-secrets konfigureras via Lovable Cloud. Klicka på sektionerna nedan för att se detaljer.
                                 </p>
                                 
-                                {/* Asset+ API Section */}
-                                <details className="border rounded-lg group">
-                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <Box className="h-5 w-5 text-primary" />
-                                        <span>Asset+</span>
-                                        <Badge variant="outline" className="ml-auto text-xs">Konfigurerad</Badge>
-                                    </summary>
-                                    <div className="px-4 pb-4 space-y-4 border-t pt-4">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setShowSecrets(!showSecrets)}
-                                                className="gap-1 h-7 text-xs"
-                                            >
-                                                {showSecrets ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                                {showSecrets ? 'Dölj' : 'Visa'}
-                                            </Button>
-                                            {!isEditMode ? (
-                                                <Button variant="outline" size="sm" onClick={() => setIsEditMode(true)} className="gap-1 h-7 text-xs">
-                                                    <Edit2 className="h-3 w-3" /> Redigera
-                                                </Button>
-                                            ) : (
-                                                <>
-                                                    <Button onClick={handleSaveConfig} disabled={isSaving} size="sm" className="gap-1 h-7 text-xs">
-                                                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Spara
+                                <Accordion type="multiple" className="space-y-2">
+                                    {/* Asset+ API Section */}
+                                    <AccordionItem value="assetplus" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Box className="h-5 w-5 text-primary" />
+                                                <span className="font-medium">Asset+</span>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs">Konfigurerad</Badge>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setShowSecrets(!showSecrets)}
+                                                        className="gap-1 h-7 text-xs"
+                                                    >
+                                                        {showSecrets ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                                        {showSecrets ? 'Dölj' : 'Visa'}
                                                     </Button>
-                                                    <Button onClick={handleCancelEdit} variant="ghost" size="sm" disabled={isSaving} className="h-7 text-xs">Avbryt</Button>
-                                                </>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">OpenID Token Endpoint</Label>
-                                                <Input value={config.keycloakUrl} onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))} placeholder="https://sso.example.com/..." disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    {!isEditMode ? (
+                                                        <Button variant="outline" size="sm" onClick={() => setIsEditMode(true)} className="gap-1 h-7 text-xs">
+                                                            <Edit2 className="h-3 w-3" /> Redigera
+                                                        </Button>
+                                                    ) : (
+                                                        <>
+                                                            <Button onClick={handleSaveConfig} disabled={isSaving} size="sm" className="gap-1 h-7 text-xs">
+                                                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Spara
+                                                            </Button>
+                                                            <Button onClick={handleCancelEdit} variant="ghost" size="sm" disabled={isSaving} className="h-7 text-xs">Avbryt</Button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">OpenID Token Endpoint</Label>
+                                                        <Input value={config.keycloakUrl} onChange={(e) => setConfig(prev => ({ ...prev, keycloakUrl: e.target.value }))} placeholder="https://sso.example.com/..." disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">API URL</Label>
+                                                        <Input value={config.apiUrl} onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))} placeholder="https://api.example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">Client ID</Label>
+                                                        <Input value={config.clientId} onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))} placeholder="asset-api" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">Client Secret</Label>
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret} onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">Username</Label>
+                                                        <Input value={config.username} onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))} placeholder="service-user@example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-sm">Password</Label>
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.password === '••••••••' ? '' : config.password} onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-end gap-3">
+                                                    <div className="flex-1 space-y-1.5">
+                                                        <Label className="text-sm">API Key</Label>
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey} onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                    </div>
+                                                    <Button onClick={handleTestConnection} disabled={isTestingConnection || isEditMode} variant="outline" className="gap-2 h-10">
+                                                        {isTestingConnection ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                                                        {isTestingConnection ? 'Testar...' : 'Testa'}
+                                                    </Button>
+                                                </div>
+                                                {connectionStatus !== 'idle' && (
+                                                    <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
+                                                        <div className="flex items-start gap-2">
+                                                            {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+                                                            <div><p className="font-medium">{connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p><p className="text-xs">{connectionMessage}</p></div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">API URL</Label>
-                                                <Input value={config.apiUrl} onChange={(e) => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))} placeholder="https://api.example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                        </AccordionContent>
+                                    </AccordionItem>
+
+                                    {/* FM Access API Section */}
+                                    <AccordionItem value="fmaccess" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Building2 className="h-5 w-5 text-primary" />
+                                                <span className="font-medium">FM Access</span>
+                                                {fmAccessStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Ansluten</Badge>}
                                             </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">Client ID</Label>
-                                                <Input value={config.clientId} onChange={(e) => setConfig(prev => ({ ...prev, clientId: e.target.value }))} placeholder="asset-api" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <p className="text-xs text-muted-foreground mb-3">Secrets konfigureras i Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
+                                            <div className="flex gap-2">
+                                                <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
+                                                    {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                                                    Testa anslutning
+                                                </Button>
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">Client Secret</Label>
-                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret} onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                        </AccordionContent>
+                                    </AccordionItem>
+
+                                    {/* Ivion API Section */}
+                                    <AccordionItem value="ivion" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <View className="h-5 w-5 text-primary" />
+                                                <span className="font-medium">Ivion (360+)</span>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
                                             </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">Username</Label>
-                                                <Input value={config.username} onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))} placeholder="service-user@example.com" disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <div className="space-y-3">
+                                                <p className="text-xs text-muted-foreground">Integration med NavVis Ivion för 360°-panorama. Secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.</p>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Embed URL för Ivion</Label>
+                                                    <div className="flex gap-2">
+                                                        <Input value={`${window.location.origin}/ivion-create`} readOnly className="h-8 text-sm font-mono bg-muted" />
+                                                        <Button variant="outline" size="sm" className="h-8" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/ivion-create`); toast({ title: 'Kopierat!' }); }}>
+                                                            <ExternalLink className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <Button variant="outline" size="sm" onClick={async () => {
+                                                    try {
+                                                        const { data, error } = await supabase.functions.invoke('ivion-poi', { body: { action: 'test-connection' } });
+                                                        if (error) throw error;
+                                                        toast({ title: data?.success ? 'Anslutning OK' : 'Misslyckades', description: data?.message });
+                                                    } catch (err: any) { toast({ variant: 'destructive', title: 'Fel', description: err.message }); }
+                                                }}>
+                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                                </Button>
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-sm">Password</Label>
-                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.password === '••••••••' ? '' : config.password} onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                        </AccordionContent>
+                                    </AccordionItem>
+
+                                    {/* Senslinc API Section */}
+                                    <AccordionItem value="senslinc" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Zap className="h-5 w-5 text-yellow-500" />
+                                                <span className="font-medium">Senslinc</span>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">IoT</Badge>
                                             </div>
-                                        </div>
-                                        <div className="flex items-end gap-3">
-                                            <div className="flex-1 space-y-1.5">
-                                                <Label className="text-sm">API Key</Label>
-                                                <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey} onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
-                                            </div>
-                                            <Button onClick={handleTestConnection} disabled={isTestingConnection || isEditMode} variant="outline" className="gap-2 h-10">
-                                                {isTestingConnection ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                                                {isTestingConnection ? 'Testar...' : 'Testa'}
-                                            </Button>
-                                        </div>
-                                        {connectionStatus !== 'idle' && (
-                                            <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
-                                                <div className="flex items-start gap-2">
-                                                    {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
-                                                    <div><p className="font-medium">{connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p><p className="text-xs">{connectionMessage}</p></div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <div className="space-y-4">
+                                                <p className="text-xs text-muted-foreground">
+                                                    IoT-sensorer och mätvärden från Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) konfigureras i Lovable Cloud.
+                                                </p>
+                                                
+                                                {/* Polling interval setting */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium">Pollningsintervall</Label>
+                                                    <select 
+                                                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                                        value={appConfigs.iot?.pollIntervalHours ?? 24}
+                                                        onChange={(e) => {
+                                                            setAppConfigs({
+                                                                ...appConfigs,
+                                                                iot: { 
+                                                                    ...appConfigs.iot, 
+                                                                    pollIntervalHours: parseInt(e.target.value) 
+                                                                }
+                                                            });
+                                                        }}
+                                                    >
+                                                        {SENSLINC_POLL_OPTIONS.map(opt => (
+                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Hur ofta sensordata ska hämtas automatiskt. Standard är var 24:e timme.
+                                                    </p>
+                                                </div>
+
+                                                <div className="flex gap-2">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        onClick={async () => {
+                                                            try {
+                                                                const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                                    body: { action: 'test-connection' } 
+                                                                });
+                                                                if (error) throw error;
+                                                                toast({ 
+                                                                    title: data?.success ? 'Anslutning OK' : 'Misslyckades', 
+                                                                    description: data?.message || data?.error 
+                                                                });
+                                                            } catch (err: any) { 
+                                                                toast({ 
+                                                                    variant: 'destructive', 
+                                                                    title: 'Fel', 
+                                                                    description: err.message 
+                                                                }); 
+                                                            }
+                                                        }}
+                                                    >
+                                                        <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                                    </Button>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        onClick={async () => {
+                                                            try {
+                                                                const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                                    body: { action: 'get-sites' } 
+                                                                });
+                                                                if (error) throw error;
+                                                                const count = Array.isArray(data?.data) ? data.data.length : 0;
+                                                                toast({ 
+                                                                    title: 'Data hämtad', 
+                                                                    description: `Hittade ${count} sites i Senslinc.` 
+                                                                });
+                                                            } catch (err: any) { 
+                                                                toast({ 
+                                                                    variant: 'destructive', 
+                                                                    title: 'Fel', 
+                                                                    description: err.message 
+                                                                }); 
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Database className="h-3.5 w-3.5 mr-1.5" /> Hämta data nu
+                                                    </Button>
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </details>
+                                        </AccordionContent>
+                                    </AccordionItem>
 
-                                {/* FM Access API Section */}
-                                <details className="border rounded-lg">
-                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <Building2 className="h-5 w-5 text-primary" />
-                                        <span>FM Access</span>
-                                        {fmAccessStatus === 'success' && <Badge className="ml-auto text-xs bg-green-100 text-green-800">Ansluten</Badge>}
-                                    </summary>
-                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
-                                        <p className="text-xs text-muted-foreground">Secrets konfigureras i Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
-                                        <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
-                                                {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-                                                Testa anslutning
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                {/* Ivion API Section */}
-                                <details className="border rounded-lg">
-                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <View className="h-5 w-5 text-primary" />
-                                        <span>Ivion (360+)</span>
-                                        <Badge variant="outline" className="ml-auto text-xs bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
-                                    </summary>
-                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
-                                        <p className="text-xs text-muted-foreground">Integration med NavVis Ivion för 360°-panorama. Secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.</p>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">Embed URL för Ivion</Label>
-                                            <div className="flex gap-2">
-                                                <Input value={`${window.location.origin}/ivion-create`} readOnly className="h-8 text-sm font-mono bg-muted" />
-                                                <Button variant="outline" size="sm" className="h-8" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/ivion-create`); toast({ title: 'Kopierat!' }); }}>
-                                                    <ExternalLink className="h-3.5 w-3.5" />
-                                                </Button>
+                                    {/* Faciliate API Section */}
+                                    <AccordionItem value="faciliate" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Wrench className="h-5 w-5 text-orange-500" />
+                                                <span className="font-medium">Faciliate</span>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>
                                             </div>
-                                        </div>
-                                        <Button variant="outline" size="sm" onClick={async () => {
-                                            try {
-                                                const { data, error } = await supabase.functions.invoke('ivion-poi', { body: { action: 'test-connection' } });
-                                                if (error) throw error;
-                                                toast({ title: data?.success ? 'Anslutning OK' : 'Misslyckades', description: data?.message });
-                                            } catch (err: any) { toast({ variant: 'destructive', title: 'Fel', description: err.message }); }
-                                        }}>
-                                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
-                                        </Button>
-                                    </div>
-                                </details>
-
-                                {/* Senslinc API Section */}
-                                <details className="border rounded-lg">
-                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <Zap className="h-5 w-5 text-yellow-500" />
-                                        <span>Senslinc</span>
-                                        <Badge variant="outline" className="ml-auto text-xs bg-green-50 text-green-700 border-green-200">IoT</Badge>
-                                    </summary>
-                                    <div className="px-4 pb-4 space-y-4 border-t pt-4">
-                                        <p className="text-xs text-muted-foreground">
-                                            IoT-sensorer och mätvärden från Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) konfigureras i Lovable Cloud.
-                                        </p>
-                                        
-                                        {/* Polling interval setting */}
-                                        <div className="space-y-2">
-                                            <Label className="text-sm font-medium">Pollningsintervall</Label>
-                                            <select 
-                                                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                                                value={appConfigs.iot?.pollIntervalHours ?? 24}
-                                                onChange={(e) => {
-                                                    setAppConfigs({
-                                                        ...appConfigs,
-                                                        iot: { 
-                                                            ...appConfigs.iot, 
-                                                            pollIntervalHours: parseInt(e.target.value) 
-                                                        }
-                                                    });
-                                                }}
-                                            >
-                                                {SENSLINC_POLL_OPTIONS.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                ))}
-                                            </select>
-                                            <p className="text-xs text-muted-foreground">
-                                                Hur ofta sensordata ska hämtas automatiskt. Standard är var 24:e timme.
-                                            </p>
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                onClick={async () => {
-                                                    try {
-                                                        const { data, error } = await supabase.functions.invoke('senslinc-query', { 
-                                                            body: { action: 'test-connection' } 
-                                                        });
-                                                        if (error) throw error;
-                                                        toast({ 
-                                                            title: data?.success ? 'Anslutning OK' : 'Misslyckades', 
-                                                            description: data?.message || data?.error 
-                                                        });
-                                                    } catch (err: any) { 
-                                                        toast({ 
-                                                            variant: 'destructive', 
-                                                            title: 'Fel', 
-                                                            description: err.message 
-                                                        }); 
-                                                    }
-                                                }}
-                                            >
-                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
-                                            </Button>
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                onClick={async () => {
-                                                    try {
-                                                        const { data, error } = await supabase.functions.invoke('senslinc-query', { 
-                                                            body: { action: 'get-sites' } 
-                                                        });
-                                                        if (error) throw error;
-                                                        const count = Array.isArray(data?.data) ? data.data.length : 0;
-                                                        toast({ 
-                                                            title: 'Data hämtad', 
-                                                            description: `Hittade ${count} sites i Senslinc.` 
-                                                        });
-                                                    } catch (err: any) { 
-                                                        toast({ 
-                                                            variant: 'destructive', 
-                                                            title: 'Fel', 
-                                                            description: err.message 
-                                                        }); 
-                                                    }
-                                                }}
-                                            >
-                                                <Database className="h-3.5 w-3.5 mr-1.5" /> Hämta data nu
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                {/* Faciliate API Section */}
-                                <details className="border rounded-lg">
-                                    <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <Wrench className="h-5 w-5 text-orange-500" />
-                                        <span>Faciliate</span>
-                                        <Badge variant="outline" className="ml-auto text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>
-                                    </summary>
-                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
-                                        <p className="text-xs text-muted-foreground">Integration med Faciliate för arbetsorder. Inte konfigurerad ännu.</p>
-                                    </div>
-                                </details>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <p className="text-xs text-muted-foreground">Integration med Faciliate för arbetsorder. Inte konfigurerad ännu.</p>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </div>
                         )}
                     </TabsContent>
