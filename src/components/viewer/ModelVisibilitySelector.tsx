@@ -11,6 +11,7 @@ export interface ModelInfo {
   id: string;
   name: string;
   shortName: string;
+  loaded?: boolean; // Whether the model is currently loaded in xeokit scene
 }
 
 interface ModelVisibilitySelectorProps {
@@ -37,6 +38,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
     const [isLoadingNames, setIsLoadingNames] = useState(false);
     const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
+    const [dbModels, setDbModels] = useState<{id: string; name: string; fileName: string}[]>([]);
     
     // Stable refs to preserve selection across re-renders
     const visibleModelIdsRef = React.useRef<Set<string>>(new Set());
@@ -87,7 +89,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     return fileName.replace('.xkt', '');
   };
 
-  // Fetch model names - first try database, then fall back to Asset+ API
+  // Fetch model names and list from database - all models for this building
   useEffect(() => {
     if (!buildingFmGuid) return;
 
@@ -95,16 +97,23 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       setIsLoadingNames(true);
       try {
         // First, try to get model names from local database (xkt_models table)
-        const { data: dbModels, error: dbError } = await supabase
+        const { data: dbModelData, error: dbError } = await supabase
           .from('xkt_models')
           .select('model_id, model_name, file_name')
           .eq('building_fm_guid', buildingFmGuid);
 
-        if (!dbError && dbModels && dbModels.length > 0) {
-          console.debug("Using model names from database:", dbModels);
+        if (!dbError && dbModelData && dbModelData.length > 0) {
+          console.debug("Using model names from database:", dbModelData);
           const nameMap = new Map<string, string>();
           
-          dbModels.forEach((m) => {
+          // Store DB models list for combining with scene models
+          setDbModels(dbModelData.map(m => ({
+            id: m.model_id || m.file_name || '',
+            name: m.model_name || m.file_name || m.model_id || '',
+            fileName: m.file_name || ''
+          })));
+          
+          dbModelData.forEach((m) => {
             // Primary: Map file_name -> model_name (most reliable for XEOkit matching)
             if (m.file_name && m.model_name) {
               nameMap.set(m.file_name, m.model_name);
@@ -125,6 +134,9 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           setModelNamesMap(nameMap);
           setIsLoadingNames(false);
           return;
+        } else {
+          // Clear dbModels if nothing found
+          setDbModels([]);
         }
 
         // Fall back to Asset+ API if database has no data
@@ -196,18 +208,22 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     }, [viewerRef]);
 
     // Extract models from scene with friendly names from API/database
+    // Also include models from database that aren't loaded yet
     const extractModels = useCallback(() => {
       const viewer = getXeokitViewer();
-      if (!viewer?.scene?.models) return [];
-
-      const sceneModels = viewer.scene.models;
+      const sceneModels = viewer?.scene?.models || {};
       const extractedModels: ModelInfo[] = [];
+      const processedFileNames = new Set<string>();
 
+      // First, process models actually loaded in the scene
       Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
         // modelId is typically the filename from XKT loader (e.g., "abc123.xkt" or "abc123")
         const rawName = model.id || modelId;
         const fileName = rawName.endsWith('.xkt') ? rawName : rawName + '.xkt';
         const fileNameWithoutExt = fileName.replace(/\.xkt$/i, '');
+        
+        processedFileNames.add(fileName.toLowerCase());
+        processedFileNames.add(fileNameWithoutExt.toLowerCase());
         
         // Try multiple matching strategies - prioritize file_name matching from xkt_models
         let matchedName: string | undefined;
@@ -238,8 +254,9 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           }
         }
         
-        // Fallback: Format raw name for display (remove .xkt, replace dashes)
-        const friendlyName = matchedName || fileNameWithoutExt.replace(/-/g, ' ');
+        // Improved fallback: show "Laddar..." if still fetching names, otherwise format nicely
+        const friendlyName = matchedName || 
+          (isLoadingNames ? 'Laddar...' : fileNameWithoutExt.replace(/-/g, ' '));
         const shortName = friendlyName.length > 30 ? friendlyName.substring(0, 30) + '...' : friendlyName;
 
         if (!matchedName && modelNamesMap.size > 0) {
@@ -250,6 +267,28 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           id: modelId,
           name: friendlyName,
           shortName,
+          loaded: true,
+        });
+      });
+
+      // Second, add models from database that aren't loaded yet
+      dbModels.forEach(dbModel => {
+        const fileNameLower = dbModel.fileName.toLowerCase();
+        const fileNameWithoutExt = dbModel.fileName.replace(/\.xkt$/i, '').toLowerCase();
+        
+        // Check if this model is already in the list (loaded in scene)
+        if (processedFileNames.has(fileNameLower) || processedFileNames.has(fileNameWithoutExt)) {
+          return;
+        }
+        
+        const name = dbModel.name || dbModel.fileName.replace(/\.xkt$/i, '').replace(/-/g, ' ');
+        const shortName = name.length > 30 ? name.substring(0, 27) + '...' : name;
+        
+        extractedModels.push({
+          id: dbModel.fileName || dbModel.id,
+          name: name,
+          shortName: shortName,
+          loaded: false, // Not loaded in scene yet
         });
       });
 
@@ -257,7 +296,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
-    }, [getXeokitViewer, modelNamesMap]);
+    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames]);
 
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
