@@ -2,7 +2,7 @@
  * ViewerThemeSettings - Settings page for managing viewer color themes
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Palette, Check, X, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Palette, Check, X, Loader2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,12 +12,11 @@ import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,9 +58,11 @@ const ViewerThemeSettings: React.FC = () => {
   const { toast } = useToast();
   const { themes, isLoading, fetchThemes, createTheme, updateTheme, deleteTheme } = useViewerTheme();
   
+  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
   const [editingTheme, setEditingTheme] = useState<EditingTheme | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
 
   // Create new theme with default values
   const handleNewTheme = () => {
@@ -80,9 +81,10 @@ const ViewerThemeSettings: React.FC = () => {
       edge_settings: { enabled: true },
       space_opacity: 0.25,
     });
+    setIsCreatingNew(true);
   };
 
-  // Edit existing theme
+  // Start editing existing theme
   const handleEditTheme = (theme: ViewerTheme) => {
     // Fill in missing categories with defaults
     const mappings = { ...theme.color_mappings };
@@ -102,6 +104,15 @@ const ViewerThemeSettings: React.FC = () => {
       edge_settings: (theme.edge_settings as { enabled: boolean }) || { enabled: true },
       space_opacity: theme.space_opacity ?? 0.25,
     });
+    setEditingThemeId(theme.id);
+    setIsCreatingNew(false);
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingTheme(null);
+    setEditingThemeId(null);
+    setIsCreatingNew(false);
   };
 
   // Save theme
@@ -128,7 +139,7 @@ const ViewerThemeSettings: React.FC = () => {
         });
         toast({ title: 'Tema skapat', description: `"${editingTheme.name}" har skapats.` });
       }
-      setEditingTheme(null);
+      handleCancelEdit();
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
@@ -146,6 +157,9 @@ const ViewerThemeSettings: React.FC = () => {
       await deleteTheme(id);
       toast({ title: 'Tema borttaget' });
       setDeleteConfirmId(null);
+      if (editingThemeId === id) {
+        handleCancelEdit();
+      }
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
@@ -203,179 +217,304 @@ const ViewerThemeSettings: React.FC = () => {
             Konfigurera färgteman för 3D-viewern
           </p>
         </div>
-        {!editingTheme && (
-          <Button size="sm" onClick={handleNewTheme}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Nytt tema
-          </Button>
-        )}
+        <Button size="sm" onClick={handleNewTheme} disabled={isCreatingNew}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          Nytt tema
+        </Button>
       </div>
 
-      {/* Theme list */}
-      {!editingTheme && (
-        <div className="space-y-2">
-          {themes.map((theme) => (
-            <Card key={theme.id} className="bg-muted/30">
-              <CardHeader className="p-3 pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Palette className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-sm">{theme.name}</CardTitle>
-                    {theme.is_system && (
-                      <Badge variant="secondary" className="text-[10px]">System</Badge>
-                    )}
+      {/* New theme form (when creating) */}
+      {isCreatingNew && editingTheme && (
+        <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              Skapa nytt tema
+            </h4>
+          </div>
+          
+          {/* Theme name */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Namn</Label>
+            <Input
+              value={editingTheme.name}
+              onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
+              placeholder="Temanamn"
+              className="h-8 text-sm"
+            />
+          </div>
+
+          <Separator />
+
+          {/* Color mappings */}
+          <div className="space-y-2">
+            <Label className="text-xs">Färgmappningar</Label>
+            <ScrollArea className="h-[200px] pr-3">
+              <div className="space-y-2">
+                {IFC_CATEGORIES.map((cat) => {
+                  const mapping = editingTheme.color_mappings[cat.key];
+                  return (
+                    <div key={cat.key} className="flex items-center gap-2 py-1">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs truncate">{cat.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={mapping?.color || cat.defaultColor}
+                          onChange={(e) => updateColor(cat.key, e.target.value)}
+                          className="w-7 h-7 rounded border border-border cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground">Kant</span>
+                          <Switch
+                            checked={mapping?.edges ?? false}
+                            onCheckedChange={(checked) => updateEdges(cat.key, checked)}
+                            className="scale-75"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <Separator />
+
+          {/* Space opacity */}
+          <div className="space-y-2">
+            <Label className="text-xs">Rum-transparens</Label>
+            <div className="flex items-center gap-3">
+              <Slider
+                value={[editingTheme.space_opacity * 100]}
+                onValueChange={(v) => setEditingTheme({ 
+                  ...editingTheme, 
+                  space_opacity: v[0] / 100 
+                })}
+                min={0}
+                max={100}
+                step={5}
+                className="flex-1"
+              />
+              <span className="text-xs w-10 text-right">
+                {Math.round(editingTheme.space_opacity * 100)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelEdit}
+              disabled={isSaving}
+            >
+              <X className="h-3.5 w-3.5 mr-1.5" />
+              Avbryt
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveTheme}
+              disabled={isSaving || !editingTheme.name.trim()}
+            >
+              {isSaving ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Spara tema
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Theme list as Accordion */}
+      <Accordion type="single" collapsible className="space-y-2">
+        {themes.map((theme) => (
+          <AccordionItem 
+            key={theme.id} 
+            value={theme.id} 
+            className="border rounded-lg bg-muted/30 overflow-hidden"
+          >
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50 [&[data-state=open]]:bg-muted/50">
+              <div className="flex items-center gap-2 flex-1">
+                <Palette className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{theme.name}</span>
+                {theme.is_system && (
+                  <Badge variant="secondary" className="text-[10px]">System</Badge>
+                )}
+                {/* Color preview swatches */}
+                <div className="flex gap-0.5 ml-2">
+                  {Object.entries(theme.color_mappings || {}).slice(0, 6).map(([key, mapping]) => (
+                    <div
+                      key={key}
+                      className="w-3.5 h-3.5 rounded border border-border/50"
+                      style={{ backgroundColor: (mapping as ThemeColorMapping).color }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 pt-2">
+              {editingThemeId === theme.id && editingTheme ? (
+                // Editing mode
+                <div className="space-y-4">
+                  {/* Theme name */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Namn</Label>
+                    <Input
+                      value={editingTheme.name}
+                      onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
+                      placeholder="Temanamn"
+                      className="h-8 text-sm"
+                    />
                   </div>
-                  <div className="flex items-center gap-1">
+
+                  <Separator />
+
+                  {/* Color mappings */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Färgmappningar</Label>
+                    <ScrollArea className="h-[200px] pr-3">
+                      <div className="space-y-2">
+                        {IFC_CATEGORIES.map((cat) => {
+                          const mapping = editingTheme.color_mappings[cat.key];
+                          return (
+                            <div key={cat.key} className="flex items-center gap-2 py-1">
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs truncate">{cat.label}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={mapping?.color || cat.defaultColor}
+                                  onChange={(e) => updateColor(cat.key, e.target.value)}
+                                  className="w-7 h-7 rounded border border-border cursor-pointer"
+                                />
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-muted-foreground">Kant</span>
+                                  <Switch
+                                    checked={mapping?.edges ?? false}
+                                    onCheckedChange={(checked) => updateEdges(cat.key, checked)}
+                                    className="scale-75"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  <Separator />
+
+                  {/* Space opacity */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Rum-transparens</Label>
+                    <div className="flex items-center gap-3">
+                      <Slider
+                        value={[editingTheme.space_opacity * 100]}
+                        onValueChange={(v) => setEditingTheme({ 
+                          ...editingTheme, 
+                          space_opacity: v[0] / 100 
+                        })}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="flex-1"
+                      />
+                      <span className="text-xs w-10 text-right">
+                        {Math.round(editingTheme.space_opacity * 100)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-2 pt-2">
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      disabled={isSaving}
+                    >
+                      <X className="h-3.5 w-3.5 mr-1.5" />
+                      Avbryt
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveTheme}
+                      disabled={isSaving || !editingTheme.name.trim()}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Spara
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                // View mode
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    {Object.keys(theme.color_mappings || {}).length} färgmappningar • 
+                    Rum-transparens: {Math.round((theme.space_opacity ?? 0.25) * 100)}%
+                  </p>
+                  
+                  {/* All color swatches */}
+                  <div className="flex gap-1 flex-wrap">
+                    {Object.entries(theme.color_mappings || {}).map(([key, mapping]) => (
+                      <div
+                        key={key}
+                        className="w-5 h-5 rounded border border-border"
+                        style={{ backgroundColor: (mapping as ThemeColorMapping).color }}
+                        title={IFC_CATEGORIES.find(c => c.key === key)?.label || key}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEditTheme(theme)}
                     >
-                      <Edit2 className="h-3.5 w-3.5" />
+                      <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                      Redigera
                     </Button>
                     {!theme.is_system && (
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
                         onClick={() => setDeleteConfirmId(theme.id)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        Ta bort
                       </Button>
                     )}
                   </div>
                 </div>
-                <CardDescription className="text-xs">
-                  {Object.keys(theme.color_mappings || {}).length} färgmappningar
-                </CardDescription>
-              </CardHeader>
-              
-              {/* Color preview swatches */}
-              <CardContent className="p-3 pt-0">
-                <div className="flex gap-1 flex-wrap">
-                  {Object.entries(theme.color_mappings || {}).slice(0, 8).map(([key, mapping]) => (
-                    <div
-                      key={key}
-                      className="w-5 h-5 rounded border border-border"
-                      style={{ backgroundColor: (mapping as ThemeColorMapping).color }}
-                      title={IFC_CATEGORIES.find(c => c.key === key)?.label || key}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+
+      {themes.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
+          <Palette className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>Inga teman konfigurerade</p>
+          <Button onClick={handleNewTheme} variant="outline" size="sm" className="mt-2">
+            Skapa ditt första tema
+          </Button>
         </div>
-      )}
-
-      {/* Edit form */}
-      {editingTheme && (
-        <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              {editingTheme.id ? 'Redigera tema' : 'Skapa nytt tema'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-2 space-y-4">
-            {/* Theme name */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Namn</Label>
-              <Input
-                value={editingTheme.name}
-                onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
-                placeholder="Temanamn"
-                className="h-8 text-sm"
-              />
-            </div>
-
-            <Separator />
-
-            {/* Color mappings */}
-            <div className="space-y-2">
-              <Label className="text-xs">Färgmappningar</Label>
-              <ScrollArea className="h-[280px] pr-3">
-                <div className="space-y-2">
-                  {IFC_CATEGORIES.map((cat) => {
-                    const mapping = editingTheme.color_mappings[cat.key];
-                    return (
-                      <div key={cat.key} className="flex items-center gap-2 py-1">
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs truncate">{cat.label}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={mapping?.color || cat.defaultColor}
-                            onChange={(e) => updateColor(cat.key, e.target.value)}
-                            className="w-7 h-7 rounded border border-border cursor-pointer"
-                          />
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground">Kant</span>
-                            <Switch
-                              checked={mapping?.edges ?? false}
-                              onCheckedChange={(checked) => updateEdges(cat.key, checked)}
-                              className="scale-75"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            </div>
-
-            <Separator />
-
-            {/* Space opacity */}
-            <div className="space-y-2">
-              <Label className="text-xs">Rum-transparens</Label>
-              <div className="flex items-center gap-3">
-                <Slider
-                  value={[editingTheme.space_opacity * 100]}
-                  onValueChange={(v) => setEditingTheme({ 
-                    ...editingTheme, 
-                    space_opacity: v[0] / 100 
-                  })}
-                  min={0}
-                  max={100}
-                  step={5}
-                  className="flex-1"
-                />
-                <span className="text-xs w-10 text-right">
-                  {Math.round(editingTheme.space_opacity * 100)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditingTheme(null)}
-                disabled={isSaving}
-              >
-                <X className="h-3.5 w-3.5 mr-1.5" />
-                Avbryt
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveTheme}
-                disabled={isSaving || !editingTheme.name.trim()}
-              >
-                {isSaving ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Check className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Spara tema
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       {/* Delete confirmation dialog */}
