@@ -15,6 +15,7 @@ const Onboarding: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [goals, setGoals] = useState<UserGoal[]>([]);
   const [script, setScript] = useState('');
+  const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -43,15 +44,15 @@ const Onboarding: React.FC = () => {
     getUser();
   }, [navigate]);
 
-  // Generate AI script
-  const generateScript = useCallback(async () => {
+  // Generate AI script and avatar
+  const generateOnboardingContent = useCallback(async () => {
     if (!role) return;
     
     setIsGenerating(true);
     setError(null);
     
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('generate-onboarding', {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-onboarding-avatar', {
         body: { role, goals },
       });
       
@@ -62,13 +63,24 @@ const Onboarding: React.FC = () => {
       } else if (data?.error) {
         throw new Error(data.error);
       }
+      
+      // Avatar image is optional - might be null if generation failed
+      if (data?.avatarImage) {
+        setAvatarImage(data.avatarImage);
+      }
     } catch (err) {
-      console.error('Failed to generate onboarding script:', err);
+      console.error('Failed to generate onboarding content:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate welcome message');
+      
       // Set a fallback script
+      const roleName = role === 'fm_technician' ? 'Facility Management Technician' 
+        : role === 'property_manager' ? 'Property Manager' 
+        : role === 'consultant' ? 'FM Consultant' 
+        : 'professional';
+        
       setScript(`Welcome to Geminus! We're excited to have you on board.
 
-As a ${role === 'fm_technician' ? 'Facility Management Technician' : role === 'property_manager' ? 'Property Manager' : role === 'consultant' ? 'FM Consultant' : 'professional'}, you'll find powerful tools to help you manage your buildings more effectively.
+As a ${roleName}, you'll find powerful tools to help you manage your buildings more effectively. Our platform combines cutting-edge 3D visualization with comprehensive facility management capabilities.
 
 Get started by exploring the 3D viewer to navigate your building models, or check out the inventory section to register and track your assets. If you need any help, our AI assistant is always available.`);
     } finally {
@@ -109,10 +121,10 @@ Get started by exploring the 3D viewer to navigate your building models, or chec
     }
   };
 
-  // Handle completion of goals step - generate script and move to complete
+  // Handle completion of goals step - generate content and move to complete
   const handleFinishGoals = async () => {
     setStep('complete');
-    await generateScript();
+    await generateOnboardingContent();
   };
 
   // Save onboarding and navigate to app
@@ -191,6 +203,7 @@ Get started by exploring the 3D viewer to navigate your building models, or chec
         {step === 'complete' && (
           <OnboardingComplete
             script={script}
+            avatarImage={avatarImage}
             isLoading={isGenerating}
             error={error}
             onStart={handleStart}
