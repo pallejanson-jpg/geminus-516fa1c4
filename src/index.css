@@ -187,10 +187,10 @@
 
 /* Map popup styling - ensure text is visible */
 .mapboxgl-popup-content {
-  background: transparent !important;
+  background: rgb(0 0 0 / 0.95) !important;
   padding: 0 !important;
   border-radius: 0.5rem !important;
-  box-shadow: none !important;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5) !important;
 }
 
 .mapboxgl-popup-content h3 {
