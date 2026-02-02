@@ -195,7 +195,7 @@ async function fetchAssetPlusObjects(
   accessToken: string, 
   filter: any[], 
   skip = 0, 
-  take = 500
+  take = 200 // Reduced from 500 to avoid MongoDB memory limit errors
 ): Promise<{ data: any[]; hasMore: boolean }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
