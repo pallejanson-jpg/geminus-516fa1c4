@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
 import GunnarChat from "@/components/chat/GunnarChat";
-import { useFavoriteBuildings } from "@/hooks/useBuildingSettings";
+import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
 
@@ -27,8 +27,11 @@ const ASSISTANTS: Array<{
 export default function HomeLanding() {
   const { toast } = useToast();
   const [gunnarOpen, setGunnarOpen] = useState(false);
-  const { favorites, isLoading: isLoadingFavorites } = useFavoriteBuildings();
+  const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData, activeApp } = useContext(AppContext);
+
+  // Get favorites from the settings map
+  const favorites = useMemo(() => getFavorites(), [getFavorites]);
 
   // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
   const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
@@ -65,12 +68,15 @@ export default function HomeLanding() {
           return sum + nta;
         }, 0);
 
+        // Use hero image from settings, with fallback to stock images
+        const heroImage = getHeroImage(building.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
+
         return {
           fmGuid: building.fmGuid,
           name: building.name,
           commonName: building.commonName,
           category: 'Building' as const,
-          image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
+          image: heroImage,
           numberOfLevels: buildingStoreys.length,
           numberOfSpaces: buildingSpaces.length,
           area: Math.round(totalArea), // Round to integer
@@ -78,7 +84,7 @@ export default function HomeLanding() {
           complexCommonName: building.complexCommonName || undefined,
         };
       });
-  }, [navigatorTreeData, favorites, allData]);
+  }, [navigatorTreeData, favorites, allData, getHeroImage]);
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
@@ -162,7 +168,7 @@ export default function HomeLanding() {
             <CardDescription className="text-[11px] sm:text-sm">Quick access to your most used buildings</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            {isLoadingFavorites ? (
+            {isLoadingSettings ? (
               <div className="text-center py-3 sm:py-4 text-xs sm:text-sm text-muted-foreground">
                 Loading favorites...
               </div>
