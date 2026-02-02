@@ -180,12 +180,65 @@ export async function createAssetPlusObject(payload: CreateAssetPayload): Promis
   return data.asset;
 }
 
+// Types for property updates
+export interface UpdatePropertyItem {
+  name: string;
+  value: string | number | boolean;
+  dataType?: number;
+}
+
+export interface UpdateAssetResult {
+  fmGuid: string;
+  success: boolean;
+  error?: string;
+  synced?: boolean;
+}
+
+export interface UpdateAssetsResponse {
+  success: boolean;
+  message: string;
+  results: UpdateAssetResult[];
+  summary: {
+    total: number;
+    success: number;
+    failed: number;
+    syncedToAssetPlus: number;
+    localOnly: number;
+  };
+}
+
+/**
+ * Update asset properties for one or more assets.
+ * Automatically syncs to Asset+ for non-local assets (is_local = false).
+ * 
+ * @param fmGuids - Array of FM GUIDs to update
+ * @param properties - Array of properties to update
+ * @returns Update results including sync status per asset
+ */
+export async function updateAssetProperties(
+  fmGuids: string[],
+  properties: UpdatePropertyItem[]
+): Promise<UpdateAssetsResponse> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-update", {
+    body: { fmGuids, properties },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to update assets");
+  }
+
+  return data as UpdateAssetsResponse;
+}
+
 /**
  * Update an existing asset in Asset+.
- * @deprecated Not yet implemented
+ * @deprecated Use updateAssetProperties() instead for better batch support
  */
-export async function updateAssetPlus(_payload: any): Promise<any> {
-  throw new Error("updateAssetPlus is not implemented yet");
+export async function updateAssetPlus(payload: {
+  fmGuid: string;
+  properties: UpdatePropertyItem[];
+}): Promise<UpdateAssetsResponse> {
+  return updateAssetProperties([payload.fmGuid], payload.properties);
 }
 
 /**
