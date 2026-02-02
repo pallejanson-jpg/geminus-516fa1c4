@@ -722,6 +722,45 @@ export type Database = {
         }
         Relationships: []
       }
+      room_label_configs: {
+        Row: {
+          click_action: string
+          created_at: string | null
+          fields: Json
+          font_size: number
+          height_offset: number
+          id: string
+          is_default: boolean
+          name: string
+          scale_with_distance: boolean
+          updated_at: string | null
+        }
+        Insert: {
+          click_action?: string
+          created_at?: string | null
+          fields?: Json
+          font_size?: number
+          height_offset?: number
+          id?: string
+          is_default?: boolean
+          name: string
+          scale_with_distance?: boolean
+          updated_at?: string | null
+        }
+        Update: {
+          click_action?: string
+          created_at?: string | null
+          fields?: Json
+          font_size?: number
+          height_offset?: number
+          id?: string
+          is_default?: boolean
+          name?: string
+          scale_with_distance?: boolean
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       saved_views: {
         Row: {
           building_fm_guid: string
