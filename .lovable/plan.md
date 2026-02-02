@@ -1,138 +1,169 @@
 
-# Plan: Lägg till "My Views" sektion på startsidan
+# Plan: Kontextbaserad 360+ Viewer med inventeringsverktyg
 
 ## Översikt
 
-Lägga till en ny sektion "My Views" under "My Favorites" på startsidan som visar användarens sparade 3D-vyer med förhandsbilder och snabb åtkomst.
+Gör 360+-viewern kontextbaserad så att när den startas från en byggnad, våning, rum eller asset så visas inventeringsverktygen (Registrera tillgång, Skapa POI från Geminus) i toolbaren. När 360+ öppnas från huvudmenyn/landningssidan (utan kontext) visas den som idag - utan dessa verktyg.
 
-## Implementation
+## Nuvarande flöde
 
-### Del 1: Skapa hook för att hämta sparade vyer
-
-Skapa en ny hook `useSavedViews` som hämtar alla sparade vyer från databasen:
-
-```typescript
-// src/hooks/useSavedViews.ts
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-
-export interface SavedView {
-  id: string;
-  name: string;
-  description: string | null;
-  building_fm_guid: string;
-  building_name: string | null;
-  screenshot_url: string | null;
-  view_mode: string | null;
-  created_at: string | null;
-  // ... camera och visibility data
-}
-
-export function useSavedViews() {
-  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchViews = async () => {
-      const { data, error } = await supabase
-        .from('saved_views')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setSavedViews(data);
-      }
-      setIsLoading(false);
-    };
-
-    fetchViews();
-  }, []);
-
-  return { savedViews, isLoading, refetch: fetchViews };
-}
+```text
+Portfolio → FacilityLandingPage → QuickActions → 360+ knappen
+                                                       ↓
+                                               handleOpen360(siteId)
+                                                       ↓
+                                          localStorage.setItem('ivion360Url', fullUrl)
+                                                       ↓
+                                               setActiveApp('radar')
+                                                       ↓
+                                          MainContent → Ivion360View (utan kontext)
 ```
 
-### Del 2: Uppdatera HomeLanding med "My Views" sektion
+**Problem:** Ivion360View får bara URL via localStorage, inte byggnadsinformation som behövs för inventeringsverktyg.
 
-Lägga till ny Card-sektion under "My Favorites":
+## Lösning: Skicka kontext via AppContext
+
+### Del 1: Utöka AppContext med 360-kontext
+
+Lägg till nytt state för att hålla 360-kontexten:
 
 ```typescript
-// I HomeLanding.tsx
+// I AppContext.tsx
+interface Ivion360Context {
+  buildingFmGuid: string;
+  buildingName?: string;
+  ivionSiteId: string;
+  ivionUrl: string;
+}
 
-// Ny import
-import { useSavedViews } from '@/hooks/useSavedViews';
-import { Camera, Eye } from 'lucide-react';
+// Nytt state
+ivion360Context: Ivion360Context | null;
+setIvion360Context: (context: Ivion360Context | null) => void;
+open360WithContext: (context: Ivion360Context) => void;
+```
 
-// I komponenten
-const { savedViews, isLoading: isLoadingViews } = useSavedViews();
+### Del 2: Uppdatera handleOpen360 i PortfolioView
 
-// Navigering till 3D viewer med vy
-const handleViewClick = (view: SavedView) => {
-  // Navigera till 3D viewer och ladda vyn
-  navigate(`/viewer?viewId=${view.id}`);
+Spara kontext istället för bara URL:
+
+```typescript
+const handleOpen360 = (siteId?: string) => {
+  if (siteId && selectedFacility) {
+    const fullUrl = `${baseUrl}/?site=${siteId}`;
+    
+    if (ivionConfig.openMode === 'internal') {
+      // NYTT: Spara kontext i AppContext
+      open360WithContext({
+        buildingFmGuid: selectedFacility.fmGuid || selectedFacility.buildingFmGuid,
+        buildingName: selectedFacility.commonName || selectedFacility.name,
+        ivionSiteId: siteId,
+        ivionUrl: fullUrl,
+      });
+    } else {
+      window.open(fullUrl, '_blank');
+    }
+  } else {
+    // Ingen kontext - öppna som vanligt
+    setActiveApp('radar');
+  }
 };
 ```
 
-### Del 3: UI för "My Views" sektion
+### Del 3: Uppdatera Ivion360View med inventeringsverktyg
+
+Lägg till verktygsknapparna och paneler när kontext finns:
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│  My Favorites                                          │
-│  Quick access to your most used buildings              │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
-│  │ 📷      │ │ 📷      │ │ 📷      │  ← Favoriter     │
-│  │ Kv A    │ │ Kv B    │ │ Kv C    │                  │
-│  └─────────┘ └─────────┘ └─────────┘                  │
-└────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────┐
-│  My Views                                              │
-│  Your saved 3D views                                   │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
-│  │ 📸 Prev │ │ 📸 Prev │ │ 📸 Prev │  ← Sparade vyer  │
-│  │ Plan 3  │ │ Brandsk │ │ Entré   │                  │
-│  │ Kv A    │ │ Kv B    │ │ Kv A    │                  │
-│  │ 3D      │ │ 2D      │ │ 3D      │                  │
-│  └─────────┘ └─────────┘ └─────────┘                  │
-└────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│ 360° Viewer - Kv. Aurora                                                  │
+│                        [📍 Registrera] [📦 POI från Geminus] [↗] [□] [X]  │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│   ┌──────────────────┐                                                   │
+│   │ Ivion Iframe     │  ┌─────────────────────────────────┐              │
+│   │                  │  │ IvionRegistrationPanel          │              │
+│   │ (360° panorama)  │  │ (draggbar, öppnas vid klick     │              │
+│   │                  │  │  eller automatiskt vid ny POI)  │              │
+│   │                  │  └─────────────────────────────────┘              │
+│   │                  │                                                   │
+│   │                  │  ┌─────────────────────────────────┐              │
+│   │                  │  │ UnplacedAssetsPanel             │              │
+│   │                  │  │ (draggbar, öppnas vid klick)    │              │
+│   └──────────────────┘  └─────────────────────────────────┘              │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
-Vykortet visar:
-- Screenshot som förhandsvisning (eller placeholder-ikon)
-- Vyns namn
-- Byggnadsnamn (subtitle)
-- Badge för 2D/3D läge
+### Del 4: POI-polling (återanvänd logik från IvionInventory)
 
----
+När registreringspanelen är öppen, polla efter nya POI:er:
 
-## Filer som skapas/ändras
+```typescript
+// Polling varje 3 sekunder
+useEffect(() => {
+  if (!ivionSiteId || !formOpen) return;
+  
+  const poll = async () => {
+    const { data } = await supabase.functions.invoke('ivion-poi', {
+      body: { action: 'get-latest-poi', siteId: ivionSiteId },
+    });
+    
+    if (data?.id && data.id !== lastSeenPoiId) {
+      setDetectedPoi(data);
+      toast.info('Ny POI upptäckt!');
+    }
+    setLastSeenPoiId(data?.id ?? null);
+  };
+  
+  const interval = setInterval(poll, 3000);
+  return () => clearInterval(interval);
+}, [ivionSiteId, formOpen, lastSeenPoiId]);
+```
+
+## Filer som ändras
 
 | Fil | Ändring |
 |-----|---------|
-| `src/hooks/useSavedViews.ts` | **NY** - Hook för att hämta sparade vyer |
-| `src/components/home/HomeLanding.tsx` | Lägg till "My Views" sektion |
+| `src/context/AppContext.tsx` | Lägg till `ivion360Context` state och `open360WithContext` action |
+| `src/components/portfolio/PortfolioView.tsx` | Uppdatera `handleOpen360` att använda `open360WithContext` med byggnadsinfo |
+| `src/components/viewer/Ivion360View.tsx` | Läsa kontext från AppContext, visa inventeringsverktyg när kontext finns, integrera paneler |
+| `src/components/layout/MainContent.tsx` | Rensa `ivion360Context` vid stängning av 360-vyn |
 
----
+## Flödesdiagram
 
-## Tekniska detaljer
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                        FRÅN BYGGNAD                             │
+│                                                                 │
+│  QuickActions → handleOpen360(siteId)                          │
+│                       ↓                                         │
+│            open360WithContext({                                 │
+│              buildingFmGuid: "...",                            │
+│              buildingName: "Kv. Aurora",                        │
+│              ivionSiteId: "123",                               │
+│              ivionUrl: "https://..."                           │
+│            })                                                   │
+│                       ↓                                         │
+│            setActiveApp('radar')                                │
+│                       ↓                                         │
+│     Ivion360View läser kontext → VISAR VERKTYG                 │
+└─────────────────────────────────────────────────────────────────┘
 
-### Navigering till sparad vy
-
-När användaren klickar på en vy navigeras till `/viewer?viewId=<id>`. ViewerPage behöver då läsa query-parametern och ladda vyn automatiskt.
-
-Alternativt kan vi lagra view-id i context och låta BuildingSelector/AssetPlusViewer hantera laddningen.
-
-### Tom-state
-
-Om inga sparade vyer finns visas en förklarande text med instruktioner:
-- "Inga sparade vyer"
-- "Öppna 3D-visaren och klicka på kamera-ikonen för att spara en vy"
-
----
+┌─────────────────────────────────────────────────────────────────┐
+│                      FRÅN HUVUDMENYN                            │
+│                                                                 │
+│  Sidebar → setActiveApp('radar')                               │
+│                       ↓                                         │
+│     Ivion360View: context = null → INGA VERKTYG                │
+│     (visar "Configure Ivion Site ID" meddelande)               │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Testning
 
-1. **Skapa några sparade vyer** → Öppna 3D, spara vyer med screenshots
-2. **Gå till startsidan** → "My Views" ska visas under "My Favorites"
-3. **Klicka på en vy** → Ska navigera till 3D-viewer och ladda vyn
-4. **Ingen vy finns** → Ska visa tom-state med instruktioner
+1. **Öppna 360+ från en byggnad** → Verktygsknappar ska visas i headern
+2. **Öppna 360+ från huvudmenyn** → Inga extra verktyg, visas som vanligt
+3. **Klicka "Registrera tillgång"** → IvionRegistrationPanel öppnas som draggbar overlay
+4. **Klicka "POI från Geminus"** → UnplacedAssetsPanel öppnas
+5. **Skapa en POI i Ivion** → Panel uppdateras automatiskt med koordinater
+6. **Stäng 360+** → Återgå till Portfolio, kontext rensas
