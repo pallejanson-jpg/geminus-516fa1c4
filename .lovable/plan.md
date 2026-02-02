@@ -1,122 +1,255 @@
 
-# Plan: Förbättra BCF-ärenden med Objektselektion
+# Plan: Flyttbara ärende-komponenter
 
 ## Sammanfattning
 
-Säkerställa att selekterade objekt verkligen fångas, visas och highlightas korrekt genom hela ärendeflödet - från skapande till visning.
+Göra två BCF-relaterade komponenter flyttbara (draggable):
+
+1. **Ärendelistan** - Idag visas i en `SidePopPanel` som automatiskt positioneras bredvid toolbar-panelen. Ska kunna dras fritt.
+2. **Skapa ärende-dialogen** - Idag en centrerad modal. Ska kunna dras för att se 3D-modellen bakom.
 
 ---
 
-## Nulägesanalys
+## Befintliga mönster att återanvända
 
-### Vad som redan fungerar
+Projektet har etablerade drag-patterns i flera komponenter:
 
-| Komponent | Status | Beskrivning |
-|-----------|--------|-------------|
-| `useBcfViewpoints.captureViewpoint()` | Fungerar | Fångar `scene.selectedObjectIds` och sparar i `viewpoint.components.selection` |
-| `getSelectedObjectIds()` | Fungerar | Hämtar aktuella selektioner från scenen |
-| `handleSubmitIssue()` | Fungerar | Sparar `selected_object_ids` i databasen |
-| `restoreViewpoint()` | Delvis | Återställer selektion via `setObjectsSelected()` men utan visuell feedback |
+| Komponent | Teknik |
+|-----------|--------|
+| `UniversalPropertiesDialog` | Position state + mouseDown på header + window listeners för move/up |
+| `ViewerTreePanel` | Drag + resize med `GripVertical`-ikon som handle |
+| `GunnarButton` | Touch-stöd + position persistence till localStorage |
 
-### Problem att lösa
-
-1. **Ingen visuell feedback vid återställning** - Objektet selekteras men användaren ser ingen tydlig highlight
-2. **Användaren ser inte vad som fångas** - I `CreateIssueDialog` visas inte vilka objekt som är markerade
-3. **Ingen objektinfo i detaljvyn** - `IssueDetailSheet` visar inte vilka objekt ärendet gäller
+Alla använder samma grundmönster:
+```typescript
+const [position, setPosition] = useState({ x: 20, y: 100 });
+const [isDragging, setIsDragging] = useState(false);
+const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+```
 
 ---
 
-## Lösning
+## Del 1: Flyttbar IssueListPanel
 
-### Del 1: Flash-effekt vid viewpoint-återställning
+### Nuvarande implementation
 
-Utöka `restoreViewpoint()` i `useBcfViewpoints.ts` för att returnera de valda objekten så att anroparen kan trigga en flash-effekt.
+`IssueListPanel` renderas inuti `SidePopPanel` som har fast positionering baserat på parent-toolbarens position. Panelen kan inte flyttas självständigt.
 
-Alternativt: Lägg till flash direkt i `restoreViewpoint()` men det kräver att vi skickar in `flashEntitiesByIds`-funktionen.
+### Lösning
 
-**Rekommenderad approach**: Uppdatera `handleGoToIssueViewpoint` i `VisualizationToolbar.tsx` för att:
-1. Anropa `restoreViewpoint()`
-2. Efter kamera-animationen (1 sekund), anropa `flashEntitiesByIds()` med de selekterade objekten
+Skapa en ny wrapper-komponent `FloatingIssueListPanel` som:
+
+1. Hanterar egen position-state med drag-logik
+2. Wrapper `IssueListPanel` med draggable header (GripHorizontal)
+3. Ersätter `SidePopPanel` för issues-case i `VisualizationToolbar`
+
+```text
+┌─────────────────────────────────────┐
+│ ≡  Ärenden (3)               [X]   │  ← Draggable header
+├─────────────────────────────────────┤
+│                                     │
+│  [IssueListPanel content]           │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### Teknisk implementation
 
 ```typescript
-const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
-  if (!viewpoint) return;
-  
-  restoreViewpoint(viewpoint, { duration: 1.0 });
-  
-  // Flash the selected objects after camera animation completes
-  if (viewpoint.components?.selection?.length > 0) {
-    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
-    setTimeout(() => {
-      const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (xeokitViewer?.scene) {
-        flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
-      }
-    }, 1100); // Slightly after camera animation
-  }
-}, [restoreViewpoint, viewerRef]);
-```
+// Ny: src/components/viewer/FloatingIssueListPanel.tsx
 
----
+const FloatingIssueListPanel: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  buildingFmGuid?: string;
+  onSelectIssue?: (issue: BcfIssue) => void;
+  onCreateIssue?: () => void;
+}> = ({ ... }) => {
+  const [position, setPosition] = useState({ x: window.innerWidth - 280, y: 80 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-### Del 2: Visa selekterade objekt i CreateIssueDialog
+  // Drag handlers (same pattern as UniversalPropertiesDialog)
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
 
-Skicka med information om selekterade objekt och visa dem i dialogrutan så användaren vet exakt vad som fångas.
+  // Window listeners for move/up
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - 260, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
+      });
+    };
+    const handleUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDragging, dragOffset]);
 
-**Uppdatera `CreateIssueDialogProps`:**
-```typescript
-interface CreateIssueDialogProps {
-  // ... existing props
-  selectedObjectCount?: number;  // Antal selekterade objekt
-  selectedObjectIds?: string[];  // För att visa i UI
-}
-```
+  if (!isOpen) return null;
 
-**Lägg till i dialogens UI:**
-```tsx
-{/* Selected objects indicator */}
-{selectedObjectIds && selectedObjectIds.length > 0 && (
-  <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-sm">
-    <Box className="h-4 w-4 text-primary" />
-    <span>
-      {selectedObjectIds.length} {selectedObjectIds.length === 1 ? 'objekt valt' : 'objekt valda'}
-    </span>
-  </div>
-)}
-```
-
----
-
-### Del 3: Visa objektinfo i IssueDetailSheet
-
-Hämta `selected_object_ids` från ärendet och visa dem som en lista eller badge.
-
-**Uppdatera `BcfIssue`-typen:**
-```typescript
-interface BcfIssue {
-  // ... existing fields
-  selected_object_ids: string[] | null;
-}
-```
-
-**Lägg till i detaljvyns UI:**
-```tsx
-{/* Selected objects */}
-{issue.selected_object_ids && issue.selected_object_ids.length > 0 && (
-  <div>
-    <h4 className="text-sm font-medium mb-1 flex items-center gap-2">
-      <Box className="h-4 w-4" />
-      Relaterade objekt
-    </h4>
-    <div className="flex flex-wrap gap-1">
-      {issue.selected_object_ids.map((id) => (
-        <Badge key={id} variant="outline" className="text-xs font-mono">
-          {id.substring(0, 12)}...
-        </Badge>
-      ))}
+  return (
+    <div
+      className="fixed z-[61] w-64 border rounded-lg shadow-lg bg-card/80 backdrop-blur-md"
+      style={{ left: position.x, top: position.y }}
+    >
+      <div
+        className="flex items-center justify-between p-2 border-b cursor-grab"
+        onMouseDown={handleDragStart}
+      >
+        <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Ärenden</span>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <IssueListPanel
+        buildingFmGuid={buildingFmGuid}
+        onSelectIssue={onSelectIssue}
+        onCreateIssue={onCreateIssue}
+        className="border-none shadow-none"
+      />
     </div>
-  </div>
-)}
+  );
+};
+```
+
+---
+
+## Del 2: Flyttbar CreateIssueDialog
+
+### Nuvarande implementation
+
+Använder Radix UI `<Dialog>` med `<DialogContent>` som centreras automatiskt via CSS (`fixed inset-0 flex items-center justify-center`).
+
+### Lösning
+
+Konvertera till en **custom floating panel** istället för modal, liknande `UniversalPropertiesDialog`:
+
+1. Byt ut `<Dialog>` mot en vanlig `<div>` med `fixed` positioning
+2. Behåll samma visuella design (DialogHeader, DialogFooter styling)
+3. Lägg till draggable header med `GripHorizontal`
+4. Behåll backdrop för att blockera klick bakom (valfritt - kan tas bort för full 3D-interaktion)
+
+```text
+┌─────────────────────────────────────────┐
+│ ≡  Skapa ärende                  [X]   │  ← Draggable header
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │ [Skärmdump av vyn]              │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Byggnad: Karolinska Sjukhuset          │
+│  📦 1 objekt valt                       │
+│                                         │
+│  ... (formulärfält) ...                 │
+│                                         │
+│           [Avbryt]    [Skicka ärende]   │
+└─────────────────────────────────────────┘
+```
+
+### Teknisk implementation
+
+```typescript
+// Uppdatera: src/components/viewer/CreateIssueDialog.tsx
+
+const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({ ... }) => {
+  // Position state
+  const [position, setPosition] = useState({ 
+    x: Math.max(20, (window.innerWidth - 480) / 2), 
+    y: Math.max(20, (window.innerHeight - 600) / 2) 
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Reset position when dialog opens
+  useEffect(() => {
+    if (open) {
+      setPosition({
+        x: Math.max(20, (window.innerWidth - 480) / 2),
+        y: Math.max(20, (window.innerHeight - 600) / 2),
+      });
+    }
+  }, [open]);
+
+  // Drag handlers (same pattern)
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea')) return;
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - 500, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y)),
+      });
+    };
+    const handleUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* Optional semi-transparent backdrop */}
+      <div 
+        className="fixed inset-0 z-[70] bg-black/20" 
+        onClick={handleClose}
+      />
+      
+      {/* Draggable panel */}
+      <div
+        className="fixed z-[71] w-[480px] max-w-[calc(100vw-40px)] border rounded-lg shadow-xl bg-card"
+        style={{ left: position.x, top: position.y }}
+      >
+        {/* Draggable header */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 py-3 border-b",
+            "cursor-grab select-none",
+            isDragging && "cursor-grabbing"
+          )}
+          onMouseDown={handleDragStart}
+        >
+          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          <MessageSquarePlus className="h-5 w-5 text-primary" />
+          <span className="font-semibold flex-1">Skapa ärende</span>
+          <Button variant="ghost" size="icon" onClick={handleClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Form content (existing) */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* ... existing form fields ... */}
+        </form>
+
+        {/* Footer buttons */}
+        <div className="flex justify-end gap-2 px-4 py-3 border-t">
+          <Button variant="outline" onClick={handleClose}>Avbryt</Button>
+          <Button type="submit" form="issue-form">Skicka ärende</Button>
+        </div>
+      </div>
+    </>
+  );
+};
 ```
 
 ---
@@ -125,39 +258,29 @@ interface BcfIssue {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/hooks/useBcfViewpoints.ts` | Exportera `getXeokitViewer` eller lägg till flash-callback |
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till flash-effekt i `handleGoToIssueViewpoint`, skicka med selectedObjectIds till dialog |
-| `src/components/viewer/CreateIssueDialog.tsx` | Visa antal/lista av selekterade objekt |
-| `src/components/viewer/IssueDetailSheet.tsx` | Visa selekterade objekt, anropa flash vid "Gå till position" |
-| `src/components/viewer/IssueListPanel.tsx` | Uppdatera `BcfIssue`-typen att inkludera `selected_object_ids` |
+| `src/components/viewer/FloatingIssueListPanel.tsx` | **NY** - Flyttbar wrapper för ärendelistan |
+| `src/components/viewer/CreateIssueDialog.tsx` | Konvertera från Dialog till flyttbar panel |
+| `src/components/viewer/VisualizationToolbar.tsx` | Byt ut SidePopPanel för issues mot FloatingIssueListPanel |
 
 ---
 
-## Tekniska detaljer
+## Beteende
 
-### Flash-timing
+### Desktop
+- Båda panelerna kan dras fritt genom att hålla i headern
+- Position begränsas inom viewport
+- Cursor ändras till `grab`/`grabbing` under drag
 
-```text
-1. Användare klickar "Gå till position"
-2. restoreViewpoint() anropas med duration: 1.0s
-3. Kameran flyger till positionen (1 sekund)
-4. Efter 1.1s: flashEntitiesByIds() triggas
-5. Objekten blinkar i 3 sekunder med röd färg
-6. Färgen återställs automatiskt
-```
-
-### Integration med useFlashHighlight
-
-Hooken `useFlashHighlight` finns redan och har:
-- `flashEntitiesByIds(scene, entityIds, options)` - Flash flera objekt
-- Automatisk cleanup och färgåterställning
-- Konfigurerbar duration och färger
+### Mobil
+- Eventuellt: Behåll centrerad modal/sheet för CreateIssueDialog
+- Touch-stöd kan läggas till med `onTouchStart`/`onTouchMove`
 
 ---
 
 ## Testning
 
-1. **Selektera objekt före ärende**: Välj ett objekt i 3D-viewern → Klicka "Skapa ärende" → Verifiera att dialogen visar "1 objekt valt"
-2. **Flash vid återställning**: Öppna ett ärende med selekterat objekt → Klicka på skärmdumpen → Verifiera att kameran flyger dit OCH objektet blinkar rött
-3. **Objektvisning i detalj**: Öppna ett ärende → Verifiera att "Relaterade objekt" visas med objekt-ID:n
-4. **Inget objekt selekterat**: Skapa ärende utan selektion → Verifiera att ingen "objekt valt"-ruta visas
+1. **Drag ärendelistan**: Öppna "Visa ärenden" → Dra panelen → Verifiera att den stannar inom skärmen
+2. **Drag skapa-dialogen**: Klicka "Skapa ärende" → Dra dialogen → Verifiera att man kan se 3D-modellen bakom
+3. **Form-interaktion**: Verifiera att klick på input-fält INTE startar drag
+4. **Stäng dialog**: Verifiera att X-knappen och backdrop-klick fortfarande stänger dialogen
+5. **Mobil**: Testa på liten skärm att dialogerna är användbara
