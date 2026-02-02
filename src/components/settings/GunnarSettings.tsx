@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Sparkles, RotateCcw } from 'lucide-react';
+import { Sparkles, RotateCcw, Eye, MapPin } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
 export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
@@ -65,7 +66,7 @@ const GunnarSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-3 pb-3 border-b">
         <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
           <Sparkles className="h-5 w-5 text-primary" />
@@ -76,49 +77,83 @@ const GunnarSettings: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Visibility toggle */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="gunnar-visible" className="text-sm font-medium">
-              Visa Gunnar-knappen
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Visar den flytande AI-assistentknappen i applikationen
-            </p>
-          </div>
-          <Switch
-            id="gunnar-visible"
-            checked={settings.visible}
-            onCheckedChange={handleVisibilityChange}
-          />
-        </div>
+      <Accordion type="multiple" className="space-y-2">
+        {/* Visibility Section */}
+        <AccordionItem value="visibility" className="border rounded-lg">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-medium text-sm">Synlighet</h4>
+                <p className="text-xs text-muted-foreground">
+                  {settings.visible ? 'Gunnar-knappen visas' : 'Gunnar-knappen är dold'}
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-2">
+            <div className="flex items-center justify-between py-2">
+              <div className="space-y-0.5">
+                <Label htmlFor="gunnar-visible" className="text-sm font-medium">
+                  Visa Gunnar-knappen
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Visar den flytande AI-assistentknappen i applikationen
+                </p>
+              </div>
+              <Switch
+                id="gunnar-visible"
+                checked={settings.visible}
+                onCheckedChange={handleVisibilityChange}
+              />
+            </div>
+          </AccordionContent>
+        </AccordionItem>
 
-        {/* Reset position */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label className="text-sm font-medium">
-              Knappposition
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {settings.buttonPosition 
-                ? `Anpassad position (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
-                : 'Standardposition (nedre höger)'
-              }
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleResetPosition}
-            disabled={!settings.buttonPosition}
-            className="gap-1.5"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Återställ
-          </Button>
-        </div>
-      </div>
+        {/* Position Section */}
+        <AccordionItem value="position" className="border rounded-lg">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-medium text-sm">Knappposition</h4>
+                <p className="text-xs text-muted-foreground">
+                  {settings.buttonPosition 
+                    ? `Anpassad (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
+                    : 'Standardposition (nedre höger)'
+                  }
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-2">
+            <div className="flex items-center justify-between py-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">
+                  Återställ position
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Återställ knappen till standardposition
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetPosition}
+                disabled={!settings.buttonPosition}
+                className="gap-1.5"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Återställ
+              </Button>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground mb-1">Tips</p>
