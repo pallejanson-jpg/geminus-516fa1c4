@@ -1060,8 +1060,15 @@ serve(async (req) => {
         const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid);
         
         if (!discovery.url) {
+          // 3D API not accessible from Edge Function environment
+          // This is expected - models will be cached via Cache-on-Load in the viewer instead
           return new Response(
-            JSON.stringify({ success: true, message: 'No 3D models endpoint available', modelCount: 0 }),
+            JSON.stringify({ 
+              success: true, 
+              message: '3D API ej tillgänglig från servern. Modeller cachas automatiskt när du öppnar 3D-viewern.',
+              hint: 'cache-on-load',
+              modelCount: 0 
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }

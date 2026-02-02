@@ -11,11 +11,21 @@ interface CacheStoreResult {
   error?: string;
 }
 
+// Track models currently being saved to prevent duplicates
+const savingModels = new Set<string>();
+
+// Maximum concurrent saves to prevent overwhelming the backend
+const MAX_CONCURRENT_SAVES = 2;
+let currentSaveCount = 0;
+
 /**
  * XKT Model Cache Service
  * 
  * Provides caching functionality for XKT 3D models to improve load times.
  * Uses Lovable Cloud Storage to store cached models.
+ * 
+ * Implements "Cache-on-Load" strategy: models are captured from the viewer
+ * during the first successful load and saved to backend in the background.
  */
 export class XktCacheService {
   private static instance: XktCacheService;
@@ -199,6 +209,107 @@ export class XktCacheService {
   }
 
   /**
+   * Save a model captured from the viewer to backend storage.
+   * Optimized for background saving - non-blocking and with rate limiting.
+   * 
+   * This is the core of the "Cache-on-Load" strategy.
+   */
+  async saveModelFromViewer(
+    modelId: string,
+    xktData: ArrayBuffer,
+    buildingFmGuid: string,
+    modelName?: string
+  ): Promise<boolean> {
+    const cacheKey = `${buildingFmGuid}/${modelId}`;
+    
+    // Skip if already saving this model
+    if (savingModels.has(cacheKey)) {
+      console.log('XKT save: Already saving', modelId);
+      return false;
+    }
+    
+    // Rate limit concurrent saves
+    if (currentSaveCount >= MAX_CONCURRENT_SAVES) {
+      console.log('XKT save: Rate limited, skipping', modelId);
+      return false;
+    }
+    
+    // Check if already cached in database
+    try {
+      const { count } = await supabase
+        .from('xkt_models')
+        .select('*', { count: 'exact', head: true })
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('model_id', modelId);
+      
+      if (count && count > 0) {
+        console.log('XKT save: Already in database', modelId);
+        return true;
+      }
+    } catch (e) {
+      console.warn('XKT save: Check failed', e);
+    }
+    
+    savingModels.add(cacheKey);
+    currentSaveCount++;
+    
+    try {
+      const fileName = modelId.endsWith('.xkt') ? modelId : `${modelId}.xkt`;
+      const storagePath = `${buildingFmGuid}/${fileName}`;
+      
+      console.log(`XKT save: Uploading ${modelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+      
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('xkt-models')
+        .upload(storagePath, xktData, {
+          contentType: 'application/octet-stream',
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        console.warn('XKT save: Upload failed', uploadError);
+        return false;
+      }
+      
+      // Get signed URL for immediate access
+      const { data: urlData } = await supabase.storage
+        .from('xkt-models')
+        .createSignedUrl(storagePath, 86400); // 24 hour expiry
+      
+      // Save metadata to database
+      const { error: dbError } = await supabase
+        .from('xkt_models')
+        .upsert({
+          building_fm_guid: buildingFmGuid,
+          model_id: modelId,
+          model_name: modelName || modelId,
+          file_name: fileName,
+          file_size: xktData.byteLength,
+          storage_path: storagePath,
+          file_url: urlData?.signedUrl || null,
+          synced_at: new Date().toISOString(),
+        }, {
+          onConflict: 'building_fm_guid,model_id',
+        });
+      
+      if (dbError) {
+        console.warn('XKT save: DB insert failed', dbError);
+        return false;
+      }
+      
+      console.log(`XKT save: Cached ${modelId} successfully`);
+      return true;
+    } catch (e) {
+      console.error('XKT save: Error', e);
+      return false;
+    } finally {
+      savingModels.delete(cacheKey);
+      currentSaveCount--;
+    }
+  }
+
+  /**
    * Convert ArrayBuffer to base64 string
    */
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -208,30 +319,6 @@ export class XktCacheService {
       binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
-  }
-
-  /**
-   * Intercept XKT model requests and return cached version if available
-   * Returns the cached URL or null if not cached
-   */
-  async interceptModelRequest(
-    originalUrl: string, 
-    buildingFmGuid?: string
-  ): Promise<string | null> {
-    // Extract model ID from URL (typically the last path segment before .xkt)
-    const modelId = this.extractModelId(originalUrl);
-    if (!modelId) {
-      return null;
-    }
-
-    const result = await this.checkCache(modelId, buildingFmGuid);
-    if (result.cached && result.url) {
-      console.log('XKT cache hit for:', modelId);
-      return result.url;
-    }
-
-    console.log('XKT cache miss for:', modelId);
-    return null;
   }
 
   /**
@@ -267,56 +354,27 @@ export class XktCacheService {
   }
 
   /**
-   * @deprecated Use extractModelIdFromUrl instead
+   * Intercept XKT model requests and return cached version if available
+   * Returns the cached URL or null if not cached
    */
-  private extractModelId(url: string): string | null {
-    return this.extractModelIdFromUrl(url);
-  }
-
-  /**
-   * Fetch XKT model with caching
-   * First checks cache, then fetches from original URL and caches the result
-   */
-  async fetchWithCache(
-    originalUrl: string,
-    buildingFmGuid?: string,
-    fetchOptions?: RequestInit
-  ): Promise<ArrayBuffer> {
-    const modelId = this.extractModelId(originalUrl);
-    
-    if (modelId) {
-      // Check if we have a cached version
-      const cachedUrl = await this.interceptModelRequest(originalUrl, buildingFmGuid);
-      if (cachedUrl) {
-        try {
-          const response = await fetch(cachedUrl);
-          if (response.ok) {
-            console.log('XKT loaded from cache:', modelId);
-            return await response.arrayBuffer();
-          }
-        } catch (e) {
-          console.warn('Failed to load from cache, falling back to original:', e);
-        }
-      }
+  async interceptModelRequest(
+    originalUrl: string, 
+    buildingFmGuid?: string
+  ): Promise<string | null> {
+    // Extract model ID from URL (typically the last path segment before .xkt)
+    const modelId = this.extractModelIdFromUrl(originalUrl);
+    if (!modelId) {
+      return null;
     }
 
-    // Fetch from original URL
-    console.log('XKT fetching from source:', originalUrl);
-    const response = await fetch(originalUrl, fetchOptions);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch XKT: ${response.status}`);
+    const result = await this.checkCache(modelId, buildingFmGuid);
+    if (result.cached && result.url) {
+      console.log('XKT cache hit for:', modelId);
+      return result.url;
     }
 
-    const data = await response.arrayBuffer();
-
-    // Cache the model in the background (don't await)
-    if (modelId) {
-      this.storeModel(modelId, data, buildingFmGuid).catch(e => {
-        console.warn('Background cache store failed:', e);
-      });
-    }
-
-    return data;
+    console.log('XKT cache miss for:', modelId);
+    return null;
   }
 
   /**
@@ -344,14 +402,11 @@ export class XktCacheService {
         return { cached: true, count, syncing: false };
       }
 
-      // 2. Trigger XKT sync for this building
-      console.log(`XKT cache: No models for ${buildingFmGuid}, triggering sync...`);
+      // 2. Don't trigger server-side sync - it won't work due to API restrictions
+      // Instead, models will be cached via Cache-on-Load when the viewer loads them
+      console.log(`XKT cache: No models for ${buildingFmGuid} - will cache on first load`);
       
-      supabase.functions.invoke('asset-plus-sync', {
-        body: { action: 'sync-xkt-building', buildingFmGuid }
-      }).catch(e => console.warn('XKT sync failed:', e));
-
-      return { cached: false, count: 0, syncing: true };
+      return { cached: false, count: 0, syncing: false };
     } catch (e) {
       console.warn('XKT ensureBuildingModels error:', e);
       return { cached: false, count: 0, syncing: false };
