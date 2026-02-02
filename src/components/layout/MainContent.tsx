@@ -18,7 +18,7 @@ const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 
 const MainContent: React.FC = () => {
-    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp } = useContext(AppContext);
+    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context } = useContext(AppContext);
     const t = THEMES[theme];
     // Track previous app for 360 view close navigation
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
@@ -91,6 +91,7 @@ const MainContent: React.FC = () => {
                 return (
                     <Ivion360View 
                         onClose={() => {
+                            setIvion360Context(null);
                             setActiveApp(previousAppBefore360 || 'portfolio');
                         }} 
                     />
