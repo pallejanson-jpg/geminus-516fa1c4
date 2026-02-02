@@ -313,10 +313,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
     setVisibleFloorFmGuids(floorIds);
     
-    // If showSpaces is ON, filter spaces to match new floor selection
-    if (showSpaces) {
-      filterSpacesToVisibleFloors(floorIds, showSpaces);
-    }
+    // ALWAYS call filterSpacesToVisibleFloors to ensure rooms are hidden when showSpaces is false
+    filterSpacesToVisibleFloors(floorIds, showSpaces);
     
     // Update room labels floor filter
     if (updateFloorFilter) {
