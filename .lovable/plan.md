@@ -1,136 +1,403 @@
 
-## Mål
-Du ska kunna få ett tydligt svar på *varför* inga objekt hittas i AI‑scanningen, och systemet ska sluta “skanna snabbt” utan att faktiskt analysera riktiga bilder.
+# Utökad Åtgärdsplan: 3D-viewer, Inventering, Gunnar AI och TreeView
 
-## Min analys av problemet (baserat på koden + loggar)
-I backend-funktionen `ai-asset-detection` sker flödet per bild så här:
+## Sammanfattning
+Denna plan adresserar alla rapporterade problem plus det nya TreeView-kravet:
 
-1) Hitta en “giltig” Ivion-bild-URL (via `HEAD` som accepterar `200` eller `302`)
-2) Ladda ner bilden och konvertera till base64 (`downloadImageAsBase64`)
-3) Skicka bilden till AI (`analyzeImageWithAI`)
-4) Spara `pending_detections`
-
-I era backend‑loggar syns återkommande fel:
-- `Download failed with status: 404` efter redirect-kedjan (302 → signed callback → 404)
-
-Det leder till att:
-- Bilden laddas aldrig ner (steg 2 faller)
-- AI anropas då inte (steg 3 uteblir)
-- Därför kan inga detektioner skapas (steg 4)
-
-Varför känns det ändå som att allt “går fort och fungerar”?
-- `processBatch` räknar ändå upp `processed_images` även när nedladdningen failar, vilket gör att UI ser “snabbt” ut.
-
-Sannolika rotorsaker:
-- **A) Behörighetsproblem i NavVis/Ivion**: kontot får lista/proba men inte hämta faktiska bilddata (GET).
-- **B) Falska positiva “träffar” p.g.a. HEAD/302**: endpoint kan returnera 302 på HEAD även om själva bilden inte går att hämta via GET.
-- (Mindre sannolikt just nu) **AI-format/prompt-problem**, eftersom AI inte ens får bilddata när nedladdningen failar.
-
-## Lösning (vad vi bygger om)
-Vi gör tre saker: (1) bättre diagnostik, (2) stoppa/faila snabbt när inga bilder kan laddas, (3) verifiera bild‑URL:er med riktig “mini‑GET” istället för bara HEAD.
+1. **AI-inventering**: Bakåtknapp fungerar inte + objekttyper ska vara förvalda med välj alla-funktion
+2. **Rumsetiketter**: Fel position + visas för alla våningar oavsett Solo-val
+3. **Visa rum**: Samma problem - alla rum visas istället för filtrerade per våning
+4. **Gunnar-ikon**: I vägen, saknar toggle i inställningar, ej flyttbar, behöver bli smartare
+5. **TreeView**: Långsam laddning + selektering ska påverka vad som syns i 3D
 
 ---
 
-## Del 1 — Lägg till “Testa bildnedladdning” i UI (riktig GET, inte bara HEAD)
-### Varför
-Nuvarande knapp “Testa bildåtkomst” anropar `test-image-access` som i praktiken bekräftar att datasets finns och att en URL kan hittas (ofta via HEAD/302). Den bevisar inte att bilden faktiskt kan hämtas.
+## Del 1: AI-inventering - Bakåtknapp och kategoriförval
 
-### Ändringar
-**Frontend**
-- `src/components/ai-scan/ScanConfigPanel.tsx`
-  - Byt befintlig test-knapp eller komplettera med en ny:
-    - “Testa bildnedladdning (GET)”
-  - Anropa backend action `test-image-download` (finns redan).
-  - Visa resultat mer detaljerat:
-    - om success: content-type + storlek
-    - om fail: lista “attempts” (metod + status) så man ser exakt var det dör (302 → 404 etc.)
+### Problem
+- Bakåtknappen i wizard-headern fungerar inte korrekt
+- Objekttyper borde ha alla markerade som standard
+- Saknar "Välj alla / Avmarkera alla"-funktion
 
-**Backend**
-- Inga krav för att komma igång (action `test-image-download` finns redan).
-- Små förbättringar: se till att `test-image-download` returnerar tydligaste feltexten i `message` som UI visar.
+### Analys
+Bakåtknappen visas korrekt (`currentStep !== 'detection'`) och `goBack()` ser korrekt ut. Men `CategorySelectionStep` auto-avancerar efter val utan att visa förvalt läge.
 
-**Acceptanskriterium**
-- Du kan trycka “Testa bildnedladdning” och få ett tydligt “OK (jpeg, X MB)” eller “MISSLYCKADES: saknar bildrättigheter / signed URL ger 404” med detaljer.
+### Lösning
 
----
+**1.1 Verifiera bakåtknapp i MobileInventoryWizard.tsx**
+- Koden vid rad 311-314 ser korrekt ut men behöver testas
+- Eventuellt problem: knappen döljs felaktigt eller `goBack()` anropas inte
 
-## Del 2 — Gör att scanningen inte “låtsas fungera” när nedladdning misslyckas
-### Varför
-Idag kan en scan job köra igenom många bilder, men egentligen bara samla fel i loggar och ändå öka räknare. Då blir det svårt att förstå problemet.
-
-### Ändringar (backend: `supabase/functions/ai-asset-detection/index.ts`)
-1) **Inför fail-fast när nedladdning misslyckas systematiskt**
-   - Håll lokala räknare i `processBatch`:
-     - `downloadFailures`, `aiFailures`, `noUrlSkips`
-   - Om t.ex. de första 10 bilderna i rad misslyckas med download → markera job som `failed` direkt med ett begripligt fel:
-     - “Kunde inte hämta panoramabilder (GET ger 404/403). Kontrollera NavVis/Ivion behörigheter för bildnedladdning.”
-2) **Skriv felmeddelande löpande**
-   - Uppdatera `scan_jobs.error_message` under körning (inte bara vid completion).
-   - Exempel: “Download failures: 12/12. Senaste fel: 404 på signed callback …”
-3) **UI-effekt**
-   - `ScanProgressPanel` visar redan `error_message` om den finns. Med detta blir felet synligt direkt.
-
-**Acceptanskriterium**
-- Om bildnedladdning inte fungerar så stannar jobbet och visar fel i UI (inte bara i loggar).
-- Det blir uppenbart *att AI inte kan analysera*, istället för att man tror att “AI hittar 0”.
+**1.2 Lägg till "Välj alla"-funktionalitet i CategorySelectionStep.tsx**
+- Ändra från "auto-advance efter val" till att visa alla kategorier med förval
+- Lägg till knappar "Välj alla" och "Avmarkera alla" överst
+- Visa en "Fortsätt"-knapp istället för auto-advance
 
 ---
 
-## Del 3 — Gör bild-URL-val robust: verifiera med mini‑GET istället för HEAD/302
-### Varför
-`getPanoramaImageUrl` anser en URL “giltig” om `HEAD` ger 200 eller 302. Men i praktiken kan GET ändå bli 404 (vilket era loggar tyder på).
+## Del 2: Rumsetiketter - Korrekt positionering och våningsfiltrering
 
-### Ändringar (backend)
-- Uppdatera `getPanoramaImageUrl` så att den:
-  - Antingen gör en liten GET med `Range: bytes=0-1023` (om servern stödjer range)
-  - Eller gör GET men avbryter tidigt (med AbortController) efter att ha sett headers/content-type
-- Endast acceptera URL som “giltig” om GET faktiskt ger 200/206 och content-type ser ut som `image/*`.
+### Problem
+- Etiketter placeras i mitten av rummet (kan bli högt upp)
+- Alla rum i hela byggnaden visas oavsett Solo-val
 
-**Acceptanskriterium**
-- Systemet väljer inte längre URL:er som senare dör med 404 vid nedladdning.
-- När scanningen körs blir “processed_images” mer representativt för verklig analys.
+### Lösning
 
----
+**useRoomLabels.ts - Ändra positionering och lägg till floor-filtrering**
 
-## Efter dessa tre delar: vad du behöver göra utanför appen (om testet bekräftar behörighetsfel)
-Om `test-image-download` visar att alla metoder failar (särskilt på signed callback), då är det nästan alltid **NavVis/Ivion-kontots rättigheter**:
-- kontot kan se datasets men får inte ladda ner panoramabilder.
+```typescript
+// Ändra från:
+const center = [
+  (aabb[0] + aabb[3]) / 2,
+  (aabb[1] + aabb[4]) / 2 + 0.5,  // Mitten + 0.5m
+  (aabb[2] + aabb[5]) / 2,
+];
 
-Då behöver vi:
-- uppdatera Ivion/NavVis användaren/rollen så den har read/download access till storage/bilder
-- alternativt använda ett annat konto/API-lösning som får hämta bilderna
+// Till:
+const center = [
+  (aabb[0] + aabb[3]) / 2,
+  aabb[1] + 1.2,  // 1.2m ovanför golvet
+  (aabb[2] + aabb[5]) / 2,
+];
+```
 
----
+**Lägg till floor-filtrering:**
+- Utöka `createLabels()` med parameter `visibleFloorFmGuids: string[]`
+- För varje IfcSpace, hitta förälder-storey genom att traversera `metaObject.parent`
+- Jämför storey's `originalSystemId` med `visibleFloorFmGuids`
+- Skippa rum som inte tillhör synliga våningar
 
-## Extra (valfritt steg om nedladdning funkar men 0 detektioner kvarstår)
-Om bildnedladdning blir OK men AI fortfarande hittar 0:
-- Lägg till en “Analysera 1 testbild”-knapp som kör AI på en enda panorama och visar:
-  - AI råsvar (första X tecken)
-  - om JSON parsing lyckas
-  - antal detektioner
-Det gör prompt/template-felsökning mycket snabbare.
-
----
-
-## Filer som kommer ändras
-Frontend:
-- `src/components/ai-scan/ScanConfigPanel.tsx` (byt/komplettera testknappen, visa testresultat)
-- (ev.) `src/components/ai-scan/ScanProgressPanel.tsx` (små UI-texter/indikatorer för failures)
-
-Backend:
-- `supabase/functions/ai-asset-detection/index.ts`
-  - förbättra `getPanoramaImageUrl` (verifiera med mini‑GET)
-  - förbättra `processBatch` (fail-fast + löpande error_message + failure counters)
-  - ev. bättre output i `test-image-download`
+**AssetPlusViewer.tsx - Skicka synliga våningar till useRoomLabels**
+- Uppdatera hooken att ta emot `visibleFloorFmGuids`
+- Anropa `refreshLabels()` när `visibleFloorFmGuids` ändras
 
 ---
 
-## Testplan (praktiskt)
-1) Gå till AI‑scanning → välj byggnad → kör “Testa bildnedladdning”
-2) Förväntat:
-   - OK: vi får content-type + storlek
-   - FAIL: vi får tydlig felkedja (vilken hop/metod som ger 404/403)
-3) Starta scan igen:
-   - Om nedladdning failar: jobbet ska faila snabbt med tydligt fel i UI
-   - Om nedladdning funkar: då ska AI börja skapa `pending_detections` (även om få)
+## Del 3: Visa rum - Filtrering per våning
 
+### Problem
+"Visa rum" visar alla rum istället för bara det Solo-valda våningsplanet.
+
+### Analys
+Koden i `filterSpacesToVisibleFloors()` (rad 212-293) ser korrekt ut och borde filtrera. Problemet kan vara:
+1. `visibleFloorFmGuids` innehåller inte rätt värden
+2. Matchningen `storeyFmGuid` vs `visibleGuidsLower` misslyckas
+
+### Lösning
+Logiken finns redan men behöver debugging. Säkerställ att:
+- `handleVisibleFloorsChange()` anropas vid Solo-val
+- `storeyFmGuid` extraheras korrekt från `parentStorey.originalSystemId`
+- Case-insensitive matchning fungerar
+
+---
+
+## Del 4: Gunnar AI - Toggle, drag och intelligens
+
+### Problem
+- Gunnar-ikonen ligger i vägen för NavCube
+- Saknar inställning för att visa/dölja
+- Kan inte flyttas
+- Behöver bättre kontextförståelse och följdförslag
+
+### Lösning
+
+**4.1 Ny fil: src/components/settings/GunnarSettings.tsx**
+```typescript
+const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
+export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
+
+export interface GunnarSettingsData {
+  visible: boolean;
+  buttonPosition: { x: number; y: number } | null;
+}
+
+// Visa toggle för att visa/dölja Gunnar-knappen
+// Spara i localStorage och dispatcha event vid ändring
+```
+
+**4.2 Uppdatera ApiSettingsModal.tsx**
+- Lägg till ny tab "Gunnar" med GunnarSettings-komponenten
+
+**4.3 Uppdatera AppLayout.tsx**
+- Lyssna på `GUNNAR_SETTINGS_CHANGED_EVENT`
+- Villkorligt rendera `<GunnarButton />` baserat på inställning
+
+**4.4 Gör trigger-knappen draggable i GunnarButton.tsx**
+- Trigger-knappen (rad 187-216) är idag `fixed bottom-20 right-4`
+- Lägg till drag-logik liknande panelens men för knappen
+- Spara position i localStorage via GunnarSettings
+- Återställ position vid sidladdning
+
+**4.5 Förbättra Gunnar-intelligens**
+
+**gunnar-chat/index.ts - Lägg till följdförslag i system-prompt:**
+```
+EFTER VARJE SVAR:
+Föreslå 2-3 relevanta följdfrågor som användaren kan ställa.
+Returnera dem i ett JSON-block:
+\`\`\`json
+{"suggested_followups": ["Hur många rum finns på Plan 2?", "Visa mig alla brandsläckare", "Öppna 3D-vyn"]}
+\`\`\`
+```
+
+**GunnarChat.tsx - Visa föreslagna följdfrågor:**
+```tsx
+const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
+
+// Parsa följdförslag från AI-svar
+// Visa som klickbara chips under senaste svaret
+{suggestedFollowups.length > 0 && (
+  <div className="flex flex-wrap gap-2 mt-2 mb-3">
+    {suggestedFollowups.map((q, i) => (
+      <Button key={i} variant="outline" size="sm" 
+        onClick={() => { setInput(q); /* auto-send */ }}>
+        {q}
+      </Button>
+    ))}
+  </div>
+)}
+```
+
+---
+
+## Del 5: TreeView - Bakgrundsladdning och synlighetsfiltrering
+
+### Problem
+1. TreeView är långsam att ladda
+2. Val i TreeView påverkar inte vad som syns i 3D
+
+### Analys
+TreeView byggs från `metaScene` vid första öppning (rad 678-690). Den har redan visibility-checkboxar men de kontrollerar individuella objekt, inte floor-baserad filtrering.
+
+### Lösning
+
+**5.1 Preload TreeView-data i bakgrunden**
+
+**AssetPlusViewer.tsx - Starta trädbyggnad efter modell-laddning:**
+```typescript
+// Ny ref för att cacha träddata
+const cachedTreeDataRef = useRef<TreeNode[] | null>(null);
+const cachedExpandedIdsRef = useRef<Set<string>>(new Set());
+
+// Efter modell är laddad (i effect efter 'ready'-state):
+useEffect(() => {
+  if (initStep === 'ready' && !cachedTreeDataRef.current) {
+    // Trigga background tree build
+    setTimeout(() => {
+      // Anropa ViewerTreePanel's buildTree via ref eller event
+      window.dispatchEvent(new CustomEvent('PRELOAD_VIEWER_TREE'));
+    }, 1000);
+  }
+}, [initStep]);
+```
+
+**ViewerTreePanel.tsx - Lyssna på preload-event:**
+```typescript
+useEffect(() => {
+  const handlePreload = () => {
+    if (treeData.length === 0) {
+      buildTree();
+    }
+  };
+  window.addEventListener('PRELOAD_VIEWER_TREE', handlePreload);
+  return () => window.removeEventListener('PRELOAD_VIEWER_TREE', handlePreload);
+}, [buildTree, treeData]);
+```
+
+**5.2 TreeView-selektering påverkar 3D-synlighet**
+
+Nuvarande `handleVisibilityChange()` (rad 460-482) togglar redan synlighet. Men det ska också synka med floor-filter.
+
+**Ny callback: `onVisibilitySelectionChange`**
+```typescript
+interface ViewerTreePanelProps {
+  // ...existing props...
+  onVisibilitySelectionChange?: (visibleNodeIds: string[], visibleFloorIds: string[]) => void;
+}
+```
+
+**Logik för att extrahera synliga våningar:**
+```typescript
+const handleVisibilityChange = (node: TreeNode, visible: boolean) => {
+  // Befintlig logik för att toggla entitet
+  
+  // Efteråt: samla alla synliga floor-ids
+  const collectVisibleFloors = (nodes: TreeNode[]): string[] => {
+    const floors: string[] = [];
+    nodes.forEach(n => {
+      if (n.type === 'IfcBuildingStorey' && n.visible) {
+        floors.push(n.fmGuid || n.id);
+      }
+      if (n.children) {
+        floors.push(...collectVisibleFloors(n.children));
+      }
+    });
+    return floors;
+  };
+  
+  const visibleFloors = collectVisibleFloors(treeData);
+  onVisibilitySelectionChange?.(/* allVisibleIds */, visibleFloors);
+};
+```
+
+**AssetPlusViewer.tsx - Hantera floor-synlighet från TreeView:**
+```typescript
+const handleTreeVisibilityChange = (visibleNodeIds: string[], visibleFloorIds: string[]) => {
+  setVisibleFloorFmGuids(visibleFloorIds);
+  
+  // Om showSpaces är på, filtrera rum
+  if (showSpaces) {
+    filterSpacesToVisibleFloors(visibleFloorIds, true);
+  }
+  
+  // Uppdatera rumsetiketter
+  // ... trigga refresh
+};
+```
+
+---
+
+## Filer som ändras
+
+### Frontend
+| Fil | Ändring |
+|-----|---------|
+| `src/components/inventory/mobile/MobileInventoryWizard.tsx` | Verifiera/fixa bakåtknapp |
+| `src/components/inventory/mobile/CategorySelectionStep.tsx` | Förval alla + välj alla-knappar + manuell "Fortsätt" |
+| `src/hooks/useRoomLabels.ts` | Y-höjd = 1.2m + floor-filtrering |
+| `src/components/viewer/AssetPlusViewer.tsx` | Skicka visibleFloors till labels + preload tree + hantera tree-visibility |
+| `src/components/viewer/ViewerTreePanel.tsx` | Preload-event + callback för visibility-ändringar |
+| `src/components/settings/GunnarSettings.tsx` | **NY FIL** - toggle + position-inställningar |
+| `src/components/settings/ApiSettingsModal.tsx` | Lägg till Gunnar-tab |
+| `src/components/layout/AppLayout.tsx` | Villkorlig rendering av GunnarButton |
+| `src/components/chat/GunnarButton.tsx` | Draggable trigger-knapp + localStorage |
+| `src/components/chat/GunnarChat.tsx` | Visa föreslagna följdfrågor |
+
+### Backend
+| Fil | Ändring |
+|-----|---------|
+| `supabase/functions/gunnar-chat/index.ts` | System-prompt med följdförslag |
+
+---
+
+## Tekniska detaljer
+
+### Rumsetiketter - Floor-filtrering i useRoomLabels.ts
+```typescript
+const createLabels = useCallback((visibleFloorFmGuids: string[] = []) => {
+  const viewer = getXeokitViewer();
+  if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return;
+
+  const container = ensureContainer();
+  if (!container) return;
+
+  const metaObjects = viewer.metaScene.metaObjects;
+  const scene = viewer.scene;
+  const visibleLower = new Set(visibleFloorFmGuids.map(g => g.toLowerCase()));
+  
+  Object.values(metaObjects).forEach((metaObj: any) => {
+    if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
+
+    // Hitta förälder-storey
+    let parentStorey: any = null;
+    let current = metaObj;
+    while (current?.parent) {
+      current = current.parent;
+      if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
+        parentStorey = current;
+        break;
+      }
+    }
+    
+    // Floor-filtrering
+    if (visibleFloorFmGuids.length > 0 && parentStorey) {
+      const storeyGuid = (parentStorey.originalSystemId || parentStorey.id || '').toLowerCase();
+      if (!visibleLower.has(storeyGuid)) {
+        return; // Skippa detta rum
+      }
+    }
+
+    const entity = scene.objects?.[metaObj.id];
+    if (!entity?.aabb) return;
+
+    // Beräkna position - 1.2m ovanför golvet
+    const aabb = entity.aabb;
+    const center = [
+      (aabb[0] + aabb[3]) / 2,
+      aabb[1] + 1.2,  // Fixad höjd
+      (aabb[2] + aabb[5]) / 2,
+    ];
+    
+    // ... skapa etikett-element ...
+  });
+}, [getXeokitViewer, ensureContainer, updateLabelPositions]);
+```
+
+### GunnarSettings localStorage-mönster
+```typescript
+const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
+export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
+
+export interface GunnarSettingsData {
+  visible: boolean;
+  buttonPosition: { x: number; y: number } | null;
+}
+
+const DEFAULT_SETTINGS: GunnarSettingsData = {
+  visible: true,
+  buttonPosition: null,
+};
+
+export function getGunnarSettings(): GunnarSettingsData {
+  try {
+    const stored = localStorage.getItem(GUNNAR_SETTINGS_KEY);
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    }
+  } catch (e) {}
+  return DEFAULT_SETTINGS;
+}
+
+export function saveGunnarSettings(settings: GunnarSettingsData): void {
+  try {
+    localStorage.setItem(GUNNAR_SETTINGS_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new CustomEvent(GUNNAR_SETTINGS_CHANGED_EVENT, { detail: settings }));
+  } catch (e) {}
+}
+```
+
+### TreeView synlighetssynk
+```text
++------------------+       visibilityChange       +-------------------+
+|  ViewerTreePanel | --------------------------> | AssetPlusViewer   |
+|  (checkbox click)|                             | handleTreeVisibility|
++------------------+                             +-------------------+
+                                                          |
+                                                          v
+                                            +---------------------------+
+                                            | setVisibleFloorFmGuids()  |
+                                            | filterSpacesToVisibleFloors|
+                                            | refreshRoomLabels()       |
+                                            +---------------------------+
+```
+
+---
+
+## Prioritetsordning
+1. **Rumsetiketter och Visa rum** (kritiskt för 3D-viewer)
+2. **TreeView synlighetsfiltrering** (kritiskt för 3D-workflow)
+3. **TreeView preload** (performance)
+4. **Gunnar toggle och drag** (UX)
+5. **Bakåtknapp + kategoriförval** (inventering)
+6. **Gunnar intelligens** (kräver prompt-iteration)
+
+---
+
+## Testning efter implementation
+1. Solo-välj ett våningsplan -> verifiera att bara det våningsplanets rum och etiketter visas
+2. Öppna TreeView -> bocka av ett våningsplan -> verifiera att det försvinner i 3D
+3. Bocka i endast en dörr i TreeView -> verifiera att bara den visas
+4. Gå till Inställningar -> Gunnar -> stäng av -> verifiera att knappen försvinner
+5. Dra Gunnar-knappen till nytt läge -> ladda om -> verifiera att position sparades
+6. AI-inventering: klicka bakåt i wizard -> verifiera att man kommer till föregående steg
+7. Ställ Gunnar en fråga -> verifiera att förslag på följdfrågor visas
