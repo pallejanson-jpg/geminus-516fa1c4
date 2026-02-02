@@ -21,6 +21,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { useXktPreload } from '@/hooks/useXktPreload';
+import { useAllBuildingSettings } from '@/hooks/useAllBuildingSettings';
 
 interface ComplexGroup {
   complexName: string;
@@ -32,6 +33,10 @@ const PortfolioView: React.FC = () => {
   
   // Preload XKT when a building is selected
   useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
+  
+  // Fetch all building settings for hero images
+  const { getHeroImage, refetch: refetchBuildingSettings } = useAllBuildingSettings();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -76,12 +81,15 @@ const PortfolioView: React.FC = () => {
         return sum + nta;
       }, 0);
 
+      // Use hero image from building_settings, with fallback to stock images
+      const heroImage = getHeroImage(building.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
+
       return {
         fmGuid: building.fmGuid,
         name: building.name,
         commonName: building.commonName,
         category: 'Building',
-        image: BUILDING_IMAGES[index % BUILDING_IMAGES.length],
+        image: heroImage,
         numberOfLevels: buildingStoreys.length,
         numberOfSpaces: buildingSpaces.length,
         area: Math.round(totalArea), // Round to integer
@@ -89,7 +97,7 @@ const PortfolioView: React.FC = () => {
         complexCommonName: building.complexCommonName || undefined,
       };
     });
-  }, [navigatorTreeData, allData]);
+  }, [navigatorTreeData, allData, getHeroImage]);
 
   // Filter facilities based on search and category
   const filteredFacilities = useMemo(() => {
@@ -297,6 +305,7 @@ const PortfolioView: React.FC = () => {
           onOpenIoT={handleOpenIoT}
           onAddAsset={handleAddAsset}
           setSelectedFacility={setSelectedFacility}
+          onSettingsChanged={refetchBuildingSettings}
         />
         <AddAssetDialog
           open={addAssetDialogOpen}
