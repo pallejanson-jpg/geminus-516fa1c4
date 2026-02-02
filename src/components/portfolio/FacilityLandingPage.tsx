@@ -35,6 +35,7 @@ interface FacilityLandingPageProps {
   onOpenIoT: (facility: Facility) => void;
   onAddAsset?: (parentNode: NavigatorNode) => void;
   setSelectedFacility: (facility: Facility) => void;
+  onSettingsChanged?: () => void;
 }
 
 const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
@@ -50,7 +51,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onShowInsights,
   onOpenIoT,
   onAddAsset,
-  setSelectedFacility
+  setSelectedFacility,
+  onSettingsChanged
 }) => {
   const { allData, setActiveApp, setViewer3dFmGuid, startInventory, openEntityInsights } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
@@ -225,6 +227,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
       await updateHeroImage(urlData.publicUrl);
       toast.success('Hero-bild uppladdad!');
+      // Notify parent to refresh building settings cache (global event also dispatched by the hook)
+      onSettingsChanged?.();
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error('Kunde inte ladda upp bild', {
