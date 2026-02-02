@@ -12,6 +12,7 @@ import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
 import RoomsView from './RoomsView';
+import DocumentsView from './DocumentsView';
 import AssetsView from './AssetsView';
 import {
   Carousel,
@@ -43,6 +44,7 @@ const PortfolioView: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showRoomsFor, setShowRoomsFor] = useState<Facility | null>(null);
   const [showAssetsFor, setShowAssetsFor] = useState<Facility | null>(null);
+  const [showDocsFor, setShowDocsFor] = useState<Facility | null>(null);
   
   // Add Asset Dialog state
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
@@ -180,7 +182,7 @@ const PortfolioView: React.FC = () => {
   };
   const handleShowAssets = (facility: Facility) => setShowAssetsFor(facility);
   const handleShowRooms = (facility: Facility) => setShowRoomsFor(facility);
-  const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
+  const handleShowDocs = (facility: Facility) => setShowDocsFor(facility);
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
   
   // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes or fetch from Senslinc API
@@ -334,6 +336,16 @@ const PortfolioView: React.FC = () => {
     }
     setShowAssetsFor(null);
   };
+
+  // Show documents view if requested
+  if (showDocsFor) {
+    return (
+      <DocumentsView
+        facility={showDocsFor}
+        onClose={() => setShowDocsFor(null)}
+      />
+    );
+  }
 
   // Show assets view if requested
   if (showAssetsFor) {
