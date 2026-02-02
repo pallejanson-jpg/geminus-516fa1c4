@@ -9,6 +9,7 @@ interface BuildingSettings {
     latitude: number | null;
     longitude: number | null;
     heroImageUrl: string | null;
+    startViewId: string | null;
 }
 
 export function useBuildingSettings(fmGuid: string | null) {
@@ -39,6 +40,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     latitude: data.latitude ?? null,
                     longitude: data.longitude ?? null,
                     heroImageUrl: (data as any).hero_image_url ?? null,
+                    startViewId: (data as any).start_view_id ?? null,
                 });
             } else {
                 // No settings yet, use defaults
@@ -49,6 +51,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     latitude: null,
                     longitude: null,
                     heroImageUrl: null,
+                    startViewId: null,
                 });
             }
         } catch (error) {
@@ -85,6 +88,9 @@ export function useBuildingSettings(fmGuid: string | null) {
                     hero_image_url: updates.heroImageUrl !== undefined
                         ? updates.heroImageUrl
                         : settings?.heroImageUrl ?? null,
+                    start_view_id: updates.startViewId !== undefined
+                        ? updates.startViewId
+                        : settings?.startViewId ?? null,
                 } as any, { 
                     onConflict: 'fm_guid' 
                 });
@@ -131,6 +137,11 @@ export function useBuildingSettings(fmGuid: string | null) {
         await saveSettings({ heroImageUrl: url });
     }, [saveSettings]);
 
+    // Update start view
+    const updateStartView = useCallback(async (viewId: string | null) => {
+        await saveSettings({ startViewId: viewId });
+    }, [saveSettings]);
+
     return {
         settings,
         isLoading,
@@ -139,6 +150,7 @@ export function useBuildingSettings(fmGuid: string | null) {
         updateIvionSiteId,
         updateMapPosition,
         updateHeroImage,
+        updateStartView,
         refetch: fetchSettings,
     };
 }

@@ -170,7 +170,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
   const { toggleArchitectMode, isActive: isArchitectModeActive, setBackgroundPreset, applyBackgroundPreset } = useArchitectViewMode();
   
   // Room labels hook
-  const { setLabelsEnabled: setRoomLabelsEnabled, updateViewMode: updateLabelsViewMode } = useRoomLabels(viewerInstanceRef);
+  const { setLabelsEnabled: setRoomLabelsEnabled, updateViewMode: updateLabelsViewMode, updateFloorFilter } = useRoomLabels(viewerInstanceRef);
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
@@ -308,7 +308,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     filterSpacesToVisibleFloors(visibleFloorFmGuids, show);
   }, [visibleFloorFmGuids, filterSpacesToVisibleFloors]);
 
-  // Handler for visible floors change - also filters spaces
+  // Handler for visible floors change - also filters spaces and room labels
   const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
     setVisibleFloorFmGuids(floorIds);
     
@@ -316,7 +316,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
     if (showSpaces) {
       filterSpacesToVisibleFloors(floorIds, showSpaces);
     }
-  }, [showSpaces, filterSpacesToVisibleFloors]);
+    
+    // Update room labels floor filter
+    if (updateFloorFilter) {
+      updateFloorFilter(floorIds);
+    }
+  }, [showSpaces, filterSpacesToVisibleFloors, updateFloorFilter]);
 
   // Handler for 2D mode toggle from mobile overlay
   const handleToggle2DMode = useCallback((is2D: boolean) => {
@@ -347,6 +352,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
       window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
     };
   }, [updateLabelsViewMode]);
+
+  // Listen for floor selection changes to update room labels filter
+  useEffect(() => {
+    const handleFloorSelectionChange = (e: CustomEvent) => {
+      // When floor selection changes, update room labels to filter by visible floors
+      console.log('AssetPlusViewer: Floor selection changed, updating room labels filter');
+      if (updateFloorFilter) {
+        updateFloorFilter(visibleFloorFmGuids);
+      }
+    };
+    
+    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorSelectionChange as EventListener);
+    return () => {
+      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorSelectionChange as EventListener);
+    };
+  }, [updateFloorFilter, visibleFloorFmGuids]);
 
   // Handler for annotations toggle from mobile overlay
   const handleAnnotationsChange = useCallback((show: boolean) => {

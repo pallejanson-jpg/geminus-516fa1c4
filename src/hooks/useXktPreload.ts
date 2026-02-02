@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { xktCacheService } from '@/services/xkt-cache-service';
+import { supabase } from '@/integrations/supabase/client';
 
 // Global cache to persist preloaded buildings across component unmounts
 const globalPreloadedBuildings = new Set<string>();
@@ -87,7 +88,46 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           return;
         }
 
-        console.log(`XKT Preload: ${result.count} models found in cache`);
+        console.log(`XKT Preload: ${result.count} models found in cache, fetching binary data...`);
+
+        // Actually fetch model data into memory for faster loading
+        const { data: models } = await supabase
+          .from('xkt_models')
+          .select('model_id, file_url, storage_path')
+          .eq('building_fm_guid', buildingFmGuid);
+
+        if (models && models.length > 0) {
+          // Preload model binaries into memory cache (limit concurrent fetches)
+          const fetchPromises = models.slice(0, 3).map(async (model) => {
+            try {
+              // Skip if already in memory
+              if (isModelInMemory(model.model_id, buildingFmGuid)) {
+                console.log(`XKT Preload: ${model.model_id} already in memory`);
+                return;
+              }
+
+              let url = model.file_url;
+              if (!url && model.storage_path) {
+                const { data: urlData } = await supabase.storage
+                  .from('xkt-models')
+                  .createSignedUrl(model.storage_path, 3600);
+                url = urlData?.signedUrl;
+              }
+
+              if (url) {
+                const response = await fetch(url);
+                if (response.ok) {
+                  const data = await response.arrayBuffer();
+                  storeModelInMemory(model.model_id, buildingFmGuid, data);
+                }
+              }
+            } catch (e) {
+              console.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);
+            }
+          });
+
+          await Promise.allSettled(fetchPromises);
+        }
 
         // Mark building as preloaded in global cache
         globalPreloadedBuildings.add(buildingFmGuid);
