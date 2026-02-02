@@ -276,6 +276,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                 if (error) {
                     console.error('Asset sync error:', error);
+                    
+                    // Check for sort memory error in the response
+                    const errorMsg = error.message || '';
+                    if (errorMsg.includes('Sort exceeded memory limit') || errorMsg.includes('SORT_MEMORY_LIMIT')) {
+                        toast({
+                            title: "Provar alternativ strategi",
+                            description: "Asset+ servern hade minnesproblem. Synken fortsätter med mindre batcher...",
+                        });
+                        // Continue after a brief delay
+                        setTimeout(() => runResumableSync(), 2000);
+                        return;
+                    }
+                    
                     toast({
                         variant: "destructive",
                         title: "Sync Error",
@@ -288,12 +301,22 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 // Update status display
                 await fetchSyncStatus();
 
+                // Handle soft errors (mode switches, etc.)
+                if (data?.softError === 'SWITCHED_TO_CURSOR_MODE') {
+                    toast({
+                        title: "Ändrar strategi",
+                        description: "Byter till cursor-baserad pagination för denna byggnad...",
+                    });
+                }
+
                 if (data?.interrupted) {
                     // Continue syncing - call again after a short delay
-                    console.log(`Asset sync progress: ${data.totalSynced} synced, continuing...`);
+                    const progressInfo = data.progress;
+                    const modeInfo = progressInfo?.pageMode === 'cursor' ? ' (cursor)' : '';
+                    console.log(`Asset sync progress: ${data.totalSynced} synced, mode: ${progressInfo?.pageMode}, continuing...`);
                     toast({
-                        title: "Syncing Assets",
-                        description: `${data.totalSynced} assets synced. Continuing...`,
+                        title: "Synkar tillgångar",
+                        description: `${data.totalSynced} tillgångar synkade (${progressInfo?.currentBuildingIndex + 1}/${progressInfo?.totalBuildings})${modeInfo}. Fortsätter...`,
                     });
                     
                     // Wait 1 second then continue
@@ -310,6 +333,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 }
             } catch (error: any) {
                 console.error('Asset sync exception:', error);
+                
+                // Check for sort memory error
+                const errorMsg = error.message || '';
+                if (errorMsg.includes('Sort exceeded memory limit') || errorMsg.includes('SORT_MEMORY_LIMIT')) {
+                    toast({
+                        title: "Provar igen",
+                        description: "Asset+ servern hade minnesproblem. Försöker igen...",
+                    });
+                    setTimeout(() => runResumableSync(), 3000);
+                    return;
+                }
+                
                 toast({
                     variant: "destructive",
                     title: "Sync Failed",
@@ -320,11 +355,36 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         };
 
         toast({
-            title: "Starting Asset Sync",
-            description: "Syncing all assets building by building. This will complete automatically.",
+            title: "Startar synkronisering",
+            description: "Synkar alla tillgångar byggnad för byggnad. Fortsätter automatiskt.",
         });
 
         runResumableSync();
+    };
+
+    // Reset assets sync progress (admin action)
+    const handleResetAssetsProgress = async () => {
+        try {
+            const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+                body: { action: 'reset-assets-progress' }
+            });
+            
+            if (error) throw error;
+            
+            toast({
+                title: "Progress återställd",
+                description: data?.message || "Du kan nu starta en ny synkronisering.",
+            });
+            
+            await fetchSyncStatus();
+            await checkSyncStatus();
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Kunde inte återställa",
+                description: error.message,
+            });
+        }
     };
 
     // Sync all XKT models with loop-until-complete behavior

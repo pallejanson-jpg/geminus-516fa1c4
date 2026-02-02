@@ -76,7 +76,10 @@ export type Database = {
           building_fm_guid: string | null
           created_at: string | null
           current_building_index: number | null
+          cursor_fm_guid: string | null
           job: string
+          last_error: string | null
+          page_mode: string | null
           skip: number | null
           total_buildings: number | null
           total_synced: number | null
@@ -86,7 +89,10 @@ export type Database = {
           building_fm_guid?: string | null
           created_at?: string | null
           current_building_index?: number | null
+          cursor_fm_guid?: string | null
           job: string
+          last_error?: string | null
+          page_mode?: string | null
           skip?: number | null
           total_buildings?: number | null
           total_synced?: number | null
@@ -96,7 +102,10 @@ export type Database = {
           building_fm_guid?: string | null
           created_at?: string | null
           current_building_index?: number | null
+          cursor_fm_guid?: string | null
           job?: string
+          last_error?: string | null
+          page_mode?: string | null
           skip?: number | null
           total_buildings?: number | null
           total_synced?: number | null
