@@ -1,383 +1,304 @@
 
 
-# Plan: Senslinc IoT-integration
+# Plan: Welcome-text, Ilean-assistent och förbättrad Senslinc-integration
 
 ## Översikt
 
-Integrera Senslinc (InUse/productinuse.com) för att hämta och visualisera IoT-sensordata i Geminus. Integrationen använder **FM GUID** som gemensam nyckel mellan Asset+ och Senslinc för att mappa byggnader, våningar, rum och tillgångar till Senslinc-equipment.
+Denna plan omfattar fyra delar:
+1. Ändra välkomsttext från "Welcome to My SWG" till "Welcome to My Geminus"
+2. Implementera Ilean-assistent (från Senslinc) med samma funktionalitet som Gunnar
+3. Ändra IOT+ till internt läge som standard (iframe istället för ny flik)
+4. Hämta IOT+ dashboard-URL via Senslinc API för byggnader och våningar som saknar URL i Asset+
 
-## API-analys
+---
 
-Baserat på den uppladdade API-dokumentationen:
+## Del 1: Välkomsttext
 
-**Autentisering:**
-- JWT-baserad autentisering via `/api-token-auth/`
-- Autentisering med email + password
-- Token skickas med `Authorization: JWT {token}`
+**Fil att ändra:** `src/components/home/HomeLanding.tsx`
 
-**Relevanta endpoints:**
-
-| Endpoint | Beskrivning | Användning |
-|----------|-------------|------------|
-| `POST /api-token-auth/` | Hämta JWT-token | Autentisering |
-| `GET /api/machines` | Lista equipment/maskiner | Rum, Assets |
-| `GET /api/machines?code={fmGuid}` | Filtrera på kod (FM GUID) | Hitta specifikt equipment |
-| `GET /api/lines` | Lista lines (våningsplan) | Våningar |
-| `GET /api/sites` | Lista sites (byggnader) | Byggnader |
-| `GET /api/producers` | Lista producers (portfolio) | Aggregerad data |
-
-**Datamodell-mappning:**
-
-```text
-Asset+                    Senslinc
---------                  --------
-Portfolio                 Manufacturer/Producer
-Building (fmGuid)   -->   Site (code = fmGuid)
-Building Storey     -->   Line (code = fmGuid)
-Space (Room)        -->   Machine/Equipment (code = fmGuid)
-Instance (Asset)    -->   Machine/Equipment (code = fmGuid)
+Rad 121: Ändra texten till:
+```typescript
+<h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight">Welcome to My Geminus</h1>
 ```
 
 ---
 
-## Fas 1: Dashboard-länkning (Lågt hängande frukt)
+## Del 2: Ilean-assistent
 
-### 1.1 Aktivera IOT+-knappen för rum
+Ilean ska fungera som Gunnar - en flyttbar, flytande AI-assistent som följer med genom hela applikationen. Skillnaden är att Ilean hämtas från Senslinc och kan vara kopplad till specifika objekt via "Ilean URL" i Asset+.
 
-När användaren klickar på IOT+ för ett rum/tillgång som har `sensorDashboard`-URL i attributen, öppna dashboarden.
+### 2.1 Inställningar för Ilean
 
-**Filer att ändra:**
-- `src/components/portfolio/PortfolioView.tsx` - Uppdatera `handleOpenIoT`
-- `src/components/portfolio/FacilityLandingPage.tsx` - Extrahera sensor-URL från attributes
-- `src/components/portfolio/QuickActions.tsx` - Aktivera IOT+-knappen med callback
+**Ny fil:** `src/components/settings/IleanSettings.tsx`
 
-**Logik:**
+```text
++--------------------------------------------------+
+| Ilean AI                                         |
+| Dokumentassistent från Senslinc                  |
++--------------------------------------------------+
+| Visa Ilean-knappen              [  Toggle  ]     |
+|                                                  |
+| Knappposition                                    |
+| Anpassad position (x, y)        [ Återställ ]   |
++--------------------------------------------------+
+| Tips: Du kan dra Ilean-knappen till valfri       |
+| position på skärmen.                             |
++--------------------------------------------------+
+```
+
+Baserad på GunnarSettings.tsx med:
+- `ILEAN_SETTINGS_KEY = 'ilean-settings'`
+- `ILEAN_SETTINGS_CHANGED_EVENT = 'ilean-settings-changed'`
+- `IleanSettingsData { visible: boolean; buttonPosition: { x, y } | null }`
+
+### 2.2 Ilean-knapp (flyttbar)
+
+**Ny fil:** `src/components/chat/IleanButton.tsx`
+
+Baserad på GunnarButton.tsx med:
+- Flyttbar trigger-knapp med position-sparning i localStorage
+- Flyttbar panel med frostad-glas-effekt
+- Iframe-innehåll som hämtar Ilean från:
+  1. **Primärt**: URL från Asset+-attribut (t.ex. "ileanUrl" eller "ilean_url")
+  2. **Fallback**: Generell Ilean-URL via Senslinc API
+
+Panelens struktur:
+```text
++---------------------------------------+
+| [Grip] Ilean AI           [-] [X]     |
++---------------------------------------+
+|                                       |
+|   Ilean iframe (från Senslinc)       |
+|   eller felmeddelande om ej config   |
+|                                       |
++---------------------------------------+
+```
+
+### 2.3 Lägg till Ilean i AppLayout
+
+**Fil:** `src/components/layout/AppLayout.tsx`
+
 ```typescript
-const handleOpenIoT = (facility: Facility) => {
+import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
+import IleanButton from '@/components/chat/IleanButton';
+
+// Lägg till state
+const [ileanVisible, setIleanVisible] = useState(() => getIleanSettings().visible);
+
+// Lägg till useEffect för att lyssna på settings-ändringar
+useEffect(() => {
+    const handleIleanSettingsChange = (e: CustomEvent) => {
+        setIleanVisible(e.detail?.visible ?? true);
+    };
+    window.addEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
+    return () => window.removeEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
+}, []);
+
+// Rendera knappen
+{ileanVisible && <IleanButton />}
+```
+
+### 2.4 Lägg till Ilean-inställningar i ProfileModal
+
+**Fil:** `src/components/settings/ProfileModal.tsx`
+
+Lägg till en tabbed-vy eller expanderbar sektion för assistentinställningar:
+
+```text
++--------------------------------------------------+
+| Profil                                           |
++--------------------------------------------------+
+| [ Profil ] [ AI-assistenter ]                    |
++--------------------------------------------------+
+|                                                  |
+| Gunnar AI                                        |
+| [GunnarSettings komponent]                       |
+|                                                  |
+| Ilean AI                                         |
+| [IleanSettings komponent]                        |
+|                                                  |
++--------------------------------------------------+
+```
+
+### 2.5 Aktivera Ilean i HomeLanding
+
+**Fil:** `src/components/home/HomeLanding.tsx`
+
+Ändra `available: false` till `available: true` för Ilean i ASSISTANTS-arrayen.
+
+---
+
+## Del 3: IOT+ internt läge som standard
+
+### 3.1 Ändra standardvärde
+
+**Fil:** `src/lib/constants.ts`
+
+Rad 69: Ändra `openMode` från `'external'` till `'internal'`:
+```typescript
+iot: { label: 'Sensor Dashboard', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
+```
+
+### 3.2 Förbättra SenslincDashboardView styling
+
+**Fil:** `src/components/viewer/SenslincDashboardView.tsx`
+
+Förbättra styling för att bättre matcha Geminus tema:
+- Använd theme-variabler för färger
+- Lägg till loading-indikator medan iframe laddas
+- Förbättra header-styling
+
+---
+
+## Del 4: Hämta IOT+ URL via Senslinc API
+
+### 4.1 Utöka senslinc-query Edge Function
+
+**Fil:** `supabase/functions/senslinc-query/index.ts`
+
+Lägg till ny action `get-dashboard-url`:
+```typescript
+case 'get-dashboard-url': {
+  if (!fmGuid) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'fmGuid required' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    );
+  }
+  
+  const token = await getJwtToken(cleanApiUrl, email, password);
+  
+  // Försök hitta som machine först (rum/asset)
+  const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, token);
+  if (Array.isArray(machines) && machines.length > 0) {
+    const machine = machines[0];
+    // Bygg dashboard-URL baserat på machine-data
+    const dashboardUrl = machine.dashboard_url || `${cleanApiUrl.replace('/api', '')}/dashboard/machine/${machine.pk}`;
+    return new Response(
+      JSON.stringify({ success: true, data: { dashboardUrl, type: 'machine', ...machine } }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  
+  // Försök hitta som site (byggnad)
+  const sites = await senslincFetch(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, token);
+  if (Array.isArray(sites) && sites.length > 0) {
+    const site = sites[0];
+    const dashboardUrl = site.dashboard_url || `${cleanApiUrl.replace('/api', '')}/dashboard/site/${site.pk}`;
+    return new Response(
+      JSON.stringify({ success: true, data: { dashboardUrl, type: 'site', ...site } }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  
+  // Försök hitta som line (våningsplan)
+  const lines = await senslincFetch(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, token);
+  if (Array.isArray(lines) && lines.length > 0) {
+    const line = lines[0];
+    const dashboardUrl = line.dashboard_url || `${cleanApiUrl.replace('/api', '')}/dashboard/line/${line.pk}`;
+    return new Response(
+      JSON.stringify({ success: true, data: { dashboardUrl, type: 'line', ...line } }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  
+  return new Response(
+    JSON.stringify({ success: false, error: 'No equipment found for this FM GUID' }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+```
+
+### 4.2 Uppdatera handleOpenIoT i PortfolioView
+
+**Fil:** `src/components/portfolio/PortfolioView.tsx`
+
+Förbättra `handleOpenIoT` för att falla tillbaka till Senslinc API:
+```typescript
+const handleOpenIoT = async (facility: Facility) => {
   const attrs = (facility as any).attributes || {};
+  
+  // Försök hitta dashboard-URL i attribut
   const dashboardKey = Object.keys(attrs).find(k => 
     k.toLowerCase().includes('sensordashboard') || 
     k.toLowerCase().includes('sensorurl')
   );
   
-  if (dashboardKey && attrs[dashboardKey]?.value) {
-    const savedConfigs = localStorage.getItem('appConfigs');
-    const appConfigs = savedConfigs ? JSON.parse(savedConfigs) : {};
-    const iotConfig = appConfigs.iot || { openMode: 'external' };
+  let dashboardUrl = dashboardKey ? attrs[dashboardKey]?.value : null;
+  
+  // Om ingen URL finns i attribut, försök hämta från Senslinc API
+  if (!dashboardUrl && facility.fmGuid) {
+    try {
+      const { data, error } = await supabase.functions.invoke('senslinc-query', {
+        body: { action: 'get-dashboard-url', fmGuid: facility.fmGuid }
+      });
+      if (data?.success && data?.data?.dashboardUrl) {
+        dashboardUrl = data.data.dashboardUrl;
+      }
+    } catch (err) {
+      console.log('[IoT] Failed to fetch dashboard URL from Senslinc:', err);
+    }
+  }
+  
+  if (dashboardUrl) {
+    const iotConfig = appConfigs.iot || { openMode: 'internal' };
     
     if (iotConfig.openMode === 'internal') {
-      openIoTDashboard(attrs[dashboardKey].value);
+      openSenslincDashboard({
+        dashboardUrl,
+        facilityName: facility.commonName || facility.name || 'IoT Dashboard',
+        facilityFmGuid: facility.fmGuid,
+      });
     } else {
-      window.open(attrs[dashboardKey].value, '_blank');
+      window.open(dashboardUrl, '_blank');
     }
   } else {
     toast.info('Ingen IoT-dashboard', {
-      description: 'Detta rum har ingen kopplad sensor-dashboard i Asset+.'
+      description: 'Detta objekt har ingen kopplad sensor-dashboard.'
     });
   }
 };
 ```
 
-### 1.2 Skapa SenslincDashboardView komponent
-
-Ny komponent för att visa Senslinc-dashboards i en intern iframe (likt Ivion360View).
-
-**Ny fil:** `src/components/viewer/SenslincDashboardView.tsx`
-
----
-
-## Fas 2: API-konfiguration med pollningsintervall
-
-### 2.1 Uppdatera Senslinc-sektionen i inställningar
-
-Ersätt "Kommer snart"-badge med faktisk konfiguration.
-
-**Fil:** `src/components/settings/ApiSettingsModal.tsx`
-
-Lägg till fält för:
-- API URL (t.ex. `https://api.swg-group.productinuse.com`)
-- Email (för autentisering)
-- Password
-- **Pollningsintervall** (dropdown med alternativ)
-
-**UI för Senslinc-sektionen:**
-
-```text
-+--------------------------------------------------+
-| Senslinc                        [Aktiv] badge    |
-|--------------------------------------------------|
-| Secrets konfigureras i Lovable Cloud             |
-| (SENSLINC_API_URL, SENSLINC_EMAIL,               |
-|  SENSLINC_PASSWORD)                              |
-|                                                  |
-| Pollningsintervall:                              |
-| [ 24 timmar (rekommenderat)        v ]           |
-|   Alternativ:                                    |
-|   - 1 timme                                      |
-|   - 6 timmar                                     |
-|   - 12 timmar                                    |
-|   - 24 timmar (rekommenderat)                    |
-|   - 48 timmar                                    |
-|   - Manuellt (ingen automatisk polling)          |
-|                                                  |
-| [ Testa anslutning ]  [ Hämta data nu ]          |
-+--------------------------------------------------+
-```
-
-### 2.2 Uppdatera DEFAULT_APP_CONFIGS
-
-**Fil:** `src/lib/constants.ts`
-
-Lägg till `pollIntervalHours` i iot-konfigurationen:
-
-```typescript
-export const DEFAULT_APP_CONFIGS: Record<string, any> = {
-  // ... existing configs ...
-  iot: { 
-    label: 'Sensor Dashboard', 
-    url: 'https://swg-demo.bim.cloud/iot', 
-    icon: Zap, 
-    openMode: 'external', 
-    username: '', 
-    password: '',
-    pollIntervalHours: 24  // Standard: 24 timmar
-  },
-  // ...
-};
-```
-
-### 2.3 Pollningsintervall-alternativ
-
-```typescript
-const SENSLINC_POLL_OPTIONS = [
-  { value: 1, label: '1 timme' },
-  { value: 6, label: '6 timmar' },
-  { value: 12, label: '12 timmar' },
-  { value: 24, label: '24 timmar (rekommenderat)' },
-  { value: 48, label: '48 timmar' },
-  { value: 0, label: 'Manuellt (ingen automatisk polling)' },
-];
-```
-
-**Secrets som behövs (läggs till i Lovable Cloud):**
-- `SENSLINC_API_URL`
-- `SENSLINC_EMAIL`
-- `SENSLINC_PASSWORD`
-
----
-
-## Fas 3: Edge Function för API-anrop
-
-### 3.1 Skapa `senslinc-query` Edge Function
-
-**Ny fil:** `supabase/functions/senslinc-query/index.ts`
-
-**Actions som stöds:**
-- `test-connection` - Testa autentisering
-- `get-equipment` - Hämta equipment via FM GUID (code)
-- `get-site-equipment` - Hämta alla equipment för en site/byggnad
-- `sync-sensor-data` - Synka sensordata till lokal cache
-
-```typescript
-serve(async (req) => {
-  const { action, fmGuid, siteCode } = await req.json();
-  
-  const apiUrl = Deno.env.get('SENSLINC_API_URL');
-  const email = Deno.env.get('SENSLINC_EMAIL');
-  const password = Deno.env.get('SENSLINC_PASSWORD');
-  
-  // Autentisera och hämta token
-  const tokenRes = await fetch(`${apiUrl}/api-token-auth/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  const { token } = await tokenRes.json();
-  
-  switch (action) {
-    case 'test-connection':
-      return Response.json({ success: true, message: 'Anslutning OK' });
-      
-    case 'get-equipment':
-      const machinesRes = await fetch(
-        `${apiUrl}/api/machines?code=${fmGuid}`,
-        { headers: { Authorization: `JWT ${token}` } }
-      );
-      return Response.json(await machinesRes.json());
-      
-    case 'get-site-equipment':
-      const siteRes = await fetch(
-        `${apiUrl}/api/machines?site=${siteCode}`,
-        { headers: { Authorization: `JWT ${token}` } }
-      );
-      return Response.json(await siteRes.json());
-  }
-});
-```
-
----
-
-## Fas 4: Frontend-hooks och services
-
-### 4.1 Skapa `useSenslincEquipment` hook
-
-**Ny fil:** `src/hooks/useSenslincEquipment.ts`
-
-Hooken respekterar pollningsintervallet från inställningarna:
-
-```typescript
-export function useSenslincEquipment(fmGuid: string) {
-  const [equipment, setEquipment] = useState<SenslincEquipment | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
-
-  // Hämta pollningsintervall från appConfigs
-  const savedConfigs = localStorage.getItem('appConfigs');
-  const appConfigs = savedConfigs ? JSON.parse(savedConfigs) : {};
-  const pollIntervalHours = appConfigs.iot?.pollIntervalHours ?? 24;
-  const pollIntervalMs = pollIntervalHours * 60 * 60 * 1000;
-
-  useEffect(() => {
-    const fetchEquipment = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('senslinc-query', {
-          body: { action: 'get-equipment', fmGuid }
-        });
-        if (error) throw error;
-        setEquipment(data?.[0] || null);
-        setLastFetched(new Date());
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    if (fmGuid) fetchEquipment();
-    
-    // Polling endast om pollIntervalHours > 0
-    if (pollIntervalHours > 0) {
-      const interval = setInterval(fetchEquipment, pollIntervalMs);
-      return () => clearInterval(interval);
-    }
-  }, [fmGuid, pollIntervalHours]);
-
-  return { equipment, isLoading, error, lastFetched };
-}
-```
-
----
-
-## Fas 5: Insights-integration
-
-### 5.1 Ny IoT-flik i InsightsView
-
-**Fil att ändra:** `src/components/insights/InsightsView.tsx`
-**Ny fil:** `src/components/insights/tabs/IoTManagementTab.tsx`
-
-Visar:
-- Realtids-KPI:er för temperatur, CO2, luftfuktighet, beläggning
-- Lista över utrustning med sensorer
-- Larmstatus och avvikelser
-- Senaste synkroniseringstid baserat på pollningsintervall
-
-### 5.2 Hierarkisk datamodell för Insights
-
-```text
-+-------------------------------------------------------------------+
-|                        PORTFOLIO                                  |
-|  Aggregerade KPI:er for alla byggnader                            |
-|  - Genomsnittlig inomhustemperatur                                |
-|  - CO2-nivaer over gransvardet                                    |
-|  - Belaggningsgrad                                                |
-+-------------------------------------------------------------------+
-           |
-           v
-+-------------------------------------------------------------------+
-|                        BYGGNAD                                    |
-|  FM GUID --> Senslinc "Site" (code = fmGuid)                      |
-|  - Temperaturkarta per vaning                                     |
-|  - Inomhusklimat-index                                            |
-+-------------------------------------------------------------------+
-           |
-           v
-+-------------------------------------------------------------------+
-|                        RUM (Space) / ASSET                        |
-|  FM GUID --> Senslinc "Machine" (code = fmGuid)                   |
-|  - Realtids-temperatur                                            |
-|  - CO2-niva                                                       |
-|  - Belaggningsstatus                                              |
-+-------------------------------------------------------------------+
-```
-
----
-
-## Fas 6: Tandem-liknande 3D-visualisering
-
-### 6.1 Förbättra RoomVisualizationPanel
-
-**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
-
-- Lägg till option att hämta live-data från Senslinc istället för mock-data
-- Visa "Live"-indikator med senaste uppdateringstid
-- Data uppdateras enligt pollningsintervallet (standard 24h)
-
-### 6.2 Förbättra IoTHoverLabel
-
-**Fil:** `src/components/viewer/IoTHoverLabel.tsx`
-
-- Visa senaste uppdateringstid
-- Lägg till sparkline/trend-ikon
-- Visa larmstatus om värde är utanför gränsvärden
-
 ---
 
 ## Filer som skapas/ändras
 
-| Fil | Ändring |
-|-----|---------|
-| `src/lib/constants.ts` | Lägg till `pollIntervalHours: 24` i iot-config |
-| `src/components/portfolio/PortfolioView.tsx` | Uppdatera `handleOpenIoT` |
-| `src/components/portfolio/FacilityLandingPage.tsx` | Extrahera sensor-URL, skicka till QuickActions |
-| `src/components/portfolio/QuickActions.tsx` | Aktivera IOT+-knappen med callback |
-| `src/components/settings/ApiSettingsModal.tsx` | Ersätt "Kommer snart" med aktiv Senslinc-sektion inkl. pollningsintervall |
-| `src/components/viewer/SenslincDashboardView.tsx` | **NY** - Iframe-vy för dashboards |
-| `src/context/AppContext.tsx` | Lägg till `openIoTDashboard` context action |
-| `src/components/layout/MainContent.tsx` | Rendera SenslincDashboardView |
-| `supabase/functions/senslinc-query/index.ts` | **NY** - Edge function för API-anrop |
-| `src/hooks/useSenslincEquipment.ts` | **NY** - Hook för att hämta equipment med konfigurerbar polling |
-| `src/components/insights/tabs/IoTManagementTab.tsx` | **NY** - IoT-flik i Insights |
+| Fil | Typ | Beskrivning |
+|-----|-----|-------------|
+| `src/components/home/HomeLanding.tsx` | Ändra | Välkomsttext + aktivera Ilean |
+| `src/components/settings/IleanSettings.tsx` | **NY** | Inställningar för Ilean-knappen |
+| `src/components/chat/IleanButton.tsx` | **NY** | Flyttbar Ilean-assistent |
+| `src/components/layout/AppLayout.tsx` | Ändra | Lägg till Ilean-knapp |
+| `src/components/settings/ProfileModal.tsx` | Ändra | Lägg till assistentinställningar |
+| `src/lib/constants.ts` | Ändra | IOT openMode till 'internal' |
+| `src/components/viewer/SenslincDashboardView.tsx` | Ändra | Förbättrad styling |
+| `supabase/functions/senslinc-query/index.ts` | Ändra | Lägg till get-dashboard-url action |
+| `src/components/portfolio/PortfolioView.tsx` | Ändra | Fallback till Senslinc API |
+
+---
+
+## Tekniska överväganden
+
+### Ilean URL-källa
+1. **Primärt**: Sök efter attribut som innehåller "ilean" i namn (ileanUrl, ilean_url, ileanDashboard, etc.)
+2. **Fallback**: Fråga Senslinc API med objektets FM GUID
+3. **Global**: Om inget objektspecifikt finns, visa generell Ilean-portal
+
+### Temastyrning för iframes
+Tyvärr kan vi inte direkt styra färger inuti iframes från externa domäner (productinuse.com) pga. cross-origin-begränsningar. Däremot kan vi:
+- Styla header/footer/ramverk runt iframe med Geminus tema
+- Använda backdrop-blur och theme-färger på container-element
+- Visa loading-state och error-state i Geminus-stil
 
 ---
 
 ## Implementeringsordning
 
-| Fas | Beskrivning | Komplexitet | Prioritet |
-|-----|-------------|-------------|-----------|
-| 1.1 | Aktivera IOT+-knapp med dashboard-URL fran Asset+ | Lag | Hog |
-| 1.2 | SenslincDashboardView komponent | Lag | Hog |
-| 2.1 | API-konfiguration med pollningsintervall i installningar | Medium | Hog |
-| 3.1 | Edge function for Senslinc-anrop | Medium | Hog |
-| 4.1 | useSenslincEquipment hook med konfigurerbar polling | Medium | Medium |
-| 5.1 | IoT-flik i Insights | Hog | Medium |
-| 6.1 | Live 3D-visualisering | Hog | Lag |
-
----
-
-## Nasta steg
-
-1. **Fas 1 forst**: Borja med att aktivera IOT+-knappen for rum som redan har dashboard-URL i Asset+
-2. **Secrets**: Lagg till `SENSLINC_API_URL`, `SENSLINC_EMAIL`, `SENSLINC_PASSWORD` i Lovable Cloud
-3. **Edge function**: Skapa `senslinc-query` for att hantera API-anrop
-
----
-
-## Tekniska overvaganden
-
-- **Token-caching**: JWT-token har begransad livstid, behover refreshas
-- **Rate limiting**: Respektera Senslinc API:s begransningar
-- **Felhantering**: Graceful degradering om Senslinc ar otillgangligt
-- **FM GUID-mappning**: Anvander `code`-faltet i Senslinc for att matcha mot Asset+ fmGuid
-- **Pollningsintervall**: Standard 24 timmar, konfigurerbart i installningar
+1. **Välkomsttext** - Snabb ändring
+2. **IOT internt läge** - Ändra standardvärde i constants.ts
+3. **Ilean Settings + Button** - Skapa nya komponenter baserade på Gunnar
+4. **AppLayout + ProfileModal** - Integrera Ilean
+5. **Senslinc API get-dashboard-url** - Edge function uppdatering
+6. **PortfolioView fallback** - Hämta URL från API om ej i Asset+
 
