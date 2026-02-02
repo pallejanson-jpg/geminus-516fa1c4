@@ -26,6 +26,7 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
   const tickListenerRef = useRef<(() => void) | null>(null);
   const cameraListenerRef = useRef<(() => void) | null>(null);
   const visibleFloorGuidsRef = useRef<string[]>([]);
+  const viewModeRef = useRef<'2d' | '3d'>('3d');
 
   // Get XEOkit viewer instance
   const getXeokitViewer = useCallback(() => {
@@ -177,11 +178,17 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
       const entity = scene.objects?.[metaObj.id];
       if (!entity?.aabb) return;
 
-      // Calculate center position - 1.2m above floor level
+      // Calculate center position - height depends on view mode
+      // 2D mode: 0.1m above floor for plan view visibility
+      // 3D mode: 1.2m above floor for eye-level visibility
       const aabb = entity.aabb;
+      const labelHeight = viewModeRef.current === '2d' 
+        ? aabb[1] + 0.1   // Floor level for 2D plan view
+        : aabb[1] + 1.2;  // 1.2m above floor for 3D
+      
       const center = [
         (aabb[0] + aabb[3]) / 2,
-        aabb[1] + 1.2, // 1.2m above floor level
+        labelHeight,
         (aabb[2] + aabb[5]) / 2,
       ];
 
@@ -310,6 +317,20 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
     }
   }, [createLabels, destroyLabels]);
 
+  // Update view mode (2D/3D) and recreate labels with appropriate height
+  const updateViewMode = useCallback((mode: '2d' | '3d') => {
+    if (viewModeRef.current === mode) return;
+    
+    console.log(`Room labels: Updating view mode to ${mode}`);
+    viewModeRef.current = mode;
+    
+    if (enabledRef.current) {
+      // Destroy and recreate labels with new height
+      destroyLabels();
+      createLabels();
+    }
+  }, [createLabels, destroyLabels]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -322,6 +343,7 @@ export function useRoomLabels(viewerRef: React.MutableRefObject<any>) {
   return {
     setLabelsEnabled,
     updateFloorFilter,
+    updateViewMode,
     isEnabled: enabledRef.current,
     labelCount: labelsRef.current.size,
     refreshLabels: createLabels,
