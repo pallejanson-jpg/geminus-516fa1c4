@@ -458,28 +458,31 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     });
   }, [getXeokitViewer]);
 
-  // Toggle visibility for a node and all children
+  // Toggle visibility for a node and all children recursively
   const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
     const xeokitViewer = getXeokitViewer();
     const scene = xeokitViewer?.scene;
     if (!scene) return;
 
-    const entity = scene.objects?.[node.id];
-    if (entity) {
-      entity.visible = visible;
-    }
-
-    const toggleChildren = (n: TreeNode) => {
-      n.children?.forEach(child => {
-        const childEntity = scene.objects?.[child.id];
-        if (childEntity) {
-          childEntity.visible = visible;
-        }
-        toggleChildren(child);
-      });
+    // Recursive function to set visibility on node and ALL descendants
+    const setVisibilityRecursive = (n: TreeNode, vis: boolean) => {
+      const entity = scene.objects?.[n.id];
+      if (entity) {
+        entity.visible = vis;
+      }
+      
+      // Process all children recursively
+      if (n.children && n.children.length > 0) {
+        n.children.forEach(child => {
+          setVisibilityRecursive(child, vis);
+        });
+      }
     };
-    toggleChildren(node);
 
+    // Apply visibility to the node and all its descendants
+    setVisibilityRecursive(node, visible);
+
+    // Refresh the tree's visual state to update checkboxes
     refreshVisibilityState();
   }, [getXeokitViewer, refreshVisibilityState]);
 

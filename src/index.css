@@ -203,6 +203,17 @@
   padding: 4px 8px !important;
 }
 
+/* Hide Asset+ internal orange spinner to avoid duplicate loading indicators */
+#AssetPlusViewer .dx-loadindicator,
+#AssetPlusViewer .dx-loadpanel,
+#AssetPlusViewer .dx-loadpanel-content,
+#AssetPlusViewer .dx-loadpanel-wrapper,
+#AssetPlusViewer .dx-loadpanel-indicator {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
 @media (min-width: 640px) {
   #navCubeCanvas {
     bottom: 80px;
