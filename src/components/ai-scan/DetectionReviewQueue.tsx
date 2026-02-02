@@ -280,12 +280,12 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
               </Select>
 
               {scanJobs.length > 0 && (
-                <Select value={selectedJobId} onValueChange={setSelectedJobId}>
+                <Select value={selectedJobId || "all"} onValueChange={(val) => setSelectedJobId(val === "all" ? "" : val)}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Alla skanningar" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Alla skanningar</SelectItem>
+                    <SelectItem value="all">Alla skanningar</SelectItem>
                     {scanJobs.map(job => (
                       <SelectItem key={job.id} value={job.id}>
                         {new Date(job.created_at).toLocaleDateString('sv-SE')} ({job.detections_found})
