@@ -190,13 +190,40 @@ async function discover3dModelsEndpoint(
   return { url: null, fromCache: false };
 }
 
-// Fetch objects from Asset+ API
+// Minimal field projection to reduce MongoDB sort memory usage
+const MINIMAL_SELECT_FIELDS = [
+  "fmGuid", "objectType", "designation", "commonName", 
+  "buildingFmGuid", "levelFmGuid", "inRoomFmGuid", 
+  "complexCommonName", "grossArea", "objectTypeValue", 
+  "createdInModel", "dateModified"
+];
+
+// Helper to detect MongoDB sort memory limit error
+function isSortMemoryError(errorText: string): boolean {
+  return errorText.includes('Sort exceeded memory limit') || 
+         errorText.includes('allowDiskUse:true') ||
+         errorText.includes('memory limit');
+}
+
+// Sleep helper for backoff
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Fetch objects from Asset+ API with adaptive retry for sort memory errors
+interface FetchOptions {
+  useMinimalSelect?: boolean;
+  useExplicitSort?: boolean;
+  cursorFmGuid?: string; // For cursor-based pagination (avoids high skip)
+}
+
 async function fetchAssetPlusObjects(
   accessToken: string, 
   filter: any[], 
   skip = 0, 
-  take = 200 // Reduced from 500 to avoid MongoDB memory limit errors
-): Promise<{ data: any[]; hasMore: boolean }> {
+  take = 200,
+  options: FetchOptions = {}
+): Promise<{ data: any[]; hasMore: boolean; lastFmGuid?: string }> {
   const apiUrl = Deno.env.get("ASSET_PLUS_API_URL");
   const apiKey = Deno.env.get("ASSET_PLUS_API_KEY");
 
@@ -207,7 +234,8 @@ async function fetchAssetPlusObjects(
   const baseUrl = apiUrl.replace(/\/+$/, "");
   const endpoint = `${baseUrl}/PublishDataServiceGetMerged`;
 
-  const requestBody = {
+  // Build request with optimizations for large datasets
+  const requestBody: any = {
     filter,
     skip,
     take,
@@ -215,6 +243,27 @@ async function fetchAssetPlusObjects(
     outputType: "raw",
     apiKey,
   };
+
+  // Add explicit sort on fmGuid to help MongoDB use indexes
+  if (options.useExplicitSort !== false) {
+    requestBody.sort = [{ selector: "fmGuid", desc: false }];
+  }
+
+  // Add field projection to reduce document size during sort
+  if (options.useMinimalSelect) {
+    requestBody.select = MINIMAL_SELECT_FIELDS;
+  }
+
+  // For cursor-based pagination, modify filter to use fmGuid > lastGuid
+  let effectiveFilter = filter;
+  let effectiveSkip = skip;
+  if (options.cursorFmGuid) {
+    // Append cursor condition: AND fmGuid > cursorFmGuid
+    effectiveFilter = [...filter, "and", ["fmGuid", ">", options.cursorFmGuid]];
+    effectiveSkip = 0; // Reset skip when using cursor
+    requestBody.filter = effectiveFilter;
+    requestBody.skip = 0;
+  }
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -233,10 +282,58 @@ async function fetchAssetPlusObjects(
   const result = await response.json();
   const data = result.data || [];
   
+  // Extract last fmGuid for cursor pagination
+  const lastFmGuid = data.length > 0 ? data[data.length - 1].fmGuid : undefined;
+  
   return {
     data,
     hasMore: data.length === take,
+    lastFmGuid,
   };
+}
+
+// Adaptive fetch with retry and backoff for sort memory errors
+async function fetchWithAdaptiveRetry(
+  accessToken: string,
+  filter: any[],
+  skip: number,
+  initialTake: number,
+  cursorFmGuid?: string | null
+): Promise<{ data: any[]; hasMore: boolean; lastFmGuid?: string; usedTake: number; switchedToCursor: boolean }> {
+  const takeSizes = [initialTake, 100, 50, 25];
+  let lastError: Error | null = null;
+  
+  for (const take of takeSizes) {
+    try {
+      // Use minimal select and explicit sort to reduce memory pressure
+      const result = await fetchAssetPlusObjects(accessToken, filter, skip, take, {
+        useMinimalSelect: true,
+        useExplicitSort: true,
+        cursorFmGuid: cursorFmGuid || undefined,
+      });
+      
+      return {
+        ...result,
+        usedTake: take,
+        switchedToCursor: !!cursorFmGuid,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (isSortMemoryError(lastError.message)) {
+        console.log(`Sort memory error at take=${take}, skip=${skip}. Retrying with smaller batch...`);
+        // Add jitter before retry
+        await sleep(250 + Math.random() * 250);
+        continue;
+      }
+      
+      // Non-recoverable error, throw immediately
+      throw error;
+    }
+  }
+  
+  // All batch sizes failed - suggest cursor mode
+  throw new Error(`SORT_MEMORY_LIMIT: Even smallest batch (25) failed. ${lastError?.message}`);
 }
 
 // Get count for specific object types
@@ -574,7 +671,7 @@ serve(async (req) => {
         );
       }
 
-      // Load progress cursor
+      // Load progress cursor (now includes cursor_fm_guid and page_mode)
       const { data: progress } = await supabase
         .from('asset_sync_progress')
         .select('*')
@@ -584,6 +681,8 @@ serve(async (req) => {
       let currentBuildingIndex = progress?.current_building_index || 0;
       let currentSkip = progress?.skip || 0;
       let totalSynced = progress?.total_synced || 0;
+      let cursorFmGuid: string | null = progress?.cursor_fm_guid || null;
+      let pageMode: 'skip' | 'cursor' = (progress?.page_mode as 'skip' | 'cursor') || 'skip';
       const totalBuildings = buildings.length;
 
       // If we're past the last building, we're done
@@ -601,12 +700,13 @@ serve(async (req) => {
 
       await updateSyncState(supabase, 'assets', 'running', totalSynced);
       let interrupted = false;
-      // Keep batches small to avoid Asset+ backend Mongo sort memory limits
+      let softError: string | null = null;
       const take = 200;
 
       while (currentBuildingIndex < totalBuildings && !interrupted) {
         const building = buildings[currentBuildingIndex];
-        console.log(`Syncing assets for building ${currentBuildingIndex + 1}/${totalBuildings}: ${building.common_name || building.fm_guid}`);
+        const buildingName = building.common_name || building.fm_guid;
+        console.log(`Syncing assets for building ${currentBuildingIndex + 1}/${totalBuildings}: ${buildingName} (mode: ${pageMode})`);
 
         const filter = [
           ["buildingFmGuid", "=", building.fm_guid],
@@ -624,39 +724,126 @@ serve(async (req) => {
             break;
           }
 
-          const result = await fetchAssetPlusObjects(accessToken, filter, currentSkip, take);
-          
-          if (result.data.length > 0) {
-            const synced = await upsertAssets(supabase, result.data);
-            totalSynced += synced;
+          try {
+            // Use adaptive fetch with backoff for sort memory errors
+            const result = await fetchWithAdaptiveRetry(
+              accessToken, 
+              filter, 
+              pageMode === 'cursor' ? 0 : currentSkip, 
+              take,
+              pageMode === 'cursor' ? cursorFmGuid : null
+            );
+            
+            if (result.data.length > 0) {
+              const synced = await upsertAssets(supabase, result.data);
+              totalSynced += synced;
+              
+              // Update cursor for next iteration
+              if (result.lastFmGuid) {
+                cursorFmGuid = result.lastFmGuid;
+              }
+            }
+
+            hasMore = result.hasMore;
+            
+            // Update skip only in skip mode
+            if (pageMode === 'skip') {
+              currentSkip += result.usedTake;
+            }
+
+            // Save progress after each batch
+            await supabase
+              .from('asset_sync_progress')
+              .upsert({
+                job: 'assets_instances',
+                building_fm_guid: building.fm_guid,
+                current_building_index: currentBuildingIndex,
+                skip: currentSkip,
+                cursor_fm_guid: cursorFmGuid,
+                page_mode: pageMode,
+                total_buildings: totalBuildings,
+                total_synced: totalSynced,
+                last_error: null,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'job' });
+
+            // Update sync state (heartbeat)
+            await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
+              subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings} - ${pageMode})`
+            });
+            
+          } catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error);
+            
+            if (errMsg.startsWith('SORT_MEMORY_LIMIT')) {
+              // All batch sizes failed - switch to cursor mode if not already
+              if (pageMode === 'skip' && currentSkip > 10000) {
+                console.log(`Switching to cursor mode at skip=${currentSkip} due to sort memory limit`);
+                pageMode = 'cursor';
+                
+                // Need to get the last fmGuid we have for this building
+                const { data: lastAsset } = await supabase
+                  .from('assets')
+                  .select('fm_guid')
+                  .eq('building_fm_guid', building.fm_guid)
+                  .eq('category', 'Instance')
+                  .order('fm_guid', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                
+                cursorFmGuid = lastAsset?.fm_guid || null;
+                
+                // Save the mode switch
+                await supabase
+                  .from('asset_sync_progress')
+                  .upsert({
+                    job: 'assets_instances',
+                    building_fm_guid: building.fm_guid,
+                    current_building_index: currentBuildingIndex,
+                    skip: currentSkip,
+                    cursor_fm_guid: cursorFmGuid,
+                    page_mode: 'cursor',
+                    total_buildings: totalBuildings,
+                    total_synced: totalSynced,
+                    last_error: 'Switched to cursor mode',
+                    updated_at: new Date().toISOString()
+                  }, { onConflict: 'job' });
+                
+                softError = 'SWITCHED_TO_CURSOR_MODE';
+                // Don't break - continue with cursor mode
+                continue;
+              } else {
+                // Already in cursor mode or skip is low - this is a hard failure
+                throw error;
+              }
+            }
+            
+            // Other errors - save and re-throw
+            await supabase
+              .from('asset_sync_progress')
+              .upsert({
+                job: 'assets_instances',
+                building_fm_guid: building.fm_guid,
+                current_building_index: currentBuildingIndex,
+                skip: currentSkip,
+                cursor_fm_guid: cursorFmGuid,
+                page_mode: pageMode,
+                total_buildings: totalBuildings,
+                total_synced: totalSynced,
+                last_error: errMsg.substring(0, 500),
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'job' });
+            
+            throw error;
           }
-
-          hasMore = result.hasMore;
-          currentSkip += take;
-
-          // Save progress after each batch
-          await supabase
-            .from('asset_sync_progress')
-            .upsert({
-              job: 'assets_instances',
-              building_fm_guid: building.fm_guid,
-              current_building_index: currentBuildingIndex,
-              skip: currentSkip,
-              total_buildings: totalBuildings,
-              total_synced: totalSynced,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'job' });
-
-          // Update sync state (heartbeat)
-          await updateSyncState(supabase, 'assets', 'running', totalSynced, undefined, {
-            subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings})`
-          });
         }
 
         if (!interrupted) {
-          // Move to next building
+          // Move to next building - reset pagination state
           currentBuildingIndex++;
           currentSkip = 0;
+          cursorFmGuid = null;
+          pageMode = 'skip'; // Reset to skip mode for new building
           
           // Save progress
           await supabase
@@ -666,8 +853,11 @@ serve(async (req) => {
               building_fm_guid: currentBuildingIndex < totalBuildings ? buildings[currentBuildingIndex].fm_guid : null,
               current_building_index: currentBuildingIndex,
               skip: 0,
+              cursor_fm_guid: null,
+              page_mode: 'skip',
               total_buildings: totalBuildings,
               total_synced: totalSynced,
+              last_error: null,
               updated_at: new Date().toISOString()
             }, { onConflict: 'job' });
         }
@@ -680,7 +870,7 @@ serve(async (req) => {
           subtree_name: 'Alla Tillgångar'
         });
       } else {
-        await updateSyncState(supabase, 'assets', 'running', totalSynced, `Progress: building ${currentBuildingIndex + 1}/${totalBuildings}`, {
+        await updateSyncState(supabase, 'assets', 'running', totalSynced, `Progress: building ${currentBuildingIndex + 1}/${totalBuildings} (${pageMode})`, {
           subtree_name: `Alla Tillgångar (${currentBuildingIndex + 1}/${totalBuildings})`
         });
       }
@@ -695,12 +885,31 @@ serve(async (req) => {
             : `Completed: ${totalSynced} assets from ${totalBuildings} buildings`, 
           totalSynced,
           interrupted,
+          softError,
           progress: {
             currentBuildingIndex,
             totalBuildings,
-            currentSkip
+            currentSkip,
+            pageMode,
+            cursorFmGuid
           }
         }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============ RESET ASSETS PROGRESS (admin-only) ============
+    if (action === 'reset-assets-progress') {
+      console.log('Resetting assets sync progress');
+      
+      // Delete progress record
+      await supabase.from('asset_sync_progress').delete().eq('job', 'assets_instances');
+      
+      // Update sync state to interrupted
+      await updateSyncState(supabase, 'assets', 'interrupted', undefined, 'Progress reset by admin');
+      
+      return new Response(
+        JSON.stringify({ success: true, message: 'Assets sync progress reset. You can start a fresh sync.' }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
