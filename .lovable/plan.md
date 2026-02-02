@@ -1,116 +1,174 @@
 
-# Plan: Fixa rum-synlighet vid våningsval
+# Plan: Förbättra ärende-panelens beteende
 
-## Problemet
+## Problem att lösa
 
-När användaren väljer ett specifikt våningsplan via våningsväljaren ("Våningsplan") så tänds rummen (IfcSpace) även fast "Visa rum"-slidern är avstängd.
-
-### Orsak
-
-1. `FloorVisibilitySelector.applyFloorVisibility()` samlar ALLA barn till det valda våningsplanet och sätter dem synliga
-2. IfcSpace (rum) är barn till IfcBuildingStorey (våningsplan), så de blir synliga
-3. `handleVisibleFloorsChange` i AssetPlusViewer anropar `filterSpacesToVisibleFloors` **endast om showSpaces är true**
-4. När showSpaces är false körs ingen kod för att dölja rummen - de förblir synliga
-
-```
-Våningsväljare klickar "Plan 3"
-       │
-       ▼
-FloorVisibilitySelector.applyFloorVisibility()
-       │
-       └── Visar ALLA barn till Plan 3 (inkl. rum)
-               │
-               ▼
-handleVisibleFloorsChange() anropas
-       │
-       └── if (showSpaces) { filterSpacesToVisibleFloors() }
-               │
-               └── showSpaces är FALSE → ingen kod körs
-                       │
-                       ▼
-              Rum förblir synliga (fel!)
-```
+1. **Ärendelistan stängs när Visningsmenyn stängs** - Den kontrolleras av `activeSubMenu` state som nollställs
+2. **Ärendelistan positioneras inte bredvid Visningsmenyn** - Den positionerar sig oberoende i högra hörnet
+3. **Objekt selekteras inte med flash vid öppning av ärende** - Flashen körs men objektet ska också vara visuellt selekterat i 3D
 
 ---
 
 ## Lösning
 
-Ändra `handleVisibleFloorsChange` så att den **alltid** anropar `filterSpacesToVisibleFloors` - inte bara när `showSpaces` är true.
+### Del 1: Oberoende state för ärendelistan
 
-Funktionen `filterSpacesToVisibleFloors` hanterar redan fallet korrekt:
-- Om `forceShow` (showSpaces) är `false` → döljer alla IfcSpace
-- Om `forceShow` är `true` → visar endast IfcSpace på synliga våningar
-
-### Före (AssetPlusViewer.tsx rad 313-325)
+Ändra från `activeSubMenu === 'issues'` till en egen `showIssueList` state:
 
 ```typescript
-const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
-  setVisibleFloorFmGuids(floorIds);
-  
-  // BUG: Anropas endast om showSpaces är true
-  if (showSpaces) {
-    filterSpacesToVisibleFloors(floorIds, showSpaces);
-  }
-  
-  // Update room labels floor filter
-  if (updateFloorFilter) {
-    updateFloorFilter(floorIds);
-  }
-}, [showSpaces, filterSpacesToVisibleFloors, updateFloorFilter]);
+// I VisualizationToolbar.tsx
+const [showIssueList, setShowIssueList] = useState(false);
+
+// Knappen "Visa ärenden"
+<Button onClick={() => setShowIssueList(!showIssueList)}>
+  Visa ärenden
+</Button>
+
+// FloatingIssueListPanel - nu oberoende av activeSubMenu
+<FloatingIssueListPanel
+  isOpen={showIssueList}
+  onClose={() => setShowIssueList(false)}
+  // ...
+/>
 ```
 
-### Efter
+Detta gör att ärendelistan förblir öppen även när huvudmenyn (VisualizationToolbar) stängs.
+
+---
+
+### Del 2: Positionera bredvid Visningsmenyn
+
+Uppdatera `FloatingIssueListPanel` att ta emot `parentPosition` och `parentWidth`:
 
 ```typescript
-const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
-  setVisibleFloorFmGuids(floorIds);
-  
-  // FIX: Anropa ALLTID för att säkerställa att rum döljs om showSpaces är false
-  filterSpacesToVisibleFloors(floorIds, showSpaces);
-  
-  // Update room labels floor filter
-  if (updateFloorFilter) {
-    updateFloorFilter(floorIds);
+interface FloatingIssueListPanelProps {
+  // ... existing
+  parentPosition?: { x: number; y: number };
+  parentWidth?: number;
+}
+
+// Beräkna initial position till vänster om Visningsmenyn
+useEffect(() => {
+  if (isOpen) {
+    const x = parentPosition 
+      ? parentPosition.x - panelWidth - 10  // 10px gap
+      : window.innerWidth - panelWidth - 20;
+    
+    setPosition({
+      x: Math.max(10, x),
+      y: parentPosition?.y ?? 80,
+    });
   }
-}, [showSpaces, filterSpacesToVisibleFloors, updateFloorFilter]);
+}, [isOpen, parentPosition, parentWidth]);
+```
+
+I `VisualizationToolbar`:
+```typescript
+<FloatingIssueListPanel
+  parentPosition={position}
+  parentWidth={panelWidth}
+  // ...
+/>
 ```
 
 ---
 
-## Teknisk detalj
+### Del 3: Selektera objekt med flash vid ärendeöppning
 
-`filterSpacesToVisibleFloors` (rad 213-294) har redan korrekt logik:
+Uppdatera `handleGoToIssueViewpoint` för att säkerställa att:
+1. Objekten selekteras i scenen (redan görs av `restoreViewpoint`)
+2. Flash-effekten körs EFTER selektion för tydlighet
 
+Nuvarande kod (fungerar delvis):
 ```typescript
-// Om showSpaces är OFF, dölj ALLA IfcSpace
-if (!forceShow) {
-  Object.values(metaObjects).forEach((metaObj: any) => {
-    if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-    const entity = scene.objects?.[metaObj.id];
-    if (entity && entity.visible) {
-      entity.visible = false;  // Dölj rummet
-    }
-  });
-  return;
+const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+  restoreViewpoint(viewpoint, { duration: 1.0 });
+  
+  if (viewpoint.components?.selection?.length > 0) {
+    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+    setTimeout(() => {
+      flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
+    }, 1100);
+  }
+}, [restoreViewpoint, flashEntitiesByIds]);
+```
+
+`restoreViewpoint` selekterar redan objekten (rad 201-207 i useBcfViewpoints.ts):
+```typescript
+if (viewpoint.components?.selection) {
+  scene.setObjectsSelected(scene.selectedObjectIds, false);
+  const idsToSelect = viewpoint.components.selection.map(s => s.ifc_guid);
+  scene.setObjectsSelected(idsToSelect, true);  // Selekterar i 3D
 }
 ```
 
-Problemet är att denna kod aldrig anropas när våningar ändras och showSpaces är false.
+Problemet kan vara:
+- Objekten finns inte i scenen (fel ID-format)
+- Våningsplanet objektet ligger på är inte synligt
+
+**Lösning**: Säkerställ att objekten blir synliga innan selektion:
+
+```typescript
+const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+  restoreViewpoint(viewpoint, { duration: 1.0 });
+  
+  if (viewpoint.components?.selection?.length > 0) {
+    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+    const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    
+    if (xeokitViewer?.scene) {
+      const scene = xeokitViewer.scene;
+      
+      // Efter kamera-animation, säkerställ selektion + flash
+      setTimeout(() => {
+        // 1. Säkerställ objekten är synliga
+        scene.setObjectsVisible(selectedIds, true);
+        
+        // 2. Selektera objekten (om inte redan gjort)
+        scene.setObjectsSelected(selectedIds, true);
+        
+        // 3. Flash för visuell feedback
+        flashEntitiesByIds(scene, selectedIds, { 
+          duration: 3000,
+          color1: [1, 0.2, 0.2],  // Röd
+          color2: [1, 1, 1],      // Vit
+        });
+      }, 1100);
+    }
+  }
+}, [restoreViewpoint, viewerRef, flashEntitiesByIds]);
+```
 
 ---
 
-## Fil som ändras
+## Filer som ändras
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Ta bort `if (showSpaces)`-villkoret runt `filterSpacesToVisibleFloors`-anropet |
+| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till `showIssueList` state, skicka `parentPosition` till panelen |
+| `src/components/viewer/FloatingIssueListPanel.tsx` | Ta emot `parentPosition`, positionera till vänster om menyn |
+
+---
+
+## Teknisk detalj: Positionering
+
+```text
+┌──────────────────────┐   ┌────────────────────────┐
+│                      │   │                        │
+│   Ärendelistan       │   │   Visningsmenyn        │
+│   (FloatingIssueList)│   │   (VisualizationToolbar)│
+│                      │   │                        │
+│   Draggbar           │ ← 10px gap →│   Draggbar   │
+│                      │   │                        │
+└──────────────────────┘   └────────────────────────┘
+        x = parent.x - panelWidth - 10
+```
 
 ---
 
 ## Testning
 
-1. **Starta 3D-viewer på en byggnad** → Alla våningar synliga, "Visa rum" avstängt
-2. **Välj ett specifikt våningsplan** → Endast det planet synligt, rum ska INTE visas
-3. **Slå på "Visa rum"** → Rum visas
-4. **Välj annat våningsplan** → Rum visas endast för det nya planet
-5. **Slå av "Visa rum"** → Rum döljs
+1. **Öppna ärendelistan** → Stäng Visningsmenyn → Ärendelistan ska förbli öppen
+2. **Positionering** → Ärendelistan ska visas till vänster om Visningsmenyn
+3. **Öppna ett ärende** → Kameran flyger till position → Objektet ska vara selekterat i 3D → Objektet ska blinka rött
+4. **Dra ärendelistan** → Den ska kunna flyttas oberoende av Visningsmenyn
