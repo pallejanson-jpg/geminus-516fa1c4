@@ -54,6 +54,7 @@ interface SingleMarkerProps {
   name: string;
   onClick: () => void;
   isSelected?: boolean;
+  color?: string;
 }
 
 const SingleMarker: React.FC<SingleMarkerProps> = ({
@@ -62,6 +63,7 @@ const SingleMarker: React.FC<SingleMarkerProps> = ({
   name,
   onClick,
   isSelected,
+  color,
 }) => {
   return (
     <Marker longitude={longitude} latitude={latitude} anchor="bottom">
@@ -72,13 +74,15 @@ const SingleMarker: React.FC<SingleMarkerProps> = ({
         }}
         className={cn(
           "p-2 rounded-full cursor-pointer transition-all shadow-lg",
-          isSelected
+          !color && (isSelected
             ? "bg-primary scale-125"
-            : "bg-primary/80 hover:bg-primary hover:scale-110"
+            : "bg-primary/80 hover:bg-primary hover:scale-110"),
+          color && isSelected && "scale-125 ring-2 ring-white"
         )}
+        style={color ? { backgroundColor: color } : undefined}
         title={name}
       >
-        <Building2 size={16} className="text-primary-foreground" />
+        <Building2 size={16} className="text-white" />
       </div>
     </Marker>
   );
