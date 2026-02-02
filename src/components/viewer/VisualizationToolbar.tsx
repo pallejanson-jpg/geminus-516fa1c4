@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
 import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous } from "lucide-react";
+import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -95,6 +96,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   // BCF viewpoint hook
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef });
+  
+  // Flash highlight hook for visual feedback on selected objects
+  const { flashEntitiesByIds } = useFlashHighlight();
 
   const [isOpen, setIsOpen] = useState(false);
   // Use controlled state if provided, otherwise local state
@@ -470,23 +474,34 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }
   }, [pendingIssueState, user, buildingFmGuid, buildingName, allData]);
 
-  // Handle navigating to issue viewpoint
+  // Handle navigating to issue viewpoint with flash effect for selected objects
   const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
-    if (viewpoint) {
-      restoreViewpoint(viewpoint, { duration: 1.0 });
+    if (!viewpoint) return;
+    
+    restoreViewpoint(viewpoint, { duration: 1.0 });
+    
+    // Flash the selected objects after camera animation completes
+    if (viewpoint.components?.selection?.length > 0) {
+      const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+      setTimeout(() => {
+        const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+        if (xeokitViewer?.scene) {
+          flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
+        }
+      }, 1100); // Slightly after camera animation
     }
-  }, [restoreViewpoint]);
+  }, [restoreViewpoint, viewerRef, flashEntitiesByIds]);
 
   // Handle selecting an issue from the list
   const handleSelectIssue = useCallback((issue: BcfIssue) => {
     setSelectedIssue(issue);
     setShowIssueDetail(true);
     
-    // Navigate to the viewpoint if available
+    // Navigate to the viewpoint if available with flash effect
     if (issue.viewpoint_json) {
-      restoreViewpoint(issue.viewpoint_json, { duration: 1.0 });
+      handleGoToIssueViewpoint(issue.viewpoint_json);
     }
-  }, [restoreViewpoint]);
+  }, [handleGoToIssueViewpoint]);
 
   // Check if user is admin (simplified - you might want to use your role system)
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1118,6 +1133,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             screenshotUrl={pendingIssueState?.screenshot}
             buildingName={buildingName}
             isSubmitting={isSubmittingIssue}
+            selectedObjectIds={pendingIssueState?.selectedObjects}
           />
           
           {/* Issue Detail Sheet */}

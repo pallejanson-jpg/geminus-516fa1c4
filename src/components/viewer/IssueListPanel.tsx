@@ -18,6 +18,7 @@ interface BcfIssue {
   screenshot_url: string | null;
   created_at: string;
   viewpoint_json: any;
+  selected_object_ids: string[] | null;
 }
 
 const ISSUE_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
@@ -69,7 +70,7 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
       try {
         const { data, error } = await supabase
           .from('bcf_issues')
-          .select('id, title, description, issue_type, priority, status, screenshot_url, created_at, viewpoint_json')
+          .select('id, title, description, issue_type, priority, status, screenshot_url, created_at, viewpoint_json, selected_object_ids')
           .eq('building_fm_guid', buildingFmGuid)
           .order('created_at', { ascending: false });
 

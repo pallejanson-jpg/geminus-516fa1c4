@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MessageSquarePlus, AlertCircle, Lightbulb, HelpCircle, Eye } from "lucide-react";
+import { MessageSquarePlus, AlertCircle, Lightbulb, HelpCircle, Eye, Box } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,8 @@ interface CreateIssueDialogProps {
   screenshotUrl?: string;
   buildingName?: string;
   isSubmitting?: boolean;
+  /** IDs of currently selected objects in the 3D viewer */
+  selectedObjectIds?: string[];
 }
 
 const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
@@ -57,6 +59,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
   screenshotUrl,
   buildingName,
   isSubmitting = false,
+  selectedObjectIds = [],
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -120,6 +123,16 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           {buildingName && (
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Byggnad:</span> {buildingName}
+            </div>
+          )}
+
+          {/* Selected objects indicator */}
+          {selectedObjectIds.length > 0 && (
+            <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-sm">
+              <Box className="h-4 w-4 text-primary" />
+              <span>
+                {selectedObjectIds.length} {selectedObjectIds.length === 1 ? 'objekt valt' : 'objekt valda'}
+              </span>
             </div>
           )}
 

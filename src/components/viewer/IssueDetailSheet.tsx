@@ -29,6 +29,7 @@ import {
   CheckCircle,
   Loader2,
   User,
+  Box,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -238,6 +239,23 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                   {issue.description}
                 </p>
+              </div>
+            )}
+
+            {/* Related objects */}
+            {issue.selected_object_ids && issue.selected_object_ids.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-1 flex items-center gap-2">
+                  <Box className="h-4 w-4" />
+                  Relaterade objekt
+                </h4>
+                <div className="flex flex-wrap gap-1">
+                  {issue.selected_object_ids.map((id) => (
+                    <Badge key={id} variant="outline" className="text-xs font-mono">
+                      {id.length > 12 ? `${id.substring(0, 12)}...` : id}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
 
