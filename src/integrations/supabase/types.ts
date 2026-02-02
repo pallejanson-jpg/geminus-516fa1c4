@@ -342,6 +342,39 @@ export type Database = {
         }
         Relationships: []
       }
+      building_external_links: {
+        Row: {
+          building_fm_guid: string
+          created_at: string
+          display_name: string | null
+          external_id: string | null
+          external_url: string
+          id: string
+          system_name: string
+          updated_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          created_at?: string
+          display_name?: string | null
+          external_id?: string | null
+          external_url: string
+          id?: string
+          system_name: string
+          updated_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          created_at?: string
+          display_name?: string | null
+          external_id?: string | null
+          external_url?: string
+          id?: string
+          system_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       building_settings: {
         Row: {
           created_at: string
@@ -438,6 +471,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      documents: {
+        Row: {
+          building_fm_guid: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          metadata: Json
+          mime_type: string | null
+          source_id: string | null
+          source_system: string
+          source_url: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          building_fm_guid: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          source_id?: string | null
+          source_system?: string
+          source_url?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          building_fm_guid?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          metadata?: Json
+          mime_type?: string | null
+          source_id?: string | null
+          source_system?: string
+          source_url?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       faciliate_sync_state: {
         Row: {
