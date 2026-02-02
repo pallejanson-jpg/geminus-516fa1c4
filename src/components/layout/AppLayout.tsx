@@ -9,10 +9,12 @@ import VoiceControlButton from '@/components/voice/VoiceControlButton';
 import GunnarButton from '@/components/chat/GunnarButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
+import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
+    const [gunnarVisible, setGunnarVisible] = useState(() => getGunnarSettings().visible);
     const isMobile = useIsMobile();
 
     // Listen for voice settings changes
@@ -22,6 +24,15 @@ const AppLayoutInner: React.FC = () => {
         };
         window.addEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
         return () => window.removeEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
+    }, []);
+
+    // Listen for Gunnar settings changes
+    useEffect(() => {
+        const handleGunnarSettingsChange = (e: CustomEvent) => {
+            setGunnarVisible(e.detail?.visible ?? true);
+        };
+        window.addEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
+        return () => window.removeEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
     }, []);
 
     // Voice command callbacks
@@ -59,8 +70,8 @@ const AppLayoutInner: React.FC = () => {
             {/* Voice Control - only visible when enabled in Settings */}
             {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
 
-            {/* Gunnar AI Assistant - always visible */}
-            <GunnarButton />
+            {/* Gunnar AI Assistant - visible based on settings */}
+            {gunnarVisible && <GunnarButton />}
         </div>
     );
 };
