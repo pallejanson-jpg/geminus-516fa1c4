@@ -1,99 +1,118 @@
 
-# Plan: XKT-modellcachning via "Cache-on-Load" i 3D-viewern
+## Vad felet betyder (enkelt)
+Det här är inte ett fel i er databas i Lovable Cloud, utan ett fel som kommer från **Asset+ backend** (de verkar köra MongoDB). Meddelandet:
 
-## Sammanfattning
-Implementera en strategi där 3D-viewern automatiskt sparar nedladdade XKT-modeller till backend första gången de laddas. Detta ger:
-- **Session-cache**: Modeller hålls i minnet under sessionen
-- **Persistent cache**: Modeller sparas till Lovable Cloud för framtida laddningar
-- **Fallback för synk**: Om Edge-funktionen inte kan nå Asset+ 3D API, finns modellerna ändå cachade efter första visningen
+> “Sort exceeded memory limit of 104857600 bytes … Pass allowDiskUse:true …”
 
-## Bakgrund
+betyder att Asset+ försöker **sortera en väldigt stor resultatsamling i RAM**, men den träffar MongoDB:s standardgräns på **100 MB** för in-memory sort. När den gränsen passeras aborterar Asset+ och svarar 500.
 
-### Varför synkdialogen misslyckas
-Edge-funktionen får ett HTML-svar (`<!doctype`) istället för JSON från Asset+ `/threed/GetModels` endpoint. Detta tyder på att:
-1. 3D API kräver annan autentisering än Bearer-token
-2. Eller så är endpointen skyddad med IP-filter/cookies som Edge-miljön saknar
+Viktigt: det kan hända även om vi bara begär `take: 200`, eftersom servern ofta måste sortera *hela* matchningen innan den tar ut “sidan”.
 
-### Varför 3D-viewern fungerar
-Asset+ viewerpaketet (`assetplusviewer.umd.min.js`) har egen fetch-logik och kommunicerar direkt med Asset+ API från användarens webbläsare, med rätt sessionsdata.
+## Varför det händer “på slutet” trots att 80k/82k redan är nere
+Jag har kollat er progress i backend-tabellen `asset_sync_progress` och den visar:
 
-## Teknisk implementation
+- `current_building_index = 12` (dvs byggnad 13 av 14)
+- `skip = 43500`
+- `total_synced = 80278`
 
-### Steg 1: Återaktivera fetch-interceptor med säker implementation
-Uppdatera `setupCacheInterceptor` i `AssetPlusViewer.tsx` för att:
-1. Intercepta utgående XKT-förfrågningar
-2. Kontrollera om modellen finns i minnet eller i databasen först
-3. Vid cache-miss: hämta från Asset+ och spara till backend i bakgrunden
+Det betyder att synken har fastnat på en specifik byggnad med extremt mycket data, och nu när `skip` blivit väldigt stort blir frågan extra tung för Asset+ (deep pagination + sort). Det är därför det funkar “nästan hela vägen” men kraschar när den kommer till just den byggnaden/sidläget.
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    XKT Request Flow                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────┐    ┌──────────────┐    ┌─────────────────┐   │
-│  │ Viewer   │───>│ Memory Cache │───>│ Database/Storage│   │
-│  │ Request  │    │ (session)    │    │ (persistent)    │   │
-│  └──────────┘    └──────────────┘    └─────────────────┘   │
-│       │                │                     │              │
-│       │                │                     │              │
-│       ▼                ▼                     ▼              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Om cache-miss                           │  │
-│  │                                                      │  │
-│  │  ┌──────────┐    ┌──────────────────────────────┐   │  │
-│  │  │ Asset+   │───>│ Spara till Memory + Backend  │   │  │
-│  │  │ API      │    │ (i bakgrunden)               │   │  │
-│  │  └──────────┘    └──────────────────────────────┘   │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+## Målet
+1) Göra synken robust så att den kan “ta sig förbi” MongoDB-sort-felet och få ner de sista ~2000 objekten.  
+2) Ge tydlig feedback i synkdialogen istället för hårt 500-stopp.  
+3) Minimera risken att den fastnar igen vid höga `skip`.
 
-### Steg 2: Uppdatera minneshantering
-Förbättra `useXktPreload.ts`:
-1. Exponera funktioner för att kontrollera/hämta från minnet
-2. Öka gränsen för samtidiga modeller i minnet
-3. Automatisk cleanup vid lågt minne
+---
 
-### Steg 3: Uppdatera xkt-cache-service
-1. Lägg till en `saveModelFromViewer`-metod optimerad för bakgrundssparning
-2. Hantera signerade URL-förnyelse
-3. Bättre felhantering och retry-logik
+## Lösning (stegvis)
 
-### Steg 4: Förbättra synk-UI med feedback
-Uppdatera synkdialogen för att visa:
-- "XKT-synk stöds ej från servern - modeller cachas automatiskt när du öppnar 3D"
-- Visa antal cachade modeller per byggnad
+### Steg 1 — Förbättra Asset+-frågan så att den blir billigare att sortera
+I `supabase/functions/asset-plus-sync/index.ts` (funktionen `fetchAssetPlusObjects`) lägger vi till:
 
-## Filer som ändras
+- **Explicit sort** (DevExtreme-stil): `sort: [{ selector: "fmGuid", desc: false }]`
+- **Select/projection** för att minska dokumentstorlek: `select: ["fmGuid","objectType","designation","commonName","buildingFmGuid","levelFmGuid","inRoomFmGuid","complexCommonName","grossArea","ObjectTypeValue","createdInModel","dateModified"]`
 
-| Fil | Förändring |
-|-----|------------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Återaktivera och förbättra `setupCacheInterceptor` |
-| `src/hooks/useXktPreload.ts` | Exponera minnescache-funktioner, förbättra preload |
-| `src/services/xkt-cache-service.ts` | Lägg till `saveModelFromViewer` metod |
-| `supabase/functions/asset-plus-sync/index.ts` | Förbättra felmeddelanden vid 3D API-misslyckande |
-| UI-komponent för synkdialog | Visa förklaring om cache-on-load strategi |
+Varför:
+- Sort på ett stabilt fält (fmGuid) ökar chansen att Asset+ kan använda index / mindre minne.
+- `select` gör varje “rad” mindre, vilket kan göra sorten mindre minneskrävande.
 
-## Fördelar
+Vi applicerar samma sort (och minimal select) även i `getRemoteCountByTypes` (som ibland kan trigga tunga operationer när `requireTotalCount: true` används).
 
-1. **Ingen manuell synk krävs** - Modeller cachas automatiskt vid första laddning
-2. **Snabbare efter första gången** - Efterföljande laddningar hämtar från Lovable Cloud
-3. **Fungerar oavsett Asset+ API-restriktioner** - Viewern har redan rätt behörigheter
-4. **Session-prestanda** - Modeller hålls i minnet under sessionen
+### Steg 2 — Adaptiv retry/backoff när vi får just “sort memory limit”
+I samma edge function fångar vi felet när `errorText` innehåller t.ex.:
+- `"Sort exceeded memory limit"` eller `"allowDiskUse:true"`
 
-## Risker och mitigation
+Då gör vi automatiskt:
+- Retry med eskalerande “snällare” inställningar, t.ex.:
+  - `take: 200` → `100` → `50` → `25`
+  - alltid med `select` (reducerad payload)
+  - alltid med explicit `sort`
+- Kort jitter/backoff (t.ex. 250–500ms) mellan retry för att undvika att slå i samma “hot path” i Asset+.
 
-| Risk | Mitigation |
-|------|------------|
-| Stora XKT-filer kan ta tid att spara | Spara i bakgrunden utan att blockera viewern |
-| Minnescache kan bli stor | Begränsa till 200 MB per session, prioritera arkitekturmodeller |
-| Interceptor kan störa Asset+ paket | Använd passiv interceptor som klonar response istället för att modifiera |
+Målet är att den ska kunna “bita av” även när Asset+ är känslig.
 
-## Testplan
-1. Öppna 3D för en byggnad som aldrig visats
-2. Verifiera att modellerna laddas från Asset+
-3. Verifiera att modellerna sparas till backend (kolla `xkt_models` tabell)
-4. Stäng och öppna 3D igen
-5. Verifiera att laddningen går snabbare (från cache)
-6. Byt byggnad och upprepa
+### Steg 3 — Ny pagination-strategi som undviker “skip 43500”-läget (cursor-läge)
+Om backoff fortfarande träffar minnesfelet (särskilt när `skip` blir stort), inför vi en fallback till **cursor-baserad pagination** för den byggnaden:
+
+- Vi kör med `sort` på `"fmGuid"` och istället för `skip`, använder vi:
+  - `filter: [ ["buildingFmGuid","=",X], "and", ["objectType","=",4], "and", ["fmGuid",">", lastFmGuid] ]`
+  - `skip: 0`
+- Efter varje batch sparar vi `lastFmGuid = sista fmGuid i batchen` som cursor.
+
+Detta kräver att vi sparar mer progress än bara `skip`.
+
+#### Databasändring (schema)
+Vi utökar `public.asset_sync_progress` med nya nullable kolumner (migration):
+- `cursor_fm_guid text null`  (sista fmGuid i senaste batch)
+- `page_mode text null` (t.ex. `'skip' | 'cursor'`)
+- ev. `last_error text null` (för UI-diagnostik)
+
+### Steg 4 — UI: Visa begriplig förklaring och fortsätt automatiskt
+I `src/components/settings/ApiSettingsModal.tsx` i `handleSyncAssetsChunked`:
+
+- Om edge function returnerar en kontrollerad “soft fail” (200 OK men `{ success:false, code:"ASSETPLUS_SORT_MEMORY_LIMIT" ... }`) så:
+  - Visar vi en toast som säger ungefär:
+    - “Asset+ klarade inte sorteringen (serverbegränsning). Vi provar en annan strategi…”
+  - Fortsätter automatiskt (eftersom det i praktiken är en retry/fallback, inte ett “hårt stopp”).
+- Vi visar också tydligare statusrad i kortet (assets syncState):
+  - Vilken byggnad den är på
+  - Om den kör “skip” eller “cursor” mode
+
+### Steg 5 — Säkerhetsventiler/verktyg
+För att slippa låsa fast sig:
+- Ny action i edge function: `reset-assets-progress` (admin-only)
+  - Rensar `asset_sync_progress` för `job='assets_instances'`
+  - (Valfritt) kan sätta syncState till “interrupted” med en tydlig text
+
+---
+
+## Förväntad effekt
+- Synken ska kunna fortsätta förbi byggnad 13/14 där `skip=43500` och få ner resterande objekt.
+- Även om Asset+ ibland är “instabil” i sin sort, ska vi gradvis gå mot en strategi som kräver mindre av servern.
+- UI ska inte “bara dö” på 500, utan guida användaren och automatiskt försöka vidare.
+
+---
+
+## Testplan (konkret)
+1. Kör “Alla Tillgångar” i synkdialogen.
+2. Verifiera att den fortsätter från nuvarande progress (byggnad 13/14).
+3. Om den träffar sort-felet:
+   - Verifiera att den först provar backoff (200→100→50→25) och att UI visar ett begripligt meddelande.
+4. Om backoff inte räcker:
+   - Verifiera att den växlar till cursor mode (skip=0 och cursor_fm_guid uppdateras i progress).
+5. När klar:
+   - `check-sync-status` ska visa `assets.inSync = true` och att local ≈ remote för Instances.
+
+---
+
+## Tekniska filer som kommer ändras
+- `supabase/functions/asset-plus-sync/index.ts`
+  - lägga till sort + select
+  - retry/backoff på “Sort exceeded memory limit”
+  - cursor-pagination fallback
+  - ev. ny action `reset-assets-progress`
+- Databas-migration: `asset_sync_progress` (nya kolumner)
+- `src/components/settings/ApiSettingsModal.tsx`
+  - bättre hantering av kontrollerade felkoder och bättre statusfeedback
+
+---
