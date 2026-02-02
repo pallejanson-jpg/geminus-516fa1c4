@@ -1,233 +1,305 @@
 
-# Plan: Kartförbättringar - Popup-styling, Sökning och Ikoninfärgning
+# Plan: 3D Viewer-förbättringar - Startproblem, Dubbla Spinners, Modellnamn och Träd
 
 ## Översikt
 
-Denna plan omfattar tre förbättringar av kartfunktionaliteten:
-1. **Svart bakgrund i popup** - Tydligare läsbarhet för byggnadsinformation
-2. **Sökfunktion i byggnadsväljaren** - Snabbare navigering bland många byggnader
-3. **Infärgningsmeny för ikoner** - Visualisera byggnader baserat på prestanda-metrics
+Denna plan åtgärdar fem identifierade problem med 3D-viewern:
+
+1. **Ibland kommer inte Byggnader/Sparade Vyer upp** - användaren kastas direkt in i viewern
+2. **Två spinners vid öppning** - behöver stänga av den orangea (eller lila)
+3. **Felaktigt modellnamn** - visar "myModel undefined" istället för "A-model"
+4. **Saknade modeller i listan** - B-modell, E-modell, V-modell visas inte
+5. **Modellträd fungerar dåligt** - selektion/avselektion propagerar inte korrekt
+6. **Prestanda-diskussion** - partiell laddning av objekt
 
 ---
 
-## Del 1: Svart bakgrund i byggnadspopupen
+## Problem 1: Byggnadsväljaren visas inte
 
-Popupen som visas när man klickar på en byggnad har idag transparent bakgrund vilket gör texten svår att läsa mot kartunderlaget.
+### Rotorsak
+I `src/pages/Viewer.tsx` (rad 14-20) kontrolleras `viewer3dFmGuid` för att avgöra om BuildingSelector eller AssetPlusViewer ska visas:
 
-### Ändringar
-
-**Fil: `src/components/map/MapView.tsx`** (rad 413)
-
-Ändra Card-komponenten i popupen:
 ```tsx
-// Före
-<Card className="border-0 shadow-none bg-transparent">
-
-// Efter
-<Card className="border-0 shadow-xl bg-black/95 backdrop-blur-sm">
+if (viewer3dFmGuid) {
+  return <AssetPlusViewer fmGuid={viewer3dFmGuid} ... />
+}
+return <BuildingSelector />
 ```
 
-**Fil: `src/index.css`** (rad 189-194)
+Om `viewer3dFmGuid` inte återställs korrekt vid föregående session eller av andra skäl har ett gammalt värde, hoppar användaren direkt in i viewern.
 
-Uppdatera popup-bakgrund:
+### Lösning
+Lägg till en `useEffect` som rensar `viewer3dFmGuid` vid unmount av Viewer-komponenten, samt validerar att den valda byggnaden faktiskt existerar i `allData`.
+
+**Fil: `src/pages/Viewer.tsx`**
+
+```tsx
+// Add validation that selected building exists
+const validBuilding = allData.find(
+  (item: any) => item.fmGuid === viewer3dFmGuid && item.category === 'Building'
+);
+
+// If GUID is set but building doesn't exist (data not loaded), show selector
+if (viewer3dFmGuid && !isLoadingData && !validBuilding) {
+  return <BuildingSelector />;
+}
+```
+
+---
+
+## Problem 2: Två spinners - stänga av den orangea
+
+### Rotorsak
+Den **lila** spinnern kommer från React-komponenten `<Spinner />` i `AssetPlusViewer.tsx` (rad 2494-2502).
+
+Den **orangea** spinnern kommer från Asset+ bibliotekets interna DevExtreme `dx-loadindicator` med färgen `#ff5722` definierad i `public/lib/assetplus/assetplusviewer.css` (rad 528-532).
+
+### Lösning
+Lägg till CSS-override i `src/index.css` för att dölja den interna Asset+ loadern:
+
+**Fil: `src/index.css`**
+
 ```css
-.mapboxgl-popup-content {
-  background: rgb(0 0 0 / 0.95) !important;
-  padding: 0 !important;
-  border-radius: 0.5rem !important;
-  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5) !important;
+/* Dölj Asset+ interna orange spinner för att undvika dubbla indikatorer */
+.dx-loadindicator {
+  display: none !important;
+}
+
+.dx-loadpanel-content,
+.dx-loadpanel-wrapper {
+  display: none !important;
+  visibility: hidden !important;
 }
 ```
 
 ---
 
-## Del 2: Sökfunktion i byggnadsväljaren
+## Problem 3: Felaktigt modellnamn ("myModel undefined")
 
-Byggnadsväljaren i vänster kant av kartan listar alla byggnader. För portföljer med många byggnader behövs en sökfunktion.
+### Rotorsak
+I `ModelVisibilitySelector.tsx` hämtas modellnamn från `xkt_models` databastabellen eller Asset+ API. Problemet uppstår när:
+1. `modelNamesMap` är tom under initialiseringen
+2. Det finns en timing-mismatch mellan när modeller laddas i xeokit och när API-namn hämtas
+3. Fallback-logiken (rad 242) visar raw model ID om ingen match hittas
 
-### UI-skiss
+### Lösning
+1. **Vänta på modellnamn innan modellista visas** - Lägg till explicit beroende på `modelNamesMap.size > 0`
+2. **Förbättra fallback-namnet** - Om ingen match, visa "Laddar..." istället av raw ID under hämtning
+3. **Uppdatera listan när namn laddas** - Säkerställ att `extractModels` anropas igen efter att `modelNamesMap` fyllts
 
-```text
-+------------------------------------------+
-| 🏢 Buildings (12)                        |
-+------------------------------------------+
-| [🔍 Search buildings...              ]   |
-+------------------------------------------+
-| Byggnad 01                               |
-| Industrivägen 1                          |
-+------------------------------------------+
-| Byggnad 02                               |
-| Storgatan 15                             |
-+------------------------------------------+
-```
+**Fil: `src/components/viewer/ModelVisibilitySelector.tsx`**
 
-### Ändringar
-
-**Fil: `src/components/map/MapView.tsx`**
-
-Lägg till sökfält i `BuildingSidebar`-komponenten:
-- Importera `Input` och `Search`-ikonen
-- Lägg till state för `searchQuery`
-- Filtrera `facilities` baserat på namn och adress
-- Visa sökfält mellan header och listan
-
----
-
-## Del 3: Infärgningsverktyg för kartikoner
-
-En ny dropdown-meny uppe till höger på kartan som låter användaren färglägga byggnadsikonerna baserat på olika metrics.
-
-### UI-skiss
-
-```text
-+-------------------------------------------+
-| 📊 Color markers by...            [⚙️]   |
-+-------------------------------------------+
-| ○ Default (no coloring)                   |
-| ● Energy efficiency (kWh/m²)              |
-| ○ Work orders (count)                     |
-| ○ CO₂ emissions                           |
-| ○ Energy rating (A-E)                     |
-+-------------------------------------------+
-| 🟢 A/B  🟡 C  🟠 D  🔴 E     [Legend]     |
-+-------------------------------------------+
-```
-
-### Infärgningstabeller (baserade på Insights-mockup)
-
-**Energy efficiency (kWh/m²)**:
-| Värde | Färg |
-|-------|------|
-| < 90 | Grön |
-| 90-100 | Ljusgrön |
-| 100-120 | Gul |
-| 120-140 | Orange |
-| > 140 | Röd |
-
-**Work orders (mock)**:
-| Antal | Färg |
-|-------|------|
-| 0-2 | Grön |
-| 3-5 | Gul |
-| 6-10 | Orange |
-| > 10 | Röd |
-
-**CO₂ emissions (tons)**:
-Beräknas som `area * 0.012`. Använder samma färgskala som kWh/m².
-
-**Energy Rating**:
-| Rating | Färg |
-|--------|------|
-| A | Mörkgrön |
-| B | Grön |
-| C | Gul |
-| D | Orange |
-| E | Röd |
-
-### Nya komponenter/funktioner
-
-**Ny fil: `src/lib/map-coloring-utils.ts`**
-
-```typescript
-export type MapColoringMode = 
-  | 'none' 
-  | 'energy-efficiency' 
-  | 'work-orders' 
-  | 'co2' 
-  | 'energy-rating';
-
-export interface BuildingMetrics {
-  fmGuid: string;
-  energyPerSqm: number;
-  workOrders: number;
-  co2Tons: number;
-  energyRating: 'A' | 'B' | 'C' | 'D' | 'E';
-}
-
-export function getBuildingColor(
-  metrics: BuildingMetrics, 
-  mode: MapColoringMode
-): string {
-  // Returns hex color based on mode and metric values
-}
-
-export function generateMockBuildingMetrics(
-  fmGuid: string,
-  area: number
-): BuildingMetrics {
-  // Deterministic mock data based on fmGuid hash
-  // Uses same logic as PerformanceTab
-}
-```
-
-### Ändringar i MapView.tsx
-
-1. **Ny state** för färgläge:
-```typescript
-const [coloringMode, setColoringMode] = useState<MapColoringMode>('none');
-```
-
-2. **Beräkna metrics** för alla byggnader i `mapFacilities`:
-```typescript
-const buildingMetrics = useMemo(() => {
-  return mapFacilities.map(f => ({
-    fmGuid: f.fmGuid,
-    ...generateMockBuildingMetrics(f.fmGuid, f.area || 0)
-  }));
-}, [mapFacilities]);
-```
-
-3. **Ny dropdown-meny** i verktygspanelen (bredvid lager-knappen):
-- Dropdown med ikoner för varje alternativ
-- Visa förklaring/legend när färgläge är aktivt
-
-4. **Uppdatera SingleMarker** för att ta emot färg:
 ```tsx
-<SingleMarker
-  ...
-  color={coloringMode !== 'none' 
-    ? getBuildingColor(metrics, coloringMode) 
-    : undefined
+// Rad 200-250: Förbättra extractModels med bättre fallback
+const extractModels = useCallback(() => {
+  // ... existing code ...
+  
+  // Förbättrad fallback som respekterar laddningstillstånd
+  const friendlyName = matchedName || 
+    (isLoadingNames ? 'Laddar...' : fileNameWithoutExt.replace(/-/g, ' '));
+  
+  // ... rest of code
+}, [getXeokitViewer, modelNamesMap, isLoadingNames]);
+
+// Rad 289-348: Vänta tills modelNamesMap är klar (om laddning pågår)
+useEffect(() => {
+  // Don't initialize until model names are loaded (or loading failed)
+  if (isInitialized || isLoadingNames) return;
+  
+  // Kräv att modelNamesMap har data om buildingFmGuid finns
+  if (buildingFmGuid && modelNamesMap.size === 0) {
+    // Names still loading, wait
+    return;
   }
+  
+  // ... rest of initialization
+}, [extractModels, isInitialized, applyModelVisibility, isLoadingNames, buildingFmGuid, modelNamesMap.size]);
+```
+
+---
+
+## Problem 4: Saknade modeller i listan
+
+### Rotorsak
+Modeller laddas bara till xeokit efter att XKT-filer hämtats. Om synkronisering av XKT-modeller inte slutförts, finns modellerna inte i `viewer.scene.models`.
+
+`extractModels()` itererar endast över `sceneModels` - modeller som faktiskt laddats in i xeokit-scenen.
+
+### Lösning
+Kombinera två datakällor:
+1. **Laddade modeller** från xeokit scene
+2. **Tillgängliga modeller** från `xkt_models` databastabellen
+
+**Fil: `src/components/viewer/ModelVisibilitySelector.tsx`**
+
+```tsx
+// Ny state för databas-modeller
+const [dbModels, setDbModels] = useState<{id: string; name: string}[]>([]);
+
+// Hämta alla modeller för byggnaden från databasen
+useEffect(() => {
+  if (!buildingFmGuid) return;
+  
+  const fetchDbModels = async () => {
+    const { data } = await supabase
+      .from('xkt_models')
+      .select('model_id, model_name, file_name')
+      .eq('building_fm_guid', buildingFmGuid);
+    
+    if (data) {
+      setDbModels(data.map(m => ({
+        id: m.file_name || m.model_id,
+        name: m.model_name || m.file_name || m.model_id
+      })));
+    }
+  };
+  
+  fetchDbModels();
+}, [buildingFmGuid]);
+
+// Modifiera extractModels för att kombinera med dbModels
+const extractModels = useCallback(() => {
+  // ... hämta laddade modeller från scene
+  
+  // Lägg till databas-modeller som inte finns i scene (visas som "ej laddade")
+  dbModels.forEach(dbModel => {
+    if (!extractedModels.find(m => m.id === dbModel.id)) {
+      extractedModels.push({
+        id: dbModel.id,
+        name: dbModel.name,
+        shortName: dbModel.name.length > 30 ? dbModel.name.substring(0, 27) + '...' : dbModel.name,
+        loaded: false, // Ny flagga för att markera ej laddade modeller
+      });
+    }
+  });
+  
+  return extractedModels;
+}, [getXeokitViewer, modelNamesMap, dbModels]);
+```
+
+---
+
+## Problem 5: Modellträd - selektion propagerar inte
+
+### Rotorsak
+I `ViewerTreePanel.tsx` hanterar `handleVisibilityChange` (rad 462-484) endast synlighetsändringar för en nod och dess barn, men funktionen anropas med `visible: boolean` som alltid sätter samma värde - den hanterar inte propagering uppåt till förälder eller korrekt selektionssynkronisering.
+
+### Lösning
+1. **Propagera nedåt** - Redan implementerat (rad 472-481)
+2. **Propagera uppåt** - Lägg till uppdatering av förälderns indeterminate-status
+3. **Fixa expand/collapse** - Se till att `onToggle` är korrekt kopplat
+
+**Fil: `src/components/viewer/ViewerTreePanel.tsx`**
+
+```tsx
+// Rad 462-484: Förbättra handleVisibilityChange för att propagera korrekt
+const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
+  const xeokitViewer = getXeokitViewer();
+  const scene = xeokitViewer?.scene;
+  if (!scene) return;
+
+  // Rekursiv funktion för att sätta synlighet på alla barn
+  const setVisibilityRecursive = (n: TreeNode, vis: boolean) => {
+    const entity = scene.objects?.[n.id];
+    if (entity) {
+      entity.visible = vis;
+    }
+    n.children?.forEach(child => setVisibilityRecursive(child, vis));
+  };
+
+  // Sätt synlighet på noden och alla dess barn
+  setVisibilityRecursive(node, visible);
+
+  // Uppdatera trädets visuella state
+  refreshVisibilityState();
+}, [getXeokitViewer, refreshVisibilityState]);
+```
+
+**Fixa TreeNodeComponent checkbox onClick**:
+```tsx
+// Rad 201-204: Korrigera event-hantering
+<Checkbox
+  checked={node.visible && !node.indeterminate}
+  ref={(el) => {
+    if (el && node.indeterminate) {
+      // Sätt indeterminate-attribut på underliggande input
+      const input = el.querySelector('input');
+      if (input) input.indeterminate = node.indeterminate;
+    }
+  }}
+  onCheckedChange={(checked) => {
+    onVisibilityChange?.(node, !!checked);
+  }}
+  onClick={(e) => e.stopPropagation()}
 />
 ```
 
-5. **Uppdatera MapCluster.tsx**:
-- Lägg till optional `color`-prop på `SingleMarker`
-- Använd färgen för markörsymbolen
+---
+
+## Problem 6: Prestanda och partiell laddning
+
+### Analys
+XEOkits demo-sidor är snabba för att de:
+1. **Laddar endast BIM-strukturen först** (hierarchy metadata)
+2. **Laddar geometri on-demand** när användaren navigerar
+3. **Använder WebGL-instancing** för duplicerade objekt
+
+### Rekommendation
+Detta är en större arkitekturell förändring som bör hanteras separat. En mellanlösning:
+
+1. **Fördröj trädbygge** - ViewerTreePanel bygger redan trädet i chunks med `requestIdleCallback`
+2. **Lazy-load barn** - Expandera inte trädnoder förrän användaren klickar
+3. **Virtualisering** - Implementera react-window för stora träd
+
+Notera: Dessa optimeringar bör dokumenteras för framtida implementation men ligger utanför denna plans scope.
 
 ---
 
-## Filer som skapas/ändras
+## Filer som ändras
 
 | Fil | Typ | Beskrivning |
 |-----|-----|-------------|
-| `src/components/map/MapView.tsx` | Ändra | Popup-styling, sökfält, färgmeny |
-| `src/components/map/MapCluster.tsx` | Ändra | Stöd för dynamisk färg på markörer |
-| `src/index.css` | Ändra | Popup-bakgrundsfärg |
-| `src/lib/map-coloring-utils.ts` | **NY** | Hjälpfunktioner för färgberäkning |
+| `src/pages/Viewer.tsx` | Ändra | Validering av vald byggnad |
+| `src/index.css` | Ändra | Dölj Asset+ interna orange spinner |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Ändra | Fixa modellnamn och visa alla tillgängliga modeller |
+| `src/components/viewer/ViewerTreePanel.tsx` | Ändra | Förbättra checkbox-propagering |
 
 ---
 
 ## Tekniska detaljer
 
-### Färginterpolering
-Samma logik som används i `src/lib/visualization-utils.ts` för rumsvisualisering kan återanvändas för kartmarkörer.
+### Spinner-arkitektur efter fix
+```text
+┌───────────────────────────────────────┐
+│ 3D Viewer Container                   │
+│                                       │
+│  ┌─────────────────────────────────┐  │
+│  │ React Spinner (lila)            │  │  ← Kontrolleras av state.isLoading
+│  │ Spinner component               │  │
+│  └─────────────────────────────────┘  │
+│                                       │
+│  ┌─────────────────────────────────┐  │
+│  │ Asset+ Internal Spinner (orange)│  │  ← DOLD via CSS
+│  │ dx-loadindicator                │  │
+│  └─────────────────────────────────┘  │
+│                                       │
+└───────────────────────────────────────┘
+```
 
-### Deterministisk mockdata
-Använder `fmGuid.split('').reduce((a, c) => a + c.charCodeAt(0), 0)` för att generera konsekventa värden per byggnad (samma approach som PerformanceTab).
-
-### Tillgänglighet
-- Legend visas alltid när färgläge är aktivt
-- Använder färger som även fungerar för färgblinda (skillnad i ljushet)
-- Tooltip på marker visar exakt värde
+### Modellsynlighet dataflöde
+```text
+xkt_models (DB)  ────┐
+                     ├──> Combined Model List ──> UI
+scene.models     ────┘
+     │
+     └──> För laddade modeller: visibility control
+```
 
 ---
 
 ## Implementeringsordning
 
-1. **Popup-styling** - Snabb CSS-ändring
-2. **Sökfunktion** - Lägg till i BuildingSidebar
-3. **map-coloring-utils.ts** - Skapa hjälpbibliotek
-4. **MapCluster.tsx** - Lägg till färgstöd
-5. **MapView.tsx** - Integrera färgväljare och meny
+1. **CSS-fix för orange spinner** - Snabb fix med omedelbar effekt
+2. **Viewer.tsx validering** - Säkerställ att BuildingSelector visas
+3. **ModelVisibilitySelector fixes** - Kombinera datakällor och förbättra namnvisning
+4. **ViewerTreePanel checkbox-fix** - Korrekt propagering av visibility
