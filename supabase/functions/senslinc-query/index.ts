@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url';
   fmGuid?: string;
   siteCode?: string;
 }
@@ -54,6 +54,14 @@ async function senslincFetch(apiUrl: string, endpoint: string, token: string) {
   }
 
   return response.json();
+}
+
+// Build dashboard URL from base URL and entity type
+function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
+  // Transform API URL to portal URL
+  // e.g., https://api.swg-group.productinuse.com -> https://swg-group.productinuse.com
+  const portalUrl = apiUrl.replace('api.', '').replace('/api', '');
+  return `${portalUrl}/dashboard/${type}/${pk}`;
 }
 
 serve(async (req) => {
@@ -171,6 +179,101 @@ serve(async (req) => {
         
         return new Response(
           JSON.stringify({ success: true, data: machines }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // New action: Get dashboard URL for a given FM GUID
+      // Searches machines, sites, and lines to find matching entity
+      case 'get-dashboard-url': {
+        if (!fmGuid) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'fmGuid required' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+        
+        const token = await getJwtToken(cleanApiUrl, email, password);
+        
+        // Try to find as machine first (rooms/assets)
+        try {
+          const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, token);
+          if (Array.isArray(machines) && machines.length > 0) {
+            const machine = machines[0];
+            const dashboardUrl = machine.dashboard_url || buildDashboardUrl(cleanApiUrl, 'machine', machine.pk);
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                data: { 
+                  dashboardUrl, 
+                  type: 'machine',
+                  name: machine.name,
+                  pk: machine.pk,
+                  ...machine 
+                } 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (err) {
+          console.log('[Senslinc] No machine found for fmGuid:', fmGuid);
+        }
+        
+        // Try to find as site (buildings)
+        try {
+          const sites = await senslincFetch(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, token);
+          if (Array.isArray(sites) && sites.length > 0) {
+            const site = sites[0];
+            const dashboardUrl = site.dashboard_url || buildDashboardUrl(cleanApiUrl, 'site', site.pk);
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                data: { 
+                  dashboardUrl, 
+                  type: 'site',
+                  name: site.name,
+                  pk: site.pk,
+                  ...site 
+                } 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (err) {
+          console.log('[Senslinc] No site found for fmGuid:', fmGuid);
+        }
+        
+        // Try to find as line (floors/storeys)
+        try {
+          const lines = await senslincFetch(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, token);
+          if (Array.isArray(lines) && lines.length > 0) {
+            const line = lines[0];
+            const dashboardUrl = line.dashboard_url || buildDashboardUrl(cleanApiUrl, 'line', line.pk);
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                data: { 
+                  dashboardUrl, 
+                  type: 'line',
+                  name: line.name,
+                  pk: line.pk,
+                  ...line 
+                } 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (err) {
+          console.log('[Senslinc] No line found for fmGuid:', fmGuid);
+        }
+        
+        // Nothing found
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'No equipment found for this FM GUID',
+            message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.'
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
