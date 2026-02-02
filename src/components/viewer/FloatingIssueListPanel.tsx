@@ -1,0 +1,131 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { GripHorizontal, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import IssueListPanel, { type BcfIssue } from './IssueListPanel';
+
+interface FloatingIssueListPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  buildingFmGuid?: string;
+  onSelectIssue?: (issue: BcfIssue) => void;
+  onCreateIssue?: () => void;
+}
+
+/**
+ * Floating draggable panel for the issue list.
+ * Can be repositioned by dragging the header.
+ */
+const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
+  isOpen,
+  onClose,
+  buildingFmGuid,
+  onSelectIssue,
+  onCreateIssue,
+}) => {
+  const panelWidth = 280;
+  const panelHeight = 400;
+
+  // Position state - initialize on right side of screen
+  const [position, setPosition] = useState({ 
+    x: typeof window !== 'undefined' ? window.innerWidth - panelWidth - 20 : 200, 
+    y: 80 
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Reset position when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setPosition({
+        x: Math.max(20, window.innerWidth - panelWidth - 20),
+        y: 80,
+      });
+    }
+  }, [isOpen]);
+
+  // Drag start handler
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    // Don't start drag if clicking interactive elements
+    if ((e.target as HTMLElement).closest('button')) return;
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  // Drag move/end handlers
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - panelWidth, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y)),
+      });
+    };
+
+    const handleUp = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className={cn(
+        "fixed z-[61] border rounded-lg shadow-lg",
+        "bg-card/80 backdrop-blur-md",
+        "flex flex-col",
+        "animate-in fade-in-0 slide-in-from-right-2 duration-200",
+        isDragging && "cursor-grabbing"
+      )}
+      style={{ 
+        left: position.x, 
+        top: position.y,
+        width: panelWidth,
+        maxHeight: panelHeight,
+      }}
+    >
+      {/* Draggable Header */}
+      <div
+        className={cn(
+          "flex items-center justify-between px-3 py-2 border-b",
+          "cursor-grab select-none",
+          isDragging && "cursor-grabbing"
+        )}
+        onMouseDown={handleDragStart}
+      >
+        <div className="flex items-center gap-2">
+          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Ärenden</span>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-6 w-6 hover:bg-muted/50" 
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      
+      {/* Issue List Content */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <IssueListPanel
+          buildingFmGuid={buildingFmGuid}
+          onSelectIssue={onSelectIssue}
+          onCreateIssue={onCreateIssue}
+          className="border-none shadow-none h-full"
+        />
+      </div>
+    </div>
+  );
+};
+
+export default FloatingIssueListPanel;
+export type { BcfIssue };
