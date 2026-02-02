@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -131,6 +131,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isTestingFmAccess, setIsTestingFmAccess] = useState(false);
     const [fmAccessStatus, setFmAccessStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [fmAccessMessage, setFmAccessMessage] = useState('');
+
+    // Congeria state
+    const [congeriaLinks, setCongeriaLinks] = useState<Record<string, string>>({});
+    const [isSyncingCongeria, setIsSyncingCongeria] = useState(false);
+    const [documentCount, setDocumentCount] = useState(0);
+    const [allBuildings, setAllBuildings] = useState<any[]>([]);
 
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
@@ -424,6 +430,112 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Congeria functions
+    const fetchCongeriaData = async () => {
+        try {
+            // Fetch all buildings
+            const { data: buildings } = await supabase
+                .from('assets')
+                .select('fm_guid, common_name, name')
+                .eq('category', 'Building');
+            
+            if (buildings) {
+                setAllBuildings(buildings);
+            }
+
+            // Fetch existing Congeria links
+            const { data: links } = await supabase
+                .from('building_external_links')
+                .select('building_fm_guid, external_url')
+                .eq('system_name', 'congeria');
+
+            if (links) {
+                const linkMap: Record<string, string> = {};
+                links.forEach(link => {
+                    linkMap[link.building_fm_guid] = link.external_url;
+                });
+                setCongeriaLinks(linkMap);
+            }
+
+            // Fetch document count
+            const { count } = await supabase
+                .from('documents')
+                .select('id', { count: 'exact', head: true });
+            
+            if (count !== null) {
+                setDocumentCount(count);
+            }
+        } catch (error) {
+            console.error('Failed to fetch Congeria data:', error);
+        }
+    };
+
+    const handleCongeriaUrlChange = (buildingFmGuid: string, url: string) => {
+        setCongeriaLinks(prev => ({
+            ...prev,
+            [buildingFmGuid]: url
+        }));
+    };
+
+    const handleSaveCongeriaUrl = async (buildingFmGuid: string) => {
+        const url = congeriaLinks[buildingFmGuid];
+        if (!url) return;
+
+        try {
+            const { error } = await supabase
+                .from('building_external_links')
+                .upsert({
+                    building_fm_guid: buildingFmGuid,
+                    system_name: 'congeria',
+                    external_url: url,
+                    display_name: 'Document Archive'
+                }, { onConflict: 'building_fm_guid,system_name' });
+
+            if (error) throw error;
+
+            toast({
+                title: "URL sparad",
+                description: "Congeria-länken har sparats.",
+            });
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Fel",
+                description: error.message,
+            });
+        }
+    };
+
+    const handleSyncAllCongeria = async () => {
+        setIsSyncingCongeria(true);
+        try {
+            // Get all buildings with Congeria links
+            const linkedBuildings = Object.keys(congeriaLinks).filter(guid => congeriaLinks[guid]);
+            
+            for (const buildingFmGuid of linkedBuildings) {
+                await supabase.functions.invoke('congeria-sync', {
+                    body: { buildingFmGuid, action: 'sync' }
+                });
+            }
+
+            toast({
+                title: "Synk startad",
+                description: `Synkar dokument för ${linkedBuildings.length} byggnader.`,
+            });
+
+            // Refetch document count
+            await fetchCongeriaData();
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Synk misslyckades",
+                description: error.message,
+            });
+        } finally {
+            setIsSyncingCongeria(false);
+        }
+    };
+
     // Trigger sync for all buildings (objectType 1 only) - Legacy, uses structure sync state
     const handleSyncAllBuildings = async () => {
         setIsSyncingStructure(true);
@@ -574,6 +686,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             fetchConfig();
             checkSyncStatus();
             fetchFavoriteBuildings();
+            fetchCongeriaData();
             setConnectionStatus('idle');
             setConnectionMessage('');
             setIsEditMode(false);
@@ -1525,6 +1638,73 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
                                     <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
                                     <p className="text-sm">Konfigurera Ivion API först</p>
+                                </div>
+                            </div>
+
+                            {/* Congeria Document Sync Section */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="h-5 w-5 text-blue-500" />
+                                        <div>
+                                            <h4 className="font-medium">Congeria Dokument</h4>
+                                            <p className="text-xs text-muted-foreground">{documentCount} dokument synkade</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button 
+                                            onClick={handleSyncAllCongeria}
+                                            disabled={isSyncingCongeria || Object.keys(congeriaLinks).length === 0}
+                                            size="sm"
+                                            variant="outline"
+                                            className="gap-1 h-8 text-xs"
+                                        >
+                                            {isSyncingCongeria ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="h-3 w-3" />
+                                            )}
+                                            Synka alla
+                                        </Button>
+                                    </div>
+                                </div>
+                                
+                                {/* Building URL mapping */}
+                                <div className="space-y-2">
+                                    <p className="text-xs text-muted-foreground">
+                                        Ange Congeria mapp-URL för varje byggnad
+                                    </p>
+                                    {allBuildings.length === 0 ? (
+                                        <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                            <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                            <p className="text-sm">Synka byggnader från Asset+ först</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                            {allBuildings.map((building) => (
+                                                <div key={building.fm_guid} className="flex items-center gap-2">
+                                                    <span className="text-sm min-w-[120px] truncate">
+                                                        {building.common_name || building.name}
+                                                    </span>
+                                                    <Input 
+                                                        placeholder="https://fms.congeria.com/..."
+                                                        value={congeriaLinks[building.fm_guid] || ''}
+                                                        onChange={(e) => handleCongeriaUrlChange(building.fm_guid, e.target.value)}
+                                                        className="flex-1 h-8 text-xs"
+                                                    />
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="ghost"
+                                                        className="h-8 px-2"
+                                                        onClick={() => handleSaveCongeriaUrl(building.fm_guid)}
+                                                        disabled={!congeriaLinks[building.fm_guid]}
+                                                    >
+                                                        <Save className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
