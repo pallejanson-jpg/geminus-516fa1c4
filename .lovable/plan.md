@@ -1,118 +1,289 @@
 
-## Vad felet betyder (enkelt)
-Det här är inte ett fel i er databas i Lovable Cloud, utan ett fel som kommer från **Asset+ backend** (de verkar köra MongoDB). Meddelandet:
 
-> “Sort exceeded memory limit of 104857600 bytes … Pass allowDiskUse:true …”
+# Plan: Konfigurerbar rumsetikettering med nytt "Viewer Settings"-flik
 
-betyder att Asset+ försöker **sortera en väldigt stor resultatsamling i RAM**, men den träffar MongoDB:s standardgräns på **100 MB** för in-memory sort. När den gränsen passeras aborterar Asset+ och svarar 500.
-
-Viktigt: det kan hända även om vi bara begär `take: 200`, eftersom servern ofta måste sortera *hela* matchningen innan den tar ut “sidan”.
-
-## Varför det händer “på slutet” trots att 80k/82k redan är nere
-Jag har kollat er progress i backend-tabellen `asset_sync_progress` och den visar:
-
-- `current_building_index = 12` (dvs byggnad 13 av 14)
-- `skip = 43500`
-- `total_synced = 80278`
-
-Det betyder att synken har fastnat på en specifik byggnad med extremt mycket data, och nu när `skip` blivit väldigt stort blir frågan extra tung för Asset+ (deep pagination + sort). Det är därför det funkar “nästan hela vägen” men kraschar när den kommer till just den byggnaden/sidläget.
-
-## Målet
-1) Göra synken robust så att den kan “ta sig förbi” MongoDB-sort-felet och få ner de sista ~2000 objekten.  
-2) Ge tydlig feedback i synkdialogen istället för hårt 500-stopp.  
-3) Minimera risken att den fastnar igen vid höga `skip`.
+## Sammanfattning
+Implementera ett flexibelt system för rumsetiketter med:
+1. **Ny "Viewer Settings"-flik** i ApiSettingsModal som samlar Teman + ny Etikettkonfiguration
+2. **Konfigurerbar etikettvisning** baserad på rumsegenskaper (namn, nummer, area, etc.)
+3. **Sparade etikettmallar** som kan väljas i VisualizationToolbar
+4. **Förbättrad 2D-klippning** som faktiskt fungerar
 
 ---
 
-## Lösning (stegvis)
+## 1. Databasstruktur (ny tabell)
 
-### Steg 1 — Förbättra Asset+-frågan så att den blir billigare att sortera
-I `supabase/functions/asset-plus-sync/index.ts` (funktionen `fetchAssetPlusObjects`) lägger vi till:
+Skapa tabell `room_label_configs` i Lovable Cloud för att spara användarens etikettmallar:
 
-- **Explicit sort** (DevExtreme-stil): `sort: [{ selector: "fmGuid", desc: false }]`
-- **Select/projection** för att minska dokumentstorlek: `select: ["fmGuid","objectType","designation","commonName","buildingFmGuid","levelFmGuid","inRoomFmGuid","complexCommonName","grossArea","ObjectTypeValue","createdInModel","dateModified"]`
-
-Varför:
-- Sort på ett stabilt fält (fmGuid) ökar chansen att Asset+ kan använda index / mindre minne.
-- `select` gör varje “rad” mindre, vilket kan göra sorten mindre minneskrävande.
-
-Vi applicerar samma sort (och minimal select) även i `getRemoteCountByTypes` (som ibland kan trigga tunga operationer när `requireTotalCount: true` används).
-
-### Steg 2 — Adaptiv retry/backoff när vi får just “sort memory limit”
-I samma edge function fångar vi felet när `errorText` innehåller t.ex.:
-- `"Sort exceeded memory limit"` eller `"allowDiskUse:true"`
-
-Då gör vi automatiskt:
-- Retry med eskalerande “snällare” inställningar, t.ex.:
-  - `take: 200` → `100` → `50` → `25`
-  - alltid med `select` (reducerad payload)
-  - alltid med explicit `sort`
-- Kort jitter/backoff (t.ex. 250–500ms) mellan retry för att undvika att slå i samma “hot path” i Asset+.
-
-Målet är att den ska kunna “bita av” även när Asset+ är känslig.
-
-### Steg 3 — Ny pagination-strategi som undviker “skip 43500”-läget (cursor-läge)
-Om backoff fortfarande träffar minnesfelet (särskilt när `skip` blir stort), inför vi en fallback till **cursor-baserad pagination** för den byggnaden:
-
-- Vi kör med `sort` på `"fmGuid"` och istället för `skip`, använder vi:
-  - `filter: [ ["buildingFmGuid","=",X], "and", ["objectType","=",4], "and", ["fmGuid",">", lastFmGuid] ]`
-  - `skip: 0`
-- Efter varje batch sparar vi `lastFmGuid = sista fmGuid i batchen` som cursor.
-
-Detta kräver att vi sparar mer progress än bara `skip`.
-
-#### Databasändring (schema)
-Vi utökar `public.asset_sync_progress` med nya nullable kolumner (migration):
-- `cursor_fm_guid text null`  (sista fmGuid i senaste batch)
-- `page_mode text null` (t.ex. `'skip' | 'cursor'`)
-- ev. `last_error text null` (för UI-diagnostik)
-
-### Steg 4 — UI: Visa begriplig förklaring och fortsätt automatiskt
-I `src/components/settings/ApiSettingsModal.tsx` i `handleSyncAssetsChunked`:
-
-- Om edge function returnerar en kontrollerad “soft fail” (200 OK men `{ success:false, code:"ASSETPLUS_SORT_MEMORY_LIMIT" ... }`) så:
-  - Visar vi en toast som säger ungefär:
-    - “Asset+ klarade inte sorteringen (serverbegränsning). Vi provar en annan strategi…”
-  - Fortsätter automatiskt (eftersom det i praktiken är en retry/fallback, inte ett “hårt stopp”).
-- Vi visar också tydligare statusrad i kortet (assets syncState):
-  - Vilken byggnad den är på
-  - Om den kör “skip” eller “cursor” mode
-
-### Steg 5 — Säkerhetsventiler/verktyg
-För att slippa låsa fast sig:
-- Ny action i edge function: `reset-assets-progress` (admin-only)
-  - Rensar `asset_sync_progress` för `job='assets_instances'`
-  - (Valfritt) kan sätta syncState till “interrupted” med en tydlig text
+```text
+room_label_configs
+├── id (uuid, PK)
+├── name (text)             -- "Namn + Area", "Endast nummer"
+├── fields (jsonb)          -- ["commonName", "designation", "nta"]
+├── height_offset (float)   -- höjd ovanför golv, t.ex. 1.2
+├── font_size (float)       -- basklocka storlek
+├── scale_with_distance (bool) -- dynamisk skala
+├── click_action (text)     -- 'none' | 'flyto' | 'roomcard'
+├── is_default (bool)
+├── created_at, updated_at
+```
 
 ---
 
-## Förväntad effekt
-- Synken ska kunna fortsätta förbi byggnad 13/14 där `skip=43500` och få ner resterande objekt.
-- Även om Asset+ ibland är “instabil” i sin sort, ska vi gradvis gå mot en strategi som kräver mindre av servern.
-- UI ska inte “bara dö” på 500, utan guida användaren och automatiskt försöka vidare.
+## 2. Nya/ändrade filer
+
+| Fil | Ändring |
+|-----|---------|
+| `src/components/settings/ApiSettingsModal.tsx` | Byt ut "Teman"-flik mot "Viewer"-flik som innehåller både Teman och Etiketter |
+| `src/components/settings/RoomLabelSettings.tsx` | **NY** - UI för att skapa/redigera etikettmallar |
+| `src/hooks/useRoomLabelConfigs.ts` | **NY** - Hook för CRUD mot `room_label_configs` |
+| `src/hooks/useRoomLabels.ts` | Utöka med stöd för dynamiska fält, klickhantering, distansskalning |
+| `src/components/viewer/VisualizationToolbar.tsx` | Ersätt enkel switch med etikettmall-väljare |
+| `src/hooks/useSectionPlaneClipping.ts` | **Fixa** - uppdatera planet istället för att återskapa det |
+| `src/components/viewer/FloatingRoomCard.tsx` | **NY** - Mindre, flytande rumskort vid klick |
 
 ---
 
-## Testplan (konkret)
-1. Kör “Alla Tillgångar” i synkdialogen.
-2. Verifiera att den fortsätter från nuvarande progress (byggnad 13/14).
-3. Om den träffar sort-felet:
-   - Verifiera att den först provar backoff (200→100→50→25) och att UI visar ett begripligt meddelande.
-4. Om backoff inte räcker:
-   - Verifiera att den växlar till cursor mode (skip=0 och cursor_fm_guid uppdateras i progress).
-5. När klar:
-   - `check-sync-status` ska visa `assets.inSync = true` och att local ≈ remote för Instances.
+## 3. Detaljerad implementation
+
+### 3.1 Ny "Viewer Settings"-flik i ApiSettingsModal
+
+Ersätt:
+```
+Teman (tabindex 4)
+```
+Med:
+```
+Viewer (tabindex 4, ikon: View)
+  └── Accordion/Collapsible:
+      ├── Viewer-teman (befintlig ViewerThemeSettings)
+      └── Rumsetiketter (ny RoomLabelSettings)
+```
+
+### 3.2 RoomLabelSettings-komponenten
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ Rumsetiketter                                            │
+│ Konfigurera hur etiketter visas på rum i 3D-viewern    │
+├──────────────────────────────────────────────────────────┤
+│ [+ Ny etikettkonfiguration]                              │
+│                                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ 📋 Namn och Area                          [Redigera] │  │
+│ │    Fält: commonName, nta                            │  │
+│ │    Höjd: 1.2m | Klick: Rumskort                     │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ 📋 Endast rumsnummer                     [Redigera] │  │
+│ │    Fält: designation                                │  │
+│ │    Höjd: 1.0m | Klick: Flytta kameran              │  │
+│ └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Redigeringsformulär:**
+- **Namn**: Textruta
+- **Fält att visa**: Multi-select chips från tillgängliga rumsegenskaper:
+  - `commonName` (Rumsnamn)
+  - `designation` (Rumsnummer)
+  - `longName` (Långt namn)
+  - `nta` (Nettoyta)
+  - `bta` (Bruttoyta)
+  - `function` (Funktion)
+  - Custom property keys från PropertySet
+- **Höjd ovanför golv**: Slider 0.1 - 2.5m
+- **Skalas med avstånd**: Toggle
+- **Klickåtgärd**: Select dropdown
+  - "Ingen"
+  - "Flytta kamera till rum" (CameraFlightAnimation)
+  - "Visa rumskort"
+
+### 3.3 Uppdatering av useRoomLabels.ts
+
+Utöka hooken med:
+
+```typescript
+interface RoomLabelConfig {
+  id: string;
+  name: string;
+  fields: string[];
+  heightOffset: number;
+  fontSize: number;
+  scaleWithDistance: boolean;
+  clickAction: 'none' | 'flyto' | 'roomcard';
+}
+
+// Ny funktion: Applicera konfiguration
+const applyConfig = useCallback((config: RoomLabelConfig) => {
+  activeConfigRef.current = config;
+  if (enabledRef.current) {
+    destroyLabels();
+    createLabels();
+  }
+}, []);
+
+// Ny funktion: Extrahera fältvärden från metaObject
+const extractFieldValue = (metaObj: any, fieldKey: string): string => {
+  // Checka attributes, propertySetValues, etc.
+};
+
+// Ny: Distance-based scaling i updateLabelPositions
+const distance = vec3.distance(camera.eye, label.worldPos);
+const scale = Math.max(0.5, Math.min(1.5, 20 / distance));
+label.element.style.transform = `translate(-50%, -50%) scale(${scale})`;
+
+// Ny: Klickhantering
+label.element.style.pointerEvents = 'auto';
+label.element.addEventListener('click', () => handleLabelClick(label));
+```
+
+### 3.4 Uppdatering av VisualizationToolbar
+
+Ersätt nuvarande switch för "Rumsetiketter" med en expanderbar sektion:
+
+```text
+┌─────────────────────────────────────┐
+│ [Type-ikon] Rumsetiketter      [▼]  │  <-- Klick öppnar lista
+│   ├─ ◉ Av                           │
+│   ├─ ○ Namn och Area                │
+│   ├─ ○ Endast rumsnummer            │
+│   └─ ○ [+ Hantera i inställningar]  │
+└─────────────────────────────────────┘
+```
+
+### 3.5 FloatingRoomCard-komponent
+
+En mindre, icke-modal version av UniversalPropertiesDialog som:
+- Visar rummets nyckeldata (namn, nummer, area)
+- Är draggbar
+- Har en "stäng" X-knapp
+- INTE blockerar 3D-interaktion (kameran kan fortfarande rotera)
+
+### 3.6 Fixa 2D-klippning (useSectionPlaneClipping.ts)
+
+**Problemet:** Funktionen `updateFloorCutHeight` återskapar planet varje gång slidern ändras, istället för att uppdatera det befintliga.
+
+**Lösning:**
+
+```typescript
+const updateFloorCutHeight = useCallback((newHeight: number) => {
+  floorCutHeightRef.current = newHeight;
+  
+  if (currentClipModeRef.current !== 'floor') return;
+  if (!topPlaneRef.current) return;
+  
+  const topClipY = currentFloorMinYRef.current + newHeight;
+  
+  // RÄTT: Uppdatera befintligt plan direkt
+  topPlaneRef.current.pos = [0, topClipY, 0];
+  
+  console.log(`2D top plane pos updated to Y=${topClipY.toFixed(2)}`);
+}, []);
+```
+
+Om xeokit inte tillåter direkt `pos`-uppdatering, fallback till:
+```typescript
+if (typeof topPlaneRef.current.pos === 'object' && 'set' in topPlaneRef.current.pos) {
+  topPlaneRef.current.pos.set([0, topClipY, 0]);
+} else {
+  // Fallback: recreate but with unique stable ID
+  destroyPlane(topPlaneRef);
+  topPlaneRef.current = createSectionPlaneOnScene(viewer, '2d-top-clip', [0, topClipY, 0], [0, 1, 0]);
+}
+```
 
 ---
 
-## Tekniska filer som kommer ändras
-- `supabase/functions/asset-plus-sync/index.ts`
-  - lägga till sort + select
-  - retry/backoff på “Sort exceeded memory limit”
-  - cursor-pagination fallback
-  - ev. ny action `reset-assets-progress`
-- Databas-migration: `asset_sync_progress` (nya kolumner)
-- `src/components/settings/ApiSettingsModal.tsx`
-  - bättre hantering av kontrollerade felkoder och bättre statusfeedback
+## 4. Svar på dina frågor
+
+### Kan labels skalas med avstånd?
+**Ja, absolut.** Vi beräknar avståndet från kameran till etikettens 3D-position och applicerar en CSS `scale()` transform. Detta gör att etiketter är läsbara på nära håll men inte blockerar hela vyn när man zoomar ut.
+
+```typescript
+const distance = Math.sqrt(
+  (camera.eye[0] - worldPos[0]) ** 2 +
+  (camera.eye[1] - worldPos[1]) ** 2 +
+  (camera.eye[2] - worldPos[2]) ** 2
+);
+const scale = Math.max(0.4, Math.min(1.2, 15 / distance));
+```
+
+### Kan man klicka på labels?
+**Ja.** Vi sätter `pointer-events: auto` på label-elementen och lägger till event listeners. Två åtgärder:
+
+1. **Flytta kamera till rummet** - Använder xeokit CameraFlightAnimation:
+```typescript
+viewer.cameraFlight.flyTo({
+  aabb: entity.aabb,
+  duration: 0.8
+});
+```
+
+2. **Visa rumskort** - Öppnar FloatingRoomCard med rumsdata
+
+### Annotation vs. HTML-labels?
+**Rekommendation: Behåll nuvarande HTML-labels.**
+
+Fördelar:
+- Full kontroll över styling (CSS)
+- Enkel klickhantering med standard DOM-events
+- Flexibel innehållsrendering (ikoner, flera rader)
+- Redan implementerat och testat
+
+Nackdelar med xeokit AnnotationsPlugin:
+- Begränsad styling
+- Komplex integration med Asset+ wrapper-paketet
+- Mindre flexibelt för dynamiskt innehåll
+
+### Varför fungerar inte 2D-klippning?
+**Identifierat problem:** I `updateFloorCutHeight` skapas ett nytt SectionPlane med dynamiskt ID (`2d-top-dynamic-${Date.now()}`) varje gång slidern ändras. Detta kan orsaka:
+- Race conditions vid snabb slider-rörelse
+- Gammalt plan tas inte alltid bort korrekt
+- xeokit kanske inte hinner synkronisera
+
+**Lösningen** är att antingen uppdatera det befintliga planets position direkt (`plane.pos = [...]`) eller använda ett stabilt ID så att samma plan återanvänds.
 
 ---
+
+## 5. Migrations-SQL
+
+```sql
+CREATE TABLE public.room_label_configs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  fields JSONB NOT NULL DEFAULT '["commonName", "designation"]',
+  height_offset REAL NOT NULL DEFAULT 1.2,
+  font_size REAL NOT NULL DEFAULT 10,
+  scale_with_distance BOOLEAN NOT NULL DEFAULT true,
+  click_action TEXT NOT NULL DEFAULT 'none' CHECK (click_action IN ('none', 'flyto', 'roomcard')),
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS
+ALTER TABLE public.room_label_configs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for now" ON public.room_label_configs FOR ALL USING (true);
+
+-- Seed default configs
+INSERT INTO public.room_label_configs (name, fields, height_offset, click_action, is_default) VALUES
+  ('Rumsnamn', '["commonName"]', 1.2, 'none', true),
+  ('Namn och nummer', '["commonName", "designation"]', 1.2, 'none', false),
+  ('Namn och area', '["commonName", "nta"]', 1.2, 'roomcard', false);
+```
+
+---
+
+## 6. Testplan
+
+1. Öppna "Inställningar" -> "Viewer"-fliken
+2. Verifiera att Teman fortfarande fungerar
+3. Skapa ny etikettkonfiguration med fält "commonName" + "nta"
+4. Gå till 3D-viewer, välj etikettmallan i Visning-menyn
+5. Verifiera att etiketter visar rätt fält
+6. Zooma in/ut - verifiera att etiketter skalas
+7. Klicka på etikett - verifiera flyto/rumskort
+8. Testa 2D-läge med klipphöjd-slider - verifiera att snittet uppdateras smidigt
+
