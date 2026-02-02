@@ -1,140 +1,163 @@
 
-# Plan: BCF-baserad Modellärende­hantering
+# Plan: Förbättra BCF-ärenden med Objektselektion
 
-## ✅ Implementationsstatus
+## Sammanfattning
 
-### Fas 1: Grundfunktionalitet - KLAR ✅
-
-**Databas:**
-- [x] `bcf_issues` tabell med BCF-viewpoint, skärmdump, status, prioritet
-- [x] `bcf_comments` tabell för konversationer
-- [x] `issue-screenshots` storage bucket
-- [x] RLS-policies för säker åtkomst
-- [x] Realtime aktiverat för live-uppdateringar
-
-**Frontend-komponenter:**
-- [x] `useBcfViewpoints.ts` - Hook för att fånga/återställa BCF viewpoints
-- [x] `CreateIssueDialog.tsx` - Dialog för att skapa ärenden
-- [x] `IssueListPanel.tsx` - Panel som visar ärenden per byggnad
-- [x] `IssueDetailSheet.tsx` - Detaljvy med kommentarer
-- [x] Integrerat i `VisualizationToolbar.tsx`
-
-**Funktioner:**
-- [x] Skapa ärende direkt från 3D-viewern
-- [x] Automatisk skärmdump + BCF viewpoint-fångst
-- [x] Visa lista över ärenden i sidopanel
-- [x] Klicka på ärende → navigera till exakt samma vy
-- [x] Kommentarsfunktion
-- [x] Admin kan ändra status (open → in_progress → resolved)
-- [x] Realtime-uppdateringar via Supabase
+Säkerställa att selekterade objekt verkligen fångas, visas och highlightas korrekt genom hela ärendeflödet - från skapande till visning.
 
 ---
 
-### Fas 2: Admin-flöde (PLANERAD)
+## Nulägesanalys
 
-| Uppgift | Status |
-|---------|--------|
-| Admin-sida `/issues` med tabell | ⏳ |
-| Filtrering per byggnad/status/typ | ⏳ |
-| Tilldelning till användare | ⏳ |
-| Batch-operationer | ⏳ |
+### Vad som redan fungerar
 
-### Fas 3: Notifikationer (PLANERAD)
+| Komponent | Status | Beskrivning |
+|-----------|--------|-------------|
+| `useBcfViewpoints.captureViewpoint()` | Fungerar | Fångar `scene.selectedObjectIds` och sparar i `viewpoint.components.selection` |
+| `getSelectedObjectIds()` | Fungerar | Hämtar aktuella selektioner från scenen |
+| `handleSubmitIssue()` | Fungerar | Sparar `selected_object_ids` i databasen |
+| `restoreViewpoint()` | Delvis | Återställer selektion via `setObjectsSelected()` men utan visuell feedback |
 
-| Uppgift | Status |
-|---------|--------|
-| In-app notis-badge | ⏳ |
-| E-postnotis vid statusändring | ⏳ |
-| Push-notiser (mobil) | ⏳ |
+### Problem att lösa
 
-### Fas 4: BCF-export (VALFRITT)
-
-| Uppgift | Status |
-|---------|--------|
-| Exportera som .bcfzip | ⏳ |
-| Importera BCF-filer | ⏳ |
-| BIMcollab-kompatibilitet | ⏳ |
+1. **Ingen visuell feedback vid återställning** - Objektet selekteras men användaren ser ingen tydlig highlight
+2. **Användaren ser inte vad som fångas** - I `CreateIssueDialog` visas inte vilka objekt som är markerade
+3. **Ingen objektinfo i detaljvyn** - `IssueDetailSheet` visar inte vilka objekt ärendet gäller
 
 ---
 
-## Arkitektur
+## Lösning
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         BCF Ärendehantering                                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ANVÄNDARE (i 3D-viewer)                                                   │
-│   ─────────────────────────                                                 │
-│   1. Klickar "Skapa ärende" i VisualizationToolbar                          │
-│   2. BCF viewpoint + skärmdump fångas automatiskt                           │
-│   3. Fyller i formulär: Titel, Beskrivning, Typ, Prioritet                  │
-│   4. Skickar ärendet                                                        │
-│                    │                                                        │
-│                    ▼                                                        │
-│   ┌────────────────────────────────────────────────┐                        │
-│   │              bcf_issues (databas)              │                        │
-│   │  • Viewpoint (JSON med kamera, synliga objekt) │                        │
-│   │  • Skärmdump (Storage URL)                     │                        │
-│   │  • Status: open → in_progress → resolved       │                        │
-│   │  • Kommentarer (bcf_comments)                  │                        │
-│   └────────────────────────────────────────────────┘                        │
-│                    │                                                        │
-│                    ▼                                                        │
-│   ADMIN/UTVECKLARE                                                          │
-│   ─────────────────                                                         │
-│   1. Ser lista över inkomna ärenden                                         │
-│   2. Klickar på ärende → 3D-viewer navigerar till exakt samma vy            │
-│   3. Utför åtgärd, skriver kommentar                                        │
-│   4. Sätter status till "Utförd"                                            │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+### Del 1: Flash-effekt vid viewpoint-återställning
+
+Utöka `restoreViewpoint()` i `useBcfViewpoints.ts` för att returnera de valda objekten så att anroparen kan trigga en flash-effekt.
+
+Alternativt: Lägg till flash direkt i `restoreViewpoint()` men det kräver att vi skickar in `flashEntitiesByIds`-funktionen.
+
+**Rekommenderad approach**: Uppdatera `handleGoToIssueViewpoint` i `VisualizationToolbar.tsx` för att:
+1. Anropa `restoreViewpoint()`
+2. Efter kamera-animationen (1 sekund), anropa `flashEntitiesByIds()` med de selekterade objekten
+
+```typescript
+const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+  if (!viewpoint) return;
+  
+  restoreViewpoint(viewpoint, { duration: 1.0 });
+  
+  // Flash the selected objects after camera animation completes
+  if (viewpoint.components?.selection?.length > 0) {
+    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
+    setTimeout(() => {
+      const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (xeokitViewer?.scene) {
+        flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
+      }
+    }, 1100); // Slightly after camera animation
+  }
+}, [restoreViewpoint, viewerRef]);
 ```
 
 ---
 
-## Filer skapade
+### Del 2: Visa selekterade objekt i CreateIssueDialog
 
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/hooks/useBcfViewpoints.ts` | Hook för BCF viewpoint-hantering |
-| `src/components/viewer/CreateIssueDialog.tsx` | Dialog för att skapa ärende |
-| `src/components/viewer/IssueListPanel.tsx` | Panel som visar ärenden |
-| `src/components/viewer/IssueDetailSheet.tsx` | Detaljvy för enskilt ärende |
-| `src/components/viewer/VisualizationToolbar.tsx` | Uppdaterad med ärende-knappar |
+Skicka med information om selekterade objekt och visa dem i dialogrutan så användaren vet exakt vad som fångas.
 
----
-
-## BCF Viewpoint JSON-struktur
-
-```json
-{
-  "perspective_camera": {
-    "camera_view_point": { "x": 10.5, "y": 20.3, "z": 15.2 },
-    "camera_direction": { "x": -0.5, "y": -0.3, "z": -0.8 },
-    "camera_up_vector": { "x": 0, "y": 0, "z": 1 },
-    "field_of_view": 60
-  },
-  "components": {
-    "selection": [
-      { "ifc_guid": "XYZ789..." }
-    ]
-  },
-  "clipping_planes": [
-    {
-      "location": { "x": 0, "y": 0, "z": 5 },
-      "direction": { "x": 0, "y": 0, "z": 1 }
-    }
-  ]
+**Uppdatera `CreateIssueDialogProps`:**
+```typescript
+interface CreateIssueDialogProps {
+  // ... existing props
+  selectedObjectCount?: number;  // Antal selekterade objekt
+  selectedObjectIds?: string[];  // För att visa i UI
 }
 ```
+
+**Lägg till i dialogens UI:**
+```tsx
+{/* Selected objects indicator */}
+{selectedObjectIds && selectedObjectIds.length > 0 && (
+  <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-sm">
+    <Box className="h-4 w-4 text-primary" />
+    <span>
+      {selectedObjectIds.length} {selectedObjectIds.length === 1 ? 'objekt valt' : 'objekt valda'}
+    </span>
+  </div>
+)}
+```
+
+---
+
+### Del 3: Visa objektinfo i IssueDetailSheet
+
+Hämta `selected_object_ids` från ärendet och visa dem som en lista eller badge.
+
+**Uppdatera `BcfIssue`-typen:**
+```typescript
+interface BcfIssue {
+  // ... existing fields
+  selected_object_ids: string[] | null;
+}
+```
+
+**Lägg till i detaljvyns UI:**
+```tsx
+{/* Selected objects */}
+{issue.selected_object_ids && issue.selected_object_ids.length > 0 && (
+  <div>
+    <h4 className="text-sm font-medium mb-1 flex items-center gap-2">
+      <Box className="h-4 w-4" />
+      Relaterade objekt
+    </h4>
+    <div className="flex flex-wrap gap-1">
+      {issue.selected_object_ids.map((id) => (
+        <Badge key={id} variant="outline" className="text-xs font-mono">
+          {id.substring(0, 12)}...
+        </Badge>
+      ))}
+    </div>
+  </div>
+)}
+```
+
+---
+
+## Filer som ändras
+
+| Fil | Ändring |
+|-----|---------|
+| `src/hooks/useBcfViewpoints.ts` | Exportera `getXeokitViewer` eller lägg till flash-callback |
+| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till flash-effekt i `handleGoToIssueViewpoint`, skicka med selectedObjectIds till dialog |
+| `src/components/viewer/CreateIssueDialog.tsx` | Visa antal/lista av selekterade objekt |
+| `src/components/viewer/IssueDetailSheet.tsx` | Visa selekterade objekt, anropa flash vid "Gå till position" |
+| `src/components/viewer/IssueListPanel.tsx` | Uppdatera `BcfIssue`-typen att inkludera `selected_object_ids` |
+
+---
+
+## Tekniska detaljer
+
+### Flash-timing
+
+```text
+1. Användare klickar "Gå till position"
+2. restoreViewpoint() anropas med duration: 1.0s
+3. Kameran flyger till positionen (1 sekund)
+4. Efter 1.1s: flashEntitiesByIds() triggas
+5. Objekten blinkar i 3 sekunder med röd färg
+6. Färgen återställs automatiskt
+```
+
+### Integration med useFlashHighlight
+
+Hooken `useFlashHighlight` finns redan och har:
+- `flashEntitiesByIds(scene, entityIds, options)` - Flash flera objekt
+- Automatisk cleanup och färgåterställning
+- Konfigurerbar duration och färger
 
 ---
 
 ## Testning
 
-1. **Skapa ärende**: Från 3D-viewern, klicka "Skapa ärende" och verifiera att viewpoint + skärmdump sparas
-2. **Öppna ärende**: Klicka på ett ärende i listan och verifiera att 3D-vyn återställs exakt
-3. **Kommentarer**: Skriv en kommentar och verifiera att den visas
-4. **Statusändring**: Som admin, ändra status och verifiera att det sparas
-5. **Realtime**: Öppna i två fönster och verifiera att ändringar synkas
+1. **Selektera objekt före ärende**: Välj ett objekt i 3D-viewern → Klicka "Skapa ärende" → Verifiera att dialogen visar "1 objekt valt"
+2. **Flash vid återställning**: Öppna ett ärende med selekterat objekt → Klicka på skärmdumpen → Verifiera att kameran flyger dit OCH objektet blinkar rött
+3. **Objektvisning i detalj**: Öppna ett ärende → Verifiera att "Relaterade objekt" visas med objekt-ID:n
+4. **Inget objekt selekterat**: Skapa ärende utan selektion → Verifiera att ingen "objekt valt"-ruta visas
