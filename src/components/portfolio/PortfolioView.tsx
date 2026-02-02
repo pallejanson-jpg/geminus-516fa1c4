@@ -29,7 +29,7 @@ interface ComplexGroup {
 }
 
 const PortfolioView: React.FC = () => {
-  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext } = useContext(AppContext);
+  const { selectedFacility, setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData, setViewer3dFmGuid, refreshInitialData, open360WithContext, openSenslincDashboard, appConfigs } = useContext(AppContext);
   
   // Preload XKT when a building is selected
   useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
@@ -182,7 +182,38 @@ const PortfolioView: React.FC = () => {
   const handleShowRooms = (facility: Facility) => setShowRoomsFor(facility);
   const handleShowDocs = (facility: Facility) => setActiveApp('original_archive');
   const handleShowInsights = (facility: Facility) => setActiveApp('insights');
-  const handleOpenIoT = (facility: Facility) => console.log('Open IoT:', facility);
+  
+  // Handle opening IoT dashboard - extract sensorDashboard URL from facility attributes
+  const handleOpenIoT = (facility: Facility) => {
+    const attrs = (facility as any).attributes || {};
+    
+    // Look for sensorDashboard or sensorURL in attributes
+    const dashboardKey = Object.keys(attrs).find(k => 
+      k.toLowerCase().includes('sensordashboard') || 
+      k.toLowerCase().includes('sensorurl')
+    );
+    
+    if (dashboardKey && attrs[dashboardKey]?.value) {
+      const dashboardUrl = attrs[dashboardKey].value;
+      const iotConfig = appConfigs.iot || { openMode: 'external' };
+      
+      if (iotConfig.openMode === 'internal') {
+        // Open in internal iframe view
+        openSenslincDashboard({
+          dashboardUrl,
+          facilityName: facility.commonName || facility.name || 'IoT Dashboard',
+          facilityFmGuid: facility.fmGuid,
+        });
+      } else {
+        // Open in new browser tab
+        window.open(dashboardUrl, '_blank');
+      }
+    } else {
+      // No dashboard URL found - show toast
+      console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
+      // Could add a toast here to inform user
+    }
+  };
   const handleToggleFavorite = () => {
     // Now handled by useBuildingSettings hook in FacilityLandingPage
   };
