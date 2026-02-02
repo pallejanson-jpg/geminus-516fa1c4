@@ -39,8 +39,8 @@ export function useBuildingSettings(fmGuid: string | null) {
                     ivionSiteId: data.ivion_site_id,
                     latitude: data.latitude ?? null,
                     longitude: data.longitude ?? null,
-                    heroImageUrl: (data as any).hero_image_url ?? null,
-                    startViewId: (data as any).start_view_id ?? null,
+                    heroImageUrl: data.hero_image_url ?? null,
+                    startViewId: data.start_view_id ?? null,
                 });
             } else {
                 // No settings yet, use defaults
