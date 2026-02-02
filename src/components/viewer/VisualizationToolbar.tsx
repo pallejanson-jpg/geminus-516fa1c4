@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous } from "lucide-react";
+import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +16,9 @@ import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
 import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
+import CreateIssueDialog from "./CreateIssueDialog";
+import IssueListPanel, { type BcfIssue } from "./IssueListPanel";
+import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
@@ -24,6 +27,8 @@ import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type 
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useBcfViewpoints } from "@/hooks/useBcfViewpoints";
 import LightingControlsPanel from "./LightingControlsPanel";
 import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT } from "@/hooks/useRoomLabels";
@@ -86,6 +91,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   } = props;
 
   const { allData } = useContext(AppContext);
+  const { user } = useAuth();
+
+  // BCF viewpoint hook
+  const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef });
 
   const [isOpen, setIsOpen] = useState(false);
   // Use controlled state if provided, otherwise local state
@@ -99,8 +108,15 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [pendingViewState, setPendingViewState] = useState<any>(null);
   const [isSavingView, setIsSavingView] = useState(false);
   
+  // BCF Issue dialog state
+  const [showCreateIssueDialog, setShowCreateIssueDialog] = useState(false);
+  const [pendingIssueState, setPendingIssueState] = useState<{ screenshot: string; viewpoint: any; selectedObjects: string[] } | null>(null);
+  const [isSubmittingIssue, setIsSubmittingIssue] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState<BcfIssue | null>(null);
+  const [showIssueDetail, setShowIssueDetail] = useState(false);
+  
   // Active side-pop submenu state
-  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | null>(null);
+  const [activeSubMenu, setActiveSubMenu] = useState<'models' | 'floors' | 'annotations' | 'issues' | null>(null);
   
   // Clipping height state (for 2D floor plan view)
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
@@ -367,6 +383,129 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setIsSavingView(false);
     }
   }, [pendingViewState]);
+
+  // Capture issue state (BCF viewpoint + screenshot)
+  const captureIssueState = useCallback(() => {
+    const screenshot = captureScreenshot();
+    const viewpoint = captureViewpoint();
+    const selectedObjects = getSelectedObjectIds();
+
+    if (!screenshot) {
+      toast({ title: "Kunde inte ta skärmdump", variant: "destructive" });
+      return;
+    }
+
+    setPendingIssueState({ screenshot, viewpoint, selectedObjects });
+    setShowCreateIssueDialog(true);
+  }, [captureScreenshot, captureViewpoint, getSelectedObjectIds]);
+
+  // Submit issue to database
+  const handleSubmitIssue = useCallback(async (data: {
+    title: string;
+    description: string;
+    issueType: string;
+    priority: string;
+  }) => {
+    if (!pendingIssueState || !user || !buildingFmGuid) {
+      toast({ title: "Kan inte skapa ärende", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingIssue(true);
+    try {
+      const issueId = crypto.randomUUID();
+
+      // Upload screenshot
+      const base64Data = pendingIssueState.screenshot.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+
+      const { error: uploadError } = await supabase.storage
+        .from('issue-screenshots')
+        .upload(`${issueId}.png`, blob, { contentType: 'image/png' });
+
+      if (uploadError) {
+        console.error('Screenshot upload failed:', uploadError);
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('issue-screenshots')
+        .getPublicUrl(`${issueId}.png`);
+
+      // Get building name
+      const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+
+      // Insert issue
+      const { error: insertError } = await supabase.from('bcf_issues').insert({
+        id: issueId,
+        title: data.title,
+        description: data.description || null,
+        issue_type: data.issueType,
+        priority: data.priority,
+        status: 'open',
+        viewpoint_json: pendingIssueState.viewpoint,
+        screenshot_url: urlData?.publicUrl || null,
+        building_fm_guid: buildingFmGuid,
+        building_name: resolvedBuildingName,
+        selected_object_ids: pendingIssueState.selectedObjects,
+        reported_by: user.id,
+      });
+
+      if (insertError) throw insertError;
+
+      toast({ title: "Ärende skapat!", description: `"${data.title}" har skickats` });
+      setShowCreateIssueDialog(false);
+      setPendingIssueState(null);
+    } catch (err) {
+      console.error('Failed to create issue:', err);
+      toast({ title: "Kunde inte skapa ärende", variant: "destructive" });
+    } finally {
+      setIsSubmittingIssue(false);
+    }
+  }, [pendingIssueState, user, buildingFmGuid, buildingName, allData]);
+
+  // Handle navigating to issue viewpoint
+  const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
+    if (viewpoint) {
+      restoreViewpoint(viewpoint, { duration: 1.0 });
+    }
+  }, [restoreViewpoint]);
+
+  // Handle selecting an issue from the list
+  const handleSelectIssue = useCallback((issue: BcfIssue) => {
+    setSelectedIssue(issue);
+    setShowIssueDetail(true);
+    
+    // Navigate to the viewpoint if available
+    if (issue.viewpoint_json) {
+      restoreViewpoint(issue.viewpoint_json, { duration: 1.0 });
+    }
+  }, [restoreViewpoint]);
+
+  // Check if user is admin (simplified - you might want to use your role system)
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      setIsAdmin(!!data);
+    };
+    checkAdmin();
+  }, [user]);
 
   // Tool visibility check
   const isToolVisible = useCallback((toolId: string) => {
@@ -841,6 +980,37 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     <span className="text-xs sm:text-sm">Skapa vy</span>
                   </Button>
 
+                  {/* Create Issue button - NEW */}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2 sm:gap-3 h-9 sm:h-10"
+                    onClick={captureIssueState}
+                    disabled={!isViewerReady}
+                  >
+                    <div className="p-1 sm:p-1.5 rounded-md bg-amber-500/10 text-amber-600">
+                      <MessageSquarePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </div>
+                    <span className="text-xs sm:text-sm">Skapa ärende</span>
+                  </Button>
+
+                  {/* Issues list button - opens side panel */}
+                  <Button
+                    variant={activeSubMenu === 'issues' ? "secondary" : "outline"}
+                    className="w-full justify-between h-9 sm:h-10"
+                    onClick={() => setActiveSubMenu(activeSubMenu === 'issues' ? null : 'issues')}
+                  >
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Visa ärenden</span>
+                    </div>
+                    <ChevronRight className={cn(
+                      "h-3 w-3 transition-transform",
+                      activeSubMenu === 'issues' && "rotate-180"
+                    )} />
+                  </Button>
+
                   {isToolVisible('addAsset') && onAddAsset && (
                     <Button
                       variant="outline"
@@ -910,6 +1080,21 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
+          {/* Side-pop panel for Issues */}
+          <SidePopPanel
+            isOpen={activeSubMenu === 'issues'}
+            onClose={() => setActiveSubMenu(null)}
+            title="Ärenden"
+            parentPosition={position}
+            parentWidth={panelWidth}
+          >
+            <IssueListPanel
+              buildingFmGuid={buildingFmGuid}
+              onSelectIssue={handleSelectIssue}
+              onCreateIssue={captureIssueState}
+            />
+          </SidePopPanel>
+          
           {/* Create View Dialog */}
           <CreateViewDialog
             open={showCreateViewDialog}
@@ -920,6 +1105,31 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             onSave={handleSaveView}
             viewState={pendingViewState}
             isSaving={isSavingView}
+          />
+          
+          {/* Create Issue Dialog */}
+          <CreateIssueDialog
+            open={showCreateIssueDialog}
+            onClose={() => {
+              setShowCreateIssueDialog(false);
+              setPendingIssueState(null);
+            }}
+            onSubmit={handleSubmitIssue}
+            screenshotUrl={pendingIssueState?.screenshot}
+            buildingName={buildingName}
+            isSubmitting={isSubmittingIssue}
+          />
+          
+          {/* Issue Detail Sheet */}
+          <IssueDetailSheet
+            issue={selectedIssue}
+            open={showIssueDetail}
+            onClose={() => {
+              setShowIssueDetail(false);
+              setSelectedIssue(null);
+            }}
+            onGoToViewpoint={handleGoToIssueViewpoint}
+            isAdmin={isAdmin}
           />
         </TooltipProvider>
       )}
