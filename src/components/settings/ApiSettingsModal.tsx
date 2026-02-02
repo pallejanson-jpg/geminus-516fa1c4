@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +26,7 @@ import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
 import ProfileSettings from './ProfileSettings';
+import GunnarSettings from './GunnarSettings';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -830,7 +831,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
+                    <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
                         <TabsTrigger value="apps" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Apps</span>
@@ -854,6 +855,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         <TabsTrigger value="voice" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
                             <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Röst</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="gunnar" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                            <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Gunnar</span>
                         </TabsTrigger>
                     </TabsList>
 
@@ -1459,6 +1464,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* Voice Settings Tab */}
                     <TabsContent value="voice" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <VoiceSettings />
+                    </TabsContent>
+
+                    {/* Gunnar AI Settings Tab */}
+                    <TabsContent value="gunnar" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <GunnarSettings />
                     </TabsContent>
                 </Tabs>
             </DialogContent>

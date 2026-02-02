@@ -46,10 +46,16 @@ interface GunnarAction {
   fmGuid?: string;
 }
 
-function parseActions(content: string): GunnarAction[] {
+interface ParsedResponse {
+  actions: GunnarAction[];
+  followups: string[];
+}
+
+function parseResponse(content: string): ParsedResponse {
   const actions: GunnarAction[] = [];
+  const followups: string[] = [];
   
-  // Look for JSON blocks with actions
+  // Look for JSON blocks with actions or follow-ups
   const jsonMatches = content.matchAll(/```json\s*(\{[\s\S]*?\})\s*```/g);
   for (const match of jsonMatches) {
     try {
@@ -57,11 +63,14 @@ function parseActions(content: string): GunnarAction[] {
       if (parsed.action) {
         actions.push(parsed);
       }
+      if (parsed.suggested_followups && Array.isArray(parsed.suggested_followups)) {
+        followups.push(...parsed.suggested_followups);
+      }
     } catch {
       // Invalid JSON, skip
     }
   }
-  return actions;
+  return { actions, followups };
 }
 
 function getContextualGreeting(context?: GunnarContext): string {
@@ -88,6 +97,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [pendingActions, setPendingActions] = useState<GunnarAction[]>([]);
+  const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast: toastHook } = useToast();
@@ -103,6 +113,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
         content: getContextualGreeting(context),
       }]);
       setPendingActions([]);
+      setSuggestedFollowups([]);
     }
   }, [context]);
 
@@ -206,15 +217,19 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     setInput("");
     setIsLoading(true);
     setPendingActions([]);
+    setSuggestedFollowups([]);
 
     try {
       const apiMessages = newMessages.filter((_, i) => i > 0);
       const response = await streamChat(apiMessages, context);
       
-      // Parse actions from response
-      const actions = parseActions(response);
+      // Parse actions and follow-ups from response
+      const { actions, followups } = parseResponse(response);
       if (actions.length > 0) {
         setPendingActions(actions);
+      }
+      if (followups.length > 0) {
+        setSuggestedFollowups(followups);
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -227,6 +242,15 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFollowupClick = (question: string) => {
+    setInput(question);
+    // Auto-send after a short delay
+    setTimeout(() => {
+      const syntheticEvent = { preventDefault: () => {} } as React.KeyboardEvent;
+      // Just set the input, user can click send
+    }, 100);
   };
 
   const executeAction = useCallback((action: GunnarAction) => {
@@ -383,6 +407,23 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
 
       {/* Input */}
       <div className="border-t border-border p-4 shrink-0">
+        {/* Suggested follow-ups */}
+        {suggestedFollowups.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {suggestedFollowups.map((q, i) => (
+              <Button
+                key={i}
+                onClick={() => handleFollowupClick(q)}
+                className="gap-1.5 text-xs h-7"
+                variant="outline"
+                size="sm"
+              >
+                {q}
+              </Button>
+            ))}
+          </div>
+        )}
+        
         {pendingActions.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {pendingActions.map((action, i) => {
