@@ -308,6 +308,23 @@ const PortfolioView: React.FC = () => {
     }
   };
 
+  // Handle selecting an asset to show its landing page
+  const handleSelectAsset = (fmGuid: string) => {
+    const asset = allData.find((a: any) => a.fmGuid === fmGuid || a.fm_guid === fmGuid);
+    if (asset) {
+      setSelectedFacility({
+        fmGuid: asset.fmGuid || asset.fm_guid,
+        name: asset.name,
+        commonName: asset.commonName || asset.common_name,
+        category: asset.category || 'Instance',
+        levelFmGuid: asset.levelFmGuid || asset.level_fm_guid,
+        buildingFmGuid: asset.buildingFmGuid || asset.building_fm_guid,
+        attributes: asset.attributes,
+      });
+      setShowAssetsFor(null);
+    }
+  };
+
   // Handle placing annotation for an asset (opens 3D viewer in pick mode)
   const handlePlaceAnnotation = (asset: any) => {
     // For now, just open the 3D viewer for the asset's building
@@ -327,6 +344,7 @@ const PortfolioView: React.FC = () => {
         onClose={() => setShowAssetsFor(null)}
         onOpen3D={handleOpen3DRoom}
         onPlaceAnnotation={handlePlaceAnnotation}
+        onSelectAsset={handleSelectAsset}
       />
     );
   }
