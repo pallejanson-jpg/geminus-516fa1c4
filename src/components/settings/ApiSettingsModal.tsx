@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { AppContext } from '@/context/AppContext';
-import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
+import { DEFAULT_APP_CONFIGS, SENSLINC_POLL_OPTIONS } from '@/lib/constants';
 import SymbolSettings from './SymbolSettings';
 import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
@@ -1117,12 +1117,91 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 {/* Senslinc API Section */}
                                 <details className="border rounded-lg">
                                     <summary className="px-4 py-3 cursor-pointer flex items-center gap-2 font-medium list-none">
-                                        <Radar className="h-5 w-5 text-primary" />
+                                        <Zap className="h-5 w-5 text-yellow-500" />
                                         <span>Senslinc</span>
-                                        <Badge variant="outline" className="ml-auto text-xs">Kommer snart</Badge>
+                                        <Badge variant="outline" className="ml-auto text-xs bg-green-50 text-green-700 border-green-200">IoT</Badge>
                                     </summary>
-                                    <div className="px-4 pb-4 space-y-3 border-t pt-4">
-                                        <p className="text-xs text-muted-foreground">IoT-sensorer och mätvärden. Inte konfigurerad ännu.</p>
+                                    <div className="px-4 pb-4 space-y-4 border-t pt-4">
+                                        <p className="text-xs text-muted-foreground">
+                                            IoT-sensorer och mätvärden från Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) konfigureras i Lovable Cloud.
+                                        </p>
+                                        
+                                        {/* Polling interval setting */}
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-medium">Pollningsintervall</Label>
+                                            <select 
+                                                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                                value={appConfigs.iot?.pollIntervalHours ?? 24}
+                                                onChange={(e) => {
+                                                    setAppConfigs({
+                                                        ...appConfigs,
+                                                        iot: { 
+                                                            ...appConfigs.iot, 
+                                                            pollIntervalHours: parseInt(e.target.value) 
+                                                        }
+                                                    });
+                                                }}
+                                            >
+                                                {SENSLINC_POLL_OPTIONS.map(opt => (
+                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                ))}
+                                            </select>
+                                            <p className="text-xs text-muted-foreground">
+                                                Hur ofta sensordata ska hämtas automatiskt. Standard är var 24:e timme.
+                                            </p>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                onClick={async () => {
+                                                    try {
+                                                        const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                            body: { action: 'test-connection' } 
+                                                        });
+                                                        if (error) throw error;
+                                                        toast({ 
+                                                            title: data?.success ? 'Anslutning OK' : 'Misslyckades', 
+                                                            description: data?.message || data?.error 
+                                                        });
+                                                    } catch (err: any) { 
+                                                        toast({ 
+                                                            variant: 'destructive', 
+                                                            title: 'Fel', 
+                                                            description: err.message 
+                                                        }); 
+                                                    }
+                                                }}
+                                            >
+                                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                            </Button>
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                onClick={async () => {
+                                                    try {
+                                                        const { data, error } = await supabase.functions.invoke('senslinc-query', { 
+                                                            body: { action: 'get-sites' } 
+                                                        });
+                                                        if (error) throw error;
+                                                        const count = Array.isArray(data?.data) ? data.data.length : 0;
+                                                        toast({ 
+                                                            title: 'Data hämtad', 
+                                                            description: `Hittade ${count} sites i Senslinc.` 
+                                                        });
+                                                    } catch (err: any) { 
+                                                        toast({ 
+                                                            variant: 'destructive', 
+                                                            title: 'Fel', 
+                                                            description: err.message 
+                                                        }); 
+                                                    }
+                                                }}
+                                            >
+                                                <Database className="h-3.5 w-3.5 mr-1.5" /> Hämta data nu
+                                            </Button>
+                                        </div>
                                     </div>
                                 </details>
 

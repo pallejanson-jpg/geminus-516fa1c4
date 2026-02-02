@@ -40,6 +40,13 @@ export interface Ivion360Context {
     ivionUrl: string;
 }
 
+// Senslinc IoT dashboard context
+export interface SenslincDashboardContext {
+    dashboardUrl: string;
+    facilityName?: string;
+    facilityFmGuid?: string;
+}
+
 export type ThemeType = 'dark' | 'light' | 'swg';
 
 interface AppContextType {
@@ -99,6 +106,11 @@ interface AppContextType {
     ivion360Context: Ivion360Context | null;
     setIvion360Context: (context: Ivion360Context | null) => void;
     open360WithContext: (context: Ivion360Context) => void;
+
+    // Senslinc IoT dashboard context
+    senslincDashboardContext: SenslincDashboardContext | null;
+    setSenslincDashboardContext: (context: SenslincDashboardContext | null) => void;
+    openSenslincDashboard: (context: SenslincDashboardContext) => void;
 
     // 3D Viewer diagnostics (for RightSidebar)
     viewerDiagnostics: {
@@ -171,6 +183,10 @@ export const AppContext = createContext<AppContextType>({
     ivion360Context: null,
     setIvion360Context: () => {},
     open360WithContext: () => {},
+
+    senslincDashboardContext: null,
+    setSenslincDashboardContext: () => {},
+    openSenslincDashboard: () => {},
 
     viewerDiagnostics: null,
     setViewerDiagnostics: () => {},
@@ -300,6 +316,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Also store in localStorage for backward compatibility
         localStorage.setItem('ivion360Url', context.ivionUrl);
         setActiveApp('radar');
+    }, []);
+
+    // Senslinc IoT dashboard context state and actions
+    const [senslincDashboardContext, setSenslincDashboardContext] = useState<SenslincDashboardContext | null>(null);
+
+    const openSenslincDashboard = useCallback((context: SenslincDashboardContext) => {
+        setSenslincDashboardContext(context);
+        setActiveApp('senslinc_dashboard');
     }, []);
 
     const buildNavigatorTree = useCallback((items: any[]): NavigatorNode[] => {
@@ -585,6 +609,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 ivion360Context,
                 setIvion360Context,
                 open360WithContext,
+
+                senslincDashboardContext,
+                setSenslincDashboardContext,
+                openSenslincDashboard,
 
                 viewerDiagnostics,
                 setViewerDiagnostics,

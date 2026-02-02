@@ -10,6 +10,7 @@ import Viewer from "@/pages/Viewer";
 import InsightsView from "@/components/insights/InsightsView";
 import EntityInsightsView from "@/components/insights/EntityInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
+import SenslincDashboardView from "@/components/viewer/SenslincDashboardView";
 
 // Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -18,7 +19,7 @@ const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 
 const MainContent: React.FC = () => {
-    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context } = useContext(AppContext);
+    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext } = useContext(AppContext);
     const t = THEMES[theme];
     // Track previous app for 360 view close navigation
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
@@ -93,6 +94,15 @@ const MainContent: React.FC = () => {
                         onClose={() => {
                             setIvion360Context(null);
                             setActiveApp(previousAppBefore360 || 'portfolio');
+                        }} 
+                    />
+                );
+            case 'senslinc_dashboard':
+                return (
+                    <SenslincDashboardView 
+                        onClose={() => {
+                            setSenslincDashboardContext(null);
+                            setActiveApp('portfolio');
                         }} 
                     />
                 );
