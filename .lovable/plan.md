@@ -1,174 +1,138 @@
 
-# Plan: Förbättra ärende-panelens beteende
+# Plan: Lägg till "My Views" sektion på startsidan
 
-## Problem att lösa
+## Översikt
 
-1. **Ärendelistan stängs när Visningsmenyn stängs** - Den kontrolleras av `activeSubMenu` state som nollställs
-2. **Ärendelistan positioneras inte bredvid Visningsmenyn** - Den positionerar sig oberoende i högra hörnet
-3. **Objekt selekteras inte med flash vid öppning av ärende** - Flashen körs men objektet ska också vara visuellt selekterat i 3D
+Lägga till en ny sektion "My Views" under "My Favorites" på startsidan som visar användarens sparade 3D-vyer med förhandsbilder och snabb åtkomst.
 
----
+## Implementation
 
-## Lösning
+### Del 1: Skapa hook för att hämta sparade vyer
 
-### Del 1: Oberoende state för ärendelistan
-
-Ändra från `activeSubMenu === 'issues'` till en egen `showIssueList` state:
+Skapa en ny hook `useSavedViews` som hämtar alla sparade vyer från databasen:
 
 ```typescript
-// I VisualizationToolbar.tsx
-const [showIssueList, setShowIssueList] = useState(false);
+// src/hooks/useSavedViews.ts
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
-// Knappen "Visa ärenden"
-<Button onClick={() => setShowIssueList(!showIssueList)}>
-  Visa ärenden
-</Button>
-
-// FloatingIssueListPanel - nu oberoende av activeSubMenu
-<FloatingIssueListPanel
-  isOpen={showIssueList}
-  onClose={() => setShowIssueList(false)}
-  // ...
-/>
-```
-
-Detta gör att ärendelistan förblir öppen även när huvudmenyn (VisualizationToolbar) stängs.
-
----
-
-### Del 2: Positionera bredvid Visningsmenyn
-
-Uppdatera `FloatingIssueListPanel` att ta emot `parentPosition` och `parentWidth`:
-
-```typescript
-interface FloatingIssueListPanelProps {
-  // ... existing
-  parentPosition?: { x: number; y: number };
-  parentWidth?: number;
+export interface SavedView {
+  id: string;
+  name: string;
+  description: string | null;
+  building_fm_guid: string;
+  building_name: string | null;
+  screenshot_url: string | null;
+  view_mode: string | null;
+  created_at: string | null;
+  // ... camera och visibility data
 }
 
-// Beräkna initial position till vänster om Visningsmenyn
-useEffect(() => {
-  if (isOpen) {
-    const x = parentPosition 
-      ? parentPosition.x - panelWidth - 10  // 10px gap
-      : window.innerWidth - panelWidth - 20;
-    
-    setPosition({
-      x: Math.max(10, x),
-      y: parentPosition?.y ?? 80,
-    });
-  }
-}, [isOpen, parentPosition, parentWidth]);
-```
+export function useSavedViews() {
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-I `VisualizationToolbar`:
-```typescript
-<FloatingIssueListPanel
-  parentPosition={position}
-  parentWidth={panelWidth}
-  // ...
-/>
-```
+  useEffect(() => {
+    const fetchViews = async () => {
+      const { data, error } = await supabase
+        .from('saved_views')
+        .select('*')
+        .order('created_at', { ascending: false });
 
----
+      if (!error && data) {
+        setSavedViews(data);
+      }
+      setIsLoading(false);
+    };
 
-### Del 3: Selektera objekt med flash vid ärendeöppning
+    fetchViews();
+  }, []);
 
-Uppdatera `handleGoToIssueViewpoint` för att säkerställa att:
-1. Objekten selekteras i scenen (redan görs av `restoreViewpoint`)
-2. Flash-effekten körs EFTER selektion för tydlighet
-
-Nuvarande kod (fungerar delvis):
-```typescript
-const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
-  restoreViewpoint(viewpoint, { duration: 1.0 });
-  
-  if (viewpoint.components?.selection?.length > 0) {
-    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
-    setTimeout(() => {
-      flashEntitiesByIds(xeokitViewer.scene, selectedIds, { duration: 3000 });
-    }, 1100);
-  }
-}, [restoreViewpoint, flashEntitiesByIds]);
-```
-
-`restoreViewpoint` selekterar redan objekten (rad 201-207 i useBcfViewpoints.ts):
-```typescript
-if (viewpoint.components?.selection) {
-  scene.setObjectsSelected(scene.selectedObjectIds, false);
-  const idsToSelect = viewpoint.components.selection.map(s => s.ifc_guid);
-  scene.setObjectsSelected(idsToSelect, true);  // Selekterar i 3D
+  return { savedViews, isLoading, refetch: fetchViews };
 }
 ```
 
-Problemet kan vara:
-- Objekten finns inte i scenen (fel ID-format)
-- Våningsplanet objektet ligger på är inte synligt
+### Del 2: Uppdatera HomeLanding med "My Views" sektion
 
-**Lösning**: Säkerställ att objekten blir synliga innan selektion:
+Lägga till ny Card-sektion under "My Favorites":
 
 ```typescript
-const handleGoToIssueViewpoint = useCallback((viewpoint: any) => {
-  restoreViewpoint(viewpoint, { duration: 1.0 });
-  
-  if (viewpoint.components?.selection?.length > 0) {
-    const selectedIds = viewpoint.components.selection.map((s: any) => s.ifc_guid);
-    const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    
-    if (xeokitViewer?.scene) {
-      const scene = xeokitViewer.scene;
-      
-      // Efter kamera-animation, säkerställ selektion + flash
-      setTimeout(() => {
-        // 1. Säkerställ objekten är synliga
-        scene.setObjectsVisible(selectedIds, true);
-        
-        // 2. Selektera objekten (om inte redan gjort)
-        scene.setObjectsSelected(selectedIds, true);
-        
-        // 3. Flash för visuell feedback
-        flashEntitiesByIds(scene, selectedIds, { 
-          duration: 3000,
-          color1: [1, 0.2, 0.2],  // Röd
-          color2: [1, 1, 1],      // Vit
-        });
-      }, 1100);
-    }
-  }
-}, [restoreViewpoint, viewerRef, flashEntitiesByIds]);
+// I HomeLanding.tsx
+
+// Ny import
+import { useSavedViews } from '@/hooks/useSavedViews';
+import { Camera, Eye } from 'lucide-react';
+
+// I komponenten
+const { savedViews, isLoading: isLoadingViews } = useSavedViews();
+
+// Navigering till 3D viewer med vy
+const handleViewClick = (view: SavedView) => {
+  // Navigera till 3D viewer och ladda vyn
+  navigate(`/viewer?viewId=${view.id}`);
+};
 ```
+
+### Del 3: UI för "My Views" sektion
+
+```text
+┌────────────────────────────────────────────────────────┐
+│  My Favorites                                          │
+│  Quick access to your most used buildings              │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
+│  │ 📷      │ │ 📷      │ │ 📷      │  ← Favoriter     │
+│  │ Kv A    │ │ Kv B    │ │ Kv C    │                  │
+│  └─────────┘ └─────────┘ └─────────┘                  │
+└────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────┐
+│  My Views                                              │
+│  Your saved 3D views                                   │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                  │
+│  │ 📸 Prev │ │ 📸 Prev │ │ 📸 Prev │  ← Sparade vyer  │
+│  │ Plan 3  │ │ Brandsk │ │ Entré   │                  │
+│  │ Kv A    │ │ Kv B    │ │ Kv A    │                  │
+│  │ 3D      │ │ 2D      │ │ 3D      │                  │
+│  └─────────┘ └─────────┘ └─────────┘                  │
+└────────────────────────────────────────────────────────┘
+```
+
+Vykortet visar:
+- Screenshot som förhandsvisning (eller placeholder-ikon)
+- Vyns namn
+- Byggnadsnamn (subtitle)
+- Badge för 2D/3D läge
 
 ---
 
-## Filer som ändras
+## Filer som skapas/ändras
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till `showIssueList` state, skicka `parentPosition` till panelen |
-| `src/components/viewer/FloatingIssueListPanel.tsx` | Ta emot `parentPosition`, positionera till vänster om menyn |
+| `src/hooks/useSavedViews.ts` | **NY** - Hook för att hämta sparade vyer |
+| `src/components/home/HomeLanding.tsx` | Lägg till "My Views" sektion |
 
 ---
 
-## Teknisk detalj: Positionering
+## Tekniska detaljer
 
-```text
-┌──────────────────────┐   ┌────────────────────────┐
-│                      │   │                        │
-│   Ärendelistan       │   │   Visningsmenyn        │
-│   (FloatingIssueList)│   │   (VisualizationToolbar)│
-│                      │   │                        │
-│   Draggbar           │ ← 10px gap →│   Draggbar   │
-│                      │   │                        │
-└──────────────────────┘   └────────────────────────┘
-        x = parent.x - panelWidth - 10
-```
+### Navigering till sparad vy
+
+När användaren klickar på en vy navigeras till `/viewer?viewId=<id>`. ViewerPage behöver då läsa query-parametern och ladda vyn automatiskt.
+
+Alternativt kan vi lagra view-id i context och låta BuildingSelector/AssetPlusViewer hantera laddningen.
+
+### Tom-state
+
+Om inga sparade vyer finns visas en förklarande text med instruktioner:
+- "Inga sparade vyer"
+- "Öppna 3D-visaren och klicka på kamera-ikonen för att spara en vy"
 
 ---
 
 ## Testning
 
-1. **Öppna ärendelistan** → Stäng Visningsmenyn → Ärendelistan ska förbli öppen
-2. **Positionering** → Ärendelistan ska visas till vänster om Visningsmenyn
-3. **Öppna ett ärende** → Kameran flyger till position → Objektet ska vara selekterat i 3D → Objektet ska blinka rött
-4. **Dra ärendelistan** → Den ska kunna flyttas oberoende av Visningsmenyn
+1. **Skapa några sparade vyer** → Öppna 3D, spara vyer med screenshots
+2. **Gå till startsidan** → "My Views" ska visas under "My Favorites"
+3. **Klicka på en vy** → Ska navigera till 3D-viewer och ladda vyn
+4. **Ingen vy finns** → Ska visa tom-state med instruktioner
