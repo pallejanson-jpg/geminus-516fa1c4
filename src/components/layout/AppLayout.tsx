@@ -7,14 +7,17 @@ import MobileNav from './MobileNav';
 import MainContent from './MainContent';
 import VoiceControlButton from '@/components/voice/VoiceControlButton';
 import GunnarButton from '@/components/chat/GunnarButton';
+import IleanButton from '@/components/chat/IleanButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
 import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
+import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
     const [gunnarVisible, setGunnarVisible] = useState(() => getGunnarSettings().visible);
+    const [ileanVisible, setIleanVisible] = useState(() => getIleanSettings().visible);
     const isMobile = useIsMobile();
 
     // Listen for voice settings changes
@@ -33,6 +36,15 @@ const AppLayoutInner: React.FC = () => {
         };
         window.addEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
         return () => window.removeEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
+    }, []);
+
+    // Listen for Ilean settings changes
+    useEffect(() => {
+        const handleIleanSettingsChange = (e: CustomEvent) => {
+            setIleanVisible(e.detail?.visible ?? true);
+        };
+        window.addEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
+        return () => window.removeEventListener(ILEAN_SETTINGS_CHANGED_EVENT, handleIleanSettingsChange as EventListener);
     }, []);
 
     // Voice command callbacks
@@ -72,6 +84,9 @@ const AppLayoutInner: React.FC = () => {
 
             {/* Gunnar AI Assistant - visible based on settings */}
             {gunnarVisible && <GunnarButton />}
+
+            {/* Ilean AI Assistant - visible based on settings */}
+            {ileanVisible && <IleanButton />}
         </div>
     );
 };
