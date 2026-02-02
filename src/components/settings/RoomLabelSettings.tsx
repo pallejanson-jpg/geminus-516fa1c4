@@ -1,0 +1,325 @@
+import React, { useState } from 'react';
+import { Plus, Edit2, Trash2, Tag, GripVertical, Check, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useRoomLabelConfigs, RoomLabelConfig, AVAILABLE_LABEL_FIELDS } from '@/hooks/useRoomLabelConfigs';
+import { cn } from '@/lib/utils';
+
+const RoomLabelSettings: React.FC = () => {
+  const {
+    configs,
+    loading,
+    createConfig,
+    updateConfig,
+    deleteConfig,
+  } = useRoomLabelConfigs();
+
+  const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<RoomLabelConfig>>({});
+
+  // Create new config
+  const handleCreate = async () => {
+    if (!editForm.name) return;
+
+    await createConfig({
+      name: editForm.name,
+      fields: editForm.fields || ['commonName'],
+      height_offset: editForm.height_offset || 1.2,
+      font_size: editForm.font_size || 10,
+      scale_with_distance: editForm.scale_with_distance ?? true,
+      click_action: editForm.click_action || 'none',
+      is_default: false,
+    });
+
+    setShowCreateDialog(false);
+    setEditForm({});
+  };
+
+  // Update existing config
+  const handleUpdate = async (id: string) => {
+    await updateConfig(id, editForm);
+    setIsEditing(null);
+    setEditForm({});
+  };
+
+  // Start editing
+  const startEdit = (config: RoomLabelConfig) => {
+    setIsEditing(config.id);
+    setEditForm({ ...config });
+  };
+
+  // Toggle field selection
+  const toggleField = (field: string) => {
+    const currentFields = editForm.fields || [];
+    if (currentFields.includes(field)) {
+      setEditForm({ ...editForm, fields: currentFields.filter(f => f !== field) });
+    } else {
+      setEditForm({ ...editForm, fields: [...currentFields, field] });
+    }
+  };
+
+  // Get click action label
+  const getClickActionLabel = (action: string) => {
+    switch (action) {
+      case 'flyto': return 'Flytta kamera';
+      case 'roomcard': return 'Visa rumskort';
+      default: return 'Ingen';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="text-muted-foreground">Laddar...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Rumsetiketter</h3>
+          <p className="text-sm text-muted-foreground">
+            Konfigurera hur etiketter visas på rum i 3D-viewern
+          </p>
+        </div>
+        <Button onClick={() => setShowCreateDialog(true)} size="sm" className="gap-2">
+          <Plus className="h-4 w-4" />
+          Ny konfiguration
+        </Button>
+      </div>
+
+      {/* Config list */}
+      <div className="space-y-3">
+        {configs.map((config) => (
+          <Card key={config.id} className={cn(
+            "transition-all",
+            isEditing === config.id && "ring-2 ring-primary"
+          )}>
+            <CardHeader className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-primary" />
+                  {isEditing === config.id ? (
+                    <Input
+                      value={editForm.name || ''}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="h-7 w-48"
+                    />
+                  ) : (
+                    <CardTitle className="text-sm font-medium">{config.name}</CardTitle>
+                  )}
+                  {config.is_default && (
+                    <Badge variant="secondary" className="text-xs">Standard</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {isEditing === config.id ? (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => handleUpdate(config.id)}>
+                        <Check className="h-4 w-4 text-green-600" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setIsEditing(null); setEditForm({}); }}>
+                        <X className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => startEdit(config)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteConfig(config.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            
+            {isEditing === config.id ? (
+              <CardContent className="pt-0 pb-4 px-4 space-y-4">
+                {/* Fields selection */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Fält att visa</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {AVAILABLE_LABEL_FIELDS.map((field) => (
+                      <Badge
+                        key={field.key}
+                        variant={(editForm.fields || []).includes(field.key) ? 'default' : 'outline'}
+                        className="cursor-pointer"
+                        onClick={() => toggleField(field.key)}
+                      >
+                        {field.label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Height slider */}
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <Label className="text-xs">Höjd ovanför golv</Label>
+                    <span className="text-xs text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+                  </div>
+                  <Slider
+                    value={[editForm.height_offset || 1.2]}
+                    onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
+                    min={0.1}
+                    max={2.5}
+                    step={0.1}
+                  />
+                </div>
+
+                {/* Scale with distance */}
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Skala med avstånd</Label>
+                  <Switch
+                    checked={editForm.scale_with_distance ?? true}
+                    onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
+                  />
+                </div>
+
+                {/* Click action */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Klickåtgärd</Label>
+                  <Select
+                    value={editForm.click_action || 'none'}
+                    onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Ingen</SelectItem>
+                      <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
+                      <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            ) : (
+              <CardContent className="pt-0 pb-3 px-4">
+                <CardDescription className="text-xs">
+                  Fält: {config.fields.map(f => 
+                    AVAILABLE_LABEL_FIELDS.find(af => af.key === f)?.label || f
+                  ).join(', ')} • 
+                  Höjd: {config.height_offset}m • 
+                  Klick: {getClickActionLabel(config.click_action)}
+                </CardDescription>
+              </CardContent>
+            )}
+          </Card>
+        ))}
+
+        {configs.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/30">
+            <Tag className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>Inga etikettkonfigurationer ännu</p>
+            <Button onClick={() => setShowCreateDialog(true)} variant="outline" size="sm" className="mt-2">
+              Skapa din första
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Create dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ny etikettkonfiguration</DialogTitle>
+            <DialogDescription>
+              Skapa en ny konfiguration för hur rumsetiketter visas i 3D-viewern.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Namn</Label>
+              <Input
+                placeholder="T.ex. 'Namn och area'"
+                value={editForm.name || ''}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fält att visa</Label>
+              <div className="flex flex-wrap gap-2">
+                {AVAILABLE_LABEL_FIELDS.map((field) => (
+                  <Badge
+                    key={field.key}
+                    variant={(editForm.fields || []).includes(field.key) ? 'default' : 'outline'}
+                    className="cursor-pointer"
+                    onClick={() => toggleField(field.key)}
+                  >
+                    {field.label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label>Höjd ovanför golv</Label>
+                <span className="text-sm text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+              </div>
+              <Slider
+                value={[editForm.height_offset || 1.2]}
+                onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
+                min={0.1}
+                max={2.5}
+                step={0.1}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label>Skala med avstånd</Label>
+              <Switch
+                checked={editForm.scale_with_distance ?? true}
+                onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Klickåtgärd</Label>
+              <Select
+                value={editForm.click_action || 'none'}
+                onValueChange={(v) => setEditForm({ ...editForm, click_action: v as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen</SelectItem>
+                  <SelectItem value="flyto">Flytta kamera till rum</SelectItem>
+                  <SelectItem value="roomcard">Visa rumskort</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowCreateDialog(false); setEditForm({}); }}>
+              Avbryt
+            </Button>
+            <Button onClick={handleCreate} disabled={!editForm.name}>
+              Skapa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default RoomLabelSettings;

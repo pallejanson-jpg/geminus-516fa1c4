@@ -32,7 +32,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useBcfViewpoints } from "@/hooks/useBcfViewpoints";
 import LightingControlsPanel from "./LightingControlsPanel";
 import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
-import { ROOM_LABELS_TOGGLE_EVENT } from "@/hooks/useRoomLabels";
+import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
+import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -133,6 +134,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
   const [showRoomLabels, setShowRoomLabels] = useState(false);
+  const [activeRoomLabelConfigId, setActiveRoomLabelConfigId] = useState<string | null>(null);
+  
+  // Room label configs from database
+  const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
 
   // Scroll indicator (external, on panel edge)
   const scrollWrapRef = useRef<HTMLDivElement | null>(null);
@@ -252,13 +257,43 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }));
   }, []);
 
-  // Handle room labels toggle
-  const handleRoomLabelsToggle = useCallback((enabled: boolean) => {
+  // Handle room labels toggle with config
+  const handleRoomLabelsToggle = useCallback((enabled: boolean, configId?: string) => {
     setShowRoomLabels(enabled);
+    
+    if (enabled && configId) {
+      setActiveRoomLabelConfigId(configId);
+      const config = roomLabelConfigs.find(c => c.id === configId);
+      if (config) {
+        // Dispatch config event first
+        window.dispatchEvent(new CustomEvent(ROOM_LABELS_CONFIG_EVENT, {
+          detail: {
+            fields: config.fields,
+            heightOffset: config.height_offset,
+            fontSize: config.font_size,
+            scaleWithDistance: config.scale_with_distance,
+            clickAction: config.click_action,
+          } as RoomLabelsConfigDetail
+        }));
+      }
+    } else if (!enabled) {
+      setActiveRoomLabelConfigId(null);
+    }
+    
+    // Then dispatch enable/disable event
     window.dispatchEvent(new CustomEvent(ROOM_LABELS_TOGGLE_EVENT, {
       detail: { enabled }
     }));
-  }, []);
+  }, [roomLabelConfigs]);
+
+  // Handle room label config selection
+  const handleRoomLabelConfigSelect = useCallback((configId: string) => {
+    if (configId === 'off') {
+      handleRoomLabelsToggle(false);
+    } else {
+      handleRoomLabelsToggle(true, configId);
+    }
+  }, [handleRoomLabelsToggle]);
 
   // Capture current view state for saving
   const captureViewState = useCallback(async () => {
@@ -929,8 +964,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     </div>
                   </div>
 
-                  {/* Room Labels Toggle */}
-                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                  {/* Room Labels Selector - Dropdown with config presets */}
+                  <div className="space-y-1.5 sm:space-y-2">
                     <div className="flex items-center gap-2 sm:gap-3">
                       <div className={cn(
                         "p-1 sm:p-1.5 rounded-md",
@@ -940,10 +975,51 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       </div>
                       <span className="text-xs sm:text-sm">Rumsetiketter</span>
                     </div>
-                    <Switch 
-                      checked={showRoomLabels} 
-                      onCheckedChange={handleRoomLabelsToggle}
-                    />
+                    <div className="pl-8 sm:pl-10">
+                      {loadingRoomLabelConfigs ? (
+                        <div className="text-xs text-muted-foreground">Laddar...</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {/* Off option */}
+                          <button
+                            className={cn(
+                              "w-full text-left px-2 py-1 rounded text-xs transition-colors",
+                              !showRoomLabels 
+                                ? "bg-primary/10 text-primary font-medium" 
+                                : "hover:bg-muted/50"
+                            )}
+                            onClick={() => handleRoomLabelConfigSelect('off')}
+                          >
+                            Av
+                          </button>
+                          
+                          {/* Config presets */}
+                          {roomLabelConfigs.map((config) => (
+                            <button
+                              key={config.id}
+                              className={cn(
+                                "w-full text-left px-2 py-1 rounded text-xs transition-colors",
+                                activeRoomLabelConfigId === config.id 
+                                  ? "bg-primary/10 text-primary font-medium" 
+                                  : "hover:bg-muted/50"
+                              )}
+                              onClick={() => handleRoomLabelConfigSelect(config.id)}
+                            >
+                              {config.name}
+                              {config.is_default && (
+                                <span className="ml-1 text-[10px] text-muted-foreground">(standard)</span>
+                              )}
+                            </button>
+                          ))}
+                          
+                          {roomLabelConfigs.length === 0 && (
+                            <div className="text-xs text-muted-foreground py-1">
+                              Inga konfigurationer. Skapa i Inställningar.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Viewer Theme Selector */}
