@@ -1,13 +1,5 @@
-import React, { useState } from "react";
-import { MessageSquarePlus, AlertCircle, Lightbulb, HelpCircle, Eye, Box } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import React, { useState, useEffect, useCallback } from "react";
+import { MessageSquarePlus, AlertCircle, Lightbulb, HelpCircle, Eye, Box, GripHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,6 +44,10 @@ interface CreateIssueDialogProps {
   selectedObjectIds?: string[];
 }
 
+/**
+ * Draggable floating panel for creating BCF issues.
+ * Can be repositioned by dragging the header to allow viewing the 3D model behind.
+ */
 const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
   open,
   onClose,
@@ -65,6 +61,55 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
   const [description, setDescription] = useState("");
   const [issueType, setIssueType] = useState<string>("fault");
   const [priority, setPriority] = useState<string>("medium");
+
+  // Drag state
+  const panelWidth = 480;
+  const [position, setPosition] = useState({ 
+    x: typeof window !== 'undefined' ? Math.max(20, (window.innerWidth - panelWidth) / 2) : 200, 
+    y: typeof window !== 'undefined' ? Math.max(20, (window.innerHeight - 600) / 2) : 100
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Reset position and form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setPosition({
+        x: Math.max(20, (window.innerWidth - panelWidth) / 2),
+        y: Math.max(20, (window.innerHeight - 600) / 2),
+      });
+      // Don't reset form here - let handleClose do it
+    }
+  }, [open]);
+
+  // Drag start handler
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    // Don't start drag if clicking interactive elements
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, [role="radiogroup"]')) return;
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  // Drag move/end handlers
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - panelWidth, e.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y)),
+      });
+    };
+
+    const handleUp = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDragging, dragOffset]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,20 +139,55 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquarePlus className="h-5 w-5 text-primary" />
-            Skapa ärende
-          </DialogTitle>
-          <DialogDescription>
-            Rapportera ett problem eller förslag koppat till modellen.
-          </DialogDescription>
-        </DialogHeader>
+  if (!open) return null;
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+  return (
+    <>
+      {/* Semi-transparent backdrop */}
+      <div 
+        className="fixed inset-0 z-[70] bg-black/20" 
+        onClick={handleClose}
+      />
+      
+      {/* Draggable panel */}
+      <div
+        className={cn(
+          "fixed z-[71] border rounded-lg shadow-xl bg-card",
+          "w-[480px] max-w-[calc(100vw-40px)]",
+          "animate-in fade-in-0 zoom-in-95 duration-200",
+          isDragging && "cursor-grabbing"
+        )}
+        style={{ left: position.x, top: position.y }}
+      >
+        {/* Draggable header */}
+        <div
+          className={cn(
+            "flex items-center gap-2 px-4 py-3 border-b",
+            "cursor-grab select-none",
+            isDragging && "cursor-grabbing"
+          )}
+          onMouseDown={handleDragStart}
+        >
+          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          <MessageSquarePlus className="h-5 w-5 text-primary" />
+          <span className="font-semibold flex-1">Skapa ärende</span>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-7 w-7"
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <p className="text-sm text-muted-foreground px-4 pt-3">
+          Rapportera ett problem eller förslag kopplat till modellen.
+        </p>
+
+        {/* Form content */}
+        <form id="issue-form" onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Screenshot preview */}
           {screenshotUrl && (
             <div className="rounded-md overflow-hidden border bg-muted/50">
@@ -219,23 +299,28 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
               disabled={isSubmitting}
             />
           </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-            >
-              Avbryt
-            </Button>
-            <Button type="submit" disabled={!title.trim() || isSubmitting}>
-              {isSubmitting ? "Skickar..." : "Skicka ärende"}
-            </Button>
-          </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+
+        {/* Footer buttons */}
+        <div className="flex justify-end gap-2 px-4 py-3 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
+            Avbryt
+          </Button>
+          <Button 
+            type="submit" 
+            form="issue-form"
+            disabled={!title.trim() || isSubmitting}
+          >
+            {isSubmitting ? "Skickar..." : "Skicka ärende"}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 };
 
