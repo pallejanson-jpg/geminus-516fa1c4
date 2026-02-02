@@ -43,12 +43,25 @@ type AuthAttempt = {
 };
 
 interface IvionPoi {
-  id: number;
+  id?: number;
   titles: Record<string, string>;
   descriptions: Record<string, string>;
-  location: { x: number; y: number; z: number };
-  orientation: { x: number; y: number; z: number; w: number };
-  poiType: { id: number };
+  // For reading existing POIs (legacy format)
+  location?: { x: number; y: number; z: number };
+  orientation?: { x: number; y: number; z: number; w: number };
+  poiType?: { id: number };
+  // For creating new POIs (required fields)
+  scsLocation?: {
+    type: 'Point';
+    coordinates: [number, number, number];
+  };
+  scsOrientation?: { x: number; y: number; z: number; w: number };
+  poiTypeId?: number;
+  security?: {
+    groupRead: number;
+    groupWrite: number;
+  };
+  visibilityCheck?: boolean;
   pointOfView?: {
     imageId: number;
     location: { x: number; y: number; z: number };
@@ -56,7 +69,7 @@ interface IvionPoi {
     fov: number;
   };
   customData?: string;
-  importance: number;
+  importance?: number;
   icon?: string;
 }
 
@@ -295,6 +308,34 @@ async function getPoiTypes(siteId: string): Promise<any[]> {
   return response.json();
 }
 
+// Get a default POI type ID for creating new POIs
+async function getDefaultPoiTypeId(siteId: string): Promise<number> {
+  try {
+    const types = await getPoiTypes(siteId);
+    if (types.length > 0) {
+      // Try to find a "generic", "default", or "other" type, otherwise use first
+      const genericType = types.find((t: any) => 
+        t.name?.toLowerCase().includes('generic') ||
+        t.name?.toLowerCase().includes('default') ||
+        t.name?.toLowerCase().includes('other') ||
+        t.name?.toLowerCase().includes('standard')
+      );
+      return genericType?.id || types[0].id;
+    }
+  } catch (e) {
+    console.log('Could not fetch POI types, using default 1:', e);
+  }
+  return 1; // Fallback to ID 1
+}
+
+// Format IFC asset type to readable name
+function formatAssetTypeName(type: string | null): string {
+  if (!type) return 'Unnamed';
+  return type
+    .replace(/^Ifc/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
 // Create POI in Ivion
 async function createPoi(siteId: string, poiData: Partial<IvionPoi>): Promise<IvionPoi> {
   const token = await getIvionToken();
@@ -425,16 +466,36 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
     return { success: true, poiId: asset.ivion_poi_id, message: 'Asset already synced' };
   }
   
-  // Build POI data
+  // Get default POI type for this site
+  const poiTypeId = await getDefaultPoiTypeId(siteId);
+  
+  // Get display name with intelligent fallbacks
+  const displayName = asset.name || asset.common_name || formatAssetTypeName(asset.asset_type) || 'Unnamed';
+  
+  // Build POI data with all required Ivion fields
   const poiData: Partial<IvionPoi> = {
-    titles: { sv: asset.name || asset.common_name || 'Unnamed' },
-    descriptions: { sv: asset.attributes?.description || '' },
-    location: {
-      x: asset.coordinate_x || 0,
-      y: asset.coordinate_y || 0,
-      z: asset.coordinate_z || 0,
+    titles: { sv: displayName },
+    descriptions: { sv: (asset.attributes as any)?.description || '' },
+    // Required: scsLocation as GeoJSON Point
+    scsLocation: {
+      type: 'Point',
+      coordinates: [
+        asset.coordinate_x || 0,
+        asset.coordinate_y || 0,
+        asset.coordinate_z || 0,
+      ],
     },
-    orientation: { x: 0, y: 0, z: 0, w: 1 },
+    // Required: scsOrientation quaternion
+    scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
+    // Required: poiTypeId
+    poiTypeId,
+    // Required: security permissions (0 = public/all users)
+    security: {
+      groupRead: 0,
+      groupWrite: 0,
+    },
+    // Required: visibilityCheck
+    visibilityCheck: false,
     importance: 1,
     customData: JSON.stringify({
       fm_guid: asset.fm_guid,
