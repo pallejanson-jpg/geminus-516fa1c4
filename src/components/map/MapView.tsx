@@ -1,15 +1,33 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
-import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp, Search, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { BUILDING_IMAGES, NORDIC_CITIES } from '@/lib/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { ClusterMarker, SingleMarker } from './MapCluster';
 import Supercluster from 'supercluster';
+import {
+  MapColoringMode,
+  BuildingMetrics,
+  getBuildingColor,
+  generateMockBuildingMetrics,
+  COLORING_MODE_LABELS,
+  COLORING_MODE_LEGENDS,
+} from '@/lib/map-coloring-utils';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 type MapFacility = Facility & { lat: number; lng: number };
@@ -33,6 +51,17 @@ const BuildingSidebar: React.FC<{
   onMarkerClick: (facility: MapFacility) => void;
 }> = ({ facilities, selectedMarker, onMarkerClick }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter facilities based on search query
+  const filteredFacilities = useMemo(() => {
+    if (!searchQuery.trim()) return facilities;
+    const query = searchQuery.toLowerCase();
+    return facilities.filter(f => 
+      (f.commonName || f.name || '').toLowerCase().includes(query) ||
+      (f.address || '').toLowerCase().includes(query)
+    );
+  }, [facilities, searchQuery]);
 
   return (
     <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-1.5rem)] sm:max-h-[calc(100%-2rem)]">
@@ -64,12 +93,23 @@ const BuildingSidebar: React.FC<{
             isExpanded ? 'max-h-48 sm:max-h-60' : 'max-h-0 sm:max-h-80'
           } ${!isExpanded && 'hidden sm:block'}`}
         >
-          {facilities.length === 0 ? (
+          {/* Search input */}
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search buildings..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          
+          {filteredFacilities.length === 0 ? (
             <p className="text-xs sm:text-sm text-muted-foreground py-4 text-center">
-              No buildings loaded
+              {searchQuery ? 'No matching buildings' : 'No buildings loaded'}
             </p>
           ) : (
-            facilities.map((facility) => (
+            filteredFacilities.map((facility) => (
               <div
                 key={facility.fmGuid}
                 onClick={() => onMarkerClick(facility)}
@@ -90,6 +130,37 @@ const BuildingSidebar: React.FC<{
   );
 };
 
+// Legend component for coloring modes
+const ColoringLegend: React.FC<{ mode: MapColoringMode }> = ({ mode }) => {
+  if (mode === 'none') return null;
+  
+  const legend = COLORING_MODE_LEGENDS[mode];
+  if (!legend) return null;
+
+  return (
+    <div className="absolute bottom-20 right-3 sm:right-4 z-10">
+      <Card className="bg-card/95 backdrop-blur-sm shadow-lg">
+        <CardContent className="p-2 sm:p-3">
+          <p className="text-[10px] sm:text-xs font-medium mb-2 text-muted-foreground">
+            {COLORING_MODE_LABELS[mode]}
+          </p>
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            {legend.map((item) => (
+              <div key={item.label} className="flex items-center gap-1">
+                <div 
+                  className="w-3 h-3 rounded-full" 
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-[10px] sm:text-xs">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 const MapView: React.FC = () => {
   const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
@@ -103,6 +174,7 @@ const MapView: React.FC = () => {
   const [selectedMarker, setSelectedMarker] = useState<MapFacility | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
   const [buildingCoordinates, setBuildingCoordinates] = useState<BuildingCoordinates[]>([]);
+  const [coloringMode, setColoringMode] = useState<MapColoringMode>('none');
   const mapRef = useRef<any>(null);
 
   // Fetch saved building coordinates from database
@@ -197,6 +269,15 @@ const MapView: React.FC = () => {
       };
     });
   }, [navigatorTreeData, allData, buildingCoordinates]);
+
+  // Generate metrics for all buildings
+  const buildingMetricsMap = useMemo(() => {
+    const map: Record<string, BuildingMetrics> = {};
+    mapFacilities.forEach(f => {
+      map[f.fmGuid] = generateMockBuildingMetrics(f.fmGuid, f.area || 0);
+    });
+    return map;
+  }, [mapFacilities]);
 
   // Create supercluster instance
   const supercluster = useMemo(() => {
@@ -332,6 +413,35 @@ const MapView: React.FC = () => {
     <div className="flex-1 flex flex-col h-full relative">
       {/* Map Controls */}
       <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-10 flex flex-col gap-2">
+        {/* Coloring mode dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="secondary"
+              size="icon"
+              className={`h-8 w-8 sm:h-9 sm:w-9 bg-card/90 backdrop-blur-sm shadow-lg ${
+                coloringMode !== 'none' ? 'ring-2 ring-primary' : ''
+              }`}
+            >
+              <Palette size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Color markers by</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup 
+              value={coloringMode} 
+              onValueChange={(v) => setColoringMode(v as MapColoringMode)}
+            >
+              {(Object.keys(COLORING_MODE_LABELS) as MapColoringMode[]).map((mode) => (
+                <DropdownMenuRadioItem key={mode} value={mode}>
+                  {COLORING_MODE_LABELS[mode]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <Button
           variant="secondary"
           size="icon"
@@ -356,6 +466,9 @@ const MapView: React.FC = () => {
         selectedMarker={selectedMarker}
         onMarkerClick={handleMarkerClick}
       />
+
+      {/* Color legend */}
+      <ColoringLegend mode={coloringMode} />
 
       {/* Map */}
       <Map
@@ -388,6 +501,11 @@ const MapView: React.FC = () => {
           }
 
           const facility = cluster.properties.facility!;
+          const metrics = buildingMetricsMap[facility.fmGuid];
+          const markerColor = coloringMode !== 'none' && metrics 
+            ? getBuildingColor(metrics, coloringMode) 
+            : undefined;
+
           return (
             <SingleMarker
               key={facility.fmGuid}
@@ -396,6 +514,7 @@ const MapView: React.FC = () => {
               name={facility.commonName || facility.name || ''}
               onClick={() => handleMarkerClick(facility)}
               isSelected={selectedMarker?.fmGuid === facility.fmGuid}
+              color={markerColor}
             />
           );
         })}
@@ -410,7 +529,7 @@ const MapView: React.FC = () => {
             closeOnClick={false}
             className="map-popup"
           >
-            <Card className="border-0 shadow-none bg-transparent">
+            <Card className="border-0 shadow-xl bg-black/95 backdrop-blur-sm">
               <CardContent className="p-0">
                 {selectedMarker.image && (
                   <img
