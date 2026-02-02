@@ -18,7 +18,7 @@ import SidePopPanel from "./SidePopPanel";
 import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
 import CreateIssueDialog from "./CreateIssueDialog";
-import IssueListPanel, { type BcfIssue } from "./IssueListPanel";
+import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel";
 import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
@@ -1095,20 +1095,14 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             />
           </SidePopPanel>
           
-          {/* Side-pop panel for Issues */}
-          <SidePopPanel
+          {/* Floating Issue List Panel - draggable */}
+          <FloatingIssueListPanel
             isOpen={activeSubMenu === 'issues'}
             onClose={() => setActiveSubMenu(null)}
-            title="Ärenden"
-            parentPosition={position}
-            parentWidth={panelWidth}
-          >
-            <IssueListPanel
-              buildingFmGuid={buildingFmGuid}
-              onSelectIssue={handleSelectIssue}
-              onCreateIssue={captureIssueState}
-            />
-          </SidePopPanel>
+            buildingFmGuid={buildingFmGuid}
+            onSelectIssue={handleSelectIssue}
+            onCreateIssue={captureIssueState}
+          />
           
           {/* Create View Dialog */}
           <CreateViewDialog
