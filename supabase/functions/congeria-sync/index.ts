@@ -135,6 +135,7 @@ serve(async (req) => {
       console.log(`[Congeria Sync] Scraping ${linkData.external_url} for building ${buildingFmGuid}`);
 
       // Use Firecrawl to scrape the Congeria page
+      // Congeria uses heavy JavaScript with hash-routing, needs longer timeout
       const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
         headers: {
@@ -144,7 +145,8 @@ serve(async (req) => {
         body: JSON.stringify({
           url: linkData.external_url,
           formats: ['html', 'links'],
-          waitFor: 5000, // Wait for JS rendering (Congeria uses hash routing)
+          waitFor: 10000, // Wait 10s for JS rendering (Congeria uses hash routing)
+          timeout: 60000, // 60 second total timeout
         }),
       });
 
