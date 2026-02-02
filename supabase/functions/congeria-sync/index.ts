@@ -14,6 +14,15 @@ interface ParsedDocument {
   folder?: string;
 }
 
+function normalizeCongeriaUrl(url: string): string {
+  const trimmed = (url || '').trim();
+  // Common user-input issue: trailing space before a slash in the hash path
+  // Example: "Småviken%20/DoU" should be "Småviken/DoU"
+  return trimmed
+    .replace(/ \//g, '/')
+    .replace(/%20\//g, '/');
+}
+
 // Parse document links from HTML content
 function parseDocumentLinks(html: string, links: string[]): ParsedDocument[] {
   const documents: ParsedDocument[] = [];
@@ -132,36 +141,52 @@ serve(async (req) => {
         );
       }
 
-      console.log(`[Congeria Sync] Scraping ${linkData.external_url} for building ${buildingFmGuid}`);
+      const folderUrl = normalizeCongeriaUrl(linkData.external_url);
+      console.log(`[Congeria Sync] Scraping ${folderUrl} for building ${buildingFmGuid}`);
 
-      // Use Firecrawl to scrape the Congeria page
-      // Congeria uses heavy JavaScript with hash-routing, needs longer timeout
-      const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${firecrawlKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: linkData.external_url,
-          formats: ['html', 'links'],
-          waitFor: 10000, // Wait 10s for JS rendering (Congeria uses hash routing)
-          timeout: 60000, // 60 second total timeout
-        }),
-      });
+      const runScrape = async (opts: { waitFor: number; timeout: number }) => {
+        const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: folderUrl,
+            // Only ask for links to keep scraping lightweight
+            formats: ['links'],
+            waitFor: opts.waitFor,
+            timeout: opts.timeout,
+            onlyMainContent: false,
+          }),
+        });
+        return resp;
+      };
+
+      // Try a fast scrape first (avoids heavy JS rendering stalls)
+      let scrapeResponse = await runScrape({ waitFor: 0, timeout: 30000 });
+
+      // If the fast scrape fails/timeouts, try a heavier render
+      if (!scrapeResponse.ok) {
+        // Consume body before retry
+        await scrapeResponse.text();
+        scrapeResponse = await runScrape({ waitFor: 10000, timeout: 180000 });
+      }
 
       if (!scrapeResponse.ok) {
         const errorText = await scrapeResponse.text();
         console.error('[Congeria Sync] Firecrawl error:', errorText);
+        // Preserve Firecrawl status (408 is a timeout)
         return new Response(
-          JSON.stringify({ 
-            success: false, 
+          JSON.stringify({
+            success: false,
             error: `Firecrawl scraping failed: ${scrapeResponse.status}`,
-            details: errorText
+            details: errorText,
+            folderUrl,
           }),
-          { 
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          {
+            status: scrapeResponse.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           }
         );
       }
@@ -190,7 +215,7 @@ serve(async (req) => {
       }
 
       // Extract folder path from Congeria URL for metadata
-      const urlPath = linkData.external_url.split('#/')[1] || '';
+      const urlPath = folderUrl.split('#/')[1] || '';
       const folderPath = decodeURIComponent(urlPath);
 
       // Process each document
