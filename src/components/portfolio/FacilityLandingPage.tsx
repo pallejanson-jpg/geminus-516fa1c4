@@ -587,6 +587,10 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onOpenIoT={onOpenIoT}
             onAddAsset={handleAddAsset}
             onInventory={handleInventory}
+            onOpenSplitView={(f) => {
+              // Navigate to split view with building fmGuid
+              window.location.href = `/split-viewer?building=${f.fmGuid}`;
+            }}
           />
         </div>
       </ScrollArea>
