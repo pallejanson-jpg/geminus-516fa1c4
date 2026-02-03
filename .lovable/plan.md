@@ -1,190 +1,126 @@
 
 
-# Plan: Implementera NavVis IVION Mandate-baserad Autentisering
+# Plan: Simplify Ivion Connection to Direct Token Input
 
-## Sammanfattning
+## Problem
+The current OAuth mandate flow fails with "Full authentication is required" because the NavVis `/api/auth/mandate/request` endpoint itself requires authentication - creating a catch-22 situation.
 
-NavVis IVION använder ett **interaktivt OAuth-liknande flöde** där användaren måste godkänna en "mandate" i webbläsaren. Detta skiljer sig från traditionell username/password-autentisering och kräver att vi bygger ett UI-flöde för att:
+## Solution
+Replace the complex mandate flow with a simple **direct token input** modal where users can paste their existing access token (like the one you already have).
 
-1. Starta autentiseringsprocessen (backend)
-2. Visa ett popup/fönster där användaren godkänner (frontend)
-3. Polla tills mandatet är godkänt (backend)
-4. Byta mandatet mot tokens och spara dem (backend)
+## Changes
 
-## Arkitektur
+### 1. Redesign IvionConnectionModal.tsx
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            FRONTEND (React)                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│  1. Användare klickar "Anslut till Ivion"                               │
-│  2. Öppnar popup med NavVis authorization URL                           │
-│  3. Användare godkänner i popup                                         │
-│  4. Stänger popup, frontend pollar status                               │
-│  5. Visar "Ansluten!" när tokens är sparade                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         EDGE FUNCTION (ivion-poi)                       │
-├─────────────────────────────────────────────────────────────────────────┤
-│  action: 'mandate-request'                                              │
-│    → POST /api/auth/mandate/request                                     │
-│    → Returnerar authorization_token + authorization_url                 │
-│                                                                         │
-│  action: 'mandate-validate'                                             │
-│    → GET /api/auth/mandate/validate?authorization_token=...             │
-│    → Returnerar status: 'pending' | 'authorized' | 'expired'            │
-│                                                                         │
-│  action: 'mandate-exchange'                                             │
-│    → POST /api/auth/mandate/exchange (med exchange_token)               │
-│    → Sparar access_token + refresh_token till databasen                 │
-│    → Returnerar success + tokenPreview                                  │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## Ändringar
-
-### 1. Edge Function: Nya mandate-actions (ivion-poi/index.ts)
-
-Lägg till tre nya actions i edge function:
-
-| Action | Endpoint | Beskrivning |
-|--------|----------|-------------|
-| `mandate-request` | `POST /api/auth/mandate/request` | Startar autentiseringsflödet, returnerar URL för användaren |
-| `mandate-validate` | `GET /api/auth/mandate/validate` | Pollar status för mandatet |
-| `mandate-exchange` | `POST /api/auth/mandate/exchange` | Byter mandatet mot tokens |
-
-**Ny funktion: `requestMandate()`**
-- Anropar `/api/auth/mandate/request`
-- Returnerar `authorization_token`, `exchange_token`, och `authorization_url`
-
-**Ny funktion: `validateMandate(authToken)`**
-- Pollar `/api/auth/mandate/validate?authorization_token={authToken}`
-- Returnerar `{ authorized: boolean, expired: boolean }`
-
-**Ny funktion: `exchangeMandate(exchangeToken)`**
-- Anropar `/api/auth/mandate/exchange` med exchange_token
-- Returnerar `access_token` och `refresh_token`
-
-### 2. Databaslagring av tokens (valfritt men rekommenderat)
-
-Alternativ A: **Spara tokens i `building_settings`-tabellen**
-- Lägg till kolumner: `ivion_access_token`, `ivion_refresh_token`, `ivion_token_expires_at`
-- Tokens är per-site/building
-
-Alternativ B: **Fortsätt använda secrets (nuvarande)**
-- Kräver manuell uppdatering vid token-förnyelse
-- Enklare implementation
-
-**Rekommendation:** Alternativ A för långsiktig stabilitet, men vi kan börja med Alternativ B och lägga till databaslagring senare.
-
-### 3. Frontend: Ivion Connection Modal (ny komponent)
-
-**Ny fil: `src/components/settings/IvionConnectionModal.tsx`**
+Replace the OAuth popup flow with a simple form:
 
 ```text
 ┌─────────────────────────────────────────────┐
-│         Anslut till NavVis IVION            │
+│      Connect to NavVis IVION                │
 ├─────────────────────────────────────────────┤
 │                                             │
-│  Klicka på knappen nedan för att öppna      │
-│  NavVis IVION och godkänna anslutningen.    │
+│  Paste your NavVis access token below.      │
+│  You can get this from the NavVis admin     │
+│  panel or use an existing JWT token.        │
 │                                             │
+│  Access Token:                              │
 │  ┌─────────────────────────────────────┐    │
-│  │   🔗  Öppna NavVis för godkännande  │    │
+│  │ eyJhbGciOiJIUzI1NiJ9...             │    │
 │  └─────────────────────────────────────┘    │
 │                                             │
-│  Status: ⏳ Väntar på godkännande...        │
+│  Refresh Token (optional):                  │
+│  ┌─────────────────────────────────────┐    │
+│  │ (for automatic renewal)             │    │
+│  └─────────────────────────────────────┘    │
 │                                             │
-│  ┌─────────┐  ┌─────────┐                   │
-│  │ Avbryt  │  │  Klar   │                   │
-│  └─────────┘  └─────────┘                   │
+│  ┌─────────────────────────────────────┐    │
+│  │   Test Connection                    │    │
+│  └─────────────────────────────────────┘    │
+│                                             │
+│  Status: Ready                              │
+│                                             │
+│  ┌─────────┐  ┌──────────────────────┐      │
+│  │ Cancel  │  │  Save to Secrets     │      │
+│  └─────────┘  └──────────────────────┘      │
 └─────────────────────────────────────────────┘
 ```
 
-Steg i flödet:
-1. Visa modal med "Öppna NavVis"-knapp
-2. När användaren klickar: anropa `mandate-request`, öppna popup med `authorization_url`
-3. Starta polling (var 2 sek) mot `mandate-validate`
-4. När `authorized: true`: anropa `mandate-exchange`
-5. Visa "Ansluten!" och stäng modal
+**New Features:**
+- Text input for Access Token
+- Optional text input for Refresh Token
+- "Test Connection" button that validates the token against Ivion API
+- Token expiry detection with warning
+- "Save to Secrets" button that opens Cloud secrets panel
 
-### 4. Integration i API Settings
+### 2. Add Token Validation Action to Edge Function
 
-**Fil: `src/components/settings/ApiSettingsModal.tsx`**
+Add a new `validate-token` action to `ivion-poi/index.ts`:
 
-Lägg till en "Anslut"-knapp i Ivion-sektionen som öppnar `IvionConnectionModal`:
-
-```text
-┌─────────────────────────────────────────────┐
-│  360+ (Ivion)                               │
-├─────────────────────────────────────────────┤
-│  API URL:  [https://swg.iv.navvis.com    ]  │
-│                                             │
-│  Status: ❌ Ej ansluten                     │
-│                                             │
-│  ┌───────────────────────────────────────┐  │
-│  │  🔗  Anslut med NavVis OAuth          │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
+```typescript
+case 'validate-token':
+  // Validate a user-provided token by making a test API call
+  if (!params.access_token) throw new Error('access_token required');
+  try {
+    // Try to list sites or make a simple API call
+    const testResponse = await fetch(`${IVION_API_URL}/api/sites`, {
+      headers: {
+        'x-authorization': `Bearer ${params.access_token}`,
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (testResponse.ok) {
+      const sites = await testResponse.json();
+      result = {
+        success: true,
+        message: `Token valid! Found ${sites.length} sites.`,
+        siteCount: sites.length,
+      };
+    } else {
+      result = {
+        success: false,
+        error: `Token invalid: ${testResponse.status}`,
+      };
+    }
+  } catch (e) {
+    result = { success: false, error: e.message };
+  }
+  break;
 ```
 
-## Tekniska detaljer
+### 3. Remove Complex Mandate Flow (Optional Cleanup)
 
-### NavVis Mandate API-flöde
+The mandate-request, mandate-validate, and mandate-exchange actions can remain but won't be used by the simplified UI. They could be removed later for cleanup.
 
-```text
-1. POST /api/auth/mandate/request
-   Response: {
-     authorization_token: "abc123",
-     exchange_token: "xyz789",
-     authorization_url: "https://swg.iv.navvis.com/oauth/authorize?token=abc123"
-   }
+## Files to Modify
 
-2. Användaren öppnar authorization_url i popup
-   → Loggar in på NavVis (om inte redan inloggad)
-   → Klickar "Allow" för att godkänna mandatet
+| File | Action | Description |
+|------|--------|-------------|
+| `src/components/settings/IvionConnectionModal.tsx` | Rewrite | Replace OAuth popup flow with direct token input form |
+| `supabase/functions/ivion-poi/index.ts` | Add | New `validate-token` action |
 
-3. GET /api/auth/mandate/validate?authorization_token=abc123
-   Response: {
-     authorized: true,
-     expired: false
-   }
+## User Flow After Changes
 
-4. POST /api/auth/mandate/exchange
-   Body: { exchange_token: "xyz789" }
-   Response: {
-     access_token: "eyJ...",
-     refresh_token: "eyJ...",
-     principal: { username: "SWG_RC", ... }
-   }
-```
+1. User clicks "Connect with NavVis OAuth" in Settings -> APIs
+2. Modal opens with token input fields
+3. User pastes their access token (like `eyJhbGciOiJIUzI1NiJ9...`)
+4. User clicks "Test Connection" to verify it works
+5. System shows "Token valid! Found X sites."
+6. User is guided to save the token to Cloud secrets (IVION_ACCESS_TOKEN)
+7. Connection complete!
 
-### Token-hantering efter anslutning
+## Benefits
 
-- **Access token**: Cachas i edge function-minnet (~30 min)
-- **Refresh token**: Sparas i secrets för automatisk förnyelse (~7 dagar)
-- **Befintlig `getIvionToken()`**: Fortsätter fungera som tidigare men använder nya tokens
+1. **No authentication catch-22** - Works even when mandate endpoint requires auth
+2. **Simple and fast** - No popups, no polling, no waiting
+3. **Works with any valid token** - JWT from admin panel, API call, etc.
+4. **Token validation** - Immediately confirms if the token works
+5. **Expiry warning** - Shows when token will expire
 
-## Filer att ändra/skapa
+## Token Expiry Handling
 
-| Fil | Åtgärd | Beskrivning |
-|-----|--------|-------------|
-| `supabase/functions/ivion-poi/index.ts` | Ändra | Lägg till mandate-request/validate/exchange actions |
-| `src/components/settings/IvionConnectionModal.tsx` | Skapa | Ny modal för OAuth-flöde |
-| `src/components/settings/ApiSettingsModal.tsx` | Ändra | Lägg till "Anslut"-knapp för Ivion |
-
-## Fördelar med denna lösning
-
-1. **Fungerar med SSO/OAuth-instanser** - Ingen lokal autentisering krävs
-2. **Användarvänligt** - Visuellt flöde med tydlig feedback
-3. **Säkert** - Tokens hanteras via popup, aldrig exponerade i URL
-4. **Återanvändbart** - Refresh token möjliggör automatisk förnyelse i 7 dagar
-
-## Begränsningar
-
-- Kräver att användaren har ett NavVis-konto med rätt behörigheter
-- Refresh token måste förnyas manuellt var 7:e dag (eller automatiseras med schemalagt jobb)
-- Popup-blockerare kan störa flödet
+The modal will parse the JWT and show:
+- "Valid for 25 minutes" (if not expired)
+- "Token expired!" (if already expired)
+- Reminder that IVION_REFRESH_TOKEN enables automatic renewal
 
