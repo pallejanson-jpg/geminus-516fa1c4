@@ -2,7 +2,8 @@ import React, { useContext, useMemo, useState, useCallback, useEffect } from "re
 import { AppContext } from "@/context/AppContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { TreeNode, type NavigatorNode } from "@/components/navigator/TreeNode";
+import { type NavigatorNode } from "@/components/navigator/TreeNode";
+import { VirtualTree } from "@/components/navigator/VirtualTree";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { X, List, Network } from "lucide-react";
@@ -282,26 +283,20 @@ export default function NavigatorView() {
               onSelect={handleSearchResultSelect}
               emptyMessage="Inga resultat för din sökning"
             />
-          ) : visibleTree.length === 0 ? (
-            <div className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">
-              Inga objekt att visa.
-            </div>
           ) : (
-            <div className="space-y-0 sm:space-y-0.5 max-h-[calc(100vh-200px)] overflow-y-auto">
-              {visibleTree.map((node) => (
-                  <TreeNode
-                    key={node.fmGuid}
-                    node={node}
-                    expanded={expanded}
-                    onToggle={onToggle}
-                    onAddChild={handleAddChild}
-                    onView={handleView}
-                    onOpen3D={handleOpen3D}
-                    onOpen2D={handleOpen2D}
-                    onInventory={handleInventory}
-                    selectedFmGuids={selectedFmGuidSet}
-                  />
-              ))}
+            <div className="h-[calc(100vh-200px)]">
+              <VirtualTree
+                nodes={visibleTree}
+                expanded={expanded}
+                selectedFmGuids={selectedFmGuidSet}
+                scrollToFmGuid={aiSelectedFmGuids[0] || null}
+                onToggle={onToggle}
+                onAddChild={handleAddChild}
+                onView={handleView}
+                onOpen3D={handleOpen3D}
+                onOpen2D={handleOpen2D}
+                onInventory={handleInventory}
+              />
             </div>
           )}
         </div>
