@@ -19,6 +19,8 @@ const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
 // Onboarding wizard
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
+// Split Viewer - 3D + 360° side-by-side
+const SplitViewer = lazy(() => import("@/pages/SplitViewer"));
 
 const queryClient = new QueryClient();
 
@@ -87,6 +89,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <Onboarding />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Split Viewer - 3D + 360° side-by-side */}
+          <Route 
+            path="/split-viewer" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <SplitViewer />
                 </ProtectedRoute>
               </Suspense>
             } 
