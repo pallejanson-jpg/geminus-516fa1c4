@@ -8,8 +8,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,10 +15,10 @@ import {
   Loader2, 
   CheckCircle2, 
   AlertCircle, 
-  Clock,
-  Copy,
+  RefreshCw,
+  Server,
+  User,
   Key,
-  TestTube2,
   Shield
 } from 'lucide-react';
 
@@ -28,120 +26,115 @@ interface IvionConnectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConnected?: () => void;
+  buildingFmGuid?: string | null;
 }
 
-type ConnectionStatus = 'idle' | 'testing' | 'valid' | 'invalid' | 'expired';
+type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error';
 
-// Parse JWT to get expiry info
-function parseJwtExpiry(token: string): { expiresAt: Date | null; isExpired: boolean; minutesRemaining: number } {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return { expiresAt: null, isExpired: true, minutesRemaining: 0 };
-    
-    const payload = JSON.parse(atob(parts[1]));
-    const exp = payload.exp;
-    if (!exp) return { expiresAt: null, isExpired: true, minutesRemaining: 0 };
-    
-    const expiresAt = new Date(exp * 1000);
-    const now = new Date();
-    const isExpired = now >= expiresAt;
-    const minutesRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 60000));
-    
-    return { expiresAt, isExpired, minutesRemaining };
-  } catch {
-    return { expiresAt: null, isExpired: true, minutesRemaining: 0 };
-  }
+interface ConfigStatus {
+  hasApiUrl: boolean;
+  hasCredentials: boolean;
+  hasAccessToken: boolean;
+  hasRefreshToken: boolean;
+  apiUrlPreview: string;
+  usernamePreview: string;
+}
+
+interface TestResult {
+  success: boolean;
+  message: string;
+  siteCount?: number;
+  authMethod?: string;
 }
 
 const IvionConnectionModal: React.FC<IvionConnectionModalProps> = ({ 
   isOpen, 
   onClose,
-  onConnected 
+  onConnected,
+  buildingFmGuid 
 }) => {
   const { toast } = useToast();
   const [status, setStatus] = useState<ConnectionStatus>('idle');
-  const [accessToken, setAccessToken] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const [testResult, setTestResult] = useState<{ message: string; siteCount?: number } | null>(null);
-  const [tokenExpiry, setTokenExpiry] = useState<{ isExpired: boolean; minutesRemaining: number } | null>(null);
+  const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
 
-  // Reset state when modal opens
+  // Load configuration status when modal opens
   useEffect(() => {
     if (isOpen) {
-      setStatus('idle');
-      setAccessToken('');
-      setRefreshToken('');
-      setTestResult(null);
-      setTokenExpiry(null);
+      loadConfigStatus();
     }
   }, [isOpen]);
 
-  // Update expiry info when access token changes
-  useEffect(() => {
-    if (accessToken.trim()) {
-      const { isExpired, minutesRemaining } = parseJwtExpiry(accessToken);
-      setTokenExpiry({ isExpired, minutesRemaining });
-      if (isExpired) {
-        setStatus('expired');
-      } else if (status === 'expired') {
-        setStatus('idle');
-      }
-    } else {
-      setTokenExpiry(null);
-      if (status === 'expired') {
-        setStatus('idle');
-      }
-    }
-  }, [accessToken, status]);
-
-  // Test the provided token
-  const handleTestConnection = useCallback(async () => {
-    if (!accessToken.trim()) {
-      toast({
-        variant: 'destructive',
-        title: 'Token Required',
-        description: 'Please enter an access token to test.',
+  // Load config status from edge function
+  const loadConfigStatus = useCallback(async () => {
+    setIsLoadingConfig(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: { action: 'get-config-status' }
       });
-      return;
-    }
 
+      if (error) throw error;
+      setConfigStatus(data);
+    } catch (e: any) {
+      console.error('Failed to load config status:', e);
+      // Set default status if we can't load
+      setConfigStatus({
+        hasApiUrl: false,
+        hasCredentials: false,
+        hasAccessToken: false,
+        hasRefreshToken: false,
+        apiUrlPreview: '',
+        usernamePreview: '',
+      });
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  }, []);
+
+  // Test connection with automatic authentication
+  const handleTestConnection = useCallback(async () => {
     setStatus('testing');
     setTestResult(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('ivion-poi', {
         body: { 
-          action: 'validate-token',
-          access_token: accessToken.trim()
+          action: 'test-connection-auto',
+          buildingFmGuid
         }
       });
 
       if (error) throw error;
 
       if (data?.success) {
-        setStatus('valid');
+        setStatus('connected');
         setTestResult({
-          message: data.message || 'Token is valid!',
+          success: true,
+          message: data.message || 'Connected successfully!',
           siteCount: data.siteCount,
+          authMethod: data.authMethod,
         });
         toast({
-          title: 'Token Valid!',
-          description: `Found ${data.siteCount} sites in Ivion.`,
+          title: 'Ivion Connected!',
+          description: data.message,
         });
       } else {
-        setStatus('invalid');
+        setStatus('error');
         setTestResult({
-          message: data?.error || 'Token validation failed',
+          success: false,
+          message: data?.message || 'Connection failed',
         });
         toast({
           variant: 'destructive',
-          title: 'Invalid Token',
-          description: data?.error || 'The token could not be validated.',
+          title: 'Connection Failed',
+          description: data?.message || 'Could not connect to Ivion.',
         });
       }
     } catch (e: any) {
-      setStatus('invalid');
+      setStatus('error');
       setTestResult({
+        success: false,
         message: e.message || 'Connection test failed',
       });
       toast({
@@ -150,188 +143,188 @@ const IvionConnectionModal: React.FC<IvionConnectionModalProps> = ({
         description: e.message,
       });
     }
-  }, [accessToken, toast]);
+  }, [buildingFmGuid, toast]);
 
-  // Copy token to clipboard
-  const copyToClipboard = useCallback((text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: 'Copied!',
-      description: `${label} copied to clipboard.`,
-    });
-  }, [toast]);
-
-  // Handle save completion
-  const handleSaveComplete = useCallback(() => {
-    toast({
-      title: 'Connection Complete',
-      description: 'Update your Cloud secrets with the tokens to persist the connection.',
-    });
-    onConnected?.();
+  // Handle close
+  const handleClose = useCallback(() => {
+    if (status === 'connected') {
+      onConnected?.();
+    }
+    setStatus('idle');
+    setTestResult(null);
     onClose();
-  }, [toast, onConnected, onClose]);
+  }, [status, onConnected, onClose]);
 
   // Render status badge
   const renderStatusBadge = () => {
     switch (status) {
       case 'idle':
-        return <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />Ready</Badge>;
+        return <Badge variant="outline" className="gap-1">Ready to test</Badge>;
       case 'testing':
         return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" />Testing...</Badge>;
-      case 'valid':
-        return <Badge className="gap-1 bg-green-600"><CheckCircle2 className="h-3 w-3" />Valid</Badge>;
-      case 'invalid':
-        return <Badge variant="destructive" className="gap-1"><AlertCircle className="h-3 w-3" />Invalid</Badge>;
-      case 'expired':
-        return <Badge variant="destructive" className="gap-1"><Clock className="h-3 w-3" />Expired</Badge>;
+      case 'connected':
+        return <Badge className="gap-1 bg-green-600"><CheckCircle2 className="h-3 w-3" />Connected</Badge>;
+      case 'error':
+        return <Badge variant="destructive" className="gap-1"><AlertCircle className="h-3 w-3" />Error</Badge>;
       default:
         return null;
     }
   };
 
+  const isConfigured = configStatus?.hasApiUrl && (configStatus?.hasCredentials || configStatus?.hasAccessToken);
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            Connect to NavVis IVION
+            <Shield className="h-5 w-5" />
+            NavVis IVION Connection
           </DialogTitle>
           <DialogDescription>
-            Paste your NavVis access token below. You can get this from the NavVis admin panel or use an existing JWT token.
+            {isConfigured 
+              ? 'Credentials are configured. Click Test to verify the connection.'
+              : 'Configure IVION_USERNAME and IVION_PASSWORD in Cloud secrets to enable automatic authentication.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Access Token Input */}
-          <div className="space-y-2">
-            <Label htmlFor="access-token" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              Access Token
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="access-token"
-                type="password"
-                placeholder="eyJhbGciOiJIUzI1NiJ9..."
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                className="font-mono text-sm"
-              />
-              {accessToken && (
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => copyToClipboard(accessToken, 'Access Token')}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              )}
+          {/* Configuration Status */}
+          {isLoadingConfig ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading configuration...
             </div>
-            {tokenExpiry && (
-              <p className={`text-xs ${tokenExpiry.isExpired ? 'text-destructive' : 'text-muted-foreground'}`}>
-                {tokenExpiry.isExpired 
-                  ? '⚠️ Token expired!'
-                  : `✓ Valid for ~${tokenExpiry.minutesRemaining} minutes`}
-              </p>
-            )}
-          </div>
+          ) : configStatus ? (
+            <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+              <h4 className="text-sm font-medium">Configuration Status</h4>
+              
+              <div className="grid gap-2 text-sm">
+                {/* API URL */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-muted-foreground" />
+                    <span>API URL</span>
+                  </div>
+                  {configStatus.hasApiUrl ? (
+                    <span className="text-green-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {configStatus.apiUrlPreview}
+                    </span>
+                  ) : (
+                    <span className="text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Not set
+                    </span>
+                  )}
+                </div>
 
-          {/* Refresh Token Input (Optional) */}
-          <div className="space-y-2">
-            <Label htmlFor="refresh-token" className="flex items-center gap-2 text-muted-foreground">
-              <Key className="h-4 w-4" />
-              Refresh Token (optional)
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="refresh-token"
-                type="password"
-                placeholder="For automatic token renewal (~7 days validity)"
-                value={refreshToken}
-                onChange={(e) => setRefreshToken(e.target.value)}
-                className="font-mono text-sm"
-              />
-              {refreshToken && (
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => copyToClipboard(refreshToken, 'Refresh Token')}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+                {/* Username/Password */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>Username/Password</span>
+                  </div>
+                  {configStatus.hasCredentials ? (
+                    <span className="text-green-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {configStatus.usernamePreview}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Not set
+                    </span>
+                  )}
+                </div>
+
+                {/* Legacy tokens */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-muted-foreground" />
+                    <span>Legacy Tokens</span>
+                  </div>
+                  {configStatus.hasAccessToken || configStatus.hasRefreshToken ? (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Available (fallback)
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {!isConfigured && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Set IVION_API_URL, IVION_USERNAME, and IVION_PASSWORD in Cloud secrets.
+                </p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Save as IVION_REFRESH_TOKEN for automatic renewal
-            </p>
-          </div>
+          ) : null}
 
           {/* Test Connection Button */}
           <Button 
             onClick={handleTestConnection} 
-            disabled={!accessToken.trim() || status === 'testing'}
+            disabled={!isConfigured || status === 'testing'}
             className="w-full gap-2"
-            variant={status === 'valid' ? 'outline' : 'default'}
+            variant={status === 'connected' ? 'outline' : 'default'}
           >
             {status === 'testing' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <TestTube2 className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
             )}
-            Test Connection
+            {status === 'connected' ? 'Test Again' : 'Test Connection'}
           </Button>
 
-          {/* Status & Test Result */}
+          {/* Status Display */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Status:</span>
             {renderStatusBadge()}
           </div>
 
+          {/* Test Result */}
           {testResult && (
             <div className={`p-3 rounded-lg border ${
-              status === 'valid' 
+              testResult.success 
                 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900' 
                 : 'bg-destructive/10 border-destructive/20'
             }`}>
               <p className={`text-sm ${
-                status === 'valid' 
+                testResult.success 
                   ? 'text-green-700 dark:text-green-300' 
                   : 'text-destructive'
               }`}>
                 {testResult.message}
-                {testResult.siteCount !== undefined && (
+                {testResult.siteCount !== undefined && testResult.success && (
                   <span className="block mt-1 font-medium">
                     Found {testResult.siteCount} site{testResult.siteCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {testResult.authMethod && testResult.success && (
+                  <span className="block text-xs mt-1 opacity-70">
+                    Authenticated via {testResult.authMethod}
                   </span>
                 )}
               </p>
             </div>
           )}
 
-          {/* Instructions for saving to secrets */}
-          {status === 'valid' && (
+          {/* Success message */}
+          {status === 'connected' && (
             <div className="p-3 bg-muted rounded-lg border">
               <p className="text-sm text-muted-foreground">
-                <strong>Next steps:</strong> Update your Cloud secrets to persist this connection:
+                <strong>✓ Connection established!</strong> Tokens are cached automatically.
+                AI scanning and other Ivion features are now ready to use.
               </p>
-              <ul className="text-xs text-muted-foreground mt-2 space-y-1 list-disc list-inside">
-                <li>IVION_ACCESS_TOKEN - The token you just tested</li>
-                {refreshToken && <li>IVION_REFRESH_TOKEN - For automatic renewal</li>}
-              </ul>
             </div>
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleSaveComplete}
-            disabled={status !== 'valid'}
-          >
-            Done
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            {status === 'connected' ? 'Done' : 'Close'}
           </Button>
         </DialogFooter>
       </DialogContent>
