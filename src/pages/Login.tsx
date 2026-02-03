@@ -44,7 +44,7 @@ const Login: React.FC = () => {
       
       if (error) {
         console.error('Google sign-in error:', error);
-        toast.error('Kunde inte logga in med Google', {
+        toast.error('Could not sign in with Google', {
           description: error.message,
         });
         setIsLoading(false);
@@ -52,7 +52,7 @@ const Login: React.FC = () => {
       // If no error, the user will be redirected
     } catch (e) {
       console.error('Sign-in error:', e);
-      toast.error('Ett fel uppstod vid inloggning');
+      toast.error('An error occurred during sign-in');
       setIsLoading(false);
     }
   };
@@ -69,9 +69,9 @@ const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Välkommen till AssetPlus</CardTitle>
+          <CardTitle className="text-2xl">Welcome to Geminus</CardTitle>
           <CardDescription>
-            Logga in för att få tillgång till byggnadsdata och 3D-modeller
+            Sign in to access building data and 3D models
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -103,11 +103,11 @@ const Login: React.FC = () => {
                 />
               </svg>
             )}
-            Logga in med Google
+            Sign in with Google
           </Button>
           
           <p className="text-xs text-center text-muted-foreground">
-            Genom att logga in godkänner du våra användarvillkor och integritetspolicy.
+            By signing in, you agree to our terms of service and privacy policy.
           </p>
         </CardContent>
       </Card>
