@@ -1,126 +1,179 @@
 
 
-# Plan: Simplify Ivion Connection to Direct Token Input
+# Plan: Automatisera Ivion-inloggning för AI-skanning
 
-## Problem
-The current OAuth mandate flow fails with "Full authentication is required" because the NavVis `/api/auth/mandate/request` endpoint itself requires authentication - creating a catch-22 situation.
+## Sammanfattning
 
-## Solution
-Replace the complex mandate flow with a simple **direct token input** modal where users can paste their existing access token (like the one you already have).
+Istället för att du ska klistra in tokens manuellt kommer systemet att:
+1. **Logga in automatiskt** med username/password när AI-skanningen startar
+2. **Spara tokens i databasen** så att de kan förnyas automatiskt
+3. **Förnya automatiskt** när tokens håller på att gå ut
+4. **Visa tydlig status** om något går fel
 
-## Changes
+Du behöver aldrig röra F12, tokens eller liknande igen.
 
-### 1. Redesign IvionConnectionModal.tsx
+## Arkitektur
 
-Replace the OAuth popup flow with a simple form:
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    AI SCAN STARTS                                       │
+│                         │                                               │
+│                         ▼                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  1. Check building_settings for stored tokens                       ││
+│  │     └── ivion_access_token, ivion_refresh_token, expires_at         ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                         │                                               │
+│        ┌────────────────┼────────────────┐                              │
+│        │                │                │                              │
+│        ▼                ▼                ▼                              │
+│   Token valid?      Token expired?   No token?                          │
+│        │                │                │                              │
+│        ▼                ▼                ▼                              │
+│    Use token    Use refresh_token   Login with                          │
+│                  to get new one     username/password                   │
+│        │                │                │                              │
+│        └────────────────┼────────────────┘                              │
+│                         │                                               │
+│                         ▼                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  2. Save new tokens to building_settings (database)                 ││
+│  │     → access_token, refresh_token, expires_at                       ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│                         │                                               │
+│                         ▼                                               │
+│                 3. Continue with scan                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Ändringar
+
+### 1. Utöka `building_settings`-tabellen
+
+Lägg till tre nya kolumner för att lagra tokens per byggnad:
+
+| Kolumn | Typ | Beskrivning |
+|--------|-----|-------------|
+| `ivion_access_token` | text | JWT access token (~30 min) |
+| `ivion_refresh_token` | text | Refresh token (~7 dagar) |
+| `ivion_token_expires_at` | timestamptz | När access_token går ut |
+
+### 2. Uppdatera `getIvionToken()` i edge functions
+
+Ny prioritetsordning för att hämta token:
+
+```text
+1. Check building_settings in database
+   └── If valid access_token exists → use it
+   └── If expired but refresh_token exists → refresh and save new tokens
+   
+2. Fallback to IVION_USERNAME/PASSWORD from secrets
+   └── Login via /api/auth/generate_tokens
+   └── Save both tokens to building_settings
+   
+3. Last resort: use IVION_ACCESS_TOKEN from secrets (legacy)
+```
+
+Tokenerna sparas nu tillbaka till databasen efter varje förnyelse, så nästa anrop använder den sparade versionen.
+
+### 3. Förenkla IvionConnectionModal
+
+Byt från "klistra in token" till ett enkelt formulär:
 
 ```text
 ┌─────────────────────────────────────────────┐
 │      Connect to NavVis IVION                │
 ├─────────────────────────────────────────────┤
 │                                             │
-│  Paste your NavVis access token below.      │
-│  You can get this from the NavVis admin     │
-│  panel or use an existing JWT token.        │
+│  Credentials are already configured.        │
+│  Click Test to verify the connection.       │
 │                                             │
-│  Access Token:                              │
-│  ┌─────────────────────────────────────┐    │
-│  │ eyJhbGciOiJIUzI1NiJ9...             │    │
-│  └─────────────────────────────────────┘    │
-│                                             │
-│  Refresh Token (optional):                  │
-│  ┌─────────────────────────────────────┐    │
-│  │ (for automatic renewal)             │    │
-│  └─────────────────────────────────────┘    │
+│  Username: SWG_***                          │
+│  Instance: swg.iv.navvis.com                │
 │                                             │
 │  ┌─────────────────────────────────────┐    │
-│  │   Test Connection                    │    │
+│  │       Test Connection               │    │
 │  └─────────────────────────────────────┘    │
 │                                             │
-│  Status: Ready                              │
+│  Status: ✓ Connected (token valid 25 min)   │
 │                                             │
-│  ┌─────────┐  ┌──────────────────────┐      │
-│  │ Cancel  │  │  Save to Secrets     │      │
-│  └─────────┘  └──────────────────────┘      │
 └─────────────────────────────────────────────┘
 ```
 
-**New Features:**
-- Text input for Access Token
-- Optional text input for Refresh Token
-- "Test Connection" button that validates the token against Ivion API
-- Token expiry detection with warning
-- "Save to Secrets" button that opens Cloud secrets panel
+Användaren behöver bara klicka "Test" för att verifiera att konfigurationen fungerar.
 
-### 2. Add Token Validation Action to Edge Function
+### 4. Automatisk reconnect vid AI-skanning
 
-Add a new `validate-token` action to `ivion-poi/index.ts`:
+I `ai-asset-detection/index.ts`:
 
-```typescript
-case 'validate-token':
-  // Validate a user-provided token by making a test API call
-  if (!params.access_token) throw new Error('access_token required');
-  try {
-    // Try to list sites or make a simple API call
-    const testResponse = await fetch(`${IVION_API_URL}/api/sites`, {
-      headers: {
-        'x-authorization': `Bearer ${params.access_token}`,
-        'Accept': 'application/json',
-      },
-    });
-    
-    if (testResponse.ok) {
-      const sites = await testResponse.json();
-      result = {
-        success: true,
-        message: `Token valid! Found ${sites.length} sites.`,
-        siteCount: sites.length,
-      };
-    } else {
-      result = {
-        success: false,
-        error: `Token invalid: ${testResponse.status}`,
-      };
-    }
-  } catch (e) {
-    result = { success: false, error: e.message };
-  }
-  break;
+**Före skanning startar:**
+1. Anropa `getIvionToken(buildingFmGuid)` som nu inkluderar auto-login
+2. Om det lyckas → fortsätt med skanning
+3. Om det misslyckas → returnera tydligt felmeddelande till UI
+
+**I UI (`ScanConfigPanel.tsx`):**
+- Visa Ivion-status innan användaren startar skanning
+- "Ivion connected ✓" eller "Ivion: authentication required"
+
+## Filer att ändra
+
+| Fil | Åtgärd | Beskrivning |
+|-----|--------|-------------|
+| `supabase/migrations/` | Skapa | Lägg till token-kolumner i building_settings |
+| `supabase/functions/ivion-poi/index.ts` | Ändra | Uppdatera getIvionToken() för db-lagring |
+| `supabase/functions/ai-asset-detection/index.ts` | Ändra | Uppdatera getIvionToken() för db-lagring |
+| `src/components/settings/IvionConnectionModal.tsx` | Förenkla | Visa status istället för token-input |
+| `src/components/ai-scan/ScanConfigPanel.tsx` | Ändra | Visa Ivion-anslutningsstatus |
+
+## Tekniska detaljer
+
+### Token-flödet i detalj
+
+```text
+getIvionToken(buildingFmGuid):
+  
+  1. Query building_settings for this building
+     
+  2. IF ivion_access_token exists AND not expired:
+       → Return access_token (fastest path)
+     
+  3. ELSE IF ivion_refresh_token exists:
+       → POST /api/auth/refresh_access_token
+       → Save new access_token + refresh_token to DB
+       → Return new access_token
+     
+  4. ELSE IF IVION_USERNAME + IVION_PASSWORD in secrets:
+       → POST /api/auth/generate_tokens
+       → Save access_token + refresh_token to DB
+       → Return access_token
+     
+  5. ELSE IF IVION_ACCESS_TOKEN in secrets (legacy):
+       → Return if not expired
+     
+  6. ELSE:
+       → Throw error: "Ivion not configured"
 ```
 
-### 3. Remove Complex Mandate Flow (Optional Cleanup)
+### Databasuppdatering efter login
 
-The mandate-request, mandate-validate, and mandate-exchange actions can remain but won't be used by the simplified UI. They could be removed later for cleanup.
+```sql
+UPDATE building_settings 
+SET 
+  ivion_access_token = 'eyJ...',
+  ivion_refresh_token = 'eyJ...',
+  ivion_token_expires_at = '2026-02-03T12:30:00Z'
+WHERE fm_guid = 'building-uuid';
+```
 
-## Files to Modify
+## Resultat
 
-| File | Action | Description |
-|------|--------|-------------|
-| `src/components/settings/IvionConnectionModal.tsx` | Rewrite | Replace OAuth popup flow with direct token input form |
-| `supabase/functions/ivion-poi/index.ts` | Add | New `validate-token` action |
+Efter implementationen:
 
-## User Flow After Changes
+1. **Du konfigurerar en gång:** Username/password i Cloud secrets (redan gjort!)
+2. **Första AI-skanningen:** Systemet loggar in automatiskt och sparar tokens
+3. **Efterföljande skanningar:** Systemet använder sparade tokens
+4. **Tokens går ut:** Systemet förnyar automatiskt med refresh_token
+5. **Refresh_token går ut (efter ~7 dagar):** Systemet loggar in igen automatiskt med username/password
 
-1. User clicks "Connect with NavVis OAuth" in Settings -> APIs
-2. Modal opens with token input fields
-3. User pastes their access token (like `eyJhbGciOiJIUzI1NiJ9...`)
-4. User clicks "Test Connection" to verify it works
-5. System shows "Token valid! Found X sites."
-6. User is guided to save the token to Cloud secrets (IVION_ACCESS_TOKEN)
-7. Connection complete!
-
-## Benefits
-
-1. **No authentication catch-22** - Works even when mandate endpoint requires auth
-2. **Simple and fast** - No popups, no polling, no waiting
-3. **Works with any valid token** - JWT from admin panel, API call, etc.
-4. **Token validation** - Immediately confirms if the token works
-5. **Expiry warning** - Shows when token will expire
-
-## Token Expiry Handling
-
-The modal will parse the JWT and show:
-- "Valid for 25 minutes" (if not expired)
-- "Token expired!" (if already expired)
-- Reminder that IVION_REFRESH_TOKEN enables automatic renewal
+Du behöver aldrig röra tokens manuellt igen.
 
