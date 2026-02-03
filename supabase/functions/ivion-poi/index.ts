@@ -725,6 +725,41 @@ serve(async (req) => {
           };
         }
         break;
+
+      // ================== VALIDATE TOKEN ==================
+      case 'validate-token':
+        // Validate a user-provided token by making a test API call
+        if (!params.access_token) throw new Error('access_token required');
+        try {
+          // Try to list sites to verify the token works
+          const testResponse = await fetch(`${IVION_API_URL}/api/sites`, {
+            headers: {
+              'x-authorization': `Bearer ${params.access_token}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (testResponse.ok) {
+            const sites = await testResponse.json();
+            result = {
+              success: true,
+              message: `Token valid! Found ${Array.isArray(sites) ? sites.length : 0} sites.`,
+              siteCount: Array.isArray(sites) ? sites.length : 0,
+            };
+          } else {
+            const errorText = await testResponse.text();
+            result = {
+              success: false,
+              error: `Token invalid: ${testResponse.status} - ${errorText.slice(0, 100)}`,
+            };
+          }
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`);
