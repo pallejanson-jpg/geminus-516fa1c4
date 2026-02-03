@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,8 @@ import { ViewerSyncProvider, useViewerSync } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
-const IVION_BASE_URL = 'https://swg.iv.navvis.com';
+const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
 interface SplitViewerContentProps {
   buildingFmGuid: string;
@@ -25,11 +24,16 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   ivionSiteId,
 }) => {
   const navigate = useNavigate();
+  const { appConfigs } = useContext(AppContext);
   const { syncLocked, setSyncLocked, syncState, resetSync } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Construct Ivion URL
-  const ivionUrl = `${IVION_BASE_URL}/main.html?site=${ivionSiteId}`;
+  // Construct Ivion URL using config (same pattern as IvionInventory)
+  const configured = appConfigs?.radar?.url?.trim();
+  const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_FALLBACK_URL;
+  const ivionUrl = `${baseUrl}/?site=${ivionSiteId}`;
+
+  console.log('[SplitViewer] Ivion URL:', ivionUrl);
 
   // Handle sync state changes - this is where the magic happens
   useEffect(() => {
