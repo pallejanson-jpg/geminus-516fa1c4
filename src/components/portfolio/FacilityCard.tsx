@@ -1,18 +1,30 @@
 import React from 'react';
-import { MapPin, Building2, Layers, LayoutGrid } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MapPin, Building2, Layers, LayoutGrid, Split } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Facility } from '@/lib/types';
 
 interface FacilityCardProps {
   facility: Facility;
   onClick: (facility: Facility) => void;
+  showSplitViewButton?: boolean;
 }
 
-const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick }) => {
+const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSplitViewButton = true }) => {
+  const navigate = useNavigate();
   const heroImage = facility.image || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop';
   const title = facility.commonName || facility.name || 'Unnamed';
   const address = facility.address || facility.designation || 'No address';
+  
+  const handleSplitViewClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (facility.fmGuid) {
+      navigate(`/split-viewer?building=${facility.fmGuid}`);
+    }
+  };
   
   return (
     <Card 
@@ -37,6 +49,25 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick }) => {
         <Badge className="absolute top-2 sm:top-3 right-2 sm:right-3 bg-primary/90 text-primary-foreground text-xs">
           {facility.category || 'Building'}
         </Badge>
+        
+        {/* Split View Button - only for buildings */}
+        {showSplitViewButton && (facility.category === 'Building' || facility.category === 'IfcBuilding') && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 h-8 w-8 bg-background/90 hover:bg-background shadow-lg"
+                onClick={handleSplitViewClick}
+              >
+                <Split className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Öppna 3D + 360°</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
       
       {/* Stats Section */}
