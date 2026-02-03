@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { AppProvider } from '@/context/AppContext';
 import LeftSidebar from './LeftSidebar';
 import AppHeader from './AppHeader';
 import RightSidebar from './RightSidebar';
@@ -92,11 +91,7 @@ const AppLayoutInner: React.FC = () => {
 };
 
 const AppLayout: React.FC = () => {
-    return (
-        <AppProvider>
-            <AppLayoutInner />
-        </AppProvider>
-    );
+    return <AppLayoutInner />;
 };
 
 export default AppLayout;
