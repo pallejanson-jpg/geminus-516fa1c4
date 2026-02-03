@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getIvionToken, testIvionConnection, getIvionConfigStatus, isTokenExpired } from "../_shared/ivion-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,12 +13,8 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 
-// Ivion credentials
+// Ivion API URL
 const IVION_API_URL = (Deno.env.get('IVION_API_URL') || '').trim().replace(/\/+$/, '');
-const IVION_USERNAME = (Deno.env.get('IVION_USERNAME') || '').trim();
-const IVION_PASSWORD = (Deno.env.get('IVION_PASSWORD') || '').trim();
-const IVION_ACCESS_TOKEN = (Deno.env.get('IVION_ACCESS_TOKEN') || '').trim();
-const IVION_REFRESH_TOKEN = (Deno.env.get('IVION_REFRESH_TOKEN') || '').trim();
 
 // Types
 interface DetectionTemplate {
@@ -29,7 +26,7 @@ interface DetectionTemplate {
   default_symbol_id: string | null;
   default_category: string | null;
   is_active: boolean;
-  example_images: string[] | null; // URLs to example images for few-shot learning
+  example_images: string[] | null;
 }
 
 interface ExtractedProperties {
@@ -46,7 +43,7 @@ interface ExtractedProperties {
 interface Detection {
   object_type: string;
   confidence: number;
-  bounding_box: [number, number, number, number]; // [ymin, xmin, ymax, xmax]
+  bounding_box: [number, number, number, number];
   description: string;
   extracted_properties?: ExtractedProperties;
 }
@@ -79,110 +76,6 @@ interface IvionImage {
     orientation?: { x: number; y: number; z: number; w: number };
   };
   timestamp?: number;
-}
-
-// Cached Ivion token
-let cachedToken: string | null = null;
-
-function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return true;
-    const payload = JSON.parse(atob(parts[1]));
-    const exp = payload.exp;
-    if (!exp) return true;
-    const now = Math.floor(Date.now() / 1000);
-    return now >= (exp - 60);
-  } catch {
-    return true;
-  }
-}
-
-async function getIvionToken(): Promise<string> {
-  // 1. Check cached token first
-  if (cachedToken && !isTokenExpired(cachedToken)) {
-    console.log('Using cached Ivion token');
-    return cachedToken;
-  }
-  
-  // 2. Try existing access token if still valid
-  if (IVION_ACCESS_TOKEN && !isTokenExpired(IVION_ACCESS_TOKEN)) {
-    console.log('Using provided IVION_ACCESS_TOKEN (still valid)');
-    return IVION_ACCESS_TOKEN;
-  }
-  
-  // 3. Try to refresh using IVION_REFRESH_TOKEN
-  if (IVION_REFRESH_TOKEN) {
-    console.log('Attempting to refresh access token using IVION_REFRESH_TOKEN...');
-    try {
-      const refreshResponse = await fetch(`${IVION_API_URL}/api/auth/refresh_access_token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ refresh_token: IVION_REFRESH_TOKEN }),
-      });
-      
-      if (refreshResponse.ok) {
-        const data = await refreshResponse.json();
-        if (data.access_token) {
-          console.log('Successfully refreshed access token via refresh_token');
-          cachedToken = data.access_token;
-          return data.access_token;
-        }
-      } else {
-        const errorText = await refreshResponse.text();
-        console.log(`Refresh token request failed: ${refreshResponse.status} - ${errorText.slice(0, 200)}`);
-      }
-    } catch (e) {
-      console.log(`Refresh token error: ${e}`);
-    }
-  }
-  
-  // 4. NEW: Login with username/password via /api/auth/generate_tokens
-  if (IVION_USERNAME && IVION_PASSWORD) {
-    console.log('Attempting login with username/password via /api/auth/generate_tokens...');
-    try {
-      const loginResponse = await fetch(`${IVION_API_URL}/api/auth/generate_tokens`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          username: IVION_USERNAME,
-          password: IVION_PASSWORD,
-        }),
-      });
-      
-      if (loginResponse.ok) {
-        const data = await loginResponse.json();
-        if (data.access_token) {
-          console.log('Successfully obtained access token via username/password login');
-          cachedToken = data.access_token;
-          return data.access_token;
-        }
-      } else {
-        const errorText = await loginResponse.text();
-        console.log(`Username/password login failed: ${loginResponse.status} - ${errorText.slice(0, 200)}`);
-      }
-    } catch (e) {
-      console.log(`Username/password login error: ${e}`);
-    }
-  }
-  
-  // All methods failed
-  const hasCredentials = IVION_USERNAME && IVION_PASSWORD;
-  const hasTokens = IVION_ACCESS_TOKEN || IVION_REFRESH_TOKEN;
-  
-  throw new Error(
-    `Ivion authentication failed. ` +
-    (hasCredentials 
-      ? 'Username/password login was attempted but failed - ensure credentials are for a LOCAL account (not SSO/OAuth). '
-      : 'No IVION_USERNAME/IVION_PASSWORD configured. ') +
-    (hasTokens
-      ? 'Provided tokens are expired or invalid. '
-      : 'No IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN configured. ') +
-    'Ensure the Ivion instance supports local authentication.'
-  );
 }
 
 // Get detection templates
