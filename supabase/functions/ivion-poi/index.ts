@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getIvionToken, testIvionConnection, getIvionConfigStatus, isTokenExpired } from "../_shared/ivion-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  // Match Supabase web client preflight headers (keep permissive)
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
@@ -12,45 +12,20 @@ function normalizeBaseUrl(url: string): string {
   return (url || '').trim().replace(/\/+$/, '');
 }
 
-// Ivion API credentials from secrets
-// NOTE: NavVis IVION uses OAuth mandate-based login which requires user interaction.
-// For automated access, provide:
-// - IVION_REFRESH_TOKEN (7 day validity) for automatic access token renewal
-// - IVION_ACCESS_TOKEN (30 min validity) as fallback
+// Ivion API URL from secrets
 const IVION_API_URL = normalizeBaseUrl(Deno.env.get('IVION_API_URL') || '');
-const IVION_USERNAME = (Deno.env.get('IVION_USERNAME') || '').trim();
-const IVION_PASSWORD = (Deno.env.get('IVION_PASSWORD') || '').trim();
-const IVION_ACCESS_TOKEN = (Deno.env.get('IVION_ACCESS_TOKEN') || '').trim();
-const IVION_REFRESH_TOKEN = (Deno.env.get('IVION_REFRESH_TOKEN') || '').trim();
 
 // Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-interface IvionTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
-type AuthAttempt = {
-  method: string;
-  url: string;
-  status?: number;
-  redirectedTo?: string | null;
-  bodyPreview?: string;
-  error?: string;
-};
-
 interface IvionPoi {
   id?: number;
   titles: Record<string, string>;
   descriptions: Record<string, string>;
-  // For reading existing POIs (legacy format)
   location?: { x: number; y: number; z: number };
   orientation?: { x: number; y: number; z: number; w: number };
   poiType?: { id: number };
-  // For creating new POIs (required fields)
   scsLocation?: {
     type: 'Point';
     coordinates: [number, number, number];
@@ -73,133 +48,22 @@ interface IvionPoi {
   icon?: string;
 }
 
-// Check if JWT token is expired
-function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return true;
-    
-    const payload = JSON.parse(atob(parts[1]));
-    const exp = payload.exp;
-    if (!exp) return true;
-    
-    // Add 60 second buffer before actual expiration
-    const now = Math.floor(Date.now() / 1000);
-    return now >= (exp - 60);
-  } catch {
-    return true;
-  }
-}
-
-// Cached token from login
-let cachedToken: string | null = null;
-let cachedTokenExpiry: number = 0;
-
-// Get auth token from Ivion - try multiple auth methods
-async function getIvionToken(): Promise<string> {
-  // 1. Check cached token first
-  if (cachedToken && !isTokenExpired(cachedToken)) {
-    console.log('Using cached Ivion token');
-    return cachedToken;
-  }
-  
-  // 2. If IVION_ACCESS_TOKEN is provided and not expired, use it
-  if (IVION_ACCESS_TOKEN && !isTokenExpired(IVION_ACCESS_TOKEN)) {
-    console.log('Using provided IVION_ACCESS_TOKEN (still valid)');
-    return IVION_ACCESS_TOKEN;
-  }
-  
-  // 3. Try to refresh using IVION_REFRESH_TOKEN if available
-  if (IVION_REFRESH_TOKEN) {
-    console.log('Attempting to refresh access token using IVION_REFRESH_TOKEN...');
-    try {
-      const refreshResponse = await fetch(`${IVION_API_URL}/api/auth/refresh_access_token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ refresh_token: IVION_REFRESH_TOKEN }),
-      });
-      
-      if (refreshResponse.ok) {
-        const data = await refreshResponse.json();
-        if (data.access_token) {
-          console.log('Successfully refreshed access token via refresh_token');
-          cachedToken = data.access_token;
-          return data.access_token;
-        }
-      } else {
-        const errorText = await refreshResponse.text();
-        console.log(`Refresh token request failed: ${refreshResponse.status} - ${errorText.slice(0, 200)}`);
-      }
-    } catch (e) {
-      console.log(`Refresh token error: ${e}`);
-    }
-  }
-  
-  // 4. NEW: Login with username/password via /api/auth/generate_tokens
-  if (IVION_USERNAME && IVION_PASSWORD) {
-    console.log('Attempting login with username/password via /api/auth/generate_tokens...');
-    try {
-      const loginResponse = await fetch(`${IVION_API_URL}/api/auth/generate_tokens`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          username: IVION_USERNAME,
-          password: IVION_PASSWORD,
-        }),
-      });
-      
-      if (loginResponse.ok) {
-        const data = await loginResponse.json();
-        if (data.access_token) {
-          console.log('Successfully obtained access token via username/password login');
-          cachedToken = data.access_token;
-          return data.access_token;
-        }
-      } else {
-        const errorText = await loginResponse.text();
-        console.log(`Username/password login failed: ${loginResponse.status} - ${errorText.slice(0, 200)}`);
-      }
-    } catch (e) {
-      console.log(`Username/password login error: ${e}`);
-    }
-  }
-  
-  // All methods failed
-  const hasCredentials = IVION_USERNAME && IVION_PASSWORD;
-  const hasTokens = IVION_ACCESS_TOKEN || IVION_REFRESH_TOKEN;
-  
-  throw new Error(
-    `Ivion authentication failed. ` +
-    (hasCredentials 
-      ? 'Username/password login was attempted but failed - ensure credentials are for a LOCAL account (not SSO/OAuth). '
-      : 'No IVION_USERNAME/IVION_PASSWORD configured. ') +
-    (hasTokens
-      ? 'Provided tokens are expired or invalid. '
-      : 'No IVION_ACCESS_TOKEN or IVION_REFRESH_TOKEN configured. ') +
-    'Ensure the Ivion instance supports local authentication.'
-  );
-}
-
-// Test connection to Ivion
+// Test connection to Ivion (legacy - use test-connection-auto instead)
 async function testConnection(): Promise<{ success: boolean; message: string; details?: string }> {
   try {
     const token = await getIvionToken();
+    const configStatus = getIvionConfigStatus();
     return { 
       success: true, 
       message: 'Successfully connected to Ivion API',
-      details: `Token obtained (${token.substring(0, 10)}...)` 
+      details: `Token obtained (${token.substring(0, 10)}...), URL: ${configStatus.apiUrlPreview}` 
     };
   } catch (error: any) {
+    const configStatus = getIvionConfigStatus();
     return { 
       success: false, 
       message: error.message,
-      details: `URL: ${IVION_API_URL}, Username: ${IVION_USERNAME ? IVION_USERNAME.substring(0, 3) + '***' : 'NOT SET'}`
+      details: `URL: ${configStatus.apiUrlPreview}, Username: ${configStatus.usernamePreview || 'NOT SET'}`
     };
   }
 }
@@ -542,23 +406,32 @@ serve(async (req) => {
       case 'test-auth':
         // Returns detailed auth diagnostics; safe to expose (no passwords, only statuses and short previews)
         try {
-          const token = await getIvionToken();
+          const token = await getIvionToken(params.buildingFmGuid);
+          const configStatus = getIvionConfigStatus();
           result = {
             success: true,
             message: 'Token obtained',
             tokenPreview: token ? token.substring(0, 12) + '...' : null,
-            usingExplicitToken: !!IVION_ACCESS_TOKEN,
+            ...configStatus,
           };
         } catch (e: any) {
+          const configStatus = getIvionConfigStatus();
           result = {
             success: false,
             message: e?.message || String(e),
-            usingExplicitToken: !!IVION_ACCESS_TOKEN,
-            hasApiUrl: !!IVION_API_URL,
-            hasUsername: !!IVION_USERNAME,
-            hasPassword: !!IVION_PASSWORD,
+            ...configStatus,
           };
         }
+        break;
+
+      case 'test-connection-auto':
+        // Test connection with automatic authentication (includes buildingFmGuid for token caching)
+        result = await testIvionConnection(params.buildingFmGuid);
+        break;
+
+      case 'get-config-status':
+        // Get configuration status for UI display
+        result = getIvionConfigStatus();
         break;
         
       case 'get-pois':
@@ -705,10 +578,7 @@ serve(async (req) => {
           
           const exchangeData = await exchangeResponse.json();
           
-          // Cache the new access token for immediate use
-          if (exchangeData.access_token) {
-            cachedToken = exchangeData.access_token;
-          }
+          // Note: Token caching is now handled by ivion-auth.ts
           
           result = {
             success: true,

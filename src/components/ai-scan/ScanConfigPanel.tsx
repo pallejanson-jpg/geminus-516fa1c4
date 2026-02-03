@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Scan, AlertCircle, CheckCircle2, Info, Download, Loader2 } from 'lucide-react';
+import { Building2, Scan, AlertCircle, CheckCircle2, Info, Download, Loader2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -43,6 +44,12 @@ interface DownloadTestResult {
   error?: string;
 }
 
+interface IvionStatus {
+  connected: boolean;
+  message: string;
+  authMethod?: string;
+}
+
 interface ScanConfigPanelProps {
   templates: DetectionTemplate[];
   buildings: Building[];
@@ -61,6 +68,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   const [isStarting, setIsStarting] = useState(false);
   const [isTestingAccess, setIsTestingAccess] = useState(false);
   const [isTestingDownload, setIsTestingDownload] = useState(false);
+  const [isCheckingIvion, setIsCheckingIvion] = useState(false);
+  const [ivionStatus, setIvionStatus] = useState<IvionStatus | null>(null);
   const [accessTestResult, setAccessTestResult] = useState<{
     success: boolean;
     message: string;
@@ -73,6 +82,15 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   useEffect(() => {
     loadBuildingSettings();
   }, []);
+
+  // Check Ivion connection when building is selected
+  useEffect(() => {
+    if (selectedBuilding && buildingSettings[selectedBuilding]?.ivion_site_id) {
+      checkIvionConnection();
+    } else {
+      setIvionStatus(null);
+    }
+  }, [selectedBuilding, buildingSettings]);
 
   const loadBuildingSettings = async () => {
     setLoadingSettings(true);
@@ -92,6 +110,36 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
       console.error('Failed to load building settings:', error);
     } finally {
       setLoadingSettings(false);
+    }
+  };
+
+  // Check Ivion connection status (auto-authenticates)
+  const checkIvionConnection = async () => {
+    setIsCheckingIvion(true);
+    setIvionStatus(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: { 
+          action: 'test-connection-auto',
+          buildingFmGuid: selectedBuilding
+        }
+      });
+
+      if (error) throw error;
+
+      setIvionStatus({
+        connected: data?.success || false,
+        message: data?.message || 'Unknown status',
+        authMethod: data?.authMethod,
+      });
+    } catch (error: any) {
+      setIvionStatus({
+        connected: false,
+        message: error.message || 'Connection check failed',
+      });
+    } finally {
+      setIsCheckingIvion(false);
     }
   };
 
@@ -282,13 +330,49 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
 
               {selectedBuilding && (
                 <div className="space-y-3">
+                  {/* Ivion Connection Status */}
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                    {isCheckingIvion ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Kontrollerar Ivion-anslutning...</span>
+                      </>
+                    ) : ivionStatus?.connected ? (
+                      <>
+                        <Wifi className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-700 dark:text-green-400">
+                          Ivion ansluten
+                        </span>
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                          {ivionStatus.authMethod === 'credentials' ? 'Auto-inloggad' : 'Token'}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <WifiOff className="h-4 w-4 text-destructive" />
+                        <span className="text-sm text-destructive">
+                          {ivionStatus?.message || 'Ivion ej ansluten'}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={checkIvionConnection}
+                          className="ml-auto"
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Försök igen
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
                   {/* Quick access test */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={testImageAccess}
-                      disabled={isTestingAccess || isTestingDownload}
+                      disabled={isTestingAccess || isTestingDownload || !ivionStatus?.connected}
                     >
                       {isTestingAccess ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                       {isTestingAccess ? 'Testar...' : 'Testa åtkomst (snabb)'}
