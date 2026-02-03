@@ -27,6 +27,7 @@ import VoiceSettings from './VoiceSettings';
 import ViewerThemeSettings from './ViewerThemeSettings';
 import RoomLabelSettings from './RoomLabelSettings';
 import ProfileSettings from './ProfileSettings';
+import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 
 interface ApiSettingsModalProps {
@@ -138,6 +139,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingCongeria, setIsSyncingCongeria] = useState(false);
     const [documentCount, setDocumentCount] = useState(0);
     const [allBuildings, setAllBuildings] = useState<any[]>([]);
+    
+    // Ivion connection modal state
+    const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
+    const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
 
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
@@ -1278,29 +1283,68 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2 flex-1">
                                                 <View className="h-5 w-5 text-primary" />
                                                 <span className="font-medium">Ivion (360+)</span>
-                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
+                                                {ivionConnectionStatus === 'connected' ? (
+                                                    <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Connected</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="ml-auto mr-2 text-xs">Not Connected</Badge>
+                                                )}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
-                                            <div className="space-y-3">
-                                                <p className="text-xs text-muted-foreground">Integration med NavVis Ivion för 360°-panorama. Secrets (IVION_API_URL, IVION_USERNAME, IVION_PASSWORD) konfigureras i Lovable Cloud.</p>
+                                            <div className="space-y-4">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Integration with NavVis IVION for 360° panoramas. Uses OAuth mandate-based authentication.
+                                                </p>
+                                                
+                                                {/* OAuth Connect Button */}
+                                                <div className="p-3 bg-muted/50 rounded-lg border">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm font-medium">Authentication</span>
+                                                        {ivionConnectionStatus === 'connected' && (
+                                                            <Badge className="bg-green-600 text-xs gap-1">
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                Active
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mb-3">
+                                                        Connect using NavVis OAuth to obtain access tokens. Tokens are cached for automatic renewal.
+                                                    </p>
+                                                    <Button 
+                                                        onClick={() => setIsIvionModalOpen(true)}
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="gap-2"
+                                                    >
+                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                        {ivionConnectionStatus === 'connected' ? 'Reconnect to NavVis' : 'Connect with NavVis OAuth'}
+                                                    </Button>
+                                                </div>
+
                                                 <div className="space-y-2">
-                                                    <Label className="text-xs">Embed URL för Ivion</Label>
+                                                    <Label className="text-xs">Embed URL for Ivion</Label>
                                                     <div className="flex gap-2">
                                                         <Input value={`${window.location.origin}/ivion-create`} readOnly className="h-8 text-sm font-mono bg-muted" />
-                                                        <Button variant="outline" size="sm" className="h-8" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/ivion-create`); toast({ title: 'Kopierat!' }); }}>
+                                                        <Button variant="outline" size="sm" className="h-8" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/ivion-create`); toast({ title: 'Copied!' }); }}>
                                                             <ExternalLink className="h-3.5 w-3.5" />
                                                         </Button>
                                                     </div>
                                                 </div>
+                                                
                                                 <Button variant="outline" size="sm" onClick={async () => {
                                                     try {
                                                         const { data, error } = await supabase.functions.invoke('ivion-poi', { body: { action: 'test-connection' } });
                                                         if (error) throw error;
-                                                        toast({ title: data?.success ? 'Anslutning OK' : 'Misslyckades', description: data?.message });
-                                                    } catch (err: any) { toast({ variant: 'destructive', title: 'Fel', description: err.message }); }
+                                                        if (data?.success) {
+                                                            setIvionConnectionStatus('connected');
+                                                        }
+                                                        toast({ title: data?.success ? 'Connection OK' : 'Failed', description: data?.message });
+                                                    } catch (err: any) { 
+                                                        setIvionConnectionStatus('error');
+                                                        toast({ variant: 'destructive', title: 'Error', description: err.message }); 
+                                                    }
                                                 }}>
-                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Testa anslutning
+                                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Test Connection
                                                 </Button>
                                             </div>
                                         </AccordionContent>
@@ -1840,6 +1884,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
                 </Tabs>
             </DialogContent>
+            
+            {/* Ivion Connection Modal */}
+            <IvionConnectionModal 
+                isOpen={isIvionModalOpen} 
+                onClose={() => setIsIvionModalOpen(false)}
+                onConnected={() => setIvionConnectionStatus('connected')}
+            />
         </Dialog>
     );
 };
