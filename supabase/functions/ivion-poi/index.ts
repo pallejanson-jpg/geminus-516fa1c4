@@ -615,6 +615,116 @@ serve(async (req) => {
           };
         }
         break;
+
+      // ================== MANDATE AUTH FLOW ==================
+      case 'mandate-request':
+        // Start the OAuth-like mandate flow
+        // Returns authorization_token, exchange_token, and authorization_url
+        try {
+          const mandateResponse = await fetch(`${IVION_API_URL}/api/auth/mandate/request`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!mandateResponse.ok) {
+            const errorText = await mandateResponse.text();
+            throw new Error(`Mandate request failed: ${mandateResponse.status} - ${errorText.slice(0, 200)}`);
+          }
+          
+          const mandateData = await mandateResponse.json();
+          result = {
+            success: true,
+            authorization_token: mandateData.authorization_token,
+            exchange_token: mandateData.exchange_token,
+            authorization_url: mandateData.authorization_url || `${IVION_API_URL}/oauth/authorize?token=${mandateData.authorization_token}`,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
+
+      case 'mandate-validate':
+        // Poll for mandate authorization status
+        // Returns: { authorized: boolean, expired: boolean, exchanged: boolean }
+        if (!params.authorization_token) throw new Error('authorization_token required');
+        try {
+          const validateResponse = await fetch(
+            `${IVION_API_URL}/api/auth/mandate/validate?authorization_token=${encodeURIComponent(params.authorization_token)}`,
+            {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+              },
+            }
+          );
+          
+          if (!validateResponse.ok) {
+            const errorText = await validateResponse.text();
+            throw new Error(`Mandate validation failed: ${validateResponse.status} - ${errorText.slice(0, 200)}`);
+          }
+          
+          const validateData = await validateResponse.json();
+          result = {
+            success: true,
+            authorized: validateData.authorized ?? false,
+            expired: validateData.expired ?? false,
+            exchanged: validateData.exchanged ?? false,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
+
+      case 'mandate-exchange':
+        // Exchange mandate for access and refresh tokens
+        // Returns: { access_token, refresh_token, principal }
+        if (!params.exchange_token) throw new Error('exchange_token required');
+        try {
+          const exchangeResponse = await fetch(`${IVION_API_URL}/api/auth/mandate/exchange`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ exchange_token: params.exchange_token }),
+          });
+          
+          if (!exchangeResponse.ok) {
+            const errorText = await exchangeResponse.text();
+            throw new Error(`Mandate exchange failed: ${exchangeResponse.status} - ${errorText.slice(0, 200)}`);
+          }
+          
+          const exchangeData = await exchangeResponse.json();
+          
+          // Cache the new access token for immediate use
+          if (exchangeData.access_token) {
+            cachedToken = exchangeData.access_token;
+          }
+          
+          result = {
+            success: true,
+            access_token: exchangeData.access_token,
+            refresh_token: exchangeData.refresh_token,
+            principal: exchangeData.principal,
+            tokenPreview: exchangeData.access_token ? exchangeData.access_token.substring(0, 12) + '...' : null,
+            message: 'Tokens obtained successfully. Update IVION_ACCESS_TOKEN and IVION_REFRESH_TOKEN secrets to persist.',
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`);
