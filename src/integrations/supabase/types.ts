@@ -391,7 +391,10 @@ export type Database = {
           hero_image_url: string | null
           id: string
           is_favorite: boolean
+          ivion_access_token: string | null
+          ivion_refresh_token: string | null
           ivion_site_id: string | null
+          ivion_token_expires_at: string | null
           latitude: number | null
           longitude: number | null
           start_view_id: string | null
@@ -403,7 +406,10 @@ export type Database = {
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
+          ivion_access_token?: string | null
+          ivion_refresh_token?: string | null
           ivion_site_id?: string | null
+          ivion_token_expires_at?: string | null
           latitude?: number | null
           longitude?: number | null
           start_view_id?: string | null
@@ -415,7 +421,10 @@ export type Database = {
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
+          ivion_access_token?: string | null
+          ivion_refresh_token?: string | null
           ivion_site_id?: string | null
+          ivion_token_expires_at?: string | null
           latitude?: number | null
           longitude?: number | null
           start_view_id?: string | null
