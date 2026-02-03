@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
+import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
@@ -2765,6 +2766,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ fmGuid, onClose, pick
           {/* Custom toolbar - centered at bottom */}
           {state.isInitialized && initStep === 'ready' && (
             <>
+              {/* Floating Floor Switcher - always visible pills above toolbar */}
+              {!isMobile && (
+                <FloatingFloorSwitcher
+                  viewerRef={viewerInstanceRef}
+                  buildingFmGuid={buildingFmGuid}
+                  isViewerReady={true}
+                  className="absolute bottom-20 left-4 z-20"
+                />
+              )}
+              
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
                 onOpenSettings={() => setToolbarSettingsOpen(true)}
