@@ -1,5 +1,5 @@
 import React, { useContext, useState, lazy, Suspense } from "react";
-import { Loader2, Box, Archive } from "lucide-react";
+import { Loader2, Box, Archive, Split } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
 import PortfolioView from "@/components/portfolio/PortfolioView";
