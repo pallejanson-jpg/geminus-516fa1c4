@@ -1,104 +1,102 @@
-# Plan: Split-View Integration - 3D + 360° Side-by-Side Navigation
 
-## ✅ Fas 1 Implementerad
 
-Split-View funktionen är nu implementerad med grundläggande funktionalitet. Du kan öppna 3D-modellen och 360°-vyn sida vid sida med en dragbar separator.
+# Plan: Förbättra Quick Actions med Split View och Tooltips
 
-### Skapade filer
+## Sammanfattning
 
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/context/ViewerSyncContext.tsx` | Synkroniseringsmotor med state för position, heading, och source |
-| `src/pages/SplitViewer.tsx` | Split View sida med resizable panels |
+Omstrukturera Quick Actions-panelen för att:
+1. Lägga visualiseringsverktygen (2D, 3D, 360+, 3D+360+) överst på första raden
+2. Lägga till tooltips på alla knappar för bättre användbarhet
+3. Lägga till ny "3D + 360°" Split View-knapp
+4. Gråa ut 360+ och 3D+360+ om byggnaden saknar Ivion Site ID
 
-### Ändrade filer
+## Ny knappordning
 
-| Fil | Ändring |
+| Rad | Knappar |
 |-----|---------|
-| `src/App.tsx` | Lade till `/split-viewer` route |
-| `src/components/portfolio/FacilityCard.tsx` | Lade till Split-ikon på byggnadskort |
-| `src/components/layout/MainContent.tsx` | Import update |
+| **Rad 1 (Visualisering)** | 2D • 3D • 360+ • 3D+360+ |
+| **Rad 2+ (Data & Verktyg)** | Insights • Assets • Rooms • Map • Navigator • Docs+ • IOT+ • Add Asset • Inventering |
 
-### Hur man använder
+## Ändringar
 
-1. Gå till **Portfolio**
-2. Hitta ett byggnadskort med konfigurerad Ivion Site ID
-3. Klicka på **Split-ikonen** (⊟) i nedre högra hörnet
-4. Split View öppnas med 3D till vänster och 360° till höger
+### 1. Lägg till Split View-knapp och onOpenSplitView prop
 
-### URL-format
+| Nytt | Beskrivning |
+|------|-------------|
+| `onOpenSplitView` prop | Callback för att öppna Split View |
+| Split View-knapp | Visar "3D+360+" med Split-ikon |
+| Disabled state | Utgråad om `ivionSiteId` saknas |
 
-```
-/split-viewer?building=<fmGuid>
-```
+### 2. Lägg till Tooltips på alla knappar
 
----
+Varje knapp får en Tooltip med förklarande text:
 
-## 🔜 Fas 2: Kamerasynkronisering (Framtida)
+| Knapp | Tooltip |
+|-------|---------|
+| 2D | "Visa 2D-planritning" |
+| 3D | "Visa 3D-modell" |
+| 360+ | "Öppna 360°-panorama" (eller "Konfigurera Ivion Site ID först" om saknas) |
+| 3D+360+ | "Synkroniserad 3D och 360°-vy" (eller "Konfigurera Ivion Site ID först" om saknas) |
+| Insights | "Visa nyckeltal och analyser" |
+| Assets | "Visa tillgångar" |
+| Rooms | "Visa rum och utrymmen" |
+| Map | "Visa på karta" |
+| Navigator | "Öppna hierarkisk navigator" |
+| Docs+ | "Visa dokument" |
+| IOT+ | "Visa IoT-sensorer" |
+| Add Asset | "Registrera ny tillgång" |
+| Inventering | "Inventera tillgångar här" |
 
-### Ändringar som behövs
+### 3. Gråa ut knappar som kräver Ivion
 
-| Komponent | Ändring |
-|-----------|---------|
-| `AssetPlusViewer.tsx` | Lägg till `onCameraChanged` callback och `syncEnabled` prop |
-| `Ivion360View.tsx` | Lägg till PostMessage-kommunikation för navigering |
-| `ViewerSyncContext.tsx` | Lägg till koordinattransformering (local ↔ geo) |
+| Knapp | Villkor för disabled |
+|-------|----------------------|
+| 360+ | `!ivionSiteId` |
+| 3D+360+ | `!ivionSiteId` |
 
-### PostMessage-protokoll för IVION
+## Filer att ändra
 
-```javascript
-// Sända till IVION iframe
-{
-  type: 'navvis-command',
-  action: 'moveToGeoLocation',
-  params: { lat, lng, heading, pitch }
-}
+| Fil | Åtgärd |
+|-----|--------|
+| `src/components/portfolio/QuickActions.tsx` | Lägg till Split View-knapp, Tooltips, ordna om knappar |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Skicka `onOpenSplitView` prop till QuickActions |
 
-// Ta emot från IVION iframe
-{
-  type: 'navvis-event',
-  event: 'camera-changed',
-  data: { location, heading, pitch, panoramaId }
-}
-```
+## Tekniska detaljer
 
----
-
-## Arkitektur
+### QuickActions.tsx - Ny struktur
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│  ViewerSyncProvider                                                     │
-│  ├── syncLocked: boolean                                                │
-│  ├── syncState: { position, heading, pitch, source, timestamp }         │
-│  ├── updateFrom3D(coords, heading)                                      │
-│  └── updateFromIvion(coords, heading)                                   │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-              ▼                               ▼
-   ┌──────────────────┐           ┌──────────────────┐
-   │  AssetPlusViewer │           │  Ivion360View    │
-   │  - 3D Model      │           │  - 360° Panorama │
-   │  - xeokit        │           │  - NavVis Ivion  │
-   └──────────────────┘           └──────────────────┘
+<CardContent>
+  <div className="grid grid-cols-4 gap-2">
+    {/* VISUALISERINGSRAD (alltid först) */}
+    {isStorey && <2D Button med Tooltip />}
+    {(isBuilding || isStorey) && <3D Button med Tooltip />}
+    {(isBuilding || isStorey) && <360+ Button med Tooltip disabled={!ivionSiteId} />}
+    {isBuilding && <3D+360+ Button med Tooltip disabled={!ivionSiteId} />}
+    
+    {/* ÖVRIGA VERKTYG */}
+    <Insights Button med Tooltip />
+    <Assets Button med Tooltip />
+    <Rooms Button med Tooltip />
+    <Map Button med Tooltip />
+    ...
+  </div>
+</CardContent>
 ```
 
----
+### Tooltip-implementering
 
-## Användarflöden
-
-### Scenario 1: Verifikation av inventerade tillgångar
-
-1. Öppna Split View för en byggnad
-2. I 3D-vyn: Klicka på en annotation
-3. 360°-vyn: Navigerar till närmaste panorama (Fas 2)
-4. Verifiera visuellt att positionen matchar
-
-### Scenario 2: Fri utforskning
-
-1. Stäng av synk (Sync Lock = OFF)
-2. Navigera fritt i båda vyerna
-3. Klicka "Synka" för att matcha positioner (Fas 2)
+```text
+<Tooltip>
+  <TooltipTrigger asChild>
+    <Button ...>
+      <Icon />
+      <span>Label</span>
+    </Button>
+  </TooltipTrigger>
+  <TooltipContent>
+    <p>Beskrivande text</p>
+  </TooltipContent>
+</Tooltip>
+```
 
