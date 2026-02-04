@@ -65,8 +65,17 @@ export default function Ivion360View({
   const buildingName = ivion360Context?.buildingName;
   const ivionSiteId = ivionSiteIdProp || ivion360Context?.ivionSiteId;
 
-  // Camera sync hook - using new image-based approach
-  const { imageCache, isLoadingImages, currentImageId, syncToIvion, syncFrom360Url } = useIvionCameraSync({
+  // Camera sync hook - using new image-based approach with postMessage support
+  const { 
+    imageCache, 
+    isLoadingImages, 
+    currentImageId, 
+    syncToIvion, 
+    syncFrom360Url,
+    sendSubscribeCommand,
+    lastSyncSource,
+    postMessageActive,
+  } = useIvionCameraSync({
     iframeRef,
     enabled: syncEnabled,
     buildingOrigin,
@@ -112,6 +121,25 @@ export default function Ivion360View({
     
     validateAndRefreshToken();
   }, [buildingFmGuid]);
+
+  // Handle iframe load - send subscribe command for camera events
+  const handleIframeLoad = useCallback(() => {
+    setIsLoading(false);
+    
+    // Send subscribe commands to enable camera events from Ivion
+    if (syncEnabled) {
+      // Wait for Ivion to fully initialize before sending subscribe
+      setTimeout(() => {
+        sendSubscribeCommand();
+        console.log('[Ivion360View] Sent subscribe commands after iframe load');
+      }, 2000);
+      
+      // Retry after a longer delay in case first attempt was too early
+      setTimeout(() => {
+        sendSubscribeCommand();
+      }, 5000);
+    }
+  }, [syncEnabled, sendSubscribeCommand]);
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
@@ -243,6 +271,13 @@ export default function Ivion360View({
               {imageCache.length} bilder
             </span>
           )}
+          {/* PostMessage status indicator */}
+          {syncEnabled && postMessageActive && (
+            <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              Auto-sync
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {/* Sync button - only show when sync is enabled */}
@@ -334,7 +369,7 @@ export default function Ivion360View({
           ref={iframeRef}
           src={ivionUrl}
           className="w-full h-full border-0"
-          onLoad={() => setIsLoading(false)}
+          onLoad={handleIframeLoad}
           allow="fullscreen; autoplay"
           title="Ivion 360 Viewer"
         />
