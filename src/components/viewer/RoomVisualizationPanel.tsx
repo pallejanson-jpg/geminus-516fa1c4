@@ -95,6 +95,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Cache for space entity IDs - built from metaScene, invalidated on floor changes
   const [entityIdCache, setEntityIdCache] = useState<Map<string, string[]>>(new Map());
   const [cacheKey, setCacheKey] = useState<string>(''); // For cache invalidation
+  
+  // Ref to track ALL colorized room fmGuids to ensure proper reset across floor changes
+  const colorizedRoomGuidsRef = useRef<Set<string>>(new Set());
 
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -333,11 +336,21 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     [viewerRef, getItemIdsByFmGuid]
   );
 
-  // Reset all room colors
+  // Reset all room colors - uses ref to reset ALL previously colorized rooms
   const resetColors = useCallback(() => {
+    // Reset from current rooms state
     rooms.forEach((room) => {
       colorizeSpace(room.fmGuid, null);
     });
+    
+    // ALSO reset any rooms that were colorized but may no longer be in current filter
+    // This prevents "sticky" colors from appearing on other floors
+    colorizedRoomGuidsRef.current.forEach((fmGuid) => {
+      colorizeSpace(fmGuid, null);
+    });
+    
+    // Clear the tracking set
+    colorizedRoomGuidsRef.current.clear();
     setColorizedCount(0);
   }, [rooms, colorizeSpace]);
 
@@ -350,6 +363,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     if (isProcessing) return;
     setIsProcessing(true);
+    
+    // CRITICAL: Reset ALL previously colorized rooms BEFORE applying new colors
+    // This prevents "sticky" colors from appearing on hidden floors
+    colorizedRoomGuidsRef.current.forEach((fmGuid) => {
+      colorizeSpace(fmGuid, null);
+    });
+    colorizedRoomGuidsRef.current.clear();
 
     let count = 0;
     const CHUNK_SIZE = 30;
@@ -379,6 +399,8 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (value !== null) {
           const color = getVisualizationColor(value, visualizationType);
           if (color && colorizeSpace(room.fmGuid, color)) {
+            // Track this room as colorized
+            colorizedRoomGuidsRef.current.add(room.fmGuid);
             count++;
           }
         }
@@ -408,10 +430,19 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   }, [visualizationType, useMockData, rooms.length, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  // Cleanup on unmount
+  // Cleanup on unmount - reset ALL tracked colorized rooms
   useEffect(() => {
     return () => {
-      resetColors();
+      // Reset all rooms in the tracking ref
+      colorizedRoomGuidsRef.current.forEach((fmGuid) => {
+        colorizeSpace(fmGuid, null);
+      });
+      colorizedRoomGuidsRef.current.clear();
+      
+      // Also reset current rooms state
+      rooms.forEach((room) => {
+        colorizeSpace(room.fmGuid, null);
+      });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

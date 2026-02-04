@@ -380,8 +380,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     setVisibleFloorIds(newVisibleIds);
     applyFloorVisibility(newVisibleIds);
     
-    // Dispatch event for other components
+    // Calculate complete event data
+    const visibleFloors = floors.filter(f => newVisibleIds.has(f.id));
+    const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+    const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
+    const isAllVisible = newVisibleIds.size === floors.length;
     const isSolo = newVisibleIds.size === 1;
+    
     const soloFloorId = isSolo ? Array.from(newVisibleIds)[0] : null;
     const floor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
     const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
@@ -390,6 +395,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       floorId: soloFloorId,
       floorName: floor?.name || null,
       bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+      visibleMetaFloorIds: allMetaIds,
+      visibleFloorFmGuids: allFmGuids,
+      isAllFloorsVisible: isAllVisible,
     };
     
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
@@ -401,10 +409,17 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     setVisibleFloorIds(allIds);
     applyFloorVisibility(allIds);
     
+    // Calculate complete event data for all floors
+    const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
+    const allMetaIds = floors.flatMap(f => f.metaObjectIds);
+    
     const eventDetail: FloorSelectionEventDetail = {
       floorId: null,
       floorName: null,
       bounds: null,
+      visibleMetaFloorIds: allMetaIds,
+      visibleFloorFmGuids: allFmGuids,
+      isAllFloorsVisible: true,
     };
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
   }, [floors, applyFloorVisibility]);

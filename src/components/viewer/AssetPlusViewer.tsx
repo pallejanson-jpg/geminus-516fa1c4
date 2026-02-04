@@ -24,7 +24,7 @@ import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
-import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
@@ -284,8 +284,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     ensureModels();
   }, [buildingFmGuid]);
 
+  // Track if all floors are visible (to avoid showing all spaces when filter is empty but not "all")
+  const isAllFloorsVisibleRef = useRef(true);
+
   // Filter spaces to only show rooms on visible floors
-  const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean) => {
+  const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean, isAllVisible?: boolean) => {
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
@@ -297,7 +300,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const scene = xeokitViewer.scene;
     const visibleGuidsLower = new Set(visibleFloorGuids.map((g: string) => g.toLowerCase()));
     
-    console.log(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors:`, visibleFloorGuids);
+    // Use isAllVisible parameter if provided, otherwise check ref
+    const effectiveIsAllVisible = isAllVisible ?? isAllFloorsVisibleRef.current;
+    
+    console.log(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors: ${visibleFloorGuids.length}, isAllVisible: ${effectiveIsAllVisible}`);
     
     // If showSpaces is OFF, hide ALL IfcSpace entities
     if (!forceShow) {
@@ -314,8 +320,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       return;
     }
     
-    // If no floor filter, show all spaces (when showSpaces is ON)
-    if (visibleFloorGuids.length === 0) {
+    // CRITICAL FIX: Only show all spaces if explicitly marked as "all floors visible"
+    // Do NOT show all spaces just because the filter list is empty
+    if (effectiveIsAllVisible) {
       let shownCount = 0;
       Object.values(metaObjects).forEach((metaObj: any) => {
         if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
@@ -325,7 +332,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           shownCount++;
         }
       });
-      console.log(`All spaces shown: ${shownCount} (no floor filter)`);
+      console.log(`All spaces shown: ${shownCount} (all floors visible)`);
+      return;
+    }
+    
+    // If we have no floor filter AND it's not "all visible", hide all spaces (safe default)
+    if (visibleFloorGuids.length === 0) {
+      let hiddenCount = 0;
+      Object.values(metaObjects).forEach((metaObj: any) => {
+        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
+        const entity = scene.objects?.[metaObj.id];
+        if (entity && entity.visible) {
+          entity.visible = false;
+          hiddenCount++;
+        }
+      });
+      console.log(`Spaces hidden: ${hiddenCount} (empty filter, not all-visible)`);
       return;
     }
 
@@ -380,16 +402,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.debug('onShowSpacesChanged failed:', e);
     }
     
-    // Apply floor filtering
-    filterSpacesToVisibleFloors(visibleFloorFmGuids, show);
+    // Apply floor filtering with current isAllFloorsVisible state
+    filterSpacesToVisibleFloors(visibleFloorFmGuids, show, isAllFloorsVisibleRef.current);
   }, [visibleFloorFmGuids, filterSpacesToVisibleFloors]);
 
   // Handler for visible floors change - also filters spaces and room labels
-  const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
+  const handleVisibleFloorsChange = useCallback((floorIds: string[], isAllVisible?: boolean) => {
     setVisibleFloorFmGuids(floorIds);
     
+    // Update ref if provided
+    if (isAllVisible !== undefined) {
+      isAllFloorsVisibleRef.current = isAllVisible;
+    }
+    
     // ALWAYS call filterSpacesToVisibleFloors to ensure rooms are hidden when showSpaces is false
-    filterSpacesToVisibleFloors(floorIds, showSpaces);
+    filterSpacesToVisibleFloors(floorIds, showSpaces, isAllVisible);
     
     // Update room labels floor filter
     if (updateFloorFilter) {
@@ -427,21 +454,47 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     };
   }, [updateLabelsViewMode]);
 
-  // Listen for floor selection changes to update room labels filter
+  // Listen for floor selection changes to update spaces, room labels, and visualization
   useEffect(() => {
-    const handleFloorSelectionChange = (e: CustomEvent) => {
-      // When floor selection changes, update room labels to filter by visible floors
-      console.log('AssetPlusViewer: Floor selection changed, updating room labels filter');
-      if (updateFloorFilter) {
-        updateFloorFilter(visibleFloorFmGuids);
+    const handleFloorSelectionChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleFloorFmGuids: newGuids, isAllFloorsVisible } = e.detail;
+      
+      console.log('AssetPlusViewer: Floor selection changed', {
+        guids: newGuids?.length,
+        isAllVisible: isAllFloorsVisible,
+      });
+      
+      // Update isAllFloorsVisible ref
+      if (isAllFloorsVisible !== undefined) {
+        isAllFloorsVisibleRef.current = isAllFloorsVisible;
+      }
+      
+      // Update state and apply filtering if we have new guids
+      if (newGuids && newGuids.length > 0) {
+        setVisibleFloorFmGuids(newGuids);
+        
+        // Filter spaces to visible floors
+        filterSpacesToVisibleFloors(newGuids, showSpaces, isAllFloorsVisible);
+        
+        // Update room labels floor filter
+        if (updateFloorFilter) {
+          updateFloorFilter(newGuids);
+        }
+      } else if (isAllFloorsVisible) {
+        // All floors visible - clear filter but keep spaces shown if enabled
+        filterSpacesToVisibleFloors([], showSpaces, true);
+        
+        if (updateFloorFilter) {
+          updateFloorFilter([]);
+        }
       }
     };
     
-    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorSelectionChange as EventListener);
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChange as EventListener);
     return () => {
-      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorSelectionChange as EventListener);
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorSelectionChange as EventListener);
     };
-  }, [updateFloorFilter, visibleFloorFmGuids]);
+  }, [updateFloorFilter, showSpaces, filterSpacesToVisibleFloors]);
 
   // Handler for annotations toggle from mobile overlay
   const handleAnnotationsChange = useCallback((show: boolean) => {
