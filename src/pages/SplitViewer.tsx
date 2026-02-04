@@ -1,18 +1,16 @@
 import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, AlertCircle, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { AppContext } from '@/context/AppContext';
 import { ViewerSyncProvider, useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
-import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
@@ -34,17 +32,11 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   const { appConfigs } = useContext(AppContext);
   const { syncLocked, setSyncLocked, resetSync, syncState, updateFrom3D, updateFromIvion, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const ivion360Ref = useRef<{ syncFrom360Url: (url: string) => Promise<boolean> } | null>(null);
   
   // Sync position state - transformed coordinates for each viewer
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
   const [sync3DHeading, setSync3DHeading] = useState<number>(0);
   const [sync3DPitch, setSync3DPitch] = useState<number>(0);
-
-  // Manual sync dialog state
-  const [showSyncDialog, setShowSyncDialog] = useState(false);
-  const [ivionUrlInput, setIvionUrlInput] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
 
   // Set building context for coordinate transformation
   useEffect(() => {
@@ -63,9 +55,6 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
 
   console.log('[SplitViewer] Ivion URL:', ivionUrl);
   console.log('[SplitViewer] Building origin:', buildingData.origin);
-
-  // Check if origin is configured (not strictly needed for image-based sync)
-  const hasOrigin = !!(buildingData.origin?.lat && buildingData.origin?.lng);
 
   // Handle camera change from 3D viewer
   const handle3DCameraChange = useCallback((position: LocalCoords, heading: number, pitch: number) => {
@@ -101,64 +90,6 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
     }
   };
 
-  // Handle manual sync from Ivion URL
-  const handleParseIvionUrl = async () => {
-    if (!ivionUrlInput.trim()) {
-      toast.error('Ange en Ivion-URL');
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      // Parse image ID from URL
-      const url = new URL(ivionUrlInput);
-      const imageId = url.searchParams.get('image');
-      
-      if (!imageId) {
-        toast.error('URL:en saknar &image= parameter');
-        return;
-      }
-
-      // Parse view angles
-      const vlon = parseFloat(url.searchParams.get('vlon') || '0');
-      const vlat = parseFloat(url.searchParams.get('vlat') || '0');
-      
-      // Convert radians to degrees
-      const heading = (vlon * 180) / Math.PI;
-      const pitch = (vlat * 180) / Math.PI;
-
-      // Fetch image position from API
-      const { data, error } = await supabase.functions.invoke('ivion-poi', {
-        body: {
-          action: 'get-image-position',
-          imageId: parseInt(imageId, 10),
-          buildingFmGuid: buildingData.fmGuid,
-        },
-      });
-
-      if (error || !data?.success) {
-        toast.error('Kunde inte hämta bildposition: ' + (data?.error || error?.message));
-        return;
-      }
-
-      // Update sync context with position from image
-      const position: LocalCoords = {
-        x: data.location.x,
-        y: data.location.y,
-        z: data.location.z,
-      };
-
-      updateFromIvion(position, heading, pitch);
-      setShowSyncDialog(false);
-      setIvionUrlInput('');
-      toast.success(`Synkad till bild ${imageId}`);
-    } catch (err: any) {
-      toast.error('Ogiltig URL: ' + err.message);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -185,23 +116,18 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Sync 360° → 3D button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSyncDialog(true)}
-                className="gap-1.5"
-              >
-                <ArrowRightLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">360° → 3D</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Synka 3D-vyn till 360°-positionen via URL
-            </TooltipContent>
-          </Tooltip>
+          {/* Sync status indicator */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded">
+            <span className={cn(
+              "h-2 w-2 rounded-full transition-colors",
+              syncState.source === 'ivion' ? "bg-green-500" :
+              syncState.source === '3d' ? "bg-blue-500" : "bg-gray-400"
+            )} />
+            <span className="hidden sm:inline">
+              {syncState.source === 'ivion' ? '360° → 3D' :
+               syncState.source === '3d' ? '3D → 360°' : 'Väntar...'}
+            </span>
+          </div>
 
           {/* Sync toggle */}
           <Tooltip>
@@ -227,7 +153,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
             </TooltipTrigger>
             <TooltipContent>
               {syncLocked
-                ? 'Vyerna följer varandra. Klicka för att låsa upp.'
+                ? 'Vyerna följer varandra automatiskt. Klicka för att låsa upp.'
                 : 'Vyerna är oberoende. Klicka för att synkronisera.'}
             </TooltipContent>
           </Tooltip>
@@ -298,37 +224,6 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
-
-      {/* Manual sync dialog */}
-      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Synka från 360°</DialogTitle>
-            <DialogDescription>
-              Högerklicka på Ivion-iframen → "Kopiera länkadress" och klistra in nedan.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              value={ivionUrlInput}
-              onChange={(e) => setIvionUrlInput(e.target.value)}
-              placeholder="https://swg.iv.navvis.com/?site=...&image=..."
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground mt-2">
-              URL:en måste innehålla <code className="bg-muted px-1 rounded">&image=XXX</code> för att kunna synka.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSyncDialog(false)}>
-              Avbryt
-            </Button>
-            <Button onClick={handleParseIvionUrl} disabled={isSyncing}>
-              {isSyncing ? 'Synkar...' : 'Synka'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
@@ -336,7 +231,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
 /**
  * Split Viewer Page
  * 
- * Displays 3D model and 360° panorama side-by-side with optional synchronization.
+ * Displays 3D model and 360° panorama side-by-side with automatic bi-directional synchronization.
  * Accessed via URL: /split-viewer?building=<fmGuid>
  */
 const SplitViewer: React.FC = () => {
