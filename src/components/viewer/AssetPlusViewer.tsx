@@ -29,6 +29,11 @@ import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CH
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
+import {
+  calculateHeadingFromCamera,
+  calculatePitchFromCamera,
+  calculateLookFromHeadingPitch,
+} from '@/lib/coordinate-transform';
 
 interface AssetPlusViewerProps {
   fmGuid: string;
@@ -200,8 +205,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Fly to received position from Ivion 360
       const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xeokitViewer?.cameraFlight) return;
-      
-      const { calculateLookFromHeadingPitch } = require('@/lib/coordinate-transform');
+
       const eye = [position.x, position.y, position.z];
       const look = calculateLookFromHeadingPitch(eye, heading, pitch);
       
@@ -232,8 +236,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       const eye = camera.eye;
       const look = camera.look;
-      
-      const { calculateHeadingFromCamera, calculatePitchFromCamera } = require('@/lib/coordinate-transform');
+
       const position: LocalCoords = { x: eye[0], y: eye[1], z: eye[2] };
       const heading = calculateHeadingFromCamera(eye, look);
       const pitch = calculatePitchFromCamera(eye, look);
