@@ -1,15 +1,16 @@
-import React, { useContext, useEffect, useState, useMemo } from 'react';
+import React, { useContext, useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { AppContext } from '@/context/AppContext';
-import { ViewerSyncProvider, useViewerSync } from '@/context/ViewerSyncContext';
+import { ViewerSyncProvider, useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
+import { localToGeo, geoToLocal, bimToGeoHeading, geoToBimHeading } from '@/lib/coordinate-transform';
 
 const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
@@ -29,8 +30,13 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
 }) => {
   const navigate = useNavigate();
   const { appConfigs } = useContext(AppContext);
-  const { syncLocked, setSyncLocked, resetSync, buildingContext, setBuildingContext } = useViewerSync();
+  const { syncLocked, setSyncLocked, resetSync, syncState, updateFrom3D, updateFromIvion, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Sync position state - transformed coordinates for each viewer
+  const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
+  const [sync3DHeading, setSync3DHeading] = useState<number>(0);
+  const [sync3DPitch, setSync3DPitch] = useState<number>(0);
 
   // Set building context for coordinate transformation
   useEffect(() => {
@@ -53,8 +59,30 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   // Check if origin is configured
   const hasOrigin = !!(buildingData.origin?.lat && buildingData.origin?.lng);
 
+  // Handle camera change from 3D viewer
+  const handle3DCameraChange = useCallback((position: LocalCoords, heading: number, pitch: number) => {
+    if (!syncLocked || !hasOrigin || !buildingData.origin) return;
+    
+    // Transform to geo coordinates and update context
+    // The Ivion360View will react to syncState changes via useIvionCameraSync
+    updateFrom3D(position, heading, pitch);
+  }, [syncLocked, hasOrigin, buildingData.origin, updateFrom3D]);
+
+  // React to sync state changes from Ivion and update 3D viewer position
+  useEffect(() => {
+    if (!syncLocked || !hasOrigin || !buildingData.origin) return;
+    if (syncState.source !== 'ivion' || !syncState.position) return;
+    
+    // Transform geo position to local BIM coordinates
+    // The Ivion hook provides position in local coords via geoToLocal
+    setSync3DPosition(syncState.position);
+    setSync3DHeading(syncState.heading);
+    setSync3DPitch(syncState.pitch);
+  }, [syncLocked, hasOrigin, buildingData.origin, syncState]);
+
   const handleBack = () => {
-    navigate(-1);
+    // Use explicit path to avoid iframe history conflicts
+    navigate('/');
   };
 
   const toggleFullscreen = () => {
@@ -177,7 +205,12 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               3D Model
             </div>
             <AssetPlusViewer 
-              fmGuid={buildingData.fmGuid} 
+              fmGuid={buildingData.fmGuid}
+              syncEnabled={syncLocked && hasOrigin}
+              onCameraChange={handle3DCameraChange}
+              syncPosition={sync3DPosition}
+              syncHeading={sync3DHeading}
+              syncPitch={sync3DPitch}
             />
           </div>
         </ResizablePanel>
@@ -195,6 +228,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               url={ivionUrl} 
               syncEnabled={syncLocked && hasOrigin}
               buildingOrigin={buildingData.origin}
+              buildingFmGuid={buildingData.fmGuid}
             />
           </div>
         </ResizablePanel>
