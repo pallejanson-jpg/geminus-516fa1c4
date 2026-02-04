@@ -1,233 +1,256 @@
 
-
-# Plan: Implementera 3D + 360° Synkronisering
+# Plan: Komplett Split View-fix (Synk, XKT-preload, Token-renewal, Tillbaka-knapp)
 
 ## Sammanfattning
 
-Synkroniseringen mellan 3D-visaren och 360°-vyn fungerar inte eftersom den faktiska kommunikationslogiken saknas. ViewerSyncContext är ett "skelett" utan "muskler" - vyerna är inte anslutna för att skicka eller ta emot kameraförändringar.
+Det finns fyra separata problem som alla behöver lösas för att Split View ska fungera korrekt:
 
-## Nuläge (vad som saknas)
+| Problem | Orsak | Lösning |
+|---------|-------|---------|
+| **1. Synkronisering saknas** | `useViewerCameraSync` anropas aldrig i `AssetPlusViewer` | Anslut hook och skicka sync-callbacks från SplitViewer |
+| **2. Gemensam startpunkt** | Ingen logik för att synkronisera initial position | Automatisk synk baserat på första Ivion-position |
+| **3. XKT-preload långsam** | Preload startar men binärdata hämtas inte effektivt | Optimera fetch-strategi och använd memory cache |
+| **4. Ivion token-renewal** | Token cachar men UI visar inte förnyelseprocess | Automatisk renewal i edge function + UI-feedback |
+| **5. Tillbaka-knappen** | `navigate(-1)` och `window.location.href` fel | Explicit navigering med `navigate('/')` |
 
-| Komponent | Problem |
-|-----------|---------|
-| `AssetPlusViewer.tsx` | Lyssnar inte på kameraändringar, skickar inte `updateFrom3D()` |
-| `Ivion360View.tsx` | Saknar `postMessage`-kommunikation med Ivion-iframe |
-| `SplitViewer.tsx` | Har bara `useEffect` som loggar, ingen faktisk synk |
+---
 
-## Lösning (tre lager)
+## Problem 1: Synkronisering mellan 3D och 360°
 
-### Lager 1: 3D-visaren → ViewerSyncContext
+### Nuläge
+
+Hooks finns men är **inte anslutna**:
+
+```text
+AssetPlusViewer.tsx:
+  ❌ Importerar INTE useViewerCameraSync
+  ❌ Lyssnar INTE på kameraändringar
+  ❌ Skickar INTE updateFrom3D()
+
+Ivion360View.tsx:
+  ✓ Importerar useIvionCameraSync
+  ✓ Hook anropas med buildingOrigin
+  ❓ Men Ivion API kanske inte skickar camera-changed events automatiskt
+```
+
+### Lösning
+
+**Steg 1: Uppdatera AssetPlusViewer.tsx**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Lägg till sync-props | `syncEnabled`, `onCameraChange`, `syncPosition` |
+| Importera och anropa `useViewerCameraSync` | Anslut till xeokit kamera |
+| Exponera viewerRef | För extern åtkomst från SplitViewer |
+
+```typescript
+// Nya props
+interface AssetPlusViewerProps {
+  fmGuid: string;
+  onClose?: () => void;
+  pickModeEnabled?: boolean;
+  onCoordinatePicked?: (...) => void;
+  // NYA sync-props
+  syncEnabled?: boolean;
+  onCameraChange?: (position: LocalCoords, heading: number, pitch: number) => void;
+  syncPosition?: LocalCoords | null;
+  syncHeading?: number;
+  syncPitch?: number;
+}
+```
+
+**Steg 2: Uppdatera SplitViewer.tsx**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Hantera `updateFrom3D` och `updateFromIvion` | Transformera koordinater mellan systemen |
+| Skicka sync-props till båda viewers | `syncEnabled`, positions, callbacks |
+| Initiera synk från första Ivion-position | Gemensam startpunkt automatiskt |
+
+---
+
+## Problem 2: Gemensam startpunkt
+
+### Alternativ
+
+| Alternativ | Beskrivning | Rekommendation |
+|------------|-------------|----------------|
+| **Automatisk** | Första Ivion camera-event sätter startpunkten för 3D | ✓ Bäst UX |
+| **Manuell** | Knapp "Synka hit" i båda vyerna | Mer kontroll men krångligare |
+| **Baserat på Startvy** | Om byggnaden har `start_view_id`, använd den | Kan kombineras |
+
+**Rekommenderad lösning: Automatisk + Manuell backup**
+
+1. När Split View öppnas, vänta på första Ivion camera-event
+2. Transformera Ivion-position till BIM-koordinater
+3. Flyga 3D-kameran dit
+4. Sync-knappen kan användas för att manuellt återsynkronisera
+
+---
+
+## Problem 3: XKT-preload är för långsam
+
+### Nuläge
+
+```text
+useXktPreload.ts:
+  ✓ Kontrollerar om modeller finns i xkt_models
+  ✓ Hämtar signed URLs
+  ❌ Begränsar till endast 5 modeller (models.slice(0, 5))
+  ❌ Ingen parallell streaming
+  ❌ Stora modeller blockar (synkron ArrayBuffer)
+```
+
+### Lösning
 
 | Åtgärd | Beskrivning |
 |--------|-------------|
-| Lyssna på kameraändringar | Anslut till xeokit `viewMatrix`-events |
-| Skicka position | Anropa `updateFrom3D(position, heading, pitch)` |
-| Ta emot synk | Reagera på `syncState` från Ivion och flyga till positionen |
+| Ta bort 5-modell-begränsningen | Ladda alla modeller parallellt |
+| Använd `Promise.all` med streams | Snabbare parallell nedladdning |
+| Prioritera mindre modeller först | Snabbare initial rendering |
+| Visa laddningsindikator | Pulsande "Laddar 3D..." overlay |
 
-```text
-xeokit camera.on('viewMatrix') → extractCameraParams() → updateFrom3D()
+**Optimerad preload-logik:**
+
+```typescript
+// Sortera modeller efter storlek (minst först)
+const sortedModels = models.sort((a, b) => 
+  (a.file_size || 0) - (b.file_size || 0)
+);
+
+// Ladda parallellt med begränsad concurrency
+const CONCURRENT_FETCHES = 3;
+await pLimit(CONCURRENT_FETCHES, sortedModels, async (model) => {
+  // ... fetch och cache
+});
 ```
 
-### Lager 2: 360°-visaren ↔ Ivion iframe
+---
 
-NavVis Ivion stödjer ett Frontend API via `postMessage`:
+## Problem 4: Ivion token-renewal
 
-| Riktning | Metod |
-|----------|-------|
-| **Ivion → App** | Lyssna på `message`-events med `navvis-event` |
-| **App → Ivion** | Skicka `postMessage` med `navvis-command` |
-
-Viktiga kommandon:
-- `moveToGeoLocation(lat, lng, heading, pitch)` - Navigera till position
-- `camera-changed` event - Ivion skickar när kameran ändras
-
-### Lager 3: Koordinattransformation
-
-3D-visaren använder **lokala BIM-koordinater** (meter), Ivion använder **geografiska koordinater** (lat/lng).
+### Nuläge
 
 ```text
-Transformation:
-lat = originLat + (localY / 111320)
-lng = originLng + (localX / (111320 × cos(originLat)))
+ivion-auth.ts (edge function):
+  ✓ Automatisk token-refresh
+  ✓ Fallback till username/password login
+  ✓ Sparar tokens till building_settings
+
+Ivion360View (frontend):
+  ❌ Visar "token expired" utan åtgärd
+  ❌ Ingen automatisk retry
 ```
 
-Byggnadsrotation måste också appliceras på heading.
+Token-renewal fungerar på backend men frontend hanterar inte förnyelse transparent.
 
-## Databasändring
+### Lösning
 
-Lägg till `rotation`-kolumn i `building_settings` för att kunna konvertera heading mellan 3D och Ivion:
+| Åtgärd | Fil |
+|--------|-----|
+| Lägg till token-validering vid iframe-load | `Ivion360View.tsx` |
+| Anropa edge function för att förnya token om utgånget | `Ivion360View.tsx` |
+| Visa diskret "Förnyar anslutning..." istället för fel | `Ivion360View.tsx` |
 
-| Kolumn | Typ | Beskrivning |
-|--------|-----|-------------|
-| `rotation` | `DECIMAL` | Byggnadens rotation i grader relativt norr (0-360) |
+**Ny token-check vid iframe load:**
+
+```typescript
+// I Ivion360View.tsx
+useEffect(() => {
+  const checkAndRefreshToken = async () => {
+    if (!buildingFmGuid) return;
+    
+    try {
+      const { data } = await supabase.functions.invoke('ivion-poi', {
+        body: { action: 'validate-token', buildingFmGuid }
+      });
+      
+      if (data?.tokenRenewed) {
+        console.log('Token förnyat automatiskt');
+      }
+    } catch (e) {
+      console.warn('Token check failed:', e);
+    }
+  };
+  
+  checkAndRefreshToken();
+}, [buildingFmGuid]);
+```
+
+---
+
+## Problem 5: Tillbaka-knappen
+
+### Nuläge
+
+```text
+FacilityLandingPage.tsx rad 592:
+  window.location.href = `/split-viewer?...`  ← Helsidesladdning!
+
+SplitViewer.tsx rad 57:
+  navigate(-1);  ← Opålitligt med iframe-historik
+```
+
+### Lösning
+
+| Fil | Ändring |
+|-----|---------|
+| `FacilityLandingPage.tsx` | `navigate('/split-viewer?...')` istället för `window.location.href` |
+| `SplitViewer.tsx` | `navigate('/')` istället för `navigate(-1)` |
+
+---
 
 ## Filer att ändra
 
 | Fil | Ändringar |
 |-----|-----------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till sync-props, lyssna på kamera, reagera på syncState |
-| `src/components/viewer/Ivion360View.tsx` | Lägg till postMessage-hantering, sync-props |
-| `src/pages/SplitViewer.tsx` | Skicka sync-callbacks till båda viewers |
-| `src/context/ViewerSyncContext.tsx` | Lägg till koordinattransformations-helpers |
-| `src/hooks/useBuildingSettings.ts` | Lägg till `rotation` i interface |
-| **Databas** | Migration för `rotation`-kolumn |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till sync-props, importera och anropa `useViewerCameraSync` |
+| `src/pages/SplitViewer.tsx` | Koordinera synk mellan viewers, fixa tillbaka-knapp |
+| `src/components/viewer/Ivion360View.tsx` | Lägg till token-validering vid load |
+| `src/hooks/useXktPreload.ts` | Optimera preload-strategi |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Fixa navigation till SplitViewer |
+| `supabase/functions/ivion-poi/index.ts` | Lägg till `validate-token` action |
 
-## Implementation steg för steg
+---
 
-### Steg 1: Uppdatera ViewerSyncContext
-
-```text
-- Lägg till helper-funktioner för koordinattransformation:
-  - localToGeo(localCoords, buildingContext) → {lat, lng}
-  - geoToLocal(lat, lng, buildingContext) → LocalCoords
-  - transformHeading(heading, rotation, direction) → number
-```
-
-### Steg 2: Uppdatera AssetPlusViewer
+## Dataflöde efter implementation
 
 ```text
-Props:
-- onCameraChange?: (position, heading, pitch) => void
-- syncPosition?: LocalCoords
-- syncHeading?: number
-- syncPitch?: number
-- syncEnabled?: boolean
-
-Implementation:
-1. Lägg till kamera-listener vid initialisering:
-   xeokitViewer.scene.camera.on('viewMatrix', () => {
-     const eye = viewer.scene.camera.eye;
-     const heading = calculateHeading(eye, look);
-     onCameraChange?.({x: eye[0], y: eye[1], z: eye[2]}, heading, pitch);
-   });
-
-2. Lägg till useEffect för att ta emot sync:
-   useEffect(() => {
-     if (syncEnabled && syncPosition) {
-       cameraFlight.flyTo({eye: [...], look: [...], duration: 0.5});
-     }
-   }, [syncPosition, syncEnabled]);
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SplitViewer.tsx                             │
+│                                                                     │
+│  ┌──────────────────┐              ┌──────────────────┐             │
+│  │ AssetPlusViewer  │◄────────────►│  Ivion360View    │             │
+│  │                  │  syncState   │                  │             │
+│  │ useViewer-       │              │ useIvion-        │             │
+│  │ CameraSync ────►─┼──updateFrom──┼►CameraSync       │             │
+│  │       ◄─────────┼─3D/Ivion────┼────────►         │             │
+│  └──────────────────┘              └──────────────────┘             │
+│                                                                     │
+│                    ViewerSyncContext                                │
+│                    (koordinat-transformation)                       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Steg 3: Uppdatera Ivion360View
+---
 
-```text
-Props:
-- onCameraChange?: (position, heading, pitch) => void
-- syncLat?: number
-- syncLng?: number
-- syncHeading?: number
-- syncEnabled?: boolean
+## Prioriteringsordning
 
-Implementation:
-1. Lägg till iframeRef och postMessage-hantering:
-   const iframeRef = useRef<HTMLIFrameElement>(null);
+| Prio | Åtgärd | Komplexitet |
+|------|--------|-------------|
+| 1 | Fixa tillbaka-knappen | Låg |
+| 2 | Anslut synk-hooks till viewers | Medel |
+| 3 | Implementera gemensam startpunkt | Medel |
+| 4 | Optimera XKT-preload | Medel |
+| 5 | Token-renewal UI | Låg |
 
-2. Lyssna på meddelanden från Ivion:
-   useEffect(() => {
-     const handler = (event) => {
-       if (event.data.type === 'navvis-event' && event.data.event === 'camera-changed') {
-         const { lat, lng, heading, pitch } = event.data.data;
-         onCameraChange?.(...);
-       }
-     };
-     window.addEventListener('message', handler);
-     return () => window.removeEventListener('message', handler);
-   }, []);
-
-3. Skicka navigeringskommando när sync ändras:
-   useEffect(() => {
-     if (syncEnabled && syncLat && iframeRef.current) {
-       iframeRef.current.contentWindow.postMessage({
-         type: 'navvis-command',
-         action: 'moveToGeoLocation',
-         params: { lat: syncLat, lng: syncLng, heading: syncHeading }
-       }, '*');
-     }
-   }, [syncLat, syncLng, syncEnabled]);
-```
-
-### Steg 4: Uppdatera SplitViewer
-
-```text
-- Hämta buildingContext med lat/lng/rotation från building_settings
-- Anropa updateFrom3D när 3D-visaren rapporterar kameraändring
-- Anropa updateFromIvion när Ivion rapporterar kameraändring
-- Transformera koordinater mellan systemen
-- Skicka syncPosition till 3D när source='ivion'
-- Skicka syncLat/Lng till Ivion när source='3d'
-```
-
-## Sekvensdiagram
-
-```text
-┌─────────────┐         ┌───────────────────┐         ┌─────────────┐
-│ AssetPlus   │         │ ViewerSyncContext │         │ Ivion360    │
-│ (3D Viewer) │         │                   │         │ (iframe)    │
-└──────┬──────┘         └─────────┬─────────┘         └──────┬──────┘
-       │                          │                          │
-       │ camera.on('viewMatrix')  │                          │
-       │ ─────────────────────────>                          │
-       │     updateFrom3D(pos)    │                          │
-       │                          │                          │
-       │                          │ syncState changed        │
-       │                          │ (source='3d')            │
-       │                          ├─────────────────────────>│
-       │                          │    postMessage(...)      │
-       │                          │                          │
-       │                          │   camera-changed event   │
-       │<─────────────────────────┼──────────────────────────│
-       │   flyTo(syncPosition)    │    updateFromIvion(pos)  │
-       │                          │                          │
-```
-
-## Begränsningar och fallbacks
-
-| Scenario | Hantering |
-|----------|-----------|
-| Ivion stödjer inte postMessage | Visa "Manuell synk" - en knapp som kopierar kameraposition |
-| Saknar lat/lng i building_settings | Visa varning, kräv konfiguration |
-| Saknar rotation | Anta 0 (norr-orienterad byggnad) |
-| Ivion-iframe blockerar kommunikation | Visa info om att synk kräver konfiguration |
-
-## Tekniska detaljer
-
-### Koordinattransformation (pseudokod)
-
-```text
-function localToGeo(local, origin, rotation):
-  // Rotera lokala koordinater
-  rotatedX = local.x * cos(rotation) - local.z * sin(rotation)
-  rotatedZ = local.x * sin(rotation) + local.z * cos(rotation)
-  
-  // Konvertera till geo
-  lat = origin.lat + (rotatedZ / 111320)
-  lng = origin.lng + (rotatedX / (111320 * cos(origin.lat)))
-  return {lat, lng}
-
-function geoToLocal(geo, origin, rotation):
-  // Konvertera från geo
-  localZ = (geo.lat - origin.lat) * 111320
-  localX = (geo.lng - origin.lng) * 111320 * cos(origin.lat)
-  
-  // Rotera tillbaka
-  x = localX * cos(-rotation) - localZ * sin(-rotation)
-  z = localX * sin(-rotation) + localZ * cos(-rotation)
-  return {x, y: local.y, z}
-```
-
-### Heading-transformation
-
-```text
-ivionHeading = (bimHeading + buildingRotation) % 360
-bimHeading = (ivionHeading - buildingRotation + 360) % 360
-```
+---
 
 ## Acceptanskriterier
 
-1. När användaren klickar i 3D-vyn och synk är på: Ivion navigerar till motsvarande position
-2. När användaren navigerar i Ivion och synk är på: 3D-kameran flyger till motsvarande position
-3. Sync ON/OFF-knappen fungerar korrekt
-4. Reset-knappen återställer båda vyerna till startposition
-5. Koordinater transformeras korrekt mellan BIM och geo-system
-
+1. ✓ Tillbaka-knappen fungerar korrekt från Split View
+2. ✓ Navigering i 3D uppdaterar 360°-vyn (om synk är på)
+3. ✓ Navigering i 360° uppdaterar 3D-vyn (om synk är på)
+4. ✓ Gemensam startpunkt etableras automatiskt
+5. ✓ XKT-modeller laddas snabbare med visuell feedback
+6. ✓ Ivion token förnyas automatiskt utan användarinteraktion
