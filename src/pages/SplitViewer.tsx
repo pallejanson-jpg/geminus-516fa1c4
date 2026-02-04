@@ -1,6 +1,6 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -9,40 +9,49 @@ import { ViewerSyncProvider, useViewerSync } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
+import type { BuildingOrigin } from '@/lib/coordinate-transform';
 
 const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
-interface SplitViewerContentProps {
-  buildingFmGuid: string;
-  buildingName: string;
+interface BuildingData {
+  fmGuid: string;
+  name: string;
   ivionSiteId: string;
+  origin: BuildingOrigin | null;
+}
+
+interface SplitViewerContentProps {
+  buildingData: BuildingData;
 }
 
 const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
-  buildingFmGuid,
-  buildingName,
-  ivionSiteId,
+  buildingData,
 }) => {
   const navigate = useNavigate();
   const { appConfigs } = useContext(AppContext);
-  const { syncLocked, setSyncLocked, syncState, resetSync } = useViewerSync();
+  const { syncLocked, setSyncLocked, resetSync, buildingContext, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Set building context for coordinate transformation
+  useEffect(() => {
+    setBuildingContext({
+      fmGuid: buildingData.fmGuid,
+      originLat: buildingData.origin?.lat,
+      originLng: buildingData.origin?.lng,
+      rotation: buildingData.origin?.rotation,
+    });
+  }, [buildingData, setBuildingContext]);
 
   // Construct Ivion URL using config (same pattern as IvionInventory)
   const configured = appConfigs?.radar?.url?.trim();
   const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_FALLBACK_URL;
-  const ivionUrl = `${baseUrl}/?site=${ivionSiteId}`;
+  const ivionUrl = `${baseUrl}/?site=${buildingData.ivionSiteId}`;
 
   console.log('[SplitViewer] Ivion URL:', ivionUrl);
+  console.log('[SplitViewer] Building origin:', buildingData.origin);
 
-  // Handle sync state changes - this is where the magic happens
-  useEffect(() => {
-    if (!syncLocked || !syncState.source || !syncState.position) return;
-
-    // The receiving viewer will handle navigation based on syncState
-    // This is done via props/context in the individual viewer components
-    console.log('Sync state changed:', syncState.source, syncState.position);
-  }, [syncLocked, syncState]);
+  // Check if origin is configured
+  const hasOrigin = !!(buildingData.origin?.lat && buildingData.origin?.lng);
 
   const handleBack = () => {
     navigate(-1);
@@ -78,12 +87,27 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
           </Button>
           <div className="h-5 w-px bg-border" />
           <div>
-            <h1 className="text-sm font-semibold">{buildingName}</h1>
+            <h1 className="text-sm font-semibold">{buildingData.name}</h1>
             <p className="text-xs text-muted-foreground">3D + 360° Synkroniserad vy</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Origin warning */}
+          {!hasOrigin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 text-amber-500 text-xs mr-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Koordinater saknas</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                Synkronisering kräver att byggnadens lat/lng är konfigurerad i inställningarna.
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           {/* Sync toggle */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -92,6 +116,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
                 size="sm"
                 onClick={() => setSyncLocked(!syncLocked)}
                 className="gap-1.5"
+                disabled={!hasOrigin}
               >
                 {syncLocked ? (
                   <>
@@ -107,9 +132,11 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {syncLocked
-                ? 'Vyerna följer varandra. Klicka för att låsa upp.'
-                : 'Vyerna är oberoende. Klicka för att synkronisera.'}
+              {!hasOrigin
+                ? 'Synkronisering kräver konfigurerade koordinater'
+                : syncLocked
+                  ? 'Vyerna följer varandra. Klicka för att låsa upp.'
+                  : 'Vyerna är oberoende. Klicka för att synkronisera.'}
             </TooltipContent>
           </Tooltip>
 
@@ -150,8 +177,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               3D Model
             </div>
             <AssetPlusViewer 
-              fmGuid={buildingFmGuid} 
-              // Note: sync callbacks will be added in a future iteration
+              fmGuid={buildingData.fmGuid} 
             />
           </div>
         </ResizablePanel>
@@ -165,7 +191,11 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
             <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium">
               360° View
             </div>
-            <Ivion360View url={ivionUrl} />
+            <Ivion360View 
+              url={ivionUrl} 
+              syncEnabled={syncLocked && hasOrigin}
+              buildingOrigin={buildingData.origin}
+            />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -184,11 +214,7 @@ const SplitViewer: React.FC = () => {
   const navigate = useNavigate();
   const { allData } = useContext(AppContext);
   
-  const [buildingData, setBuildingData] = useState<{
-    fmGuid: string;
-    name: string;
-    ivionSiteId: string;
-  } | null>(null);
+  const [buildingData, setBuildingData] = useState<BuildingData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -216,11 +242,11 @@ const SplitViewer: React.FC = () => {
         return;
       }
 
-      // Fetch building settings to get Ivion site ID
+      // Fetch building settings to get Ivion site ID and coordinates
       try {
         const { data: settings, error: settingsError } = await supabase
           .from('building_settings')
-          .select('ivion_site_id')
+          .select('ivion_site_id, latitude, longitude, rotation')
           .eq('fm_guid', buildingFmGuid)
           .maybeSingle();
 
@@ -234,10 +260,21 @@ const SplitViewer: React.FC = () => {
           return;
         }
 
+        // Build origin for coordinate transformation
+        const origin: BuildingOrigin | null = 
+          settings.latitude && settings.longitude
+            ? {
+                lat: settings.latitude,
+                lng: settings.longitude,
+                rotation: (settings as any).rotation ?? 0,
+              }
+            : null;
+
         setBuildingData({
           fmGuid: buildingFmGuid,
           name: building.commonName || building.name || 'Byggnad',
           ivionSiteId: settings.ivion_site_id,
+          origin,
         });
       } catch (err) {
         console.error('Error loading building data:', err);
@@ -284,13 +321,12 @@ const SplitViewer: React.FC = () => {
     <ViewerSyncProvider
       initialBuildingContext={{
         fmGuid: buildingData.fmGuid,
+        originLat: buildingData.origin?.lat,
+        originLng: buildingData.origin?.lng,
+        rotation: buildingData.origin?.rotation ?? 0,
       }}
     >
-      <SplitViewerContent
-        buildingFmGuid={buildingData.fmGuid}
-        buildingName={buildingData.name}
-        ivionSiteId={buildingData.ivionSiteId}
-      />
+      <SplitViewerContent buildingData={buildingData} />
     </ViewerSyncProvider>
   );
 };

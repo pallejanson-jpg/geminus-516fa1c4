@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback } from "react";
+import React, { useState, useEffect, useContext, useCallback, useRef } from "react";
 import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppContext, Ivion360Context } from "@/context/AppContext";
@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import IvionRegistrationPanel from "@/components/inventory/IvionRegistrationPanel";
 import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
+import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
+import type { BuildingOrigin } from "@/lib/coordinate-transform";
 
 interface IvionPoiData {
   id: number;
@@ -19,12 +21,22 @@ type ConnectionStatus = 'unknown' | 'connected' | 'error' | 'expired';
 interface Ivion360ViewProps {
   url?: string; // Direct URL prop for inline usage (fallback)
   onClose?: () => void;
+  /** Enable camera synchronization with 3D viewer */
+  syncEnabled?: boolean;
+  /** Building origin for coordinate transformation */
+  buildingOrigin?: BuildingOrigin | null;
 }
 
-export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
+export default function Ivion360View({ 
+  url, 
+  onClose, 
+  syncEnabled = false,
+  buildingOrigin = null,
+}: Ivion360ViewProps) {
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Panel states
   const [registrationPanelOpen, setRegistrationPanelOpen] = useState(false);
@@ -43,6 +55,17 @@ export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
   const buildingFmGuid = ivion360Context?.buildingFmGuid;
   const buildingName = ivion360Context?.buildingName;
   const ivionSiteId = ivion360Context?.ivionSiteId;
+
+  // Extract Ivion origin from URL for postMessage security
+  const ivionOrigin = ivionUrl ? new URL(ivionUrl).origin : '';
+
+  // Camera sync hook
+  useIvionCameraSync({
+    iframeRef,
+    enabled: syncEnabled,
+    buildingOrigin,
+    ivionOrigin,
+  });
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
@@ -227,6 +250,7 @@ export default function Ivion360View({ url, onClose }: Ivion360ViewProps) {
           </div>
         )}
         <iframe
+          ref={iframeRef}
           src={ivionUrl}
           className="w-full h-full border-0"
           onLoad={() => setIsLoading(false)}
