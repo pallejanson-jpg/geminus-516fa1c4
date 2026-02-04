@@ -2,11 +2,12 @@ import React, { useState, useContext, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Label } from '@/components/ui/label';
@@ -62,6 +63,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
   const [latitudeInput, setLatitudeInput] = useState('');
   const [longitudeInput, setLongitudeInput] = useState('');
+  const [rotationInput, setRotationInput] = useState(0);
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
   const [isUploadingHero, setIsUploadingHero] = useState(false);
   const heroInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +76,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     toggleFavorite, 
     updateIvionSiteId,
     updateMapPosition,
-    updateHeroImage
+    updateHeroImage,
+    updateRotation
   } = useBuildingSettings(facility.fmGuid || null);
 
   // Sync ivion input with settings
@@ -88,7 +91,10 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     if (settings?.longitude !== null && settings?.longitude !== undefined) {
       setLongitudeInput(String(settings.longitude));
     }
-  }, [settings?.ivionSiteId, settings?.latitude, settings?.longitude]);
+    if (settings?.rotation !== null && settings?.rotation !== undefined) {
+      setRotationInput(settings.rotation);
+    }
+  }, [settings?.ivionSiteId, settings?.latitude, settings?.longitude, settings?.rotation]);
 
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -185,6 +191,12 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     const lat = latitudeInput ? parseFloat(latitudeInput) : null;
     const lng = longitudeInput ? parseFloat(longitudeInput) : null;
     updateMapPosition(lat, lng);
+  };
+
+  // Handler for saving rotation
+  const handleSaveRotation = async () => {
+    await updateRotation(rotationInput);
+    onSettingsChanged?.();
   };
 
   // Handler for showing entity insights
@@ -433,6 +445,44 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       >
                         {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
                       </Button>
+                    </div>
+                  </div>
+
+                  {/* Rotation Settings for 3D/360° sync */}
+                  <div className="border-t pt-4">
+                    <Label className="text-xs flex items-center gap-2 mb-3">
+                      <RotateCcw size={12} />
+                      Rotation (för 3D/360° synk)
+                    </Label>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-4">
+                        <Slider
+                          value={[rotationInput]}
+                          onValueChange={(values) => setRotationInput(values[0])}
+                          min={0}
+                          max={360}
+                          step={1}
+                          className="flex-1"
+                        />
+                        <div className="w-16 text-sm font-medium text-right">
+                          {rotationInput}°
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2">
+                        <p className="text-[10px] text-muted-foreground">
+                          Byggnadens orientering relativt norr
+                        </p>
+                        <Button 
+                          size="sm" 
+                          onClick={handleSaveRotation}
+                          disabled={isSaving || rotationInput === (settings?.rotation ?? 0)}
+                          className="h-7 text-xs"
+                        >
+                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Spara'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
