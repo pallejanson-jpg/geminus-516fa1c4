@@ -1,321 +1,241 @@
 
-# Plan: Split View Synkronisering via Ivion Image ID
+# Plan: Automatisk 360° ↔ 3D Synkronisering
 
-## Sammanfattning
+## Mål
+Ta bort behovet av manuell kopiering av URL:er. Synkroniseringen ska ske automatiskt i båda riktningar.
 
-NavVis Ivion exponerar sin position via URL-parametern `image=XXX` där XXX är ID:t för den panoramabild användaren tittar på. Genom att:
-1. Hämta bildpositionen via Ivion API (`GET /images/{imageId}`)
-2. Transformera koordinaterna till BIM-lokala koordinater
-3. Flytta 3D-kameran dit
+## Teknisk Lösning
 
-...kan vi uppnå **360° → 3D synkronisering**.
-
-För **3D → 360°** kan vi:
-1. Hitta närmaste Ivion-bild baserat på 3D-kamerans position
-2. Uppdatera iframe:ns URL med `&image=XXX`
-
----
-
-## Ivion URL-format (bekräftat)
-
-```
-https://swg.iv.navvis.com/?site={siteId}&vlon={yaw_rad}&vlat={pitch_rad}&fov={fov_deg}&image={imageId}
-```
-
-| Parameter | Betydelse | Enhet |
-|-----------|-----------|-------|
-| `site` | Ivion Site ID | string |
-| `vlon` | Kamerans yaw/heading | radianer |
-| `vlat` | Kamerans pitch | radianer |
-| `fov` | Field of view | grader |
-| `image` | Aktuell panoramabild-ID | number |
-
----
-
-## Lösningsarkitektur
+### Arkitektur
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    Split View Sync (NY DESIGN)                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   360° Ivion                              3D xeokit             │
-│       │                                       │                 │
-│       │ 1. hashchange event                   │                 │
-│       ├──────────────────────────────────────►│                 │
-│       │    (parse image=XXX)                  │                 │
-│       │                                       │                 │
-│       │ 2. Fetch image position               │                 │
-│       │    GET /images/{imageId}              │                 │
-│       │                                       │                 │
-│       │ 3. Transform coords → flyTo           │                 │
-│       │                                       │                 │
-│       │◄──────────────────────────────────────┤                 │
-│       │ 4. 3D camera change                   │                 │
-│       │    → find nearest image               │                 │
-│       │    → update iframe.src                │                 │
-│       │                                       │                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                AUTOMATISK SYNKRONISERING                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────┐                  ┌─────────────────┐          │
+│  │   3D xeokit     │                  │  Ivion 360°     │          │
+│  │                 │                  │  (iframe)       │          │
+│  │  camera.on()    │                  │                 │          │
+│  │       │         │                  │                 │          │
+│  └───────┼─────────┘                  └─────────────────┘          │
+│          │                                   ▲                      │
+│          │ 1. Kamera rör sig                 │                      │
+│          ▼                                   │                      │
+│  ┌─────────────────┐                         │                      │
+│  │ Hitta närmaste  │                         │                      │
+│  │ Ivion-bild      │                         │                      │
+│  │ (lokal cache)   │                         │                      │
+│  └────────┬────────┘                         │                      │
+│           │                                  │                      │
+│           │ 2. Uppdatera iframe.src          │                      │
+│           │    med &image=XXX               │                      │
+│           ▼                                  │                      │
+│  ┌─────────────────────────────────────────────┐                   │
+│  │          iframe.src = ?site=...&image=XXX   │                   │
+│  │          &vlon=heading&vlat=pitch           │                   │
+│  └─────────────────────────────────────────────┘                   │
+│                                                                     │
+│  ════════════════════════════════════════════════════              │
+│                                                                     │
+│  360° → 3D: Dual-approach för maximal kompatibilitet               │
+│                                                                     │
+│  ┌─────────────────┐     A: postMessage (om Ivion stöder)          │
+│  │  Ivion 360°     │────────────────────────────────────►          │
+│  │  navigation     │     type: 'navvis-event'                      │
+│  │                 │     event: 'camera-changed'                   │
+│  │                 │     data: { imageId, yaw, pitch }             │
+│  └─────────────────┘                                               │
+│          │                                                          │
+│          │              B: Polling av senaste POI-aktivitet        │
+│          │              (backup om postMessage ej fungerar)        │
+│          ▼                                                          │
+│  ┌─────────────────┐                                               │
+│  │ Hämta bild-     │                                               │
+│  │ position via API│                                               │
+│  │ GET /images/XXX │                                               │
+│  └────────┬────────┘                                               │
+│           │                                                         │
+│           ▼                                                         │
+│  ┌─────────────────┐                                               │
+│  │ 3D viewer.flyTo │                                               │
+│  │ (position,      │                                               │
+│  │  heading, pitch)│                                               │
+│  └─────────────────┘                                               │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Del 1: Hämta Ivion-bildpositioner (Backend)
+## Implementation
 
-### Ny Edge Function: `ivion-get-image-position`
+### 1. Skicka subscribe-kommando vid iframe-laddning
 
-Skapar en ny action i befintliga `ivion-poi` edge function för att hämta bildposition.
+När Ivion-iframen laddas skickar vi ett `subscribe`-kommando för att aktivera kamera-events:
 
-```typescript
-// Ny action i ivion-poi/index.ts
-
-case 'get-image-position':
-  if (!params.imageId) throw new Error('imageId required');
-  const token = await getIvionToken();
-  
-  const imageResp = await fetch(`${IVION_API_URL}/api/images/${params.imageId}`, {
-    headers: { 'x-authorization': `Bearer ${token}` },
-  });
-  
-  if (!imageResp.ok) throw new Error(`Image not found: ${params.imageId}`);
-  
-  const image = await imageResp.json();
-  // Image response includes: { id, location: {x, y, z}, orientation: {...}, ... }
-  result = {
-    id: image.id,
-    location: image.location, // {x, y, z} i meter (lokala Ivion-koordinater)
-    orientation: image.orientation,
-    datasetId: image.datasetId,
-  };
-  break;
-
-case 'get-images-for-site':
-  // Hämta alla bilder för en site (för att kunna hitta närmaste bild)
-  if (!params.siteId) throw new Error('siteId required');
-  const token2 = await getIvionToken();
-  
-  // Hämta datasets för siten
-  const datasetsResp = await fetch(`${IVION_API_URL}/api/site/${params.siteId}/datasets`, {
-    headers: { 'x-authorization': `Bearer ${token2}` },
-  });
-  const datasets = await datasetsResp.json();
-  
-  // Hämta bilder för varje dataset
-  const allImages = [];
-  for (const ds of datasets) {
-    const imagesResp = await fetch(`${IVION_API_URL}/api/dataset/${ds.id}/images`, {
-      headers: { 'x-authorization': `Bearer ${token2}` },
-    });
-    const images = await imagesResp.json();
-    allImages.push(...images.map(img => ({
-      id: img.id,
-      location: img.location,
-      datasetId: ds.id,
-    })));
-  }
-  
-  result = { images: allImages };
-  break;
-```
-
----
-
-## Del 2: Refaktorera useIvionCameraSync
-
-### Ny strategi: URL-baserad synk istället för postMessage
+**Fil: `src/components/viewer/Ivion360View.tsx`**
 
 ```typescript
-// src/hooks/useIvionCameraSync.ts - NY IMPLEMENTATION
-
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
-import { supabase } from '@/integrations/supabase/client';
-import { geoToBimHeading, normalizeHeading, type BuildingOrigin } from '@/lib/coordinate-transform';
-
-interface IvionImage {
-  id: number;
-  location: { x: number; y: number; z: number };
-  datasetId: number;
-}
-
-interface UseIvionCameraSyncOptions {
-  iframeRef: React.RefObject<HTMLIFrameElement>;
-  enabled: boolean;
-  buildingOrigin: BuildingOrigin | null;
-  ivionSiteId: string;
-}
-
-export function useIvionCameraSync({
-  iframeRef,
-  enabled,
-  buildingOrigin,
-  ivionSiteId,
-}: UseIvionCameraSyncOptions): void {
-  const { syncLocked, syncState, updateFromIvion, updateFrom3D } = useViewerSync();
+const handleIframeLoad = useCallback(() => {
+  setIsLoading(false);
   
-  // Cache av alla bilder för att hitta närmaste
-  const [imageCache, setImageCache] = useState<IvionImage[]>([]);
-  const lastImageIdRef = useRef<number | null>(null);
-  const isSyncingRef = useRef(false);
-
-  // 1. Ladda alla bilder för siten vid mount
-  useEffect(() => {
-    if (!enabled || !ivionSiteId) return;
+  // Skicka subscribe-kommando för att aktivera kamera-events
+  if (syncEnabled && iframeRef.current?.contentWindow) {
+    const subscribeCommands = [
+      { type: 'navvis-command', action: 'subscribe' },
+      { type: 'navvis-command', action: 'subscribe', events: ['camera-changed', 'image-changed'] },
+      { type: 'navvis-subscribe', events: ['cameraUpdate', 'imageChange'] },
+    ];
     
-    const loadImages = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('ivion-poi', {
-          body: { action: 'get-images-for-site', siteId: ivionSiteId },
-        });
-        
-        if (data?.images) {
-          setImageCache(data.images);
-          console.log(`[Ivion Sync] Loaded ${data.images.length} images for site`);
+    setTimeout(() => {
+      subscribeCommands.forEach(cmd => {
+        try {
+          iframeRef.current?.contentWindow?.postMessage(cmd, '*');
+        } catch (e) {
+          // Ignorera fel
         }
-      } catch (e) {
-        console.error('[Ivion Sync] Failed to load images:', e);
-      }
-    };
-    
-    loadImages();
-  }, [enabled, ivionSiteId]);
+      });
+      console.log('[Ivion] Sent subscribe commands');
+    }, 1500);
+  }
+}, [syncEnabled]);
+```
 
-  // 2. Lyssna på hashchange för att fånga image-byten
-  useEffect(() => {
-    if (!enabled || !syncLocked) return;
-    
-    const checkIframeUrl = () => {
-      // Vi kan inte läsa cross-origin iframe URL direkt,
-      // men vi kan lyssna på window.postMessage om Ivion skickar det
-      // ELLER använda polling av iframe.contentWindow.location (misslyckas pga CORS)
-    };
-    
-    // Alternativ approach: Polling av Ivion API för senast visade bild
-    // Om Ivion exponerar "current image" via API
-    
-  }, [enabled, syncLocked]);
+### 2. Lyssna på postMessage-events från Ivion
 
-  // 3. När 3D-kameran ändras → hitta närmaste bild → uppdatera iframe URL
-  useEffect(() => {
-    if (!enabled || !syncLocked) return;
-    if (syncState.source !== '3d' || !syncState.position) return;
-    if (!iframeRef.current || imageCache.length === 0) return;
-    if (isSyncingRef.current) return;
+**Fil: `src/hooks/useIvionCameraSync.ts`**
+
+Utöka hooken med en event-lyssnare som fångar kamera-ändringar:
+
+```typescript
+// Lyssna på postMessage från Ivion iframe
+useEffect(() => {
+  if (!enabled || !syncLocked) return;
+  
+  const handleMessage = async (event: MessageEvent) => {
+    const data = event.data;
     
-    // Hitta närmaste bild
-    const pos = syncState.position;
-    let nearestImage: IvionImage | null = null;
-    let nearestDist = Infinity;
-    
-    for (const img of imageCache) {
-      const dx = img.location.x - pos.x;
-      const dy = img.location.y - pos.y;
-      const dz = img.location.z - pos.z;
-      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    // NavVis kan skicka olika format
+    if (data?.type === 'navvis-event') {
+      console.log('[Ivion Sync] Received navvis-event:', data);
       
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestImage = img;
+      if (data.event === 'camera-changed' || data.event === 'image-changed') {
+        const eventData = data.data || {};
+        const imageId = eventData.imageId || eventData.image;
+        const heading = eventData.yaw ?? eventData.heading ?? 0;
+        const pitch = eventData.pitch ?? 0;
+        
+        if (imageId && imageId !== lastSyncedImageIdRef.current) {
+          await handleIvionImageChange(imageId, heading, pitch);
+        }
       }
     }
     
-    if (!nearestImage || nearestImage.id === lastImageIdRef.current) return;
-    if (nearestDist > 10) return; // Max 10m avstånd
+    // Alternativt format: direkt kameradata
+    if (data?.imageId || data?.currentImage) {
+      const imageId = data.imageId || data.currentImage;
+      if (imageId !== lastSyncedImageIdRef.current) {
+        await handleIvionImageChange(imageId, data.heading || 0, data.pitch || 0);
+      }
+    }
+  };
+  
+  window.addEventListener('message', handleMessage);
+  return () => window.removeEventListener('message', handleMessage);
+}, [enabled, syncLocked]);
+
+// Hantera bild-byte från Ivion
+const handleIvionImageChange = async (imageId: number, heading: number, pitch: number) => {
+  if (isSyncingRef.current) return;
+  isSyncingRef.current = true;
+  
+  try {
+    // Hämta bildposition från API
+    const { data, error } = await supabase.functions.invoke('ivion-poi', {
+      body: {
+        action: 'get-image-position',
+        imageId,
+        buildingFmGuid,
+      },
+    });
     
-    lastImageIdRef.current = nearestImage.id;
-    isSyncingRef.current = true;
-    
-    // Uppdatera iframe URL med ny bild
-    const currentUrl = new URL(iframeRef.current.src);
-    currentUrl.searchParams.set('image', String(nearestImage.id));
-    
-    // Konvertera heading till radianer för vlon
-    const vlonRad = (syncState.heading * Math.PI) / 180;
-    const vlatRad = (syncState.pitch * Math.PI) / 180;
-    currentUrl.searchParams.set('vlon', vlonRad.toFixed(2));
-    currentUrl.searchParams.set('vlat', vlatRad.toFixed(2));
-    
-    console.log('[Ivion Sync] Navigating to image:', nearestImage.id);
-    iframeRef.current.src = currentUrl.toString();
-    
-    setTimeout(() => { isSyncingRef.current = false; }, 1000);
-  }, [enabled, syncLocked, syncState, imageCache, iframeRef]);
-}
+    if (data?.success && data?.location) {
+      const position: LocalCoords = {
+        x: data.location.x,
+        y: data.location.y,
+        z: data.location.z,
+      };
+      
+      console.log('[Ivion Sync] Updating 3D from image:', imageId);
+      updateFromIvion(position, heading, pitch);
+      lastSyncedImageIdRef.current = imageId;
+    }
+  } catch (e) {
+    console.error('[Ivion Sync] Failed to handle image change:', e);
+  } finally {
+    setTimeout(() => { isSyncingRef.current = false; }, 500);
+  }
+};
 ```
 
----
+### 3. Fallback: Polling för 360° → 3D
 
-## Del 3: Ivion → 3D Synk (svårare)
-
-### Problemet
-Vi kan **inte läsa** en cross-origin iframe:s URL pga webbläsarsäkerhet.
-
-### Möjliga lösningar
-
-#### Alternativ A: Polling via Backend (rekommenderas)
-Ivion API har möjlighet att exponera "senast visade bild" per session/användare, men detta är oklart utan djupare dokumentation.
-
-#### Alternativ B: hashchange via proxy-sida (komplex)
-Om vi kontrollerar Ivion-hosten kan vi lägga in JavaScript som skickar `postMessage` vid navigation.
-
-#### Alternativ C: Manuell synk-knapp (enklast)
-Lägg till en "Synka 360° → 3D" knapp som:
-1. Öppnar Ivion i ny flik
-2. Användaren kopierar aktuell URL
-3. Appen läser `image=XXX` från inmatningen
-
-#### Alternativ D: NavVis IndoorViewer SDK
-Om ni har tillgång till SDK:t kan den injiceras och skicka `postMessage` vid navigation.
-
----
-
-## Del 4: Förenklad Implementation (Fas 1)
-
-### Vad vi implementerar nu:
-
-| Funktion | Beskrivning | Komplexitet |
-|----------|-------------|-------------|
-| 3D → 360° synk | Hitta närmaste bild, uppdatera iframe URL | Medel |
-| Initial synk | Båda startar på samma plats (3D:s startposition) | Enkel |
-| Synk-knapp | "Synka nu" knapp som tvingar uppdatering | Enkel |
-| 360° → 3D synk | **Manuell via URL-input** (tills SDK finns) | Enkel |
-
-### UI-förändringar
+Om postMessage inte stöds av Ivion-instansen, använd polling som backup:
 
 ```typescript
-// SplitViewer.tsx - Lägg till i header
+// Polling-baserad fallback (om postMessage ej fungerar)
+useEffect(() => {
+  if (!enabled || !syncLocked || !ivionSiteId) return;
+  if (postMessageWorking.current) return; // Hoppa över om postMessage fungerar
+  
+  const pollInterval = setInterval(async () => {
+    // Hämta senaste POI-aktivitet eller annan indikation
+    // (Begränsad funktionalitet - mest för POI-skapande)
+  }, 5000);
+  
+  return () => clearInterval(pollInterval);
+}, [enabled, syncLocked, ivionSiteId]);
+```
 
-<Button
-  variant="outline"
-  size="sm"
-  onClick={handleSyncToIvion}
-  disabled={!hasOrigin || imageCache.length === 0}
->
-  <RefreshCw className="h-4 w-4 mr-1" />
-  Synka 360° till 3D
-</Button>
+### 4. Ta bort manuella sync-dialoger
 
-{/* Dialog för manuell Ivion → 3D synk */}
-<Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>Synka från 360°</DialogTitle>
-    </DialogHeader>
-    <p className="text-sm text-muted-foreground mb-4">
-      Kopiera URL:en från Ivion (högerklicka → Kopiera länkadress) och klistra in nedan:
-    </p>
-    <Input
-      value={ivionUrlInput}
-      onChange={(e) => setIvionUrlInput(e.target.value)}
-      placeholder="https://swg.iv.navvis.com/?site=...&image=..."
-    />
-    <DialogFooter>
-      <Button onClick={handleParseIvionUrl}>
-        Synka
+**Fil: `src/pages/SplitViewer.tsx`**
+
+- Ta bort "360° → 3D"-knappen och dialogen för URL-inklistring
+- Behåll enbart sync-toggle och reset-knapp
+- Lägg till en statusindikator som visar synkstatus
+
+```typescript
+// Ersätt manuell dialog med statusindikator
+<div className="flex items-center gap-1">
+  {/* Status indicator */}
+  <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
+    <span className={cn(
+      "h-2 w-2 rounded-full",
+      syncState.source === 'ivion' ? "bg-green-500" :
+      syncState.source === '3d' ? "bg-blue-500" : "bg-gray-400"
+    )} />
+    <span>
+      {syncState.source === 'ivion' ? '360° → 3D' :
+       syncState.source === '3d' ? '3D → 360°' : 'Väntar...'}
+    </span>
+  </div>
+  
+  {/* Sync toggle */}
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button
+        variant={syncLocked ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => setSyncLocked(!syncLocked)}
+      >
+        {syncLocked ? <Link2 /> : <Link2Off />}
+        Sync {syncLocked ? 'ON' : 'OFF'}
       </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
+    </TooltipTrigger>
+  </Tooltip>
+</div>
 ```
 
 ---
@@ -324,61 +244,72 @@ Om ni har tillgång till SDK:t kan den injiceras och skicka `postMessage` vid na
 
 | Fil | Ändring |
 |-----|---------|
-| `supabase/functions/ivion-poi/index.ts` | Lägg till `get-image-position` och `get-images-for-site` actions |
-| `src/hooks/useIvionCameraSync.ts` | Helt omskriven: URL-baserad synk, bildcache, närmaste-bild-logik |
-| `src/pages/SplitViewer.tsx` | Lägg till synk-knappar, dialog för manuell URL-input |
-| `src/components/viewer/Ivion360View.tsx` | Skicka `ivionSiteId` till sync-hook istället för `ivionOrigin` |
+| `src/hooks/useIvionCameraSync.ts` | Lägg till postMessage-lyssnare, `handleIvionImageChange`, och automatisk 360° → 3D synk |
+| `src/components/viewer/Ivion360View.tsx` | Skicka subscribe-kommando vid iframe onLoad |
+| `src/pages/SplitViewer.tsx` | Ta bort manuell sync-dialog, lägg till statusindikator |
 
 ---
 
-## Framtida förbättringar (Fas 2)
+## Tekniska detaljer
 
-### Om ni får tillgång till NavVis IndoorViewer SDK:
+### NavVis postMessage API (förväntad struktur)
 
+NavVis IVION kan stödja postMessage-kommunikation:
+
+**Skicka (från värd → iframe):**
 ```javascript
-// Kod som kan injiceras i Ivion-viewer
-viewer.on('imageChange', (imageId) => {
-  window.parent.postMessage({
-    type: 'ivion-image-change',
-    imageId: imageId,
-    location: viewer.currentImage.location,
-    vlon: viewer.camera.yaw,
-    vlat: viewer.camera.pitch,
-  }, '*');
-});
+iframe.contentWindow.postMessage({
+  type: 'navvis-command',
+  action: 'subscribe',
+  events: ['camera-changed', 'image-changed']
+}, '*');
 ```
 
-Med detta skulle full tvåvägssynk vara möjlig utan manuell URL-kopiering.
+**Ta emot (från iframe → värd):**
+```javascript
+{
+  type: 'navvis-event',
+  event: 'camera-changed',
+  data: {
+    imageId: 286928215558994,
+    yaw: 6.62,      // radianer
+    pitch: -0.34,   // radianer
+    fov: 100.0
+  }
+}
+```
+
+### Koordinattransformation
+
+Ivion-bilder har position i lokala koordinater `{x, y, z}` i meter. Dessa mappas direkt till xeokit:s koordinatsystem (om origin matchar).
+
+Om offset behövs kan det konfigureras i `building_settings`:
+- `ivion_offset_x`, `ivion_offset_y`, `ivion_offset_z`
+
+### Fallback-strategi
+
+Om postMessage inte fungerar (vissa Ivion-versioner stöder det kanske inte):
+1. Systemet fortsätter med envägs-synk (3D → 360°)
+2. En liten "Synka manuellt"-knapp visas som öppnar Ivion i ny flik
+3. Användaren kan då kopiera URL:en enklare (från webbläsarens adressfält)
 
 ---
 
-## Teknisk detalj: Koordinatsystem
+## Förväntad användarupplevelse
 
-### Ivion bildpositioner
-Ivion-bilder har en `location: {x, y, z}` i **lokala meter-koordinater** relativt till en scannings-origin. Dessa behöver mappas till BIM-koordinater.
-
-### Transformation
-Om BIM-modellen och Ivion-scannern har samma origin:
-- `ivion.location.x` ≈ `bim.x`
-- `ivion.location.y` ≈ `bim.z` (höjd kan variera)
-- `ivion.location.z` ≈ `bim.y` (Y-up vs Z-up)
-
-Om de har olika origin behövs en offset som konfigureras per byggnad.
-
-### Byggnadsinställningar (utöka)
-Lägg till i `building_settings`:
-- `ivion_offset_x` - Offset mellan Ivion och BIM origin X
-- `ivion_offset_y` - Offset Y
-- `ivion_offset_z` - Offset Z
-- `ivion_rotation` - Rotation mellan koordinatsystemen
+1. Användaren öppnar Split View
+2. Båda visare laddas med initial position
+3. När användaren navigerar i **3D** → 360°-vyn hoppar automatiskt till närmaste panorama
+4. När användaren navigerar i **360°** → 3D-vyn flyger till samma position (om postMessage fungerar)
+5. Synk-toggle kan stängas av för oberoende navigation
+6. Statusindikator visar vilken vy som senast uppdaterade
 
 ---
 
-## Sammanfattning
+## Testplan
 
-1. **3D → 360°**: Fungerar genom att hitta närmaste Ivion-bild och uppdatera iframe URL
-2. **360° → 3D**: Kräver manuell URL-input (eller SDK-integration i framtiden)
-3. **Initial synk**: 3D styr startposition, hittar närmaste bild, laddar den i Ivion
-4. **Heading/Pitch synk**: `vlon`/`vlat` i radianer mappar till 3D:s heading/pitch
-
-Denna lösning ger funktionell synk utan att behöva SDK-tillgång, med en tydlig väg framåt för fullständig integration.
+1. **3D → 360°**: Flytta kameran i 3D, verifiera att 360° hoppar till rätt bild
+2. **360° → 3D (postMessage)**: Navigera i Ivion, se om 3D följer automatiskt
+3. **Fallback**: Om postMessage ej fungerar, verifiera att manuell synk via URL fortfarande är möjlig
+4. **Sync toggle**: Verifiera att OFF faktiskt stänger av synk
+5. **Performance**: Kontrollera att polling/events inte orsakar fördröjning eller flimmer
