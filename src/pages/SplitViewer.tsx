@@ -1,16 +1,18 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, AlertCircle, RefreshCw, ArrowRightLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { AppContext } from '@/context/AppContext';
 import { ViewerSyncProvider, useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
-import { localToGeo, geoToLocal, bimToGeoHeading, geoToBimHeading } from '@/lib/coordinate-transform';
+import { toast } from 'sonner';
 
 const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
@@ -32,11 +34,17 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   const { appConfigs } = useContext(AppContext);
   const { syncLocked, setSyncLocked, resetSync, syncState, updateFrom3D, updateFromIvion, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const ivion360Ref = useRef<{ syncFrom360Url: (url: string) => Promise<boolean> } | null>(null);
   
   // Sync position state - transformed coordinates for each viewer
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
   const [sync3DHeading, setSync3DHeading] = useState<number>(0);
   const [sync3DPitch, setSync3DPitch] = useState<number>(0);
+
+  // Manual sync dialog state
+  const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [ivionUrlInput, setIvionUrlInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Set building context for coordinate transformation
   useEffect(() => {
@@ -56,29 +64,27 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   console.log('[SplitViewer] Ivion URL:', ivionUrl);
   console.log('[SplitViewer] Building origin:', buildingData.origin);
 
-  // Check if origin is configured
+  // Check if origin is configured (not strictly needed for image-based sync)
   const hasOrigin = !!(buildingData.origin?.lat && buildingData.origin?.lng);
 
   // Handle camera change from 3D viewer
   const handle3DCameraChange = useCallback((position: LocalCoords, heading: number, pitch: number) => {
-    if (!syncLocked || !hasOrigin || !buildingData.origin) return;
+    if (!syncLocked) return;
     
-    // Transform to geo coordinates and update context
-    // The Ivion360View will react to syncState changes via useIvionCameraSync
+    // Update sync context - Ivion360View will react via useIvionCameraSync
     updateFrom3D(position, heading, pitch);
-  }, [syncLocked, hasOrigin, buildingData.origin, updateFrom3D]);
+  }, [syncLocked, updateFrom3D]);
 
   // React to sync state changes from Ivion and update 3D viewer position
   useEffect(() => {
-    if (!syncLocked || !hasOrigin || !buildingData.origin) return;
+    if (!syncLocked) return;
     if (syncState.source !== 'ivion' || !syncState.position) return;
     
-    // Transform geo position to local BIM coordinates
-    // The Ivion hook provides position in local coords via geoToLocal
+    // Set position for 3D viewer
     setSync3DPosition(syncState.position);
     setSync3DHeading(syncState.heading);
     setSync3DPitch(syncState.pitch);
-  }, [syncLocked, hasOrigin, buildingData.origin, syncState]);
+  }, [syncLocked, syncState]);
 
   const handleBack = () => {
     // Use explicit path to avoid iframe history conflicts
@@ -92,6 +98,64 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
     } else {
       document.exitFullscreen();
       setIsFullscreen(false);
+    }
+  };
+
+  // Handle manual sync from Ivion URL
+  const handleParseIvionUrl = async () => {
+    if (!ivionUrlInput.trim()) {
+      toast.error('Ange en Ivion-URL');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      // Parse image ID from URL
+      const url = new URL(ivionUrlInput);
+      const imageId = url.searchParams.get('image');
+      
+      if (!imageId) {
+        toast.error('URL:en saknar &image= parameter');
+        return;
+      }
+
+      // Parse view angles
+      const vlon = parseFloat(url.searchParams.get('vlon') || '0');
+      const vlat = parseFloat(url.searchParams.get('vlat') || '0');
+      
+      // Convert radians to degrees
+      const heading = (vlon * 180) / Math.PI;
+      const pitch = (vlat * 180) / Math.PI;
+
+      // Fetch image position from API
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'get-image-position',
+          imageId: parseInt(imageId, 10),
+          buildingFmGuid: buildingData.fmGuid,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast.error('Kunde inte hämta bildposition: ' + (data?.error || error?.message));
+        return;
+      }
+
+      // Update sync context with position from image
+      const position: LocalCoords = {
+        x: data.location.x,
+        y: data.location.y,
+        z: data.location.z,
+      };
+
+      updateFromIvion(position, heading, pitch);
+      setShowSyncDialog(false);
+      setIvionUrlInput('');
+      toast.success(`Synkad till bild ${imageId}`);
+    } catch (err: any) {
+      toast.error('Ogiltig URL: ' + err.message);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -121,20 +185,23 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Origin warning */}
-          {!hasOrigin && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 text-amber-500 text-xs mr-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">Koordinater saknas</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                Synkronisering kräver att byggnadens lat/lng är konfigurerad i inställningarna.
-              </TooltipContent>
-            </Tooltip>
-          )}
+          {/* Sync 360° → 3D button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSyncDialog(true)}
+                className="gap-1.5"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">360° → 3D</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Synka 3D-vyn till 360°-positionen via URL
+            </TooltipContent>
+          </Tooltip>
 
           {/* Sync toggle */}
           <Tooltip>
@@ -144,7 +211,6 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
                 size="sm"
                 onClick={() => setSyncLocked(!syncLocked)}
                 className="gap-1.5"
-                disabled={!hasOrigin}
               >
                 {syncLocked ? (
                   <>
@@ -160,11 +226,9 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {!hasOrigin
-                ? 'Synkronisering kräver konfigurerade koordinater'
-                : syncLocked
-                  ? 'Vyerna följer varandra. Klicka för att låsa upp.'
-                  : 'Vyerna är oberoende. Klicka för att synkronisera.'}
+              {syncLocked
+                ? 'Vyerna följer varandra. Klicka för att låsa upp.'
+                : 'Vyerna är oberoende. Klicka för att synkronisera.'}
             </TooltipContent>
           </Tooltip>
 
@@ -206,7 +270,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
             </div>
             <AssetPlusViewer 
               fmGuid={buildingData.fmGuid}
-              syncEnabled={syncLocked && hasOrigin}
+              syncEnabled={syncLocked}
               onCameraChange={handle3DCameraChange}
               syncPosition={sync3DPosition}
               syncHeading={sync3DHeading}
@@ -226,13 +290,45 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
             </div>
             <Ivion360View 
               url={ivionUrl} 
-              syncEnabled={syncLocked && hasOrigin}
+              syncEnabled={syncLocked}
               buildingOrigin={buildingData.origin}
               buildingFmGuid={buildingData.fmGuid}
+              ivionSiteIdProp={buildingData.ivionSiteId}
             />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Manual sync dialog */}
+      <Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Synka från 360°</DialogTitle>
+            <DialogDescription>
+              Högerklicka på Ivion-iframen → "Kopiera länkadress" och klistra in nedan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={ivionUrlInput}
+              onChange={(e) => setIvionUrlInput(e.target.value)}
+              placeholder="https://swg.iv.navvis.com/?site=...&image=..."
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              URL:en måste innehålla <code className="bg-muted px-1 rounded">&image=XXX</code> för att kunna synka.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSyncDialog(false)}>
+              Avbryt
+            </Button>
+            <Button onClick={handleParseIvionUrl} disabled={isSyncing}>
+              {isSyncing ? 'Synkar...' : 'Synka'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
