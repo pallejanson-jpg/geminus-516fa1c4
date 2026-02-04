@@ -1,469 +1,384 @@
 
-# Plan: Synkronisera Våningsväljare, Fixa 2D-klippning & Split View
+# Plan: Split View Synkronisering via Ivion Image ID
 
 ## Sammanfattning
 
-Denna plan adresserar sex problem i 3D-visaren:
-1. **Våningsväljarna hänger inte ihop** - Modellträdet, Pills, Menyväljaren och Karusellen styr inte samma val
-2. **Pills ska vara vertikal, draggbar och vid höger meny** - Med toggle i Viewer settings
-3. **Skapa ärenden ska vara flytande** - Redan implementerat (CreateIssueDialog är draggbar)
-4. **Modellträdet behöver längre standardhöjd** - 400px → 550px
-5. **2D-klippfunktionen fungerar inte** - SectionPlane kräver `clippable: true` på entities
-6. **Split View synk-problem** - Startvy, klipp av objekt ovanför nästa våningsplan, och 360→våning-hopp
+NavVis Ivion exponerar sin position via URL-parametern `image=XXX` där XXX är ID:t för den panoramabild användaren tittar på. Genom att:
+1. Hämta bildpositionen via Ivion API (`GET /images/{imageId}`)
+2. Transformera koordinaterna till BIM-lokala koordinater
+3. Flytta 3D-kameran dit
+
+...kan vi uppnå **360° → 3D synkronisering**.
+
+För **3D → 360°** kan vi:
+1. Hitta närmaste Ivion-bild baserat på 3D-kamerans position
+2. Uppdatera iframe:ns URL med `&image=XXX`
 
 ---
 
-## Del 1: Synkronisera Våningsväljare
+## Ivion URL-format (bekräftat)
 
-### Problem
-- `ViewerTreePanel` ändrar synlighet direkt i scengrafen men skickar INTE `FLOOR_SELECTION_CHANGED_EVENT`
-- `FloatingFloorSwitcher` lyssnar på eventet men uppdaterar inte sin selection vid multi-select från andra källor
-- `FloorCarousel` skickar event vid klick men lyssnar inte för att synka sin markering
-
-### Lösning
-
-```text
-┌────────────────────────────────────────────────────────────────┐
-│               Unified Floor Selection Architecture             │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│   ViewerTreePanel ──┐                                          │
-│                     │                                          │
-│   FloorVisibility ──┼──▶ FLOOR_SELECTION_CHANGED_EVENT ──┐     │
-│                     │                                    │     │
-│   FloatingPills ────┤                                    ▼     │
-│                     │                              ┌──────────┐│
-│   FloorCarousel ────┘                              │ Listeners ││
-│                                                    └──────────┘│
-│                                                         │      │
-│   All components BOTH dispatch AND listen to this event │      │
-│   ────────────────────────────────────────────────────────     │
-└────────────────────────────────────────────────────────────────┘
+```
+https://swg.iv.navvis.com/?site={siteId}&vlon={yaw_rad}&vlat={pitch_rad}&fov={fov_deg}&image={imageId}
 ```
 
-### Filer att ändra
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/viewer/ViewerTreePanel.tsx` | Dispatcha FLOOR_SELECTION_CHANGED_EVENT vid storey-nod visibility toggle |
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | Uppdatera `visibleFloorIds` state vid mottagning av event (stödja multi-select) |
-| `src/components/viewer/FloorCarousel.tsx` | Lägg till listener för att synka `selectedFloorId` |
-
-### Ändringar i ViewerTreePanel
-
-När en storey-nod ändrar synlighet:
-
-```typescript
-const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
-  // ... existing visibility logic ...
-  
-  // If node is IfcBuildingStorey, dispatch floor selection event
-  if (node.type?.toLowerCase() === 'ifcbuildingstorey') {
-    // Collect all currently visible storeys
-    const visibleStoreys = getAllVisibleStoreys(scene, metaObjects);
-    
-    window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
-      detail: {
-        floorId: visibleStoreys.length === 1 ? visibleStoreys[0].id : null,
-        visibleMetaFloorIds: visibleStoreys.map(s => s.id),
-        visibleFloorFmGuids: visibleStoreys.map(s => s.originalSystemId || s.id),
-        isAllFloorsVisible: visibleStoreys.length === allStoreys.length,
-      }
-    }));
-  }
-}, []);
-```
-
-### Ändringar i FloatingFloorSwitcher
-
-Uppdatera listener för att hantera full synk:
-
-```typescript
-useEffect(() => {
-  const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-    const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
-    
-    if (isAllFloorsVisible) {
-      setVisibleFloorIds(new Set(floors.map(f => f.id)));
-    } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
-      // Match against our floor list
-      const matchingIds = floors
-        .filter(f => visibleMetaFloorIds.includes(f.id))
-        .map(f => f.id);
-      setVisibleFloorIds(new Set(matchingIds));
-    }
-  };
-  
-  window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
-  return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
-}, [floors]);
-```
+| Parameter | Betydelse | Enhet |
+|-----------|-----------|-------|
+| `site` | Ivion Site ID | string |
+| `vlon` | Kamerans yaw/heading | radianer |
+| `vlat` | Kamerans pitch | radianer |
+| `fov` | Field of view | grader |
+| `image` | Aktuell panoramabild-ID | number |
 
 ---
 
-## Del 2: Vertikal Draggbar Pills vid Höger Meny
-
-### Nuvarande
-- Horisontell, fixed i bottom-left
-- Inte konfigurerbar via settings
-
-### Önskad
-- Vertikal layout
-- Draggbar
-- Default-position: höger (vid VisualizationToolbar)
-- Toggle i Viewer Settings (maximera-knappen i Visningsmenyn)
-
-### Filer att ändra
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | Ny layout (vertical), draggbar, läs show/hide från localStorage |
-| `src/components/viewer/VisualizationToolbar.tsx` | Lägg till Switch "Visa våningsväljare" under Viewer settings |
-| `src/components/viewer/ToolbarSettings.tsx` | (Valfritt) Lägg till som konfigurerbart verktyg |
-
-### FloatingFloorSwitcher ändringar
-
-```typescript
-// State for dragging
-const [position, setPosition] = useState({ x: 0, y: 0 });
-const [isDragging, setIsDragging] = useState(false);
-
-// Check visibility from localStorage or context
-const [isVisible, setIsVisible] = useState(() => {
-  return localStorage.getItem('viewer-show-floor-pills') !== 'false'; // Default ON
-});
-
-// Listen for visibility toggle events
-useEffect(() => {
-  const handleToggle = (e: CustomEvent) => {
-    setIsVisible(e.detail.visible);
-    localStorage.setItem('viewer-show-floor-pills', String(e.detail.visible));
-  };
-  window.addEventListener('FLOOR_PILLS_TOGGLE', handleToggle);
-  return () => window.removeEventListener('FLOOR_PILLS_TOGGLE', handleToggle);
-}, []);
-
-// Initial position - right side
-useEffect(() => {
-  if (position.x === 0 && position.y === 0) {
-    const x = window.innerWidth - 80; // Near right edge
-    const y = 150; // Below header
-    setPosition({ x, y });
-  }
-}, []);
-
-// Render vertically
-return (
-  <div
-    style={{ left: position.x, top: position.y }}
-    className={cn(
-      'fixed z-20 flex flex-col items-center gap-1 p-2',
-      'bg-background/80 backdrop-blur-sm border rounded-lg shadow-lg',
-      !isVisible && 'hidden',
-      isDragging && 'cursor-grabbing'
-    )}
-    onMouseDown={handleDragStart}
-  >
-    {/* Drag handle */}
-    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-    
-    {/* Vertical pills */}
-    {floors.map(floor => (
-      <button key={floor.id} className="w-10 h-10 rounded-full ...">
-        {floor.shortName}
-      </button>
-    ))}
-  </div>
-);
-```
-
-### VisualizationToolbar toggle
-
-Under "Viewer settings" collapsible:
-
-```tsx
-<div className="flex items-center justify-between">
-  <Label>Visa våningsväljare</Label>
-  <Switch
-    checked={showFloorPills}
-    onCheckedChange={(show) => {
-      setShowFloorPills(show);
-      window.dispatchEvent(new CustomEvent('FLOOR_PILLS_TOGGLE', {
-        detail: { visible: show }
-      }));
-    }}
-  />
-</div>
-```
-
----
-
-## Del 3: Längre Modellträd som Standard
-
-### Nuvarande
-Default height: 400px → många våningar får inte plats
-
-### Ändring
-
-```typescript
-// ViewerTreePanel.tsx line 338
-const [size, setSize] = useState({ width: 320, height: 550 }); // Was 400
-```
-
----
-
-## Del 4: Fixa 2D-klippning (SectionPlane)
-
-### Problem (från xeokit-dokumentation)
-SectionPlanes klipper ENDAST entities som har `clippable: true`. Standard i xeokit är `true`, men Asset+-bundlen kan sätta det annorlunda.
-
-### Lösning
-Säkerställ att alla entities har `clippable: true` innan SectionPlane appliceras.
-
-### xeokit SectionPlane API-dokumentation (sammanfattning)
-
-```javascript
-// KORREKT: dir pekar mot den kasserade sidan
-// [0, 1, 0] = UP = kastera allt OVANFÖR planet
-// [0, -1, 0] = DOWN = kastera allt NEDANFÖR planet
-
-const sectionPlane = new SectionPlane(scene, {
-  id: "myPlane",
-  pos: [0, 5, 0],   // Y = 5 meter
-  dir: [0, 1, 0],   // Discard above
-  active: true
-});
-
-// Entity måste ha clippable: true
-entity.clippable = true; // default är true men kan vara override
-```
-
-### Filer att ändra
-
-| Fil | Ändring |
-|-----|---------|
-| `src/hooks/useSectionPlaneClipping.ts` | Sätt `clippable: true` på ALLA scene objects innan klippning |
-
-### Ny funktion: ensureClippable
-
-```typescript
-/**
- * Ensure all entities in the scene are clippable.
- * Required for SectionPlanes to work correctly.
- */
-const ensureAllEntitiesClippable = useCallback(() => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene?.objects) return;
-  
-  const objects = viewer.scene.objects;
-  let count = 0;
-  
-  Object.values(objects).forEach((entity: any) => {
-    if (entity && entity.clippable === false) {
-      entity.clippable = true;
-      count++;
-    }
-  });
-  
-  if (count > 0) {
-    console.log(`[SectionPlane] Enabled clippable on ${count} entities`);
-  }
-}, [getXeokitViewer]);
-```
-
-Anropas i `applyFloorPlanClipping` och `applyCeilingClipping` innan plane skapas.
-
-### Objekt högre än nästa våning (felritade)
-
-Lösning: 3D Solo mode ska använda nästa vånings `minY` som klipphöjd istället för aktuell vånings `maxY`. Detta är redan implementerat i `calculateClipHeightFromFloorBoundary` men måste säkerställas att den verkligen används.
-
----
-
-## Del 5: Fixa Split View Synkronisering
-
-### Problem 1: Startvy saknas
-360 styr start (användarvalet) men idag sker ingen initial synk.
-
-### Problem 2: Redundanta props
-`syncPosition`, `syncHeading`, `syncPitch` i AssetPlusViewer är **oanvända** - de passas ner men läses aldrig.
-
-### Problem 3: Ivion postMessage-synk fungerar ej
-`useIvionCameraSync` lyssnar på `navvis-event` med `camera-changed` men Ivion kanske inte skickar det i rätt format.
-
-### Lösning
+## Lösningsarkitektur
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Split View Sync Flow                        │
+│                    Split View Sync (NY DESIGN)                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. SplitViewer öppnas                                          │
-│  2. Ivion360View laddas i iframe                                │
-│  3. Ivion skickar 'navvis-event' camera-changed                 │
-│  4. useIvionCameraSync fångar → updateFromIvion(pos, heading)   │
-│  5. syncState.source = 'ivion' → SplitViewer useEffect triggas  │
-│  6. Antingen:                                                   │
-│     a) SplitViewer skickar till AssetPlusViewer via             │
-│        useViewerCameraSync onSyncReceived callback              │
-│     b) ELLER: Ta bort mellanhand, låt AssetPlusViewer lyssna    │
-│        direkt på syncState                                      │
-│                                                                 │
-│  Implementera (b) - enklare och redan delvis på plats           │
+│   360° Ivion                              3D xeokit             │
+│       │                                       │                 │
+│       │ 1. hashchange event                   │                 │
+│       ├──────────────────────────────────────►│                 │
+│       │    (parse image=XXX)                  │                 │
+│       │                                       │                 │
+│       │ 2. Fetch image position               │                 │
+│       │    GET /images/{imageId}              │                 │
+│       │                                       │                 │
+│       │ 3. Transform coords → flyTo           │                 │
+│       │                                       │                 │
+│       │◄──────────────────────────────────────┤                 │
+│       │ 4. 3D camera change                   │                 │
+│       │    → find nearest image               │                 │
+│       │    → update iframe.src                │                 │
+│       │                                       │                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Filer att ändra
+---
 
-| Fil | Ändring |
-|-----|---------|
-| `src/hooks/useIvionCameraSync.ts` | Lägg till mer robust message-parsing och fallback |
-| `src/components/viewer/AssetPlusViewer.tsx` | Ta bort oanvända `syncPosition/syncHeading/syncPitch` props, förlita på useViewerCameraSync |
-| `src/pages/SplitViewer.tsx` | Ta bort redundant state-mellanhand |
-| `src/components/viewer/Ivion360View.tsx` | Lägg till debug-loggning för inkommande postMessages |
+## Del 1: Hämta Ivion-bildpositioner (Backend)
 
-### Initialsynk från 360
+### Ny Edge Function: `ivion-get-image-position`
 
-Lägg till i `useIvionCameraSync`:
+Skapar en ny action i befintliga `ivion-poi` edge function för att hämta bildposition.
 
 ```typescript
-// After first message received, set initialSyncDone flag
-const initialSyncDoneRef = useRef(false);
+// Ny action i ivion-poi/index.ts
 
-// In message handler:
-if (!initialSyncDoneRef.current && data?.data?.lat) {
-  console.log('[Ivion Sync] Initial position received');
-  initialSyncDoneRef.current = true;
-  // Force broadcast to 3D viewer
+case 'get-image-position':
+  if (!params.imageId) throw new Error('imageId required');
+  const token = await getIvionToken();
+  
+  const imageResp = await fetch(`${IVION_API_URL}/api/images/${params.imageId}`, {
+    headers: { 'x-authorization': `Bearer ${token}` },
+  });
+  
+  if (!imageResp.ok) throw new Error(`Image not found: ${params.imageId}`);
+  
+  const image = await imageResp.json();
+  // Image response includes: { id, location: {x, y, z}, orientation: {...}, ... }
+  result = {
+    id: image.id,
+    location: image.location, // {x, y, z} i meter (lokala Ivion-koordinater)
+    orientation: image.orientation,
+    datasetId: image.datasetId,
+  };
+  break;
+
+case 'get-images-for-site':
+  // Hämta alla bilder för en site (för att kunna hitta närmaste bild)
+  if (!params.siteId) throw new Error('siteId required');
+  const token2 = await getIvionToken();
+  
+  // Hämta datasets för siten
+  const datasetsResp = await fetch(`${IVION_API_URL}/api/site/${params.siteId}/datasets`, {
+    headers: { 'x-authorization': `Bearer ${token2}` },
+  });
+  const datasets = await datasetsResp.json();
+  
+  // Hämta bilder för varje dataset
+  const allImages = [];
+  for (const ds of datasets) {
+    const imagesResp = await fetch(`${IVION_API_URL}/api/dataset/${ds.id}/images`, {
+      headers: { 'x-authorization': `Bearer ${token2}` },
+    });
+    const images = await imagesResp.json();
+    allImages.push(...images.map(img => ({
+      id: img.id,
+      location: img.location,
+      datasetId: ds.id,
+    })));
+  }
+  
+  result = { images: allImages };
+  break;
+```
+
+---
+
+## Del 2: Refaktorera useIvionCameraSync
+
+### Ny strategi: URL-baserad synk istället för postMessage
+
+```typescript
+// src/hooks/useIvionCameraSync.ts - NY IMPLEMENTATION
+
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
+import { supabase } from '@/integrations/supabase/client';
+import { geoToBimHeading, normalizeHeading, type BuildingOrigin } from '@/lib/coordinate-transform';
+
+interface IvionImage {
+  id: number;
+  location: { x: number; y: number; z: number };
+  datasetId: number;
+}
+
+interface UseIvionCameraSyncOptions {
+  iframeRef: React.RefObject<HTMLIFrameElement>;
+  enabled: boolean;
+  buildingOrigin: BuildingOrigin | null;
+  ivionSiteId: string;
+}
+
+export function useIvionCameraSync({
+  iframeRef,
+  enabled,
+  buildingOrigin,
+  ivionSiteId,
+}: UseIvionCameraSyncOptions): void {
+  const { syncLocked, syncState, updateFromIvion, updateFrom3D } = useViewerSync();
+  
+  // Cache av alla bilder för att hitta närmaste
+  const [imageCache, setImageCache] = useState<IvionImage[]>([]);
+  const lastImageIdRef = useRef<number | null>(null);
+  const isSyncingRef = useRef(false);
+
+  // 1. Ladda alla bilder för siten vid mount
+  useEffect(() => {
+    if (!enabled || !ivionSiteId) return;
+    
+    const loadImages = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('ivion-poi', {
+          body: { action: 'get-images-for-site', siteId: ivionSiteId },
+        });
+        
+        if (data?.images) {
+          setImageCache(data.images);
+          console.log(`[Ivion Sync] Loaded ${data.images.length} images for site`);
+        }
+      } catch (e) {
+        console.error('[Ivion Sync] Failed to load images:', e);
+      }
+    };
+    
+    loadImages();
+  }, [enabled, ivionSiteId]);
+
+  // 2. Lyssna på hashchange för att fånga image-byten
+  useEffect(() => {
+    if (!enabled || !syncLocked) return;
+    
+    const checkIframeUrl = () => {
+      // Vi kan inte läsa cross-origin iframe URL direkt,
+      // men vi kan lyssna på window.postMessage om Ivion skickar det
+      // ELLER använda polling av iframe.contentWindow.location (misslyckas pga CORS)
+    };
+    
+    // Alternativ approach: Polling av Ivion API för senast visade bild
+    // Om Ivion exponerar "current image" via API
+    
+  }, [enabled, syncLocked]);
+
+  // 3. När 3D-kameran ändras → hitta närmaste bild → uppdatera iframe URL
+  useEffect(() => {
+    if (!enabled || !syncLocked) return;
+    if (syncState.source !== '3d' || !syncState.position) return;
+    if (!iframeRef.current || imageCache.length === 0) return;
+    if (isSyncingRef.current) return;
+    
+    // Hitta närmaste bild
+    const pos = syncState.position;
+    let nearestImage: IvionImage | null = null;
+    let nearestDist = Infinity;
+    
+    for (const img of imageCache) {
+      const dx = img.location.x - pos.x;
+      const dy = img.location.y - pos.y;
+      const dz = img.location.z - pos.z;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestImage = img;
+      }
+    }
+    
+    if (!nearestImage || nearestImage.id === lastImageIdRef.current) return;
+    if (nearestDist > 10) return; // Max 10m avstånd
+    
+    lastImageIdRef.current = nearestImage.id;
+    isSyncingRef.current = true;
+    
+    // Uppdatera iframe URL med ny bild
+    const currentUrl = new URL(iframeRef.current.src);
+    currentUrl.searchParams.set('image', String(nearestImage.id));
+    
+    // Konvertera heading till radianer för vlon
+    const vlonRad = (syncState.heading * Math.PI) / 180;
+    const vlatRad = (syncState.pitch * Math.PI) / 180;
+    currentUrl.searchParams.set('vlon', vlonRad.toFixed(2));
+    currentUrl.searchParams.set('vlat', vlatRad.toFixed(2));
+    
+    console.log('[Ivion Sync] Navigating to image:', nearestImage.id);
+    iframeRef.current.src = currentUrl.toString();
+    
+    setTimeout(() => { isSyncingRef.current = false; }, 1000);
+  }, [enabled, syncLocked, syncState, imageCache, iframeRef]);
 }
 ```
 
 ---
 
-## Del 6: 360 till Rätt Våning via Geo
+## Del 3: Ivion → 3D Synk (svårare)
 
-### Nuvarande
-Ingen logik för att skicka startposition till Ivion baserat på vald våning.
+### Problemet
+Vi kan **inte läsa** en cross-origin iframe:s URL pga webbläsarsäkerhet.
 
-### Lösning
-När 360-vy öppnas med en förselekterad våning, beräkna våningens centroid i geo-koordinater och skicka `moveToGeoLocation` till Ivion.
+### Möjliga lösningar
 
-### Filer att ändra
+#### Alternativ A: Polling via Backend (rekommenderas)
+Ivion API har möjlighet att exponera "senast visade bild" per session/användare, men detta är oklart utan djupare dokumentation.
+
+#### Alternativ B: hashchange via proxy-sida (komplex)
+Om vi kontrollerar Ivion-hosten kan vi lägga in JavaScript som skickar `postMessage` vid navigation.
+
+#### Alternativ C: Manuell synk-knapp (enklast)
+Lägg till en "Synka 360° → 3D" knapp som:
+1. Öppnar Ivion i ny flik
+2. Användaren kopierar aktuell URL
+3. Appen läser `image=XXX` från inmatningen
+
+#### Alternativ D: NavVis IndoorViewer SDK
+Om ni har tillgång till SDK:t kan den injiceras och skicka `postMessage` vid navigation.
+
+---
+
+## Del 4: Förenklad Implementation (Fas 1)
+
+### Vad vi implementerar nu:
+
+| Funktion | Beskrivning | Komplexitet |
+|----------|-------------|-------------|
+| 3D → 360° synk | Hitta närmaste bild, uppdatera iframe URL | Medel |
+| Initial synk | Båda startar på samma plats (3D:s startposition) | Enkel |
+| Synk-knapp | "Synka nu" knapp som tvingar uppdatering | Enkel |
+| 360° → 3D synk | **Manuell via URL-input** (tills SDK finns) | Enkel |
+
+### UI-förändringar
+
+```typescript
+// SplitViewer.tsx - Lägg till i header
+
+<Button
+  variant="outline"
+  size="sm"
+  onClick={handleSyncToIvion}
+  disabled={!hasOrigin || imageCache.length === 0}
+>
+  <RefreshCw className="h-4 w-4 mr-1" />
+  Synka 360° till 3D
+</Button>
+
+{/* Dialog för manuell Ivion → 3D synk */}
+<Dialog open={showSyncDialog} onOpenChange={setShowSyncDialog}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Synka från 360°</DialogTitle>
+    </DialogHeader>
+    <p className="text-sm text-muted-foreground mb-4">
+      Kopiera URL:en från Ivion (högerklicka → Kopiera länkadress) och klistra in nedan:
+    </p>
+    <Input
+      value={ivionUrlInput}
+      onChange={(e) => setIvionUrlInput(e.target.value)}
+      placeholder="https://swg.iv.navvis.com/?site=...&image=..."
+    />
+    <DialogFooter>
+      <Button onClick={handleParseIvionUrl}>
+        Synka
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+---
+
+## Filer som ändras
 
 | Fil | Ändring |
 |-----|---------|
-| `src/context/AppContext.tsx` | Utöka `Ivion360Context` med `initialFloorFmGuid` |
-| `src/components/viewer/Ivion360View.tsx` | Vid mount, om `initialFloorFmGuid` finns, hämta floor bounds → geo → postMessage |
-
-### Ivion360View tillägg
-
-```typescript
-// After iframe loaded and token validated
-useEffect(() => {
-  const initialFloor = ivion360Context?.initialFloorFmGuid;
-  if (!initialFloor || !buildingOrigin || !iframeRef.current?.contentWindow) return;
-  
-  // Fetch floor centroid from 3D model data (via AppContext.allData)
-  const floor = allData.find(a => 
-    a.fmGuid === initialFloor && a.category === 'Building Storey'
-  );
-  
-  if (floor?.centroid) { // If we have cached centroid
-    const geo = localToGeo(floor.centroid, buildingOrigin);
-    
-    iframeRef.current.contentWindow.postMessage({
-      type: 'navvis-command',
-      action: 'moveToGeoLocation',
-      params: { lat: geo.lat, lng: geo.lng, heading: 0 }
-    }, '*');
-  }
-}, [ivion360Context?.initialFloorFmGuid, buildingOrigin, isLoading]);
-```
+| `supabase/functions/ivion-poi/index.ts` | Lägg till `get-image-position` och `get-images-for-site` actions |
+| `src/hooks/useIvionCameraSync.ts` | Helt omskriven: URL-baserad synk, bildcache, närmaste-bild-logik |
+| `src/pages/SplitViewer.tsx` | Lägg till synk-knappar, dialog för manuell URL-input |
+| `src/components/viewer/Ivion360View.tsx` | Skicka `ivionSiteId` till sync-hook istället för `ivionOrigin` |
 
 ---
 
-## Prioritetsordning
+## Framtida förbättringar (Fas 2)
 
-| Prio | Åtgärd | Beskrivning |
-|------|--------|-------------|
-| 1 | 2D-klippning | Sätt `clippable: true` - kritiskt för all klipplogik |
-| 2 | Våningssynk | ViewerTreePanel skickar event + alla lyssnar |
-| 3 | Split View startvy | 360 → 3D synk vid öppning |
-| 4 | Pills vertikal | Layout + draggbar + toggle |
-| 5 | Modellträd höjd | Enkel ändring |
-| 6 | 360 våningshopp | Geo-baserad initial navigation |
-
----
-
-## Tekniska Detaljer
-
-### xeokit SectionPlane Korrekt Användning
+### Om ni får tillgång till NavVis IndoorViewer SDK:
 
 ```javascript
-// Metod 1: Via scene (rekommenderad)
-const plane = new viewer.scene.SectionPlane(viewer.scene, {
-  id: 'floor-clip',
-  pos: [0, height, 0],
-  dir: [0, 1, 0], // Kastera ovanför
-  active: true
+// Kod som kan injiceras i Ivion-viewer
+viewer.on('imageChange', (imageId) => {
+  window.parent.postMessage({
+    type: 'ivion-image-change',
+    imageId: imageId,
+    location: viewer.currentImage.location,
+    vlon: viewer.camera.yaw,
+    vlat: viewer.camera.pitch,
+  }, '*');
 });
-
-// Metod 2: Via scene.sectionPlanes registry
-viewer.scene.sectionPlanes['myPlane'] = new SectionPlane(...);
-
-// KRITISKT: Entity.clippable måste vara true
-Object.values(scene.objects).forEach(e => e.clippable = true);
 ```
 
-### NavVis Ivion postMessage API
-
-```javascript
-// Lyssna på kamera-ändringar
-window.addEventListener('message', (e) => {
-  if (e.data?.type === 'navvis-event' && e.data?.event === 'camera-changed') {
-    const { lat, lng, heading, pitch } = e.data.data;
-    // ...
-  }
-});
-
-// Skicka navigeringskommando
-iframe.contentWindow.postMessage({
-  type: 'navvis-command',
-  action: 'moveToGeoLocation',
-  params: { lat, lng, heading, pitch }
-}, '*');
-```
-
-### Event Flow Diagram
-
-```text
-User clicks floor in ViewerTreePanel
-          │
-          ▼
-ViewerTreePanel.handleVisibilityChange()
-          │
-          ├─── scene.objects[id].visible = true/false
-          │
-          └─── dispatch FLOOR_SELECTION_CHANGED_EVENT
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-  FloatingFloorSwitcher  FloorCarousel  AssetPlusViewer
-  (updates pills state)  (updates       (filters spaces,
-                         selection)     labels, viz)
-```
+Med detta skulle full tvåvägssynk vara möjlig utan manuell URL-kopiering.
 
 ---
 
-## Filer som ändras (sammanfattning)
+## Teknisk detalj: Koordinatsystem
 
-1. `src/hooks/useSectionPlaneClipping.ts` - clippable fix
-2. `src/components/viewer/ViewerTreePanel.tsx` - event dispatch + height
-3. `src/components/viewer/FloatingFloorSwitcher.tsx` - vertikal, draggbar, listener
-4. `src/components/viewer/FloorCarousel.tsx` - listener
-5. `src/components/viewer/VisualizationToolbar.tsx` - pills toggle
-6. `src/hooks/useIvionCameraSync.ts` - robust parsing
-7. `src/components/viewer/Ivion360View.tsx` - initial floor navigation
-8. `src/components/viewer/AssetPlusViewer.tsx` - cleanup unused props
-9. `src/pages/SplitViewer.tsx` - cleanup redundant state
-10. `src/context/AppContext.tsx` - extend Ivion360Context
+### Ivion bildpositioner
+Ivion-bilder har en `location: {x, y, z}` i **lokala meter-koordinater** relativt till en scannings-origin. Dessa behöver mappas till BIM-koordinater.
 
+### Transformation
+Om BIM-modellen och Ivion-scannern har samma origin:
+- `ivion.location.x` ≈ `bim.x`
+- `ivion.location.y` ≈ `bim.z` (höjd kan variera)
+- `ivion.location.z` ≈ `bim.y` (Y-up vs Z-up)
+
+Om de har olika origin behövs en offset som konfigureras per byggnad.
+
+### Byggnadsinställningar (utöka)
+Lägg till i `building_settings`:
+- `ivion_offset_x` - Offset mellan Ivion och BIM origin X
+- `ivion_offset_y` - Offset Y
+- `ivion_offset_z` - Offset Z
+- `ivion_rotation` - Rotation mellan koordinatsystemen
+
+---
+
+## Sammanfattning
+
+1. **3D → 360°**: Fungerar genom att hitta närmaste Ivion-bild och uppdatera iframe URL
+2. **360° → 3D**: Kräver manuell URL-input (eller SDK-integration i framtiden)
+3. **Initial synk**: 3D styr startposition, hittar närmaste bild, laddar den i Ivion
+4. **Heading/Pitch synk**: `vlon`/`vlat` i radianer mappar till 3D:s heading/pitch
+
+Denna lösning ger funktionell synk utan att behöva SDK-tillgång, med en tydlig väg framåt för fullständig integration.
