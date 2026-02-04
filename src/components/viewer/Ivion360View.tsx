@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback, useRef } from "react";
-import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin } from "lucide-react";
+import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppContext, Ivion360Context } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,10 @@ interface Ivion360ViewProps {
   buildingOrigin?: BuildingOrigin | null;
   /** Building FM GUID for token renewal (optional - uses context if not provided) */
   buildingFmGuid?: string;
+  /** Ivion site ID for sync (optional - uses context if not provided) */
+  ivionSiteIdProp?: string;
+  /** Callback when manual sync button is clicked */
+  onSyncRequest?: () => void;
 }
 
 export default function Ivion360View({ 
@@ -35,6 +39,8 @@ export default function Ivion360View({
   syncEnabled = false,
   buildingOrigin = null,
   buildingFmGuid: propBuildingFmGuid,
+  ivionSiteIdProp,
+  onSyncRequest,
 }: Ivion360ViewProps) {
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,17 +63,15 @@ export default function Ivion360View({
   const hasContext = !!ivion360Context;
   const buildingFmGuid = propBuildingFmGuid || ivion360Context?.buildingFmGuid;
   const buildingName = ivion360Context?.buildingName;
-  const ivionSiteId = ivion360Context?.ivionSiteId;
+  const ivionSiteId = ivionSiteIdProp || ivion360Context?.ivionSiteId;
 
-  // Extract Ivion origin from URL for postMessage security
-  const ivionOrigin = ivionUrl ? new URL(ivionUrl).origin : '';
-
-  // Camera sync hook
-  useIvionCameraSync({
+  // Camera sync hook - using new image-based approach
+  const { imageCache, isLoadingImages, currentImageId, syncToIvion, syncFrom360Url } = useIvionCameraSync({
     iframeRef,
     enabled: syncEnabled,
     buildingOrigin,
-    ivionOrigin,
+    ivionSiteId: ivionSiteId || '',
+    buildingFmGuid,
   });
 
   // Token renewal state
@@ -124,6 +128,16 @@ export default function Ivion360View({
     setIvion360Context(null);
     onClose?.();
   }, [setIvion360Context, onClose]);
+
+  // Manual sync button handler
+  const handleManualSync = useCallback(() => {
+    if (onSyncRequest) {
+      onSyncRequest();
+    } else {
+      syncToIvion();
+      toast.success('360°-vy synkad till 3D-position');
+    }
+  }, [onSyncRequest, syncToIvion]);
 
   // POI polling effect - only when registration panel is open
   useEffect(() => {
@@ -224,8 +238,27 @@ export default function Ivion360View({
             <span className="text-sm text-muted-foreground">- {buildingName}</span>
           )}
           {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {syncEnabled && !isLoadingImages && imageCache.length > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              {imageCache.length} bilder
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
+          {/* Sync button - only show when sync is enabled */}
+          {syncEnabled && imageCache.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleManualSync}
+              title="Synka 360° till 3D"
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline text-xs">Synka</span>
+            </Button>
+          )}
+          
           {/* Inventory tools - only show when context is available */}
           {hasContext && ivionSiteId && (
             <>
@@ -283,12 +316,16 @@ export default function Ivion360View({
 
       {/* Iframe container */}
       <div className="flex-1 relative">
-        {(isLoading || isRenewingToken) && (
+        {(isLoading || isRenewingToken || isLoadingImages) && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
-                {isRenewingToken ? 'Förnyar anslutning...' : 'Laddar 360°-vy...'}
+                {isRenewingToken 
+                  ? 'Förnyar anslutning...' 
+                  : isLoadingImages 
+                    ? 'Laddar bildpositioner...'
+                    : 'Laddar 360°-vy...'}
               </span>
             </div>
           </div>

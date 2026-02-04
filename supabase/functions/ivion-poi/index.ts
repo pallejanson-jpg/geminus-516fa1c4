@@ -630,6 +630,103 @@ serve(async (req) => {
           };
         }
         break;
+
+      // ================== IMAGE POSITION FOR SYNC ==================
+      case 'get-image-position':
+        // Get position of a specific Ivion panorama image
+        if (!params.imageId) throw new Error('imageId required');
+        try {
+          const token = await getIvionToken(params.buildingFmGuid);
+          
+          const imageResp = await fetch(`${IVION_API_URL}/api/images/${params.imageId}`, {
+            headers: {
+              'x-authorization': `Bearer ${token}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!imageResp.ok) {
+            const errorText = await imageResp.text();
+            throw new Error(`Image not found: ${imageResp.status} - ${errorText.slice(0, 100)}`);
+          }
+          
+          const image = await imageResp.json();
+          result = {
+            success: true,
+            id: image.id,
+            location: image.location, // {x, y, z} in meters (local Ivion coordinates)
+            orientation: image.orientation,
+            datasetId: image.datasetId,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
+
+      case 'get-images-for-site':
+        // Get all images for a site (for finding nearest image in sync)
+        if (!params.siteId) throw new Error('siteId required');
+        try {
+          const token = await getIvionToken(params.buildingFmGuid);
+          
+          // First get datasets for the site
+          const datasetsResp = await fetch(`${IVION_API_URL}/api/site/${params.siteId}/datasets`, {
+            headers: {
+              'x-authorization': `Bearer ${token}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!datasetsResp.ok) {
+            throw new Error(`Failed to get datasets: ${datasetsResp.status}`);
+          }
+          
+          const datasets = await datasetsResp.json();
+          
+          // Get images for each dataset (limit to first 2 datasets to avoid timeout)
+          const allImages: Array<{ id: number; location: { x: number; y: number; z: number }; datasetId: number }> = [];
+          const datasetsToProcess = datasets.slice(0, 2);
+          
+          for (const ds of datasetsToProcess) {
+            try {
+              const imagesResp = await fetch(`${IVION_API_URL}/api/dataset/${ds.id}/images?limit=500`, {
+                headers: {
+                  'x-authorization': `Bearer ${token}`,
+                  'Accept': 'application/json',
+                },
+              });
+              
+              if (imagesResp.ok) {
+                const images = await imagesResp.json();
+                const imageList = Array.isArray(images) ? images : (images.items || []);
+                allImages.push(...imageList.map((img: any) => ({
+                  id: img.id,
+                  location: img.location,
+                  datasetId: ds.id,
+                })));
+              }
+            } catch (e) {
+              console.log(`Failed to load images for dataset ${ds.id}:`, e);
+            }
+          }
+          
+          result = {
+            success: true,
+            images: allImages,
+            totalDatasets: datasets.length,
+            processedDatasets: datasetsToProcess.length,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+            images: [],
+          };
+        }
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`);
