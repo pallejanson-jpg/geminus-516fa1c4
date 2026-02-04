@@ -25,6 +25,8 @@ interface Ivion360ViewProps {
   syncEnabled?: boolean;
   /** Building origin for coordinate transformation */
   buildingOrigin?: BuildingOrigin | null;
+  /** Building FM GUID for token renewal (optional - uses context if not provided) */
+  buildingFmGuid?: string;
 }
 
 export default function Ivion360View({ 
@@ -32,6 +34,7 @@ export default function Ivion360View({
   onClose, 
   syncEnabled = false,
   buildingOrigin = null,
+  buildingFmGuid: propBuildingFmGuid,
 }: Ivion360ViewProps) {
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,7 +55,7 @@ export default function Ivion360View({
   // Determine the URL to use (context takes priority, then prop, then localStorage)
   const ivionUrl = ivion360Context?.ivionUrl || url || localStorage.getItem('ivion360Url');
   const hasContext = !!ivion360Context;
-  const buildingFmGuid = ivion360Context?.buildingFmGuid;
+  const buildingFmGuid = propBuildingFmGuid || ivion360Context?.buildingFmGuid;
   const buildingName = ivion360Context?.buildingName;
   const ivionSiteId = ivion360Context?.ivionSiteId;
 
@@ -66,6 +69,45 @@ export default function Ivion360View({
     buildingOrigin,
     ivionOrigin,
   });
+
+  // Token renewal state
+  const [isRenewingToken, setIsRenewingToken] = useState(false);
+
+  // Automatic token validation and renewal on mount
+  useEffect(() => {
+    if (!buildingFmGuid) return;
+    
+    const validateAndRefreshToken = async () => {
+      try {
+        setIsRenewingToken(true);
+        
+        const { data, error } = await supabase.functions.invoke('ivion-poi', {
+          body: { 
+            action: 'test-connection-auto',
+            buildingFmGuid,
+          },
+        });
+        
+        if (error) {
+          console.warn('Ivion token validation failed:', error);
+          setConnectionStatus('error');
+        } else if (data?.success) {
+          console.log('Ivion token valid/renewed:', data.message);
+          setConnectionStatus('connected');
+        } else {
+          console.warn('Ivion token check returned unsuccessful:', data);
+          setConnectionStatus('expired');
+        }
+      } catch (e) {
+        console.error('Token renewal error:', e);
+        setConnectionStatus('error');
+      } finally {
+        setIsRenewingToken(false);
+      }
+    };
+    
+    validateAndRefreshToken();
+  }, [buildingFmGuid]);
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
@@ -241,11 +283,13 @@ export default function Ivion360View({
 
       {/* Iframe container */}
       <div className="flex-1 relative">
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+        {(isLoading || isRenewingToken) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">Loading 360° view...</span>
+              <span className="text-sm text-muted-foreground">
+                {isRenewingToken ? 'Förnyar anslutning...' : 'Laddar 360°-vy...'}
+              </span>
             </div>
           </div>
         )}
