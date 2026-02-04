@@ -75,6 +75,8 @@ export default function Ivion360View({
     sendSubscribeCommand,
     lastSyncSource,
     postMessageActive,
+    hasImageLoadError,
+    retryLoadImages,
   } = useIvionCameraSync({
     iframeRef,
     enabled: syncEnabled,
@@ -365,6 +367,21 @@ export default function Ivion360View({
             </div>
           </div>
         )}
+        
+        {/* Warning banner when image cache is empty but sync is enabled */}
+        {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
+          <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
+                          text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
+            <span>⚠️ Kunde inte hämta bildpositioner för synk.</span>
+            <button 
+              onClick={retryLoadImages}
+              className="underline hover:no-underline whitespace-nowrap"
+            >
+              Försök igen
+            </button>
+          </div>
+        )}
+        
         <iframe
           ref={iframeRef}
           src={ivionUrl}
