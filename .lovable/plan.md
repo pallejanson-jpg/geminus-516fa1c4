@@ -1,256 +1,107 @@
 
-# Plan: Komplett Split View-fix (Synk, XKT-preload, Token-renewal, Tillbaka-knapp)
+# Plan: Fixa "Koordinater saknas" i Split View
 
 ## Sammanfattning
 
-Det finns fyra separata problem som alla behöver lösas för att Split View ska fungera korrekt:
+Split View visar "Koordinater saknas" eftersom **byggnaden saknar lat/lng-värden** i databasen. Synkroniseringen kräver dessa för att transformera koordinater mellan 3D (lokal BIM) och 360° (geografisk).
 
-| Problem | Orsak | Lösning |
-|---------|-------|---------|
-| **1. Synkronisering saknas** | `useViewerCameraSync` anropas aldrig i `AssetPlusViewer` | Anslut hook och skicka sync-callbacks från SplitViewer |
-| **2. Gemensam startpunkt** | Ingen logik för att synkronisera initial position | Automatisk synk baserat på första Ivion-position |
-| **3. XKT-preload långsam** | Preload startar men binärdata hämtas inte effektivt | Optimera fetch-strategi och använd memory cache |
-| **4. Ivion token-renewal** | Token cachar men UI visar inte förnyelseprocess | Automatisk renewal i edge function + UI-feedback |
-| **5. Tillbaka-knappen** | `navigate(-1)` och `window.location.href` fel | Explicit navigering med `navigate('/')` |
+## Nuläge
 
----
+| Fält | Värde |
+|------|-------|
+| `fm_guid` | 9baa7a3a-717d-4fcb-8718-0f5ca618b28a |
+| `ivion_site_id` | 3373717251911143 ✓ |
+| `latitude` | **null** ❌ |
+| `longitude` | **null** ❌ |
+| `rotation` | 0 |
 
-## Problem 1: Synkronisering mellan 3D och 360°
+## Lösning (två delar)
 
-### Nuläge
+### Del 1: Sätt in koordinater för Centralstationen
 
-Hooks finns men är **inte anslutna**:
+Stockholm Centralstations koordinater:
+- **Latitude**: 59.330364
+- **Longitude**: 18.060124
+- **Rotation**: 0 (kan justeras senare om synk-riktningen är fel)
 
-```text
-AssetPlusViewer.tsx:
-  ❌ Importerar INTE useViewerCameraSync
-  ❌ Lyssnar INTE på kameraändringar
-  ❌ Skickar INTE updateFrom3D()
+Detta görs via en databasuppdatering.
 
-Ivion360View.tsx:
-  ✓ Importerar useIvionCameraSync
-  ✓ Hook anropas med buildingOrigin
-  ❓ Men Ivion API kanske inte skickar camera-changed events automatiskt
-```
+### Del 2: Skapa UI för att konfigurera koordinater
 
-### Lösning
-
-**Steg 1: Uppdatera AssetPlusViewer.tsx**
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Lägg till sync-props | `syncEnabled`, `onCameraChange`, `syncPosition` |
-| Importera och anropa `useViewerCameraSync` | Anslut till xeokit kamera |
-| Exponera viewerRef | För extern åtkomst från SplitViewer |
-
-```typescript
-// Nya props
-interface AssetPlusViewerProps {
-  fmGuid: string;
-  onClose?: () => void;
-  pickModeEnabled?: boolean;
-  onCoordinatePicked?: (...) => void;
-  // NYA sync-props
-  syncEnabled?: boolean;
-  onCameraChange?: (position: LocalCoords, heading: number, pitch: number) => void;
-  syncPosition?: LocalCoords | null;
-  syncHeading?: number;
-  syncPitch?: number;
-}
-```
-
-**Steg 2: Uppdatera SplitViewer.tsx**
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Hantera `updateFrom3D` och `updateFromIvion` | Transformera koordinater mellan systemen |
-| Skicka sync-props till båda viewers | `syncEnabled`, positions, callbacks |
-| Initiera synk från första Ivion-position | Gemensam startpunkt automatiskt |
-
----
-
-## Problem 2: Gemensam startpunkt
-
-### Alternativ
-
-| Alternativ | Beskrivning | Rekommendation |
-|------------|-------------|----------------|
-| **Automatisk** | Första Ivion camera-event sätter startpunkten för 3D | ✓ Bäst UX |
-| **Manuell** | Knapp "Synka hit" i båda vyerna | Mer kontroll men krångligare |
-| **Baserat på Startvy** | Om byggnaden har `start_view_id`, använd den | Kan kombineras |
-
-**Rekommenderad lösning: Automatisk + Manuell backup**
-
-1. När Split View öppnas, vänta på första Ivion camera-event
-2. Transformera Ivion-position till BIM-koordinater
-3. Flyga 3D-kameran dit
-4. Sync-knappen kan användas för att manuellt återsynkronisera
-
----
-
-## Problem 3: XKT-preload är för långsam
-
-### Nuläge
-
-```text
-useXktPreload.ts:
-  ✓ Kontrollerar om modeller finns i xkt_models
-  ✓ Hämtar signed URLs
-  ❌ Begränsar till endast 5 modeller (models.slice(0, 5))
-  ❌ Ingen parallell streaming
-  ❌ Stora modeller blockar (synkron ArrayBuffer)
-```
-
-### Lösning
-
-| Åtgärd | Beskrivning |
-|--------|-------------|
-| Ta bort 5-modell-begränsningen | Ladda alla modeller parallellt |
-| Använd `Promise.all` med streams | Snabbare parallell nedladdning |
-| Prioritera mindre modeller först | Snabbare initial rendering |
-| Visa laddningsindikator | Pulsande "Laddar 3D..." overlay |
-
-**Optimerad preload-logik:**
-
-```typescript
-// Sortera modeller efter storlek (minst först)
-const sortedModels = models.sort((a, b) => 
-  (a.file_size || 0) - (b.file_size || 0)
-);
-
-// Ladda parallellt med begränsad concurrency
-const CONCURRENT_FETCHES = 3;
-await pLimit(CONCURRENT_FETCHES, sortedModels, async (model) => {
-  // ... fetch och cache
-});
-```
-
----
-
-## Problem 4: Ivion token-renewal
-
-### Nuläge
-
-```text
-ivion-auth.ts (edge function):
-  ✓ Automatisk token-refresh
-  ✓ Fallback till username/password login
-  ✓ Sparar tokens till building_settings
-
-Ivion360View (frontend):
-  ❌ Visar "token expired" utan åtgärd
-  ❌ Ingen automatisk retry
-```
-
-Token-renewal fungerar på backend men frontend hanterar inte förnyelse transparent.
-
-### Lösning
-
-| Åtgärd | Fil |
-|--------|-----|
-| Lägg till token-validering vid iframe-load | `Ivion360View.tsx` |
-| Anropa edge function för att förnya token om utgånget | `Ivion360View.tsx` |
-| Visa diskret "Förnyar anslutning..." istället för fel | `Ivion360View.tsx` |
-
-**Ny token-check vid iframe load:**
-
-```typescript
-// I Ivion360View.tsx
-useEffect(() => {
-  const checkAndRefreshToken = async () => {
-    if (!buildingFmGuid) return;
-    
-    try {
-      const { data } = await supabase.functions.invoke('ivion-poi', {
-        body: { action: 'validate-token', buildingFmGuid }
-      });
-      
-      if (data?.tokenRenewed) {
-        console.log('Token förnyat automatiskt');
-      }
-    } catch (e) {
-      console.warn('Token check failed:', e);
-    }
-  };
-  
-  checkAndRefreshToken();
-}, [buildingFmGuid]);
-```
-
----
-
-## Problem 5: Tillbaka-knappen
-
-### Nuläge
-
-```text
-FacilityLandingPage.tsx rad 592:
-  window.location.href = `/split-viewer?...`  ← Helsidesladdning!
-
-SplitViewer.tsx rad 57:
-  navigate(-1);  ← Opålitligt med iframe-historik
-```
-
-### Lösning
-
-| Fil | Ändring |
-|-----|---------|
-| `FacilityLandingPage.tsx` | `navigate('/split-viewer?...')` istället för `window.location.href` |
-| `SplitViewer.tsx` | `navigate('/')` istället för `navigate(-1)` |
-
----
+Användare behöver ett sätt att ställa in lat/lng och rotation för byggnader. Detta ska läggas till i byggnadsinställningarna.
 
 ## Filer att ändra
 
-| Fil | Ändringar |
-|-----|-----------|
-| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till sync-props, importera och anropa `useViewerCameraSync` |
-| `src/pages/SplitViewer.tsx` | Koordinera synk mellan viewers, fixa tillbaka-knapp |
-| `src/components/viewer/Ivion360View.tsx` | Lägg till token-validering vid load |
-| `src/hooks/useXktPreload.ts` | Optimera preload-strategi |
-| `src/components/portfolio/FacilityLandingPage.tsx` | Fixa navigation till SplitViewer |
-| `supabase/functions/ivion-poi/index.ts` | Lägg till `validate-token` action |
+| Fil | Ändring |
+|-----|---------|
+| **Databas** | Uppdatera `building_settings` med lat/lng för Centralstationen |
+| `src/components/settings/ApiSettingsModal.tsx` | Lägg till fält för lat/lng och rotation (eller skapa ny komponent) |
+| `src/hooks/useBuildingSettings.ts` | Eventuellt utöka med `updateRotation` |
 
----
+## Implementation
+
+### Steg 1: Databasuppdatering
+```sql
+UPDATE building_settings 
+SET latitude = 59.330364, longitude = 18.060124, rotation = 0
+WHERE fm_guid = '9baa7a3a-717d-4fcb-8718-0f5ca618b28a';
+```
+
+### Steg 2: UI för koordinatinställningar
+
+Lägg till ett expanderbart avsnitt i byggnadsinställningarna med:
+- Textfält för Latitude (decimal)
+- Textfält för Longitude (decimal)
+- Slider eller textfält för Rotation (0-360 grader)
+- "Hämta från karta"-knapp (valfritt - öppnar karta för att välja punkt)
+
+```text
+┌─────────────────────────────────────────────┐
+│ Byggnadsinställningar                       │
+├─────────────────────────────────────────────┤
+│ 📍 Georeferering (för 3D/360° synk)        │
+│                                             │
+│ Latitude:  [59.330364________]              │
+│ Longitude: [18.060124________]              │
+│ Rotation:  [0°_____] (grader relativt norr) │
+│                                             │
+│ [Spara koordinater]                         │
+└─────────────────────────────────────────────┘
+```
 
 ## Dataflöde efter implementation
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                         SplitViewer.tsx                             │
-│                                                                     │
-│  ┌──────────────────┐              ┌──────────────────┐             │
-│  │ AssetPlusViewer  │◄────────────►│  Ivion360View    │             │
-│  │                  │  syncState   │                  │             │
-│  │ useViewer-       │              │ useIvion-        │             │
-│  │ CameraSync ────►─┼──updateFrom──┼►CameraSync       │             │
-│  │       ◄─────────┼─3D/Ivion────┼────────►         │             │
-│  └──────────────────┘              └──────────────────┘             │
-│                                                                     │
-│                    ViewerSyncContext                                │
-│                    (koordinat-transformation)                       │
-└─────────────────────────────────────────────────────────────────────┘
+building_settings (DB)
+    │
+    ├─ latitude: 59.330364
+    ├─ longitude: 18.060124
+    └─ rotation: 0
+          │
+          ▼
+SplitViewer.tsx
+    │
+    ├─ buildingData.origin = { lat, lng, rotation }
+    ├─ hasOrigin = true ✓
+    └─ syncEnabled = true
+          │
+          ▼
+    ┌─────────────┐         ┌─────────────┐
+    │ 3D Viewer   │◄───────►│ 360° View   │
+    │ (BIM local) │  SYNK   │ (Geo coord) │
+    └─────────────┘         └─────────────┘
 ```
 
----
+## Prioritering
 
-## Prioriteringsordning
-
-| Prio | Åtgärd | Komplexitet |
+| Prio | Åtgärd | Beskrivning |
 |------|--------|-------------|
-| 1 | Fixa tillbaka-knappen | Låg |
-| 2 | Anslut synk-hooks till viewers | Medel |
-| 3 | Implementera gemensam startpunkt | Medel |
-| 4 | Optimera XKT-preload | Medel |
-| 5 | Token-renewal UI | Låg |
-
----
+| 1 | Databasuppdatering | Sätt in Centralstationens koordinater (omedelbar fix) |
+| 2 | UI för koordinater | Skapa inställningsfält för framtida byggnader |
 
 ## Acceptanskriterier
 
-1. ✓ Tillbaka-knappen fungerar korrekt från Split View
-2. ✓ Navigering i 3D uppdaterar 360°-vyn (om synk är på)
-3. ✓ Navigering i 360° uppdaterar 3D-vyn (om synk är på)
-4. ✓ Gemensam startpunkt etableras automatiskt
-5. ✓ XKT-modeller laddas snabbare med visuell feedback
-6. ✓ Ivion token förnyas automatiskt utan användarinteraktion
+1. ✓ Varningen "Koordinater saknas" försvinner för Centralstationen
+2. ✓ Sync ON-knappen blir aktiv
+3. ✓ Navigering i 360° uppdaterar 3D-vyn
+4. ✓ Användare kan konfigurera koordinater för andra byggnader via UI
