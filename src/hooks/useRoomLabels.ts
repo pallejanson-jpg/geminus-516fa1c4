@@ -288,12 +288,18 @@ export function useRoomLabels(
         }
       }
 
-      // Floor filtering - skip rooms not on visible floors
-      if (hasFloorFilter && parentStorey) {
+      // STRICT floor filtering - if filter is active, REQUIRE parent storey match
+      if (hasFloorFilter) {
+        if (!parentStorey) {
+          // No parent storey found - skip this room entirely when filtering
+          filteredCount++;
+          return;
+        }
+        
         const storeyGuid = (parentStorey.originalSystemId || parentStorey.id || '').toLowerCase();
         if (!visibleLower.has(storeyGuid)) {
           filteredCount++;
-          return; // Skip this room
+          return; // Skip this room - not on a visible floor
         }
       }
 

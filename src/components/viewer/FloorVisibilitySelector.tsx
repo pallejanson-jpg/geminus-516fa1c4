@@ -369,22 +369,31 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         console.log('Applying initial floor visibility:', Array.from(visibleFloorIds));
         applyFloorVisibility(visibleFloorIds);
         
-        // Also emit the appropriate event based on selection
-        if (visibleFloorIds.size === 1) {
-          const soloFloorId = Array.from(visibleFloorIds)[0];
-          const floor = floors.find(f => f.id === soloFloorId);
-          const bounds = calculateFloorBounds(soloFloorId);
-          
-          // Auto-enable clipping in solo mode
+        // Calculate and emit complete event data
+        const visibleFloors = floors.filter(f => visibleFloorIds.has(f.id));
+        const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+        const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
+        const isAllVisible = visibleFloorIds.size === floors.length;
+        const isSolo = visibleFloorIds.size === 1;
+        
+        const soloFloorId = isSolo ? Array.from(visibleFloorIds)[0] : null;
+        const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
+        const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
+        
+        if (isSolo) {
           setClippingEnabled(true);
-          
-          const eventDetail: FloorSelectionEventDetail = {
-            floorId: soloFloorId,
-            floorName: floor?.name || null,
-            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-          };
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
         }
+        
+        // ALWAYS dispatch event on init with complete data
+        const eventDetail: FloorSelectionEventDetail = {
+          floorId: soloFloorId,
+          floorName: soloFloor?.name || null,
+          bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+          visibleMetaFloorIds: allMetaIds,
+          visibleFloorFmGuids: allFmGuids,
+          isAllFloorsVisible: isAllVisible,
+        };
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
       }, 100);
       
       return () => clearTimeout(timeoutId);
@@ -404,34 +413,33 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         // Update section plane clipping based on visible floors
         updateClipping(Array.from(newSet));
         
-        // ALWAYS emit floor selection event for consistent 2D mode behavior
-        if (newSet.size === 1) {
-          const soloFloorId = Array.from(newSet)[0];
-          const floor = floors.find(f => f.id === soloFloorId);
-          const bounds = calculateFloorBounds(soloFloorId);
-          
-          // Auto-enable clipping in solo mode
+        // Calculate event data
+        const visibleFloors = floors.filter(f => newSet.has(f.id));
+        const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+        const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
+        const isAllVisible = newSet.size === floors.length;
+        const isSolo = newSet.size === 1;
+        
+        // ALWAYS emit floor selection event with complete data
+        const soloFloorId = isSolo ? Array.from(newSet)[0] : null;
+        const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
+        const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
+        
+        if (isSolo) {
           setClippingEnabled(true);
-          
-          const eventDetail: FloorSelectionEventDetail = {
-            floorId: soloFloorId,
-            floorName: floor?.name || null,
-            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-          };
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-        } else {
-          // Multiple floors visible - emit null selection
-          const eventDetail: FloorSelectionEventDetail = {
-            floorId: null,
-            floorName: null,
-            bounds: null,
-          };
-          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
         }
         
+        const eventDetail: FloorSelectionEventDetail = {
+          floorId: soloFloorId,
+          floorName: soloFloor?.name || null,
+          bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+          visibleMetaFloorIds: allMetaIds,
+          visibleFloorFmGuids: allFmGuids,
+          isAllFloorsVisible: isAllVisible,
+        };
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        
         if (onVisibleFloorsChange) {
-          const visibleFloors = floors.filter(f => newSet.has(f.id));
-          const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
           onVisibleFloorsChange(allFmGuids);
         }
         
@@ -459,12 +467,15 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         }
       }
       
-      // Emit event for other components (e.g., ViewerToolbar 2D mode)
+      // Emit event for other components with complete data
       const floor = floors.find(f => f.id === floorId);
       const eventDetail: FloorSelectionEventDetail = {
         floorId,
         floorName: floor?.name || null,
         bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+        visibleMetaFloorIds: floor ? floor.metaObjectIds : [floorId],
+        visibleFloorFmGuids: floor ? floor.databaseLevelFmGuids : [],
+        isAllFloorsVisible: false,
       };
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
       
@@ -483,17 +494,21 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       // Remove clipping when showing all floors
       updateClipping(Array.from(allIds));
       
-      // Emit event to signal no specific floor is selected
+      // Emit event with complete data for all floors
+      const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
+      const allMetaIds = floors.flatMap(f => f.metaObjectIds);
+      
       const eventDetail: FloorSelectionEventDetail = {
         floorId: null,
         floorName: null,
         bounds: null,
+        visibleMetaFloorIds: allMetaIds,
+        visibleFloorFmGuids: allFmGuids,
+        isAllFloorsVisible: true,
       };
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
       
       if (onVisibleFloorsChange) {
-        // Collect all fmGuids from all floors
-        const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
         onVisibleFloorsChange(allFmGuids);
       }
     }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
