@@ -1,4 +1,5 @@
 import React, { useState, useContext, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
   DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload
@@ -54,6 +55,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   setSelectedFacility,
   onSettingsChanged
 }) => {
+  const navigate = useNavigate();
   const { allData, setActiveApp, setViewer3dFmGuid, startInventory, openEntityInsights } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -588,8 +590,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onAddAsset={handleAddAsset}
             onInventory={handleInventory}
             onOpenSplitView={(f) => {
-              // Navigate to split view with building fmGuid
-              window.location.href = `/split-viewer?building=${f.fmGuid}`;
+              // Navigate to split view using React Router (preserves SPA history)
+              navigate(`/split-viewer?building=${f.fmGuid}`);
             }}
           />
         </div>

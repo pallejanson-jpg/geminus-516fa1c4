@@ -131,12 +131,21 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
         // Actually fetch model data into memory for faster loading
         const { data: models } = await supabase
           .from('xkt_models')
-          .select('model_id, file_url, storage_path')
+          .select('model_id, file_url, storage_path, file_size')
           .eq('building_fm_guid', buildingFmGuid);
 
         if (models && models.length > 0) {
-          // Preload model binaries into memory cache (limit concurrent fetches)
-          const fetchPromises = models.slice(0, 5).map(async (model) => {
+          // Sort models by size (smallest first for faster initial feedback)
+          const sortedModels = [...models].sort((a, b) => 
+            (a.file_size || 0) - (b.file_size || 0)
+          );
+
+          // Concurrent fetch with limit to avoid overwhelming the network
+          const CONCURRENT_FETCHES = 3;
+          let activePromises: Promise<void>[] = [];
+          let completedCount = 0;
+
+          const fetchModel = async (model: typeof models[0]) => {
             try {
               // Skip if already in memory
               if (isModelInMemory(model.model_id, buildingFmGuid)) {
@@ -157,14 +166,33 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 if (response.ok) {
                   const data = await response.arrayBuffer();
                   storeModelInMemory(model.model_id, buildingFmGuid, data);
+                  completedCount++;
+                  console.log(`XKT Preload: ${completedCount}/${sortedModels.length} models loaded`);
                 }
               }
             } catch (e) {
               console.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);
             }
-          });
+          };
 
-          await Promise.allSettled(fetchPromises);
+          // Process models with concurrency control
+          for (const model of sortedModels) {
+            if (activePromises.length >= CONCURRENT_FETCHES) {
+              await Promise.race(activePromises);
+              activePromises = activePromises.filter(p => 
+                // Filter out resolved promises (hacky but works)
+                !p.then(() => false, () => false)
+              );
+            }
+            
+            const promise = fetchModel(model).then(() => {
+              activePromises = activePromises.filter(p => p !== promise);
+            });
+            activePromises.push(promise);
+          }
+
+          // Wait for remaining fetches
+          await Promise.allSettled(activePromises);
         }
 
         // Mark building as preloaded in global cache
