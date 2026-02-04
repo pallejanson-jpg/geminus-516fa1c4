@@ -52,6 +52,10 @@ interface UseIvionCameraSyncResult {
   lastSyncSource: 'ivion' | '3d' | null;
   /** Whether postMessage sync is working */
   postMessageActive: boolean;
+  /** Whether there was an error loading images */
+  hasImageLoadError: boolean;
+  /** Retry loading images from Ivion */
+  retryLoadImages: () => Promise<void>;
 }
 
 /**
@@ -69,6 +73,7 @@ export function useIvionCameraSync({
   // Cache of all images for finding nearest
   const [imageCache, setImageCache] = useState<IvionImage[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
+  const [hasImageLoadError, setHasImageLoadError] = useState(false);
   const [currentImageId, setCurrentImageId] = useState<number | null>(null);
   const [lastSyncSource, setLastSyncSource] = useState<'ivion' | '3d' | null>(null);
   const [postMessageActive, setPostMessageActive] = useState(false);
@@ -80,39 +85,54 @@ export function useIvionCameraSync({
   const postMessageReceivedRef = useRef(false);
   const SYNC_THROTTLE_MS = 2000; // Minimum time between URL updates
 
+  // Load images function - reusable for retry
+  const loadImages = useCallback(async () => {
+    if (!ivionSiteId) return;
+    
+    setIsLoadingImages(true);
+    setHasImageLoadError(false);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: { 
+          action: 'get-images-for-site', 
+          siteId: ivionSiteId,
+          buildingFmGuid,
+        },
+      });
+      
+      if (error) {
+        console.error('[Ivion Sync] Failed to load images:', error);
+        setHasImageLoadError(true);
+        return;
+      }
+      
+      if (data?.success && data?.images && data.images.length > 0) {
+        setImageCache(data.images);
+        setHasImageLoadError(false);
+        console.log(`[Ivion Sync] Loaded ${data.images.length} images for site (${data.processedDatasets}/${data.totalDatasets} datasets)`);
+      } else {
+        console.warn('[Ivion Sync] No images returned:', data?.error || 'Unknown error');
+        setHasImageLoadError(true);
+      }
+    } catch (e) {
+      console.error('[Ivion Sync] Failed to load images:', e);
+      setHasImageLoadError(true);
+    } finally {
+      setIsLoadingImages(false);
+    }
+  }, [ivionSiteId, buildingFmGuid]);
+
+  // Retry function exposed to UI
+  const retryLoadImages = useCallback(async () => {
+    await loadImages();
+  }, [loadImages]);
+
   // 1. Load all images for the site on mount
   useEffect(() => {
     if (!enabled || !ivionSiteId) return;
-    
-    const loadImages = async () => {
-      setIsLoadingImages(true);
-      try {
-        const { data, error } = await supabase.functions.invoke('ivion-poi', {
-          body: { 
-            action: 'get-images-for-site', 
-            siteId: ivionSiteId,
-            buildingFmGuid,
-          },
-        });
-        
-        if (error) {
-          console.error('[Ivion Sync] Failed to load images:', error);
-          return;
-        }
-        
-        if (data?.success && data?.images) {
-          setImageCache(data.images);
-          console.log(`[Ivion Sync] Loaded ${data.images.length} images for site (${data.processedDatasets}/${data.totalDatasets} datasets)`);
-        }
-      } catch (e) {
-        console.error('[Ivion Sync] Failed to load images:', e);
-      } finally {
-        setIsLoadingImages(false);
-      }
-    };
-    
     loadImages();
-  }, [enabled, ivionSiteId, buildingFmGuid]);
+  }, [enabled, ivionSiteId, loadImages]);
 
   // 2. Send subscribe command to iframe to enable camera events
   const sendSubscribeCommand = useCallback(() => {
@@ -413,5 +433,7 @@ export function useIvionCameraSync({
     sendSubscribeCommand,
     lastSyncSource,
     postMessageActive,
+    hasImageLoadError,
+    retryLoadImages,
   };
 }

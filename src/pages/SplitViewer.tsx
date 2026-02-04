@@ -1,14 +1,17 @@
 import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Link2, Link2Off, RotateCcw, Maximize2, Minimize2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { AppContext } from '@/context/AppContext';
 import { ViewerSyncProvider, useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +35,11 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   const { appConfigs } = useContext(AppContext);
   const { syncLocked, setSyncLocked, resetSync, syncState, updateFrom3D, updateFromIvion, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Manual sync fallback state
+  const [showManualSyncDialog, setShowManualSyncDialog] = useState(false);
+  const [manualIvionUrl, setManualIvionUrl] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Sync position state - transformed coordinates for each viewer
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
@@ -74,6 +82,72 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
     setSync3DHeading(syncState.heading);
     setSync3DPitch(syncState.pitch);
   }, [syncLocked, syncState]);
+
+  // Handle manual sync from Ivion URL
+  const handleParseManualUrl = useCallback(async () => {
+    if (!manualIvionUrl.includes('image=')) {
+      toast.error('URL:en måste innehålla &image=XXX');
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      const url = new URL(manualIvionUrl);
+      const imageId = url.searchParams.get('image');
+      
+      if (!imageId) {
+        toast.error('Kunde inte hitta image-parameter i URL:en');
+        return;
+      }
+      
+      // Parse view angles from URL
+      const vlon = parseFloat(url.searchParams.get('vlon') || '0');
+      const vlat = parseFloat(url.searchParams.get('vlat') || '0');
+      
+      // Convert radians to degrees
+      const heading = (vlon * 180) / Math.PI;
+      const pitch = (vlat * 180) / Math.PI;
+      
+      // Fetch image position from API
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'get-image-position',
+          imageId: parseInt(imageId, 10),
+          buildingFmGuid: buildingData.fmGuid,
+        },
+      });
+      
+      if (error || !data?.success) {
+        toast.error('Kunde inte hämta bildposition', {
+          description: data?.error || 'Kontrollera Ivion-konfigurationen'
+        });
+        return;
+      }
+      
+      const position: LocalCoords = {
+        x: data.location.x,
+        y: data.location.y,
+        z: data.location.z,
+      };
+      
+      console.log('[SplitViewer] Manual sync from URL:', { imageId, position, heading, pitch });
+      
+      // Update 3D viewer
+      updateFromIvion(position, heading, pitch);
+      setSync3DPosition(position);
+      setSync3DHeading(heading);
+      setSync3DPitch(pitch);
+      
+      toast.success('3D-vy synkad från 360°');
+      setShowManualSyncDialog(false);
+      setManualIvionUrl('');
+    } catch (err) {
+      console.error('[SplitViewer] Failed to parse URL:', err);
+      toast.error('Ogiltig URL');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [manualIvionUrl, buildingData.fmGuid, updateFromIvion]);
 
   const handleBack = () => {
     // Use explicit path to avoid iframe history conflicts
@@ -120,8 +194,8 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded">
             <span className={cn(
               "h-2 w-2 rounded-full transition-colors",
-              syncState.source === 'ivion' ? "bg-green-500" :
-              syncState.source === '3d' ? "bg-blue-500" : "bg-gray-400"
+              syncState.source === 'ivion' ? "bg-primary" :
+              syncState.source === '3d' ? "bg-accent-foreground" : "bg-muted-foreground/50"
             )} />
             <span className="hidden sm:inline">
               {syncState.source === 'ivion' ? '360° → 3D' :
@@ -156,6 +230,21 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
                 ? 'Vyerna följer varandra automatiskt. Klicka för att låsa upp.'
                 : 'Vyerna är oberoende. Klicka för att synkronisera.'}
             </TooltipContent>
+          </Tooltip>
+
+          {/* Manual sync button (fallback) */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowManualSyncDialog(true)}
+                title="Synka manuellt från 360°-URL"
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Synka manuellt från 360°-URL</TooltipContent>
           </Tooltip>
 
           {/* Reset button */}
@@ -224,6 +313,51 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Manual sync fallback dialog */}
+      <Dialog open={showManualSyncDialog} onOpenChange={setShowManualSyncDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Synka från 360°</DialogTitle>
+            <DialogDescription>
+              Klistra in en 360°-länk för att synka 3D-vyn till samma position.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <ol className="list-decimal list-inside text-sm space-y-2 text-muted-foreground">
+              <li>I 360°-vyn, klicka på <strong className="text-foreground">Dela</strong>-ikonen (📤)</li>
+              <li>Kopiera länken som visas</li>
+              <li>Klistra in den nedan</li>
+            </ol>
+            <Input
+              value={manualIvionUrl}
+              onChange={(e) => setManualIvionUrl(e.target.value)}
+              placeholder="https://swg.iv.navvis.com/?site=...&image=..."
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              URL:en måste innehålla <code className="bg-muted px-1 rounded">&image=XXX</code>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowManualSyncDialog(false);
+                setManualIvionUrl('');
+              }}
+            >
+              Avbryt
+            </Button>
+            <Button 
+              onClick={handleParseManualUrl} 
+              disabled={!manualIvionUrl.includes('image=') || isSyncing}
+            >
+              {isSyncing ? 'Synkar...' : 'Synka'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
