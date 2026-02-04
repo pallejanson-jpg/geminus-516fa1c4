@@ -26,6 +26,12 @@ export interface FloorSelectionEventDetail {
   floorId: string | null;
   floorName?: string | null;
   bounds?: { minY: number; maxY: number } | null;
+  /** All visible metaObject storey IDs (xeokit internal IDs) */
+  visibleMetaFloorIds?: string[];
+  /** All visible floor FM GUIDs (database originalSystemId) */
+  visibleFloorFmGuids?: string[];
+  /** True when all floors are visible (no isolation) */
+  isAllFloorsVisible?: boolean;
 }
 
 export interface ViewModeEventDetail {
