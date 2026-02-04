@@ -1,9 +1,9 @@
 /**
  * Hook for synchronizing camera between Ivion 360° viewer and 3D viewer.
  * 
- * Strategy: URL-based navigation via image IDs
+ * Strategy: Bi-directional automatic sync
  * - 3D → 360°: Find nearest Ivion image, update iframe URL with &image=XXX
- * - 360° → 3D: Parse image ID from manual URL input, fetch position from API
+ * - 360° → 3D: Listen for postMessage events from Ivion iframe
  * 
  * NavVis Ivion URL format:
  * https://swg.iv.navvis.com/?site={siteId}&vlon={yaw_rad}&vlat={pitch_rad}&fov={fov}&image={imageId}
@@ -31,6 +31,8 @@ interface UseIvionCameraSyncOptions {
   ivionSiteId: string;
   /** Building FM GUID for token auth */
   buildingFmGuid?: string;
+  /** Callback when iframe loads - triggers subscribe command */
+  onIframeLoad?: () => void;
 }
 
 interface UseIvionCameraSyncResult {
@@ -44,6 +46,12 @@ interface UseIvionCameraSyncResult {
   syncToIvion: () => void;
   /** Navigate 3D to position from Ivion URL */
   syncFrom360Url: (ivionUrl: string) => Promise<boolean>;
+  /** Send subscribe command to iframe */
+  sendSubscribeCommand: () => void;
+  /** Last sync source for status indicator */
+  lastSyncSource: 'ivion' | '3d' | null;
+  /** Whether postMessage sync is working */
+  postMessageActive: boolean;
 }
 
 /**
@@ -62,11 +70,14 @@ export function useIvionCameraSync({
   const [imageCache, setImageCache] = useState<IvionImage[]>([]);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [currentImageId, setCurrentImageId] = useState<number | null>(null);
+  const [lastSyncSource, setLastSyncSource] = useState<'ivion' | '3d' | null>(null);
+  const [postMessageActive, setPostMessageActive] = useState(false);
   
   // Track last synced image to avoid loops
   const lastSyncedImageIdRef = useRef<number | null>(null);
   const isSyncingRef = useRef(false);
   const syncThrottleRef = useRef<number>(0);
+  const postMessageReceivedRef = useRef(false);
   const SYNC_THROTTLE_MS = 2000; // Minimum time between URL updates
 
   // 1. Load all images for the site on mount
@@ -102,6 +113,141 @@ export function useIvionCameraSync({
     
     loadImages();
   }, [enabled, ivionSiteId, buildingFmGuid]);
+
+  // 2. Send subscribe command to iframe to enable camera events
+  const sendSubscribeCommand = useCallback(() => {
+    if (!iframeRef.current?.contentWindow) {
+      console.log('[Ivion Sync] No iframe to send subscribe command');
+      return;
+    }
+
+    // NavVis may support different command formats - try multiple
+    const subscribeCommands = [
+      { type: 'navvis-command', action: 'subscribe' },
+      { type: 'navvis-command', action: 'subscribe', events: ['camera-changed', 'image-changed'] },
+      { type: 'navvis-subscribe', events: ['cameraUpdate', 'imageChange'] },
+      { type: 'subscribe', events: ['camera', 'navigation'] },
+    ];
+
+    console.log('[Ivion Sync] Sending subscribe commands to iframe');
+    
+    subscribeCommands.forEach((cmd, i) => {
+      try {
+        iframeRef.current?.contentWindow?.postMessage(cmd, '*');
+      } catch (e) {
+        console.warn(`[Ivion Sync] Failed to send command ${i}:`, e);
+      }
+    });
+  }, [iframeRef]);
+
+  // 3. Listen for postMessage events from Ivion iframe (360° → 3D sync)
+  useEffect(() => {
+    if (!enabled || !syncLocked) return;
+
+    const handleMessage = async (event: MessageEvent) => {
+      const data = event.data;
+      
+      // Skip non-object messages
+      if (!data || typeof data !== 'object') return;
+
+      // Log all messages for debugging (only first time)
+      if (!postMessageReceivedRef.current && data.type) {
+        console.log('[Ivion Sync] Received postMessage:', data);
+      }
+
+      // NavVis event format
+      if (data?.type === 'navvis-event') {
+        console.log('[Ivion Sync] NavVis event:', data.event, data.data);
+        postMessageReceivedRef.current = true;
+        setPostMessageActive(true);
+        
+        if (data.event === 'camera-changed' || data.event === 'image-changed') {
+          const eventData = data.data || {};
+          const imageId = eventData.imageId || eventData.image;
+          const heading = eventData.yaw ?? eventData.heading ?? 0;
+          const pitch = eventData.pitch ?? 0;
+          
+          if (imageId && imageId !== lastSyncedImageIdRef.current) {
+            await handleIvionImageChange(imageId, heading, pitch);
+          }
+        }
+        return;
+      }
+
+      // Alternative formats - direct camera/image data
+      if (data?.imageId || data?.currentImage || data?.image) {
+        const imageId = data.imageId || data.currentImage || data.image;
+        console.log('[Ivion Sync] Direct image data:', imageId);
+        postMessageReceivedRef.current = true;
+        setPostMessageActive(true);
+        
+        if (imageId !== lastSyncedImageIdRef.current) {
+          const heading = data.heading ?? data.yaw ?? 0;
+          const pitch = data.pitch ?? 0;
+          await handleIvionImageChange(imageId, heading, pitch);
+        }
+        return;
+      }
+
+      // Camera position update
+      if (data?.camera?.position || data?.position) {
+        console.log('[Ivion Sync] Camera position data:', data);
+        postMessageReceivedRef.current = true;
+        setPostMessageActive(true);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [enabled, syncLocked, buildingFmGuid]);
+
+  // Handle image change from Ivion - fetch position and update 3D
+  const handleIvionImageChange = useCallback(async (imageId: number, heading: number, pitch: number) => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
+    try {
+      console.log('[Ivion Sync] Handling image change:', imageId);
+      
+      // Fetch image position from API
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: {
+          action: 'get-image-position',
+          imageId,
+          buildingFmGuid,
+        },
+      });
+
+      if (error) {
+        console.error('[Ivion Sync] Failed to get image position:', error);
+        return;
+      }
+
+      if (data?.success && data?.location) {
+        const position: LocalCoords = {
+          x: data.location.x,
+          y: data.location.y,
+          z: data.location.z,
+        };
+
+        // Convert heading/pitch from radians if needed
+        const headingDeg = Math.abs(heading) > Math.PI * 2 ? heading : (heading * 180) / Math.PI;
+        const pitchDeg = Math.abs(pitch) > Math.PI * 2 ? pitch : (pitch * 180) / Math.PI;
+
+        console.log('[Ivion Sync] Updating 3D viewer from Ivion image:', imageId, position);
+        updateFromIvion(position, headingDeg, pitchDeg);
+        setCurrentImageId(imageId);
+        setLastSyncSource('ivion');
+        lastSyncedImageIdRef.current = imageId;
+      }
+    } catch (e) {
+      console.error('[Ivion Sync] Failed to handle image change:', e);
+    } finally {
+      setTimeout(() => {
+        isSyncingRef.current = false;
+      }, 500);
+    }
+  }, [buildingFmGuid, updateFromIvion]);
 
   // Find nearest image to a position
   const findNearestImage = useCallback((pos: LocalCoords): IvionImage | null => {
@@ -178,6 +324,7 @@ export function useIvionCameraSync({
       
       iframeRef.current.src = currentUrl.toString();
       setCurrentImageId(nearestImage.id);
+      setLastSyncSource('3d');
     } catch (err) {
       console.error('[Ivion Sync] Failed to update iframe URL:', err);
     }
@@ -232,6 +379,7 @@ export function useIvionCameraSync({
       // Update sync context - 3D viewer will react
       updateFromIvion(position, heading, pitch);
       setCurrentImageId(parseInt(imageId, 10));
+      setLastSyncSource('ivion');
       lastSyncedImageIdRef.current = parseInt(imageId, 10);
       
       return true;
@@ -262,5 +410,8 @@ export function useIvionCameraSync({
     currentImageId,
     syncToIvion,
     syncFrom360Url,
+    sendSubscribeCommand,
+    lastSyncSource,
+    postMessageActive,
   };
 }
