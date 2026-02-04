@@ -397,6 +397,7 @@ export type Database = {
           ivion_token_expires_at: string | null
           latitude: number | null
           longitude: number | null
+          rotation: number | null
           start_view_id: string | null
           updated_at: string
         }
@@ -412,6 +413,7 @@ export type Database = {
           ivion_token_expires_at?: string | null
           latitude?: number | null
           longitude?: number | null
+          rotation?: number | null
           start_view_id?: string | null
           updated_at?: string
         }
@@ -427,6 +429,7 @@ export type Database = {
           ivion_token_expires_at?: string | null
           latitude?: number | null
           longitude?: number | null
+          rotation?: number | null
           start_view_id?: string | null
           updated_at?: string
         }
