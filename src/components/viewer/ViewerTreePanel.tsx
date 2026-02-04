@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 
 interface TreeNode {
   id: string;
@@ -335,7 +336,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   
   // Desktop floating panel state - position, size, drag, resize
   const [position, setPosition] = useState({ x: 12, y: 56 });
-  const [size, setSize] = useState({ width: 320, height: 400 });
+  const [size, setSize] = useState({ width: 320, height: 550 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -462,6 +463,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
     const xeokitViewer = getXeokitViewer();
     const scene = xeokitViewer?.scene;
+    const metaScene = xeokitViewer?.metaScene;
     if (!scene) return;
 
     // Recursive function to set visibility on node and ALL descendants
@@ -484,6 +486,41 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
 
     // Refresh the tree's visual state to update checkboxes
     refreshVisibilityState();
+
+    // If this is a storey node, dispatch FLOOR_SELECTION_CHANGED_EVENT to sync other selectors
+    if (node.type?.toLowerCase() === 'ifcbuildingstorey' && metaScene?.metaObjects) {
+      // Collect all currently visible storey nodes
+      const allStoreys: { id: string; name: string; fmGuid: string }[] = [];
+      Object.values(metaScene.metaObjects).forEach((metaObj: any) => {
+        if (metaObj.type?.toLowerCase() === 'ifcbuildingstorey') {
+          allStoreys.push({
+            id: metaObj.id,
+            name: metaObj.name || metaObj.id,
+            fmGuid: metaObj.originalSystemId || metaObj.id,
+          });
+        }
+      });
+
+      const visibleStoreys = allStoreys.filter(s => {
+        const entity = scene.objects?.[s.id];
+        return entity?.visible;
+      });
+
+      const isAllVisible = visibleStoreys.length === allStoreys.length;
+      const isSolo = visibleStoreys.length === 1;
+      const soloFloor = isSolo ? visibleStoreys[0] : null;
+
+      const eventDetail: FloorSelectionEventDetail = {
+        floorId: soloFloor?.id || null,
+        floorName: soloFloor?.name || null,
+        bounds: null, // Could calculate but not critical for sync
+        visibleMetaFloorIds: visibleStoreys.map(s => s.id),
+        visibleFloorFmGuids: visibleStoreys.map(s => s.fmGuid),
+        isAllFloorsVisible: isAllVisible,
+      };
+
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+    }
   }, [getXeokitViewer, refreshVisibilityState]);
 
   // Build tree from xeokit metaScene with CHUNKED processing to prevent UI freeze

@@ -42,7 +42,42 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
   const [floors, setFloors] = useState<FloorInfo[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [isGeneratingThumbnails, setIsGeneratingThumbnails] = useState(false);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(selectedFloorId);
   const thumbnailsGeneratedRef = useRef(false);
+
+  // Sync internal selection with prop
+  useEffect(() => {
+    setInternalSelectedId(selectedFloorId);
+  }, [selectedFloorId]);
+
+  // Listen for floor selection events from other sources
+  useEffect(() => {
+    const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { floorId, visibleMetaFloorIds } = e.detail;
+      
+      if (floorId) {
+        // Single floor selected - find matching floor in our list
+        const matchingFloor = floors.find(f => f.id === floorId);
+        if (matchingFloor) {
+          setInternalSelectedId(matchingFloor.id);
+        }
+      } else if (visibleMetaFloorIds && visibleMetaFloorIds.length === 1) {
+        // Single floor via meta IDs
+        const matchingFloor = floors.find(f => visibleMetaFloorIds.includes(f.id));
+        if (matchingFloor) {
+          setInternalSelectedId(matchingFloor.id);
+        }
+      } else {
+        // Multiple or all floors - clear selection
+        setInternalSelectedId(undefined);
+      }
+    };
+    
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    return () => {
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    };
+  }, [floors]);
 
   // Get XEOkit viewer
   const getXeokitViewer = useCallback(() => {
@@ -332,7 +367,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
                 className={cn(
                   "flex-shrink-0 rounded-md overflow-hidden transition-all",
                   "border-2 hover:border-primary/50",
-                  selectedFloorId === floor.id 
+                  internalSelectedId === floor.id 
                     ? "border-primary ring-2 ring-primary/30" 
                     : "border-border/50"
                 )}
