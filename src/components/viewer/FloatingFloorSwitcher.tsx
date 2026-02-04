@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { ChevronDown, Layers } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
+import { ChevronDown, Layers, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,12 +25,16 @@ interface FloatingFloorSwitcherProps {
   className?: string;
 }
 
+// Event for visibility toggle from settings
+export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
+
 // Constants for responsive design
-const MAX_VISIBLE_PILLS_DESKTOP = 6;
+const MAX_VISIBLE_PILLS_DESKTOP = 8;
 const MAX_VISIBLE_PILLS_MOBILE = 4;
 
 /**
  * Floating floor switcher with pill buttons overlaid on the 3D viewer.
+ * Vertical layout, draggable, positioned near right menu by default.
  * Provides 1-click floor isolation with visual feedback.
  */
 const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
@@ -47,6 +51,20 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
 
+  // Draggable position state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const hasInitializedPosition = useRef(false);
+
+  // Visibility state (controlled from VisualizationToolbar settings)
+  const [isVisible, setIsVisible] = useState(() => {
+    return localStorage.getItem('viewer-show-floor-pills') !== 'false';
+  });
+
+  // Ref to track if we're receiving an external event (to prevent dispatch loops)
+  const isReceivingExternalEvent = useRef(false);
+
   // Get XEOkit viewer
   const getXeokitViewer = useCallback(() => {
     try {
@@ -55,6 +73,61 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       return null;
     }
   }, [viewerRef]);
+
+  // Initialize position on right side
+  useEffect(() => {
+    if (hasInitializedPosition.current) return;
+    if (typeof window === 'undefined') return;
+    
+    // Position near right edge, below header
+    const x = window.innerWidth - 80;
+    const y = 150;
+    setPosition({ x, y });
+    hasInitializedPosition.current = true;
+  }, []);
+
+  // Listen for visibility toggle events from settings
+  useEffect(() => {
+    const handleToggle = (e: CustomEvent<{ visible: boolean }>) => {
+      setIsVisible(e.detail.visible);
+      localStorage.setItem('viewer-show-floor-pills', String(e.detail.visible));
+    };
+    window.addEventListener(FLOOR_PILLS_TOGGLE_EVENT, handleToggle as EventListener);
+    return () => {
+      window.removeEventListener(FLOOR_PILLS_TOGGLE_EVENT, handleToggle as EventListener);
+    };
+  }, []);
+
+  // Drag handlers
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    dragOffsetRef.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOffsetRef.current.x)),
+        y: Math.max(50, Math.min(window.innerHeight - 200, e.clientY - dragOffsetRef.current.y)),
+      });
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   // Fetch floor names from database
   useEffect(() => {
@@ -199,18 +272,45 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     }
   }, [floorNamesMap, isInitialized, extractFloors]);
 
-  // Listen for external floor selection changes
+  // Listen for external floor selection changes (from ViewerTreePanel, FloorVisibilitySelector, etc.)
   useEffect(() => {
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { floorId } = e.detail;
+      const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
       
-      if (floorId === null) {
+      // Mark that we're receiving an external event
+      isReceivingExternalEvent.current = true;
+      
+      if (isAllFloorsVisible) {
         // All floors visible
         setVisibleFloorIds(new Set(floors.map(f => f.id)));
-      } else {
-        // Single floor visible
-        setVisibleFloorIds(new Set([floorId]));
+      } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
+        // Match visible floors by ID
+        const matchingIds = floors
+          .filter(f => visibleMetaFloorIds.some(metaId => 
+            f.id === metaId || f.metaObjectIds.includes(metaId)
+          ))
+          .map(f => f.id);
+        
+        if (matchingIds.length > 0) {
+          setVisibleFloorIds(new Set(matchingIds));
+        }
+      } else if (e.detail.floorId === null) {
+        // Fallback: All floors visible
+        setVisibleFloorIds(new Set(floors.map(f => f.id)));
+      } else if (e.detail.floorId) {
+        // Single floor
+        const matchingFloor = floors.find(f => 
+          f.id === e.detail.floorId || f.metaObjectIds.includes(e.detail.floorId!)
+        );
+        if (matchingFloor) {
+          setVisibleFloorIds(new Set([matchingFloor.id]));
+        }
       }
+      
+      // Reset flag after a tick
+      setTimeout(() => {
+        isReceivingExternalEvent.current = false;
+      }, 100);
     };
     
     window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
@@ -441,20 +541,30 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   const overflowPills = floors.slice(maxVisible);
   const hasOverflow = overflowPills.length > 0;
 
-  // Don't render if no floors
-  if (floors.length === 0 || !isViewerReady) {
+  // Don't render if no floors or not visible
+  if (floors.length === 0 || !isViewerReady || !isVisible) {
     return null;
   }
 
   return (
     <div 
+      style={{ left: position.x, top: position.y }}
       className={cn(
-        'flex items-center gap-1 sm:gap-1.5 p-1.5 sm:p-2 rounded-lg',
+        'fixed z-20 flex flex-col items-center gap-1 p-1.5 sm:p-2 rounded-lg',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
-        'pointer-events-auto',
+        'pointer-events-auto transition-shadow',
+        isDragging && 'cursor-grabbing shadow-xl',
         className
       )}
     >
+      {/* Drag handle */}
+      <div 
+        className="flex items-center justify-center w-full py-0.5 cursor-grab active:cursor-grabbing"
+        onMouseDown={handleDragStart}
+      >
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+      </div>
+
       {/* Floors icon indicator */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -462,13 +572,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
             <Layers className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </TooltipTrigger>
-        <TooltipContent side="top">
+        <TooltipContent side="left">
           <p>Våningar ({visibleFloorIds.size}/{floors.length} synliga)</p>
           <p className="text-xs text-muted-foreground">Klicka: solo | Ctrl+Klick: multi | Dubbelklick: alla</p>
         </TooltipContent>
       </Tooltip>
 
-      {/* Visible pills */}
+      {/* Vertical pills */}
       {visiblePills.map((floor) => {
         const state = getPillState(floor.id);
         
@@ -482,8 +592,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  'h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm font-medium rounded-full',
-                  'transition-all duration-150 min-w-0',
+                  'h-8 w-8 sm:h-9 sm:w-9 p-0 text-xs sm:text-sm font-medium rounded-full',
+                  'transition-all duration-150',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
                     'ring-2 ring-primary/30',
@@ -499,12 +609,12 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                   ],
                 )}
               >
-                <span className="truncate max-w-[60px] sm:max-w-[80px]">
-                  {isMobile ? floor.shortName : floor.name}
+                <span className="text-[10px] sm:text-xs">
+                  {floor.shortName}
                 </span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">
+            <TooltipContent side="left">
               <p>{floor.name}</p>
               <p className="text-xs text-muted-foreground">
                 {state === 'active' ? 'Solo' : state === 'partial' ? 'Del av selektion' : 'Ej isolerad'}
@@ -523,24 +633,23 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               className={cn(
-                'h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm font-medium rounded-full',
+                'h-8 w-8 sm:h-9 sm:w-9 p-0 text-xs sm:text-sm font-medium rounded-full',
                 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
-                'flex items-center gap-1',
+                'flex items-center justify-center',
               )}
             >
-              <span>+{overflowPills.length}</span>
-              <ChevronDown className="h-3 w-3" />
+              <span className="text-[10px]">+{overflowPills.length}</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent 
             className="w-56 p-2" 
-            align="end" 
-            side="top"
+            align="center" 
+            side="left"
             sideOffset={8}
           >
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {overflowPills.map((floor) => {
-                const isVisible = visibleFloorIds.has(floor.id);
+                const isFloorVisible = visibleFloorIds.has(floor.id);
                 
                 return (
                   <div 
@@ -555,7 +664,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                     </Label>
                     <Switch
                       id={`floor-overflow-${floor.id}`}
-                      checked={isVisible}
+                      checked={isFloorVisible}
                       onCheckedChange={(checked) => {
                         const newSet = new Set(visibleFloorIds);
                         if (checked) {
@@ -567,6 +676,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                         applyFloorVisibility(newSet);
                         
                         // Dispatch event
+                        const visibleFloors = floors.filter(f => newSet.has(f.id));
+                        const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+                        const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
                         const isSolo = newSet.size === 1;
                         const soloFloorId = isSolo ? Array.from(newSet)[0] : null;
                         const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
@@ -576,6 +688,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                           floorId: soloFloorId,
                           floorName: soloFloor?.name || null,
                           bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+                          visibleMetaFloorIds: allMetaIds,
+                          visibleFloorFmGuids: allFmGuids,
+                          isAllFloorsVisible: newSet.size === floors.length,
                         };
                         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
                       }}
@@ -597,12 +712,12 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               onClick={handlePillDoubleClick}
-              className="h-7 sm:h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-7 w-full px-1 text-[10px] text-muted-foreground hover:text-foreground"
             >
               Alla
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">Visa alla våningar</TooltipContent>
+          <TooltipContent side="left">Visa alla våningar</TooltipContent>
         </Tooltip>
       )}
     </div>
