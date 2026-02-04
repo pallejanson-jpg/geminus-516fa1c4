@@ -81,6 +81,30 @@ export function useSectionPlaneClipping(
   }, [viewerRef]);
 
   /**
+   * Ensure all entities in the scene are clippable.
+   * Required for SectionPlanes to work correctly - xeokit SectionPlanes only
+   * clip entities that have clippable: true.
+   */
+  const ensureAllEntitiesClippable = useCallback(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene?.objects) return;
+    
+    const objects = viewer.scene.objects;
+    let count = 0;
+    
+    Object.values(objects).forEach((entity: any) => {
+      if (entity && entity.clippable === false) {
+        entity.clippable = true;
+        count++;
+      }
+    });
+    
+    if (count > 0) {
+      console.log(`✅ [SectionPlane] Enabled clippable on ${count} entities`);
+    }
+  }, [getXeokitViewer]);
+
+  /**
    * Create a SectionPlane directly on the scene using xeokit's internal API.
    */
   const createSectionPlaneOnScene = useCallback((
@@ -294,6 +318,9 @@ export function useSectionPlaneClipping(
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
 
+    // CRITICAL: Ensure all entities are clippable before applying section planes
+    ensureAllEntitiesClippable();
+
     // Remove any existing 2D planes first (switching modes)
     destroyPlane(topPlaneRef);
     destroyPlane(bottomPlaneRef);
@@ -343,6 +370,9 @@ export function useSectionPlaneClipping(
 
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
+
+    // CRITICAL: Ensure all entities are clippable before applying section planes
+    ensureAllEntitiesClippable();
 
     // Remove 3D ceiling plane when switching to 2D
     destroyPlane(ceilingPlaneRef);

@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useContext, useRef } from "react";
-import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous } from "lucide-react";
+import { Layers, MessageSquare, MessageSquarePlus, MoreVertical, Palette, Plus, GripVertical, X, Scissors, Box, ChevronRight, Camera, SquareDashed, Settings, ChevronDown, Type, TreeDeciduous, Eye } from "lucide-react";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import LightingControlsPanel from "./LightingControlsPanel";
 import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
+import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -135,6 +136,9 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
   const [showRoomLabels, setShowRoomLabels] = useState(false);
   const [activeRoomLabelConfigId, setActiveRoomLabelConfigId] = useState<string | null>(null);
+  const [showFloorPills, setShowFloorPills] = useState(() => {
+    return localStorage.getItem('viewer-show-floor-pills') !== 'false';
+  });
   
   // Room label configs from database
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
@@ -1057,6 +1061,29 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Floor Pills Toggle */}
+                  <div className="flex items-center justify-between py-1.5 sm:py-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Våningsväljare (pills)</span>
+                    </div>
+                    <Switch 
+                      checked={showFloorPills} 
+                      onCheckedChange={(checked) => {
+                        setShowFloorPills(checked);
+                        localStorage.setItem('viewer-show-floor-pills', String(checked));
+                        window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, {
+                          detail: { visible: checked }
+                        }));
+                      }} 
+                    />
                   </div>
 
                   {/* Lighting Controls */}
