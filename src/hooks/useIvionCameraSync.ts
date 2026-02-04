@@ -142,11 +142,14 @@ export function useIvionCameraSync({
     }
 
     // NavVis may support different command formats - try multiple
+    // Including PointOfViewInterface subscriptions for direct position data
     const subscribeCommands = [
       { type: 'navvis-command', action: 'subscribe' },
-      { type: 'navvis-command', action: 'subscribe', events: ['camera-changed', 'image-changed'] },
-      { type: 'navvis-subscribe', events: ['cameraUpdate', 'imageChange'] },
-      { type: 'subscribe', events: ['camera', 'navigation'] },
+      { type: 'navvis-command', action: 'subscribe', events: ['camera-changed', 'image-changed', 'pov-changed'] },
+      { type: 'navvis-subscribe', events: ['cameraUpdate', 'imageChange', 'pointOfView'] },
+      { type: 'navvis-subscribe', action: 'pointOfView', events: ['change'] },
+      { type: 'ivion-subscribe', events: ['pov-changed', 'camera-changed'] },
+      { type: 'subscribe', events: ['camera', 'navigation', 'pov'] },
     ];
 
     console.log('[Ivion Sync] Sending subscribe commands to iframe');
@@ -170,9 +173,16 @@ export function useIvionCameraSync({
       // Skip non-object messages
       if (!data || typeof data !== 'object') return;
 
-      // Log all messages for debugging (only first time)
+      // Enhanced debug logging for all NavVis-related messages
+      if (data.type?.includes('navvis') || data.type?.includes('ivion') || 
+          data.event?.includes('camera') || data.event?.includes('pov') ||
+          data.position || data.location) {
+        console.log('[Ivion Sync] postMessage received:', JSON.stringify(data, null, 2));
+      }
+
+      // Log first message for debugging
       if (!postMessageReceivedRef.current && data.type) {
-        console.log('[Ivion Sync] Received postMessage:', data);
+        console.log('[Ivion Sync] First postMessage:', data);
       }
 
       // NavVis event format
@@ -181,8 +191,34 @@ export function useIvionCameraSync({
         postMessageReceivedRef.current = true;
         setPostMessageActive(true);
         
-        if (data.event === 'camera-changed' || data.event === 'image-changed') {
+        if (data.event === 'camera-changed' || data.event === 'image-changed' || data.event === 'pov-changed') {
           const eventData = data.data || {};
+          
+          // PRIORITY: Extract position directly if available (no backend needed!)
+          const directPosition = eventData.position || eventData.location;
+          if (directPosition && directPosition.x !== undefined) {
+            const position: LocalCoords = {
+              x: directPosition.x,
+              y: directPosition.y,
+              z: directPosition.z,
+            };
+            
+            // Convert heading/pitch from radians if needed
+            const headingRad = eventData.yaw ?? eventData.heading ?? 0;
+            const pitchRad = eventData.pitch ?? 0;
+            // If value is small (< 2π), it's likely radians - convert to degrees
+            const heading = Math.abs(headingRad) > Math.PI * 2 ? headingRad : (headingRad * 180) / Math.PI;
+            const pitch = Math.abs(pitchRad) > Math.PI * 2 ? pitchRad : (pitchRad * 180) / Math.PI;
+            
+            console.log('[Ivion Sync] Direct position from postMessage:', position, 'heading:', heading);
+            updateFromIvion(position, heading, pitch);
+            setCurrentImageId(eventData.imageId || eventData.image || null);
+            setLastSyncSource('ivion');
+            lastSyncedImageIdRef.current = eventData.imageId || eventData.image || null;
+            return; // Skip backend call
+          }
+          
+          // Fallback to imageId-based sync if position not available
           const imageId = eventData.imageId || eventData.image;
           const heading = eventData.yaw ?? eventData.heading ?? 0;
           const pitch = eventData.pitch ?? 0;
@@ -209,17 +245,36 @@ export function useIvionCameraSync({
         return;
       }
 
-      // Camera position update
-      if (data?.camera?.position || data?.position) {
-        console.log('[Ivion Sync] Camera position data:', data);
+      // Direct camera position update (alternative format)
+      if (data?.camera?.position || data?.position || data?.location) {
+        const directPosition = data.camera?.position || data.position || data.location;
+        console.log('[Ivion Sync] Direct camera position data:', directPosition);
         postMessageReceivedRef.current = true;
         setPostMessageActive(true);
+        
+        if (directPosition && directPosition.x !== undefined) {
+          const position: LocalCoords = {
+            x: directPosition.x,
+            y: directPosition.y,
+            z: directPosition.z,
+          };
+          
+          const headingRad = data.camera?.heading ?? data.heading ?? data.yaw ?? 0;
+          const pitchRad = data.camera?.pitch ?? data.pitch ?? 0;
+          const heading = Math.abs(headingRad) > Math.PI * 2 ? headingRad : (headingRad * 180) / Math.PI;
+          const pitch = Math.abs(pitchRad) > Math.PI * 2 ? pitchRad : (pitchRad * 180) / Math.PI;
+          
+          console.log('[Ivion Sync] Updating from direct position:', position);
+          updateFromIvion(position, heading, pitch);
+          setCurrentImageId(data.imageId || null);
+          setLastSyncSource('ivion');
+        }
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [enabled, syncLocked, buildingFmGuid]);
+  }, [enabled, syncLocked, buildingFmGuid, updateFromIvion]);
 
   // Handle image change from Ivion - fetch position and update 3D
   const handleIvionImageChange = useCallback(async (imageId: number, heading: number, pitch: number) => {
@@ -295,7 +350,7 @@ export function useIvionCameraSync({
     return nearestDist < 50 ? nearestImage : null;
   }, [imageCache]);
 
-  // Navigate Ivion to nearest image based on current 3D position
+  // Navigate Ivion to position based on current 3D camera
   const syncToIvion = useCallback(() => {
     if (!iframeRef.current || !syncState.position) {
       console.log('[Ivion Sync] Cannot sync: no iframe or position');
@@ -309,44 +364,70 @@ export function useIvionCameraSync({
       return;
     }
     
-    const nearestImage = findNearestImage(syncState.position);
-    if (!nearestImage) {
-      console.log('[Ivion Sync] No nearby image found');
-      return;
-    }
-    
-    // Don't update if same image
-    if (nearestImage.id === lastSyncedImageIdRef.current) {
-      console.log('[Ivion Sync] Same image, skipping');
-      return;
-    }
-    
     syncThrottleRef.current = now;
-    lastSyncedImageIdRef.current = nearestImage.id;
     isSyncingRef.current = true;
     
-    try {
-      const currentUrl = new URL(iframeRef.current.src);
-      currentUrl.searchParams.set('image', String(nearestImage.id));
+    // Try postMessage first (instant, no reload)
+    if (iframeRef.current.contentWindow) {
+      const moveCommand = {
+        type: 'navvis-command',
+        action: 'moveToLocation',
+        params: {
+          position: {
+            x: syncState.position.x,
+            y: syncState.position.y,
+            z: syncState.position.z,
+          },
+          heading: (syncState.heading * Math.PI) / 180, // Convert to radians
+          pitch: (syncState.pitch * Math.PI) / 180,
+        },
+      };
       
-      // Convert heading/pitch to radians for vlon/vlat
-      const vlonRad = (syncState.heading * Math.PI) / 180;
-      const vlatRad = (syncState.pitch * Math.PI) / 180;
-      currentUrl.searchParams.set('vlon', vlonRad.toFixed(2));
-      currentUrl.searchParams.set('vlat', vlatRad.toFixed(2));
+      console.log('[Ivion Sync] Sending moveToLocation via postMessage:', moveCommand.params);
+      iframeRef.current.contentWindow.postMessage(moveCommand, '*');
       
-      console.log('[Ivion Sync] Navigating to image:', nearestImage.id, 'at distance:', 
-        Math.sqrt(
-          Math.pow(nearestImage.location.x - syncState.position.x, 2) +
-          Math.pow(nearestImage.location.y - syncState.position.y, 2) +
-          Math.pow(nearestImage.location.z - syncState.position.z, 2)
-        ).toFixed(1), 'm');
+      // Also try alternative command formats
+      iframeRef.current.contentWindow.postMessage({
+        type: 'ivion-command',
+        action: 'setPointOfView',
+        params: moveCommand.params,
+      }, '*');
       
-      iframeRef.current.src = currentUrl.toString();
-      setCurrentImageId(nearestImage.id);
       setLastSyncSource('3d');
-    } catch (err) {
-      console.error('[Ivion Sync] Failed to update iframe URL:', err);
+    }
+    
+    // Fallback: Find nearest image and update URL (slower but more reliable)
+    const nearestImage = findNearestImage(syncState.position);
+    if (nearestImage) {
+      // Don't update URL if same image (postMessage should handle the precise position)
+      if (nearestImage.id !== lastSyncedImageIdRef.current) {
+        lastSyncedImageIdRef.current = nearestImage.id;
+        
+        try {
+          const currentUrl = new URL(iframeRef.current.src);
+          currentUrl.searchParams.set('image', String(nearestImage.id));
+          
+          // Convert heading/pitch to radians for vlon/vlat
+          const vlonRad = (syncState.heading * Math.PI) / 180;
+          const vlatRad = (syncState.pitch * Math.PI) / 180;
+          currentUrl.searchParams.set('vlon', vlonRad.toFixed(2));
+          currentUrl.searchParams.set('vlat', vlatRad.toFixed(2));
+          
+          console.log('[Ivion Sync] Fallback: Navigating to image:', nearestImage.id, 'at distance:', 
+            Math.sqrt(
+              Math.pow(nearestImage.location.x - syncState.position.x, 2) +
+              Math.pow(nearestImage.location.y - syncState.position.y, 2) +
+              Math.pow(nearestImage.location.z - syncState.position.z, 2)
+            ).toFixed(1), 'm');
+          
+          iframeRef.current.src = currentUrl.toString();
+          setCurrentImageId(nearestImage.id);
+        } catch (err) {
+          console.error('[Ivion Sync] Failed to update iframe URL:', err);
+        }
+      }
+    } else {
+      console.log('[Ivion Sync] No nearby image found for URL fallback');
     }
     
     // Clear syncing flag after delay
