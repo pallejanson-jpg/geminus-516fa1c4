@@ -9,6 +9,7 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from '@/components/ui/carousel';
+import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 
 export interface FloorInfo {
   id: string;
@@ -17,6 +18,8 @@ export interface FloorInfo {
   shortName: string;
   thumbnail?: string; // Base64 encoded PNG
   aabb?: number[];
+  /** Database level FM GUIDs (originalSystemId) */
+  databaseLevelFmGuids?: string[];
 }
 
 interface FloorCarouselProps {
@@ -74,11 +77,15 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
         const shortMatch = name.match(/(\d+)/);
         const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
         
+        // Get fmGuid from originalSystemId for database matching
+        const fmGuid = metaObject.originalSystemId || metaObject.id;
+        
         extractedFloors.push({
           id: metaObject.id,
-          fmGuid: metaObject.id, // Will be updated if FmGuid property exists
+          fmGuid: fmGuid,
           name,
           shortName,
+          databaseLevelFmGuids: [fmGuid],
         });
       }
     });
@@ -308,7 +315,20 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
             {floors.map((floor) => (
               <button
                 key={floor.id}
-                onClick={() => onFloorSelect(floor)}
+                onClick={() => {
+                  onFloorSelect(floor);
+                  
+                  // Dispatch floor selection event with complete data
+                  const eventDetail: FloorSelectionEventDetail = {
+                    floorId: floor.id,
+                    floorName: floor.name,
+                    bounds: null,
+                    visibleMetaFloorIds: [floor.id],
+                    visibleFloorFmGuids: floor.databaseLevelFmGuids || [floor.fmGuid],
+                    isAllFloorsVisible: false,
+                  };
+                  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+                }}
                 className={cn(
                   "flex-shrink-0 rounded-md overflow-hidden transition-all",
                   "border-2 hover:border-primary/50",
