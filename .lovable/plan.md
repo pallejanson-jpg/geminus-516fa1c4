@@ -1,158 +1,41 @@
 
-# Plan: Åtgärda 360° ↔ 3D Synkronisering
+# Plan: Verifiera och felsök Ivion-credentials
 
 ## Problemanalys
 
-Jag har identifierat **två separata problem**:
+Du har uppdaterat `IVION_USERNAME` till `SWG_PalJ` men systemet visar fortfarande `SWG***` i felmeddelandet. Problemet kan vara:
 
-### Problem 1: Ivion API-autentisering misslyckas
-Felmeddelandena i loggarna visar:
-```
-"Bad credentials" - username/password login failed
-"Ivion authentication failed. Username/password login was attempted but failed."
-```
-
-**Konsekvens:** Bildcachen (`imageCache`) förblir tom, vilket innebär att 3D → 360° synk inte kan fungera eftersom systemet inte vet var bilderna finns.
-
-### Problem 2: Ingen postMessage-kommunikation från Ivion
-NavVis IVION skickar inte automatiskt `camera-changed` events via `postMessage` till parent-fönstret. Vi kan skicka `subscribe`-kommandon men det är oklart om er Ivion-instans stöder detta.
-
----
+1. **Edge function cache** - Edge functions kan cacheläsa miljövariabler
+2. **Preview visar för lite** - Koden visar bara 3 första tecknen (`SWG`), så vi kan inte se skillnad mellan `SWG_RC` och `SWG_PalJ`
 
 ## Lösning
 
-### Del 1: Fixa Ivion-autentisering
+### Del 1: Förbättra debug-visning
 
-**Alternativ A: Uppdatera credentials**
-Om er Ivion-instans kräver **lokalt konto** (inte SSO/OAuth), behöver ni uppdatera IVION_USERNAME och IVION_PASSWORD med korrekta uppgifter.
+Uppdatera `getIvionConfigStatus()` för att visa fler tecken av användarnamnet (6 istället för 3):
 
-**Alternativ B: Använd färsk token**
-Om ni kan hämta en färsk access_token och refresh_token manuellt från Ivion, kan dessa läggas in som IVION_ACCESS_TOKEN och IVION_REFRESH_TOKEN.
-
-**Hur ni får tag på tokens manuellt:**
-1. Logga in på Ivion i webbläsaren
-2. Öppna Developer Tools → Network
-3. Hitta ett API-anrop som innehåller `x-authorization: Bearer XXX`
-4. Kopiera token-värdet
-
-### Del 2: Alternativ synk-strategi (utan API-beroende)
-
-Eftersom Ivion-iframen laddar och användaren kan navigera i den, kan vi implementera en **URL-parser-baserad synk** som inte kräver API-anrop för bildcachen.
-
-**Ny strategi:**
-1. **3D → 360°**: Direkt URL-uppdatering med `&image=XXX` (kräver fortfarande bildcache)
-2. **360° → 3D (ny fallback)**: 
-   - Lägg till en "Synka hit"-knapp i 3D-sidan
-   - Knappen öppnar en dialog där användaren klistrar in Ivion-URL:en (som de kopierar via Dela-ikonen)
-   - Systemet parsar URL:en, hämtar bildpositionen via API, och uppdaterar 3D
-
-### Del 3: Förbättrad felhantering och status
-
-Visa tydligare status till användaren om:
-- API-anslutning fungerar eller inte
-- Hur många bilder som laddats
-- Om synk är aktiv
-
----
-
-## Tekniska ändringar
-
-### 1. Felmeddelande i UI vid auth-problem
-
-**Fil: `src/components/viewer/Ivion360View.tsx`**
-
-Visa ett varningsmeddelande om bildcachen är tom men sync är aktiverad:
-
+**Fil: `supabase/functions/_shared/ivion-auth.ts`**
 ```typescript
-// Om sync är aktiverad men ingen bildcache → visa varning
-{syncEnabled && !isLoadingImages && imageCache.length === 0 && connectionStatus === 'error' && (
-  <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
-                  text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow">
-    ⚠️ Kunde inte hämta bildpositioner. 
-    <button onClick={handleRetryImageLoad} className="underline ml-1">
-      Försök igen
-    </button>
-  </div>
-)}
+// Rad 331: Ändra från
+usernamePreview: config.username ? config.username.slice(0, 3) + '***' : '',
+
+// Till
+usernamePreview: config.username ? config.username.slice(0, 6) + '***' : '',
 ```
 
-### 2. Manuell synk-dialog som fallback
+Detta visar `SWG_Pa***` om rätt användarnamn används, eller `SWG_RC***` om det gamla fortfarande är kvar.
 
-**Fil: `src/pages/SplitViewer.tsx`**
+### Del 2: Deploya edge function
 
-Lägg till en dialog som dyker upp vid klick på "Synka 360° → 3D" om automatisk synk inte fungerar:
+Efter ändringen deployas `ivion-poi` för att:
+1. Uppdatera koden
+2. **Tvinga omladdning av miljövariabler** (löser eventuell cache-problem)
 
-```typescript
-{/* Fallback sync dialog */}
-<Dialog open={showManualSyncDialog} onOpenChange={setShowManualSyncDialog}>
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>Synka från 360°</DialogTitle>
-    </DialogHeader>
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Automatisk synk är inte tillgänglig. Du kan synka manuellt:
-      </p>
-      <ol className="list-decimal list-inside text-sm space-y-2">
-        <li>I 360°-vyn, klicka på <strong>Dela</strong>-ikonen (📤)</li>
-        <li>Kopiera länken som visas</li>
-        <li>Klistra in den nedan</li>
-      </ol>
-      <Input
-        value={manualIvionUrl}
-        onChange={(e) => setManualIvionUrl(e.target.value)}
-        placeholder="https://swg.iv.navvis.com/?site=...&image=..."
-      />
-      <p className="text-xs text-muted-foreground">
-        URL:en måste innehålla <code>&amp;image=XXX</code>
-      </p>
-    </div>
-    <DialogFooter>
-      <Button variant="outline" onClick={() => setShowManualSyncDialog(false)}>
-        Avbryt
-      </Button>
-      <Button onClick={handleParseManualUrl} disabled={!manualIvionUrl.includes('image=')}>
-        Synka
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-```
+### Del 3: Testa anslutningen
 
-### 3. Retry-logik för bildladdning
-
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-
-Lägg till en retry-funktion som användaren kan anropa:
-
-```typescript
-// Ny export: retryLoadImages
-const retryLoadImages = useCallback(async () => {
-  setIsLoadingImages(true);
-  try {
-    const { data, error } = await supabase.functions.invoke('ivion-poi', {
-      body: { 
-        action: 'get-images-for-site', 
-        siteId: ivionSiteId,
-        buildingFmGuid,
-      },
-    });
-    
-    if (data?.success && data?.images?.length > 0) {
-      setImageCache(data.images);
-      toast.success(`Laddade ${data.images.length} bildpositioner`);
-    } else {
-      toast.error('Kunde inte ladda bildpositioner', {
-        description: data?.error || 'Kontrollera Ivion-konfigurationen'
-      });
-    }
-  } catch (e) {
-    toast.error('Anslutning till Ivion misslyckades');
-  } finally {
-    setIsLoadingImages(false);
-  }
-}, [ivionSiteId, buildingFmGuid]);
-```
+Kör ett nytt test-anrop för att verifiera:
+- Att rätt användarnamn (`SWG_Pa***`) visas
+- Att autentiseringen fungerar
 
 ---
 
@@ -160,32 +43,23 @@ const retryLoadImages = useCallback(async () => {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/viewer/Ivion360View.tsx` | Lägg till varningsmeddelande vid tom bildcache, retry-knapp |
-| `src/hooks/useIvionCameraSync.ts` | Exportera `retryLoadImages`-funktion |
-| `src/pages/SplitViewer.tsx` | Lägg till manuell sync-dialog som fallback |
+| `supabase/functions/_shared/ivion-auth.ts` | Visa 6 tecken av användarnamn i preview |
 
 ---
 
-## Rekommenderad åtgärd
+## Förväntade resultat
 
-**Steg 1: Verifiera Ivion-credentials**
-Kontrollera att IVION_USERNAME och IVION_PASSWORD är för ett **lokalt konto** (inte SSO). NavVis Ivion API stöder ofta bara lokala konton för programmatisk åtkomst.
-
-**Steg 2: Implementera fallback-synk**
-Jag implementerar manuell URL-parser-synk som backup så att ni kan synka även om automatiken inte fungerar.
-
-**Steg 3: Testa med korrekta credentials**
-När credentials fungerar kommer bildcachen att laddas och automatisk synk aktiveras.
+Efter implementationen:
+- Om du ser `SWG_Pa***` → Rätt användarnamn används, problemet är lösenordet
+- Om du ser `SWG_RC***` → Secrets uppdateras inte, vi behöver felsöka varför
+- Om inloggningen lyckas → Problemet är löst!
 
 ---
 
 ## Sammanfattning
 
-| Problem | Orsak | Lösning |
-|---------|-------|---------|
-| Ingen bildcache | API-auth misslyckas | Uppdatera credentials + retry-logik |
-| 3D → 360° fungerar ej | Bildcache tom | Löses av ovanstående |
-| 360° → 3D fungerar ej | PostMessage stöds ej | Manuell URL-input som fallback |
-| Dålig UX vid fel | Ingen feedback | Varningsmeddelanden + status |
-
-Den viktigaste åtgärden är att fixa Ivion-autentiseringen. Med fungerande credentials kommer den befintliga synk-logiken att fungera för 3D → 360°. För 360° → 3D erbjuder jag en manuell fallback tills eventuellt SDK-stöd finns.
+| Steg | Åtgärd |
+|------|--------|
+| 1 | Ändra preview från 3→6 tecken |
+| 2 | Deploya edge function (tvingar secrets-omladdning) |
+| 3 | Testa anslutningen |
