@@ -104,6 +104,9 @@ export function useBuildingSettings(fmGuid: string | null) {
                     start_view_id: updates.startViewId !== undefined
                         ? updates.startViewId
                         : settings?.startViewId ?? null,
+                    rotation: updates.rotation !== undefined
+                        ? updates.rotation
+                        : settings?.rotation ?? null,
                 } as any, { 
                     onConflict: 'fm_guid' 
                 });
@@ -158,6 +161,11 @@ export function useBuildingSettings(fmGuid: string | null) {
         await saveSettings({ startViewId: viewId });
     }, [saveSettings]);
 
+    // Update rotation
+    const updateRotation = useCallback(async (rotation: number | null) => {
+        await saveSettings({ rotation: rotation });
+    }, [saveSettings]);
+
     return {
         settings,
         isLoading,
@@ -167,6 +175,7 @@ export function useBuildingSettings(fmGuid: string | null) {
         updateMapPosition,
         updateHeroImage,
         updateStartView,
+        updateRotation,
         refetch: fetchSettings,
     };
 }

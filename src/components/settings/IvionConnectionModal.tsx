@@ -21,6 +21,7 @@ import {
   Key,
   Shield
 } from 'lucide-react';
+import GeoreferencingSettings from './GeoreferencingSettings';
 
 interface IvionConnectionModalProps {
   isOpen: boolean;
@@ -319,6 +320,13 @@ const IvionConnectionModal: React.FC<IvionConnectionModalProps> = ({
                 AI scanning and other Ivion features are now ready to use.
               </p>
             </div>
+          )}
+
+          {/* Georeferencing Settings - show when building is specified */}
+          {buildingFmGuid && (
+            <GeoreferencingSettings 
+              buildingFmGuid={buildingFmGuid}
+            />
           )}
         </div>
 
