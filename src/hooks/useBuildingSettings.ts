@@ -10,6 +10,7 @@ interface BuildingSettings {
     longitude: number | null;
     heroImageUrl: string | null;
     startViewId: string | null;
+    rotation: number | null;
     // Token fields (managed by edge functions, read-only in frontend)
     ivionAccessToken: string | null;
     ivionRefreshToken: string | null;
@@ -45,6 +46,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     longitude: data.longitude ?? null,
                     heroImageUrl: data.hero_image_url ?? null,
                     startViewId: data.start_view_id ?? null,
+                    rotation: (data as any).rotation ?? null,
                     ivionAccessToken: (data as any).ivion_access_token ?? null,
                     ivionRefreshToken: (data as any).ivion_refresh_token ?? null,
                     ivionTokenExpiresAt: (data as any).ivion_token_expires_at ?? null,
@@ -59,6 +61,7 @@ export function useBuildingSettings(fmGuid: string | null) {
                     longitude: null,
                     heroImageUrl: null,
                     startViewId: null,
+                    rotation: null,
                     ivionAccessToken: null,
                     ivionRefreshToken: null,
                     ivionTokenExpiresAt: null,
