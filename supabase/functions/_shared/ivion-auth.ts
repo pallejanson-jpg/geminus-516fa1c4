@@ -328,6 +328,6 @@ export function getIvionConfigStatus(): {
     hasAccessToken: !!config.accessToken,
     hasRefreshToken: !!config.refreshToken,
     apiUrlPreview: config.apiUrl ? config.apiUrl.replace(/^https?:\/\//, '').slice(0, 30) + '...' : '',
-    usernamePreview: config.username ? config.username.slice(0, 3) + '***' : '',
+    usernamePreview: config.username ? config.username.slice(0, 6) + '***' : '',
   };
 }
