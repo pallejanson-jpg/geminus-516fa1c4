@@ -22,6 +22,8 @@ interface BuildingData {
   name: string;
   ivionSiteId: string;
   origin: BuildingOrigin | null;
+  startVlon?: number;
+  startVlat?: number;
 }
 
 interface SplitViewerContentProps {
@@ -59,7 +61,15 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   // Construct Ivion URL using config (same pattern as IvionInventory)
   const configured = appConfigs?.radar?.url?.trim();
   const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_FALLBACK_URL;
-  const ivionUrl = `${baseUrl}/?site=${buildingData.ivionSiteId}`;
+  
+  // Build URL with optional start view coordinates
+  let ivionUrl = `${baseUrl}/?site=${buildingData.ivionSiteId}`;
+  if (buildingData.startVlon !== undefined) {
+    ivionUrl += `&vlon=${buildingData.startVlon}`;
+  }
+  if (buildingData.startVlat !== undefined) {
+    ivionUrl += `&vlat=${buildingData.startVlat}`;
+  }
 
   console.log('[SplitViewer] Ivion URL:', ivionUrl);
   console.log('[SplitViewer] Building origin:', buildingData.origin);
@@ -401,11 +411,11 @@ const SplitViewer: React.FC = () => {
         return;
       }
 
-      // Fetch building settings to get Ivion site ID and coordinates
+      // Fetch building settings to get Ivion site ID, coordinates, and start view
       try {
         const { data: settings, error: settingsError } = await supabase
           .from('building_settings')
-          .select('ivion_site_id, latitude, longitude, rotation')
+          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat')
           .eq('fm_guid', buildingFmGuid)
           .maybeSingle();
 
@@ -434,6 +444,8 @@ const SplitViewer: React.FC = () => {
           name: building.commonName || building.name || 'Byggnad',
           ivionSiteId: settings.ivion_site_id,
           origin,
+          startVlon: (settings as any).ivion_start_vlon ?? undefined,
+          startVlat: (settings as any).ivion_start_vlat ?? undefined,
         });
       } catch (err) {
         console.error('Error loading building data:', err);
