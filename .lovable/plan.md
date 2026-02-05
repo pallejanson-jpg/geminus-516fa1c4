@@ -1,78 +1,120 @@
 
+# Plan: Fixa 3D Quick Actions för våningar och rum
 
-# Plan: Åtgärda AI-skanning - Bildnedladdning misslyckas
+## Problem
+När användaren navigerar till en våning (Building Storey) eller ett rum (Space) och klickar på "3D" i Quick Actions, händer ingenting. Istället visas byggnadsväljar-vyn.
 
-## Problemanalys
+## Orsak
+Filen `Viewer.tsx` validerar att `viewer3dFmGuid` måste vara en byggnad (`Building` eller `IfcBuilding`). När en vånings- eller rums-fmGuid skickas:
+1. `validBuilding` blir `null` eftersom kategorin inte matchar
+2. Koden rensar `viewer3dFmGuid` och visar `BuildingSelector`
+3. `AssetPlusViewer` når aldrig det skickade fmGuid:et
 
-Efter undersökning av edge function-loggar och databas har jag identifierat rotorsaken:
+Paradoxalt nog har `AssetPlusViewer` redan färdig logik för att hantera Building Storey och Space med korrekta kamera-actions (cutoutfloor, lookatspace).
 
-| Steg | Status | Problem |
-|------|--------|---------|
-| Ivion-autentisering | ✅ Fungerar | `SWG_PalJ` bekräftat, 224 sites |
-| Hämta datasets | ✅ Fungerar | Dataset `2020-12-14_13.58.34` hittas |
-| Hämta poses.csv | ❌ 404/blockerad | Filen finns inte eller är ej tillgänglig |
-| Proba bildfilnamn | ❌ 404 på alla | `00000-pano.jpg` etc. existerar inte |
-| Ladda ner bild | ❌ Aldrig når hit | Alla URL:er returnerar 404 |
+## Lösning
+Uppdatera valideringslogiken i `Viewer.tsx` för att:
+1. Acceptera våningar och rum (inte bara byggnader)
+2. Automatiskt härleda föräldrbyggnadens fmGuid när en underordnad entitet väljs
+3. Skicka båda till `AssetPlusViewer`: byggnadens fmGuid för modelladdning + det ursprungliga fmGuid:et för fokusering
 
-**Rotorsak**: NavVis-instansen använder ett **annat filnamnsformat** än det förväntade `XXXXX-pano.jpg`. Koden söker efter fel filnamn.
+---
 
-## Lösning: Tre-stegs strategi
+## Steg 1: Uppdatera Viewer.tsx
 
-### Steg 1: Använd NavVis Storage API för att lista filer
-
-Istället för att gissa filnamn, använd NavVis API för att lista faktiska filer i dataset:
+Ändra `validBuilding`-logiken för att hitta byggnaden även när en våning eller rum väljs:
 
 ```typescript
-// Ny endpoint för att lista filer i ett dataset
-async function listDatasetFiles(siteId: string, datasetName: string): Promise<string[]> {
-  const token = await getIvionToken();
+// Ny logik: hitta byggnad baserat på viewer3dFmGuid
+const { buildingFmGuid, targetFacility } = useMemo(() => {
+  if (!viewer3dFmGuid || !allData || allData.length === 0) {
+    return { buildingFmGuid: null, targetFacility: null };
+  }
   
-  // NavVis API endpoint för att lista filer
-  const endpoints = [
-    `${IVION_API_URL}/api/site/${siteId}/storage/list/datasets_web/${datasetName}/pano`,
-    `${IVION_API_URL}/api/site/${siteId}/datasets/${datasetName}/images`,
-    `${IVION_API_URL}/api/dataset/${datasetName}/images`,
-  ];
+  // Hitta den valda entiteten
+  const facility = allData.find((item: any) => item.fmGuid === viewer3dFmGuid);
+  if (!facility) return { buildingFmGuid: null, targetFacility: null };
   
-  for (const endpoint of endpoints) {
-    const response = await fetch(endpoint, {
-      headers: { 'x-authorization': `Bearer ${token}` },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      // Extrahera filnamn från response
-      return extractFilenames(data);
+  // Om det är en byggnad, använd den direkt
+  if (facility.category === 'Building' || facility.category === 'IfcBuilding') {
+    return { buildingFmGuid: facility.fmGuid, targetFacility: facility };
+  }
+  
+  // Om det är en våning eller rum, hitta föräldra-byggnaden
+  if (facility.buildingFmGuid) {
+    const building = allData.find((item: any) => 
+      item.fmGuid === facility.buildingFmGuid && 
+      (item.category === 'Building' || item.category === 'IfcBuilding')
+    );
+    if (building) {
+      return { buildingFmGuid: building.fmGuid, targetFacility: facility };
     }
   }
   
-  return [];
+  return { buildingFmGuid: null, targetFacility: null };
+}, [viewer3dFmGuid, allData]);
+```
+
+Uppdatera villkorlig rendering för att använda nya variabler.
+
+---
+
+## Steg 2: Skicka initialFmGuidToFocus till AssetPlusViewer
+
+Lägg till en ny prop för att tala om vilken entitet som ska fokuseras:
+
+```typescript
+<AssetPlusViewer 
+  fmGuid={buildingFmGuid}  // Byggnaden för modelladdning
+  initialFmGuidToFocus={viewer3dFmGuid}  // Det ursprungliga fmGuid:et (våning/rum)
+  onClose={handleClose} 
+/>
+```
+
+---
+
+## Steg 3: Uppdatera AssetPlusViewer props
+
+Lägg till `initialFmGuidToFocus` som optional prop och använd den i initieringslogiken:
+
+```typescript
+interface AssetPlusViewerProps {
+  fmGuid: string;  // Byggnadens fmGuid
+  initialFmGuidToFocus?: string;  // Entiteten att fokusera på (valfri)
+  onClose?: () => void;
+  // ... övriga props
 }
 ```
 
-### Steg 2: Utöka filnamnsmönster att proba
-
-NavVis använder olika format beroende på skanner:
-
+I `initializeViewer`:
 ```typescript
-// Nya filnamnsmönster att testa
-const patterns = [
-  `${index.toString().padStart(5, '0')}-pano.jpg`,     // 00000-pano.jpg
-  `${index.toString().padStart(5, '0')}.jpg`,          // 00000.jpg
-  `pano_${index.toString().padStart(5, '0')}.jpg`,     // pano_00000.jpg
-  `panorama_${index}.jpg`,                              // panorama_0.jpg
-  `img_${index.toString().padStart(6, '0')}.jpg`,      // img_000000.jpg
-];
+// Använd initialFmGuidToFocus för att bestämma displayAction
+const focusFmGuid = initialFmGuidToFocus || fmGuid;
+const focusData = allData.find((a: any) => a.fmGuid === focusFmGuid);
+
+if (focusData?.category === 'Building') {
+  displayAction = { action: 'viewall' };
+} else if (focusData?.category === 'Building Storey') {
+  displayAction = { 
+    action: 'cutoutfloor', 
+    parameter: { fmGuid: focusFmGuid, includeRelatedFloors: true } 
+  };
+} else if (focusData?.category === 'Space') {
+  // ...befintlig logik
+}
 ```
 
-### Steg 3: Testa alternativa katalogstrukturer
+---
+
+## Steg 4: Uppdatera QuickActions.tsx (valfritt)
+
+Lägg till 3D-knappen för Space-kategori:
 
 ```typescript
-const directories = [
-  `datasets_web/${datasetName}/pano`,      // Standard
-  `datasets_web/${datasetName}/panorama`,  // Alternativ
-  `datasets_web/${datasetName}/images`,    // Alternativ
-  `datasets/${datasetName}/pano`,          // Äldre format
-];
+// Rad 89: Ändra från
+{(isBuilding || isStorey) && (
+// Till
+{(isBuilding || isStorey || isSpace) && (
 ```
 
 ---
@@ -81,153 +123,26 @@ const directories = [
 
 | Fil | Ändring |
 |-----|---------|
-| `supabase/functions/ai-asset-detection/index.ts` | Ny `listDatasetFiles()`, utökade filnamnsmönster, förbättrad diagnostik |
+| `src/pages/Viewer.tsx` | Uppdatera validering för att stödja våningar och rum |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lägg till `initialFmGuidToFocus` prop |
+| `src/components/portfolio/QuickActions.tsx` | Visa 3D-knappen även för rum (Space) |
 
 ---
 
-## Teknisk implementation
+## Tekniska detaljer
 
-### Del 1: Ny funktion för att lista filer
+```text
+Flöde före fix:
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  QuickActions   │───▶│   Viewer.tsx    │───▶│ BuildingSelector│
+│  onToggle3D()   │    │ validBuilding   │    │   (visas)       │
+│  fmGuid=Våning  │    │ = null ❌       │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 
-Lägg till i `ai-asset-detection/index.ts`:
-
-```typescript
-// Försök lista filer via NavVis Storage API
-async function discoverDatasetFiles(
-  siteId: string,
-  datasetName: string
-): Promise<{ filenames: string[]; source: string }> {
-  const token = await getIvionToken();
-  
-  // 1. Försök list-API
-  const listUrl = `${IVION_API_URL}/api/site/${siteId}/storage/list/datasets_web/${datasetName}/pano`;
-  try {
-    const resp = await fetch(listUrl, {
-      headers: { 'x-authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      // NavVis returnerar ofta { files: [...] } eller direkt array
-      const files = Array.isArray(data) ? data : data.files || data.items || [];
-      if (files.length > 0) {
-        console.log(`Found ${files.length} files via storage/list API`);
-        return { filenames: files.map(f => f.name || f), source: 'list-api' };
-      }
-    }
-  } catch (e) {
-    console.log('Storage list API not available');
-  }
-  
-  // 2. Proba olika filnamnsmönster
-  const testFilenames = [
-    '00000-pano.jpg', '00000.jpg', 'pano_00000.jpg',
-    '0-pano.jpg', '0.jpg', 'panorama_0.jpg'
-  ];
-  
-  for (const filename of testFilenames) {
-    const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${filename}`;
-    const exists = await verifyImageUrlWithGet(testUrl, token);
-    if (exists) {
-      console.log(`Found working pattern: ${filename}`);
-      return { filenames: [filename], source: filename.includes('-pano') ? 'dash-pano' : 'simple' };
-    }
-  }
-  
-  return { filenames: [], source: 'none' };
-}
+Flöde efter fix:
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  QuickActions   │───▶│   Viewer.tsx    │───▶│AssetPlusViewer  │
+│  onToggle3D()   │    │ buildingFmGuid  │    │ fmGuid=Byggnad  │
+│  fmGuid=Våning  │    │ = Building ✓    │    │ focus=Våning ✓  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
-
-### Del 2: Utöka `probeDatasetImages` med fler mönster
-
-```typescript
-async function probeDatasetImages(
-  siteId: string,
-  datasetName: string,
-  maxImages: number = 500
-): Promise<IvionImage[]> {
-  // Först: försök lista filer direkt
-  const discovered = await discoverDatasetFiles(siteId, datasetName);
-  if (discovered.filenames.length > 0) {
-    return discovered.filenames.map((f, i) => ({
-      id: i,
-      filePath: f,
-      name: f,
-    }));
-  }
-  
-  // Fallback: proba olika mönster
-  const token = await getIvionToken();
-  const patterns = [
-    (i: number) => `${String(i).padStart(5, '0')}-pano.jpg`,
-    (i: number) => `${String(i).padStart(5, '0')}.jpg`,
-    (i: number) => `pano_${String(i).padStart(5, '0')}.jpg`,
-    (i: number) => `panorama_${i}.jpg`,
-    (i: number) => `img_${String(i).padStart(6, '0')}.jpg`,
-  ];
-  
-  // Testa varje mönster med bild 0
-  for (const pattern of patterns) {
-    const filename = pattern(0);
-    const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${filename}`;
-    const exists = await verifyImageUrlWithGet(testUrl, token);
-    if (exists) {
-      console.log(`Pattern match: ${filename}`);
-      // Använd detta mönster för alla bilder
-      return await probeWithPattern(siteId, datasetName, pattern, maxImages, token);
-    }
-  }
-  
-  return [];
-}
-```
-
-### Del 3: Förbättra diagnostik i test-image-download
-
-```typescript
-// Lägg till info om vilka mönster som testats
-case 'test-image-download':
-  // Inkludera vilka filnamnsmönster som testats
-  const result = await testImageDownload(params.siteId);
-  result.testedPatterns = ['00000-pano.jpg', '00000.jpg', 'pano_00000.jpg', ...];
-  result.suggestion = 'Kontrollera korrekt filnamnsformat i NavVis admin';
-  return result;
-```
-
----
-
-## Alternativ lösning: Manuell konfiguration
-
-Om automatisk upptäckt inte fungerar, kan vi låta användaren ange rätt format:
-
-| Inställning | Beskrivning |
-|-------------|-------------|
-| `image_filename_pattern` | T.ex. `{index:5}-pano.jpg` eller `panorama_{index}.jpg` |
-| `image_directory` | T.ex. `pano` eller `panorama` |
-
-Detta kan sparas per building i `building_settings`:
-
-```sql
-ALTER TABLE building_settings 
-ADD COLUMN ivion_image_pattern TEXT,
-ADD COLUMN ivion_image_directory TEXT DEFAULT 'pano';
-```
-
----
-
-## Nästa steg
-
-1. Implementera utökad filupptäckt med fler mönster
-2. Lägga till Storage List API-anrop
-3. Förbättra felmeddelanden med specifik diagnostik
-4. Eventuellt: UI för manuell konfiguration av filnamnsmönster
-
----
-
-## Sammanfattning
-
-| Problem | Orsak | Lösning |
-|---------|-------|---------|
-| Inga bilder hittas | Fel filnamnsformat (`00000-pano.jpg`) | Testa fler mönster, använd List API |
-| poses.csv saknas | Ej tillgänglig på denna NavVis-instans | Fallback till direkt fil-upptäckt |
-| Alla URL:er ger 404 | Filerna finns på annan sökväg/format | Utöka sökstrategin |
-
