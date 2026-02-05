@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
 
@@ -34,9 +35,11 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
   buildingData,
 }) => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { appConfigs } = useContext(AppContext);
   const { syncLocked, setSyncLocked, resetSync, syncState, updateFrom3D, updateFromIvion, setBuildingContext } = useViewerSync();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activePanel, setActivePanel] = useState<'3d' | '360'>('3d');
   
   // Manual sync fallback state
   const [showManualSyncDialog, setShowManualSyncDialog] = useState(false);
@@ -183,6 +186,87 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Mobile: Tab-based layout
+  if (isMobile) {
+    return (
+      <div className="h-screen flex flex-col bg-background">
+        {/* Compact mobile header */}
+        <div 
+          className="flex items-center justify-between px-2 py-2 border-b bg-background/95 backdrop-blur-sm shrink-0"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
+        >
+          <Button variant="ghost" size="icon" onClick={handleBack} className="h-9 w-9">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          
+          {/* Tab switcher */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+            <Button 
+              size="sm"
+              variant={activePanel === '3d' ? 'default' : 'ghost'}
+              className="h-7 px-3 text-xs rounded-md"
+              onClick={() => setActivePanel('3d')}
+            >
+              3D
+            </Button>
+            <Button 
+              size="sm"
+              variant={activePanel === '360' ? 'default' : 'ghost'}
+              className="h-7 px-3 text-xs rounded-md"
+              onClick={() => setActivePanel('360')}
+            >
+              360°
+            </Button>
+          </div>
+          
+          <div className="flex items-center gap-1">
+            {/* Sync status dot */}
+            <div className="flex items-center gap-1 px-1.5 py-0.5">
+              <span className={cn(
+                "h-2 w-2 rounded-full transition-colors",
+                syncState.source === 'ivion' ? "bg-primary" :
+                syncState.source === '3d' ? "bg-accent-foreground" : "bg-muted-foreground/50"
+              )} />
+            </div>
+            
+            {/* Sync toggle */}
+            <Button
+              variant={syncLocked ? 'default' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSyncLocked(!syncLocked)}
+            >
+              {syncLocked ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Active view - full height */}
+        <div className="flex-1 min-h-0 relative">
+          {activePanel === '3d' ? (
+            <AssetPlusViewer 
+              fmGuid={buildingData.fmGuid}
+              syncEnabled={syncLocked}
+              onCameraChange={handle3DCameraChange}
+              syncPosition={sync3DPosition}
+              syncHeading={sync3DHeading}
+              syncPitch={sync3DPitch}
+            />
+          ) : (
+            <Ivion360View 
+              url={ivionUrl} 
+              syncEnabled={syncLocked}
+              buildingOrigin={buildingData.origin}
+              buildingFmGuid={buildingData.fmGuid}
+              ivionSiteIdProp={buildingData.ivionSiteId}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: Side-by-side resizable panels
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Header */}

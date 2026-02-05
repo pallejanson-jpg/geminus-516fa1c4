@@ -2728,12 +2728,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           <div 
             ref={viewerContainerRef}
             id="AssetPlusViewer"
-            className="w-full h-full dx-device-desktop dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar"
+            className={`w-full h-full ${isMobile ? 'dx-device-mobile' : 'dx-device-desktop'} dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar`}
             style={{
               display: 'flex',
               flex: '1 0 auto',
               background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
-            }}
+              touchAction: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+            } as React.CSSProperties}
           />
 
           {/* Loading spinner overlay */}

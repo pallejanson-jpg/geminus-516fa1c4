@@ -8,6 +8,7 @@ import IvionRegistrationPanel from "@/components/inventory/IvionRegistrationPane
 import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
 import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
 import type { BuildingOrigin } from "@/lib/coordinate-transform";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface IvionPoiData {
   id: number;
@@ -42,6 +43,7 @@ export default function Ivion360View({
   ivionSiteIdProp,
   onSyncRequest,
 }: Ivion360ViewProps) {
+  const isMobile = useIsMobile();
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -130,18 +132,31 @@ export default function Ivion360View({
     
     // Send subscribe commands to enable camera events from Ivion
     if (syncEnabled) {
-      // Wait for Ivion to fully initialize before sending subscribe
       setTimeout(() => {
         sendSubscribeCommand();
         console.log('[Ivion360View] Sent subscribe commands after iframe load');
       }, 2000);
       
-      // Retry after a longer delay in case first attempt was too early
       setTimeout(() => {
         sendSubscribeCommand();
       }, 5000);
     }
-  }, [syncEnabled, sendSubscribeCommand]);
+    
+    // On mobile, try to minimize Ivion sidebar via postMessage
+    if (isMobile && iframeRef.current?.contentWindow) {
+      setTimeout(() => {
+        try {
+          iframeRef.current?.contentWindow?.postMessage({
+            command: 'setSidebarVisibility',
+            params: { visible: false }
+          }, '*');
+          console.log('[Ivion360View] Sent sidebar minimize command (mobile)');
+        } catch (e) {
+          console.warn('[Ivion360View] Could not send sidebar postMessage:', e);
+        }
+      }, 3000);
+    }
+  }, [syncEnabled, sendSubscribeCommand, isMobile]);
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
@@ -260,96 +275,98 @@ export default function Ivion360View({
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">360° Viewer</span>
-          {buildingName && (
-            <span className="text-sm text-muted-foreground">- {buildingName}</span>
-          )}
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          {syncEnabled && !isLoadingImages && imageCache.length > 0 && (
-            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-              {imageCache.length} bilder
-            </span>
-          )}
-          {/* PostMessage status indicator */}
-          {syncEnabled && postMessageActive && (
-            <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              Auto-sync
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {/* Sync button - only show when sync is enabled */}
-          {syncEnabled && imageCache.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleManualSync}
-              title="Synka 360° till 3D"
-              className="gap-1.5"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span className="hidden sm:inline text-xs">Synka</span>
-            </Button>
-          )}
-          
-          {/* Inventory tools - only show when context is available */}
-          {hasContext && ivionSiteId && (
-            <>
+      {/* Toolbar - hidden on mobile for fullscreen experience */}
+      {!isMobile && (
+        <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">360° Viewer</span>
+            {buildingName && (
+              <span className="text-sm text-muted-foreground">- {buildingName}</span>
+            )}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            {syncEnabled && !isLoadingImages && imageCache.length > 0 && (
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {imageCache.length} bilder
+              </span>
+            )}
+            {/* PostMessage status indicator */}
+            {syncEnabled && postMessageActive && (
+              <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                Auto-sync
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Sync button - only show when sync is enabled */}
+            {syncEnabled && imageCache.length > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setRegistrationPanelOpen(true)}
-                title="Registrera tillgång"
+                onClick={handleManualSync}
+                title="Synka 360° till 3D"
                 className="gap-1.5"
               >
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">Registrera</span>
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">Synka</span>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setUnplacedPanelOpen(true)}
-                title="Skapa POI från Geminus"
-                className="gap-1.5"
-              >
-                <MapPin className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs">POI</span>
-              </Button>
-              <div className="w-px h-5 bg-border mx-1" />
-            </>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleOpenExternal}
-            title="Open in new tab"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-          {(onClose || hasContext) && (
+            )}
+            
+            {/* Inventory tools - only show when context is available */}
+            {hasContext && ivionSiteId && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRegistrationPanelOpen(true)}
+                  title="Registrera tillgång"
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs">Registrera</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setUnplacedPanelOpen(true)}
+                  title="Skapa POI från Geminus"
+                  className="gap-1.5"
+                >
+                  <MapPin className="h-4 w-4" />
+                  <span className="hidden sm:inline text-xs">POI</span>
+                </Button>
+                <div className="w-px h-5 bg-border mx-1" />
+              </>
+            )}
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleClose}
-              title="Close"
+              onClick={handleOpenExternal}
+              title="Open in new tab"
             >
-              <X className="h-4 w-4" />
+              <ExternalLink className="h-4 w-4" />
             </Button>
-          )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+            {(onClose || hasContext) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClose}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Iframe container */}
       <div className="flex-1 relative">
