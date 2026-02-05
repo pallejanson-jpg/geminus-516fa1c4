@@ -8,9 +8,12 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data';
   fmGuid?: string;
   siteCode?: string;
+  indiceId?: number;
+  workspaceKey?: string;
+  query?: Record<string, unknown>;
 }
 
 async function getJwtToken(apiUrl: string, email: string, password: string): Promise<string> {
@@ -55,24 +58,53 @@ async function getJwtToken(apiUrl: string, email: string, password: string): Pro
   throw new Error(`Authentication failed: ${lastStatus}${lastText ? ` (${lastText})` : ''}`);
 }
 
-async function senslincFetch(apiUrl: string, endpoint: string, token: string) {
+async function senslincFetchWithRetry(
+  apiUrl: string, 
+  endpoint: string, 
+  token: string,
+  options?: { method?: string; body?: unknown }
+): Promise<unknown> {
+  const maxRetries = 3;
+  let delay = 1000;
   const url = `${apiUrl}${endpoint}`;
-  console.log('[Senslinc] Fetching:', url);
   
-  const response = await fetch(url, {
-    headers: { 
-      'Authorization': `JWT ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.error('[Senslinc] Request failed:', response.status, text);
-    throw new Error(`Senslinc API error: ${response.status}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    console.log(`[Senslinc] Fetching: ${url} (attempt ${attempt + 1})`);
+    
+    const response = await fetch(url, {
+      method: options?.method || 'GET',
+      headers: { 
+        'Authorization': `JWT ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+    
+    if (response.status === 429) {
+      if (attempt < maxRetries) {
+        console.log(`[Senslinc] Rate limited, retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+      throw new Error('Rate limit exceeded after retries');
+    }
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[Senslinc] Request failed:', response.status, text);
+      throw new Error(`Senslinc API error: ${response.status} - ${text}`);
+    }
+    
+    return response.json();
   }
+  
+  throw new Error('Max retries exceeded');
+}
 
-  return response.json();
+// Legacy wrapper for backwards compatibility
+async function senslincFetch(apiUrl: string, endpoint: string, token: string) {
+  return senslincFetchWithRetry(apiUrl, endpoint, token);
 }
 
 // Build dashboard URL from base URL and entity type
@@ -96,7 +128,7 @@ serve(async (req) => {
     });
 
   try {
-    const { action, fmGuid, siteCode } = await req.json() as SenslincRequest;
+    const { action, fmGuid, siteCode, indiceId, workspaceKey, query } = await req.json() as SenslincRequest;
     
     // Get credentials from environment
     const apiUrl = Deno.env.get('SENSLINC_API_URL');
@@ -126,6 +158,9 @@ serve(async (req) => {
       'get-lines',
       'get-machines',
       'get-dashboard-url',
+      'get-indices',
+      'get-properties',
+      'search-data',
     ]);
 
     let token: string | null = null;
@@ -278,13 +313,48 @@ serve(async (req) => {
           console.log('[Senslinc] No line found for fmGuid:', fmGuid);
         }
         
-        // Nothing found
-        return jsonResponse({
-          success: false,
-          error: 'No equipment found for this FM GUID',
-          message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.',
-        });
+      // Nothing found
+      return jsonResponse({
+        success: false,
+        error: 'No equipment found for this FM GUID',
+        message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.',
+      });
+    }
+
+    // === Elasticsearch DSL Actions ===
+    
+    case 'get-indices': {
+      const authToken = token as string;
+      const indices = await senslincFetchWithRetry(cleanApiUrl, '/api/indices', authToken);
+      return jsonResponse({ success: true, data: indices });
+    }
+
+    case 'get-properties': {
+      if (!indiceId) {
+        return jsonResponse({ success: false, error: 'indiceId required' }, 400);
       }
+      const authToken = token as string;
+      const properties = await senslincFetchWithRetry(
+        cleanApiUrl, 
+        `/api/properties?indice=${indiceId}`, 
+        authToken
+      );
+      return jsonResponse({ success: true, data: properties });
+    }
+
+    case 'search-data': {
+      if (!workspaceKey || !query) {
+        return jsonResponse({ success: false, error: 'workspaceKey and query required' }, 400);
+      }
+      const authToken = token as string;
+      const results = await senslincFetchWithRetry(
+        cleanApiUrl,
+        `/api/data-workspaces/${encodeURIComponent(workspaceKey)}/_search`,
+        authToken,
+        { method: 'POST', body: query }
+      );
+      return jsonResponse({ success: true, data: results });
+    }
 
       default:
         return jsonResponse({ success: false, error: `Unknown action: ${action}` }, 400);
