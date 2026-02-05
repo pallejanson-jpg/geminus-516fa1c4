@@ -96,7 +96,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, [viewMode]);
   
   // SectionPlane clipping for 2D floor plan view
-  const { applyFloorPlanClipping, applyGlobalFloorPlanClipping, removeSectionPlane, calculateFloorBounds, updateFloorCutHeight } = useSectionPlaneClipping(
+  const { 
+    applyFloorPlanClipping, 
+    applyGlobalFloorPlanClipping, 
+    applyCeilingClipping,
+    removeSectionPlane, 
+    remove3DClipping,
+    calculateFloorBounds, 
+    updateFloorCutHeight 
+  } = useSectionPlaneClipping(
     viewerRef,
     { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
   );
@@ -185,12 +193,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   // Listen for floor selection changes from FloorVisibilitySelector
   useEffect(() => {
     const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { floorId, bounds } = e.detail;
+      const { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
       setCurrentFloorId(floorId);
       setCurrentFloorBounds(bounds || null);
       
-      // If 2D mode is active, apply clipping
+      // Determine if this is a solo floor selection (exactly one floor visible)
+      const isSoloFloor = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
+      const soloFloorId = isSoloFloor ? (visibleMetaFloorIds[0] || floorId) : null;
+      
       if (viewModeRef.current === '2d') {
+        // 2D mode: apply floor plan clipping (slab slice)
         if (floorId) {
           applyFloorPlanClipping(floorId);
         } else {
@@ -202,6 +214,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             applyGlobalFloorPlanClipping(baseHeight);
           }
         }
+      } else {
+        // 3D mode: apply ceiling clipping when solo floor is visible
+        if (soloFloorId) {
+          console.log('[ViewerToolbar] 3D Solo mode - applying ceiling clipping for:', soloFloorId);
+          applyCeilingClipping(soloFloorId);
+        } else {
+          // Multiple or all floors visible - remove 3D ceiling clipping
+          console.log('[ViewerToolbar] 3D All floors - removing ceiling clipping');
+          remove3DClipping();
+        }
       }
     };
     
@@ -209,7 +231,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     return () => {
       window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
     };
-  }, [applyFloorPlanClipping, getXeokitViewer]);
+  }, [applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, remove3DClipping, getXeokitViewer]);
 
   // Listen for clip height changes from VisualizationToolbar slider
   useEffect(() => {
@@ -434,6 +456,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       // Switching to 3D mode - remove 2D clipping
       removeSectionPlane();
       
+      // If a solo floor is selected, apply ceiling clipping for 3D mode
+      if (currentFloorId) {
+        console.log('[ViewerToolbar] Switching to 3D with solo floor - applying ceiling clipping');
+        applyCeilingClipping(currentFloorId);
+      }
+      
       const camera = viewer.camera;
       if (camera) {
         camera.projection = 'perspective';
@@ -443,7 +471,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         }
       }
     }
-  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, removeSectionPlane]);
+  }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
 
   const handleClearSlices = useCallback(() => {
     const assetView = getAssetView();
