@@ -22,6 +22,8 @@ const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 // Split Viewer - 3D + 360° side-by-side
 const SplitViewer = lazy(() => import("@/pages/SplitViewer"));
+// Mobile 360° Viewer page (fullscreen)
+const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
 
 const queryClient = new QueryClient();
 
@@ -103,6 +105,18 @@ const App = () => (
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <SplitViewer />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Mobile 360° Viewer - fullscreen mode */}
+          <Route 
+            path="/360-viewer" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <Mobile360Viewer />
                 </ProtectedRoute>
               </Suspense>
             } 

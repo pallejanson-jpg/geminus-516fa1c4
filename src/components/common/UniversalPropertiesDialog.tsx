@@ -85,7 +85,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(['system', 'local', 'area']));
+  // On mobile, only open 'local' by default to save space
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    new Set(isMobile ? ['local'] : ['system', 'local', 'area'])
+  );
   
   // Resize state (desktop only)
   const [size, setSize] = useState({ width: 400, height: 500 });
@@ -661,7 +664,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
             placeholder="Search properties..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-9 text-sm"
+            className="pl-8 h-8 text-sm"
           />
         </div>
       </div>
@@ -733,7 +736,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
       {/* Footer actions */}
       {assets.length > 0 && (
-        <div className="p-3 border-t flex justify-end gap-2 shrink-0">
+        <div className="p-3 border-t flex justify-end gap-2 shrink-0"
+             style={{ paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' : undefined }}>
           {isEditing ? (
             <>
               <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
@@ -761,7 +765,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   if (isMobile) {
     return (
       <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+        <SheetContent 
+          side="bottom" 
+          className="h-[90vh] flex flex-col p-0"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
           <SheetHeader className="p-3 border-b shrink-0">
             <SheetTitle className="flex items-center gap-2 text-left">
               {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
