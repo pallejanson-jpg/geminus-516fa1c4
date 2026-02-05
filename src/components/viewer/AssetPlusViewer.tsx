@@ -37,6 +37,7 @@ import {
 
 interface AssetPlusViewerProps {
   fmGuid: string;
+  initialFmGuidToFocus?: string;  // Entity to focus on (floor/room) - uses fmGuid if not provided
   onClose?: () => void;
   // External pick mode control for asset registration flow
   pickModeEnabled?: boolean;
@@ -90,6 +91,7 @@ const lookAtSpaceAndInstanceFlyToDuration = 1;
  */
 const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({ 
   fmGuid, 
+  initialFmGuidToFocus,
   onClose, 
   pickModeEnabled, 
   onCoordinatePicked,
@@ -2499,21 +2501,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // For Space: cut out the parent floor (levelFmGuid) and look at the space
       let displayAction: any = undefined;
       
-      if (assetData?.category === 'Building') {
+      // Use initialFmGuidToFocus to determine the display action
+      const focusFmGuid = initialFmGuidToFocus || fmGuid;
+      const focusData = allData.find((a: any) => a.fmGuid === focusFmGuid);
+      
+      console.log('AssetPlusViewer: Focus target -', focusFmGuid, 'category:', focusData?.category);
+      
+      if (!focusData || focusData.category === 'Building' || focusData.category === 'IfcBuilding') {
         displayAction = { action: 'viewall' };
-      } else if (assetData?.category === 'Building Storey') {
+      } else if (focusData.category === 'Building Storey' || focusData.category === 'IfcBuildingStorey') {
         // Storey: use the storey's own fmGuid for floor cutout
         displayAction = { 
           action: 'cutoutfloor', 
-          parameter: { fmGuid: fmGuid, includeRelatedFloors: true } 
+          parameter: { fmGuid: focusFmGuid, includeRelatedFloors: true } 
         };
-      } else if (assetData?.category === 'Space') {
+      } else if (focusData.category === 'Space' || focusData.category === 'IfcSpace') {
         // Space: use the parent floor's fmGuid (levelFmGuid) for cutout, then look at the space
-        const floorFmGuid = assetData?.levelFmGuid || fmGuid;
+        const floorFmGuid = focusData.levelFmGuid || focusFmGuid;
         displayAction = { 
           action: 'cutoutfloor_and_lookatspace', 
           parameter: { 
-            fmGuid: fmGuid,  // Space fmGuid for lookAt
+            fmGuid: focusFmGuid,  // Space fmGuid for lookAt
             floorFmGuid: floorFmGuid, // Parent floor for cutout
             includeRelatedFloors: true, 
             heightAboveAABB: defaultHeightAboveAABB 
@@ -2521,7 +2529,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         };
       }
       
-      displayFmGuid(fmGuid, displayAction);
+      displayFmGuid(focusFmGuid, displayAction);
 
       // Clear any pending error display on successful init
       if (showErrorTimeoutRef.current) {
@@ -2562,7 +2570,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         setShowError(true);
       }, 800); // 800ms delay to allow retry to succeed
     }
-  }, [fmGuid, assetData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
+  }, [fmGuid, initialFmGuidToFocus, assetData, allData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
 
   const handleRetry = useCallback(() => {
     // If we're already initializing, ignore retry clicks.
