@@ -16,6 +16,26 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
 // Ivion API URL
 const IVION_API_URL = (Deno.env.get('IVION_API_URL') || '').trim().replace(/\/+$/, '');
 
+// Filename patterns for different NavVis scanner versions
+type FilenamePattern = (i: number) => string;
+
+const FILENAME_PATTERNS: { name: string; pattern: FilenamePattern }[] = [
+  { name: 'dash-pano-5', pattern: (i: number) => `${String(i).padStart(5, '0')}-pano.jpg` },
+  { name: 'simple-5', pattern: (i: number) => `${String(i).padStart(5, '0')}.jpg` },
+  { name: 'pano-prefix-5', pattern: (i: number) => `pano_${String(i).padStart(5, '0')}.jpg` },
+  { name: 'panorama-simple', pattern: (i: number) => `panorama_${i}.jpg` },
+  { name: 'img-6', pattern: (i: number) => `img_${String(i).padStart(6, '0')}.jpg` },
+  { name: 'dash-pano-4', pattern: (i: number) => `${String(i).padStart(4, '0')}-pano.jpg` },
+  { name: 'simple-4', pattern: (i: number) => `${String(i).padStart(4, '0')}.jpg` },
+];
+
+const DIRECTORY_PATTERNS = [
+  'pano',           // Standard
+  'panorama',       // Alternative
+  'images',         // Alternative
+  'pano_high',      // High-res
+];
+
 // Types
 interface DetectionTemplate {
   id: string;
@@ -215,7 +235,9 @@ function parsePosesCsv(csvText: string): IvionImage[] {
   const lines = csvText.split('\n').filter(line => line.trim() && !line.startsWith('#'));
   
   return lines.map(line => {
-    const parts = line.split(';').map(s => s.trim());
+    // Support both semicolon and comma as delimiters
+    const delimiter = line.includes(';') ? ';' : ',';
+    const parts = line.split(delimiter).map(s => s.trim());
     const [id, filename, timestamp, posX, posY, posZ, oriW, oriX, oriY, oriZ] = parts;
     
     return {
@@ -240,27 +262,105 @@ function parsePosesCsv(csvText: string): IvionImage[] {
   }).filter(img => img.filePath); // Filter out any malformed entries
 }
 
-// Probe for images in a dataset by testing sequential filenames
-async function probeDatasetImages(
+// Discover dataset files using NavVis Storage List API
+async function discoverDatasetFiles(
+  siteId: string,
+  datasetName: string
+): Promise<{ filenames: string[]; directory: string; source: string }> {
+  const token = await getIvionToken();
+  
+  console.log(`[Discovery] Attempting to discover files for dataset ${datasetName}`);
+  
+  // Try different directories
+  for (const dir of DIRECTORY_PATTERNS) {
+    // Method 1: Try Storage List API
+    const listUrl = `${IVION_API_URL}/api/site/${siteId}/storage/list/datasets_web/${datasetName}/${dir}`;
+    console.log(`[Discovery] Trying Storage List API: ${listUrl.slice(0, 120)}...`);
+    
+    try {
+      const resp = await fetch(listUrl, {
+        headers: { 
+          'x-authorization': `Bearer ${token}`, 
+          'Accept': 'application/json' 
+        },
+      });
+      
+      console.log(`[Discovery] Storage List response: ${resp.status}`);
+      
+      if (resp.ok) {
+        const data = await resp.json();
+        // NavVis returns different formats: array, { files: [...] }, { items: [...] }
+        let files: any[] = [];
+        if (Array.isArray(data)) {
+          files = data;
+        } else if (data.files && Array.isArray(data.files)) {
+          files = data.files;
+        } else if (data.items && Array.isArray(data.items)) {
+          files = data.items;
+        } else if (data.content && Array.isArray(data.content)) {
+          files = data.content;
+        }
+        
+        // Extract filenames - filter for images only
+        const imageFiles = files
+          .map((f: any) => typeof f === 'string' ? f : (f.name || f.filename || f.path || ''))
+          .filter((name: string) => name && /\.(jpg|jpeg|png)$/i.test(name));
+        
+        if (imageFiles.length > 0) {
+          console.log(`[Discovery] Found ${imageFiles.length} images via Storage List API in ${dir}/`);
+          return { filenames: imageFiles, directory: dir, source: 'storage-list-api' };
+        }
+      } else {
+        await resp.text(); // consume
+      }
+    } catch (e) {
+      console.log(`[Discovery] Storage List API failed: ${e}`);
+    }
+  }
+  
+  // Method 2: Probe different filename patterns in different directories
+  console.log('[Discovery] Storage List API unavailable, probing filename patterns...');
+  
+  for (const dir of DIRECTORY_PATTERNS) {
+    for (const { name, pattern } of FILENAME_PATTERNS) {
+      const testFilename = pattern(0);
+      const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/${dir}/${testFilename}`;
+      
+      console.log(`[Discovery] Testing pattern "${name}" in ${dir}/: ${testFilename}`);
+      
+      const exists = await verifyImageUrlWithGet(testUrl, token);
+      if (exists) {
+        console.log(`[Discovery] ✓ Found working pattern: "${name}" in ${dir}/ (${testFilename})`);
+        return { filenames: [testFilename], directory: dir, source: `pattern:${name}` };
+      }
+    }
+  }
+  
+  console.log('[Discovery] ✗ No working filename pattern found');
+  return { filenames: [], directory: 'pano', source: 'none' };
+}
+
+// Probe images using a specific pattern
+async function probeWithPattern(
   siteId: string,
   datasetName: string,
-  maxImages: number = 500
+  directory: string,
+  pattern: FilenamePattern,
+  maxImages: number,
+  token: string
 ): Promise<IvionImage[]> {
-  const token = await getIvionToken();
   const images: IvionImage[] = [];
-  const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano`;
+  const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/${directory}`;
   
   const batchSize = 10;
   let index = 0;
   let consecutiveFailures = 0;
   
-  console.log(`Probing for images in dataset ${datasetName}...`);
-  
-  while (index < maxImages && consecutiveFailures < 3) {
+  while (index < maxImages && consecutiveFailures < 5) {
     // Create batch of probe requests
     const batch: { index: number; filename: string }[] = [];
     for (let i = 0; i < batchSize && (index + i) < maxImages; i++) {
-      const filename = `${String(index + i).padStart(5, '0')}-pano.jpg`;
+      const filename = pattern(index + i);
       batch.push({ index: index + i, filename });
     }
     
@@ -281,7 +381,7 @@ async function probeDatasetImages(
       })
     );
     
-    // Process results - check batch sequentially for proper failure detection
+    // Process results
     let batchHadSuccess = false;
     for (const result of results) {
       if (result.exists) {
@@ -294,20 +394,80 @@ async function probeDatasetImages(
         batchHadSuccess = true;
       } else {
         consecutiveFailures++;
-        if (consecutiveFailures >= 3) break;
+        if (consecutiveFailures >= 5) break;
       }
     }
     
-    // If entire batch failed, stop
-    if (!batchHadSuccess) {
-      break;
-    }
-    
+    if (!batchHadSuccess) break;
     index += batchSize;
   }
   
-  console.log(`Probed ${images.length} images for dataset ${datasetName}`);
   return images;
+}
+
+// Probe for images in a dataset - now with discovery and multiple patterns
+async function probeDatasetImages(
+  siteId: string,
+  datasetName: string,
+  maxImages: number = 500
+): Promise<IvionImage[]> {
+  const token = await getIvionToken();
+  
+  // First: try to discover files directly via API or pattern probing
+  const discovered = await discoverDatasetFiles(siteId, datasetName);
+  
+  // If we got filenames from Storage List API, use those directly
+  if (discovered.source === 'storage-list-api' && discovered.filenames.length > 0) {
+    console.log(`Using ${discovered.filenames.length} files from Storage List API`);
+    return discovered.filenames.slice(0, maxImages).map((f, i) => ({
+      id: i,
+      filePath: f,
+      name: f,
+    }));
+  }
+  
+  // If we discovered a working pattern, probe using it
+  if (discovered.source.startsWith('pattern:')) {
+    const patternName = discovered.source.replace('pattern:', '');
+    const matchedPattern = FILENAME_PATTERNS.find(p => p.name === patternName);
+    if (matchedPattern) {
+      console.log(`Probing with discovered pattern: ${patternName} in ${discovered.directory}/`);
+      const images = await probeWithPattern(
+        siteId, 
+        datasetName, 
+        discovered.directory, 
+        matchedPattern.pattern, 
+        maxImages, 
+        token
+      );
+      if (images.length > 0) {
+        console.log(`Probed ${images.length} images using pattern ${patternName}`);
+        return images;
+      }
+    }
+  }
+  
+  // Fallback: try each pattern in sequence until one works
+  console.log('No pattern discovered, trying all patterns in sequence...');
+  for (const dir of DIRECTORY_PATTERNS) {
+    for (const { name, pattern } of FILENAME_PATTERNS) {
+      // Quick test with image 0
+      const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/${dir}/${pattern(0)}`;
+      const exists = await verifyImageUrlWithGet(testUrl, token);
+      
+      if (exists) {
+        console.log(`Found working pattern: ${name} in ${dir}/`);
+        const images = await probeWithPattern(siteId, datasetName, dir, pattern, maxImages, token);
+        if (images.length > 0) {
+          console.log(`Probed ${images.length} images for dataset ${datasetName}`);
+          return images;
+        }
+      }
+    }
+  }
+  
+  console.log(`No images found for dataset ${datasetName} with any pattern`);
+  return [];
 }
 
 // Get images from a dataset - tries poses.csv first, falls back to probing
@@ -385,9 +545,13 @@ async function getPanoramaImageUrl(
   const patterns = [
     // Primary: via storage redirect API (most common working pattern)
     `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${imageFilename}`,
+    // Alternative directories
+    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/panorama/${imageFilename}`,
+    `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/images/${imageFilename}`,
     // Direct data paths
     `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano/${imageFilename}`,
-    // Alternative: pano_high directory for higher resolution
+    `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/panorama/${imageFilename}`,
+    // High-res alternatives
     `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano_high/${imageFilename}`,
     `${IVION_API_URL}/data/${siteId}/datasets_web/${datasetName}/pano_high/${imageFilename}`,
   ];
@@ -1494,8 +1658,12 @@ async function testImageDownload(
   imageSize?: number;
   contentType?: string;
   error?: string;
+  testedPatterns?: string[];
+  discoveryResult?: { source: string; directory: string; filesFound: number };
+  suggestion?: string;
 }> {
   const attempts: { method: string; url: string; status: number; contentType?: string; size?: number }[] = [];
+  const testedPatterns: string[] = [];
   
   try {
     const token = await getIvionToken();
@@ -1503,43 +1671,91 @@ async function testImageDownload(
     // Use provided dataset or get first available
     const datasets = await getIvionDatasets(siteId);
     if (datasets.length === 0) {
-      return { success: false, attempts, error: 'No datasets found' };
+      return { success: false, attempts, testedPatterns, error: 'No datasets found', suggestion: 'Verify site has uploaded datasets in NavVis admin' };
     }
     
     const testDataset = datasetName || datasets[0].name;
-    const filename = imageFilename || '00000-pano.jpg';
-    const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${testDataset}/pano/${filename}`;
     
-    // Method 1: Let fetch follow redirects automatically (with auth on first request)
-    console.log('Method 1: Auto-follow redirects with auth header');
-    try {
-      const resp1 = await fetch(baseUrl, {
-        headers: { 'x-authorization': `Bearer ${token}` },
-        redirect: 'follow',
-      });
-      attempts.push({ 
-        method: 'auto-follow-with-auth', 
-        url: baseUrl.slice(0, 150), 
-        status: resp1.status,
-        contentType: resp1.headers.get('content-type') || undefined,
-      });
-      if (resp1.ok) {
-        const buffer = await resp1.arrayBuffer();
-        return {
-          success: true,
-          attempts,
-          imageSize: buffer.byteLength,
-          contentType: resp1.headers.get('content-type') || 'unknown',
+    // Step 1: Try file discovery first
+    console.log(`[Test] Running file discovery for dataset ${testDataset}...`);
+    const discovered = await discoverDatasetFiles(siteId, testDataset);
+    
+    const discoveryResult = {
+      source: discovered.source,
+      directory: discovered.directory,
+      filesFound: discovered.filenames.length,
+    };
+    
+    // If discovery found files, use those
+    let filename = imageFilename;
+    let directory = 'pano';
+    
+    if (discovered.filenames.length > 0) {
+      filename = filename || discovered.filenames[0];
+      directory = discovered.directory;
+      console.log(`[Test] Using discovered file: ${filename} in ${directory}/`);
+    } else if (!filename) {
+      // If no discovery result and no filename provided, test all patterns
+      console.log('[Test] No files discovered, testing all filename patterns...');
+      
+      for (const dir of DIRECTORY_PATTERNS) {
+        for (const { name, pattern } of FILENAME_PATTERNS) {
+          const testFile = pattern(0);
+          testedPatterns.push(`${dir}/${testFile}`);
+          const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${testDataset}/${dir}/${testFile}`;
+          
+          const exists = await verifyImageUrlWithGet(testUrl, token);
+          if (exists) {
+            console.log(`[Test] ✓ Found working pattern: ${name} in ${dir}/`);
+            filename = testFile;
+            directory = dir;
+            break;
+          }
+        }
+        if (filename) break;
+      }
+      
+      if (!filename) {
+        return { 
+          success: false, 
+          attempts, 
+          testedPatterns,
+          discoveryResult,
+          error: 'No working filename pattern found',
+          suggestion: 'Check NavVis instance for actual filename format. Common formats: 00000-pano.jpg, 00000.jpg, pano_00000.jpg'
         };
       }
-      await resp1.text(); // consume
-    } catch (e: any) {
-      attempts.push({ method: 'auto-follow-with-auth', url: baseUrl.slice(0, 150), status: -1 });
-      console.log(`Method 1 error: ${e.message}`);
     }
     
+    const baseUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${testDataset}/${directory}/${filename}`;
+    
+    // Method 1: Let fetch follow redirects automatically
+    console.log('[Test] Method 1: Auto-follow redirects with auth header');
+    const resp1 = await fetch(baseUrl, {
+      headers: { 'x-authorization': `Bearer ${token}` },
+      redirect: 'follow',
+    });
+    attempts.push({ 
+      method: 'auto-follow-with-auth', 
+      url: baseUrl.slice(0, 150), 
+      status: resp1.status,
+      contentType: resp1.headers.get('content-type') || undefined,
+    });
+    if (resp1.ok) {
+      const buffer = await resp1.arrayBuffer();
+      return {
+        success: true,
+        attempts,
+        testedPatterns,
+        discoveryResult,
+        imageSize: buffer.byteLength,
+        contentType: resp1.headers.get('content-type') || 'unknown',
+      };
+    }
+    await resp1.text(); // consume
+    
     // Method 2: Manual first redirect, then auto-follow WITHOUT auth
-    console.log('Method 2: Manual first hop, then auto-follow without auth');
+    console.log('[Test] Method 2: Manual first hop, then auto-follow without auth');
     try {
       const resp2a = await fetch(baseUrl, {
         headers: { 'x-authorization': `Bearer ${token}` },
@@ -1550,7 +1766,7 @@ async function testImageDownload(
         await resp2a.text();
         if (location) {
           const signedUrl = location.startsWith('/') ? `${IVION_API_URL}${location}` : location;
-          console.log(`Got signed URL: ${signedUrl.slice(0, 150)}...`);
+          console.log(`[Test] Got signed URL: ${signedUrl.slice(0, 150)}...`);
           
           // Try following this without auth (signed URLs often don't need it)
           const resp2b = await fetch(signedUrl, { redirect: 'follow' });
@@ -1565,6 +1781,8 @@ async function testImageDownload(
             return {
               success: true,
               attempts,
+              testedPatterns,
+              discoveryResult,
               imageSize: buffer.byteLength,
               contentType: resp2b.headers.get('content-type') || 'unknown',
             };
@@ -1573,12 +1791,12 @@ async function testImageDownload(
         }
       }
     } catch (e: any) {
-      console.log(`Method 2 error: ${e.message}`);
+      console.log(`[Test] Method 2 error: ${e.message}`);
     }
     
     // Method 3: Try direct /data/ path (static files, not via storage API)
-    console.log('Method 3: Direct /data/ path');
-    const directUrl = `${IVION_API_URL}/data/${siteId}/datasets_web/${testDataset}/pano/${filename}`;
+    console.log('[Test] Method 3: Direct /data/ path');
+    const directUrl = `${IVION_API_URL}/data/${siteId}/datasets_web/${testDataset}/${directory}/${filename}`;
     try {
       const resp3 = await fetch(directUrl, {
         headers: { 'x-authorization': `Bearer ${token}` },
@@ -1595,6 +1813,8 @@ async function testImageDownload(
         return {
           success: true,
           attempts,
+          testedPatterns,
+          discoveryResult,
           imageSize: buffer.byteLength,
           contentType: resp3.headers.get('content-type') || 'unknown',
         };
@@ -1605,7 +1825,7 @@ async function testImageDownload(
     }
     
     // Method 4: Try x-api-key instead of x-authorization
-    console.log('Method 4: Try Authorization header instead of x-authorization');
+    console.log('[Test] Method 4: Try Authorization header instead of x-authorization');
     try {
       const resp4 = await fetch(baseUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
@@ -1622,6 +1842,8 @@ async function testImageDownload(
         return {
           success: true,
           attempts,
+          testedPatterns,
+          discoveryResult,
           imageSize: buffer.byteLength,
           contentType: resp4.headers.get('content-type') || 'unknown',
         };
@@ -1633,12 +1855,15 @@ async function testImageDownload(
     
     return { 
       success: false, 
-      attempts, 
-      error: 'All download methods failed - check NavVis account permissions for image access' 
+      attempts,
+      testedPatterns,
+      discoveryResult,
+      error: 'All download methods failed - check NavVis account permissions for image access',
+      suggestion: 'Contact NavVis admin to verify the service account has storage read permissions',
     };
     
   } catch (e: any) {
-    return { success: false, attempts, error: e.message };
+    return { success: false, attempts, testedPatterns, error: e.message, suggestion: 'Check Ivion credentials and network connectivity' };
   }
 }
 
