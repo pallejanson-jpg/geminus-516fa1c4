@@ -11,13 +11,34 @@ export default function Viewer() {
     setViewer3dFmGuid(null);
   };
 
-  // Validate that selected building actually exists in data
-  const validBuilding = useMemo(() => {
-    if (!viewer3dFmGuid || !allData || allData.length === 0) return null;
-    return allData.find(
-      (item: any) => item.fmGuid === viewer3dFmGuid && 
+  // Resolve building and target entity from viewer3dFmGuid
+  // Supports: Buildings (direct), Building Storeys (via buildingFmGuid), Spaces (via buildingFmGuid)
+  const { buildingFmGuid, targetFacility } = useMemo(() => {
+    if (!viewer3dFmGuid || !allData || allData.length === 0) {
+      return { buildingFmGuid: null, targetFacility: null };
+    }
+    
+    // Find the selected entity
+    const facility = allData.find((item: any) => item.fmGuid === viewer3dFmGuid);
+    if (!facility) return { buildingFmGuid: null, targetFacility: null };
+    
+    // If it's a Building, use it directly
+    if (facility.category === 'Building' || facility.category === 'IfcBuilding') {
+      return { buildingFmGuid: facility.fmGuid, targetFacility: facility };
+    }
+    
+    // If it's a Storey or Space, find the parent building
+    if (facility.buildingFmGuid) {
+      const building = allData.find((item: any) => 
+        item.fmGuid === facility.buildingFmGuid && 
         (item.category === 'Building' || item.category === 'IfcBuilding')
-    );
+      );
+      if (building) {
+        return { buildingFmGuid: building.fmGuid, targetFacility: facility };
+      }
+    }
+    
+    return { buildingFmGuid: null, targetFacility: null };
   }, [viewer3dFmGuid, allData]);
 
   // Clear invalid GUID on unmount to ensure clean state
@@ -36,8 +57,8 @@ export default function Viewer() {
     );
   }
 
-  // If GUID is set but building doesn't exist in data, show selector
-  if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !validBuilding) {
+  // If GUID is set but we couldn't resolve a building, show selector
+  if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
     // Clear invalid GUID and show selector
     setViewer3dFmGuid(null);
     return (
@@ -47,11 +68,15 @@ export default function Viewer() {
     );
   }
 
-  // If we have a valid FMGUID, show the Asset+ viewer
-  if (viewer3dFmGuid && validBuilding) {
+  // If we have a valid building, show the Asset+ viewer
+  if (buildingFmGuid && targetFacility) {
     return (
       <div className="h-full">
-        <AssetPlusViewer fmGuid={viewer3dFmGuid} onClose={handleClose} />
+        <AssetPlusViewer 
+          fmGuid={buildingFmGuid} 
+          initialFmGuidToFocus={viewer3dFmGuid}
+          onClose={handleClose} 
+        />
       </div>
     );
   }
