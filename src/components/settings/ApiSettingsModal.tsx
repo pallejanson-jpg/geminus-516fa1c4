@@ -233,32 +233,29 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Sync structure (buildings, storeys, spaces)
+    // Sync structure (buildings, storeys, spaces) - uses sync-with-cleanup to also remove orphans
     const handleSyncStructure = async () => {
         setIsSyncingStructure(true);
         try {
             supabase.functions.invoke('asset-plus-sync', {
-                body: { action: 'sync-structure' }
+                body: { action: 'sync-with-cleanup' }
+            }).then(({ data }) => {
+                if (data?.success) {
+                    toast({
+                        title: 'Synkronisering klar',
+                        description: data.message,
+                    });
+                }
             }).catch((err) => {
                 console.log('Edge function call ended:', err?.message);
             });
 
             toast({
                 title: "Synkar struktur",
-                description: "Hämtar byggnader, våningsplan och rum från Asset+.",
+                description: "Hämtar data och tar bort objekt som inte längre finns i Asset+.",
             });
 
-            // Poll only fetchSyncStatus, not checkSyncStatus continuously
-            const pollInterval = setInterval(async () => {
-                await fetchSyncStatus();
-            }, 3000);
-
-            setTimeout(() => {
-                clearInterval(pollInterval);
-                setIsSyncingStructure(false);
-                fetchSyncStatus();
-                checkSyncStatus(); // Only check once when done
-            }, 300000);
+            // Spinner stops via Realtime subscription (no more polling/timeout)
 
         } catch (error: any) {
             toast({
@@ -763,6 +760,53 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setHasCheckedSync(false);
         }
     }, [isOpen, hasCheckedSync]);
+
+    // Realtime subscription for asset_sync_state changes
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const channel = supabase
+            .channel('sync-settings-monitor')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'asset_sync_state'
+            }, (payload) => {
+                const newState = payload.new as SyncStatus;
+
+                // Auto-refresh sync statuses
+                fetchSyncStatus();
+
+                // If a sync completed or failed, refresh the full check and stop spinners
+                if (newState?.sync_status === 'completed' || newState?.sync_status === 'failed') {
+                    checkSyncStatus();
+
+                    if (newState.subtree_id === 'structure') setIsSyncingStructure(false);
+                    if (newState.subtree_id === 'assets') setIsSyncingAssets(false);
+                    if (newState.subtree_id === 'xkt') setIsSyncingXkt(false);
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [isOpen]);
+
+    // Listen for custom sync-completed events from DataConsistencyBanner
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleSyncCompleted = () => {
+            fetchSyncStatus();
+            checkSyncStatus();
+        };
+
+        window.addEventListener('asset-sync-completed', handleSyncCompleted);
+        return () => {
+            window.removeEventListener('asset-sync-completed', handleSyncCompleted);
+        };
+    }, [isOpen]);
 
     const handleCancelEdit = () => {
         if (originalConfig) {
