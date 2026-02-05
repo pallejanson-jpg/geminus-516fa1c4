@@ -7,7 +7,7 @@
 export const VIEW_MODE_REQUESTED_EVENT = 'VIEW_MODE_REQUESTED';
 
 /** Event dispatched when view mode has actually changed */
-export { VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, CLIP_HEIGHT_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+export { VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, CLIP_HEIGHT_CHANGED_EVENT, CLIP_HEIGHT_3D_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 
 /** Event dispatched when room visualization panel wants to force "Show Spaces" on */
 export { FORCE_SHOW_SPACES_EVENT } from '@/components/viewer/RoomVisualizationPanel';
