@@ -1,187 +1,78 @@
 
-# Plan: Koordinat-baserad Split View-synk via postMessage
+
+# Plan: Åtgärda AI-skanning - Bildnedladdning misslyckas
 
 ## Problemanalys
 
-Efter grundlig undersökning har jag identifierat rotorsaken:
+Efter undersökning av edge function-loggar och databas har jag identifierat rotorsaken:
 
-| Komponent | Status | Problem |
-|-----------|--------|---------|
-| Ivion-autentisering | ✅ Fungerar | `SWG_PalJ` bekräftat |
-| Backend-API för bilder | ❌ Begränsat | Endast 2 av 17 datasets söks, returnerar tom lista |
-| postMessage-lyssnare | ⚠️ Ofullständig | Extraherar endast `imageId`, ignorerar `position` |
-| Koordinatsystem | ✅ Kompatibelt | Ivion och xeokit använder samma lokala meter-system |
+| Steg | Status | Problem |
+|------|--------|---------|
+| Ivion-autentisering | ✅ Fungerar | `SWG_PalJ` bekräftat, 224 sites |
+| Hämta datasets | ✅ Fungerar | Dataset `2020-12-14_13.58.34` hittas |
+| Hämta poses.csv | ❌ 404/blockerad | Filen finns inte eller är ej tillgänglig |
+| Proba bildfilnamn | ❌ 404 på alla | `00000-pano.jpg` etc. existerar inte |
+| Ladda ner bild | ❌ Aldrig når hit | Alla URL:er returnerar 404 |
 
-**Huvudinsikt**: Ivion skickar redan `position: {x, y, z}` i lokala meter direkt i `camera-changed`-händelser! Vi behöver inte geo-koordinater eller backend-API alls för synkronisering.
+**Rotorsak**: NavVis-instansen använder ett **annat filnamnsformat** än det förväntade `XXXXX-pano.jpg`. Koden söker efter fel filnamn.
 
-## Lösning: Direktsynk via postMessage
+## Lösning: Tre-stegs strategi
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  NUVARANDE FLÖDE (trasigt)                                  │
-├─────────────────────────────────────────────────────────────┤
-│  Ivion postMessage → extrahera imageId → anropa backend     │
-│  → hämta koordinater → uppdatera 3D                         │
-│                          ↑                                  │
-│                    Backend returnerar tom lista!            │
-└─────────────────────────────────────────────────────────────┘
+### Steg 1: Använd NavVis Storage API för att lista filer
 
-┌─────────────────────────────────────────────────────────────┐
-│  NYTT FLÖDE (direkt)                                        │
-├─────────────────────────────────────────────────────────────┤
-│  Ivion postMessage → extrahera position {x,y,z} direkt      │
-│  → uppdatera 3D viewer                                      │
-│                                                             │
-│  ⚡ Ingen backend-anrop behövs!                              │
-│  ⚡ Realtidssynk utan fördröjning!                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Teknisk implementation
-
-### Steg 1: Uppdatera postMessage-lyssnaren
-
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-
-Modifiera `handleMessage` för att extrahera position direkt:
+Istället för att gissa filnamn, använd NavVis API för att lista faktiska filer i dataset:
 
 ```typescript
-// I handleMessage (cirka rad 184-195):
-if (data.event === 'camera-changed' || data.event === 'image-changed') {
-  const eventData = data.data || {};
+// Ny endpoint för att lista filer i ett dataset
+async function listDatasetFiles(siteId: string, datasetName: string): Promise<string[]> {
+  const token = await getIvionToken();
   
-  // NYTT: Extrahera position direkt om tillgänglig
-  const directPosition = eventData.position || eventData.location;
-  if (directPosition && directPosition.x !== undefined) {
-    const position: LocalCoords = {
-      x: directPosition.x,
-      y: directPosition.y,
-      z: directPosition.z,
-    };
-    
-    // Konvertera heading/pitch från radianer om nödvändigt
-    const headingRad = eventData.yaw ?? eventData.heading ?? 0;
-    const pitchRad = eventData.pitch ?? 0;
-    const heading = Math.abs(headingRad) > Math.PI * 2 ? headingRad : headingRad * (180 / Math.PI);
-    const pitch = Math.abs(pitchRad) > Math.PI * 2 ? pitchRad : pitchRad * (180 / Math.PI);
-    
-    console.log('[Ivion Sync] Direct position from postMessage:', position);
-    updateFromIvion(position, heading, pitch);
-    setCurrentImageId(eventData.imageId || null);
-    setLastSyncSource('ivion');
-    return; // Skippa backend-anrop
+  // NavVis API endpoint för att lista filer
+  const endpoints = [
+    `${IVION_API_URL}/api/site/${siteId}/storage/list/datasets_web/${datasetName}/pano`,
+    `${IVION_API_URL}/api/site/${siteId}/datasets/${datasetName}/images`,
+    `${IVION_API_URL}/api/dataset/${datasetName}/images`,
+  ];
+  
+  for (const endpoint of endpoints) {
+    const response = await fetch(endpoint, {
+      headers: { 'x-authorization': `Bearer ${token}` },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      // Extrahera filnamn från response
+      return extractFilenames(data);
+    }
   }
   
-  // Fallback till imageId-baserad synk om position saknas
-  const imageId = eventData.imageId || eventData.image;
-  if (imageId && imageId !== lastSyncedImageIdRef.current) {
-    await handleIvionImageChange(imageId, heading, pitch);
-  }
+  return [];
 }
 ```
 
-### Steg 2: Lägg till NavVis PointOfViewInterface-stöd
+### Steg 2: Utöka filnamnsmönster att proba
 
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-
-Skicka `subscribe`-kommando för att aktivera POV-events:
+NavVis använder olika format beroende på skanner:
 
 ```typescript
-// I sendSubscribeCommand:
-const subscribeCommands = [
-  // Befintliga kommandon...
-  
-  // NYTT: PointOfViewInterface subscription
-  { type: 'navvis-subscribe', action: 'pointOfView', events: ['change'] },
-  { type: 'ivion-subscribe', events: ['pov-changed', 'camera-changed'] },
+// Nya filnamnsmönster att testa
+const patterns = [
+  `${index.toString().padStart(5, '0')}-pano.jpg`,     // 00000-pano.jpg
+  `${index.toString().padStart(5, '0')}.jpg`,          // 00000.jpg
+  `pano_${index.toString().padStart(5, '0')}.jpg`,     // pano_00000.jpg
+  `panorama_${index}.jpg`,                              // panorama_0.jpg
+  `img_${index.toString().padStart(6, '0')}.jpg`,      // img_000000.jpg
 ];
 ```
 
-### Steg 3: Hantera 3D → 360° synk via postMessage
-
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-
-I `syncToIvion`, skicka `moveToLocation`-kommando istället för att ändra URL:
+### Steg 3: Testa alternativa katalogstrukturer
 
 ```typescript
-// I syncToIvion (cirka rad 298-356):
-// Försök postMessage först
-if (iframeRef.current?.contentWindow) {
-  const moveCommand = {
-    type: 'navvis-command',
-    action: 'moveToLocation',
-    params: {
-      position: {
-        x: syncState.position.x,
-        y: syncState.position.y,
-        z: syncState.position.z,
-      },
-      heading: (syncState.heading * Math.PI) / 180, // Till radianer
-      pitch: (syncState.pitch * Math.PI) / 180,
-    },
-  };
-  
-  iframeRef.current.contentWindow.postMessage(moveCommand, '*');
-  console.log('[Ivion Sync] Sent moveToLocation via postMessage');
-  
-  // Fallback till URL-ändring om postMessage inte stöds
-  // (behåll befintlig URL-logik som backup)
-}
-```
-
-### Steg 4: Spara startvy-koordinater för byggnader
-
-**Databas: `building_settings`**
-
-Lägg till fält för att spara Ivion startposition:
-
-```sql
--- Ny kolumn för Ivion startvy-koordinater
-ALTER TABLE building_settings 
-ADD COLUMN IF NOT EXISTS ivion_start_vlon NUMERIC,
-ADD COLUMN IF NOT EXISTS ivion_start_vlat NUMERIC;
-```
-
-**Fil: `src/pages/SplitViewer.tsx`**
-
-Använd sparade koordinater för initial URL:
-
-```typescript
-// I SplitViewerContent:
-const ivionUrl = useMemo(() => {
-  let url = `${baseUrl}/?site=${buildingData.ivionSiteId}`;
-  
-  // Lägg till startvy om konfigurerad
-  if (buildingData.startVlon !== undefined) {
-    url += `&vlon=${buildingData.startVlon}`;
-  }
-  if (buildingData.startVlat !== undefined) {
-    url += `&vlat=${buildingData.startVlat}`;
-  }
-  
-  return url;
-}, [baseUrl, buildingData]);
-```
-
-### Steg 5: Förbättra debug-logging
-
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-
-Logga alla inkommande postMessage för att verifiera dataformat:
-
-```typescript
-const handleMessage = async (event: MessageEvent) => {
-  const data = event.data;
-  if (!data || typeof data !== 'object') return;
-
-  // NYTT: Logga alla NavVis-relaterade meddelanden för debugging
-  if (data.type?.includes('navvis') || data.type?.includes('ivion') || 
-      data.event?.includes('camera') || data.position) {
-    console.log('[Ivion Sync] postMessage received:', JSON.stringify(data, null, 2));
-  }
-  
-  // ... resten av hanteringen
-};
+const directories = [
+  `datasets_web/${datasetName}/pano`,      // Standard
+  `datasets_web/${datasetName}/panorama`,  // Alternativ
+  `datasets_web/${datasetName}/images`,    // Alternativ
+  `datasets/${datasetName}/pano`,          // Äldre format
+];
 ```
 
 ---
@@ -190,55 +81,153 @@ const handleMessage = async (event: MessageEvent) => {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/hooks/useIvionCameraSync.ts` | Extrahera position direkt från postMessage, lägg till debug-logging |
-| `src/pages/SplitViewer.tsx` | Använd startvy-koordinater i Ivion URL |
+| `supabase/functions/ai-asset-detection/index.ts` | Ny `listDatasetFiles()`, utökade filnamnsmönster, förbättrad diagnostik |
 
 ---
 
-## Förväntade resultat
+## Teknisk implementation
 
-Efter implementation:
+### Del 1: Ny funktion för att lista filer
 
-1. **360° → 3D**: Realtidssynk utan backend-anrop (om Ivion skickar position)
-2. **3D → 360°**: Snabb synk via postMessage (om Ivion stöder moveToLocation)
-3. **Fallback**: Befintlig URL-baserad synk fungerar som backup
-4. **Startvy**: Byggnader öppnas med korrekt initial kameraposition
+Lägg till i `ai-asset-detection/index.ts`:
 
----
-
-## Verifieringssteg
-
-1. Öppna Split View för Akerselva
-2. Kontrollera konsolen för `[Ivion Sync] postMessage received:`
-3. Verifiera att `position: {x, y, z}` finns i loggarna
-4. Om position finns → Synk ska fungera automatiskt
-5. Om position saknas → Vi behöver lägga till NavVis Frontend SDK
-
----
-
-## Om postMessage inte skickar position
-
-Om NavVis-instansen inte skickar position i postMessage, finns dessa alternativ:
-
-| Alternativ | Beskrivning | Komplexitet |
-|------------|-------------|-------------|
-| **A: NavVis Frontend SDK** | Integrera SDK i iframe via script-injektion | Hög |
-| **B: URL-parsing** | Extrahera position från iframe.src efter navigation | Medel |
-| **C: Utöka backend** | Scanna alla 17 datasets (istället för 2) | Medel |
-| **D: Manuell synk** | Användaren klistrar in URL (redan implementerat) | Låg |
-
----
-
-## Angående startposition (vlon/vlat)
-
-För att spara `vlon=-1.38&vlat=-0.25` som startposition för Akerselva:
-
-```sql
-UPDATE building_settings 
-SET ivion_start_vlon = -1.38, ivion_start_vlat = -0.25
-WHERE fm_guid = '9baa7a3a-717d-4fcb-8718-0f5ca618b28a';
+```typescript
+// Försök lista filer via NavVis Storage API
+async function discoverDatasetFiles(
+  siteId: string,
+  datasetName: string
+): Promise<{ filenames: string[]; source: string }> {
+  const token = await getIvionToken();
+  
+  // 1. Försök list-API
+  const listUrl = `${IVION_API_URL}/api/site/${siteId}/storage/list/datasets_web/${datasetName}/pano`;
+  try {
+    const resp = await fetch(listUrl, {
+      headers: { 'x-authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      // NavVis returnerar ofta { files: [...] } eller direkt array
+      const files = Array.isArray(data) ? data : data.files || data.items || [];
+      if (files.length > 0) {
+        console.log(`Found ${files.length} files via storage/list API`);
+        return { filenames: files.map(f => f.name || f), source: 'list-api' };
+      }
+    }
+  } catch (e) {
+    console.log('Storage list API not available');
+  }
+  
+  // 2. Proba olika filnamnsmönster
+  const testFilenames = [
+    '00000-pano.jpg', '00000.jpg', 'pano_00000.jpg',
+    '0-pano.jpg', '0.jpg', 'panorama_0.jpg'
+  ];
+  
+  for (const filename of testFilenames) {
+    const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${filename}`;
+    const exists = await verifyImageUrlWithGet(testUrl, token);
+    if (exists) {
+      console.log(`Found working pattern: ${filename}`);
+      return { filenames: [filename], source: filename.includes('-pano') ? 'dash-pano' : 'simple' };
+    }
+  }
+  
+  return { filenames: [], source: 'none' };
+}
 ```
 
-Dessa värden är **vinklar i radianer** (inte geografiska koordinater):
-- `vlon` = yaw (horisontell rotation, -π till π)
-- `vlat` = pitch (vertikal vinkel, -π/2 till π/2)
+### Del 2: Utöka `probeDatasetImages` med fler mönster
+
+```typescript
+async function probeDatasetImages(
+  siteId: string,
+  datasetName: string,
+  maxImages: number = 500
+): Promise<IvionImage[]> {
+  // Först: försök lista filer direkt
+  const discovered = await discoverDatasetFiles(siteId, datasetName);
+  if (discovered.filenames.length > 0) {
+    return discovered.filenames.map((f, i) => ({
+      id: i,
+      filePath: f,
+      name: f,
+    }));
+  }
+  
+  // Fallback: proba olika mönster
+  const token = await getIvionToken();
+  const patterns = [
+    (i: number) => `${String(i).padStart(5, '0')}-pano.jpg`,
+    (i: number) => `${String(i).padStart(5, '0')}.jpg`,
+    (i: number) => `pano_${String(i).padStart(5, '0')}.jpg`,
+    (i: number) => `panorama_${i}.jpg`,
+    (i: number) => `img_${String(i).padStart(6, '0')}.jpg`,
+  ];
+  
+  // Testa varje mönster med bild 0
+  for (const pattern of patterns) {
+    const filename = pattern(0);
+    const testUrl = `${IVION_API_URL}/api/site/${siteId}/storage/redirect/datasets_web/${datasetName}/pano/${filename}`;
+    const exists = await verifyImageUrlWithGet(testUrl, token);
+    if (exists) {
+      console.log(`Pattern match: ${filename}`);
+      // Använd detta mönster för alla bilder
+      return await probeWithPattern(siteId, datasetName, pattern, maxImages, token);
+    }
+  }
+  
+  return [];
+}
+```
+
+### Del 3: Förbättra diagnostik i test-image-download
+
+```typescript
+// Lägg till info om vilka mönster som testats
+case 'test-image-download':
+  // Inkludera vilka filnamnsmönster som testats
+  const result = await testImageDownload(params.siteId);
+  result.testedPatterns = ['00000-pano.jpg', '00000.jpg', 'pano_00000.jpg', ...];
+  result.suggestion = 'Kontrollera korrekt filnamnsformat i NavVis admin';
+  return result;
+```
+
+---
+
+## Alternativ lösning: Manuell konfiguration
+
+Om automatisk upptäckt inte fungerar, kan vi låta användaren ange rätt format:
+
+| Inställning | Beskrivning |
+|-------------|-------------|
+| `image_filename_pattern` | T.ex. `{index:5}-pano.jpg` eller `panorama_{index}.jpg` |
+| `image_directory` | T.ex. `pano` eller `panorama` |
+
+Detta kan sparas per building i `building_settings`:
+
+```sql
+ALTER TABLE building_settings 
+ADD COLUMN ivion_image_pattern TEXT,
+ADD COLUMN ivion_image_directory TEXT DEFAULT 'pano';
+```
+
+---
+
+## Nästa steg
+
+1. Implementera utökad filupptäckt med fler mönster
+2. Lägga till Storage List API-anrop
+3. Förbättra felmeddelanden med specifik diagnostik
+4. Eventuellt: UI för manuell konfiguration av filnamnsmönster
+
+---
+
+## Sammanfattning
+
+| Problem | Orsak | Lösning |
+|---------|-------|---------|
+| Inga bilder hittas | Fel filnamnsformat (`00000-pano.jpg`) | Testa fler mönster, använd List API |
+| poses.csv saknas | Ej tillgänglig på denna NavVis-instans | Fallback till direkt fil-upptäckt |
+| Alla URL:er ger 404 | Filerna finns på annan sökväg/format | Utöka sökstrategin |
+
