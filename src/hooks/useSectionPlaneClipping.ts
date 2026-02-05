@@ -1,5 +1,8 @@
 import { useRef, useCallback, useEffect } from 'react';
 
+// Plugin reference for proper xeokit integration (module-level to persist)
+let sectionPlanesPluginRef: any = null;
+
 interface FloorBounds {
   id: string;
   name: string;
@@ -88,6 +91,42 @@ export function useSectionPlaneClipping(
   }, [viewerRef]);
 
   /**
+   * Get or create SectionPlanesPlugin instance.
+   * xeokit requires using SectionPlanesPlugin to create SectionPlanes.
+   */
+  const getSectionPlanesPlugin = useCallback(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer) return null;
+
+    // Check if plugin already exists and is for this viewer
+    if (sectionPlanesPluginRef && sectionPlanesPluginRef.viewer === viewer) {
+      return sectionPlanesPluginRef;
+    }
+
+    // Look for existing plugin on viewer
+    const existingPlugin = viewer.plugins?.SectionPlanes || viewer.plugins?.sectionPlanes;
+    if (existingPlugin) {
+      sectionPlanesPluginRef = existingPlugin;
+      return existingPlugin;
+    }
+
+    // Try to create a new plugin if SectionPlanesPlugin class is available
+    const SectionPlanesPlugin = (window as any).xeokit?.SectionPlanesPlugin || 
+                                  (window as any).SectionPlanesPlugin;
+    if (SectionPlanesPlugin) {
+      try {
+        sectionPlanesPluginRef = new SectionPlanesPlugin(viewer, { id: 'lovableSectionPlanesPlugin' });
+        console.log('✅ Created SectionPlanesPlugin');
+        return sectionPlanesPluginRef;
+      } catch (e) {
+        console.debug('Could not create SectionPlanesPlugin:', e);
+      }
+    }
+
+    return null;
+  }, [getXeokitViewer]);
+
+  /**
    * Ensure all entities in the scene are clippable.
    * Required for SectionPlanes to work correctly - xeokit SectionPlanes only
    * clip entities that have clippable: true.
@@ -123,56 +162,97 @@ export function useSectionPlaneClipping(
     const scene = viewer.scene;
     if (!scene) return null;
 
-    // Method 1: Direct SectionPlane constructor from scene
-    const SectionPlaneClass = scene.SectionPlane;
+    // Method 1: Use SectionPlanesPlugin if available (PREFERRED for xeokit)
+    const plugin = getSectionPlanesPlugin();
+    if (plugin && typeof plugin.createSectionPlane === 'function') {
+      try {
+        // Destroy existing plane with same ID first
+        const existing = plugin.sectionPlanes?.[id];
+        if (existing) {
+          try { existing.destroy?.(); } catch (e) { /* ignore */ }
+        }
+        const plane = plugin.createSectionPlane({ id, pos, dir, active: true });
+        console.log(`✅ SectionPlane created via plugin: ${id} at Y=${pos[1].toFixed(2)}, dir=${JSON.stringify(dir)}`);
+        return plane;
+      } catch (e) {
+        console.debug('SectionPlanesPlugin.createSectionPlane failed:', e);
+      }
+    }
+
+    // Method 2: Direct SectionPlane constructor (xeokit exposes this on scene or globally)
+    const SectionPlaneClass = scene.SectionPlane || 
+                               (window as any).xeokit?.SectionPlane || 
+                               (window as any).SectionPlane;
     if (SectionPlaneClass) {
       try {
         const plane = new SectionPlaneClass(scene, { id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created: ${id} at Y=${pos[1].toFixed(2)}, dir=${JSON.stringify(dir)}`);
+        console.log(`✅ SectionPlane created via constructor: ${id} at Y=${pos[1].toFixed(2)}, dir=${JSON.stringify(dir)}`);
         return plane;
       } catch (e) {
-        console.debug('scene.SectionPlane constructor failed:', e);
+        console.debug('SectionPlane constructor failed:', e);
       }
     }
 
-    // Method 2: Use xeokit global SectionPlane if available
-    const GlobalSectionPlane = (window as any).xeokit?.SectionPlane || (window as any).SectionPlane;
-    if (GlobalSectionPlane) {
+    // Method 3: Create on scene._sectionPlanesState directly (low-level xeokit internal)
+    const state = scene._sectionPlanesState;
+    if (state) {
       try {
-        const plane = new GlobalSectionPlane(scene, { id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created via global: ${id} at Y=${pos[1].toFixed(2)}`);
-        return plane;
-      } catch (e) {
-        console.debug('Global SectionPlane constructor failed:', e);
-      }
-    }
+        // Create a proxy plane object that manipulates _sectionPlanesState
+        const planeData = { pos: [...pos], dir: [...dir], active: true };
+        
+        if (!state.sectionPlanes) {
+          state.sectionPlanes = [];
+        }
+        
+        // Remove existing plane with same id
+        const existingIndex = state.sectionPlanes.findIndex((p: any) => p?.id === id);
+        if (existingIndex >= 0) {
+          state.sectionPlanes.splice(existingIndex, 1);
+        }
+        
+        const planeIndex = state.sectionPlanes.length;
+        state.sectionPlanes.push({ ...planeData, id });
+        state.numSectionPlanes = state.sectionPlanes.length;
 
-    // Method 3: Try scene.createSectionPlane helper if available
-    if (typeof scene.createSectionPlane === 'function') {
-      try {
-        const plane = scene.createSectionPlane({ id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created via helper: ${id} at Y=${pos[1].toFixed(2)}`);
-        return plane;
-      } catch (e) {
-        console.debug('scene.createSectionPlane failed:', e);
-      }
-    }
+        // Create wrapper object with pos setter for dynamic updates
+        const plane = {
+          id,
+          _pos: [...pos] as [number, number, number],
+          dir: [...dir] as [number, number, number],
+          active: true,
+          _stateIndex: planeIndex,
+          set pos(newPos: [number, number, number]) {
+            this._pos = [...newPos] as [number, number, number];
+            const stateEntry = state.sectionPlanes?.[this._stateIndex];
+            if (stateEntry) {
+              stateEntry.pos = [...newPos];
+            }
+            scene.glRedraw?.();
+          },
+          get pos() {
+            return this._pos;
+          },
+          destroy: () => {
+            const idx = state.sectionPlanes?.findIndex((p: any) => p?.id === id);
+            if (idx >= 0) {
+              state.sectionPlanes.splice(idx, 1);
+              state.numSectionPlanes = state.sectionPlanes.length;
+            }
+            scene.glRedraw?.();
+          }
+        };
 
-    // Method 4: Try using xeokit's Component class if available
-    const sectionPlanes = scene.sectionPlanes;
-    if (sectionPlanes && typeof sectionPlanes.create === 'function') {
-      try {
-        const plane = sectionPlanes.create({ id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created via sectionPlanes.create: ${id}`);
+        scene.glRedraw?.();
+        console.log(`✅ SectionPlane created via _sectionPlanesState: ${id} at Y=${pos[1].toFixed(2)}`);
         return plane;
       } catch (e) {
-        console.debug('scene.sectionPlanes.create failed:', e);
+        console.debug('scene._sectionPlanesState creation failed:', e);
       }
     }
 
     console.warn('❌ Could not create SectionPlane - no method available');
     return null;
-  }, []);
+  }, [getSectionPlanesPlugin]);
 
   /**
    * Safely destroy a section plane
