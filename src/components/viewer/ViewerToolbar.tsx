@@ -96,14 +96,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, [viewMode]);
   
   // SectionPlane clipping for 2D floor plan view
-  const { 
-    applyFloorPlanClipping, 
-    applyGlobalFloorPlanClipping, 
+  const {
+    applyFloorPlanClipping,
+    applyGlobalFloorPlanClipping,
     applyCeilingClipping,
-    removeSectionPlane, 
+    removeSectionPlane,
     remove3DClipping,
-    calculateFloorBounds, 
-    updateFloorCutHeight 
+    calculateFloorBounds,
+    updateFloorCutHeight,
+    update3DCeilingOffset
   } = useSectionPlaneClipping(
     viewerRef,
     { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 }
@@ -245,6 +246,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       window.removeEventListener(CLIP_HEIGHT_CHANGED_EVENT, handleClipHeightChange as EventListener);
     };
   }, [updateFloorCutHeight]);
+
+  // Listen for 3D ceiling clip offset changes from VisualizationToolbar slider
+  useEffect(() => {
+    const handleClipHeight3DChange = (e: CustomEvent) => {
+      const { offset } = e.detail || {};
+      if (typeof offset === 'number') {
+        update3DCeilingOffset(offset);
+      }
+    };
+    
+    // Import the event name from hook
+    const CLIP_HEIGHT_3D_CHANGED_EVENT = 'CLIP_HEIGHT_3D_CHANGED';
+    window.addEventListener(CLIP_HEIGHT_3D_CHANGED_EVENT, handleClipHeight3DChange as EventListener);
+    return () => {
+      window.removeEventListener(CLIP_HEIGHT_3D_CHANGED_EVENT, handleClipHeight3DChange as EventListener);
+    };
+  }, [update3DCeilingOffset]);
 
   // Listen for view mode requests from VisualizationToolbar (2D/3D switch)
   useEffect(() => {

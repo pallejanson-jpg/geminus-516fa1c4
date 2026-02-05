@@ -22,6 +22,7 @@ import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel"
 import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
+import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
@@ -131,6 +132,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [clipHeight, setClipHeight] = useState(1.2); // Default 1.2m above floor
   const [is2DMode, setIs2DMode] = useState(false);
   
+  // 3D ceiling clip offset state (for 3D solo floor mode)
+  const [clipHeight3D, setClipHeight3D] = useState(0); // Default 0m offset from next floor
+  const [isSoloFloor, setIsSoloFloor] = useState(false);
+  
   // Viewer settings collapsible state
   const [viewerSettingsOpen, setViewerSettingsOpen] = useState(false);
   const [architectBackground, setArchitectBackground] = useState<BackgroundPresetId>('sage');
@@ -201,11 +206,29 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Listen for view mode changes to show/hide clipping slider
   useEffect(() => {
     const handleViewModeChange = (e: CustomEvent) => {
-      setIs2DMode(e.detail?.mode === '2d');
+      const mode = e.detail?.mode;
+      setIs2DMode(mode === '2d');
+      // In 2D mode, solo floor detection is handled differently
+      if (mode === '2d') {
+        setIsSoloFloor(false);
+      }
     };
     window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
     return () => {
       window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
+    };
+  }, []);
+
+  // Listen for floor selection changes to detect solo floor mode
+  useEffect(() => {
+    const handleFloorChange = (e: CustomEvent) => {
+      const { isAllFloorsVisible, visibleMetaFloorIds } = e.detail || {};
+      const solo = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
+      setIsSoloFloor(solo);
+    };
+    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+    return () => {
+      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
     };
   }, []);
 
@@ -241,6 +264,17 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     // Emit event to update clipping in real-time
     window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_CHANGED_EVENT, {
       detail: { height: newHeight }
+    }));
+  }, []);
+
+  // Handle 3D ceiling clip offset change
+  const handleClipHeight3DChange = useCallback((value: number[]) => {
+    const newOffset = value[0];
+    setClipHeight3D(newOffset);
+    
+    // Emit event to update 3D ceiling clipping in real-time
+    window.dispatchEvent(new CustomEvent(CLIP_HEIGHT_3D_CHANGED_EVENT, {
+      detail: { offset: newOffset }
     }));
   }, []);
 
@@ -964,6 +998,40 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       />
                       <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                         Höjd ovanför golv
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3D Ceiling clip height slider - for solo floor mode */}
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-1">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        isSoloFloor && !is2DMode 
+                          ? "bg-primary/10 text-primary" 
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        <Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Takklipp (3D Solo)</span>
+                      <span className="text-xs font-medium ml-auto">
+                        {clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m
+                      </span>
+                    </div>
+                    <div className="pl-8 sm:pl-10">
+                      <Slider
+                        value={[clipHeight3D]}
+                        onValueChange={handleClipHeight3DChange}
+                        min={-1.5}
+                        max={1.5}
+                        step={0.1}
+                        className="w-full"
+                        disabled={is2DMode || !isSoloFloor}
+                      />
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                        {isSoloFloor && !is2DMode 
+                          ? "Offset från nästa vånings golv" 
+                          : "Aktiveras när en våning är isolerad i 3D"}
                       </p>
                     </div>
                   </div>
