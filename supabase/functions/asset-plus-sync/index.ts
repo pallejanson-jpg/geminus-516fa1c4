@@ -1389,6 +1389,140 @@ serve(async (req) => {
       }
     }
 
+    // ============ CHECK DELTA (compare local vs remote) ============
+    if (action === 'check-delta') {
+      console.log('Starting check-delta');
+      const accessToken = await getAccessToken();
+      
+      // Get remote structure counts and sample fmGuids
+      const remoteStructureCount = await getRemoteCountByTypes(accessToken, [1, 2, 3]);
+      
+      // Get local structure counts
+      const { count: localStructureCount } = await supabase
+        .from('assets')
+        .select('*', { count: 'exact', head: true })
+        .in('category', ['Building', 'Building Storey', 'Space']);
+      
+      // For detailed comparison, fetch a sample of fmGuids from both sides
+      // This is a lightweight check - full comparison would require fetching all GUIDs
+      const discrepancy = (localStructureCount || 0) - remoteStructureCount;
+      const hasOrphans = discrepancy > 0;
+      const hasMissing = discrepancy < 0;
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          localCount: localStructureCount || 0,
+          remoteCount: remoteStructureCount,
+          orphanCount: hasOrphans ? Math.abs(discrepancy) : 0,
+          newCount: hasMissing ? Math.abs(discrepancy) : 0,
+          inSync: discrepancy === 0,
+          discrepancy,
+          message: discrepancy === 0 
+            ? 'Data är synkroniserad' 
+            : hasOrphans 
+              ? `${Math.abs(discrepancy)} objekt finns lokalt men inte i Asset+`
+              : `${Math.abs(discrepancy)} objekt saknas lokalt`
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============ SYNC WITH CLEANUP (remove orphans) ============
+    if (action === 'sync-with-cleanup') {
+      console.log('Starting sync-with-cleanup');
+      const accessToken = await getAccessToken();
+      
+      await updateSyncState(supabase, 'structure', 'running', undefined, undefined, {
+        subtree_name: 'Byggnad/Plan/Rum (med rensning)'
+      });
+      
+      // Step 1: Fetch all remote structure fmGuids
+      const filter = [
+        ["objectType", "=", 1], "or",
+        ["objectType", "=", 2], "or",
+        ["objectType", "=", 3]
+      ];
+      
+      const remoteFmGuids = new Set<string>();
+      let totalSynced = 0;
+      let skip = 0;
+      const take = 200;
+      let hasMore = true;
+      
+      console.log('Fetching all remote structure objects...');
+      
+      while (hasMore) {
+        const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
+        
+        // Collect fmGuids and upsert
+        result.data.forEach((item: any) => {
+          remoteFmGuids.add(item.fmGuid);
+        });
+        
+        if (result.data.length > 0) {
+          const synced = await upsertAssets(supabase, result.data);
+          totalSynced += synced;
+        }
+        
+        hasMore = result.hasMore;
+        skip += take;
+        
+        console.log(`Synced ${totalSynced} structure items, collected ${remoteFmGuids.size} GUIDs...`);
+        await updateSyncState(supabase, 'structure', 'running', totalSynced);
+      }
+      
+      console.log(`Total remote fmGuids: ${remoteFmGuids.size}`);
+      
+      // Step 2: Find local orphans
+      const { data: localStructure } = await supabase
+        .from('assets')
+        .select('fm_guid')
+        .in('category', ['Building', 'Building Storey', 'Space']);
+      
+      const orphanFmGuids: string[] = [];
+      (localStructure || []).forEach((item: any) => {
+        if (!remoteFmGuids.has(item.fm_guid)) {
+          orphanFmGuids.push(item.fm_guid);
+        }
+      });
+      
+      console.log(`Found ${orphanFmGuids.length} orphan objects to remove`);
+      
+      // Step 3: Remove orphans in batches
+      let removedCount = 0;
+      const batchSize = 100;
+      
+      for (let i = 0; i < orphanFmGuids.length; i += batchSize) {
+        const batch = orphanFmGuids.slice(i, i + batchSize);
+        
+        const { error: deleteError } = await supabase
+          .from('assets')
+          .delete()
+          .in('fm_guid', batch);
+        
+        if (deleteError) {
+          console.error(`Error deleting orphans batch ${i / batchSize}:`, deleteError);
+        } else {
+          removedCount += batch.length;
+          console.log(`Removed ${removedCount}/${orphanFmGuids.length} orphans`);
+        }
+      }
+      
+      await updateSyncState(supabase, 'structure', 'completed', totalSynced);
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Synkade ${totalSynced} objekt, tog bort ${removedCount} föräldralösa objekt`,
+          totalSynced,
+          orphansRemoved: removedCount,
+          orphansFound: orphanFmGuids.length
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ DEFAULT: Unknown action ============
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
