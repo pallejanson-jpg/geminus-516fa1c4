@@ -260,3 +260,11 @@
     transform: translateX(400%);
   }
 }
+
+/* 3D Viewer touch optimization */
+#AssetPlusViewer {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
