@@ -86,7 +86,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             )}
 
             {/* 3D - Building or Storey */}
-            {(isBuilding || isStorey) && (
+            {(isBuilding || isStorey || isSpace) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
@@ -99,7 +99,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Visa 3D-modell</p>
+                  <p>{isSpace ? "Visa rum i 3D" : "Visa 3D-modell"}</p>
                 </TooltipContent>
               </Tooltip>
             )}
