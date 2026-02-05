@@ -61,6 +61,12 @@ export const DataConsistencyBanner: React.FC = () => {
         });
         setDeltaResult(null);
         setDismissed(true);
+        
+        // Emit custom event so other components (e.g. Sync tab) can react
+        window.dispatchEvent(new CustomEvent('asset-sync-completed', {
+          detail: { totalSynced: data.totalSynced, orphansRemoved: data.orphansRemoved }
+        }));
+        
         // Re-check after a delay
         setTimeout(checkDelta, 2000);
       }
