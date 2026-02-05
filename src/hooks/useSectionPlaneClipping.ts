@@ -21,6 +21,7 @@ interface SectionPlaneClippingOptions {
 export const FLOOR_SELECTION_CHANGED_EVENT = 'FLOOR_SELECTION_CHANGED';
 export const VIEW_MODE_CHANGED_EVENT = 'VIEW_MODE_CHANGED';
 export const CLIP_HEIGHT_CHANGED_EVENT = 'CLIP_HEIGHT_CHANGED';
+export const CLIP_HEIGHT_3D_CHANGED_EVENT = 'CLIP_HEIGHT_3D_CHANGED';
 
 export interface FloorSelectionEventDetail {
   floorId: string | null;
@@ -43,6 +44,10 @@ export interface ClipHeightEventDetail {
   height: number; // Height in meters above floor
 }
 
+export interface ClipHeight3DEventDetail {
+  offset: number; // Offset in meters from next floor boundary (negative = lower)
+}
+
 /**
  * Hook for managing horizontal SectionPlane clipping at floor boundaries.
  * 
@@ -59,7 +64,7 @@ export function useSectionPlaneClipping(
   viewerRef: React.MutableRefObject<any>,
   options: SectionPlaneClippingOptions = {}
 ) {
-  const { enabled = true, offset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
+  const { enabled = true, offset: initialOffset = 0.05, clipMode = 'ceiling', floorCutHeight: initialFloorCutHeight = 1.2 } = options;
   
   // Separate refs for 2D (top+bottom) and 3D (ceiling) planes
   const topPlaneRef = useRef<any>(null);
@@ -70,6 +75,8 @@ export function useSectionPlaneClipping(
   const currentClipModeRef = useRef<ClipMode | null>(null);
   const floorCutHeightRef = useRef<number>(initialFloorCutHeight);
   const currentFloorMinYRef = useRef<number>(0);
+  const ceiling3DOffsetRef = useRef<number>(initialOffset);
+  const nextFloorMinYRef = useRef<number | null>(null);
 
   // Get XEOkit viewer instance
   const getXeokitViewer = useCallback(() => {
@@ -259,7 +266,7 @@ export function useSectionPlaneClipping(
 
   // Calculate clip height from floor boundary (for 3D Solo mode)
   // This finds the next floor's base height instead of using geometry max
-  const calculateClipHeightFromFloorBoundary = useCallback((floorId: string): number | null => {
+  const calculateClipHeightFromFloorBoundary = useCallback((floorId: string): { clipHeight: number; nextFloorMinY: number | null } | null => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return null;
 
@@ -299,12 +306,12 @@ export function useSectionPlaneClipping(
       // Clip at next floor's base level
       const nextFloor = storeys[currentIndex + 1];
       console.log(`3D Clipping: At next floor boundary ${nextFloor.name} minY=${nextFloor.minY.toFixed(2)}`);
-      return nextFloor.minY;
+      return { clipHeight: nextFloor.minY, nextFloorMinY: nextFloor.minY };
     } else {
       // Top floor - clip at own maxY + small offset
       const topFloor = storeys[currentIndex];
       console.log(`3D Clipping: Top floor - at maxY + offset: ${(topFloor.maxY + 0.1).toFixed(2)}`);
-      return topFloor.maxY + 0.1;
+      return { clipHeight: topFloor.maxY + 0.1, nextFloorMinY: null };
     }
   }, [getXeokitViewer, calculateFloorBounds]);
 
@@ -325,11 +332,14 @@ export function useSectionPlaneClipping(
     destroyPlane(topPlaneRef);
     destroyPlane(bottomPlaneRef);
     
-    const clipHeight = calculateClipHeightFromFloorBoundary(floorId);
-    if (!clipHeight) {
+    const result = calculateClipHeightFromFloorBoundary(floorId);
+    if (!result) {
       console.debug('Could not calculate ceiling clipping height for:', floorId);
       return;
     }
+    
+    const { clipHeight: baseClipHeight, nextFloorMinY } = result;
+    nextFloorMinYRef.current = nextFloorMinY;
 
     // Get floor bounds for reference
     const bounds = calculateFloorBounds(floorId);
@@ -343,17 +353,20 @@ export function useSectionPlaneClipping(
     // Remove existing ceiling plane
     destroyPlane(ceilingPlaneRef);
 
+    // Apply user offset to clip height
+    const adjustedClipHeight = baseClipHeight + ceiling3DOffsetRef.current;
+
     // Create ceiling clipping plane
     // Direction [0, 1, 0] = UP = discard geometry ABOVE the plane
     ceilingPlaneRef.current = createSectionPlaneOnScene(
       viewer,
       `3d-ceiling-${floorId}`,
-      [0, clipHeight, 0],
+      [0, adjustedClipHeight, 0],
       [0, 1, 0]  // CORRECTED: UP direction discards above
     );
 
     if (ceilingPlaneRef.current) {
-      console.log(`✅ 3D Ceiling clipping at Y=${clipHeight.toFixed(2)} for ${floorName} [dir: UP = discard above]`);
+      console.log(`✅ 3D Ceiling clipping at Y=${adjustedClipHeight.toFixed(2)} for ${floorName} (base: ${baseClipHeight.toFixed(2)}, offset: ${ceiling3DOffsetRef.current}m) [dir: UP = discard above]`);
       currentFloorIdRef.current = floorId;
       currentClipModeRef.current = 'ceiling';
     }
@@ -467,6 +480,51 @@ export function useSectionPlaneClipping(
       currentClipModeRef.current = 'floor';
     }
   }, [enabled, getXeokitViewer, createSectionPlaneOnScene, destroyPlane]);
+
+  /**
+   * Update 3D ceiling clip height offset dynamically (for 3D mode slider)
+   */
+  const update3DCeilingOffset = useCallback((newOffset: number) => {
+    ceiling3DOffsetRef.current = newOffset;
+    
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    
+    // Only update if we're in 3D ceiling mode
+    if (currentClipModeRef.current !== 'ceiling') {
+      console.debug('Not in 3D ceiling mode, skipping offset update');
+      return;
+    }
+    
+    // Calculate new clip position
+    const baseHeight = nextFloorMinYRef.current ?? (currentFloorMinYRef.current + 3.0); // Default 3m floor height
+    const newClipY = baseHeight + newOffset;
+    
+    // Try to update existing plane position directly
+    if (ceilingPlaneRef.current) {
+      try {
+        ceilingPlaneRef.current.pos = [0, newClipY, 0];
+        console.log(`✅ 3D ceiling plane pos updated to Y=${newClipY.toFixed(2)} (offset: ${newOffset}m)`);
+        return;
+      } catch (e) {
+        console.debug('Direct pos update failed, recreating plane:', e);
+      }
+    }
+    
+    // Fallback: recreate with stable ID
+    destroyPlane(ceilingPlaneRef);
+    
+    ceilingPlaneRef.current = createSectionPlaneOnScene(
+      viewer,
+      `3d-ceiling-stable`,
+      [0, newClipY, 0],
+      [0, 1, 0]
+    );
+
+    if (ceilingPlaneRef.current) {
+      console.log(`✅ 3D ceiling plane recreated at Y=${newClipY.toFixed(2)} (offset: ${newOffset}m)`);
+    }
+  }, [getXeokitViewer, createSectionPlaneOnScene, destroyPlane]);
 
   /**
    * Update floor cut height dynamically (for 2D mode slider)
@@ -602,12 +660,14 @@ export function useSectionPlaneClipping(
     remove2DClipping,
     remove3DClipping,
     updateFloorCutHeight,
+    update3DCeilingOffset,
     calculateFloorBounds,
     getCurrentFloorBounds,
     isClippingActive: currentFloorIdRef.current !== null || currentClipModeRef.current !== null,
     currentFloorId: currentFloorIdRef.current,
     currentClipMode: currentClipModeRef.current,
     currentFloorCutHeight: floorCutHeightRef.current,
+    current3DCeilingOffset: ceiling3DOffsetRef.current,
   };
 }
 
