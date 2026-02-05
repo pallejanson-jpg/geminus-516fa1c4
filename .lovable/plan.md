@@ -1,77 +1,152 @@
 
-# Plan: Asset+ Datakonsistens och XKT-caching
+# Plan: Samordna Datakonsistens mellan Banner och Sync-flik
 
-## ✅ IMPLEMENTERAT
+## Problembeskrivning
 
-### Del 1: Automatisk datakonsistenskontroll - ✅ KLART
+DataConsistencyBanner och Sync-fliken i Settings fungerar oberoende av varandra:
+- Bannern kör `sync-with-cleanup` (tar bort orphans) men Sync-fliken vet inte om det
+- Sync-flikens "Synka"-knapp kör `sync-structure` som bara lagger till data, aldrig tar bort
+- Ingen Realtime-subscription i Sync-fliken - den visar gammal data
+- Spinnern har ingen koppling till faktisk status
 
-**Implementerade komponenter:**
+## Losning
 
-1. **`check-delta` action** i `asset-plus-sync` edge function
-   - Jämför lokal vs remote asset-antal
-   - Returnerar: `{ orphanCount, newCount, inSync, discrepancy }`
-   - Testad: Bekräftade **1,232 orphan-objekt**
+### 1. Lagg till Realtime-subscription i ApiSettingsModal
 
-2. **`sync-with-cleanup` action** i `asset-plus-sync` edge function  
-   - Hämtar alla remote fmGuids
-   - Upsertar alla structure-objekt
-   - Tar bort lokala objekt som inte finns i Asset+
+Sync-fliken ska lyssna pa `asset_sync_state`-andringar via Supabase Realtime. Nar en sync slutfors (fran bannern eller nagon annan kalla) ska UI:t automatiskt uppdateras.
 
-3. **DataConsistencyBanner** (`src/components/common/DataConsistencyBanner.tsx`)
-   - Visar varning vid appstart om data är osynkad
-   - Knapp för "Synka & rensa" som anropar `sync-with-cleanup`
-   - Kan ignoreras av användaren
-
-4. **SyncProgressBanner** (`src/components/layout/SyncProgressBanner.tsx`)
-   - Visar realtidsframsteg under pågående synk
-   - Lyssnar på Supabase Realtime för `asset_sync_state`
-
-5. **Realtime aktiverat** för `asset_sync_state` tabell
-   - Live-uppdateringar av synkstatus
-
-6. **AppLayout uppdaterad** med banners
-   - DataConsistencyBanner visas vid diskrepans
-   - SyncProgressBanner visas under aktiv synk
-
----
-
-## 🔜 NÄSTA STEG
-
-### Del 2: XKT-caching (ej ännu implementerat)
-
-Problemet kvarstår: Server-side synk kan inte hämta XKT-filer pga API-restriktioner.
-
-**Planerad lösning:**
-- Fortsätt med "Cache-on-Load" strategi via fetch-interceptor
-- Lägg till statusspårning för vilka byggnader som har cache
-- Överväg `xkt_cache_status` tabell för snabb kontroll
-
----
-
-## Test-resultat
-
-```json
-// check-delta response:
-{
-  "success": true,
-  "localCount": 4034,
-  "remoteCount": 2802,
-  "orphanCount": 1232,
-  "newCount": 0,
-  "inSync": false,
-  "discrepancy": 1232,
-  "message": "1232 objekt finns lokalt men inte i Asset+"
-}
+```text
+Realtime-flode:
+Banner kor sync-with-cleanup
+    |
+    v
+asset_sync_state uppdateras (completed)
+    |
+    v
+Realtime-event --> ApiSettingsModal --> auto-refresh syncCheck
 ```
 
+**Andringar i `src/components/settings/ApiSettingsModal.tsx`:**
+- Lagg till `useEffect` med Supabase Realtime-kanal for `asset_sync_state`
+- Vid Realtime-event: kalla `fetchSyncStatus()` och `checkSyncStatus()` automatiskt
+- Avsluta kanalen vid unmount/modal-stangning
+
+### 2. Andrastruktur-synk till att anvanda sync-with-cleanup
+
+Byt `handleSyncStructure` fran `sync-structure` till `sync-with-cleanup` sa att orphans tas bort aven fran Sync-fliken.
+
+**Andringar i `src/components/settings/ApiSettingsModal.tsx`:**
+- `handleSyncStructure` anropar `sync-with-cleanup` istallet for `sync-structure`
+- Lagg till text under knappen: "Synkar och tar bort objekt som inte langre finns i Asset+"
+
+### 3. Forbattra spinner-logik med Realtime-driven status
+
+Ersatt den 300-sekunderska timeouten med Realtime-driven statusuppdatering:
+- Nar Realtime-event visar `sync_status === 'completed'` for 'structure' -> stoppa spinner
+- Nar `sync_status === 'failed'` -> stoppa spinner, visa felmeddelande
+- Ta bort den harda 300s-timeouten
+
+### 4. Emittera custom event fran DataConsistencyBanner
+
+Nar bannern slutfor cleanup, emittera ett custom DOM-event sa att andra komponenter kan reagera.
+
+**Andringar i `src/components/common/DataConsistencyBanner.tsx`:**
+- Dispatchera `sync-completed` event efter lyckad sync-with-cleanup
+- Inkludera resultat (synced count, orphans removed) i event detail
+
+**Andringar i `src/components/settings/ApiSettingsModal.tsx`:**
+- Lyssna pa `sync-completed` event som komplement till Realtime
+
 ---
 
-## Implementerade filer
+## Filer som andras
 
-| Fil | Status |
-|-----|--------|
-| `supabase/functions/asset-plus-sync/index.ts` | ✅ Uppdaterad med check-delta & sync-with-cleanup |
-| `src/components/common/DataConsistencyBanner.tsx` | ✅ Ny |
-| `src/components/layout/SyncProgressBanner.tsx` | ✅ Ny |
-| `src/components/layout/AppLayout.tsx` | ✅ Uppdaterad med banners |
-| Migration: Realtime för asset_sync_state | ✅ Klar |
+| Fil | Andring |
+|-----|---------|
+| `src/components/settings/ApiSettingsModal.tsx` | Realtime-subscription, sync-with-cleanup, forbattrad spinner |
+| `src/components/common/DataConsistencyBanner.tsx` | Dispatchera custom event vid cleanup |
+
+## Tekniska detaljer
+
+### Realtime-subscription i ApiSettingsModal
+
+```typescript
+useEffect(() => {
+  if (!isOpen) return;
+  
+  const channel = supabase
+    .channel('sync-settings-monitor')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'asset_sync_state'
+    }, (payload) => {
+      const newState = payload.new as SyncStatus;
+      
+      // Auto-refresh sync statuses
+      fetchSyncStatus();
+      
+      // If a sync completed or failed, refresh the full check
+      if (newState.sync_status === 'completed' || newState.sync_status === 'failed') {
+        checkSyncStatus();
+        
+        // Stop relevant spinner
+        if (newState.subtree_id === 'structure') setIsSyncingStructure(false);
+        if (newState.subtree_id === 'assets') setIsSyncingAssets(false);
+        if (newState.subtree_id === 'xkt') setIsSyncingXkt(false);
+      }
+    })
+    .subscribe();
+  
+  return () => { supabase.removeChannel(channel); };
+}, [isOpen]);
+```
+
+### Uppdaterad handleSyncStructure
+
+```typescript
+const handleSyncStructure = async () => {
+  setIsSyncingStructure(true);
+  try {
+    // Use sync-with-cleanup instead of sync-structure
+    // to also remove orphan objects
+    supabase.functions.invoke('asset-plus-sync', {
+      body: { action: 'sync-with-cleanup' }
+    }).then(({ data }) => {
+      if (data?.success) {
+        toast({
+          title: 'Synkronisering klar',
+          description: data.message,
+        });
+      }
+    }).catch((err) => {
+      console.log('Edge function call ended:', err?.message);
+    });
+
+    toast({
+      title: 'Synkar struktur',
+      description: 'Hamtar data och tar bort objekt som inte langre finns i Asset+.',
+    });
+    // Spinner stops via Realtime subscription
+  } catch (error: any) {
+    toast({ variant: 'destructive', title: 'Synk misslyckades', description: error.message });
+    setIsSyncingStructure(false);
+  }
+};
+```
+
+### Custom event fran DataConsistencyBanner
+
+```typescript
+// After successful sync-with-cleanup
+window.dispatchEvent(new CustomEvent('asset-sync-completed', {
+  detail: { totalSynced: data.totalSynced, orphansRemoved: data.orphansRemoved }
+}));
+```
+
+## Forvantat resultat
+
+1. Nar bannern kor cleanup -> Sync-fliken uppdateras automatiskt via Realtime
+2. Sync-flikens "Synka"-knapp tar nu aven bort orphans
+3. Spinnern slutar snurra nar synken faktiskt ar klar (inte efter 5 min timeout)
+4. Bada vyerna visar konsekvent data
