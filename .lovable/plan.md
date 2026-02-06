@@ -1,167 +1,125 @@
 
 
-# Plan: Viewer-menyer som sidopaneler + Rumsvisualisering fix
+# Plan: Prestandafix, kollapserbara sektioner, namngivning och positionering
 
-## Sammanfattning
+## Sammanfattning av problem
 
-Tva huvudandringar:
-
-1. **Ersatt flytande menyer med en fast hogersidopanel (Sheet/Drawer)** -- Alla viewer-menyer (VisualizationToolbar, RoomVisualizationPanel, ViewerTreePanel, SidePopPanels) konsolideras till en hogermeny som skjuts in/ut via en hamburgare, precis som mobilversionen redan gor (MobileViewerOverlay pattern).
-
-2. **Fix av rumsvisualisering sa den fungerar tillforlitligt** -- Saker automatisk farginladdning vid val av visualiseringstyp, med robust "Visa rum"-aktivering och ratt golvsfiltrering.
+1. **Prestanda**: ViewerRightPanel renderar alla tunga barn (ModelVisibilitySelector, FloorVisibilitySelector, RoomVisualizationPanel, LightingControlsPanel) oavsett om panelen ar oppen eller stangd. Sheet mountar alltid sitt innehall.
+2. **Kollapserbara sektioner**: "Visa", "Rumsvisualisering" och "Atgarder" ar inte kollapserbara -- bara BIM-modeller, Vaningar och Viewer Settings ar det.
+3. **Vaningsnamn**: Vissa vaningsplan i Smaviken saknar `common_name` i databasen (3 av 13 storeys har `null`). Da faller koden tillbaka till `Vaningsplan {GUID-fragment}`. Problemet: metaObject.name fran xeokit ar ocksa ett GUID.
+4. **FloatingFloorSwitcher position**: Initieras med `x = window.innerWidth - 80` (fixed position), men med den nya hogerpanelen (320px bred) hamnar den utanfor synligt omrade. Dessutom ar den for lang vertikalt.
+5. **BIM-modellnamn**: `xkt_models`-tabellen ar tom for Smaviken, sa ModelVisibilitySelector faller tillbaka till Asset+ API. Men bara modeller som faktiskt ar laddade i scenen visas -- modeller som inte ar laddade (E, B, V) syns inte.
 
 ---
 
-## Del 1: Hogersidopanel istallet for flytande menyer
+## Losning 1: Prestanda -- lazy rendering
 
-### Nuvarande arkitektur (problem)
-
-- **VisualizationToolbar**: Flytande, dragbar panel (position med x/y-koordinater) med SidePopPanel-barn for BIM-modeller, vaningsplan, annotationer
-- **RoomVisualizationPanel**: Separat flytande, dragbar panel
-- **ViewerTreePanel**: Separat flytande panel (vanter sida)
-- **FloatingIssueListPanel**: Ytterligare flytande panel
-
-Allt "flyter runt" med drag-handlers, pixelpositionering, och kan hamna utanfor skarmens kant.
-
-### Ny arkitektur
-
-Ersatt alla flytande paneler med en **en enda hogersidopanel** (Sheet/Drawer) som innehaller allt. Exakt samma monster som `MobileViewerOverlay` redan anvander -- men nu for bade desktop och mobil.
+Problemet ar att Sheet alltid monterar sina barn. Losningen ar att villkorligt rendera tunga komponenter baserat pa `isOpen`:
 
 ```text
-+----------------------------------------------------------+
-| [X] [Full] [Tree]                    [Hamburger-knapp] |
-|                                                          |
-|                                                          |
-|                     3D VIEWER                            |
-|                                          +-------------+ |
-|                                          | Sheet/Drawer | |
-|                                          | - BIM models | |
-|                                          | - Floors     | |
-|                                          | - Display    | |
-|                                          |   - 2D/3D    | |
-|                                          |   - Visa rum | |
-|                                          |   - Annot.   | |
-|                                          |   - RumsVis  | |
-|                                          | - Settings   | |
-|                                          | - Actions    | |
-|                                          +-------------+ |
-|   [Floor pills]                                          |
-|   [Navigation toolbar]                                   |
-+----------------------------------------------------------+
+Andringar i ViewerRightPanel.tsx:
+
+- Wrappa hela ScrollArea-innehallet i: {isOpen && (...)}
+- Alternativt: anvand CSS visibility/display for att behalla state men undvika rendering
+- ModelVisibilitySelector, FloorVisibilitySelector, RoomVisualizationPanel,
+  LightingControlsPanel renderas bara nar panelen ar oppen
 ```
 
-### Implementationsdetaljer
-
-**Ny komponent: `ViewerRightPanel.tsx`**
-
-Skapar en ny komponent som konsoliderar all funktionalitet fran:
-- `VisualizationToolbar.tsx` (innehall, inte panelen)
-- `RoomVisualizationPanel.tsx` (inbaddad som sektion)
-- Submenyer (BIM-modeller, vaningsplan, annotationer)
-
-Anvander `Sheet` (fran Radix/shadcn) med `side="right"` for en renare UX. Panelen oppnas/stangs med en hamburgerknapp i viewerns header.
-
-Sektioner:
-1. **BIM-modeller** (Collapsible)
-2. **Vaningsplan** (Collapsible)
-3. **Visa** (2D/3D, Visa rum, Annotationer, Rumsvisualisering)
-4. **Rumsvisualisering** (inbaddad direkt -- typ-val, legend, statistik)
-5. **Viewer settings** (Collapsible -- klipphodj, rumsetiketter, tema, bakgrund)
-6. **Atgarder** (Skapa vy, Skapa arende, Visa arenden)
-
-**Andringar i `AssetPlusViewer.tsx`:**
-- Ersatt VisualizationToolbar-triggerknappen med en Sheet-trigger
-- Flytta RoomVisualizationPanel fran separat flytande komponent till inbaddad i sidopanelen
-- Behall ViewerTreePanel som flytande vanstersidopanel (den fungerar redan bra dar)
-
-**Ta bort:**
-- All drag-logik fran VisualizationToolbar (mouseDown, mouseMove, position-state)
-- SidePopPanel-anrop (BIM, floors, annotations -- dessa blir Collapsible-sektioner istallet)
-- RoomVisualizationPanel drag-logik (den baddas in direkt)
-
-### Desktop vs Mobil
-
-- **Desktop**: Sheet med `side="right"`, bredd 320-340px, bakgrunden fortfarande interaktiv
-- **Mobil**: Samma Sheet, exakt som MobileViewerOverlay redan gor det -- ingen andring behovs for mobil
+Detta forhindrar att alla underkomponenter (som gor Supabase-queries, itererar metaScene, etc.) kor nar panelen ar stangd.
 
 ---
 
-## Del 2: Rumsvisualisering -- tillforlitlig auto-fargning
+## Losning 2: Kollapserbara sektioner
 
-### Nuvarande problem
+Gora om "Visa", "Rumsvisualisering" och "Atgarder" till Collapsible-komponenter. Bara "Visa" ska vara expanderad som standard.
 
-Rumsvisualiseringen "fungerar bara sporadiskt" pa grund av flera samverkande problem:
+| Sektion | Standard | Nu |
+|---------|----------|----|
+| BIM-modeller | Kollapsad | Redan collapsible, standard kollapsad |
+| Vaningsplan | Kollapsad | Redan collapsible, standard kollapsad |
+| **Visa** | **Expanderad** | Ej collapsible (fast div) |
+| **Rumsvisualisering** | **Kollapsad** | Ej collapsible |
+| **Viewer Settings** | Kollapsad | Redan collapsible, standard kollapsad |
+| **Atgarder** | **Kollapsad** | Ej collapsible |
 
-1. **Timing-problem med entity cache**: `applyVisualization` kors ibland innan `entityIdCache` ar uppbyggd fran metaScene (rad 421-430 i RoomVisualizationPanel). useEffect-beroendet ar `entityIdCache.size` men cachen byggs asynkront.
-
-2. **"Visa rum" maste vara aktivt**: Rumsobjekten (IfcSpace) maste vara synliga i viewern innan de kan fargas. Komponenten skickar `FORCE_SHOW_SPACES_EVENT` pa mount, men det ar inte garanterat att viewern hinner reagera.
-
-3. **Val av typ bor automatiskt tanda rum + farga**: Nar man valjer tex "Temperatur" bor det:
-   - Automatiskt aktivera "Visa rum" (IfcSpace-objekt synliga)
-   - Automatiskt farga in rummen baserat pa typ
-   - Bara visa rum for selekterade vaningsplan
-
-4. **Byte av typ (t.ex. Temp -> CO2) bor direkt farga om**: Koden har redan `applyVisualization` i useEffect (rad 421), men den koers inte alltid tillforlitligt pa grund av race conditions med cachen.
-
-### Losning
-
-**a) Saker auto-aktivering av "Visa rum":**
-
-Nar visualiseringstyp andras fran `none` till nagot:
-- Dispatcha `FORCE_SHOW_SPACES_EVENT`
-- Vanta en kort tid (200ms) for att ge viewern tid att rendera IfcSpace-objekten
-- Sedan kora `applyVisualization`
-
-**b) Saker cache-timing:**
-
-Endra logiken sa att `applyVisualization` har en retry-mekanism:
-- Om `entityIdCache.size === 0`, vanta 500ms och forsok igen (max 3 forsok)
-- Logga tydligt varfor fargning misslyckades (cache tom, inga rum, etc.)
-
-**c) Garanterad omfargning vid typbyte:**
-
-Nar `visualizationType` andras:
-1. Rensa ALLA tidigare farger (resetColors)
-2. Om ny typ !== 'none': forcera "Visa rum" + applicera ny fargning
-
-**d) Golvsfiltrering:**
-
-Se till att `visibleFloorFmGuids` alltid skickas korrekt till komponenten. I nuvarande kod (AssetPlusViewer rad 2984):
-```typescript
-visibleFloorFmGuids={visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
-```
-
-Nar `undefined` skickas visas alla rum -- men vi bor sakerstalla att golvsselektionen synkas korrekt vid byte.
-
-### Tekniska andringar i RoomVisualizationPanel
+Ny state:
 
 ```typescript
-// Ny logik for automatisk "Visa rum" + fargning vid typbyte
-useEffect(() => {
-  if (visualizationType === 'none') {
-    resetColors();
-    return;
-  }
-  
-  // Steg 1: Tvinga "Visa rum" pa
-  window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
-  if (onShowSpaces) onShowSpaces(true);
-  
-  // Steg 2: Vanta pa att IfcSpace-objekt blir synliga
-  const applyWithRetry = (attempt: number) => {
-    if (entityIdCache.size > 0 && rooms.length > 0) {
-      applyVisualization();
-    } else if (attempt < 3) {
-      setTimeout(() => applyWithRetry(attempt + 1), 500);
-    } else {
-      console.warn('Room visualization: gave up after 3 attempts');
-    }
-  };
-  
-  // Kort delay for att ge viewern tid att rendera rum
-  setTimeout(() => applyWithRetry(0), 200);
-}, [visualizationType, useMockData]);
+const [displayOpen, setDisplayOpen] = useState(true);      // Expanderad som standard
+const [roomVizOpen, setRoomVizOpen] = useState(false);      // Kollapsad
+const [actionsOpen, setActionsOpen] = useState(false);       // Kollapsad
 ```
+
+---
+
+## Losning 3: Vaningsnamn
+
+Problemet ar att vaningsplan utan `common_name` i databasen visas som GUID-fragment. Losningen ar att forbattra fallback-logiken i bade `FloorVisibilitySelector.tsx` och `FloatingFloorSwitcher.tsx`:
+
+```text
+Nuvarande fallback-kedja:
+1. common_name fran databas -> OK om finns
+2. metaObject.name -> Ofta ocksa ett GUID
+3. "Vaningsplan {GUID.substring(0,8)}" -> Darligt
+
+Ny fallback-kedja:
+1. common_name fran databas -> OK om finns
+2. metaObject.name (om det INTE ar ett GUID) -> Anvand det
+3. name fran assets-tabellen (om den finns) -> Anvand det
+4. "Plan {index+1}" -> Numrera sekventiellt baserat pa position i listan
+```
+
+Dessutom: nar `common_name` ar null men assets-tabellen har raden, inkludera `name`-faltet i DB-queryn (det ar redan inkluderat men inte anvant som fallback):
+
+```typescript
+// I fetchFloorNames:
+const displayName = f.common_name || f.name || null; // Bara satt i map om vi har ett namn
+if (displayName) {
+  nameMap.set(f.fm_guid, displayName);
+}
+// Vaningsplan utan bade common_name och name i DB far "Plan X" som fallback
+```
+
+For att ge sekventiella namn ("Plan 1", "Plan 2") snarare an GUID-fragment, numbrera de ej-namngivna vaningarna baserat pa deras position i den sorterade listan.
+
+---
+
+## Losning 4: FloatingFloorSwitcher position och storlek
+
+### Position
+Andra initial position fran `window.innerWidth - 80` till `window.innerWidth - 400` (utanfor hogerpanelen). Samt gora den relativ till viewerns container istallet for `fixed` om mojligt. Enklaste fix: justera startposition och klamma till synligt omrade.
+
+### Vertikal storlek
+Minska `MAX_VISIBLE_PILLS_DESKTOP` fran 8 till 5 for att gora panelen kortare. Overflow-menyn handskas redan med resten.
+
+### Namnproblem
+Samma fix som Losning 3 -- `FloatingFloorSwitcher` anvander exakt samma fallback-logik.
+
+---
+
+## Losning 5: BIM-modellnamn och synlighet
+
+### Problem A: Inte alla modeller visas
+`ModelVisibilitySelector` kombinerar scen-modeller med `dbModels` (fran xkt_models-tabellen). Men xkt_models ar tom for Smaviken, sa inga extra modeller laggs till. Asset+ API-svaret anvands bara for namngivning, inte for att populera listan.
+
+Fix: Nar modellnamn hamtas fran Asset+ API (GetModels), spara aven dessa som "tillgangliga men ej laddade" modeller i komponentens state, precis som dbModels redan gor for xkt_models-data.
+
+```typescript
+// I fetchModelNames, nar Asset+ API svarar:
+if (response.ok) {
+  const apiModels = await response.json();
+  // Spara som apiModels for att visa i listan (ej laddade)
+  setDbModels(apiModels.map(m => ({
+    id: m.id || '',
+    name: m.name || '',
+    fileName: m.xktFileUrl ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt' : m.id
+  })));
+  // ... namn-mappning som redan finns
+}
+```
+
+### Problem B: Namngivning
+Nar varken xkt_models eller Asset+ API ger namn, visas filnamnet utan formatering. Med Asset+ API-data lagd i dbModels-listen losas bade synlighet och namngivning.
 
 ---
 
@@ -169,30 +127,118 @@ useEffect(() => {
 
 | Fil | Andring |
 |-----|---------|
-| **NY: `src/components/viewer/ViewerRightPanel.tsx`** | Ny komponent -- Sheet-baserad hogersidopanel med alla visningstool |
-| `src/components/viewer/AssetPlusViewer.tsx` | Ersatt VisualizationToolbar + RoomVisualizationPanel med ViewerRightPanel |
-| `src/components/viewer/RoomVisualizationPanel.tsx` | Stod for `embedded` mode (utan drag/header), robust auto-fargning |
-| `src/components/viewer/VisualizationToolbar.tsx` | Kan tas bort helt (funktionalitet flyttas till ViewerRightPanel) |
-| `src/components/viewer/SidePopPanel.tsx` | Behalls men anvands inte langre fran VisualizationToolbar |
+| `src/components/viewer/ViewerRightPanel.tsx` | Lazy rendering (isOpen guard), kollapserbara Visa/RumsViz/Atgarder |
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Forbattrad vaningsnamn-fallback (Plan X) |
+| `src/components/viewer/FloatingFloorSwitcher.tsx` | Positionsfix, max 5 pills, vaningsnamn-fallback |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Populera dbModels fran Asset+ API-svar |
+
+---
+
+## Tekniska detaljer
+
+### ViewerRightPanel -- lazy rendering
+
+```typescript
+// Wrappa hela innehallet i isOpen-check
+<ScrollArea className="h-[calc(100vh-80px)]">
+  {isOpen && (
+    <div className="p-4 space-y-3">
+      {/* BIM Models, Floors, Display, etc. */}
+    </div>
+  )}
+</ScrollArea>
+```
+
+### ViewerRightPanel -- kollapserbara sektioner
+
+```typescript
+// Nya state
+const [displayOpen, setDisplayOpen] = useState(true);
+const [roomVizOpen, setRoomVizOpen] = useState(false);
+const [actionsOpen, setActionsOpen] = useState(false);
+
+// Visa-sektionen blir:
+<Collapsible open={displayOpen} onOpenChange={setDisplayOpen}>
+  <CollapsibleTrigger asChild>
+    <Button variant="ghost" className="w-full justify-between h-10 px-2">
+      <span>Visa</span>
+      <ChevronDown className={cn(...)} />
+    </Button>
+  </CollapsibleTrigger>
+  <CollapsibleContent>
+    {/* 2D/3D, Modellrad, Visa rum, Annotationer */}
+  </CollapsibleContent>
+</Collapsible>
+```
+
+### FloatingFloorSwitcher -- position och storlek
+
+```typescript
+// Initiell position: langre till vanster for att inte hamna under hogerpanelen
+const x = window.innerWidth - 400;
+const y = 150;
+
+// Minska max synliga pills
+const MAX_VISIBLE_PILLS_DESKTOP = 5; // Tidigare 8
+```
+
+### Vaningsnamn -- forbattrad fallback
+
+```typescript
+// I bade FloorVisibilitySelector och FloatingFloorSwitcher:
+let displayName = metaObject.name || 'Unknown Floor';
+if (dbName) {
+  displayName = dbName;
+} else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
+  // Namn ar ett GUID - ge sekventiellt nummer
+  // (beraknas efter sortering, se nedan)
+  displayName = null; // Markera for numrering
+}
+
+// Efter extraktion, numrera icke-namngivna vaningar:
+let unknownIndex = 1;
+extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+extractedFloors.forEach(floor => {
+  if (!floor.name || floor.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+    floor.name = `Plan ${unknownIndex}`;
+    floor.shortName = String(unknownIndex);
+    unknownIndex++;
+  }
+});
+```
+
+### ModelVisibilitySelector -- Asset+ API-modeller i listan
+
+```typescript
+// I fetchModelNames, nar Asset+ API svarar framgangsrikt:
+if (response.ok) {
+  const apiModels = await response.json();
+
+  // Spara som dbModels sa att extractModels() inkluderar dem
+  setDbModels(apiModels.map((m: any) => ({
+    id: m.id || '',
+    name: m.name || '',
+    fileName: m.xktFileUrl
+      ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
+      : (m.id || '')
+  })));
+
+  // Namn-mappning (redan existerande kod)
+  const nameMap = new Map<string, string>();
+  apiModels.forEach((m: any) => { ... });
+  setModelNamesMap(nameMap);
+}
+```
 
 ---
 
 ## Implementationsordning
 
-| Prio | Steg | Beskrivning |
-|------|------|-------------|
-| 1 | ViewerRightPanel | Skapa ny komponent med Sheet-baserad hogersidopanel |
-| 2 | RoomVisualization fix | Robust auto-fargning med retry och auto-"Visa rum" |
-| 3 | AssetPlusViewer integration | Byt ut VisualizationToolbar mot ViewerRightPanel |
-| 4 | Cleanup | Ta bort oanvand drag-logik, SidePopPanel-anvandning |
-
----
-
-## Vad behalls
-
-- **ViewerToolbar** (navigationsverktygsfalt langst ner) -- behalls oforandrad
-- **FloatingFloorSwitcher** (pills) -- behalls
-- **FloorCarousel** -- behalls
-- **MobileViewerOverlay** -- behalls (anvander redan Sheet-monster)
-- **ViewerTreePanel** som vansterpanel -- behalls (fungerar bra)
+| Prio | Steg |
+|------|------|
+| 1 | Lazy rendering i ViewerRightPanel (prestanda) |
+| 2 | Kollapserbara sektioner (Visa, RumsViz, Atgarder) |
+| 3 | Vaningsnamn-fallback i FloorVisibilitySelector + FloatingFloorSwitcher |
+| 4 | FloatingFloorSwitcher position + max pills |
+| 5 | ModelVisibilitySelector -- visa alla modeller fran Asset+ API |
 
