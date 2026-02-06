@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
-import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous } from 'lucide-react';
+import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous, Menu } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,8 +14,7 @@ import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
-import RoomVisualizationPanel from './RoomVisualizationPanel';
-import VisualizationToolbar from './VisualizationToolbar';
+import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import MobileViewerOverlay, { MobileFloorInfo } from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
@@ -154,7 +153,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const [showTreePanel, setShowTreePanel] = useState(false);
-  const [showVisualizationPanel, setShowVisualizationPanel] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
@@ -2767,7 +2766,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               onShowAnnotationsChange={handleAnnotationsChange}
               showRoomLabels={showRoomLabels}
               onShowRoomLabelsChange={handleRoomLabelsToggle}
-              onOpenVisualizationPanel={() => setShowVisualizationPanel(true)}
+              onOpenVisualizationPanel={() => setRightPanelOpen(true)}
               models={availableModels}
               onModelToggle={handleModelToggle}
             />
@@ -2810,40 +2809,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 </Button>
               </div>
             
-            {/* Right side: Visualization menu + Annotations */}
+            {/* Right side: Hamburger menu for right panel */}
             <div className="flex gap-1.5 pointer-events-auto">
               {state.isInitialized && (
-                <>
-                  <VisualizationToolbar
-                    viewerRef={viewerInstanceRef}
-                    buildingFmGuid={buildingFmGuid}
-                    isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
-                    onToggleNavCube={(visible) => setShowNavCube(visible)}
-                    onToggleMinimap={(visible) => setShowMinimap(visible)}
-                    onToggleTreeView={(visible) => setShowTreePanel(visible)}
-                    onToggleVisualization={(visible) => {
-                      setShowVisualizationPanel(visible);
-                      // Auto-activate "Visa rum" when opening visualization panel
-                      if (visible) {
-                        handleShowSpacesChange(true);
-                      }
-                    }}
-                    onVisibleFloorsChange={handleVisibleFloorsChange}
-                    onAddAsset={handleOpenInventorySheet}
-                    onPickCoordinate={handleTogglePickMode}
-                    onShowProperties={() => setPropertiesDialogOpen(true)}
-                    onOpenSettings={() => setToolbarSettingsOpen(true)}
-                    isPickMode={isPickMode}
-                    showTreeView={showTreePanel}
-                    showVisualization={showVisualizationPanel}
-                    showNavCube={showNavCube}
-                    showMinimap={showMinimap}
-                    inline={true}
-                    showSpaces={showSpaces}
-                    onShowSpacesChange={handleShowSpacesChange}
-                  />
-                  {/* AnnotationToggleMenu removed - now in VisualizationToolbar flyout */}
-                </>
+                <Button
+                  variant={rightPanelOpen ? "default" : "secondary"}
+                  size="icon"
+                  onClick={() => setRightPanelOpen(!rightPanelOpen)}
+                  className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                  aria-label="Visning"
+                  title="Visning"
+                >
+                  <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
               )}
             </div>
             </div>
@@ -2975,15 +2953,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 selectedFloorId={selectedFloorId || undefined}
               />
               
-              {/* Room Visualization Panel */}
-              {showVisualizationPanel && buildingFmGuid && (
-                <RoomVisualizationPanel
-                  viewerRef={viewerInstanceRef}
-                  buildingFmGuid={buildingFmGuid}
-                  onClose={() => setShowVisualizationPanel(false)}
-                  visibleFloorFmGuids={visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
-                />
-              )}
+              {/* Right Side Panel (Sheet) - replaces floating VisualizationToolbar + RoomVisualizationPanel */}
+              <ViewerRightPanel
+                isOpen={rightPanelOpen}
+                onOpenChange={setRightPanelOpen}
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingFmGuid}
+                buildingName={assetData?.commonName || assetData?.name}
+                isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
+                showSpaces={showSpaces}
+                onShowSpacesChange={handleShowSpacesChange}
+                visibleFloorFmGuids={visibleFloorFmGuids}
+                onVisibleFloorsChange={handleVisibleFloorsChange}
+                visibleModelIds={[]}
+                visibleFloorIds={visibleFloorFmGuids}
+                onToggleTreeView={(visible) => setShowTreePanel(visible)}
+                showTreeView={showTreePanel}
+                onAddAsset={handleOpenInventorySheet}
+              />
             </>
           )}
 
