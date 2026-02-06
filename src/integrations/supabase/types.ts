@@ -742,10 +742,13 @@ export type Database = {
       }
       qr_report_configs: {
         Row: {
+          asset_fm_guid: string | null
+          asset_name: string | null
           building_fm_guid: string
           building_name: string | null
           created_at: string | null
           id: string
+          installation_number: string | null
           is_active: boolean | null
           qr_key: string
           space_fm_guid: string | null
@@ -753,10 +756,13 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          asset_fm_guid?: string | null
+          asset_name?: string | null
           building_fm_guid: string
           building_name?: string | null
           created_at?: string | null
           id?: string
+          installation_number?: string | null
           is_active?: boolean | null
           qr_key: string
           space_fm_guid?: string | null
@@ -764,10 +770,13 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          asset_fm_guid?: string | null
+          asset_name?: string | null
           building_fm_guid?: string
           building_name?: string | null
           created_at?: string | null
           id?: string
+          installation_number?: string | null
           is_active?: boolean | null
           qr_key?: string
           space_fm_guid?: string | null
