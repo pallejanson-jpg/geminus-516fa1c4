@@ -588,13 +588,16 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
                 <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Floors ({childStoreys.length})</h3>
                 {childStoreys.length > 0 ? (
-                  <Carousel opts={{ align: "start" }} className="w-full">
+                  <Carousel opts={{ align: "start", loop: false }} className="w-full">
                     <CarouselContent className="-ml-2">
                       {childStoreys.map((storey) => (
                         <CarouselItem key={storey.fmGuid} className="md:basis-1/2 lg:basis-1/3 pl-2">
                           <Card
                             className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
-                            onClick={() => setSelectedFacility(storey)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedFacility(storey);
+                            }}
                           >
                             <div className="h-32 sm:h-40 bg-muted relative">
                               <img

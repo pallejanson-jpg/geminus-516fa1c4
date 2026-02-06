@@ -416,11 +416,22 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Create lookup for storey by name within each building (for fallback matching)
         // Key: "buildingFmGuid|storeyName" -> storey fmGuid
         const storeyNameLookup = new Map<string, string>();
+        // Also maintain a reverse lookup of storey designation numbers for room name matching
+        const storeyNumberLookup = new Map<string, string[]>(); // buildingGuid -> list of [number, storeyFmGuid]
         storeyMap.forEach((storey: any) => {
             const storeyName = (storey.commonName || storey.name || '').toLowerCase().trim();
             if (storeyName && storey.buildingFmGuid) {
                 const key = `${storey.buildingFmGuid}|${storeyName}`;
                 storeyNameLookup.set(key, storey.fmGuid);
+            }
+            // Extract floor number from storey name for heuristic matching
+            const numberMatch = (storey.commonName || storey.name || '').match(/(\d+)/);
+            if (numberMatch && storey.buildingFmGuid) {
+                const key = storey.buildingFmGuid;
+                if (!storeyNumberLookup.has(key)) {
+                    storeyNumberLookup.set(key, []);
+                }
+                storeyNumberLookup.get(key)!.push(`${numberMatch[1]}|${storey.fmGuid}`);
             }
         });
 
@@ -438,24 +449,56 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Build space map for instance attachment
         const spaceMap = new Map<string, NavigatorNode>();
 
-        // Attach spaces to storeys - with fallback matching by levelCommonName
+        // Attach spaces to storeys - with enhanced fallback matching
         spaces.forEach((space: any) => {
             let parentStorey = storeyMap.get(space.levelFmGuid);
             
-            // Fallback: Try to match by levelCommonName from attributes
+            // Fallback 1: Try to match by levelCommonName from attributes
             if (!parentStorey && space.buildingFmGuid) {
                 const attrs = space.attributes || {};
                 // Try different attribute fields that might contain the storey name
-                const levelName = (
-                    attrs.levelCommonName || 
-                    attrs.levelDesignation || 
-                    attrs.levelName ||
-                    attrs.parentCommonName ||
-                    ''
-                ).toLowerCase().trim();
+                const levelNameCandidates = [
+                    attrs.levelCommonName,
+                    attrs.levelDesignation,
+                    attrs.levelName,
+                ];
                 
-                if (levelName) {
+                for (const candidate of levelNameCandidates) {
+                    if (!candidate) continue;
+                    const levelName = String(candidate).toLowerCase().trim();
                     const lookupKey = `${space.buildingFmGuid}|${levelName}`;
+                    const matchedStoreyGuid = storeyNameLookup.get(lookupKey);
+                    if (matchedStoreyGuid) {
+                        parentStorey = storeyMap.get(matchedStoreyGuid);
+                        break;
+                    }
+                }
+            }
+
+            // Fallback 2: Try to extract floor number from room designation/name
+            // e.g. room "1234" → floor "1", room "Plan 2 - Rum 5" → floor "2"
+            if (!parentStorey && space.buildingFmGuid) {
+                const designation = space.name || space.commonName || '';
+                const floorNumMatch = designation.match(/^(\d)/); // first digit often = floor number
+                if (floorNumMatch) {
+                    const floorNum = floorNumMatch[1];
+                    const candidates = storeyNumberLookup.get(space.buildingFmGuid) || [];
+                    for (const entry of candidates) {
+                        const [num, guid] = entry.split('|');
+                        if (num === floorNum) {
+                            parentStorey = storeyMap.get(guid);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Fallback 3: parentCommonName - but ONLY if it matches a storey name, not a building/model name
+            if (!parentStorey && space.buildingFmGuid) {
+                const attrs = space.attributes || {};
+                const parentName = (attrs.parentCommonName || '').toLowerCase().trim();
+                if (parentName) {
+                    const lookupKey = `${space.buildingFmGuid}|${parentName}`;
                     const matchedStoreyGuid = storeyNameLookup.get(lookupKey);
                     if (matchedStoreyGuid) {
                         parentStorey = storeyMap.get(matchedStoreyGuid);
