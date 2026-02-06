@@ -1523,6 +1523,110 @@ serve(async (req) => {
       );
     }
 
+    // ============ PUSH LOCAL TO REMOTE ============
+    if (action === 'push-local-to-remote') {
+      console.log('Starting push-local-to-remote');
+      
+      // Fetch all local-only assets that have a parent room
+      const { data: localAssets, error: localError } = await supabase
+        .from('assets')
+        .select('*')
+        .eq('is_local', true)
+        .eq('category', 'Instance')
+        .not('in_room_fm_guid', 'is', null);
+      
+      if (localError) {
+        return new Response(
+          JSON.stringify({ success: false, error: localError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (!localAssets || localAssets.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, pushed: 0, failed: 0, errors: [], message: 'No local assets to push' }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`Found ${localAssets.length} local assets to push`);
+      
+      const accessToken = await getAccessToken();
+      const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
+      const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+      const baseUrl = apiUrl.replace(/\/+$/, "");
+      
+      let pushed = 0;
+      let failed = 0;
+      const errors: Array<{ fmGuid: string; error: string }> = [];
+      
+      // Process in batches of 10
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < localAssets.length; i += BATCH_SIZE) {
+        const batch = localAssets.slice(i, i + BATCH_SIZE);
+        
+        for (const asset of batch) {
+          try {
+            // Build AddObject payload
+            const bimObject: any = {
+              apiKey,
+              objectType: 4, // Instance
+              designation: asset.name || 'Unknown',
+              inRoomFmGuid: asset.in_room_fm_guid,
+            };
+            
+            if (asset.fm_guid) bimObject.fmGuid = asset.fm_guid;
+            if (asset.common_name) bimObject.commonName = asset.common_name;
+            
+            const response = await fetch(`${baseUrl}/AddObject`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(bimObject),
+            });
+            
+            const responseText = await response.text();
+            
+            if (response.ok) {
+              // Mark as synced
+              await supabase
+                .from('assets')
+                .update({
+                  is_local: false,
+                  synced_at: new Date().toISOString(),
+                })
+                .eq('fm_guid', asset.fm_guid);
+              
+              pushed++;
+              console.log(`Pushed ${asset.fm_guid} to Asset+`);
+            } else {
+              failed++;
+              errors.push({ fmGuid: asset.fm_guid, error: responseText || `HTTP ${response.status}` });
+            }
+          } catch (err) {
+            failed++;
+            errors.push({ 
+              fmGuid: asset.fm_guid, 
+              error: err instanceof Error ? err.message : 'Unknown error' 
+            });
+          }
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({
+          success: failed === 0,
+          pushed,
+          failed,
+          errors,
+          message: `Pushed ${pushed} assets, ${failed} failed`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ============ DEFAULT: Unknown action ============
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),

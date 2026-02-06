@@ -4,36 +4,14 @@ import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.t
 
 /**
  * Property data types for Asset+ API
- * 0 = String
- * 1 = Int32
- * 2 = Int64
- * 3 = Decimal
- * 4 = DateTime
- * 5 = Bool
+ * 0 = String, 1 = Int32, 2 = Int64, 3 = Decimal, 4 = DateTime, 5 = Bool
  */
 const DataType = {
-  String: 0,
-  Int32: 1,
-  Int64: 2,
-  Decimal: 3,
-  DateTime: 4,
-  Bool: 5,
+  String: 0, Int32: 1, Int64: 2, Decimal: 3, DateTime: 4, Bool: 5,
 } as const;
 
-/**
- * Object types in Asset+ system
- * 0 = Complex
- * 1 = Building
- * 2 = Level (Building Storey)
- * 3 = Space
- * 4 = Instance (Asset/Door)
- */
 const ObjectType = {
-  Complex: 0,
-  Building: 1,
-  Level: 2,
-  Space: 3,
-  Instance: 4,
+  Complex: 0, Building: 1, Level: 2, Space: 3, Instance: 4,
 } as const;
 
 // Get Keycloak access token
@@ -54,15 +32,9 @@ async function getAccessToken(): Promise<string> {
 
   if (username && password) {
     const params = new URLSearchParams({
-      grant_type: "password",
-      username,
-      password,
-      client_id: clientId,
+      grant_type: "password", username, password, client_id: clientId,
     });
-
-    if (clientSecret) {
-      params.set("client_secret", clientSecret);
-    }
+    if (clientSecret) params.set("client_secret", clientSecret);
 
     const res = await fetch(tokenUrl, {
       method: "POST",
@@ -79,25 +51,18 @@ async function getAccessToken(): Promise<string> {
   throw new Error("Keycloak auth failed");
 }
 
-interface CreateAssetRequest {
-  // Generated fmGuid for the new asset
+// ============ TYPES ============
+
+interface CreateAssetItem {
   fmGuid?: string;
-  
-  // Parent Space FM GUID - required for objectType 4
   parentSpaceFmGuid: string;
-  
-  // Basic asset info
-  designation: string; // Primary name/number
+  designation: string;
   commonName?: string;
-  
-  // Extended properties with their data types
   properties?: Array<{
     name: string;
     value: string | number | boolean;
-    dataType: number; // DataType enum value
+    dataType: number;
   }>;
-  
-  // 3D coordinates for placement
   coordinates?: {
     x: number | null;
     y: number | null;
@@ -105,111 +70,66 @@ interface CreateAssetRequest {
   };
 }
 
-interface BimObjectWithParent {
-  fmGuid?: string;
-  objectType: number;
-  designation: string;
+/** Supports both single object and batch creation */
+interface CreateRequest {
+  // Single object (backward compat)
+  parentSpaceFmGuid?: string;
+  designation?: string;
   commonName?: string;
-  inRoomFmGuid?: string;
+  fmGuid?: string;
   properties?: Array<{
     name: string;
-    value: string;
+    value: string | number | boolean;
     dataType: number;
   }>;
+  coordinates?: {
+    x: number | null;
+    y: number | null;
+    z: number | null;
+  };
+  // Batch mode
+  objects?: CreateAssetItem[];
 }
 
-interface AddObjectRequest {
-  apiKey: string;
-  bimObjectWithParent: BimObjectWithParent;
+interface CreateResult {
+  fmGuid?: string;
+  success: boolean;
+  error?: string;
+  asset?: any;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+// ============ CORE CREATE LOGIC ============
+
+async function createSingleObject(
+  item: CreateAssetItem,
+  accessToken: string,
+  apiUrl: string,
+  apiKey: string,
+  supabase: any,
+): Promise<CreateResult> {
+  const baseUrl = apiUrl.replace(/\/+$/, "");
+  const endpoint = `${baseUrl}/AddObject`;
+
+  const bimObject: any = {
+    objectType: ObjectType.Instance,
+    designation: item.designation,
+    inRoomFmGuid: item.parentSpaceFmGuid,
+  };
+
+  if (item.fmGuid) bimObject.fmGuid = item.fmGuid;
+  if (item.commonName) bimObject.commonName = item.commonName;
+
+  if (item.properties && item.properties.length > 0) {
+    bimObject.properties = item.properties.map(prop => ({
+      name: prop.name,
+      value: String(prop.value),
+      dataType: prop.dataType,
+    }));
   }
 
-  // Verify authentication
-  const auth = await verifyAuth(req);
-  if (!auth.authenticated) {
-    return unauthorizedResponse(auth.error);
-  }
+  const requestPayload = { apiKey, ...bimObject };
 
   try {
-    const body: CreateAssetRequest = await req.json();
-    
-    // Validate required fields
-    if (!body.parentSpaceFmGuid) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "parentSpaceFmGuid is required - asset must be linked to a parent Space" 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    if (!body.designation) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "designation (name/number) is required" 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Get authentication token
-    const accessToken = await getAccessToken();
-    
-    // Get API configuration
-    const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
-    const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
-    
-    if (!apiUrl) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Asset+ API URL not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const baseUrl = apiUrl.replace(/\/+$/, "");
-    const endpoint = `${baseUrl}/AddObject`;
-
-    // Build the bimObject payload - try flat structure without wrapper
-    const bimObject: any = {
-      objectType: ObjectType.Instance, // Type 4 for assets
-      designation: body.designation,
-      inRoomFmGuid: body.parentSpaceFmGuid, // Link to parent Space
-    };
-
-    // Use provided fmGuid or let Asset+ generate one
-    if (body.fmGuid) {
-      bimObject.fmGuid = body.fmGuid;
-    }
-
-    if (body.commonName) {
-      bimObject.commonName = body.commonName;
-    }
-
-    // Convert properties to proper format with data types
-    if (body.properties && body.properties.length > 0) {
-      bimObject.properties = body.properties.map(prop => ({
-        name: prop.name,
-        value: String(prop.value), // API expects string values
-        dataType: prop.dataType,
-      }));
-    }
-
-    // Try alternative payload format - some Asset+ endpoints want flat structure with apiKey
-    const requestPayload = {
-      apiKey,
-      ...bimObject, // Spread bimObject properties directly instead of nesting
-    };
-
-    console.log(`Creating asset in Asset+ API: ${endpoint}`);
-    console.log("Payload:", JSON.stringify(requestPayload, null, 2));
-
-    // Call Asset+ API
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -220,7 +140,6 @@ serve(async (req) => {
     });
 
     const responseText = await response.text();
-    console.log(`Asset+ API response: ${response.status} - ${responseText || "(empty)"}`);
 
     if (!response.ok) {
       let errorMessage = `Asset+ API error: ${response.status}`;
@@ -228,85 +147,273 @@ serve(async (req) => {
         if (responseText) {
           const errorData = JSON.parse(responseText);
           if (Array.isArray(errorData)) {
-            // Validation failures array
             errorMessage = errorData.map((e: any) => e.errorMessage || e.message || JSON.stringify(e)).join(", ");
           } else if (errorData.message) {
             errorMessage = errorData.message;
           } else if (errorData.error) {
             errorMessage = errorData.error;
-          } else {
-            errorMessage = JSON.stringify(errorData);
           }
         }
       } catch {
         errorMessage = responseText || errorMessage;
       }
-      
-      return new Response(
-        JSON.stringify({ success: false, error: errorMessage }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { fmGuid: item.fmGuid, success: false, error: errorMessage };
     }
 
-    // Parse successful response
-    let createdAsset;
+    let createdAsset: any;
     try {
       createdAsset = JSON.parse(responseText);
     } catch {
       createdAsset = { rawResponse: responseText };
     }
 
-    // Also store locally with coordinates if provided
-    if (body.coordinates) {
+    // Store locally with coordinates
+    const assetFmGuid = createdAsset?.fmGuid || item.fmGuid;
+    if (assetFmGuid && supabase) {
       try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-        
-        if (supabaseUrl && supabaseKey) {
-          const supabase = createClient(supabaseUrl, supabaseKey);
-          
-          const assetFmGuid = createdAsset?.fmGuid || body.fmGuid;
-          if (assetFmGuid) {
-            // Upsert local record with coordinates
+        await supabase
+          .from("assets")
+          .upsert({
+            fm_guid: assetFmGuid,
+            name: item.designation,
+            common_name: item.commonName || null,
+            category: "Instance",
+            in_room_fm_guid: item.parentSpaceFmGuid,
+            coordinate_x: item.coordinates?.x ?? null,
+            coordinate_y: item.coordinates?.y ?? null,
+            coordinate_z: item.coordinates?.z ?? null,
+            is_local: false,
+            synced_at: new Date().toISOString(),
+          }, { onConflict: "fm_guid" });
+      } catch (localError) {
+        console.warn("Failed to store asset locally:", localError);
+      }
+    }
+
+    return { fmGuid: assetFmGuid, success: true, asset: createdAsset };
+  } catch (error) {
+    return {
+      fmGuid: item.fmGuid,
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+async function createBatchObjects(
+  items: CreateAssetItem[],
+  accessToken: string,
+  apiUrl: string,
+  apiKey: string,
+  supabase: any,
+): Promise<CreateResult[]> {
+  const baseUrl = apiUrl.replace(/\/+$/, "");
+
+  // Try AddObjectList first for efficiency
+  const bimObjects = items.map(item => {
+    const obj: any = {
+      objectType: ObjectType.Instance,
+      designation: item.designation,
+      inRoomFmGuid: item.parentSpaceFmGuid,
+    };
+    if (item.fmGuid) obj.fmGuid = item.fmGuid;
+    if (item.commonName) obj.commonName = item.commonName;
+    if (item.properties && item.properties.length > 0) {
+      obj.properties = item.properties.map(prop => ({
+        name: prop.name,
+        value: String(prop.value),
+        dataType: prop.dataType,
+      }));
+    }
+    return obj;
+  });
+
+  const batchPayload = {
+    apiKey,
+    bimObjectWithParents: bimObjects,
+  };
+
+  try {
+    const endpoint = `${baseUrl}/AddObjectList`;
+    console.log(`Batch creating ${items.length} objects via AddObjectList`);
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(batchPayload),
+    });
+
+    const responseText = await response.text();
+    console.log(`AddObjectList response: ${response.status}`);
+
+    if (response.ok) {
+      let createdList: any[];
+      try {
+        createdList = JSON.parse(responseText);
+        if (!Array.isArray(createdList)) createdList = [createdList];
+      } catch {
+        createdList = [];
+      }
+
+      // Store all locally
+      const results: CreateResult[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const created = createdList[i];
+        const assetFmGuid = created?.fmGuid || item.fmGuid;
+
+        if (assetFmGuid && supabase) {
+          try {
             await supabase
               .from("assets")
               .upsert({
                 fm_guid: assetFmGuid,
-                name: body.designation,
-                common_name: body.commonName || null,
+                name: item.designation,
+                common_name: item.commonName || null,
                 category: "Instance",
-                in_room_fm_guid: body.parentSpaceFmGuid,
-                coordinate_x: body.coordinates.x,
-                coordinate_y: body.coordinates.y,
-                coordinate_z: body.coordinates.z,
-                is_local: false, // Created in Asset+, so synced
+                in_room_fm_guid: item.parentSpaceFmGuid,
+                coordinate_x: item.coordinates?.x ?? null,
+                coordinate_y: item.coordinates?.y ?? null,
+                coordinate_z: item.coordinates?.z ?? null,
+                is_local: false,
                 synced_at: new Date().toISOString(),
               }, { onConflict: "fm_guid" });
-            
-            console.log(`Stored asset ${assetFmGuid} locally with coordinates`);
+          } catch (e) {
+            console.warn(`Failed to store ${assetFmGuid} locally:`, e);
           }
         }
-      } catch (localError) {
-        console.warn("Failed to store asset locally:", localError);
-        // Don't fail the request - Asset+ creation succeeded
+
+        results.push({ fmGuid: assetFmGuid, success: true, asset: created });
+      }
+      return results;
+    }
+
+    // AddObjectList failed - fallback to individual AddObject calls
+    console.log("AddObjectList failed, falling back to individual AddObject calls");
+  } catch (batchError) {
+    console.log("AddObjectList not available, using individual AddObject:", batchError);
+  }
+
+  // Fallback: create one by one
+  const results: CreateResult[] = [];
+  for (const item of items) {
+    const result = await createSingleObject(item, accessToken, apiUrl, apiKey, supabase);
+    results.push(result);
+  }
+  return results;
+}
+
+// ============ SERVE ============
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const auth = await verifyAuth(req);
+  if (!auth.authenticated) {
+    return unauthorizedResponse(auth.error);
+  }
+
+  try {
+    const body: CreateRequest = await req.json();
+
+    // Determine if batch or single mode
+    const isBatch = Array.isArray(body.objects) && body.objects.length > 0;
+    const items: CreateAssetItem[] = isBatch
+      ? body.objects!
+      : [{
+          fmGuid: body.fmGuid,
+          parentSpaceFmGuid: body.parentSpaceFmGuid || "",
+          designation: body.designation || "",
+          commonName: body.commonName,
+          properties: body.properties,
+          coordinates: body.coordinates,
+        }];
+
+    // Validate all items
+    for (const item of items) {
+      if (!item.parentSpaceFmGuid) {
+        return new Response(
+          JSON.stringify({ success: false, error: "parentSpaceFmGuid is required for all objects" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (!item.designation) {
+        return new Response(
+          JSON.stringify({ success: false, error: "designation is required for all objects" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
+    // Limit batch size
+    if (items.length > 100) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Maximum 100 objects per request" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const accessToken = await getAccessToken();
+    const apiUrl = Deno.env.get("ASSET_PLUS_API_URL") || "";
+    const apiKey = Deno.env.get("ASSET_PLUS_API_KEY") || "";
+
+    if (!apiUrl) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Asset+ API URL not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
+    let results: CreateResult[];
+
+    if (items.length === 1) {
+      const result = await createSingleObject(items[0], accessToken, apiUrl, apiKey, supabase);
+      results = [result];
+    } else {
+      results = await createBatchObjects(items, accessToken, apiUrl, apiKey, supabase);
+    }
+
+    const summary = {
+      total: items.length,
+      created: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+    };
+
+    // Backward compatible: single mode returns asset directly
+    if (!isBatch) {
+      const result = results[0];
+      if (!result.success) {
+        return new Response(
+          JSON.stringify({ success: false, error: result.error }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ success: true, asset: result.asset, message: "Asset created successfully" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Batch mode returns full results
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        asset: createdAsset,
-        message: "Asset created successfully"
-      }),
+      JSON.stringify({ success: summary.failed === 0, results, summary }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
     console.error("asset-plus-create error:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : "Internal server error" 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Internal server error",
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
