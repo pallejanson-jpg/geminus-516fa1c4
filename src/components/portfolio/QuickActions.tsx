@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList, SplitSquareHorizontal 
+  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList, SplitSquareHorizontal, AlertTriangle 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,7 @@ interface QuickActionsProps {
   onAddAsset?: (facility: Facility) => void;
   onInventory?: (prefill: InventoryPrefill) => void;
   onOpenSplitView?: (facility: Facility) => void;
+  onFaultReport?: (facility: Facility) => void;
 }
 
 const QuickActions: React.FC<QuickActionsProps> = ({ 
@@ -47,7 +48,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onOpenIoT,
   onAddAsset,
   onInventory,
-  onOpenSplitView
+  onOpenSplitView,
+  onFaultReport
 }) => {
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
@@ -307,6 +309,25 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Inventera tillgångar här</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Felanmälan */}
+            {onFaultReport && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onFaultReport(facility)} 
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                  >
+                    <AlertTriangle size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
+                    <span className="text-[10px] sm:text-xs">Felanmälan</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Rapportera ett fel</p>
                 </TooltipContent>
               </Tooltip>
             )}

@@ -24,6 +24,8 @@ const Onboarding = lazy(() => import("@/pages/Onboarding"));
 const SplitViewer = lazy(() => import("@/pages/SplitViewer"));
 // Mobile 360° Viewer page (fullscreen)
 const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
+// Fault Report page (public, no auth required)
+const FaultReport = lazy(() => import("@/pages/FaultReport"));
 
 const queryClient = new QueryClient();
 
@@ -118,6 +120,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Mobile360Viewer />
                 </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Public Fault Report page - accessible via QR code without auth */}
+          <Route 
+            path="/fault-report" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <FaultReport />
               </Suspense>
             } 
           />
