@@ -1397,11 +1397,12 @@ serve(async (req) => {
       // Get remote structure counts and sample fmGuids
       const remoteStructureCount = await getRemoteCountByTypes(accessToken, [1, 2, 3]);
       
-      // Get local structure counts
+      // Get local structure counts - EXCLUDE is_local objects (locally created, not from Asset+)
       const { count: localStructureCount } = await supabase
         .from('assets')
         .select('*', { count: 'exact', head: true })
-        .in('category', ['Building', 'Building Storey', 'Space']);
+        .in('category', ['Building', 'Building Storey', 'Space'])
+        .eq('is_local', false);
       
       // For detailed comparison, fetch a sample of fmGuids from both sides
       // This is a lightweight check - full comparison would require fetching all GUIDs
@@ -1474,11 +1475,12 @@ serve(async (req) => {
       
       console.log(`Total remote fmGuids: ${remoteFmGuids.size}`);
       
-      // Step 2: Find local orphans
+      // Step 2: Find local orphans (only check synced objects, not local-only)
       const { data: localStructure } = await supabase
         .from('assets')
         .select('fm_guid')
-        .in('category', ['Building', 'Building Storey', 'Space']);
+        .in('category', ['Building', 'Building Storey', 'Space'])
+        .eq('is_local', false);
       
       const orphanFmGuids: string[] = [];
       (localStructure || []).forEach((item: any) => {
