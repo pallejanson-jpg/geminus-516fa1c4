@@ -504,6 +504,38 @@ async function markStaleRunningAsInterrupted(supabase: any) {
   }
 }
 
+// Fetch all fm_guids from local DB, paginating past the 1000-row default limit
+async function fetchAllLocalFmGuids(
+  supabase: any,
+  categories: string[],
+  isLocal: boolean = false
+): Promise<string[]> {
+  const allGuids: string[] = [];
+  const PAGE = 1000;
+  let from = 0;
+  let done = false;
+
+  while (!done) {
+    const { data, error } = await supabase
+      .from('assets')
+      .select('fm_guid')
+      .in('category', categories)
+      .eq('is_local', isLocal)
+      .range(from, from + PAGE - 1);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      data.forEach((r: any) => allGuids.push(r.fm_guid));
+      from += PAGE;
+      if (data.length < PAGE) done = true;
+    } else {
+      done = true;
+    }
+  }
+  return allGuids;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -608,7 +640,7 @@ serve(async (req) => {
     if (action === 'sync-structure') {
       await updateSyncState(supabase, 'structure', 'running');
       const accessToken = await getAccessToken();
-      console.log('Starting sync-structure (ObjectTypes 1, 2, 3)');
+      console.log('Starting sync-structure (ObjectTypes 1, 2, 3) with orphan cleanup');
 
       const filter = [
         ["objectType", "=", 1], "or",
@@ -616,9 +648,9 @@ serve(async (req) => {
         ["objectType", "=", 3]
       ];
 
+      const remoteFmGuids = new Set<string>();
       let totalSynced = 0;
       let skip = 0;
-      // Keep batches small to avoid Asset+ backend Mongo sort memory limits
       const take = 200;
       let hasMore = true;
 
@@ -626,6 +658,11 @@ serve(async (req) => {
         console.log(`Fetching structure at skip=${skip}...`);
         const result = await fetchAssetPlusObjects(accessToken, filter, skip, take);
         
+        // Collect all remote fmGuids for orphan detection
+        result.data.forEach((item: any) => {
+          remoteFmGuids.add(item.fmGuid);
+        });
+
         if (result.data.length > 0) {
           const synced = await upsertAssets(supabase, result.data);
           totalSynced += synced;
@@ -637,11 +674,47 @@ serve(async (req) => {
         await updateSyncState(supabase, 'structure', 'running', totalSynced);
       }
 
+      // --- Orphan cleanup: remove local non-is_local objects not found in Asset+ ---
+      console.log(`Total remote fmGuids: ${remoteFmGuids.size}. Checking for orphans...`);
+      
+      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false);
+      console.log(`Local non-is_local structure count: ${localFmGuids.length}`);
+      
+      const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
+      
+      let orphansRemoved = 0;
+      if (orphanFmGuids.length > 0) {
+        console.log(`Found ${orphanFmGuids.length} orphan structure objects to remove`);
+        const batchSize = 100;
+        for (let i = 0; i < orphanFmGuids.length; i += batchSize) {
+          const batch = orphanFmGuids.slice(i, i + batchSize);
+          const { error: deleteError } = await supabase
+            .from('assets')
+            .delete()
+            .in('fm_guid', batch);
+          if (deleteError) {
+            console.error(`Error deleting orphans batch:`, deleteError);
+          } else {
+            orphansRemoved += batch.length;
+          }
+        }
+        console.log(`Removed ${orphansRemoved} orphan structure objects`);
+      } else {
+        console.log('No orphan structure objects found');
+      }
+
       await updateSyncState(supabase, 'structure', 'completed', totalSynced);
-      console.log(`Structure sync completed: ${totalSynced} items`);
+      console.log(`Structure sync completed: ${totalSynced} items, ${orphansRemoved} orphans removed`);
 
       return new Response(
-        JSON.stringify({ success: true, message: `Synced ${totalSynced} structure items`, totalSynced }),
+        JSON.stringify({ 
+          success: true, 
+          message: orphansRemoved > 0 
+            ? `Synkade ${totalSynced} objekt, tog bort ${orphansRemoved} föräldralösa objekt`
+            : `Synced ${totalSynced} structure items`, 
+          totalSynced,
+          orphansRemoved,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -1476,18 +1549,10 @@ serve(async (req) => {
       console.log(`Total remote fmGuids: ${remoteFmGuids.size}`);
       
       // Step 2: Find local orphans (only check synced objects, not local-only)
-      const { data: localStructure } = await supabase
-        .from('assets')
-        .select('fm_guid')
-        .in('category', ['Building', 'Building Storey', 'Space'])
-        .eq('is_local', false);
+      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false);
+      console.log(`Local non-is_local structure count: ${localFmGuids.length}`);
       
-      const orphanFmGuids: string[] = [];
-      (localStructure || []).forEach((item: any) => {
-        if (!remoteFmGuids.has(item.fm_guid)) {
-          orphanFmGuids.push(item.fm_guid);
-        }
-      });
+      const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
       
       console.log(`Found ${orphanFmGuids.length} orphan objects to remove`);
       
