@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.asset-plus-delete]
 verify_jwt = false
+
+[functions.acc-sync]
+verify_jwt = false
