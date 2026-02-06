@@ -1,247 +1,178 @@
 
 
-# Komplett CRUD-process: Bidirektionell synk mellan Lovable och Asset+
+# Plan: Fixa fastlast synk och forbattra testbarhet
 
-## Nulageskartlaggning
+## Problem 1: Synken fastnar pa "3/11"
 
-### Vad finns idag
+### Rotorsak
 
-| Operation | Lovable -> Asset+ | Asset+ -> Lovable |
-|-----------|------------------|-------------------|
-| **Create** | `asset-plus-create` (enstaka objekt via AddObject) | `sync-structure`, `sync-assets-resumable` (bulk) |
-| **Read** | Lokal databas via `fetchLocalAssets()` | Via `PublishDataServiceGetMerged` |
-| **Update** | `asset-plus-update` (batch via UpdateBimObjectsPropertiesData) | Full re-sync (overskriver lokala varden) |
-| **Delete** | Saknas helt | `sync-with-cleanup` (tar bort lokala orphans) |
+Synken ar designad som en **resumable loop**: varje anrop processar byggnader i 45 sekunder, returnerar `interrupted: true`, och forvantar att frontend anropar funktionen igen. Loopen lever i `ApiSettingsModal` via `setTimeout(() => runResumableSync(), 1000)`.
 
-### Aktuell data i databasen
+Men om anvandaren stanger fliken, navigerar bort, eller edge function timeout:ar sa hamnar databasen i ett "stale running"-tillstand -- `sync_status = 'running'` men ingen process driver den framåt. `SyncProgressBanner` laser bara status och visar spinnern -- den har ingen logik for att:
 
-- 85 523 synkade objekt (`is_local = false`)
-- 15 lokalt skapade objekt (`is_local = true`)
-- Totalt: 85 538 objekt
+1. Upptacka att synken ar stal (startad for 13+ timmar sedan)
+2. Erbjuda "Fortsatt synk" eller auto-resume
 
-De 180 objekt som diskrepanskontrollen rapporterar avser **strukturobjekt** (Byggnad/Plan/Rum), inte tillgangar. Det ar troligen rum eller vaningsplan som tagits bort ur BIM-modellen i Asset+ men fortfarande finns kvar lokalt.
+### Losning: Tre delar
 
-### Vad saknas for komplett CRUD
+#### a) Stale-detektion i SyncProgressBanner
 
-1. **Batch-push av lokala objekt till Asset+** (anvander `AddObjectList` istallet for enstaka `AddObject`)
-2. **Delete/Expire** -- ingen mojlighet att ta bort objekt i Asset+ fran Lovable
-3. **Inkrementell synk** -- bara full re-sync finns, ingen delta baserad pa `dateModified`
-4. **Konflikthantering** -- nar bade Lovable och Asset+ andrat samma objekt
-5. **Flytt av objekt** -- `UpsertRelationships` for att flytta objekt mellan rum/vaningsplan
+Lagg till logik som kontrollerar om `last_sync_started_at` ar aldre an 5 minuter och status fortfarande ar `running`. I sa fall:
+- Visa en "Synken verkar ha stannat" badge istallet for spinner
+- Visa en **"Fortsatt"**-knapp som anropar `sync-assets-resumable`
+- Visa en **"Aterstall"**-knapp som nollstaller progress
+
+```text
+Logik:
+if sync_status === 'running' AND (now - last_sync_started_at) > 5 min:
+  -> Visa "Avbruten" med Resume/Reset-knappar
+else if sync_status === 'running':
+  -> Visa spinner som vanligt
+```
+
+#### b) Auto-resume vid appladdning (valfritt)
+
+Nar appen laddas och en stale sync detekteras, auto-trigga `sync-assets-resumable` med en 3-sekunders fordrojning. Visar en toast "Fortsatter avbruten synk...".
+
+#### c) Direkt fix: Nollstall den fastnada synken
+
+For att losa det omedelbara problemet, uppdatera `asset_sync_state` sa att raden for `assets` slattar `running`-status. Detta kan goras genom:
+- Edge function-anrop `reset-assets-progress` (finns redan i koden)
+- Eller direkt via en knapp i bannern
 
 ---
 
-## Losningsforslag: Komplett CRUD-arkitektur
+## Problem 2: Senslinc 429
 
-### Grundprinciper
+Senslinc-API:t har rate limit. Den exponential backoff som redan implementerats i edge-funktionen kommer hantera detta automatiskt nar ban-perioden slappt. Ingen kodandring behovs -- bara vantan.
 
-- **FM GUID** ar den unika nyckeln i bada systemen
-- **`is_local`-flagga** avgpr om ett objekt enbart finns lokalt (true) eller ar synkat med Asset+ (false)
-- **Asset+ ar master** for strukturobjekt (Building, Storey, Space) -- dessa skapas via BIM-import
-- **Lovable ar master** for lokalt inventerade tillgangar tills de synkas
-- **Senast andrad vinner** for uppdateringar, med manuell konfliktlosning som framtida tillagg
-
-### CRUD-flode oversikt
-
-```text
-SKAPA (Create)
---------------
-Lovable Inventering --> lokalt objekt (is_local=true)
-                    --> "Pusha till Asset+" --> AddObjectList --> is_local=false
-
-Asset+ BIM-import   --> sync-structure/sync-assets --> lokalt objekt (is_local=false)
-
-
-LASA (Read)
------------
-Primar kalla: Lokal databas (snabbast)
-Fallback: Asset+ API via PublishDataServiceGetMerged
-
-
-UPPDATERA (Update)
-------------------
-Lokalt objekt (is_local=true)  --> uppdatera lokal DB
-Synkat objekt (is_local=false) --> uppdatera lokal DB + UpdateBimObjectsPropertiesData
-Fran Asset+                    --> delta-sync baserat pa dateModified
-
-
-TA BORT (Delete / Expire)
--------------------------
-Lokalt objekt   --> radera fran lokal DB (inget Asset+-anrop)
-Synkat objekt   --> ExpireObject i Asset+ + radera/markera lokalt
-Fran Asset+     --> sync-with-cleanup tar bort lokala orphans
-```
+For att kunna testa: Lagg till en "Testa anslutning"-knapp i Settings som gor ett minimalt API-anrop (bara `get-indices`) och rapporterar om anslutningen fungerar eller fortfarande ar blockerad.
 
 ---
 
-## Implementationsplan
+## Filer som andras
 
-### Steg 1: Ny edge function `asset-plus-delete` (ExpireObject)
-
-Skapar en ny edge function som anropar Asset+ API:ets `ExpireObject` endpoint. Objekt i Asset+ "tas inte bort" utan far ett utgangsdatum (soft delete).
-
-**Funktionalitet:**
-- Ta emot en lista av `fmGuids` att ta bort/expirera
-- For lokala objekt (`is_local = true`): radera direkt fran lokal DB
-- For synkade objekt (`is_local = false`): anropa `ExpireObject` i Asset+ och sedan radera lokalt
-- Returnera resultat per objekt (lyckades/misslyckades)
-
-**Asset+ API-anrop:**
-```text
-POST /ExpireObject
-{
-  "APIKey": "...",
-  "ExpireBimObjects": [
-    { "FmGuid": "xxx", "ExpireDate": "2026-02-06T12:00:00Z" }
-  ]
-}
-```
-
-### Steg 2: Uppgradera `asset-plus-create` till AddObjectList
-
-Nuvarande `asset-plus-create` anvander `AddObject` (enstaka objekt). Uppgradera till `AddObjectList` for batch-stod:
-
-**Andringar:**
-- Acceptera en lista av objekt istallet for ett enstaka
-- Anvand `AddObjectList` med `BimObjectWithParents`-format
-- Stod for att pusha flera lokala objekt i en och samma begaran
-- Uppdatera `is_local = false` och `synced_at` for alla lyckade objekt
-
-### Steg 3: Ny action `push-local-to-remote` i `asset-plus-sync`
-
-En ny action i befintliga sync-funktionen som:
-1. Hamtar alla objekt med `is_local = true`
-2. Validerar att de har `in_room_fm_guid` (krav fran Asset+)
-3. Anropar `AddObjectList` i batch
-4. Anropar `UpdateBimObjectsPropertiesData` for att satta egenskaper
-5. Uppdaterar `is_local = false` for lyckade objekt
-
-### Steg 4: Ny action `delta-sync` i `asset-plus-sync`
-
-Inkrementell synk baserad pa `dateModified`:
-1. Hamta senaste `synced_at` fran `asset_sync_state`
-2. Fraga Asset+ efter objekt med `dateModified > last_sync_completed_at`
-3. Upserta andrade objekt lokalt
-4. Rapportera antal nya/andrade/borttagna
-
-### Steg 5: Frontend-integration
-
-**Egenskapsdialogen (UniversalPropertiesDialog):**
-- Lagg till "Ta bort"-knapp (med bekraftelse) for Instance-objekt
-- Visa tydlig status: "Lokal" (orange badge) vs "Synkad" (gron badge)
-- "Pusha till Asset+"-knapp for lokala objekt
-
-**Inventerings-vy (Inventory):**
-- "Synka alla lokala" massatgardsknapp
-- Statuskolumn som visar sync-status per objekt
-
-**Settings Sync-flik:**
-- Ny rad "Lokala objekt" som visar antal ospushade lokalt
-- Knapp "Pusha lokala till Asset+" med progress
+| Fil | Andring |
+|-----|---------|
+| `src/components/layout/SyncProgressBanner.tsx` | Stale-detektion, resume/reset-knappar, auto-resume |
+| `src/components/settings/ApiSettingsModal.tsx` | Lagg till "Testa Senslinc"-knapp i Senslinc-fliken |
 
 ---
 
 ## Tekniska detaljer
 
-### asset-plus-delete edge function
+### SyncProgressBanner - Stale-detektion och resume
+
+```typescript
+// Ny konstant
+const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+// I renderingen, for varje sync:
+const isStale = sync.sync_status === 'running' && 
+  sync.last_sync_started_at &&
+  (Date.now() - new Date(sync.last_sync_started_at).getTime()) > STALE_THRESHOLD_MS;
+
+// Resume-funktion
+const handleResume = async (subtreeId: string) => {
+  if (subtreeId === 'assets') {
+    // Trigger resumable sync
+    supabase.functions.invoke('asset-plus-sync', {
+      body: { action: 'sync-assets-resumable' }
+    }).then(({ data }) => {
+      if (data?.interrupted) {
+        // Will continue via Realtime updates
+        // Call again after delay
+        setTimeout(() => handleResume(subtreeId), 2000);
+      }
+    });
+  }
+};
+
+// Reset-funktion
+const handleReset = async (subtreeId: string) => {
+  if (subtreeId === 'assets') {
+    await supabase.functions.invoke('asset-plus-sync', {
+      body: { action: 'reset-assets-progress' }
+    });
+  }
+};
+```
+
+### UI for stale sync
 
 ```text
-Fil: supabase/functions/asset-plus-delete/index.ts
+Stalldetektion (isStale = true):
++----------------------------------------------------+
+| (!) Synken har stannat - Alla Tillgangar (3/11)     |
+|     8 757 objekt synkade                            |
+|     [Fortsatt]  [Aterstall]                   [X]   |
++----------------------------------------------------+
 
-Input:  { fmGuids: string[], expireDate?: string }
-Output: { success, results: [{ fmGuid, success, error?, expired? }], summary }
-
-Flode:
-1. Verifiera auth
-2. Hamta assets fran lokal DB for att avgora is_local
-3. Lokala objekt: DELETE fran assets-tabellen direkt
-4. Synkade objekt: Anropa ExpireObject i Asset+ -> om OK, DELETE lokalt
-5. Returnera resultat
+Normal running:
++----------------------------------------------------+
+| (spin) Synkar Alla Tillgangar (3/11)   8 757 objekt |
+|     ==================---  67%                [X]   |
++----------------------------------------------------+
 ```
 
-### Uppgraderad asset-plus-create (AddObjectList)
+### Senslinc-testknapp i Settings
 
-```text
-Fil: supabase/functions/asset-plus-create/index.ts (uppdatera)
-
-Nytt format:
-Input:  { objects: [{ parentSpaceFmGuid, designation, commonName, fmGuid, properties }] }
-         -- Aven stod for enstaka objekt (bakatkompatiblitet)
-
-Flode:
-1. Bygg BimObjectWithParents-array
-2. POST till AddObjectList
-3. Upserta alla skapade objekt lokalt med is_local = false
+```typescript
+const testSenslincConnection = async () => {
+  const { data, error } = await supabase.functions.invoke('senslinc-query', {
+    body: { action: 'get-indices' }
+  });
+  
+  if (error || !data?.success) {
+    toast({
+      variant: 'destructive',
+      title: 'Anslutningsfel',
+      description: data?.error || 'Kunde inte na Senslinc API (mojlig rate limit)',
+    });
+  } else {
+    toast({
+      title: 'Anslutning OK',
+      description: `Hittade ${data.indices?.length || 0} index`,
+    });
+  }
+};
 ```
 
-### push-local-to-remote action
+### SyncProgressBanner - Auto-resume vid laddning
 
-```text
-I: supabase/functions/asset-plus-sync/index.ts (ny action)
+Nar komponenten mountar och hittar en stale sync, starta en resume automatiskt efter 3 sekunder:
 
-Flode:
-1. SELECT * FROM assets WHERE is_local = true AND in_room_fm_guid IS NOT NULL
-2. Gruppera per building
-3. For varje batch:
-   a. AddObjectList (skapa i Asset+)
-   b. UpdateBimObjectsPropertiesData (satt egenskaper)
-   c. UPDATE assets SET is_local = false, synced_at = now() WHERE fm_guid IN (...)
-4. Rapportera resultat
+```typescript
+useEffect(() => {
+  const staleSync = activeSyncs.find(s => {
+    if (s.sync_status !== 'running' || !s.last_sync_started_at) return false;
+    return Date.now() - new Date(s.last_sync_started_at).getTime() > STALE_THRESHOLD_MS;
+  });
+  
+  if (staleSync && staleSync.subtree_id === 'assets') {
+    const timer = setTimeout(() => handleResume('assets'), 3000);
+    return () => clearTimeout(timer);
+  }
+}, [activeSyncs]);
 ```
-
-### delta-sync action
-
-```text
-I: supabase/functions/asset-plus-sync/index.ts (ny action)
-
-Flode:
-1. Hamta last_sync_completed_at fran asset_sync_state
-2. Fraga Asset+ med filter: [dateModified, ">", last_sync_date] OR [dateCreated, ">", last_sync_date]
-3. Upserta resultat i lokal DB
-4. Uppdatera asset_sync_state
-```
-
-### Databas-andringar
-
-RLS-policyn for DELETE pa assets saknas for vanliga anvandare. En ny RLS-policy behovs:
-
-```sql
-CREATE POLICY "Authenticated users can delete local assets"
-  ON public.assets
-  FOR DELETE
-  TO authenticated
-  USING (is_local = true);
-```
-
-Alternativt kan DELETE goras via service_role i edge function (som sync-with-cleanup redan gor).
-
-### Frontend-andringar
-
-| Fil | Andring |
-|-----|---------|
-| `UniversalPropertiesDialog.tsx` | "Ta bort"-knapp, sync-status badge, "Pusha till Asset+"-knapp |
-| `Inventory.tsx` | "Synka alla lokala"-knapp, status-indikator |
-| `ApiSettingsModal.tsx` | Ny rad for lokala objekt + push-knapp |
-| `asset-plus-service.ts` | Ny `deleteAssets()` och `pushLocalToRemote()` |
 
 ---
 
-## Implementationsordning
+## Testplan efter implementering
 
-| Prio | Steg | Beskrivning | Filer |
-|------|------|-------------|-------|
-| 1 | Delete/Expire | `asset-plus-delete` edge function + frontend-knapp | Ny edge fn, `UniversalPropertiesDialog.tsx`, `asset-plus-service.ts` |
-| 2 | Batch push | `push-local-to-remote` action + "Synka lokala" UI | `asset-plus-sync/index.ts`, `ApiSettingsModal.tsx`, `Inventory.tsx` |
-| 3 | AddObjectList | Uppgradera `asset-plus-create` till batch | `asset-plus-create/index.ts` |
-| 4 | Delta-sync | Inkrementell synk baserad pa dateModified | `asset-plus-sync/index.ts`, `ApiSettingsModal.tsx` |
-| 5 | Sync-status UI | Tydliga badges, push-knappar, progress | `UniversalPropertiesDialog.tsx`, `Inventory.tsx` |
+1. **Omedelbara tester (utan att vanta pa Senslinc):**
+   - Oppna appen -- bannern ska visa "Synken har stannat" med resume/reset-knappar
+   - Klicka "Aterstall" -- bannern forsvinner, sync-status nollstalls
+   - Oppna Settings > Sync -- verifiera att progress-kortet visar "Ej synkad" efter aterstallning
+   - Klicka "Synka" pa Tillgangar -- verifiera att loopen kors och progress uppdateras live
 
----
+2. **CRUD-tester:**
+   - Oppna Inventering, skapa ett nytt objekt -- verifiera att det sparas med `is_local = true`
+   - Oppna egenskapsdialogen pa det nya objektet -- kontrollera att orange "Lokal" badge visas
+   - Testa "Ta bort"-knappen pa det lokala objektet
+   - Testa "Pusha till Asset+"-knappen (kraver att Asset+ API fungerar)
 
-## Risker och begransningar
-
-- **ExpireObject ar soft delete**: Asset+ tar inte bort objekt permanent utan satter ett utgangsdatum. Objekten kan fortfarande dyka upp i fragor om man inte filtrerar pa `dateExpired`.
-- **BIM-modellskyddade objekt**: Objekt som skapats via BIM-import (`createdInModel = true`) bor troligen inte kunna tas bort fran Lovable -- de hanterasav BIM-modellen.
-- **Edge function timeout**: Batch-push av manga lokala objekt kan ta tid. Anvander samma resumable-monster som befintliga synk-funktioner (45s max per anrop).
-- **AddObjectList kraver parentFmGuid**: Lokala objekt utan `in_room_fm_guid` kan inte pushas till Asset+. UI:t bor guida anvandaren att tilldela ett rum forst.
+3. **Senslinc-test (nar ban slappt):**
+   - Oppna Settings > Senslinc > "Testa anslutning"
+   - Om OK: oppna en byggnad med sensorer och verifiera att IoT-data visas
 
