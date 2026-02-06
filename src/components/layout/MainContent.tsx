@@ -17,6 +17,7 @@ const MapView = lazy(() => import("@/components/map/MapView"));
 const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
+const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext } = useContext(AppContext);
@@ -124,6 +125,16 @@ const MainContent: React.FC = () => {
                         </div>
                     }>
                         <IvionCreate />
+                    </Suspense>
+                );
+            case 'fault_report':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <InAppFaultReport />
                     </Suspense>
                 );
             default:
