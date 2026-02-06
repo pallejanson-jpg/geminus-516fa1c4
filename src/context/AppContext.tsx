@@ -26,6 +26,14 @@ export interface InventoryPrefill {
     roomFmGuid?: string;
 }
 
+// Fault report prefill context
+export interface FaultReportPrefill {
+    buildingFmGuid?: string;
+    buildingName?: string;
+    spaceFmGuid?: string;
+    spaceName?: string;
+}
+
 // Annotation placement context for placing orphan assets in 3D
 export interface AnnotationPlacementContext {
     asset: any; // The asset to place annotation for
@@ -90,6 +98,11 @@ interface AppContextType {
     inventoryPrefill: InventoryPrefill | null;
     startInventory: (prefill: InventoryPrefill) => void;
     clearInventoryPrefill: () => void;
+
+    // Fault report prefill for contextual reporting
+    faultReportPrefill: FaultReportPrefill | null;
+    startFaultReport: (prefill: FaultReportPrefill) => void;
+    clearFaultReportPrefill: () => void;
 
     // Annotation placement for orphan assets
     annotationPlacementContext: AnnotationPlacementContext | null;
@@ -170,6 +183,10 @@ export const AppContext = createContext<AppContextType>({
     inventoryPrefill: null,
     startInventory: () => {},
     clearInventoryPrefill: () => {},
+
+    faultReportPrefill: null,
+    startFaultReport: () => {},
+    clearFaultReportPrefill: () => {},
 
     annotationPlacementContext: null,
     startAnnotationPlacement: () => {},
@@ -277,6 +294,18 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const clearInventoryPrefill = useCallback(() => {
         setInventoryPrefill(null);
+    }, []);
+
+    // Fault report prefill state and actions
+    const [faultReportPrefill, setFaultReportPrefill] = useState<FaultReportPrefill | null>(null);
+
+    const startFaultReport = useCallback((prefill: FaultReportPrefill) => {
+        setFaultReportPrefill(prefill);
+        setActiveApp('fault_report');
+    }, []);
+
+    const clearFaultReportPrefill = useCallback(() => {
+        setFaultReportPrefill(null);
     }, []);
 
     // Annotation placement state and actions
@@ -596,6 +625,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 inventoryPrefill,
                 startInventory,
                 clearInventoryPrefill,
+
+                faultReportPrefill,
+                startFaultReport,
+                clearFaultReportPrefill,
 
                 annotationPlacementContext,
                 startAnnotationPlacement,

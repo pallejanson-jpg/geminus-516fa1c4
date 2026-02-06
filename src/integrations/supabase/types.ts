@@ -740,6 +740,42 @@ export type Database = {
         }
         Relationships: []
       }
+      qr_report_configs: {
+        Row: {
+          building_fm_guid: string
+          building_name: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          qr_key: string
+          space_fm_guid: string | null
+          space_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          building_name?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          qr_key: string
+          space_fm_guid?: string | null
+          space_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          building_name?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          qr_key?: string
+          space_fm_guid?: string | null
+          space_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       room_label_configs: {
         Row: {
           click_action: string

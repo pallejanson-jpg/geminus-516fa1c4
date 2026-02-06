@@ -57,7 +57,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   onSettingsChanged
 }) => {
   const navigate = useNavigate();
-  const { allData, setActiveApp, setViewer3dFmGuid, startInventory, openEntityInsights } = useContext(AppContext);
+  const { allData, setActiveApp, setViewer3dFmGuid, startInventory, startFaultReport, openEntityInsights } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
@@ -640,8 +640,15 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onAddAsset={handleAddAsset}
             onInventory={handleInventory}
             onOpenSplitView={(f) => {
-              // Navigate to split view using React Router (preserves SPA history)
               navigate(`/split-viewer?building=${f.fmGuid}`);
+            }}
+            onFaultReport={(f) => {
+              startFaultReport({
+                buildingFmGuid: isBuilding ? f.fmGuid : (f as any).buildingFmGuid,
+                buildingName: f.commonName || f.name || undefined,
+                spaceFmGuid: isSpace ? f.fmGuid : undefined,
+                spaceName: isSpace ? (f.commonName || f.name || undefined) : undefined,
+              });
             }}
           />
         </div>
