@@ -1,126 +1,90 @@
 
-# Sidebar Reorganization with Drag-and-Drop App Ordering
+# Fix Data Discrepancy Banner (180 Orphan Objects)
 
-## What Changes
+## Root Cause Analysis
 
-### 1. Sidebar Layout - New Fixed Structure
+The banner shows **2,982 local** vs **2,802 in Asset+** -- a difference of **180 objects**. These are **real orphans**, not a false positive.
 
-The left sidebar (`LeftSidebar.tsx`) will be reorganized with a visual divider separating two groups:
+### What happened
 
-**Above the divider (primary tools):**
-- Inventering
-- Felanmalan
-- Insights
+180 Space (room) objects belong to **two buildings that no longer exist in Asset+** (building GUIDs `b1148a3b-...` with 179 rooms and `815eff21-...` with 1 room). These buildings were removed from Asset+ but their rooms remain locally because:
 
-**Below the divider (platform apps):**
-- FMA+
-- Asset+
-- IoT+ (renamed from "Sensor Dashboard")
-- OA+
-- 360+ (renamed from "360+ (Ivion)")
+1. The **regular structure sync** (`sync-structure`) only **upserts** -- it never deletes objects removed from the remote source
+2. The **cleanup action** (`sync-with-cleanup`) does handle orphan removal and works correctly, but it runs as a separate action
+3. The **"Synka & rensa" button** on the banner triggers `sync-with-cleanup`, which should fix it. However, the edge function takes ~45-60 seconds to fetch all 2,802+ remote GUIDs for comparison, which may cause timeouts in the client
 
-The "Home" button stays at the very top (before both groups), as the main landing navigation.
+### Why the banner keeps reappearing
 
-### 2. Rename Apps
+The `dismissed` state is stored in React state only -- it resets every time the component remounts (page navigation, refresh). So even if the user clicks "Ignorera", the banner reappears on next visit.
 
-| Current Name | New Name |
-|---|---|
-| Sensor Dashboard | IoT+ |
-| 360+ (Ivion) | 360+ |
+## Fix Plan
 
-These renames apply in `DEFAULT_APP_CONFIGS` in `constants.ts` and the sidebar icon color map.
+### 1. Make the regular sync-structure also clean up orphans
 
-### 3. Drag-and-Drop App Menu Settings
+Modify the `sync-structure` action in the edge function to track all fetched remote `fmGuids` during sync and delete local objects not found remotely (same logic as `sync-with-cleanup`). This way, every structure sync automatically cleans orphans instead of requiring a separate action.
 
-A new "Appar" (Apps) menu item is added to the user dropdown menu in `AppHeader.tsx`. Clicking it opens an **AppMenuSettings** dialog that lets users:
+**File:** `supabase/functions/asset-plus-sync/index.ts`
 
-- **Drag and drop** items to reorder them (using the existing `@dnd-kit/sortable` pattern already used in `ToolbarSettings.tsx`)
-- **Place visual dividers** -- each item has a "Avdelare under" (divider below) toggle, so users can put dividers wherever they want
-- **Reset** to the default order
+Changes to the `sync-structure` block (lines ~608-647):
+- Collect all remote fmGuids into a Set during the pagination loop (same as sync-with-cleanup)
+- After the upsert loop completes, query local non-is_local structure objects
+- Delete any local objects whose fmGuid is not in the remote set
+- Log orphan removal count
 
-The order and divider positions are saved to `localStorage` (key: `sidebar-app-order`) and read by `LeftSidebar.tsx`.
+### 2. Persist banner dismissal in localStorage
 
-### 4. Data Model for Sidebar Items
+Modify `DataConsistencyBanner.tsx` to store dismissal in `localStorage` with a time-based expiry (e.g., 24 hours). This prevents the banner from reappearing on every page navigation while still re-checking periodically.
 
-```typescript
-interface SidebarItem {
-  id: string;           // e.g. 'inventory', 'fault_report', 'insights', 'fma_plus', etc.
-  hasDividerAfter: boolean;  // visual divider below this item
-}
-```
+**File:** `src/components/common/DataConsistencyBanner.tsx`
 
-Default order:
-```
-[
-  { id: 'inventory', hasDividerAfter: false },
-  { id: 'fault_report', hasDividerAfter: false },
-  { id: 'insights', hasDividerAfter: true },       // <-- divider here
-  { id: 'fma_plus', hasDividerAfter: false },
-  { id: 'asset_plus', hasDividerAfter: false },
-  { id: 'iot', hasDividerAfter: false },
-  { id: 'original_archive', hasDividerAfter: false },
-  { id: 'radar', hasDividerAfter: false },
-]
-```
+Changes:
+- On dismiss, store `{ dismissedAt: Date.now() }` in localStorage key `data-consistency-dismissed`
+- On mount, check localStorage -- if dismissed less than 24 hours ago, don't show
+- After a successful sync-with-cleanup, clear the localStorage entry
 
----
+### 3. Immediately clean up the 180 existing orphans
+
+Since the edge function uses the service role key (bypasses RLS), the `sync-with-cleanup` action can delete the orphans right now. The fix to `sync-structure` will prevent future orphans from accumulating.
+
+We will trigger a cleanup by calling `sync-with-cleanup` once the updated function is deployed.
 
 ## Technical Details
 
-### Files to Create
+### Edge function changes (`asset-plus-sync/index.ts`)
 
-**`src/components/settings/AppMenuSettings.tsx`** -- New dialog component
-- Uses `DndContext` + `SortableContext` with `verticalListSortingStrategy` (same pattern as `ToolbarSettings.tsx`)
-- Each row shows: drag handle, app icon + label, divider toggle switch
-- Save/Reset/Close buttons
-- Persists to `localStorage` under key `sidebar-app-order`
-
-### Files to Modify
-
-**`src/lib/constants.ts`**
-- Rename `iot.label` from `'Sensor Dashboard'` to `'IoT+'`
-- Rename `radar.label` from `'360+ (Ivion)'` to `'360+'`
-- Add new export `DEFAULT_SIDEBAR_ORDER: SidebarItem[]` with the default item order and divider positions
-
-**`src/components/layout/LeftSidebar.tsx`**
-- Remove the current hardcoded "Inventory" button and "Home" button separation
-- Keep "Home" button at the very top (unchanged, always first)
-- Read sidebar order from `localStorage` (falling back to `DEFAULT_SIDEBAR_ORDER`)
-- Render items dynamically based on the stored order, including dividers where `hasDividerAfter === true`
-- Each item maps to an `id` that resolves its icon, label, color, and click handler (including `inventory`, `fault_report`, `insights`, and the `DEFAULT_APP_CONFIGS` entries)
-- Add `fault_report` to the icon color map (with `text-red-500`)
-
-**`src/components/layout/AppHeader.tsx`**
-- Add an "Appar" (Apps) menu item to the user dropdown (with a `LayoutGrid` icon)
-- Wire it to open `AppMenuSettings` dialog
-- Import and render the dialog component
-
-### Interaction Flow
-
-1. User clicks their avatar in the top-right header
-2. User sees new "Appar" menu item in the dropdown
-3. Clicking it opens the `AppMenuSettings` dialog
-4. User drags items to reorder them
-5. User toggles "Avdelare" switches to add/remove visual dividers between items
-6. User clicks "Spara" -- order is saved to localStorage
-7. The sidebar immediately re-renders with the new order
-
-### Sidebar Rendering Logic
+The `sync-structure` action (lines 608-647) will be extended with orphan cleanup logic:
 
 ```
-LeftSidebar renders:
-  [Menu toggle button]
-  [Home button]            -- always first, not reorderable
-  [divider]
-  -- dynamic items from saved order --
-  for each item in sidebarOrder:
-    [AppButton for item.id]
-    if item.hasDividerAfter:
-      [visual divider line]
+sync-structure flow (updated):
+  1. Paginate through all Asset+ structure objects (objectType 1,2,3)
+  2. Upsert each batch to local DB (existing behavior)
+  3. Collect all remote fmGuids into a Set (new)
+  4. After loop: query local structure objects where is_local=false (new)
+  5. Delete any local objects not in remote Set (new)
+  6. Log and include orphan count in response (new)
 ```
 
-The item `id` maps to icon/label/handler:
-- `inventory` -- ClipboardList icon, "Inventering", `setActiveApp('inventory')`
-- `fault_report` -- AlertTriangle icon, "Felanmalan", `setActiveApp('fault_report')`
-- `insights` -- BarChart2 icon, "Insights", `setActiveApp('insights')`
-- `fma_plus`, `asset_plus`, `iot`, `original_archive`, `radar` -- from `DEFAULT_APP_CONFIGS` with external/internal handling
+### Banner changes (`DataConsistencyBanner.tsx`)
+
+```
+Mount behavior (updated):
+  1. Check localStorage for recent dismissal (< 24h)
+  2. If recently dismissed, don't check or show
+  3. Otherwise, run check-delta as before
+
+Dismiss behavior (updated):
+  1. Set dismissed=true in state
+  2. Store dismissedAt timestamp in localStorage
+
+After successful sync:
+  1. Clear localStorage dismissal
+  2. Re-check delta after 2s delay (existing behavior)
+```
+
+### Implementation order
+
+| Step | Task | File |
+|------|------|------|
+| 1 | Add orphan cleanup to sync-structure action | `supabase/functions/asset-plus-sync/index.ts` |
+| 2 | Add localStorage persistence for banner dismissal | `src/components/common/DataConsistencyBanner.tsx` |
+| 3 | Deploy and trigger sync-with-cleanup to clear existing orphans | Edge function deployment |
