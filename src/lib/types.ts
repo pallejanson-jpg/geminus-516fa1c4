@@ -20,6 +20,7 @@ export interface Facility {
     siteId?: string;
     buildingFmGuid?: string;
     levelFmGuid?: string;
+    attributes?: Record<string, any>;
 }
 
 export interface AppConfig {
