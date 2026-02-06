@@ -14,6 +14,9 @@ interface QrConfig {
   building_name: string | null;
   space_fm_guid: string | null;
   space_name: string | null;
+  asset_fm_guid: string | null;
+  asset_name: string | null;
+  installation_number: string | null;
 }
 
 const FaultReport: React.FC = () => {
@@ -37,7 +40,7 @@ const FaultReport: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('qr_report_configs')
-          .select('building_fm_guid, building_name, space_fm_guid, space_name')
+          .select('building_fm_guid, building_name, space_fm_guid, space_name, asset_fm_guid, asset_name, installation_number')
           .eq('qr_key', qrKey)
           .eq('is_active', true)
           .maybeSingle();
@@ -63,31 +66,39 @@ const FaultReport: React.FC = () => {
     setIsSubmitting(true);
     try {
       const externalId = `FR-${Date.now()}`;
+      const assetLabel = qrConfig?.asset_name || qrConfig?.installation_number || '';
+      const descSnippet = data.description.slice(0, 50);
+      const autoTitle = assetLabel
+        ? `Felanmälan: ${assetLabel}`
+        : `Felanmälan: ${descSnippet}`;
 
       const workOrder = {
-        title: data.title,
+        title: autoTitle,
         description: data.description,
-        category: data.category,
-        priority: data.priority,
+        category: null,
+        priority: 'medium' as const,
         status: 'open' as const,
         external_id: externalId,
-        reported_by: data.reporterName,
+        reported_by: null,
         reported_at: new Date().toISOString(),
         building_fm_guid: qrConfig?.building_fm_guid || null,
         building_name: qrConfig?.building_name || null,
         space_fm_guid: qrConfig?.space_fm_guid || null,
         space_name: qrConfig?.space_name || null,
         attributes: {
-          reporter_email: data.reporterEmail,
-          reporter_phone: data.reporterPhone || null,
+          error_code: data.errorCode || null,
+          reporter_email: data.email || null,
+          reporter_phone: data.phone || null,
           images: photos,
           source: 'fault_report',
           qr_key: qrKey || null,
+          asset_fm_guid: qrConfig?.asset_fm_guid || null,
+          asset_name: qrConfig?.asset_name || null,
+          installation_number: qrConfig?.installation_number || null,
         },
       };
 
       const { error } = await supabase.from('work_orders').insert(workOrder);
-
       if (error) throw error;
 
       setSubmittedId(externalId);
@@ -138,6 +149,11 @@ const FaultReport: React.FC = () => {
         <FaultReportSuccess
           externalId={submittedId}
           buildingName={qrConfig?.building_name || undefined}
+          installationInfo={
+            qrConfig?.installation_number || qrConfig?.asset_name
+              ? `${qrConfig?.installation_number || ''} ${qrConfig?.asset_name || ''}`.trim()
+              : undefined
+          }
           onNewReport={handleReset}
         />
       </div>
@@ -146,14 +162,18 @@ const FaultReport: React.FC = () => {
 
   const buildingName = qrConfig?.building_name || undefined;
   const spaceName = qrConfig?.space_name || undefined;
+  const installationNumber = qrConfig?.installation_number || undefined;
+  const assetName = qrConfig?.asset_name || undefined;
 
-  // Mobile wizard layout
+  // Mobile layout
   if (isMobile) {
     return (
       <div className="h-screen bg-background">
         <MobileFaultReport
           buildingName={buildingName}
           spaceName={spaceName}
+          installationNumber={installationNumber}
+          assetName={assetName}
           onSubmit={handleSubmit}
           isSubmitting={isSubmitting}
           onBack={() => window.history.back()}
@@ -168,6 +188,8 @@ const FaultReport: React.FC = () => {
       <FaultReportForm
         buildingName={buildingName}
         spaceName={spaceName}
+        installationNumber={installationNumber}
+        assetName={assetName}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
