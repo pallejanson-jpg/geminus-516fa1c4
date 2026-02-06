@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 interface FaultReportSuccessProps {
   externalId: string;
   buildingName?: string;
+  installationInfo?: string;
   onNewReport?: () => void;
   onClose?: () => void;
 }
@@ -13,6 +14,7 @@ interface FaultReportSuccessProps {
 const FaultReportSuccess: React.FC<FaultReportSuccessProps> = ({
   externalId,
   buildingName,
+  installationInfo,
   onNewReport,
   onClose,
 }) => {
@@ -27,7 +29,8 @@ const FaultReportSuccess: React.FC<FaultReportSuccessProps> = ({
           <div className="space-y-2">
             <h2 className="text-xl font-bold">Felanmälan skickad!</h2>
             <p className="text-sm text-muted-foreground">
-              Din felanmälan har registrerats{buildingName ? ` för ${buildingName}` : ''}.
+              Din felanmälan har registrerats
+              {installationInfo ? ` för ${installationInfo}` : buildingName ? ` för ${buildingName}` : ''}.
             </p>
           </div>
 
