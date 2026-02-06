@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useContext, useCallback } from 'rea
 import { useNavigate } from 'react-router-dom';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
-    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles
+    Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
+import AppMenuSettings from '@/components/settings/AppMenuSettings';
 import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -52,6 +53,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
 
@@ -223,6 +225,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <Settings className="mr-2 h-4 w-4" />
                             Inställningar
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsAppMenuOpen(true)}>
+                            <AppWindow className="mr-2 h-4 w-4" />
+                            Appar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate('/onboarding')}>
                             <Sparkles className="mr-2 h-4 w-4" />
                             Starta introduktion
@@ -242,6 +248,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 <ApiSettingsModal 
                     isOpen={isApiSettingsOpen} 
                     onClose={() => setIsApiSettingsOpen(false)} 
+                />
+                <AppMenuSettings
+                    isOpen={isAppMenuOpen}
+                    onClose={() => setIsAppMenuOpen(false)}
                 />
             </div>
         </header>
