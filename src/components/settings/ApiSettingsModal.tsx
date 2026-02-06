@@ -151,7 +151,137 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     
     // Ivion connection modal state
     const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
+    
+    // ACC (Autodesk Construction Cloud) state
+    const [accProjects, setAccProjects] = useState<any[]>([]);
+    const [selectedAccProjectId, setSelectedAccProjectId] = useState('');
+    const [isLoadingAccProjects, setIsLoadingAccProjects] = useState(false);
+    const [isTestingAcc, setIsTestingAcc] = useState(false);
+    const [accConnectionStatus, setAccConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [accConnectionMessage, setAccConnectionMessage] = useState('');
+    const [isSyncingAccLocations, setIsSyncingAccLocations] = useState(false);
+    const [isSyncingAccAssets, setIsSyncingAccAssets] = useState(false);
+    const [accStatus, setAccStatus] = useState<any>(null);
+    const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
+
+    // ACC handlers
+    const handleTestAccConnection = async () => {
+        setIsTestingAcc(true);
+        setAccConnectionStatus('idle');
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'test-connection' }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                setAccConnectionStatus('success');
+                setAccConnectionMessage(data.message);
+                toast({ title: 'Anslutning OK', description: data.message });
+            } else {
+                setAccConnectionStatus('error');
+                setAccConnectionMessage(data?.error || 'Okänt fel');
+                toast({ variant: 'destructive', title: 'Anslutning misslyckades', description: data?.error });
+            }
+        } catch (err: any) {
+            setAccConnectionStatus('error');
+            setAccConnectionMessage(err.message);
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsTestingAcc(false);
+        }
+    };
+
+    const handleFetchAccProjects = async () => {
+        setIsLoadingAccProjects(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'list-projects' }
+            });
+            if (error) throw error;
+            if (data?.success && data.projects) {
+                setAccProjects(data.projects);
+                if (data.projects.length > 0 && !selectedAccProjectId) {
+                    setSelectedAccProjectId(data.projects[0].id);
+                }
+                toast({ title: 'Projekt hämtade', description: `Hittade ${data.projects.length} projekt i ACC.` });
+            } else {
+                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta projekt' });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsLoadingAccProjects(false);
+        }
+    };
+
+    const handleSyncAccLocations = async () => {
+        if (!selectedAccProjectId) {
+            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt först.' });
+            return;
+        }
+        setIsSyncingAccLocations(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'sync-locations', projectId: selectedAccProjectId }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                toast({ title: 'Synk klar', description: data.message });
+                handleCheckAccStatus();
+            } else {
+                toast({ variant: 'destructive', title: 'Synk misslyckades', description: data?.error });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsSyncingAccLocations(false);
+        }
+    };
+
+    const handleSyncAccAssets = async () => {
+        if (!selectedAccProjectId) {
+            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt först.' });
+            return;
+        }
+        setIsSyncingAccAssets(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'sync-assets', projectId: selectedAccProjectId }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                toast({ title: 'Synk klar', description: data.message });
+                handleCheckAccStatus();
+            } else {
+                toast({ variant: 'destructive', title: 'Synk misslyckades', description: data?.error });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsSyncingAccAssets(false);
+        }
+    };
+
+    const handleCheckAccStatus = async () => {
+        setIsCheckingAccStatus(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'check-status' }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                setAccStatus(data);
+                if (data.savedProjectId && !selectedAccProjectId) {
+                    setSelectedAccProjectId(data.savedProjectId);
+                }
+            }
+        } catch (err: any) {
+            console.error('Failed to check ACC status:', err);
+        } finally {
+            setIsCheckingAccStatus(false);
+        }
+    };
 
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
@@ -1553,6 +1683,135 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <p className="text-xs text-muted-foreground">Integration med Faciliate för arbetsorder. Inte konfigurerad ännu.</p>
+                                        </AccordionContent>
+                                    </AccordionItem>
+
+                                    {/* Autodesk Construction Cloud (ACC) Section */}
+                                    <AccordionItem value="acc" className="border rounded-lg">
+                                        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Layers className="h-5 w-5 text-blue-500" />
+                                                <span className="font-medium">Autodesk Construction Cloud</span>
+                                                {accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Ansluten</Badge>}
+                                                {accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
+                                            </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="px-4 pb-4 pt-2">
+                                            <div className="space-y-4">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Integration med Autodesk Construction Cloud för byggnads-, vånings- och rumsdata via APS OAuth 2.0 (2-legged).
+                                                    Secrets (APS_CLIENT_ID, APS_CLIENT_SECRET, ACC_ACCOUNT_ID) konfigureras i Lovable Cloud.
+                                                </p>
+
+                                                <div className="flex gap-2 flex-wrap">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={handleTestAccConnection}
+                                                        disabled={isTestingAcc}
+                                                    >
+                                                        {isTestingAcc ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                                                        Testa anslutning
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={handleFetchAccProjects}
+                                                        disabled={isLoadingAccProjects}
+                                                    >
+                                                        {isLoadingAccProjects ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Database className="h-3.5 w-3.5 mr-1.5" />}
+                                                        Hämta projekt
+                                                    </Button>
+                                                </div>
+
+                                                {accConnectionStatus !== 'idle' && (
+                                                    <div className={`rounded-lg border p-3 text-sm ${accConnectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
+                                                        <div className="flex items-start gap-2">
+                                                            {accConnectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+                                                            <div>
+                                                                <p className="font-medium">{accConnectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p>
+                                                                <p className="text-xs">{accConnectionMessage}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {accProjects.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Välj ACC-projekt</Label>
+                                                        <select
+                                                            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                                            value={selectedAccProjectId}
+                                                            onChange={(e) => setSelectedAccProjectId(e.target.value)}
+                                                        >
+                                                            {accProjects.map((p: any) => (
+                                                                <option key={p.id} value={p.id}>
+                                                                    {p.name} ({p.status || 'active'})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {selectedAccProjectId && (
+                                                    <div className="flex gap-2 flex-wrap">
+                                                        <Button
+                                                            onClick={handleSyncAccLocations}
+                                                            disabled={isSyncingAccLocations || isSyncingAccAssets}
+                                                            size="sm"
+                                                            className="gap-1"
+                                                        >
+                                                            {isSyncingAccLocations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Building2 className="h-3.5 w-3.5" />}
+                                                            Synka platser
+                                                        </Button>
+                                                        <Button
+                                                            onClick={handleSyncAccAssets}
+                                                            disabled={isSyncingAccLocations || isSyncingAccAssets}
+                                                            size="sm"
+                                                            variant="secondary"
+                                                            className="gap-1"
+                                                        >
+                                                            {isSyncingAccAssets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+                                                            Synka tillgångar
+                                                        </Button>
+                                                        <Button
+                                                            onClick={handleCheckAccStatus}
+                                                            disabled={isCheckingAccStatus}
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="gap-1"
+                                                        >
+                                                            {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                                            Status
+                                                        </Button>
+                                                    </div>
+                                                )}
+
+                                                {accStatus && (
+                                                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-muted-foreground">Platser (lokalt):</span>
+                                                            <span className="font-medium">{accStatus.localLocationCount}</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-muted-foreground">Tillgångar (lokalt):</span>
+                                                            <span className="font-medium">{accStatus.localAssetCount}</span>
+                                                        </div>
+                                                        {accStatus.locationsSyncState && (
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <span className="text-muted-foreground">Plats-synk:</span>
+                                                                <span className="font-medium">{accStatus.locationsSyncState.sync_status}</span>
+                                                            </div>
+                                                        )}
+                                                        {accStatus.assetsSyncState && (
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <span className="text-muted-foreground">Tillgångs-synk:</span>
+                                                                <span className="font-medium">{accStatus.assetsSyncState.sync_status}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </AccordionContent>
                                     </AccordionItem>
                                 </Accordion>
