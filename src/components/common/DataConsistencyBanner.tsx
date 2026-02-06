@@ -14,12 +14,33 @@ interface DeltaResult {
   message: string;
 }
 
+const DISMISS_KEY = 'data-consistency-dismissed';
+const DISMISS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function isDismissedInStorage(): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    if (!raw) return false;
+    const { dismissedAt } = JSON.parse(raw);
+    return Date.now() - dismissedAt < DISMISS_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
 export const DataConsistencyBanner: React.FC = () => {
   const [deltaResult, setDeltaResult] = useState<DeltaResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => isDismissedInStorage());
   const { toast } = useToast();
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(DISMISS_KEY, JSON.stringify({ dismissedAt: Date.now() }));
+    } catch {}
+  };
 
   const checkDelta = async () => {
     setIsChecking(true);
@@ -60,7 +81,9 @@ export const DataConsistencyBanner: React.FC = () => {
           description: data.message,
         });
         setDeltaResult(null);
-        setDismissed(true);
+        setDismissed(false);
+        // Clear dismissal so re-check can show updated status
+        try { localStorage.removeItem(DISMISS_KEY); } catch {}
         
         // Emit custom event so other components (e.g. Sync tab) can react
         window.dispatchEvent(new CustomEvent('asset-sync-completed', {
@@ -83,9 +106,10 @@ export const DataConsistencyBanner: React.FC = () => {
   };
 
   useEffect(() => {
-    // Check on mount
+    // Skip check if recently dismissed
+    if (dismissed) return;
     checkDelta();
-  }, []);
+  }, [dismissed]);
 
   // Don't show if dismissed, in sync, or still checking
   if (dismissed || deltaResult?.inSync || isChecking || !deltaResult) {
@@ -126,7 +150,7 @@ export const DataConsistencyBanner: React.FC = () => {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setDismissed(true)}
+              onClick={dismiss}
             >
               Ignorera
             </Button>
@@ -137,7 +161,7 @@ export const DataConsistencyBanner: React.FC = () => {
           variant="ghost"
           size="icon"
           className="h-6 w-6 flex-shrink-0"
-          onClick={() => setDismissed(true)}
+          onClick={dismiss}
         >
           <X className="h-4 w-4" />
         </Button>
