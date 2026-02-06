@@ -1,52 +1,167 @@
 
 
-# Plan: Fixa fastlast synk och forbattra testbarhet
+# Plan: Viewer-menyer som sidopaneler + Rumsvisualisering fix
 
-## Problem 1: Synken fastnar pa "3/11"
+## Sammanfattning
 
-### Rotorsak
+Tva huvudandringar:
 
-Synken ar designad som en **resumable loop**: varje anrop processar byggnader i 45 sekunder, returnerar `interrupted: true`, och forvantar att frontend anropar funktionen igen. Loopen lever i `ApiSettingsModal` via `setTimeout(() => runResumableSync(), 1000)`.
+1. **Ersatt flytande menyer med en fast hogersidopanel (Sheet/Drawer)** -- Alla viewer-menyer (VisualizationToolbar, RoomVisualizationPanel, ViewerTreePanel, SidePopPanels) konsolideras till en hogermeny som skjuts in/ut via en hamburgare, precis som mobilversionen redan gor (MobileViewerOverlay pattern).
 
-Men om anvandaren stanger fliken, navigerar bort, eller edge function timeout:ar sa hamnar databasen i ett "stale running"-tillstand -- `sync_status = 'running'` men ingen process driver den framåt. `SyncProgressBanner` laser bara status och visar spinnern -- den har ingen logik for att:
-
-1. Upptacka att synken ar stal (startad for 13+ timmar sedan)
-2. Erbjuda "Fortsatt synk" eller auto-resume
-
-### Losning: Tre delar
-
-#### a) Stale-detektion i SyncProgressBanner
-
-Lagg till logik som kontrollerar om `last_sync_started_at` ar aldre an 5 minuter och status fortfarande ar `running`. I sa fall:
-- Visa en "Synken verkar ha stannat" badge istallet for spinner
-- Visa en **"Fortsatt"**-knapp som anropar `sync-assets-resumable`
-- Visa en **"Aterstall"**-knapp som nollstaller progress
-
-```text
-Logik:
-if sync_status === 'running' AND (now - last_sync_started_at) > 5 min:
-  -> Visa "Avbruten" med Resume/Reset-knappar
-else if sync_status === 'running':
-  -> Visa spinner som vanligt
-```
-
-#### b) Auto-resume vid appladdning (valfritt)
-
-Nar appen laddas och en stale sync detekteras, auto-trigga `sync-assets-resumable` med en 3-sekunders fordrojning. Visar en toast "Fortsatter avbruten synk...".
-
-#### c) Direkt fix: Nollstall den fastnada synken
-
-For att losa det omedelbara problemet, uppdatera `asset_sync_state` sa att raden for `assets` slattar `running`-status. Detta kan goras genom:
-- Edge function-anrop `reset-assets-progress` (finns redan i koden)
-- Eller direkt via en knapp i bannern
+2. **Fix av rumsvisualisering sa den fungerar tillforlitligt** -- Saker automatisk farginladdning vid val av visualiseringstyp, med robust "Visa rum"-aktivering och ratt golvsfiltrering.
 
 ---
 
-## Problem 2: Senslinc 429
+## Del 1: Hogersidopanel istallet for flytande menyer
 
-Senslinc-API:t har rate limit. Den exponential backoff som redan implementerats i edge-funktionen kommer hantera detta automatiskt nar ban-perioden slappt. Ingen kodandring behovs -- bara vantan.
+### Nuvarande arkitektur (problem)
 
-For att kunna testa: Lagg till en "Testa anslutning"-knapp i Settings som gor ett minimalt API-anrop (bara `get-indices`) och rapporterar om anslutningen fungerar eller fortfarande ar blockerad.
+- **VisualizationToolbar**: Flytande, dragbar panel (position med x/y-koordinater) med SidePopPanel-barn for BIM-modeller, vaningsplan, annotationer
+- **RoomVisualizationPanel**: Separat flytande, dragbar panel
+- **ViewerTreePanel**: Separat flytande panel (vanter sida)
+- **FloatingIssueListPanel**: Ytterligare flytande panel
+
+Allt "flyter runt" med drag-handlers, pixelpositionering, och kan hamna utanfor skarmens kant.
+
+### Ny arkitektur
+
+Ersatt alla flytande paneler med en **en enda hogersidopanel** (Sheet/Drawer) som innehaller allt. Exakt samma monster som `MobileViewerOverlay` redan anvander -- men nu for bade desktop och mobil.
+
+```text
++----------------------------------------------------------+
+| [X] [Full] [Tree]                    [Hamburger-knapp] |
+|                                                          |
+|                                                          |
+|                     3D VIEWER                            |
+|                                          +-------------+ |
+|                                          | Sheet/Drawer | |
+|                                          | - BIM models | |
+|                                          | - Floors     | |
+|                                          | - Display    | |
+|                                          |   - 2D/3D    | |
+|                                          |   - Visa rum | |
+|                                          |   - Annot.   | |
+|                                          |   - RumsVis  | |
+|                                          | - Settings   | |
+|                                          | - Actions    | |
+|                                          +-------------+ |
+|   [Floor pills]                                          |
+|   [Navigation toolbar]                                   |
++----------------------------------------------------------+
+```
+
+### Implementationsdetaljer
+
+**Ny komponent: `ViewerRightPanel.tsx`**
+
+Skapar en ny komponent som konsoliderar all funktionalitet fran:
+- `VisualizationToolbar.tsx` (innehall, inte panelen)
+- `RoomVisualizationPanel.tsx` (inbaddad som sektion)
+- Submenyer (BIM-modeller, vaningsplan, annotationer)
+
+Anvander `Sheet` (fran Radix/shadcn) med `side="right"` for en renare UX. Panelen oppnas/stangs med en hamburgerknapp i viewerns header.
+
+Sektioner:
+1. **BIM-modeller** (Collapsible)
+2. **Vaningsplan** (Collapsible)
+3. **Visa** (2D/3D, Visa rum, Annotationer, Rumsvisualisering)
+4. **Rumsvisualisering** (inbaddad direkt -- typ-val, legend, statistik)
+5. **Viewer settings** (Collapsible -- klipphodj, rumsetiketter, tema, bakgrund)
+6. **Atgarder** (Skapa vy, Skapa arende, Visa arenden)
+
+**Andringar i `AssetPlusViewer.tsx`:**
+- Ersatt VisualizationToolbar-triggerknappen med en Sheet-trigger
+- Flytta RoomVisualizationPanel fran separat flytande komponent till inbaddad i sidopanelen
+- Behall ViewerTreePanel som flytande vanstersidopanel (den fungerar redan bra dar)
+
+**Ta bort:**
+- All drag-logik fran VisualizationToolbar (mouseDown, mouseMove, position-state)
+- SidePopPanel-anrop (BIM, floors, annotations -- dessa blir Collapsible-sektioner istallet)
+- RoomVisualizationPanel drag-logik (den baddas in direkt)
+
+### Desktop vs Mobil
+
+- **Desktop**: Sheet med `side="right"`, bredd 320-340px, bakgrunden fortfarande interaktiv
+- **Mobil**: Samma Sheet, exakt som MobileViewerOverlay redan gor det -- ingen andring behovs for mobil
+
+---
+
+## Del 2: Rumsvisualisering -- tillforlitlig auto-fargning
+
+### Nuvarande problem
+
+Rumsvisualiseringen "fungerar bara sporadiskt" pa grund av flera samverkande problem:
+
+1. **Timing-problem med entity cache**: `applyVisualization` kors ibland innan `entityIdCache` ar uppbyggd fran metaScene (rad 421-430 i RoomVisualizationPanel). useEffect-beroendet ar `entityIdCache.size` men cachen byggs asynkront.
+
+2. **"Visa rum" maste vara aktivt**: Rumsobjekten (IfcSpace) maste vara synliga i viewern innan de kan fargas. Komponenten skickar `FORCE_SHOW_SPACES_EVENT` pa mount, men det ar inte garanterat att viewern hinner reagera.
+
+3. **Val av typ bor automatiskt tanda rum + farga**: Nar man valjer tex "Temperatur" bor det:
+   - Automatiskt aktivera "Visa rum" (IfcSpace-objekt synliga)
+   - Automatiskt farga in rummen baserat pa typ
+   - Bara visa rum for selekterade vaningsplan
+
+4. **Byte av typ (t.ex. Temp -> CO2) bor direkt farga om**: Koden har redan `applyVisualization` i useEffect (rad 421), men den koers inte alltid tillforlitligt pa grund av race conditions med cachen.
+
+### Losning
+
+**a) Saker auto-aktivering av "Visa rum":**
+
+Nar visualiseringstyp andras fran `none` till nagot:
+- Dispatcha `FORCE_SHOW_SPACES_EVENT`
+- Vanta en kort tid (200ms) for att ge viewern tid att rendera IfcSpace-objekten
+- Sedan kora `applyVisualization`
+
+**b) Saker cache-timing:**
+
+Endra logiken sa att `applyVisualization` har en retry-mekanism:
+- Om `entityIdCache.size === 0`, vanta 500ms och forsok igen (max 3 forsok)
+- Logga tydligt varfor fargning misslyckades (cache tom, inga rum, etc.)
+
+**c) Garanterad omfargning vid typbyte:**
+
+Nar `visualizationType` andras:
+1. Rensa ALLA tidigare farger (resetColors)
+2. Om ny typ !== 'none': forcera "Visa rum" + applicera ny fargning
+
+**d) Golvsfiltrering:**
+
+Se till att `visibleFloorFmGuids` alltid skickas korrekt till komponenten. I nuvarande kod (AssetPlusViewer rad 2984):
+```typescript
+visibleFloorFmGuids={visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
+```
+
+Nar `undefined` skickas visas alla rum -- men vi bor sakerstalla att golvsselektionen synkas korrekt vid byte.
+
+### Tekniska andringar i RoomVisualizationPanel
+
+```typescript
+// Ny logik for automatisk "Visa rum" + fargning vid typbyte
+useEffect(() => {
+  if (visualizationType === 'none') {
+    resetColors();
+    return;
+  }
+  
+  // Steg 1: Tvinga "Visa rum" pa
+  window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+  if (onShowSpaces) onShowSpaces(true);
+  
+  // Steg 2: Vanta pa att IfcSpace-objekt blir synliga
+  const applyWithRetry = (attempt: number) => {
+    if (entityIdCache.size > 0 && rooms.length > 0) {
+      applyVisualization();
+    } else if (attempt < 3) {
+      setTimeout(() => applyWithRetry(attempt + 1), 500);
+    } else {
+      console.warn('Room visualization: gave up after 3 attempts');
+    }
+  };
+  
+  // Kort delay for att ge viewern tid att rendera rum
+  setTimeout(() => applyWithRetry(0), 200);
+}, [visualizationType, useMockData]);
+```
 
 ---
 
@@ -54,125 +169,30 @@ For att kunna testa: Lagg till en "Testa anslutning"-knapp i Settings som gor et
 
 | Fil | Andring |
 |-----|---------|
-| `src/components/layout/SyncProgressBanner.tsx` | Stale-detektion, resume/reset-knappar, auto-resume |
-| `src/components/settings/ApiSettingsModal.tsx` | Lagg till "Testa Senslinc"-knapp i Senslinc-fliken |
+| **NY: `src/components/viewer/ViewerRightPanel.tsx`** | Ny komponent -- Sheet-baserad hogersidopanel med alla visningstool |
+| `src/components/viewer/AssetPlusViewer.tsx` | Ersatt VisualizationToolbar + RoomVisualizationPanel med ViewerRightPanel |
+| `src/components/viewer/RoomVisualizationPanel.tsx` | Stod for `embedded` mode (utan drag/header), robust auto-fargning |
+| `src/components/viewer/VisualizationToolbar.tsx` | Kan tas bort helt (funktionalitet flyttas till ViewerRightPanel) |
+| `src/components/viewer/SidePopPanel.tsx` | Behalls men anvands inte langre fran VisualizationToolbar |
 
 ---
 
-## Tekniska detaljer
+## Implementationsordning
 
-### SyncProgressBanner - Stale-detektion och resume
-
-```typescript
-// Ny konstant
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-
-// I renderingen, for varje sync:
-const isStale = sync.sync_status === 'running' && 
-  sync.last_sync_started_at &&
-  (Date.now() - new Date(sync.last_sync_started_at).getTime()) > STALE_THRESHOLD_MS;
-
-// Resume-funktion
-const handleResume = async (subtreeId: string) => {
-  if (subtreeId === 'assets') {
-    // Trigger resumable sync
-    supabase.functions.invoke('asset-plus-sync', {
-      body: { action: 'sync-assets-resumable' }
-    }).then(({ data }) => {
-      if (data?.interrupted) {
-        // Will continue via Realtime updates
-        // Call again after delay
-        setTimeout(() => handleResume(subtreeId), 2000);
-      }
-    });
-  }
-};
-
-// Reset-funktion
-const handleReset = async (subtreeId: string) => {
-  if (subtreeId === 'assets') {
-    await supabase.functions.invoke('asset-plus-sync', {
-      body: { action: 'reset-assets-progress' }
-    });
-  }
-};
-```
-
-### UI for stale sync
-
-```text
-Stalldetektion (isStale = true):
-+----------------------------------------------------+
-| (!) Synken har stannat - Alla Tillgangar (3/11)     |
-|     8 757 objekt synkade                            |
-|     [Fortsatt]  [Aterstall]                   [X]   |
-+----------------------------------------------------+
-
-Normal running:
-+----------------------------------------------------+
-| (spin) Synkar Alla Tillgangar (3/11)   8 757 objekt |
-|     ==================---  67%                [X]   |
-+----------------------------------------------------+
-```
-
-### Senslinc-testknapp i Settings
-
-```typescript
-const testSenslincConnection = async () => {
-  const { data, error } = await supabase.functions.invoke('senslinc-query', {
-    body: { action: 'get-indices' }
-  });
-  
-  if (error || !data?.success) {
-    toast({
-      variant: 'destructive',
-      title: 'Anslutningsfel',
-      description: data?.error || 'Kunde inte na Senslinc API (mojlig rate limit)',
-    });
-  } else {
-    toast({
-      title: 'Anslutning OK',
-      description: `Hittade ${data.indices?.length || 0} index`,
-    });
-  }
-};
-```
-
-### SyncProgressBanner - Auto-resume vid laddning
-
-Nar komponenten mountar och hittar en stale sync, starta en resume automatiskt efter 3 sekunder:
-
-```typescript
-useEffect(() => {
-  const staleSync = activeSyncs.find(s => {
-    if (s.sync_status !== 'running' || !s.last_sync_started_at) return false;
-    return Date.now() - new Date(s.last_sync_started_at).getTime() > STALE_THRESHOLD_MS;
-  });
-  
-  if (staleSync && staleSync.subtree_id === 'assets') {
-    const timer = setTimeout(() => handleResume('assets'), 3000);
-    return () => clearTimeout(timer);
-  }
-}, [activeSyncs]);
-```
+| Prio | Steg | Beskrivning |
+|------|------|-------------|
+| 1 | ViewerRightPanel | Skapa ny komponent med Sheet-baserad hogersidopanel |
+| 2 | RoomVisualization fix | Robust auto-fargning med retry och auto-"Visa rum" |
+| 3 | AssetPlusViewer integration | Byt ut VisualizationToolbar mot ViewerRightPanel |
+| 4 | Cleanup | Ta bort oanvand drag-logik, SidePopPanel-anvandning |
 
 ---
 
-## Testplan efter implementering
+## Vad behalls
 
-1. **Omedelbara tester (utan att vanta pa Senslinc):**
-   - Oppna appen -- bannern ska visa "Synken har stannat" med resume/reset-knappar
-   - Klicka "Aterstall" -- bannern forsvinner, sync-status nollstalls
-   - Oppna Settings > Sync -- verifiera att progress-kortet visar "Ej synkad" efter aterstallning
-   - Klicka "Synka" pa Tillgangar -- verifiera att loopen kors och progress uppdateras live
-
-2. **CRUD-tester:**
-   - Oppna Inventering, skapa ett nytt objekt -- verifiera att det sparas med `is_local = true`
-   - Oppna egenskapsdialogen pa det nya objektet -- kontrollera att orange "Lokal" badge visas
-   - Testa "Ta bort"-knappen pa det lokala objektet
-   - Testa "Pusha till Asset+"-knappen (kraver att Asset+ API fungerar)
-
-3. **Senslinc-test (nar ban slappt):**
-   - Oppna Settings > Senslinc > "Testa anslutning"
-   - Om OK: oppna en byggnad med sensorer och verifiera att IoT-data visas
+- **ViewerToolbar** (navigationsverktygsfalt langst ner) -- behalls oforandrad
+- **FloatingFloorSwitcher** (pills) -- behalls
+- **FloorCarousel** -- behalls
+- **MobileViewerOverlay** -- behalls (anvander redan Sheet-monster)
+- **ViewerTreePanel** som vansterpanel -- behalls (fungerar bra)
 
