@@ -1,20 +1,26 @@
-import React, { useContext } from 'react';
-import { Box, Menu as MenuIcon, Home, ClipboardList } from 'lucide-react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
+import { Box, Menu as MenuIcon, Home, ClipboardList, AlertTriangle, BarChart2, Building2, Zap, Archive, Radar } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES, DEFAULT_APP_CONFIGS } from '@/lib/constants';
+import { THEMES, DEFAULT_APP_CONFIGS, DEFAULT_SIDEBAR_ORDER, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
+import type { SidebarItem } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
+import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 
-// Define a mapping of icon keys to colors
-const ICON_COLORS: Record<string, string> = {
-    home: 'text-sky-500',
-    default: 'text-muted-foreground',
-    insights: 'text-green-500',
-    fma_plus: 'text-blue-500',
-    asset_plus: 'text-purple-500',
-    iot: 'text-yellow-500',
-    original_archive: 'text-indigo-500',
-    radar: 'text-pink-500',
-    inventory: 'text-orange-500',
+// Map sidebar item IDs to icon + color + label + handler type
+const SIDEBAR_ITEM_META: Record<string, {
+    icon: React.ElementType;
+    color: string;
+    label: string;
+    type: 'internal' | 'config'; // 'internal' = custom setActiveApp, 'config' = from DEFAULT_APP_CONFIGS
+}> = {
+    inventory: { icon: ClipboardList, color: 'text-orange-500', label: 'Inventering', type: 'internal' },
+    fault_report: { icon: AlertTriangle, color: 'text-red-500', label: 'Felanmälan', type: 'internal' },
+    insights: { icon: BarChart2, color: 'text-green-500', label: 'Insights', type: 'internal' },
+    fma_plus: { icon: Building2, color: 'text-blue-500', label: DEFAULT_APP_CONFIGS.fma_plus.label, type: 'config' },
+    asset_plus: { icon: Box, color: 'text-purple-500', label: DEFAULT_APP_CONFIGS.asset_plus.label, type: 'config' },
+    iot: { icon: Zap, color: 'text-yellow-500', label: DEFAULT_APP_CONFIGS.iot.label, type: 'config' },
+    original_archive: { icon: Archive, color: 'text-indigo-500', label: DEFAULT_APP_CONFIGS.original_archive.label, type: 'config' },
+    radar: { icon: Radar, color: 'text-pink-500', label: DEFAULT_APP_CONFIGS.radar.label, type: 'config' },
 };
 
 const LeftSidebar: React.FC = () => {
@@ -29,22 +35,50 @@ const LeftSidebar: React.FC = () => {
     } = useContext(AppContext);
     
     const t = THEMES[theme];
+    const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
 
-    // Helper function to get color for an icon
+    // Listen for changes from AppMenuSettings
+    useEffect(() => {
+        const handleSettingsChange = (e: Event) => {
+            const customEvent = e as CustomEvent<SidebarItem[]>;
+            if (customEvent.detail) {
+                setSidebarOrder(customEvent.detail);
+            }
+        };
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === SIDEBAR_ORDER_STORAGE_KEY) {
+                setSidebarOrder(getSidebarOrder());
+            }
+        };
+        window.addEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+        window.addEventListener('storage', handleStorageChange);
+        return () => {
+            window.removeEventListener(SIDEBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, []);
+
     const getIconColor = (key: string) => {
-        if (activeApp === key) {
-            return '';
-        }
-        return ICON_COLORS[key] || ICON_COLORS.default;
+        if (activeApp === key) return '';
+        return SIDEBAR_ITEM_META[key]?.color || 'text-muted-foreground';
     };
     
-    const handleAppClick = (key: string, config: any) => {
-        if (config.openMode === 'external' && config.url) {
-            window.open(config.url, '_blank');
+    const handleItemClick = useCallback((id: string) => {
+        const meta = SIDEBAR_ITEM_META[id];
+        if (!meta) return;
+
+        if (meta.type === 'config') {
+            const currentAppConfig = appConfigs[id] || {};
+            if (currentAppConfig.openMode === 'external' && currentAppConfig.url) {
+                window.open(currentAppConfig.url, '_blank');
+            } else {
+                setActiveApp(id);
+            }
         } else {
-            setActiveApp(key);
+            // Internal items: inventory, fault_report, insights
+            setActiveApp(id);
         }
-    };
+    }, [appConfigs, setActiveApp]);
 
     return (
         <aside 
@@ -69,45 +103,39 @@ const LeftSidebar: React.FC = () => {
             
             <div className={`transition-opacity duration-200 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0 md:opacity-100'}`}>
                 <nav className="flex-1 p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
-                    {/* Inventory - primary action at top */}
-                    <AppButton 
-                        onClick={() => setActiveApp('inventory')} 
-                        variant={activeApp === 'inventory' ? 'default' : 'ghost'} 
-                        className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
-                        title={isSidebarExpanded ? "" : "Inventering"}
-                    >
-                        <ClipboardList size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor('inventory')}`} />
-                        <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>Inventering</span>
-                    </AppButton>
-                    
-                    <div className={`h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1`} />
-                    
+                    {/* Home - always first, not reorderable */}
                     <AppButton 
                         onClick={() => { setActiveApp('home'); setSelectedFacility(null); }} 
                         variant={activeApp === 'home' ? 'default' : 'ghost'} 
                         className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
                         title={isSidebarExpanded ? "" : "Home"}
                     >
-                        <Home size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor('home')}`} />
+                        <Home size={16} className={`sm:w-[18px] sm:h-[18px] ${activeApp === 'home' ? '' : 'text-sky-500'}`} />
                         <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>Home</span>
                     </AppButton>
                     
-                    <div className={`h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1`} />
+                    <div className="h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1" />
                     
-                    {Object.entries(DEFAULT_APP_CONFIGS).map(([key, cfg]: [string, any]) => {
-                        const IconComp = cfg.icon || Box;
-                        const currentAppConfig = appConfigs[key] || {};
+                    {/* Dynamic items from saved order */}
+                    {sidebarOrder.map((item) => {
+                        const meta = SIDEBAR_ITEM_META[item.id];
+                        if (!meta) return null;
+                        const IconComp = meta.icon;
                         return (
-                            <AppButton 
-                                key={key} 
-                                onClick={() => handleAppClick(key, currentAppConfig)}
-                                variant={activeApp === key ? 'default' : 'ghost'} 
-                                className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
-                                title={isSidebarExpanded ? "" : String(cfg.label)} 
-                            >
-                                <IconComp size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor(key)}`} /> 
-                                <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>{String(cfg.label)}</span>
-                            </AppButton>
+                            <React.Fragment key={item.id}>
+                                <AppButton 
+                                    onClick={() => handleItemClick(item.id)}
+                                    variant={activeApp === item.id ? 'default' : 'ghost'} 
+                                    className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
+                                    title={isSidebarExpanded ? "" : meta.label}
+                                >
+                                    <IconComp size={16} className={`sm:w-[18px] sm:h-[18px] ${getIconColor(item.id)}`} />
+                                    <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>{meta.label}</span>
+                                </AppButton>
+                                {item.hasDividerAfter && (
+                                    <div className="h-px bg-border my-1.5 sm:my-2 mx-0.5 sm:mx-1" />
+                                )}
+                            </React.Fragment>
                         );
                     })}
                 </nav>
