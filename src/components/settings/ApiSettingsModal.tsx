@@ -1709,26 +1709,49 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <Radar className="h-5 w-5 text-primary" />
                                         <div>
                                             <h4 className="font-medium">Senslinc</h4>
-                                            <p className="text-xs text-muted-foreground">0 sensorer synkade</p>
+                                            <p className="text-xs text-muted-foreground">IoT-sensorer via Senslinc (InUse)</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
                                         <Button 
-                                            disabled
                                             size="sm"
                                             variant="outline"
                                             className="gap-1 h-8 text-xs"
+                                            onClick={async () => {
+                                                try {
+                                                    const { data, error } = await supabase.functions.invoke('senslinc-query', {
+                                                        body: { action: 'get-indices' }
+                                                    });
+                                                    if (error) throw error;
+                                                    if (data?.success) {
+                                                        toast({
+                                                            title: 'Anslutning OK',
+                                                            description: `Hittade ${data.indices?.length || 0} index i Senslinc.`,
+                                                        });
+                                                    } else {
+                                                        toast({
+                                                            variant: 'destructive',
+                                                            title: 'Anslutningsfel',
+                                                            description: data?.error || 'Kunde inte nå Senslinc API (möjlig rate limit)',
+                                                        });
+                                                    }
+                                                } catch (err: any) {
+                                                    toast({
+                                                        variant: 'destructive',
+                                                        title: 'Fel',
+                                                        description: err.message,
+                                                    });
+                                                }
+                                            }}
                                         >
                                             <RefreshCw className="h-3 w-3" />
-                                            Starta synk
+                                            Testa anslutning
                                         </Button>
                                     </div>
                                 </div>
-                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
-                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                    <p className="text-sm">Konfigurera Senslinc API först</p>
-                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Tryck "Testa anslutning" för att kontrollera om Senslinc API:t är tillgängligt. Om du får rate limit-fel (429), vänta en stund och försök igen.
+                                </p>
                             </div>
 
                             {/* Ivion Sync Section */}

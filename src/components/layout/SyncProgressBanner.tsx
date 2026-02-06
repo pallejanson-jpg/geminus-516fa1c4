@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, CheckCircle, AlertCircle, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, AlertCircle, X, Play, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 interface SyncState {
   subtree_id: string;
@@ -14,20 +18,137 @@ interface SyncState {
   error_message: string | null;
 }
 
+interface SyncProgress {
+  totalSynced: number | null;
+  totalBuildings: number | null;
+  currentBuildingIndex: number | null;
+}
+
 export const SyncProgressBanner: React.FC = () => {
+  const { toast } = useToast();
   const [activeSyncs, setActiveSyncs] = useState<SyncState[]>([]);
+  const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const resumeRef = useRef(false);
+
+  const isStale = useCallback((sync: SyncState) => {
+    if (sync.sync_status !== 'running' || !sync.last_sync_started_at) return false;
+    return Date.now() - new Date(sync.last_sync_started_at).getTime() > STALE_THRESHOLD_MS;
+  }, []);
+
+  const handleResume = useCallback(async (subtreeId: string) => {
+    if (resumeRef.current) return; // prevent double-triggering
+    resumeRef.current = true;
+    setIsResuming(true);
+
+    const runLoop = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('asset-plus-sync', {
+          body: { action: 'sync-assets-resumable' }
+        });
+
+        if (error) {
+          console.error('Resume sync error:', error);
+          toast({
+            variant: 'destructive',
+            title: 'Synkfel',
+            description: error.message,
+          });
+          setIsResuming(false);
+          resumeRef.current = false;
+          return;
+        }
+
+        if (data?.interrupted) {
+          // Continue after delay
+          setTimeout(() => runLoop(), 2000);
+        } else {
+          // Completed
+          toast({
+            title: 'Synk klar',
+            description: `${data?.totalSynced || 0} tillgångar synkade.`,
+          });
+          setIsResuming(false);
+          resumeRef.current = false;
+          window.dispatchEvent(new CustomEvent('asset-sync-completed'));
+        }
+      } catch (err: any) {
+        console.error('Resume sync exception:', err);
+        setIsResuming(false);
+        resumeRef.current = false;
+      }
+    };
+
+    toast({
+      title: 'Fortsätter synk',
+      description: 'Återupptar avbruten synkronisering...',
+    });
+
+    runLoop();
+  }, [toast]);
+
+  const handleReset = useCallback(async (subtreeId: string) => {
+    setIsResetting(true);
+    try {
+      const { error } = await supabase.functions.invoke('asset-plus-sync', {
+        body: { action: 'reset-assets-progress' }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Återställd',
+        description: 'Synkstatus har återställts. Du kan starta en ny synk.',
+      });
+
+      // Clear the stale sync from local state
+      setActiveSyncs(prev => prev.filter(s => s.subtree_id !== subtreeId));
+      window.dispatchEvent(new CustomEvent('asset-sync-completed'));
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Kunde inte återställa',
+        description: err.message,
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  }, [toast]);
+
+  // Fetch sync progress details
+  const fetchProgress = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('asset_sync_progress')
+        .select('total_synced, total_buildings, current_building_index')
+        .eq('job', 'assets_instances')
+        .maybeSingle();
+
+      if (data) {
+        setProgress({
+          totalSynced: data.total_synced,
+          totalBuildings: data.total_buildings,
+          currentBuildingIndex: data.current_building_index,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch sync progress:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    // Initial fetch
+    // Initial fetch - get ALL running or recently active syncs
     const fetchSyncStates = async () => {
       const { data } = await supabase
         .from('asset_sync_state')
         .select('*')
         .eq('sync_status', 'running');
       
-      if (data) {
+      if (data && data.length > 0) {
         setActiveSyncs(data);
+        fetchProgress();
       }
     };
 
@@ -62,6 +183,7 @@ export const SyncProgressBanner: React.FC = () => {
               }
               return [...prev, newState];
             });
+            fetchProgress();
           } else {
             // Remove completed/failed syncs after a delay
             setTimeout(() => {
@@ -72,10 +194,39 @@ export const SyncProgressBanner: React.FC = () => {
       )
       .subscribe();
 
+    // Also subscribe to progress updates
+    const progressChannel = supabase
+      .channel('sync-progress-detail')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'asset_sync_progress'
+        },
+        () => {
+          fetchProgress();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(progressChannel);
     };
-  }, []);
+  }, [fetchProgress]);
+
+  // Auto-resume stale syncs on mount (with 3s delay)
+  useEffect(() => {
+    const staleSync = activeSyncs.find(s => isStale(s) && s.subtree_id === 'assets');
+    
+    if (staleSync && !isResuming && !isResetting) {
+      const timer = setTimeout(() => {
+        handleResume('assets');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeSyncs, isStale, isResuming, isResetting, handleResume]);
 
   if (dismissed || activeSyncs.length === 0) {
     return null;
@@ -83,40 +234,94 @@ export const SyncProgressBanner: React.FC = () => {
 
   return (
     <div className="bg-primary/5 border-b border-primary/20 px-4 py-2">
-      {activeSyncs.map((sync) => (
-        <div key={sync.subtree_id} className="flex items-center gap-3">
-          <RefreshCw className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
-          
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">
-                Synkar {sync.subtree_name || sync.subtree_id}
-              </span>
-              {sync.total_assets && sync.total_assets > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  {sync.total_assets.toLocaleString()} objekt
-                </span>
+      {activeSyncs.map((sync) => {
+        const stale = isStale(sync);
+        const progressPercent = progress?.totalBuildings && progress.totalBuildings > 0
+          ? Math.round(((progress.currentBuildingIndex ?? 0) / progress.totalBuildings) * 100)
+          : null;
+        const progressLabel = progress?.totalBuildings
+          ? `(${(progress.currentBuildingIndex ?? 0) + 1}/${progress.totalBuildings})`
+          : '';
+
+        return (
+          <div key={sync.subtree_id} className="flex items-center gap-3">
+            {stale ? (
+              <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+            ) : (
+              <RefreshCw className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+            )}
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium truncate">
+                    {stale ? 'Synken har stannat' : 'Synkar'} {sync.subtree_name || sync.subtree_id} {progressLabel}
+                  </span>
+                  {stale && (
+                    <Badge variant="outline" className="text-xs border-yellow-300 bg-yellow-50 text-yellow-700 flex-shrink-0">
+                      Avbruten
+                    </Badge>
+                  )}
+                </div>
+                {sync.total_assets != null && sync.total_assets > 0 && (
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    {(progress?.totalSynced ?? sync.total_assets).toLocaleString()} objekt
+                  </span>
+                )}
+              </div>
+              
+              {!stale && progressPercent !== null && (
+                <Progress 
+                  value={progressPercent} 
+                  className="h-1 mt-1" 
+                />
+              )}
+
+              {stale && (
+                <div className="flex gap-2 mt-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs gap-1"
+                    onClick={() => handleResume(sync.subtree_id)}
+                    disabled={isResuming || isResetting}
+                  >
+                    {isResuming ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                    Fortsätt
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs gap-1"
+                    onClick={() => handleReset(sync.subtree_id)}
+                    disabled={isResuming || isResetting}
+                  >
+                    {isResetting ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3 w-3" />
+                    )}
+                    Återställ
+                  </Button>
+                </div>
               )}
             </div>
             
-            {sync.total_assets && sync.total_assets > 0 && (
-              <Progress 
-                value={100} 
-                className="h-1 mt-1" 
-              />
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 flex-shrink-0"
+              onClick={() => setDismissed(true)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
           </div>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 flex-shrink-0"
-            onClick={() => setDismissed(true)}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
