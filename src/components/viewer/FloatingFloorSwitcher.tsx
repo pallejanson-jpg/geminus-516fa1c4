@@ -29,7 +29,7 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 // Constants for responsive design
-const MAX_VISIBLE_PILLS_DESKTOP = 8;
+const MAX_VISIBLE_PILLS_DESKTOP = 5;
 const MAX_VISIBLE_PILLS_MOBILE = 4;
 
 /**
@@ -79,8 +79,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     if (hasInitializedPosition.current) return;
     if (typeof window === 'undefined') return;
     
-    // Position near right edge, below header
-    const x = window.innerWidth - 80;
+    // Position to the left of right panel (320px panel + some padding)
+    const x = window.innerWidth - 400;
     const y = 150;
     setPosition({ x, y });
     hasInitializedPosition.current = true;
@@ -144,7 +144,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         if (!error && dbFloors && dbFloors.length > 0) {
           const nameMap = new Map<string, string>();
           dbFloors.forEach((f) => {
-            const displayName = f.common_name || f.name || f.fm_guid;
+            const displayName = f.common_name || f.name || null;
+            if (!displayName) return; // Skip - will get sequential naming
             nameMap.set(f.fm_guid, displayName);
             nameMap.set(f.fm_guid.toLowerCase(), displayName);
             nameMap.set(f.fm_guid.toUpperCase(), displayName);
@@ -180,7 +181,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         if (dbName) {
           displayName = dbName;
         } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-          displayName = `Plan ${fmGuid.substring(0, 6)}`;
+          displayName = `__GUID_PLACEHOLDER__`;
         }
         
         // Extract short name (number or first few chars)
@@ -207,6 +208,16 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
     const extractedFloors = Array.from(floorsByName.values());
     extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+
+    // Replace GUID placeholders with sequential "Plan X" names
+    let unknownIndex = 1;
+    extractedFloors.forEach(floor => {
+      if (floor.name === '__GUID_PLACEHOLDER__') {
+        floor.name = `Plan ${unknownIndex}`;
+        floor.shortName = String(unknownIndex);
+        unknownIndex++;
+      }
+    });
 
     return extractedFloors;
   }, [getXeokitViewer, floorNamesMap]);

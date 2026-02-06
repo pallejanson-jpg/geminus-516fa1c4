@@ -109,6 +109,9 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const [modelsOpen, setModelsOpen] = useState(false);
   const [floorsOpen, setFloorsOpen] = useState(false);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(true);       // Expanded by default
+  const [roomVizOpen, setRoomVizOpen] = useState(false);       // Collapsed by default
+  const [actionsOpen, setActionsOpen] = useState(false);        // Collapsed by default
 
   // Clipping height state
   const [clipHeight, setClipHeight] = useState(1.2);
@@ -436,6 +439,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
           </SheetHeader>
 
           <ScrollArea className="h-[calc(100vh-80px)]">
+            {isOpen && (
             <div className="p-4 space-y-3">
 
               {/* BIM Models - Collapsible */}
@@ -483,10 +487,19 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               <Separator />
 
-              {/* Display Section */}
-              <div>
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Visa</Label>
-                <div className="space-y-3">
+              {/* Display Section - Collapsible, expanded by default */}
+              <Collapsible open={displayOpen} onOpenChange={setDisplayOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      <span className="font-medium text-sm">Visa</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", displayOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <div className="space-y-3 pt-2">
                   {/* 2D/3D Toggle */}
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
@@ -551,19 +564,35 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </Collapsible>
                   )}
                 </div>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               <Separator />
 
-              {/* Room Visualization - Embedded */}
+              {/* Room Visualization - Collapsible, collapsed by default */}
               {isToolVisible('visualization') && buildingFmGuid && (
-                <RoomVisualizationPanel
-                  viewerRef={viewerRef}
-                  buildingFmGuid={buildingFmGuid}
-                  onShowSpaces={onShowSpacesChange}
-                  visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
-                  embedded={true}
-                />
+                <Collapsible open={roomVizOpen} onOpenChange={setRoomVizOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                      <div className="flex items-center gap-2">
+                        <Palette className="h-4 w-4" />
+                        <span className="font-medium text-sm">Rumsvisualisering</span>
+                      </div>
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="pt-2">
+                      <RoomVisualizationPanel
+                        viewerRef={viewerRef}
+                        buildingFmGuid={buildingFmGuid}
+                        onShowSpaces={onShowSpacesChange}
+                        visibleFloorFmGuids={visibleFloorFmGuids && visibleFloorFmGuids.length > 0 ? visibleFloorFmGuids : undefined}
+                        embedded={true}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
 
               <Separator />
@@ -699,10 +728,19 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
               <Separator />
 
-              {/* Actions section */}
-              <div>
-                <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Åtgärder</Label>
-                <div className="space-y-1">
+              {/* Actions section - Collapsible, collapsed by default */}
+              <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4" />
+                      <span className="font-medium text-sm">Åtgärder</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", actionsOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <div className="space-y-1 pt-2">
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureViewState} disabled={!isViewerReady}>
                     <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
                     <span className="text-sm">Skapa vy</span>
@@ -730,8 +768,10 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </Button>
                   )}
                 </div>
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
+            )}
           </ScrollArea>
         </SheetContent>
       </Sheet>
