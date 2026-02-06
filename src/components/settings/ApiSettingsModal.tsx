@@ -163,6 +163,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingAccAssets, setIsSyncingAccAssets] = useState(false);
     const [accStatus, setAccStatus] = useState<any>(null);
     const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
+    const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>('US');
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
 
     // ACC handlers
@@ -196,7 +197,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setIsLoadingAccProjects(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'list-projects' }
+                body: { action: 'list-projects', region: accRegion }
             });
             if (error) throw error;
             if (data?.success && data.projects) {
@@ -223,7 +224,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setIsSyncingAccLocations(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'sync-locations', projectId: selectedAccProjectId }
+                body: { action: 'sync-locations', projectId: selectedAccProjectId, region: accRegion }
             });
             if (error) throw error;
             if (data?.success) {
@@ -247,7 +248,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         setIsSyncingAccAssets(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'sync-assets', projectId: selectedAccProjectId }
+                body: { action: 'sync-assets', projectId: selectedAccProjectId, region: accRegion }
             });
             if (error) throw error;
             if (data?.success) {
@@ -1702,6 +1703,27 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     Integration med Autodesk Construction Cloud för byggnads-, vånings- och rumsdata via APS OAuth 2.0 (2-legged).
                                                     Secrets (APS_CLIENT_ID, APS_CLIENT_SECRET, ACC_ACCOUNT_ID) konfigureras i Lovable Cloud.
                                                 </p>
+
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium">Region</Label>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant={accRegion === 'US' ? 'default' : 'outline'}
+                                                            size="sm"
+                                                            onClick={() => setAccRegion('US')}
+                                                        >
+                                                            US
+                                                        </Button>
+                                                        <Button
+                                                            variant={accRegion === 'EMEA' ? 'default' : 'outline'}
+                                                            size="sm"
+                                                            onClick={() => setAccRegion('EMEA')}
+                                                        >
+                                                            EMEA
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">Välj den region där ditt ACC-konto finns (EU-projekt kräver EMEA).</p>
+                                                </div>
 
                                                 <div className="flex gap-2 flex-wrap">
                                                     <Button

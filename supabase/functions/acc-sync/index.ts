@@ -36,6 +36,23 @@ async function getApsAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+// ============ REGION HELPERS ============
+
+function getBaseUrl(region?: string): string {
+  // EMEA uses a different base URL for ACC/AEC Data Model APIs
+  if (region?.toUpperCase() === "EMEA") {
+    return "https://developer.api.autodesk.com";
+  }
+  return "https://developer.api.autodesk.com";
+}
+
+function getRegionHeader(region?: string): Record<string, string> {
+  if (region?.toUpperCase() === "EMEA") {
+    return { "region": "EMEA" };
+  }
+  return {};
+}
+
 // ============ ACC API HELPERS ============
 
 interface LocationNode {
@@ -69,17 +86,16 @@ async function fetchAllLocationNodes(
   const allNodes: LocationNode[] = [];
   let offset = 0;
   const limit = 10000;
-
-  // Strip "b." prefix if present for the API call
   const cleanProjectId = projectId.replace(/^b\./, "");
+  const regionHeaders = getRegionHeader(region);
 
   while (true) {
     const url = `https://developer.api.autodesk.com/construction/locations/v2/projects/${cleanProjectId}/trees/default/nodes?limit=${limit}&offset=${offset}`;
     const headers: Record<string, string> = {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
+      ...regionHeaders,
     };
-    if (region) headers["region"] = region;
 
     const res = await fetch(url, { headers });
 
@@ -102,9 +118,11 @@ async function fetchAllLocationNodes(
 async function fetchAccAssets(
   token: string,
   projectId: string,
+  region?: string,
   cursorState?: string,
 ): Promise<{ results: AccAsset[]; cursorState?: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
+  const regionHeaders = getRegionHeader(region);
   let url = `https://developer.api.autodesk.com/construction/assets/v2/projects/${cleanProjectId}/assets?limit=200`;
   if (cursorState) url += `&cursorState=${encodeURIComponent(cursorState)}`;
 
@@ -112,6 +130,7 @@ async function fetchAccAssets(
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
+      ...regionHeaders,
     },
   });
 
@@ -130,19 +149,21 @@ async function fetchAccAssets(
 async function fetchAccCategories(
   token: string,
   projectId: string,
+  region?: string,
 ): Promise<Record<string, string>> {
   const cleanProjectId = projectId.replace(/^b\./, "");
+  const regionHeaders = getRegionHeader(region);
   const url = `https://developer.api.autodesk.com/construction/assets/v1/projects/${cleanProjectId}/categories`;
 
   const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
+      ...regionHeaders,
     },
   });
 
   if (!res.ok) {
-    // Non-critical, return empty map
     console.log(`Categories API failed (${res.status}), continuing without category names`);
     return {};
   }
@@ -158,14 +179,17 @@ async function fetchAccCategories(
 async function fetchAccProjects(
   token: string,
   accountId: string,
+  region?: string,
 ): Promise<any[]> {
   const cleanAccountId = accountId.replace(/^b\./, "");
+  const regionHeaders = getRegionHeader(region);
   const url = `https://developer.api.autodesk.com/construction/admin/v1/accounts/${cleanAccountId}/projects?limit=100`;
 
   const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
+      ...regionHeaders,
     },
   });
 
@@ -451,7 +475,7 @@ serve(async (req: Request) => {
         }
 
         const token = await getApsAccessToken();
-        const projects = await fetchAccProjects(token, accountId);
+        const projects = await fetchAccProjects(token, accountId, region);
 
         return new Response(
           JSON.stringify({
@@ -545,14 +569,14 @@ serve(async (req: Request) => {
           }
 
           // Fetch categories
-          const categoryMap = await fetchAccCategories(token, projectId);
+          const categoryMap = await fetchAccCategories(token, projectId, region);
 
           // Fetch all assets with pagination
           let totalSynced = 0;
           let cursorState: string | undefined;
 
           do {
-            const page = await fetchAccAssets(token, projectId, cursorState);
+            const page = await fetchAccAssets(token, projectId, region, cursorState);
             console.log(`Fetched ${page.results.length} assets (cursor: ${cursorState ? "yes" : "start"})`);
 
             if (page.results.length > 0) {
