@@ -1,244 +1,284 @@
 
+# Felanmalan - Quick Action for Fault Reporting
 
-# Plan: Prestandafix, kollapserbara sektioner, namngivning och positionering
+## Overview
 
-## Sammanfattning av problem
+Build a new "Felanmalan" (Fault Report) feature that mirrors the er-rep.com workflow within Geminus. The feature supports two entry points:
 
-1. **Prestanda**: ViewerRightPanel renderar alla tunga barn (ModelVisibilitySelector, FloorVisibilitySelector, RoomVisualizationPanel, LightingControlsPanel) oavsett om panelen ar oppen eller stangd. Sheet mountar alltid sitt innehall.
-2. **Kollapserbara sektioner**: "Visa", "Rumsvisualisering" och "Atgarder" ar inte kollapserbara -- bara BIM-modeller, Vaningar och Viewer Settings ar det.
-3. **Vaningsnamn**: Vissa vaningsplan i Smaviken saknar `common_name` i databasen (3 av 13 storeys har `null`). Da faller koden tillbaka till `Vaningsplan {GUID-fragment}`. Problemet: metaObject.name fran xeokit ar ocksa ett GUID.
-4. **FloatingFloorSwitcher position**: Initieras med `x = window.innerWidth - 80` (fixed position), men med den nya hogerpanelen (320px bred) hamnar den utanfor synligt omrade. Dessutom ar den for lang vertikalt.
-5. **BIM-modellnamn**: `xkt_models`-tabellen ar tom for Smaviken, sa ModelVisibilitySelector faller tillbaka till Asset+ API. Men bara modeller som faktiskt ar laddade i scenen visas -- modeller som inte ar laddade (E, B, V) syns inte.
+1. **QR-kod scanning** (mobile-first): User scans a QR code on-site, which opens a mobile-optimized fault report form pre-filled with building/room context.
+2. **Quick Action** (desktop/app): User clicks "Felanmalan" in the QuickActions panel on a facility landing page, opening a desktop-optimized form.
+
+The data is stored in the existing `work_orders` table.
 
 ---
 
-## Losning 1: Prestanda -- lazy rendering
+## Form Fields
 
-Problemet ar att Sheet alltid monterar sina barn. Losningen ar att villkorligt rendera tunga komponenter baserat pa `isOpen`:
+Based on analysis of er-rep.com (Angular/DevExtreme app using QR key-based routing) and the existing `work_orders` schema, the form will contain:
+
+| Field | Type | Required | Maps to `work_orders` column |
+|-------|------|----------|------------------------------|
+| Rubrik (Title) | Text input | Yes | `title` |
+| Beskrivning (Description) | Textarea | Yes | `description` |
+| Kategori | Select (El, VVS, Hiss, Bygg, Ventilation, Stad/Rent, Ovrigt) | Yes | `category` |
+| Prioritet | Radio pills (Lag/Medel/Hog/Kritisk) | No (default: Medel) | `priority` |
+| Foto | Camera/file upload (up to 3 images) | No | `attributes.images[]` |
+| Namn (reporter) | Text input | Yes | `reported_by` |
+| E-post | Email input | Yes | `attributes.reporter_email` |
+| Telefon | Phone input | No | `attributes.reporter_phone` |
+
+Auto-populated fields (from QR or context):
+- `building_fm_guid` / `building_name` -- from QR key or facility context
+- `space_fm_guid` / `space_name` -- from QR key or facility context
+- `status` -- defaults to 'open'
+- `external_id` -- generated unique ID (e.g. `FR-{timestamp}`)
+- `reported_at` -- current timestamp
+
+---
+
+## Architecture
+
+### Route: `/fault-report` (public, no login required)
+
+A standalone route (like `/ivion-create`) that can be accessed via QR code without logging in. QR codes will resolve to URLs like:
+
+```
+https://{app-domain}/fault-report?key={qr-key}
+```
+
+The `key` parameter maps to a building or room fm_guid via a lookup (see QR mapping below).
+
+### QR Code Mapping
+
+New database table `qr_report_configs` to map QR keys to buildings/rooms:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| qr_key | text (unique) | The key from the QR code URL |
+| building_fm_guid | text | Building reference |
+| building_name | text | Display name |
+| space_fm_guid | text (nullable) | Optional room reference |
+| space_name | text (nullable) | Room display name |
+| is_active | boolean | Whether this QR config is active |
+| created_at | timestamp | Creation time |
+
+RLS: Public SELECT (no auth required for reading config), admin-only INSERT/UPDATE/DELETE.
+
+---
+
+## File Structure
+
+### New Files
+
+```
+src/pages/FaultReport.tsx                           -- Main page (route handler)
+src/components/fault-report/FaultReportForm.tsx      -- Desktop form layout
+src/components/fault-report/MobileFaultReport.tsx    -- Mobile wizard layout
+src/components/fault-report/FaultReportSuccess.tsx   -- Success/confirmation screen
+src/components/fault-report/QrScanner.tsx            -- QR code scanner (camera)
+src/components/fault-report/PhotoCapture.tsx         -- Photo upload/camera component
+```
+
+### Modified Files
+
+```
+src/App.tsx                                         -- Add /fault-report route (public)
+src/components/portfolio/QuickActions.tsx            -- Add Felanmalan button
+src/components/portfolio/FacilityLandingPage.tsx     -- Wire up onFaultReport handler
+src/context/AppContext.tsx                           -- Add fault report context/navigation
+src/components/layout/MainContent.tsx                -- Add fault_report case
+```
+
+---
+
+## Mobile Layout (Wizard Steps)
+
+Following the same pattern as `MobileInventoryWizard`:
 
 ```text
-Andringar i ViewerRightPanel.tsx:
+Step 1: QR / Plats (Location)
+  +----------------------------------+
+  |  [<]  Felanmalan          [Scan] |
+  |  (o) (o) (o) (o)  <-- step dots |
+  |                                  |
+  |  Skanna QR-kod eller valj plats  |
+  |                                  |
+  |  [Camera viewfinder / QR scan]   |
+  |                                  |
+  |  -- or --                        |
+  |  [Valj byggnad manuellt]         |
+  +----------------------------------+
 
-- Wrappa hela ScrollArea-innehallet i: {isOpen && (...)}
-- Alternativt: anvand CSS visibility/display for att behalla state men undvika rendering
-- ModelVisibilitySelector, FloorVisibilitySelector, RoomVisualizationPanel,
-  LightingControlsPanel renderas bara nar panelen ar oppen
+Step 2: Felinformation
+  +----------------------------------+
+  |  [<]  Felanmalan                 |
+  |  (.) (o) (o) (o)                 |
+  |                                  |
+  |  Byggnad: Smaviken               |
+  |  Rum: Korridor Plan 01           |
+  |                                  |
+  |  Kategori *                      |
+  |  [El v]                          |
+  |                                  |
+  |  Rubrik *                        |
+  |  [________________]              |
+  |                                  |
+  |  Beskrivning *                   |
+  |  [________________]              |
+  |  [________________]              |
+  |                                  |
+  |  Prioritet                       |
+  |  [Lag] [Medel] [Hog] [Kritisk]   |
+  +----------------------------------+
+
+Step 3: Foto
+  +----------------------------------+
+  |  [<]  Felanmalan                 |
+  |  (.) (.) (o) (o)                 |
+  |                                  |
+  |  Ta foto av felet                |
+  |                                  |
+  |  [Camera / Upload area]          |
+  |  [Photo 1] [Photo 2] [+]        |
+  |                                  |
+  |  [Hoppa over]        [Nasta ->]  |
+  +----------------------------------+
+
+Step 4: Kontaktuppgifter + Skicka
+  +----------------------------------+
+  |  [<]  Felanmalan                 |
+  |  (.) (.) (.) (o)                 |
+  |                                  |
+  |  Ditt namn *                     |
+  |  [________________]              |
+  |                                  |
+  |  E-post *                        |
+  |  [________________]              |
+  |                                  |
+  |  Telefon                         |
+  |  [________________]              |
+  |                                  |
+  |  [=== Skicka felanmalan ===]     |
+  +----------------------------------+
 ```
-
-Detta forhindrar att alla underkomponenter (som gor Supabase-queries, itererar metaScene, etc.) kor nar panelen ar stangd.
 
 ---
 
-## Losning 2: Kollapserbara sektioner
+## Desktop Layout
 
-Gora om "Visa", "Rumsvisualisering" och "Atgarder" till Collapsible-komponenter. Bara "Visa" ska vara expanderad som standard.
+A single-page form similar to the Inventory desktop layout:
+- Left panel (35%): Form with all fields visible in a scrollable card
+- Right panel (65%): Map showing building location (if coordinates available) or placeholder
 
-| Sektion | Standard | Nu |
-|---------|----------|----|
-| BIM-modeller | Kollapsad | Redan collapsible, standard kollapsad |
-| Vaningsplan | Kollapsad | Redan collapsible, standard kollapsad |
-| **Visa** | **Expanderad** | Ej collapsible (fast div) |
-| **Rumsvisualisering** | **Kollapsad** | Ej collapsible |
-| **Viewer Settings** | Kollapsad | Redan collapsible, standard kollapsad |
-| **Atgarder** | **Kollapsad** | Ej collapsible |
-
-Ny state:
-
-```typescript
-const [displayOpen, setDisplayOpen] = useState(true);      // Expanderad som standard
-const [roomVizOpen, setRoomVizOpen] = useState(false);      // Kollapsad
-const [actionsOpen, setActionsOpen] = useState(false);       // Kollapsad
-```
+When opened from QuickActions, building/room info is pre-filled.
 
 ---
 
-## Losning 3: Vaningsnamn
+## Technical Details
 
-Problemet ar att vaningsplan utan `common_name` i databasen visas som GUID-fragment. Losningen ar att forbattra fallback-logiken i bade `FloorVisibilitySelector.tsx` och `FloatingFloorSwitcher.tsx`:
+### 1. Database Migration
 
-```text
-Nuvarande fallback-kedja:
-1. common_name fran databas -> OK om finns
-2. metaObject.name -> Ofta ocksa ett GUID
-3. "Vaningsplan {GUID.substring(0,8)}" -> Darligt
+```sql
+CREATE TABLE public.qr_report_configs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  qr_key TEXT UNIQUE NOT NULL,
+  building_fm_guid TEXT NOT NULL,
+  building_name TEXT,
+  space_fm_guid TEXT,
+  space_name TEXT,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
-Ny fallback-kedja:
-1. common_name fran databas -> OK om finns
-2. metaObject.name (om det INTE ar ett GUID) -> Anvand det
-3. name fran assets-tabellen (om den finns) -> Anvand det
-4. "Plan {index+1}" -> Numrera sekventiellt baserat pa position i listan
+ALTER TABLE public.qr_report_configs ENABLE ROW LEVEL SECURITY;
+
+-- Public can read (needed for QR code lookups without auth)
+CREATE POLICY "Anyone can read active qr configs"
+  ON public.qr_report_configs FOR SELECT
+  USING (is_active = true);
+
+-- Only admins can manage configs
+CREATE POLICY "Admins can manage qr configs"
+  ON public.qr_report_configs FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+-- Allow anonymous inserts to work_orders (for QR-based reports)
+-- Add a new policy for unauthenticated fault reports
+CREATE POLICY "Anyone can insert fault reports"
+  ON public.work_orders FOR INSERT
+  WITH CHECK (status = 'open');
 ```
 
-Dessutom: nar `common_name` ar null men assets-tabellen har raden, inkludera `name`-faltet i DB-queryn (det ar redan inkluderat men inte anvant som fallback):
+### 2. Photo Storage
+
+Use the existing `inventory-images` storage bucket (public). Photos are uploaded to a `fault-reports/{work_order_id}/` path and URLs stored in `attributes.images[]`.
+
+### 3. App.tsx Route
 
 ```typescript
-// I fetchFloorNames:
-const displayName = f.common_name || f.name || null; // Bara satt i map om vi har ett namn
-if (displayName) {
-  nameMap.set(f.fm_guid, displayName);
-}
-// Vaningsplan utan bade common_name och name i DB far "Plan X" som fallback
-```
+const FaultReport = lazy(() => import("@/pages/FaultReport"));
 
-For att ge sekventiella namn ("Plan 1", "Plan 2") snarare an GUID-fragment, numbrera de ej-namngivna vaningarna baserat pa deras position i den sorterade listan.
-
----
-
-## Losning 4: FloatingFloorSwitcher position och storlek
-
-### Position
-Andra initial position fran `window.innerWidth - 80` till `window.innerWidth - 400` (utanfor hogerpanelen). Samt gora den relativ till viewerns container istallet for `fixed` om mojligt. Enklaste fix: justera startposition och klamma till synligt omrade.
-
-### Vertikal storlek
-Minska `MAX_VISIBLE_PILLS_DESKTOP` fran 8 till 5 for att gora panelen kortare. Overflow-menyn handskas redan med resten.
-
-### Namnproblem
-Samma fix som Losning 3 -- `FloatingFloorSwitcher` anvander exakt samma fallback-logik.
-
----
-
-## Losning 5: BIM-modellnamn och synlighet
-
-### Problem A: Inte alla modeller visas
-`ModelVisibilitySelector` kombinerar scen-modeller med `dbModels` (fran xkt_models-tabellen). Men xkt_models ar tom for Smaviken, sa inga extra modeller laggs till. Asset+ API-svaret anvands bara for namngivning, inte for att populera listan.
-
-Fix: Nar modellnamn hamtas fran Asset+ API (GetModels), spara aven dessa som "tillgangliga men ej laddade" modeller i komponentens state, precis som dbModels redan gor for xkt_models-data.
-
-```typescript
-// I fetchModelNames, nar Asset+ API svarar:
-if (response.ok) {
-  const apiModels = await response.json();
-  // Spara som apiModels for att visa i listan (ej laddade)
-  setDbModels(apiModels.map(m => ({
-    id: m.id || '',
-    name: m.name || '',
-    fileName: m.xktFileUrl ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt' : m.id
-  })));
-  // ... namn-mappning som redan finns
-}
-```
-
-### Problem B: Namngivning
-Nar varken xkt_models eller Asset+ API ger namn, visas filnamnet utan formatering. Med Asset+ API-data lagd i dbModels-listen losas bade synlighet och namngivning.
-
----
-
-## Filer som andras
-
-| Fil | Andring |
-|-----|---------|
-| `src/components/viewer/ViewerRightPanel.tsx` | Lazy rendering (isOpen guard), kollapserbara Visa/RumsViz/Atgarder |
-| `src/components/viewer/FloorVisibilitySelector.tsx` | Forbattrad vaningsnamn-fallback (Plan X) |
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | Positionsfix, max 5 pills, vaningsnamn-fallback |
-| `src/components/viewer/ModelVisibilitySelector.tsx` | Populera dbModels fran Asset+ API-svar |
-
----
-
-## Tekniska detaljer
-
-### ViewerRightPanel -- lazy rendering
-
-```typescript
-// Wrappa hela innehallet i isOpen-check
-<ScrollArea className="h-[calc(100vh-80px)]">
-  {isOpen && (
-    <div className="p-4 space-y-3">
-      {/* BIM Models, Floors, Display, etc. */}
-    </div>
-  )}
-</ScrollArea>
-```
-
-### ViewerRightPanel -- kollapserbara sektioner
-
-```typescript
-// Nya state
-const [displayOpen, setDisplayOpen] = useState(true);
-const [roomVizOpen, setRoomVizOpen] = useState(false);
-const [actionsOpen, setActionsOpen] = useState(false);
-
-// Visa-sektionen blir:
-<Collapsible open={displayOpen} onOpenChange={setDisplayOpen}>
-  <CollapsibleTrigger asChild>
-    <Button variant="ghost" className="w-full justify-between h-10 px-2">
-      <span>Visa</span>
-      <ChevronDown className={cn(...)} />
-    </Button>
-  </CollapsibleTrigger>
-  <CollapsibleContent>
-    {/* 2D/3D, Modellrad, Visa rum, Annotationer */}
-  </CollapsibleContent>
-</Collapsible>
-```
-
-### FloatingFloorSwitcher -- position och storlek
-
-```typescript
-// Initiell position: langre till vanster for att inte hamna under hogerpanelen
-const x = window.innerWidth - 400;
-const y = 150;
-
-// Minska max synliga pills
-const MAX_VISIBLE_PILLS_DESKTOP = 5; // Tidigare 8
-```
-
-### Vaningsnamn -- forbattrad fallback
-
-```typescript
-// I bade FloorVisibilitySelector och FloatingFloorSwitcher:
-let displayName = metaObject.name || 'Unknown Floor';
-if (dbName) {
-  displayName = dbName;
-} else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-  // Namn ar ett GUID - ge sekventiellt nummer
-  // (beraknas efter sortering, se nedan)
-  displayName = null; // Markera for numrering
-}
-
-// Efter extraktion, numrera icke-namngivna vaningar:
-let unknownIndex = 1;
-extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-extractedFloors.forEach(floor => {
-  if (!floor.name || floor.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-    floor.name = `Plan ${unknownIndex}`;
-    floor.shortName = String(unknownIndex);
-    unknownIndex++;
+// Public route (no ProtectedRoute wrapper)
+<Route
+  path="/fault-report"
+  element={
+    <Suspense fallback={...}>
+      <FaultReport />
+    </Suspense>
   }
+/>
+```
+
+### 4. QuickActions Integration
+
+Add a new button "Felanmalan" with `AlertTriangle` icon in `QuickActions.tsx`. It calls a new `onFaultReport` prop that navigates to the fault report form with building context pre-filled.
+
+### 5. AppContext Changes
+
+Add `startFaultReport(prefill)` function similar to `startInventory`:
+- Sets `faultReportPrefill` state with building/room context
+- Sets `activeApp` to `'fault_report'`
+
+### 6. QR Scanner
+
+Use the device camera via `navigator.mediaDevices.getUserMedia` and a lightweight QR detection library. When a QR is scanned:
+1. Parse the URL to extract the key
+2. Look up the key in `qr_report_configs` table
+3. Pre-fill building/room fields
+4. Advance to the form step
+
+For the initial implementation, manual building selection will also be available as fallback.
+
+### 7. Form Validation (Zod)
+
+```typescript
+const faultReportSchema = z.object({
+  title: z.string().trim().min(1, "Rubrik kravs").max(200),
+  description: z.string().trim().min(1, "Beskrivning kravs").max(2000),
+  category: z.string().min(1, "Valj en kategori"),
+  priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+  reporterName: z.string().trim().min(1, "Namn kravs").max(100),
+  reporterEmail: z.string().trim().email("Ogiltig e-postadress").max(255),
+  reporterPhone: z.string().trim().max(20).optional(),
 });
 ```
 
-### ModelVisibilitySelector -- Asset+ API-modeller i listan
-
-```typescript
-// I fetchModelNames, nar Asset+ API svarar framgangsrikt:
-if (response.ok) {
-  const apiModels = await response.json();
-
-  // Spara som dbModels sa att extractModels() inkluderar dem
-  setDbModels(apiModels.map((m: any) => ({
-    id: m.id || '',
-    name: m.name || '',
-    fileName: m.xktFileUrl
-      ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
-      : (m.id || '')
-  })));
-
-  // Namn-mappning (redan existerande kod)
-  const nameMap = new Map<string, string>();
-  apiModels.forEach((m: any) => { ... });
-  setModelNamesMap(nameMap);
-}
-```
-
 ---
 
-## Implementationsordning
+## Implementation Order
 
-| Prio | Steg |
-|------|------|
-| 1 | Lazy rendering i ViewerRightPanel (prestanda) |
-| 2 | Kollapserbara sektioner (Visa, RumsViz, Atgarder) |
-| 3 | Vaningsnamn-fallback i FloorVisibilitySelector + FloatingFloorSwitcher |
-| 4 | FloatingFloorSwitcher position + max pills |
-| 5 | ModelVisibilitySelector -- visa alla modeller fran Asset+ API |
-
+| Priority | Task | Files |
+|----------|------|-------|
+| 1 | Create `qr_report_configs` table + RLS + work_orders anonymous insert policy | Migration |
+| 2 | Create `FaultReportForm.tsx` (desktop form component) | New file |
+| 3 | Create `MobileFaultReport.tsx` (mobile wizard) | New file |
+| 4 | Create `PhotoCapture.tsx` (camera/upload component) | New file |
+| 5 | Create `FaultReportSuccess.tsx` (confirmation screen) | New file |
+| 6 | Create `FaultReport.tsx` page (route handler, desktop/mobile switch) | New file |
+| 7 | Add `/fault-report` route to `App.tsx` (public) | Modified |
+| 8 | Add "Felanmalan" to QuickActions + wire up in FacilityLandingPage | Modified |
+| 9 | Add `fault_report` app case to MainContent + AppContext | Modified |
+| 10 | Create `QrScanner.tsx` (QR code camera scanning) | New file |
