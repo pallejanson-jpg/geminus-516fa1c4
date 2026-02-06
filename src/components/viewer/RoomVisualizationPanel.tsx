@@ -26,11 +26,13 @@ import IoTHoverLabel from './IoTHoverLabel';
 interface RoomVisualizationPanelProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid: string;
-  onClose: () => void;
+  onClose?: () => void;
   onShowSpaces?: (show: boolean) => void;
   /** Array of visible floor GUIDs from floor selector - filters which rooms to visualize */
   visibleFloorFmGuids?: string[];
   className?: string;
+  /** When true, renders inline without floating panel/drag/header */
+  embedded?: boolean;
 }
 
 interface RoomData {
@@ -61,6 +63,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   onShowSpaces,
   visibleFloorFmGuids,
   className,
+  embedded = false,
 }) => {
   const { allData } = useContext(AppContext);
   
@@ -417,16 +420,37 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     processChunk(0);
   }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors, isProcessing]);
 
-  // Apply visualization when type or mock data changes (AUTO-APPLY, no button needed)
+  // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
   useEffect(() => {
-    // Only apply when visualization is active, rooms are loaded, and cache is built
-    if (visualizationType !== 'none' && rooms.length > 0 && entityIdCache.size > 0) {
-      // Reset count before re-applying
-      setColorizedCount(0);
-      applyVisualization();
-    } else if (visualizationType === 'none') {
+    if (visualizationType === 'none') {
       resetColors();
+      return;
     }
+
+    // Force show spaces when visualization is active
+    window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
+    if (onShowSpaces) onShowSpaces(true);
+
+    // Retry mechanism - wait for cache and rooms to be ready
+    let cancelled = false;
+    const applyWithRetry = (attempt: number) => {
+      if (cancelled) return;
+      if (entityIdCache.size > 0 && rooms.length > 0) {
+        setColorizedCount(0);
+        applyVisualization();
+      } else if (attempt < 5) {
+        setTimeout(() => applyWithRetry(attempt + 1), 400);
+      } else {
+        console.warn('Room visualization: gave up after 5 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
+      }
+    };
+
+    // Short delay to let viewer render IfcSpace objects after force-show
+    const timer = setTimeout(() => applyWithRetry(0), 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [visualizationType, useMockData, rooms.length, entityIdCache.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -540,6 +564,101 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     return `linear-gradient(to right, ${stops.join(', ')})`;
   }, [config]);
 
+  // Shared content JSX
+  const contentJSX = (
+    <div className={cn(embedded ? "space-y-3" : "p-3 space-y-4")}>
+      {/* Header for embedded mode */}
+      {embedded && (
+        <div className="flex items-center gap-2 mb-1">
+          <Palette className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">Rumsvisualisering</span>
+        </div>
+      )}
+
+      {/* Visualization type selector */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
+        <Select
+          value={visualizationType}
+          onValueChange={(v) => setVisualizationType(v as VisualizationType)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Välj typ..." />
+          </SelectTrigger>
+          <SelectContent className="bg-card border shadow-lg z-[60]">
+            <SelectItem value="none">Ingen</SelectItem>
+            <SelectItem value="temperature">🌡️ Temperatur</SelectItem>
+            <SelectItem value="co2">💨 CO₂</SelectItem>
+            <SelectItem value="humidity">💧 Luftfuktighet</SelectItem>
+            <SelectItem value="occupancy">👥 Beläggning</SelectItem>
+            <SelectItem value="area">📐 Yta (NTA)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Mock data toggle */}
+      {!hasRealData && visualizationType !== 'none' && (
+        <div className="flex items-center justify-between">
+          <Label className="text-xs flex items-center gap-1">
+            <AlertCircle className="h-3 w-3 text-amber-500" />
+            Simulerad data
+          </Label>
+          <Switch checked={useMockData} onCheckedChange={setUseMockData} />
+        </div>
+      )}
+
+      {hasRealData && visualizationType !== 'none' && (
+        <p className="text-xs text-green-600">✓ Riktig sensordata tillgänglig</p>
+      )}
+
+      {/* Legend */}
+      {visualizationType !== 'none' && config && (
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Färgskala ({config.unit})</Label>
+          <div className="h-4 rounded-sm" style={{ background: legendGradient }} />
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>{config.min} {config.unit}</span>
+            <span>{config.max} {config.unit}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+        <span>{isProcessing ? 'Bearbetar...' : `${rooms.length} rum hittade`}</span>
+        {colorizedCount > 0 && <span className="text-primary">{colorizedCount} färglagda</span>}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onClick={resetColors} disabled={colorizedCount === 0 || isProcessing}>
+          <RefreshCw className="h-3 w-3 mr-1" />
+          Rensa färger
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Embedded mode - render inline without floating panel
+  if (embedded) {
+    return (
+      <div className={className}>
+        {contentJSX}
+        {hoverLabel && (
+          <IoTHoverLabel
+            visible={hoverLabel.visible}
+            position={hoverLabel.position}
+            roomName={hoverLabel.roomName}
+            value={hoverLabel.value}
+            visualizationType={visualizationType}
+            color={hoverLabel.color}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Standalone floating panel mode
   return (
     <div
       ref={panelRef}
@@ -566,91 +685,9 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         </Button>
       </div>
 
-      {/* Content */}
-      <div className="p-3 space-y-4">
-        {/* Visualization type selector */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Visualiseringstyp</Label>
-          <Select
-            value={visualizationType}
-            onValueChange={(v) => setVisualizationType(v as VisualizationType)}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Välj typ..." />
-            </SelectTrigger>
-            <SelectContent className="bg-card border shadow-lg z-[60]">
-              <SelectItem value="none">Ingen</SelectItem>
-              <SelectItem value="temperature">🌡️ Temperatur</SelectItem>
-              <SelectItem value="co2">💨 CO₂</SelectItem>
-              <SelectItem value="humidity">💧 Luftfuktighet</SelectItem>
-              <SelectItem value="occupancy">👥 Beläggning</SelectItem>
-              <SelectItem value="area">📐 Yta (NTA)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {contentJSX}
 
-        {/* Mock data toggle */}
-        {!hasRealData && visualizationType !== 'none' && (
-          <div className="flex items-center justify-between">
-            <Label className="text-xs flex items-center gap-1">
-              <AlertCircle className="h-3 w-3 text-amber-500" />
-              Simulerad data
-            </Label>
-            <Switch checked={useMockData} onCheckedChange={setUseMockData} />
-          </div>
-        )}
-
-        {hasRealData && visualizationType !== 'none' && (
-          <p className="text-xs text-green-600">✓ Riktig sensordata tillgänglig</p>
-        )}
-
-        {/* Legend */}
-        {visualizationType !== 'none' && config && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Färgskala ({config.unit})
-            </Label>
-            <div
-              className="h-4 rounded-sm"
-              style={{ background: legendGradient }}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>
-                {config.min} {config.unit}
-              </span>
-              <span>
-                {config.max} {config.unit}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-          <span>
-            {isProcessing ? 'Bearbetar...' : `${rooms.length} rum hittade`}
-          </span>
-          {colorizedCount > 0 && (
-            <span className="text-primary">{colorizedCount} färglagda</span>
-          )}
-        </div>
-
-        {/* Actions - only Reset, no Update button needed (auto-apply) */}
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={resetColors}
-            disabled={colorizedCount === 0 || isProcessing}
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Rensa färger
-          </Button>
-        </div>
-      </div>
-
-      {/* IoT Hover Label - rendered outside panel but associated with it */}
+      {/* IoT Hover Label */}
       {hoverLabel && (
         <IoTHoverLabel
           visible={hoverLabel.visible}
