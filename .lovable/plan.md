@@ -1,155 +1,160 @@
 
 
-# Bygg om Felanmälan -- replikera er-rep.com-formularet med modernt UI
+# Autodesk Construction Cloud (ACC) Integration
 
-## Bakgrund
+## Background
 
-Det gamla formularet pa er-rep.com (SWG Nordic) har dessa falt:
+Your app currently fetches building hierarchy data (Buildings, Storeys, Spaces, Assets) from **Asset+** via Keycloak-authenticated REST calls, syncs it to a local database (`assets` table), and builds a Navigator tree from it. This plan adds **Autodesk Construction Cloud** as an alternative/additional data source using the same proven pattern.
 
-| Falt | Typ | Obligatoriskt |
-|------|-----|---------------|
-| Installation (fran QR) | Visas som rubrik, ej redigerbart | Automatiskt |
-| Beskrivning | Textarea | Ja |
-| Felkod | Textfalt | Nej |
-| Aterkoppling via e-post | E-postfalt | Nej |
-| Kontakt, telefonnummer | Telefonfalt | Nej |
-| Bifoga bilder | Kamera/filval | Nej |
+## What ACC Offers
 
-Det nuvarande formularet i Lovable har helt andra falt (Kategori, Rubrik, Prioritet, Namn) som INTE finns i originalet. Dessa ska bort och ersattas med falt som matchar er-rep.com.
+ACC provides two key APIs that map directly to your existing data model:
 
-## Vad andras
+1. **Locations API** -- A tree of location nodes (LBS = Location Breakdown Structure) representing buildings, floors, rooms, zones, etc. This maps to your hierarchy: Building > Building Storey > Space.
 
-### 1. Utoka `qr_report_configs`-tabellen
+2. **Assets API** -- Equipment/items linked to locations and categories. This maps to your "Instance" objects (assets).
 
-Lagga till falt for installation/utrustningsinfo som QR-koden kopplas till:
+Both APIs are well-documented REST endpoints under `https://developer.api.autodesk.com/`.
 
-- `asset_fm_guid` (text, nullable) -- kopplar till en specifik installation/tillgang
-- `asset_name` (text, nullable) -- t.ex. "Kaffemaskin K12"
-- `installation_number` (text, nullable) -- t.ex. "000000042"
+## Architecture Overview
 
-### 2. Skriva om `FaultReportForm.tsx` helt
-
-Bort med: Kategori, Rubrik, Prioritet, Anmalarens namn.
-
-Nya falt som matchar er-rep.com:
+The integration follows the same hybrid pattern you already use for Asset+:
+- A backend function authenticates with Autodesk, fetches data, and upserts it into the local `assets` table
+- The frontend remains unchanged -- it reads from the local database via the existing Navigator tree builder
 
 ```text
-+-----------------------------------------------+
-|  Anmal fel                                     |
-|                                                |
-|  Installation 000000042 Kaffemaskin K12         |
-|  (grat inforuta med byggnads/rumskontext)      |
-|                                                |
-|  Beskrivning *                                 |
-|  [ Beskriv felet sa tydligt du kan for att     ]|
-|  [ underlatta processen for alla involverade   ]|
-|  [ personer                                    ]|
-|                                                |
-|  Felkod                                        |
-|  [ Ange en matchande felkod.                  ]|
-|                                                |
-|  Aterkoppling via e-post                       |
-|  [ Fyll i e-post om du vill ha aterkoppling   ]|
-|                                                |
-|  Kontakt, telefonnummer                        |
-|  [ Fyll i telefonnummer om du vill bli         ]|
-|  [ kontaktad                                   ]|
-|                                                |
-|  Bifoga bilder                                 |
-|  [ Ta Bild/Bladdra... ] [bild1] [bild2]        |
-|                                                |
-|  [ Skicka felanmalan                         ] |
-+-----------------------------------------------+
++-------------------+       +---------------------+       +----------------+
+|  ACC Locations    |       |  Edge Function      |       |  assets table  |
+|  & Assets APIs   | ----> |  acc-sync            | ----> |  (existing)    |
++-------------------+       +---------------------+       +----------------+
+                                    |                            |
+                            OAuth 2.0 (2-legged)         Navigator Tree
+                            via APS                      (unchanged)
 ```
 
-### 3. Skriva om `MobileFaultReport.tsx`
+## Credentials Required
 
-Ta bort steg-wizarden (3 steg). Ersatt med ett enda scrollbart formulat med alla falt synliga direkt -- precis som er-rep.com. Modern mobilanpassad layout med:
-- Installationsinfo visas prominent i toppen
-- Stora knappar for kamera/foto
-- "Skicka"-knapp langst ner
+You will need to create an **APS Application** (Autodesk Platform Services) at https://aps.autodesk.com. From there you get:
 
-### 4. Uppdatera `FaultReport.tsx` (sidan)
-
-- Utoka `QrConfig` interfacet med `asset_fm_guid`, `asset_name`, `installation_number`
-- Hamta och visa installationsinfo fran QR-konfigurationen
-- Skicka installationsinfo till formularet
-
-### 5. Uppdatera `InAppFaultReport.tsx`
-
-- Anpassa submit-hanteraren till nya faltnamn
-- Auto-generera `title` fran installationsinfo + beskrivning (forsta 50 tecken)
-- Spara `felkod`, `email`, `phone` i work_order attributes
-
-### 6. Uppdatera submit-logiken
-
-Mappningen fran formularet till `work_orders`-tabellen andras:
-
-| Formularfalt | work_orders-falt |
+| Credential | Description |
 |---|---|
-| Beskrivning | `description` |
-| (auto-genererad) | `title` = "Felanmalan: [asset_name]" eller forsta 50 tecken av beskrivning |
-| -- | `category` = null (tas bort fran formularet) |
-| -- | `priority` = 'medium' (default) |
-| -- | `reported_by` = null (inget namnfalt langre) |
-| Felkod | `attributes.error_code` |
-| E-post | `attributes.reporter_email` |
-| Telefon | `attributes.reporter_phone` |
-| Foton | `attributes.images` |
-| QR-nyckel | `attributes.qr_key` |
-| Installationsnr | `attributes.installation_number` |
-| Tillgangsnamn | `attributes.asset_name` |
+| APS_CLIENT_ID | Application Client ID |
+| APS_CLIENT_SECRET | Application Client Secret |
+| ACC_ACCOUNT_ID | Your ACC account (hub) ID |
 
-## Teknisk plan
+The 2-legged (Client Credentials) OAuth flow is used since this is a server-to-server sync -- no user login required. You also need to know which ACC **Project ID** to sync from. This can be configured per building or globally.
 
-### Steg 1: Databasmigrering
-Utoka `qr_report_configs` med tre nya kolumner:
-```sql
-ALTER TABLE qr_report_configs
-  ADD COLUMN asset_fm_guid text,
-  ADD COLUMN asset_name text,
-  ADD COLUMN installation_number text;
-```
+## API Endpoints We Will Use
 
-### Steg 2: Ny formularschema (Zod)
+### Authentication
+- `POST https://developer.api.autodesk.com/authentication/v2/token` -- Get access token (2-legged, Client Credentials grant)
+
+### Account / Projects
+- `GET https://developer.api.autodesk.com/construction/admin/v1/accounts/{accountId}/projects` -- List available projects
+
+### Locations (Building hierarchy)
+- `GET https://developer.api.autodesk.com/construction/locations/v2/projects/{projectId}/trees/{treeId}/nodes` -- Get all location nodes (the full LBS tree)
+
+### Assets
+- `GET https://developer.api.autodesk.com/construction/assets/v2/projects/{projectId}/assets` -- List assets with pagination
+- `GET https://developer.api.autodesk.com/construction/assets/v1/projects/{projectId}/categories` -- Get asset categories
+
+## Implementation Plan
+
+### Step 1: Store ACC Credentials as Secrets
+
+Request three secrets from you:
+- `APS_CLIENT_ID`
+- `APS_CLIENT_SECRET`
+- `ACC_ACCOUNT_ID`
+
+These are stored securely as backend secrets (same pattern as your existing Asset+ credentials).
+
+### Step 2: Create `acc-sync` Edge Function
+
+A new backend function `supabase/functions/acc-sync/index.ts` with the following actions:
+
+**`authenticate`** -- Gets a 2-legged OAuth token from APS:
 ```text
-faultReportSchema:
-  description: string, required, max 2000
-  errorCode: string, optional, max 100
-  email: string, optional, email format
-  phone: string, optional, max 20
+POST /authentication/v2/token
+  grant_type=client_credentials
+  client_id=...
+  client_secret=...
+  scope=data:read
 ```
 
-### Steg 3: Bygga om FaultReportForm.tsx
-- Ny props: `installationNumber`, `assetName`, `buildingName`, `spaceName`
-- Installationsinfo visas som en informationsruta i toppen (ej redigerbar)
-- Alla falt i ett enda formulat (ingen wizard)
-- Modern Card-layout med tydliga labels och placeholders som matchar originalet
-- Behall befintlig `PhotoCapture`-komponent (den fungerar bra)
+**`list-projects`** -- Lists ACC projects for the account (used in settings UI to let you pick which project to sync from).
 
-### Steg 4: Bygga om MobileFaultReport.tsx
-- Ta bort steg-wizard
-- Ersatt med scrollbart enstegsformular
-- Behall header med tillbakaknapp och platsinfo
-- Stora touch-vanliga falt och knappar
+**`sync-locations`** -- Fetches the LBS tree and maps location nodes to the `assets` table:
+- Root node -> ignored
+- Level 1 nodes (e.g. buildings) -> category = 'Building'
+- Level 2 nodes (e.g. floors) -> category = 'Building Storey'
+- Level 3+ nodes (e.g. rooms) -> category = 'Space'
+- Uses the node `id` as `fm_guid` and `parentId` to set `building_fm_guid` / `level_fm_guid`
 
-### Steg 5: Uppdatera FaultReport.tsx
-- Utoka QrConfig-interfacet
-- Hamta extra kolumner fran qr_report_configs
-- Skicka installationsinfo till formularet
+**`sync-assets`** -- Fetches ACC assets with pagination and maps them:
+- Asset `id` -> `fm_guid`
+- Asset `clientAssetId` (Name) -> `name`
+- Asset `description` -> stored in `attributes`
+- Asset `locationId` -> resolved to `building_fm_guid`, `level_fm_guid`, `in_room_fm_guid` via the location tree
+- Asset category name -> `asset_type`
+- Category hierarchy -> `category` = 'Instance'
 
-### Steg 6: Uppdatera InAppFaultReport.tsx
-- Anpassa till nya FaultReportFormData
-- Auto-generera title vid submit
+**`check-status`** -- Returns sync state for the ACC data source.
 
-### Andrade filer
+### Step 3: Add ACC Configuration to Settings UI
 
-| Fil | Andring |
-|-----|---------|
-| `qr_report_configs` (DB) | 3 nya kolumner |
-| `src/components/fault-report/FaultReportForm.tsx` | Total omskrivning av falt och schema |
-| `src/components/fault-report/MobileFaultReport.tsx` | Ta bort wizard, nytt enstegsformular |
-| `src/pages/FaultReport.tsx` | Utokat QrConfig, ny prop-mappning |
-| `src/components/fault-report/InAppFaultReport.tsx` | Anpassad submit + auto-title |
-| `src/components/fault-report/FaultReportSuccess.tsx` | Mindre UI-justering (visa installationsinfo) |
+Add an "Autodesk Construction Cloud" tab/section in the existing API Settings modal (alongside Asset+, FM Access, Congeria, etc.):
+
+- **Connection fields**: APS Client ID, Client Secret (masked), ACC Account ID
+- **Project selector**: Dropdown populated by the `list-projects` action
+- **Sync buttons**: "Sync Locations" and "Sync Assets" with progress indicators
+- **Status display**: Counts of synced buildings/floors/rooms/assets from ACC
+
+Store the selected ACC project ID in a new column on `building_settings` or in a dedicated `acc_settings` key-value store.
+
+### Step 4: Data Mapping Logic
+
+The mapping between ACC and your existing data model:
+
+| ACC Concept | Your Data Model | Table Column |
+|---|---|---|
+| Location Node (tier 1) | Building | `category = 'Building'` |
+| Location Node (tier 2) | Building Storey | `category = 'Building Storey'` |
+| Location Node (tier 3+) | Space | `category = 'Space'` |
+| Asset | Instance | `category = 'Instance'` |
+| Node ID | fm_guid | `fm_guid` |
+| Node name | commonName | `common_name` |
+| Asset clientAssetId | name | `name` |
+| Asset locationId | Resolved to room | `in_room_fm_guid` |
+
+All records synced from ACC will have a source marker in the `attributes` JSONB column: `{ "source": "acc", "acc_project_id": "..." }` so they can be distinguished from Asset+ data.
+
+### Step 5: Database Changes
+
+Minimal changes needed since the existing `assets` table already supports all required fields. We may add:
+
+- A new `asset_sync_state` entry with `subtree_id = 'acc-locations'` and `subtree_id = 'acc-assets'` to track ACC sync status independently
+- Optional: A simple `acc_config` table or key-value rows in `asset_plus_endpoint_cache` to store the selected ACC project ID
+
+### Step 6: Frontend -- No Changes Needed
+
+The Navigator tree, AssetsView, InventoryForm, and all other components read from the local `assets` table. Since ACC data will be written to the same table with compatible categories, the entire UI works automatically:
+- Buildings appear in the portfolio view
+- Floors appear in the floor switcher
+- Rooms appear in room selectors
+- Assets appear in inventory lists
+
+## What You Need to Provide
+
+1. **APS Application credentials** -- Create an app at https://aps.autodesk.com, note the Client ID and Secret
+2. **ACC Account ID** -- Found in your ACC admin settings (the hub ID, usually prefixed with `b.`)
+3. **Confirmation of which project(s)** to sync from (the edge function can list available projects for you to choose)
+
+## Risks and Considerations
+
+- **ACC requires an Autodesk Docs subscription** for API access to AEC Data Model and Locations
+- **Location tree depth may vary** -- some projects use 2 tiers, others up to 20. The mapping logic will handle this flexibly
+- **Data overlap** -- if you sync the same building from both Asset+ and ACC, there could be duplicates. The source marker in `attributes` helps manage this
+- **Rate limits** -- ACC APIs have rate limits (varies by endpoint). The sync function will include retry logic with backoff
 
