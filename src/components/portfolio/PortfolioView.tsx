@@ -46,6 +46,9 @@ const PortfolioView: React.FC = () => {
   const [showAssetsFor, setShowAssetsFor] = useState<Facility | null>(null);
   const [showDocsFor, setShowDocsFor] = useState<Facility | null>(null);
   
+  // Navigation history stack for proper back-navigation
+  const [facilityHistory, setFacilityHistory] = useState<Facility[]>([]);
+  
   // Add Asset Dialog state
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
@@ -141,8 +144,26 @@ const PortfolioView: React.FC = () => {
       });
   }, [filteredFacilities]);
 
+  // Wrap setSelectedFacility to track history for back-navigation
+  const navigateToFacility = (facility: Facility | null) => {
+    if (facility && selectedFacility) {
+      // Push current facility onto history stack before navigating to child
+      setFacilityHistory(prev => [...prev, selectedFacility]);
+    }
+    setSelectedFacility(facility);
+  };
+
   // Handlers for FacilityLandingPage
-  const handleClose = () => setSelectedFacility(null);
+  const handleClose = () => {
+    if (facilityHistory.length > 0) {
+      // Pop the most recent parent from history
+      const parent = facilityHistory[facilityHistory.length - 1];
+      setFacilityHistory(prev => prev.slice(0, -1));
+      setSelectedFacility(parent);
+    } else {
+      setSelectedFacility(null);
+    }
+  };
   const handleEdit = (facility: Facility) => console.log('Edit:', facility);
   const handleOpenMap = () => setActiveApp('map');
   const handleOpenNavigator = (facility: Facility) => setActiveApp('navigation');
@@ -297,7 +318,7 @@ const PortfolioView: React.FC = () => {
   const handleSelectRoom = (fmGuid: string) => {
     const room = allData.find((a: any) => a.fmGuid === fmGuid);
     if (room) {
-      setSelectedFacility({
+      navigateToFacility({
         fmGuid: room.fmGuid,
         name: room.name,
         commonName: room.commonName,
@@ -314,7 +335,7 @@ const PortfolioView: React.FC = () => {
   const handleSelectAsset = (fmGuid: string) => {
     const asset = allData.find((a: any) => a.fmGuid === fmGuid || a.fm_guid === fmGuid);
     if (asset) {
-      setSelectedFacility({
+      navigateToFacility({
         fmGuid: asset.fmGuid || asset.fm_guid,
         name: asset.name,
         commonName: asset.commonName || asset.common_name,
@@ -518,7 +539,7 @@ const PortfolioView: React.FC = () => {
                     <Carousel
                       opts={{
                         align: 'start',
-                        loop: group.facilities.length > 3,
+                        loop: false,
                       }}
                       className="w-full"
                     >
@@ -530,7 +551,7 @@ const PortfolioView: React.FC = () => {
                           >
                             <FacilityCard 
                               facility={facility} 
-                              onClick={setSelectedFacility} 
+                              onClick={navigateToFacility} 
                             />
                           </CarouselItem>
                         ))}
