@@ -2,3 +2,6 @@ project_id = "diqfthpfncdojlnqnicq"
 
 [functions.senslinc-query]
 verify_jwt = false
+
+[functions.asset-plus-delete]
+verify_jwt = false

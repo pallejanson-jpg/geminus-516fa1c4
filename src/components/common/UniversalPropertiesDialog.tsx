@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   X, Pencil, Save, GripVertical, ChevronDown, ChevronUp, Loader2, 
-  Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud
+  Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
+  Trash2, Upload, CloudOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { updateAssetProperties, UpdatePropertyItem } from '@/services/asset-plus-service';
+import { updateAssetProperties, UpdatePropertyItem, deleteAssets, syncAssetToAssetPlus } from '@/services/asset-plus-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -94,6 +96,10 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [size, setSize] = useState({ width: 400, height: 500 });
   const [isResizing, setIsResizing] = useState(false);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  
+  // Delete/Push state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
   
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -560,6 +566,72 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
   const displayCategory = assets[0]?.category || category || 'Object';
   
+  // Sync status derived from assets
+  const syncStatus = useMemo(() => {
+    if (assets.length === 0) return null;
+    const allLocal = assets.every(a => a.is_local);
+    const allSynced = assets.every(a => !a.is_local);
+    const hasBimCreated = assets.some(a => a.created_in_model);
+    const isInstance = assets.every(a => a.category === 'Instance');
+    return { allLocal, allSynced, hasBimCreated, isInstance };
+  }, [assets]);
+  
+  
+  // Delete handler
+  
+  const handleDelete = async () => {
+    if (assets.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const result = await deleteAssets(fmGuids);
+      if (result.summary.deleted > 0) {
+        toast.success(`${result.summary.deleted} object(s) deleted`);
+        onUpdate?.();
+        onClose();
+      }
+      if (result.summary.failed > 0) {
+        const errors = result.results.filter(r => !r.success).map(r => r.error).join(', ');
+        toast.error(`${result.summary.failed} failed: ${errors}`);
+      }
+    } catch (error: any) {
+      toast.error('Delete failed: ' + error.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const handlePushToAssetPlus = async () => {
+    if (assets.length === 0) return;
+    setIsPushing(true);
+    try {
+      // Push each local asset
+      let succeeded = 0;
+      let failed = 0;
+      for (const fmGuid of fmGuids) {
+        const result = await syncAssetToAssetPlus(fmGuid);
+        if (result.success) succeeded++;
+        else failed++;
+      }
+      if (succeeded > 0) {
+        toast.success(`${succeeded} object(s) pushed to Asset+`);
+        onUpdate?.();
+        // Refresh data
+        const { data: refreshed } = await supabase
+          .from('assets')
+          .select('*')
+          .in('fm_guid', fmGuids);
+        if (refreshed) setAssets(refreshed);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} object(s) failed to push`);
+      }
+    } catch (error: any) {
+      toast.error('Push failed: ' + error.message);
+    } finally {
+      setIsPushing(false);
+    }
+  };
+  
   // Title for header
   const headerTitle = useMemo(() => {
     if (isMultiMode) {
@@ -736,24 +808,94 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
 
       {/* Footer actions */}
       {assets.length > 0 && (
-        <div className="p-3 border-t flex justify-end gap-2 shrink-0"
+        <div className="p-3 border-t space-y-2 shrink-0"
              style={{ paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' : undefined }}>
-          {isEditing ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                {isMultiMode ? `Save All (${fmGuids.length})` : 'Save'}
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              <Pencil className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
+          {/* Sync status badge */}
+          {syncStatus && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {syncStatus.allLocal && (
+                <Badge variant="outline" className="text-xs gap-1 border-amber-500/50 text-amber-600">
+                  <CloudOff className="h-3 w-3" />
+                  Local only
+                </Badge>
+              )}
+              {syncStatus.allSynced && (
+                <Badge variant="outline" className="text-xs gap-1 border-emerald-500/50 text-emerald-600">
+                  <Cloud className="h-3 w-3" />
+                  Synced
+                </Badge>
+              )}
+              {!syncStatus.allLocal && !syncStatus.allSynced && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  Mixed sync status
+                </Badge>
+              )}
+              {syncStatus.hasBimCreated && (
+                <Badge variant="secondary" className="text-[10px]">BIM</Badge>
+              )}
+            </div>
           )}
+          
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 justify-between">
+            <div className="flex gap-1">
+              {/* Delete button - only for Instance objects */}
+              {syncStatus?.isInstance && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" disabled={isDeleting}>
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete {isMultiMode ? `${fmGuids.length} objects` : 'object'}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {syncStatus.allLocal 
+                          ? 'This will permanently delete the local object(s).'
+                          : 'This will expire the object(s) in Asset+ and remove them locally. BIM-created objects are protected.'}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              
+              {/* Push to Asset+ button - only for local objects */}
+              {syncStatus?.allLocal && syncStatus?.isInstance && (
+                <Button variant="outline" size="sm" onClick={handlePushToAssetPlus} disabled={isPushing}>
+                  {isPushing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                  Push to Asset+
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex gap-1">
+              {isEditing ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                    {isMultiMode ? `Save All (${fmGuids.length})` : 'Save'}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </>

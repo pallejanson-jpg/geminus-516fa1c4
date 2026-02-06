@@ -505,3 +505,87 @@ export async function ensureBuildingAssets(
 
   return { hasAssets: false, count: 0, syncing: true };
 }
+
+// ============ DELETE / EXPIRE ============
+
+export interface DeleteAssetsResult {
+  fmGuid: string;
+  success: boolean;
+  error?: string;
+  wasLocal: boolean;
+  expired?: boolean;
+}
+
+export interface DeleteAssetsResponse {
+  success: boolean;
+  results: DeleteAssetsResult[];
+  summary: {
+    total: number;
+    deleted: number;
+    failed: number;
+    localDeleted: number;
+    expiredInAssetPlus: number;
+  };
+}
+
+/**
+ * Delete one or more assets. Local assets are deleted directly,
+ * synced assets are expired in Asset+ then removed locally.
+ * BIM-created objects are protected unless force=true.
+ */
+export async function deleteAssets(
+  fmGuids: string[],
+  options?: { force?: boolean; expireDate?: string }
+): Promise<DeleteAssetsResponse> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-delete", {
+    body: {
+      fmGuids,
+      force: options?.force,
+      expireDate: options?.expireDate,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to delete assets");
+  }
+
+  return data as DeleteAssetsResponse;
+}
+
+/**
+ * Push all local-only assets to Asset+ via the sync edge function.
+ * Returns summary of pushed objects.
+ */
+export async function pushLocalAssetsToRemote(): Promise<{
+  success: boolean;
+  pushed: number;
+  failed: number;
+  errors: Array<{ fmGuid: string; error: string }>;
+}> {
+  const { data, error } = await supabase.functions.invoke("asset-plus-sync", {
+    body: { action: "push-local-to-remote" },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to push local assets");
+  }
+
+  return data as any;
+}
+
+/**
+ * Get count of local-only assets (not yet synced to Asset+).
+ */
+export async function getLocalAssetCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("assets")
+    .select("*", { count: "exact", head: true })
+    .eq("is_local", true);
+
+  if (error) {
+    console.error("Failed to count local assets:", error);
+    return 0;
+  }
+
+  return count || 0;
+}
