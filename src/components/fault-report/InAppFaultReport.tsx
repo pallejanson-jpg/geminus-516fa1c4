@@ -18,23 +18,28 @@ const InAppFaultReport: React.FC = () => {
     setIsSubmitting(true);
     try {
       const externalId = `FR-${Date.now()}`;
+      const descSnippet = data.description.slice(0, 50);
+      const autoTitle = faultReportPrefill?.buildingName
+        ? `Felanmälan: ${faultReportPrefill.buildingName}`
+        : `Felanmälan: ${descSnippet}`;
 
       const workOrder = {
-        title: data.title,
+        title: autoTitle,
         description: data.description,
-        category: data.category,
-        priority: data.priority,
+        category: null,
+        priority: 'medium' as const,
         status: 'open' as const,
         external_id: externalId,
-        reported_by: data.reporterName,
+        reported_by: null,
         reported_at: new Date().toISOString(),
         building_fm_guid: faultReportPrefill?.buildingFmGuid || null,
         building_name: faultReportPrefill?.buildingName || null,
         space_fm_guid: faultReportPrefill?.spaceFmGuid || null,
         space_name: faultReportPrefill?.spaceName || null,
         attributes: {
-          reporter_email: data.reporterEmail,
-          reporter_phone: data.reporterPhone || null,
+          error_code: data.errorCode || null,
+          reporter_email: data.email || null,
+          reporter_phone: data.phone || null,
           images: photos,
           source: 'in_app_fault_report',
         },
