@@ -123,7 +123,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           if (!error && floors && floors.length > 0) {
             const nameMap = new Map<string, string>();
             floors.forEach((f) => {
-              const displayName = f.common_name || f.name || f.fm_guid;
+            const displayName = f.common_name || f.name || null;
+              if (!displayName) return; // Skip floors without any name - they'll get sequential naming
               nameMap.set(f.fm_guid, displayName);
               nameMap.set(f.fm_guid.toLowerCase(), displayName);
               nameMap.set(f.fm_guid.toUpperCase(), displayName);
@@ -162,8 +163,8 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           if (dbName) {
             displayName = dbName;
           } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-            // Name looks like a GUID, try to extract something useful
-            displayName = `Våningsplan ${fmGuid.substring(0, 8)}`;
+            // Name looks like a GUID - mark for sequential numbering
+            displayName = `__GUID_PLACEHOLDER__`;
           }
           
           const shortMatch = displayName.match(/(\d+)/);
@@ -192,6 +193,16 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       // Convert to array and sort alphabetically by name
       const extractedFloors = Array.from(floorsByName.values());
       extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+
+      // Replace GUID placeholders with sequential "Plan X" names
+      let unknownIndex = 1;
+      extractedFloors.forEach(floor => {
+        if (floor.name === '__GUID_PLACEHOLDER__') {
+          floor.name = `Plan ${unknownIndex}`;
+          floor.shortName = String(unknownIndex);
+          unknownIndex++;
+        }
+      });
 
       return extractedFloors;
     }, [getXeokitViewer, floorNamesMap]);

@@ -166,6 +166,15 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           const apiModels = await response.json();
           const nameMap = new Map<string, string>();
           console.debug("Asset+ GetModels response:", apiModels);
+
+          // Populate dbModels from API so all models appear in the list
+          setDbModels(apiModels.map((m: any) => ({
+            id: m.id || '',
+            name: m.name || '',
+            fileName: m.xktFileUrl
+              ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
+              : (m.id || '')
+          })));
           
           apiModels.forEach((m: any) => {
             // Primary: map model.id to name
