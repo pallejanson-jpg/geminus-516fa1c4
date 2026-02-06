@@ -66,10 +66,29 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
     fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'external', username: '', password: '' },
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
-    iot: { label: 'Sensor Dashboard', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
+    iot: { label: 'IoT+', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
-    radar: { label: '360+ (Ivion)', url: 'https://ivion.se', icon: Radar, openMode: 'external', username: '', password: '' },
+    radar: { label: '360+', url: 'https://ivion.se', icon: Radar, openMode: 'external', username: '', password: '' },
 };
+
+export interface SidebarItem {
+    id: string;
+    hasDividerAfter: boolean;
+}
+
+export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
+    { id: 'inventory', hasDividerAfter: false },
+    { id: 'fault_report', hasDividerAfter: false },
+    { id: 'insights', hasDividerAfter: true },
+    { id: 'fma_plus', hasDividerAfter: false },
+    { id: 'asset_plus', hasDividerAfter: false },
+    { id: 'iot', hasDividerAfter: false },
+    { id: 'original_archive', hasDividerAfter: false },
+    { id: 'radar', hasDividerAfter: false },
+];
+
+export const SIDEBAR_ORDER_STORAGE_KEY = 'sidebar-app-order';
+export const SIDEBAR_SETTINGS_CHANGED_EVENT = 'sidebar-settings-changed';
 
 export const SENSLINC_POLL_OPTIONS = [
     { value: 1, label: '1 timme' },
