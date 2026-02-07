@@ -50,6 +50,17 @@ export interface IvionPointOfView {
   set?(location: IvionVector3, orientation: IvionQuaternion, fov?: number, imageId?: number): void;
 }
 
+export interface IvionAuthApi {
+  /** Get current access token */
+  getToken(): string;
+  /** Update the access token (call before expiry) */
+  updateToken(token: string, uploadToken?: string): void;
+  /** Login with a JWT token */
+  loginWithToken(token: string, awaitDataLoad?: boolean): Promise<any>;
+  /** Currently authenticated user */
+  currentUser: any;
+}
+
 export interface IvionApi {
   /** Get the main panorama view */
   getMainView(): IvionMainView;
@@ -78,6 +89,8 @@ export interface IvionApi {
   resetView?(): void;
   /** Get current share URL with position params */
   getShareUrl?(): string;
+  /** Authentication API (available when loginToken is used) */
+  auth?: IvionAuthApi;
 }
 
 /** Load status for the SDK */
@@ -90,10 +103,11 @@ export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
  * This requires proper CORS configuration on the Ivion instance to allow our domain.
  * 
  * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
- * @param timeoutMs - Maximum time to wait for SDK load (default 20s)
+ * @param timeoutMs - Maximum time to wait for SDK load (default 10s)
+ * @param loginToken - Optional JWT token for automatic authentication
  * @returns Promise resolving to the Ivion API interface
  */
-export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000): Promise<IvionApi> {
+export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginToken?: string): Promise<IvionApi> {
   return new Promise((resolve, reject) => {
     let settled = false;
     
@@ -105,11 +119,18 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000): Promis
       else reject(value);
     };
 
+    // Build config object for getApi
+    const sdkConfig: Record<string, any> = {};
+    if (loginToken) {
+      sdkConfig.loginToken = loginToken;
+      console.log('[Ivion SDK] Using loginToken for auto-authentication');
+    }
+
     // Check if already loaded from a previous mount
     const existingGetApi = (window as any).NavVis?.getApi || (window as any).getApi;
     if (existingGetApi) {
       console.log('[Ivion SDK] getApi already available, initializing...');
-      existingGetApi(baseUrl)
+      existingGetApi(baseUrl, Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined)
         .then((iv: IvionApi) => {
           console.log('[Ivion SDK] Initialized from existing global');
           settle('resolve', iv);
@@ -163,7 +184,7 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000): Promis
 
       console.log('[Ivion SDK] Script loaded, calling getApi()...');
       
-      getApi(baseUrl)
+      getApi(baseUrl, Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined)
         .then((iv: IvionApi) => {
           console.log('[Ivion SDK] ✅ API ready');
           settle('resolve', iv);
