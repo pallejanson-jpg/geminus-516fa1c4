@@ -1,106 +1,109 @@
 
 
-# Integrera @navvis/ivion SDK (.tgz) for fullt SDK-lage
+# Fix Split View Sync and XKT Caching
 
-## Oversikt
+## Problem Summary
 
-NavVis distribuerar sitt Frontend API som en privat `.tgz`-fil (inte via npmjs.org). Genom att lagga in den i projektet och referera den i `package.json` far vi tillgang till `getApi` via en riktig ES-import -- vilket ger fullstandig bi-direktionell kamerasynkronisering i Split View utan CORS-problem.
+Two separate issues prevent Split View sync and fast 3D loading:
 
-## Forutsattning
+1. **Split View windows don't follow each other** - The NavVis SDK package (`@navvis/ivion`) was uploaded but never added to `package.json`. The system always falls back to iframe mode, which has no real-time camera synchronization.
 
-Du behover hamta `.tgz`-filen fran NavVis Knowledge Base (kräver inloggning med IVION Professional/Enterprise-licens). Filen heter nagot i stil med `navvis-ivion-X.X.X.tgz`.
+2. **XKT models load from Asset+ every time** - The cache-on-load mechanism fails silently because:
+   - The `xkt-models` storage bucket is missing INSERT and UPDATE policies (uploads are blocked by security rules)
+   - The upload code passes raw `ArrayBuffer` to the storage client, which causes a JSON parsing error on the response for large binary files (~23 MB)
+   - Result: 0 models have ever been cached in the database
 
-## Steg-for-steg
+## Fix Plan
 
-### Steg 1: Lagg till .tgz-filen i projektet
+### Fix 1: Install NavVis SDK package
 
-Placera den nedladdade filen i projektroten, t.ex.:
+**File: `package.json`**
+- Add `"@navvis/ivion": "file:navvis-ivion-11.9.8.tgz"` to the `dependencies` section
+- The uploaded `.tgz` file needs to be copied from the user upload location to the project root
 
+No other code changes needed -- `src/lib/ivion-sdk.ts` already uses `import('@navvis/ivion')` with automatic fallback, and `Ivion360View.tsx` already handles the SDK/iframe mode switch.
+
+### Fix 2: Add storage policies for XKT models
+
+**Database migration** -- Add missing storage policies:
+
+```sql
+-- Allow authenticated users to upload XKT models
+CREATE POLICY "Authenticated users can upload XKT models"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'xkt-models');
+
+-- Allow authenticated users to update XKT models (needed for upsert)
+CREATE POLICY "Authenticated users can update XKT models"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'xkt-models');
 ```
-/navvis-ivion-X.X.X.tgz
+
+### Fix 3: Fix binary upload data format
+
+**File: `src/services/xkt-cache-service.ts`**
+
+In the `saveModelFromViewer` method (around line 263), wrap the `ArrayBuffer` in a `Blob` before uploading:
+
+```typescript
+// Before (broken):
+const { error: uploadError } = await supabase.storage
+  .from('xkt-models')
+  .upload(storagePath, xktData, {
+    contentType: 'application/octet-stream',
+    upsert: true,
+  });
+
+// After (fixed):
+const blob = new Blob([xktData], { type: 'application/octet-stream' });
+const { error: uploadError } = await supabase.storage
+  .from('xkt-models')
+  .upload(storagePath, blob, {
+    contentType: 'application/octet-stream',
+    upsert: true,
+  });
 ```
 
-### Steg 2: Uppdatera package.json
+Also fix the same issue in the `storeModel` method, which sends base64-encoded data through an edge function. This path is less critical since `saveModelFromViewer` is the primary cache mechanism, but wrapping binary data in a `Blob` ensures consistency.
 
-Lagg till en dependency som pekar pa den lokala .tgz-filen:
+### Fix 4: Fix signed URL expiry in database
 
-```json
-{
-  "dependencies": {
-    "@navvis/ivion": "file:navvis-ivion-X.X.X.tgz"
-  }
-}
-```
+The current code stores a signed URL (with 24-hour expiry) in the `file_url` column of `xkt_models`. After 24 hours, these URLs become invalid. The `checkCache` method should regenerate signed URLs from `storage_path` when `file_url` returns a failed fetch, or we should simply not store signed URLs and always generate them on demand.
 
-Kör sedan `npm install` sa att paketet paketeras ut i `node_modules/@navvis/ivion/`.
+**File: `src/services/xkt-cache-service.ts`**
 
-### Steg 3: Uppdatera ivion-sdk.ts -- importera getApi direkt
+In `checkCache`, when a match is found with `file_url`, validate it's still accessible. If not, regenerate from `storage_path`. This is a minor optimization but prevents stale URL issues.
 
-Den nuvarande `loadIvionSdk()`-funktionen soker efter `window.getApi` globalt och ger sedan upp. Med det installerade npm-paketet kan vi istallet importera `getApi` direkt och skapa en riktig SDK-anslutning.
+## Technical Details
 
-**Andringar i `src/lib/ivion-sdk.ts`:**
+### Files changed
 
-- Lagg till `import { getApi } from '@navvis/ivion'` langst upp
-- Ta bort logiken som soker efter `window.getApi` / `window.NavVis.getApi`
-- Anropa `getApi(baseUrl, config)` direkt i `loadIvionSdk()`
-- Behall typ-interfacen (`IvionApi`, `IvionVector3`, etc.) som redan ar definierade -- de matchar SDK:ts `ApiInterface`
-- Behall `createIvionElement()` och `destroyIvionElement()` som de ar (SDK renderar in i `<ivion>`-elementet)
+| File | Change |
+|------|--------|
+| `package.json` | Add `@navvis/ivion` dependency |
+| `navvis-ivion-11.9.8.tgz` | Copy from uploads to project root |
+| Database migration | Add INSERT + UPDATE policies for `xkt-models` storage |
+| `src/services/xkt-cache-service.ts` | Wrap ArrayBuffer in Blob for upload; improve signed URL handling |
 
-Resulterande flode:
+### Expected behavior after fix
+
+1. **Split View**: SDK loads successfully, `renderMode` becomes `'sdk'`, bi-directional camera polling activates. Moving in 360 view updates 3D view and vice versa.
+
+2. **XKT Caching**: First load fetches from Asset+ and caches the binary to storage (~23 MB upload). Subsequent loads serve from memory cache (instant) or storage cache (fast signed URL). The database tracks cached models per building.
+
+3. **Cache flow**:
 
 ```text
-loadIvionSdk(baseUrl, timeout, loginToken)
+User opens 3D viewer
   |
-  +-- import { getApi } from '@navvis/ivion'
-  +-- getApi(baseUrl, { loginToken? })
-  +-- return IvionApi (= ApiInterface)
+  +-- fetch interceptor detects XKT request
+  +-- Check memory cache --> HIT? Return instantly
+  +-- Check database cache --> HIT? Fetch from storage, store in memory
+  +-- MISS? Fetch from Asset+ API
+       +-- Store in memory cache
+       +-- Background: Upload Blob to storage bucket
+       +-- Background: Save metadata to xkt_models table
 ```
-
-### Steg 4: Verifiera att Ivion360View.tsx fungerar utan andringar
-
-Komponenten `Ivion360View.tsx` anropar redan `loadIvionSdk()` och hanterar bade SDK-lage och iframe-fallback. Nar `getApi` nu returnerar ett riktigt API-objekt kommer:
-
-- `sdkStatus` att sattes till `'ready'`
-- `renderMode` att bli `'sdk'` (inte `'iframe'`)
-- SDK-containern (`<ivion>`-elementet) visas istallet for iframe:n
-- Kamerasync-hooken (`useIvionCameraSync`) aktiverar SDK-pollning automatiskt
-
-Ingen andring behövs i `Ivion360View.tsx` eller `useIvionCameraSync.ts`.
-
-### Steg 5: CORS-proxyn behovs inte langre for SDK-laddning
-
-`ivion-proxy` edge function kan behallar for andra andamal (t.ex. proxya tillgangsforfragan), men den behover inte langre laddas for `main.js` eller `ivion.js`. Inget behover andras eller tas bort -- den anropas helt enkelt inte langre for SDK-laddning.
-
-## Tekniska detaljer
-
-### Filer som andras
-
-| Fil | Andring |
-|-----|---------|
-| `package.json` | Lagg till `"@navvis/ivion": "file:navvis-ivion-X.X.X.tgz"` |
-| `src/lib/ivion-sdk.ts` | Importera `getApi` fran `@navvis/ivion`, forenkla `loadIvionSdk()` |
-
-### Filer som INTE andras
-
-| Fil | Anledning |
-|-----|-----------|
-| `Ivion360View.tsx` | Anvander redan `loadIvionSdk()` korrekt |
-| `useIvionCameraSync.ts` | Har redan SDK-mode med pollning och `moveToImageId()` |
-| `SplitViewer.tsx` | Passerar redan ratt props till `Ivion360View` |
-| `ivion-proxy/index.ts` | Behallar for framtida bruk, men anropas inte for SDK |
-
-### Typ-kompatibilitet
-
-Var `IvionApi`-interface matchar NavVis `ApiInterface` (metoderna `getMainView()`, `moveToImageId()`, `moveToImage()`, `auth`, `pov`, etc.). Om paketet exporterar TypeScript-typer kan vi eventuellt byta ut vara egna definitioner mot SDK:ts, men det ar valfritt och behover inte goras direkt.
-
-### Versionsmatchning
-
-Viktigt: `.tgz`-versionen maste matcha Ivion-instansens version (kontrollera via About-menyn i `swg.iv.navvis.com`). Felaktig version kan orsaka laddningsfel eller ovaentade API-skillnader.
-
-## Vad du behover gora
-
-1. Logga in pa NavVis Knowledge Base
-2. Ladda ned ratt version av `navvis-ivion-X.X.X.tgz`
-3. Ladda upp filen till projektet (dra in i Lovable eller lagg i repot)
-4. Meddela mig sa implementerar jag integrationen
 
