@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback, useRef } from "react";
-import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin, RefreshCw } from "lucide-react";
+import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppContext, Ivion360Context } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,7 @@ import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
 import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
 import type { BuildingOrigin } from "@/lib/coordinate-transform";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi, type IvionSdkStatus } from "@/lib/ivion-sdk";
 
 interface IvionPoiData {
   id: number;
@@ -20,15 +21,15 @@ interface IvionPoiData {
 type ConnectionStatus = 'unknown' | 'connected' | 'error' | 'expired';
 
 interface Ivion360ViewProps {
-  url?: string; // Direct URL prop for inline usage (fallback)
+  url?: string;
   onClose?: () => void;
   /** Enable camera synchronization with 3D viewer */
   syncEnabled?: boolean;
   /** Building origin for coordinate transformation */
   buildingOrigin?: BuildingOrigin | null;
-  /** Building FM GUID for token renewal (optional - uses context if not provided) */
+  /** Building FM GUID for token renewal */
   buildingFmGuid?: string;
-  /** Ivion site ID for sync (optional - uses context if not provided) */
+  /** Ivion site ID for sync */
   ivionSiteIdProp?: string;
   /** Callback when manual sync button is clicked */
   onSyncRequest?: () => void;
@@ -47,27 +48,36 @@ export default function Ivion360View({
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // SDK mode state
+  const [sdkStatus, setSdkStatus] = useState<IvionSdkStatus>('idle');
+  const ivApiRef = useRef<IvionApi | null>(null);
+  const sdkContainerRef = useRef<HTMLDivElement>(null);
+  const ivionElementRef = useRef<HTMLElement | null>(null);
+
+  // Rendering mode: 'sdk' if SDK loaded successfully, 'iframe' as fallback
+  const renderMode = sdkStatus === 'ready' ? 'sdk' : 'iframe';
 
   // Panel states
   const [registrationPanelOpen, setRegistrationPanelOpen] = useState(false);
   const [unplacedPanelOpen, setUnplacedPanelOpen] = useState(false);
 
-  // POI polling state (when registration panel is open)
+  // POI polling state
   const [lastSeenPoiId, setLastSeenPoiId] = useState<number | null>(null);
   const [detectedPoi, setDetectedPoi] = useState<IvionPoiData | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
   const [hasPendingPoi, setHasPendingPoi] = useState(false);
   const [pendingPoiQueue, setPendingPoiQueue] = useState<IvionPoiData[]>([]);
 
-  // Determine the URL to use (context takes priority, then prop, then localStorage)
+  // URL/context resolution
   const ivionUrl = ivion360Context?.ivionUrl || url || localStorage.getItem('ivion360Url');
   const hasContext = !!ivion360Context;
   const buildingFmGuid = propBuildingFmGuid || ivion360Context?.buildingFmGuid;
   const buildingName = ivion360Context?.buildingName;
   const ivionSiteId = ivionSiteIdProp || ivion360Context?.ivionSiteId;
 
-  // Camera sync hook - using new image-based approach with postMessage support
+  // Camera sync hook - supports both SDK and iframe modes
   const { 
     imageCache, 
     isLoadingImages, 
@@ -81,6 +91,7 @@ export default function Ivion360View({
     retryLoadImages,
   } = useIvionCameraSync({
     iframeRef,
+    ivApiRef,
     enabled: syncEnabled,
     buildingOrigin,
     ivionSiteId: ivionSiteId || '',
@@ -90,7 +101,71 @@ export default function Ivion360View({
   // Token renewal state
   const [isRenewingToken, setIsRenewingToken] = useState(false);
 
-  // Automatic token validation and renewal on mount
+  // ─── SDK Loading ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!ivionUrl || !syncEnabled) {
+      // Only try SDK when sync is enabled (Split View)
+      setSdkStatus('idle');
+      return;
+    }
+
+    let cancelled = false;
+
+    const tryLoadSdk = async () => {
+      setSdkStatus('loading');
+      
+      try {
+        // Extract base URL from Ivion URL
+        const parsedUrl = new URL(ivionUrl);
+        const baseUrl = parsedUrl.origin;
+        
+        // Create the <ivion> container element before loading SDK
+        if (sdkContainerRef.current) {
+          const ivionEl = createIvionElement(sdkContainerRef.current);
+          ivionElementRef.current = ivionEl;
+        }
+        
+        console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
+        const api = await loadIvionSdk(baseUrl, 15000);
+        
+        if (cancelled) return;
+        
+        ivApiRef.current = api;
+        setSdkStatus('ready');
+        setIsLoading(false);
+        
+        console.log('[Ivion360View] ✅ SDK mode active');
+        toast.success('360° SDK ansluten', { description: 'Automatisk synkronisering aktiv' });
+      } catch (err) {
+        if (cancelled) return;
+        
+        console.warn('[Ivion360View] SDK load failed, falling back to iframe:', err);
+        setSdkStatus('failed');
+        
+        // Clean up the <ivion> element since we're switching to iframe
+        if (sdkContainerRef.current && ivionElementRef.current) {
+          destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
+          ivionElementRef.current = null;
+        }
+      }
+    };
+
+    tryLoadSdk();
+
+    return () => {
+      cancelled = true;
+      // Clean up SDK on unmount
+      if (sdkContainerRef.current && ivionElementRef.current) {
+        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
+        ivionElementRef.current = null;
+      }
+      ivApiRef.current = null;
+    };
+  }, [ivionUrl, syncEnabled]);
+
+  // ─── Token renewal ────────────────────────────────────────────────
+
   useEffect(() => {
     if (!buildingFmGuid) return;
     
@@ -126,23 +201,11 @@ export default function Ivion360View({
     validateAndRefreshToken();
   }, [buildingFmGuid]);
 
-  // Handle iframe load - send subscribe command for camera events
+  // ─── Iframe handlers ──────────────────────────────────────────────
+
   const handleIframeLoad = useCallback(() => {
     setIsLoading(false);
     
-    // Send subscribe commands to enable camera events from Ivion
-    if (syncEnabled) {
-      setTimeout(() => {
-        sendSubscribeCommand();
-        console.log('[Ivion360View] Sent subscribe commands after iframe load');
-      }, 2000);
-      
-      setTimeout(() => {
-        sendSubscribeCommand();
-      }, 5000);
-    }
-    
-    // On mobile, try to minimize Ivion sidebar via postMessage
     if (isMobile && iframeRef.current?.contentWindow) {
       setTimeout(() => {
         try {
@@ -150,13 +213,14 @@ export default function Ivion360View({
             command: 'setSidebarVisibility',
             params: { visible: false }
           }, '*');
-          console.log('[Ivion360View] Sent sidebar minimize command (mobile)');
         } catch (e) {
           console.warn('[Ivion360View] Could not send sidebar postMessage:', e);
         }
       }, 3000);
     }
-  }, [syncEnabled, sendSubscribeCommand, isMobile]);
+  }, [isMobile]);
+
+  // ─── UI handlers ──────────────────────────────────────────────────
 
   const handleOpenExternal = () => {
     if (ivionUrl) {
@@ -169,12 +233,10 @@ export default function Ivion360View({
   };
 
   const handleClose = useCallback(() => {
-    // Clear 360 context when closing
     setIvion360Context(null);
     onClose?.();
   }, [setIvion360Context, onClose]);
 
-  // Manual sync button handler
   const handleManualSync = useCallback(() => {
     if (onSyncRequest) {
       onSyncRequest();
@@ -184,11 +246,10 @@ export default function Ivion360View({
     }
   }, [onSyncRequest, syncToIvion]);
 
-  // POI polling effect - only when registration panel is open
+  // ─── POI polling ──────────────────────────────────────────────────
+
   useEffect(() => {
-    if (!ivionSiteId || !registrationPanelOpen) {
-      return;
-    }
+    if (!ivionSiteId || !registrationPanelOpen) return;
 
     const pollForNewPois = async () => {
       try {
@@ -207,14 +268,12 @@ export default function Ivion360View({
         setConnectionStatus('connected');
 
         if (data?.location && data?.id) {
-          // Check if this is a new POI
           if (lastSeenPoiId !== null && data.id !== lastSeenPoiId) {
-            // New POI detected!
             setDetectedPoi(data);
             setHasPendingPoi(true);
             setPendingPoiQueue(prev => [...prev, data]);
             toast.info('Ny POI upptäckt i Ivion!', {
-              description: `Klicka för att ladda in koordinater`,
+              description: 'Klicka för att ladda in koordinater',
             });
           }
           setLastSeenPoiId(data.id);
@@ -225,16 +284,11 @@ export default function Ivion360View({
       }
     };
 
-    // Initial poll
     pollForNewPois();
-
-    // Poll every 3 seconds
     const interval = setInterval(pollForNewPois, 3000);
-
     return () => clearInterval(interval);
   }, [ivionSiteId, registrationPanelOpen, lastSeenPoiId]);
 
-  // Load pending POI into form
   const handleLoadPendingPoi = useCallback(() => {
     if (pendingPoiQueue.length > 0) {
       const nextPoi = pendingPoiQueue[0];
@@ -244,23 +298,21 @@ export default function Ivion360View({
     }
   }, [pendingPoiQueue]);
 
-  // Handle save completed
   const handleSaved = useCallback(() => {
-    // Reset detected POI after saving
     setDetectedPoi(null);
-    // Check if there are more pending POIs
     if (pendingPoiQueue.length > 0) {
       handleLoadPendingPoi();
     }
   }, [pendingPoiQueue, handleLoadPendingPoi]);
 
-  // Handle save and close
   const handleSavedAndClose = useCallback(() => {
     setRegistrationPanelOpen(false);
     setDetectedPoi(null);
     setPendingPoiQueue([]);
     setHasPendingPoi(false);
   }, []);
+
+  // ─── Render ───────────────────────────────────────────────────────
 
   if (!ivionUrl) {
     return (
@@ -275,7 +327,7 @@ export default function Ivion360View({
 
   return (
     <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
-      {/* Toolbar - hidden on mobile for fullscreen experience */}
+      {/* Toolbar - hidden on mobile */}
       {!isMobile && (
         <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur-sm">
           <div className="flex items-center gap-2">
@@ -284,21 +336,32 @@ export default function Ivion360View({
               <span className="text-sm text-muted-foreground">- {buildingName}</span>
             )}
             {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-            {syncEnabled && !isLoadingImages && imageCache.length > 0 && (
-              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                {imageCache.length} bilder
-              </span>
-            )}
-            {/* PostMessage status indicator */}
-            {syncEnabled && postMessageActive && (
-              <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                Auto-sync
-              </span>
+            
+            {/* Sync mode indicator */}
+            {syncEnabled && (
+              <>
+                {postMessageActive && (
+                  <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                    {renderMode === 'sdk' ? 'SDK Sync' : 'Auto-sync'}
+                  </span>
+                )}
+                {renderMode === 'iframe' && sdkStatus === 'failed' && (
+                  <span className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Iframe-läge
+                  </span>
+                )}
+                {!isLoadingImages && imageCache.length > 0 && (
+                  <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    {imageCache.length} bilder
+                  </span>
+                )}
+              </>
             )}
           </div>
           <div className="flex items-center gap-1">
-            {/* Sync button - only show when sync is enabled */}
+            {/* Sync button */}
             {syncEnabled && imageCache.length > 0 && (
               <Button
                 variant="ghost"
@@ -312,7 +375,7 @@ export default function Ivion360View({
               </Button>
             )}
             
-            {/* Inventory tools - only show when context is available */}
+            {/* Inventory tools */}
             {hasContext && ivionSiteId && (
               <>
                 <Button
@@ -338,29 +401,14 @@ export default function Ivion360View({
                 <div className="w-px h-5 bg-border mx-1" />
               </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenExternal}
-              title="Open in new tab"
-            >
+            <Button variant="ghost" size="icon" onClick={handleOpenExternal} title="Open in new tab">
               <ExternalLink className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            >
+            <Button variant="ghost" size="icon" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </Button>
             {(onClose || hasContext) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleClose}
-                title="Close"
-              >
+              <Button variant="ghost" size="icon" onClick={handleClose} title="Close">
                 <X className="h-4 w-4" />
               </Button>
             )}
@@ -368,24 +416,27 @@ export default function Ivion360View({
         </div>
       )}
 
-      {/* Iframe container */}
+      {/* Viewer container */}
       <div className="flex-1 relative">
-        {(isLoading || isRenewingToken || isLoadingImages) && (
+        {/* Loading overlay */}
+        {(isLoading || isRenewingToken || isLoadingImages || sdkStatus === 'loading') && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
-                {isRenewingToken 
-                  ? 'Förnyar anslutning...' 
-                  : isLoadingImages 
-                    ? 'Laddar bildpositioner...'
-                    : 'Laddar 360°-vy...'}
+                {sdkStatus === 'loading' 
+                  ? 'Laddar 360° SDK...'
+                  : isRenewingToken 
+                    ? 'Förnyar anslutning...' 
+                    : isLoadingImages 
+                      ? 'Laddar bildpositioner...'
+                      : 'Laddar 360°-vy...'}
               </span>
             </div>
           </div>
         )}
         
-        {/* Warning banner when image cache is empty but sync is enabled */}
+        {/* Image cache error banner */}
         {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
           <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
                           text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
@@ -398,15 +449,25 @@ export default function Ivion360View({
             </button>
           </div>
         )}
-        
-        <iframe
-          ref={iframeRef}
-          src={ivionUrl}
-          className="w-full h-full border-0"
-          onLoad={handleIframeLoad}
-          allow="fullscreen; autoplay"
-          title="Ivion 360 Viewer"
+
+        {/* SDK rendering container - always present to allow SDK loading */}
+        <div 
+          ref={sdkContainerRef} 
+          className="w-full h-full"
+          style={{ display: renderMode === 'sdk' ? 'block' : 'none' }}
         />
+        
+        {/* Iframe fallback - shown when SDK is not available */}
+        {renderMode === 'iframe' && (
+          <iframe
+            ref={iframeRef}
+            src={ivionUrl}
+            className="w-full h-full border-0"
+            onLoad={handleIframeLoad}
+            allow="fullscreen; autoplay"
+            title="Ivion 360 Viewer"
+          />
+        )}
 
         {/* Registration panel overlay */}
         {registrationPanelOpen && buildingFmGuid && (
