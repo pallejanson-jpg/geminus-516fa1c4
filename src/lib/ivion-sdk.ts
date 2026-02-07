@@ -4,9 +4,10 @@
  * The SDK renders the 360° viewer natively in a <div>/<ivion> element,
  * providing full programmatic control vs the limited iframe approach.
  * 
- * IMPORTANT: The NavVis IVION SDK requires the @navvis/ivion npm package.
- * Loading main.js from the NavVis instance does NOT expose getApi globally —
- * it bootstraps the full Angular application which manages getApi internally.
+ * PREFERRED: Install the @navvis/ivion npm package (distributed as .tgz
+ * from NavVis Knowledge Base) and this module will import getApi directly.
+ * 
+ * FALLBACK: If the package is not installed, the caller should use iframe mode.
  * 
  * A CORS proxy edge function (ivion-proxy) is available at:
  *   /functions/v1/ivion-proxy/<path>
@@ -107,67 +108,56 @@ export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
 /**
  * Dynamically load the NavVis IVION SDK.
  * 
- * This attempts to load the SDK from a script URL. The NavVis IVION SDK
- * must be available either:
- *   1. Via the @navvis/ivion npm package (preferred, exposes getApi as import)
- *   2. Via a custom script that exposes window.getApi or window.NavVis.getApi
- * 
- * NOTE: Loading main.js from the NavVis instance does NOT work — it boots
- * the full Angular app without exposing getApi globally. If the SDK is not
- * available, the caller should fall back to iframe mode.
+ * This attempts to import getApi from the @navvis/ivion npm package.
+ * If the package is installed (via .tgz), it initializes the SDK directly.
+ * If not installed, it rejects so the caller can fall back to iframe mode.
  * 
  * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
- * @param timeoutMs - Maximum time to wait for SDK load (default 10s)
+ * @param timeoutMs - Maximum time to wait for SDK initialization (default 10s)
  * @param loginToken - Optional JWT token for automatic authentication
  * @returns Promise resolving to the Ivion API interface
  */
-export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginToken?: string): Promise<IvionApi> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    
-    const settle = (action: 'resolve' | 'reject', value: any) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (action === 'resolve') resolve(value);
-      else reject(value);
-    };
+export async function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginToken?: string): Promise<IvionApi> {
+  // Build config object for getApi
+  const sdkConfig: Record<string, any> = {};
+  if (loginToken) {
+    sdkConfig.loginToken = loginToken;
+    console.log('[Ivion SDK] Using loginToken for auto-authentication');
+  }
 
-    // Build config object for getApi
-    const sdkConfig: Record<string, any> = {};
-    if (loginToken) {
-      sdkConfig.loginToken = loginToken;
-      console.log('[Ivion SDK] Using loginToken for auto-authentication');
-    }
+  // Try to dynamically import the @navvis/ivion npm package
+  let getApi: ((baseUrl: string, config?: any) => Promise<IvionApi>) | null = null;
 
-    // Check if already loaded (e.g., from @navvis/ivion npm package)
-    const existingGetApi = (window as any).NavVis?.getApi || (window as any).getApi;
-    if (existingGetApi) {
-      console.log('[Ivion SDK] getApi already available, initializing...');
-      existingGetApi(baseUrl, Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined)
-        .then((iv: IvionApi) => {
-          console.log('[Ivion SDK] Initialized from existing global');
-          settle('resolve', iv);
-        })
-        .catch((err: any) => {
-          console.error('[Ivion SDK] Failed to initialize from existing global:', err);
-          settle('reject', err);
-        });
-      return;
-    }
+  try {
+    // Use a variable to prevent bundler from statically analyzing the import
+    const moduleName = '@navvis/ivion';
+    const ivionModule = await import(/* @vite-ignore */ moduleName);
+    getApi = ivionModule.getApi || ivionModule.default?.getApi;
+    console.log('[Ivion SDK] @navvis/ivion npm package loaded successfully');
+  } catch {
+    console.log('[Ivion SDK] @navvis/ivion npm package not installed');
+    console.log('[Ivion SDK] To enable SDK mode, download the .tgz from NavVis Knowledge Base');
+    console.log('[Ivion SDK] and add "@navvis/ivion": "file:navvis-ivion-X.X.X.tgz" to package.json');
+    throw new Error(
+      'NavVis SDK not available. Install @navvis/ivion npm package (.tgz from NavVis Knowledge Base) for SDK mode.'
+    );
+  }
 
-    // SDK not available — getApi is only provided by the @navvis/ivion npm package.
-    // Loading main.js from the NavVis instance boots the full Angular app and does NOT
-    // expose getApi as a global. Fall back to iframe mode.
-    console.log('[Ivion SDK] @navvis/ivion npm package not detected, falling back to iframe mode');
-    console.log('[Ivion SDK] To enable SDK mode, install @navvis/ivion and import getApi');
-    
-    const timeout = setTimeout(() => {}, 0); // dummy for settle()
-    settle('reject', new Error(
-      'NavVis SDK not available. Install @navvis/ivion npm package for SDK mode. ' +
-      'CORS proxy (ivion-proxy) is available for other NavVis asset requests.'
-    ));
-  });
+  if (!getApi) {
+    throw new Error('NavVis SDK package found but getApi export is missing. Check package version.');
+  }
+
+  // Initialize with timeout
+  const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
+  
+  const apiPromise = getApi(baseUrl, config);
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Ivion SDK initialization timed out after ${timeoutMs}ms`)), timeoutMs)
+  );
+
+  const iv = await Promise.race([apiPromise, timeoutPromise]);
+  console.log('[Ivion SDK] Initialized successfully via @navvis/ivion package');
+  return iv;
 }
 
 /**
