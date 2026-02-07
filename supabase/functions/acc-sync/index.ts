@@ -517,6 +517,285 @@ async function upsertAccAssets(
 
   return total;
 }
+// ============ BIM SYNC HELPERS ============
+
+function isBimFile(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return ['rvt', 'ifc', 'nwc', 'dwg', 'nwd'].includes(ext);
+}
+
+function parseLDJSON(text: string): any[] {
+  return text.split('\n')
+    .filter(line => line.trim())
+    .map(line => {
+      try { return JSON.parse(line); }
+      catch { return null; }
+    })
+    .filter(Boolean);
+}
+
+async function extractBimHierarchy(
+  token: string,
+  projectId: string,
+  versionUrns: string[],
+  regionHeaders: Record<string, string>,
+): Promise<{ levels: any[]; rooms: any[]; fieldsMap: Record<string, string>; indexState: string }> {
+  const cleanProjectId = projectId.replace(/^b\./, "");
+
+  // Step 1: POST to batch-status to start/check indexing
+  const batchUrl = `https://developer.api.autodesk.com/construction/index/v2/projects/${cleanProjectId}/indexes:batch-status`;
+
+  const batchRes = await fetch(batchUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...regionHeaders,
+    },
+    body: JSON.stringify({
+      versions: versionUrns.map(urn => ({ versionUrn: urn })),
+    }),
+  });
+
+  if (!batchRes.ok) {
+    const errorText = await batchRes.text();
+    throw new Error(`Model Properties batch-status failed (${batchRes.status}): ${errorText}`);
+  }
+
+  const batchData = await batchRes.json();
+  const indexes = batchData.indexes || [];
+
+  if (indexes.length === 0) {
+    throw new Error('No indexes returned from batch-status');
+  }
+
+  // Step 2: Poll until all indexes are FINISHED (max ~45 seconds)
+  const maxPollTime = 45000;
+  const pollInterval = 3000;
+  const startTime = Date.now();
+
+  let allFinished = false;
+  let currentIndexes = indexes;
+
+  while (!allFinished && (Date.now() - startTime) < maxPollTime) {
+    allFinished = currentIndexes.every((idx: any) => idx.state === 'FINISHED');
+    if (allFinished) break;
+
+    const hasProcessing = currentIndexes.some((idx: any) =>
+      idx.state === 'PROCESSING' || idx.state === 'QUEUED'
+    );
+    if (!hasProcessing) break;
+
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    // Re-check status
+    const recheckRes = await fetch(batchUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...regionHeaders,
+      },
+      body: JSON.stringify({
+        versions: versionUrns.map(urn => ({ versionUrn: urn })),
+      }),
+    });
+
+    if (recheckRes.ok) {
+      const recheckData = await recheckRes.json();
+      currentIndexes = recheckData.indexes || currentIndexes;
+    }
+  }
+
+  // Check final state
+  const finishedIndexes = currentIndexes.filter((idx: any) => idx.state === 'FINISHED');
+  const overallState = allFinished ? 'FINISHED' :
+    currentIndexes.some((idx: any) => idx.state === 'PROCESSING' || idx.state === 'QUEUED') ? 'PROCESSING' : 'PARTIAL';
+
+  if (finishedIndexes.length === 0) {
+    return { levels: [], rooms: [], fieldsMap: {}, indexState: overallState };
+  }
+
+  // Step 3: Fetch fields and properties from finished indexes
+  const allLevels: any[] = [];
+  const allRooms: any[] = [];
+  const fieldsMap: Record<string, string> = {};
+
+  for (const idx of finishedIndexes) {
+    try {
+      // Fetch fields
+      if (idx.fieldsUrl) {
+        const fieldsRes = await fetch(idx.fieldsUrl, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (fieldsRes.ok) {
+          const fieldsText = await fieldsRes.text();
+          const fields = parseLDJSON(fieldsText);
+          for (const field of fields) {
+            if (field.key && field.name) {
+              fieldsMap[field.key] = field.name;
+            }
+          }
+        }
+      }
+
+      // Fetch properties
+      if (idx.propertiesUrl) {
+        const propsRes = await fetch(idx.propertiesUrl, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (propsRes.ok) {
+          const propsText = await propsRes.text();
+          const props = parseLDJSON(propsText);
+
+          // Known keys: p5eddc473 = Category, p153cb174 = Name
+          let categoryKey = 'p5eddc473';
+          let nameKey = 'p153cb174';
+          let elevationKey = 'pdf1348b1';
+          let levelKey = 'pbadfe721';
+
+          // Try to find keys from fieldsMap
+          for (const [key, name] of Object.entries(fieldsMap)) {
+            const lowerName = (name as string).toLowerCase();
+            if (lowerName === 'category' || lowerName === 'kategori') categoryKey = key;
+            if (lowerName === 'name' || lowerName === 'namn') nameKey = key;
+            if (lowerName === 'elevation' || lowerName === 'höjd') elevationKey = key;
+            if (lowerName === 'level' || lowerName === 'våning' || lowerName === 'nivå') levelKey = key;
+          }
+
+          for (const obj of props) {
+            const category = obj.props?.[categoryKey] || '';
+            const name = obj.props?.[nameKey] || '';
+            const externalId = obj.externalId || obj.svf2Id?.toString() || '';
+
+            if (category === 'Revit Level' || category === 'Levels') {
+              allLevels.push({
+                externalId,
+                name,
+                elevation: obj.props?.[elevationKey] || null,
+                objectId: obj.objectId,
+                versionUrn: idx.versionUrn,
+              });
+            } else if (category === 'Revit Rooms' || category === 'Rooms') {
+              allRooms.push({
+                externalId,
+                name,
+                level: obj.props?.[levelKey] || null,
+                objectId: obj.objectId,
+                versionUrn: idx.versionUrn,
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Error processing index ${idx.indexId}:`, err);
+    }
+  }
+
+  console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms from ${finishedIndexes.length} models`);
+  return { levels: allLevels, rooms: allRooms, fieldsMap, indexState: overallState };
+}
+
+async function upsertBimAssets(
+  supabase: any,
+  folderName: string,
+  folderId: string,
+  levels: any[],
+  rooms: any[],
+  accProjectId: string,
+): Promise<{ building: number; levels: number; rooms: number }> {
+  const buildingFmGuid = `acc-bim-building-${folderId.replace(/[^a-zA-Z0-9-]/g, '')}`;
+
+  // 1. Upsert building
+  const buildingAsset = {
+    fm_guid: buildingFmGuid,
+    category: 'Building',
+    name: null,
+    common_name: folderName,
+    building_fm_guid: buildingFmGuid,
+    attributes: {
+      source: 'acc-bim',
+      acc_project_id: accProjectId,
+      acc_folder_id: folderId,
+    },
+    synced_at: new Date().toISOString(),
+  };
+
+  await supabase.from('assets').upsert(buildingAsset, { onConflict: 'fm_guid', ignoreDuplicates: false });
+
+  // 2. Upsert levels
+  const levelAssets = levels.map(level => ({
+    fm_guid: `acc-bim-level-${level.externalId}`,
+    category: 'Building Storey',
+    name: null,
+    common_name: level.name || `Level ${level.externalId}`,
+    building_fm_guid: buildingFmGuid,
+    level_fm_guid: `acc-bim-level-${level.externalId}`,
+    attributes: {
+      source: 'acc-bim',
+      acc_project_id: accProjectId,
+      acc_folder_id: folderId,
+      bim_external_id: level.externalId,
+      bim_elevation: level.elevation,
+      bim_object_id: level.objectId,
+      bim_version_urn: level.versionUrn,
+    },
+    synced_at: new Date().toISOString(),
+  }));
+
+  // 3. Upsert rooms with level matching
+  const levelNameMap = new Map<string, string>();
+  for (const level of levels) {
+    levelNameMap.set(level.name, `acc-bim-level-${level.externalId}`);
+  }
+
+  const roomAssets = rooms.map(room => {
+    let levelFmGuid: string | null = null;
+    if (room.level) {
+      levelFmGuid = levelNameMap.get(room.level) || null;
+      if (!levelFmGuid) {
+        for (const [levelName, levelGuid] of levelNameMap) {
+          if (room.level.includes(levelName) || levelName.includes(room.level)) {
+            levelFmGuid = levelGuid;
+            break;
+          }
+        }
+      }
+    }
+
+    return {
+      fm_guid: `acc-bim-room-${room.externalId}`,
+      category: 'Space',
+      name: null,
+      common_name: room.name || `Room ${room.externalId}`,
+      building_fm_guid: buildingFmGuid,
+      level_fm_guid: levelFmGuid,
+      attributes: {
+        source: 'acc-bim',
+        acc_project_id: accProjectId,
+        acc_folder_id: folderId,
+        bim_external_id: room.externalId,
+        bim_level_ref: room.level,
+        bim_object_id: room.objectId,
+        bim_version_urn: room.versionUrn,
+      },
+      synced_at: new Date().toISOString(),
+    };
+  });
+
+  // Batch upsert
+  const allAssets = [...levelAssets, ...roomAssets];
+  for (let i = 0; i < allAssets.length; i += 200) {
+    const chunk = allAssets.slice(i, i + 200);
+    const { error } = await supabase.from('assets').upsert(chunk, { onConflict: 'fm_guid', ignoreDuplicates: false });
+    if (error) throw error;
+  }
+
+  return { building: 1, levels: levelAssets.length, rooms: roomAssets.length };
+}
 
 // ============ SYNC STATE HELPERS ============
 
@@ -566,7 +845,8 @@ serve(async (req: Request) => {
       return forbiddenResponse();
     }
 
-    const { action, projectId, region } = await req.json();
+    const body = await req.json();
+    const { action, projectId, region } = body;
     console.log(`ACC Sync action: ${action} (user: ${auth.userId})`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -916,6 +1196,7 @@ serve(async (req: Request) => {
 
         const contentsData = await contentsRes.json();
         const allItems = contentsData.data || [];
+        const topIncluded = contentsData.included || [];
 
         // Separate folders (buildings) and items (loose files)
         const subFolders = allItems.filter((item: any) => item.type === "folders");
@@ -942,15 +1223,25 @@ serve(async (req: Request) => {
             let items: any[] = [];
             if (subRes.ok) {
               const subData = await subRes.json();
+              const subIncluded = subData.included || [];
               items = (subData.data || [])
                 .filter((item: any) => item.type === "items")
-                .map((item: any) => ({
-                  id: item.id,
-                  name: item.attributes?.displayName || item.attributes?.name || item.id,
-                  type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
-                  size: item.attributes?.storageSize || null,
-                  createTime: item.attributes?.createTime || null,
-                }));
+                .map((item: any) => {
+                  const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
+                  const versionUrn = item.relationships?.tip?.data?.id || null;
+                  const derivativeUrn = versionUrn
+                    ? (subIncluded.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
+                    : null;
+                  return {
+                    id: item.id,
+                    name: fileName,
+                    type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
+                    size: item.attributes?.storageSize || null,
+                    createTime: item.attributes?.createTime || null,
+                    versionUrn: isBimFile(fileName) ? versionUrn : null,
+                    derivativeUrn: isBimFile(fileName) ? derivativeUrn : null,
+                  };
+                });
             }
 
             folders.push({
@@ -965,13 +1256,22 @@ serve(async (req: Request) => {
         }
 
         // Include any top-level items not in subfolders
-        const topLevelItems = looseItems.map((item: any) => ({
-          id: item.id,
-          name: item.attributes?.displayName || item.attributes?.name || item.id,
-          type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
-          size: item.attributes?.storageSize || null,
-          createTime: item.attributes?.createTime || null,
-        }));
+        const topLevelItems = looseItems.map((item: any) => {
+          const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
+          const versionUrn = item.relationships?.tip?.data?.id || null;
+          const derivativeUrn = versionUrn
+            ? (topIncluded.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
+            : null;
+          return {
+            id: item.id,
+            name: fileName,
+            type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
+            size: item.attributes?.storageSize || null,
+            createTime: item.attributes?.createTime || null,
+            versionUrn: isBimFile(fileName) ? versionUrn : null,
+            derivativeUrn: isBimFile(fileName) ? derivativeUrn : null,
+          };
+        });
 
         return new Response(
           JSON.stringify({
@@ -982,6 +1282,103 @@ serve(async (req: Request) => {
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
+      }
+
+      // ---- SYNC BIM DATA (Model Properties API) ----
+      case "sync-bim-data": {
+        const { folderName, folderId, items: folderItems } = body;
+
+        if (!projectId || !folderId || !folderItems) {
+          return new Response(
+            JSON.stringify({ success: false, error: "projectId, folderId, and items are required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+        const regionHeaders = getRegionHeader(region);
+
+        // Filter to BIM items with valid versionUrns
+        const bimItems = (folderItems as any[]).filter(
+          (item: any) => item.versionUrn && isBimFile(item.name)
+        );
+
+        if (bimItems.length === 0) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: "Inga BIM-filer med versionUrn hittades i denna mapp. Se till att mappen innehåller RVT/IFC-filer.",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        console.log(`sync-bim-data: ${bimItems.length} BIM files in folder "${folderName}"`);
+        const versionUrns = bimItems.map((item: any) => item.versionUrn);
+
+        try {
+          // Extract BIM hierarchy via Model Properties API
+          const { levels, rooms, fieldsMap, indexState } = await extractBimHierarchy(
+            token, projectId, versionUrns, regionHeaders,
+          );
+
+          if (indexState === 'PROCESSING') {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                state: 'PROCESSING',
+                message: 'Indexeringen pågår fortfarande hos Autodesk. Prova igen om 30-60 sekunder.',
+                modelsIndexed: 0,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+
+          if (levels.length === 0 && rooms.length === 0) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                message: `Indexering klar men inga våningsplan eller rum hittades i ${bimItems.length} BIM-modell(er). Modellerna kanske inte innehåller Revit Levels/Rooms.`,
+                indexState,
+                fieldsFound: Object.keys(fieldsMap).length,
+                building: 0,
+                levels: 0,
+                rooms: 0,
+                modelsIndexed: bimItems.length,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+
+          // Upsert to database
+          const result = await upsertBimAssets(
+            supabase, folderName, folderId, levels, rooms, projectId,
+          );
+
+          const message = `Skapade: ${result.building} byggnad, ${result.levels} våningsplan, ${result.rooms} rum från ${bimItems.length} modell(er)`;
+
+          // Update sync state
+          await updateSyncState(supabase, "acc-bim", "completed", result.levels + result.rooms + result.building);
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message,
+              indexState,
+              ...result,
+              modelsIndexed: bimItems.length,
+              fieldsFound: Object.keys(fieldsMap).length,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error(`sync-bim-data error: ${errMsg}`);
+          return new Response(
+            JSON.stringify({ success: false, error: errMsg }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       }
 
       default:

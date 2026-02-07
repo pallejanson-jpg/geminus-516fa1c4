@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -175,6 +175,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isLoadingAccFolders, setIsLoadingAccFolders] = useState(false);
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
     const [hasLoadedAccSettings, setHasLoadedAccSettings] = useState(false);
+    
+    // BIM sync state
+    const [syncingBimFolderId, setSyncingBimFolderId] = useState<string | null>(null);
+    const [bimSyncProgress, setBimSyncProgress] = useState<string | null>(null);
     
     // Autodesk 3-legged OAuth state
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
@@ -442,6 +446,63 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             else next.add(folderId);
             return next;
         });
+    };
+
+    // BIM sync handler
+    const handleSyncBimData = async (folder: any) => {
+        const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
+        if (!effectiveProjectId) {
+            toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
+            return;
+        }
+
+        const bimItems = (folder.items || []).filter((item: any) => item.versionUrn);
+        if (bimItems.length === 0) {
+            toast({ variant: 'destructive', title: 'Inga BIM-filer', description: 'Denna mapp innehåller inga BIM-filer med versionUrn.' });
+            return;
+        }
+
+        setSyncingBimFolderId(folder.id);
+        setBimSyncProgress('Indexerar modeller...');
+
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: {
+                    action: 'sync-bim-data',
+                    projectId: effectiveProjectId,
+                    region: accRegion,
+                    folderName: folder.name,
+                    folderId: folder.id,
+                    items: folder.items,
+                }
+            });
+
+            if (error) throw error;
+
+            if (data?.success) {
+                toast({
+                    title: 'BIM-synk klar',
+                    description: data.message,
+                });
+                handleCheckAccStatus();
+            } else if (data?.state === 'PROCESSING') {
+                toast({
+                    title: 'Indexering pågår',
+                    description: data.message || 'Modellerna indexeras. Prova igen om en stund.',
+                });
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'BIM-synk misslyckades',
+                    description: data?.error || data?.message || 'Okänt fel',
+                });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setSyncingBimFolderId(null);
+            setBimSyncProgress(null);
+        }
     };
 
     const formatFileSize = (bytes: number | null) => {
@@ -2071,21 +2132,42 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         )}
 
                                                         <div className="space-y-1 max-h-64 overflow-y-auto">
-                                                            {accFolders.map((folder: any) => (
+                                                            {accFolders.map((folder: any) => {
+                                                                const hasBimFiles = (folder.items || []).some((item: any) => item.versionUrn);
+                                                                const isSyncingThisFolder = syncingBimFolderId === folder.id;
+                                                                return (
                                                                 <div key={folder.id} className="rounded border bg-background">
-                                                                    <button
-                                                                        onClick={() => toggleFolder(folder.id)}
-                                                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left hover:bg-muted/50 rounded text-sm"
-                                                                    >
-                                                                        {expandedFolders.has(folder.id) ? (
-                                                                            <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                                        ) : (
-                                                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                    <div className="flex items-center">
+                                                                        <button
+                                                                            onClick={() => toggleFolder(folder.id)}
+                                                                            className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-1.5 text-left hover:bg-muted/50 rounded-l text-sm"
+                                                                        >
+                                                                            {expandedFolders.has(folder.id) ? (
+                                                                                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                            ) : (
+                                                                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                            )}
+                                                                            <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                                                            <span className="font-medium truncate">{folder.name}</span>
+                                                                            <Badge variant="outline" className="ml-auto text-[10px] shrink-0">{folder.items?.length || 0} filer</Badge>
+                                                                        </button>
+                                                                        {hasBimFiles && (
+                                                                            <Button
+                                                                                onClick={(e) => { e.stopPropagation(); handleSyncBimData(folder); }}
+                                                                                disabled={!!syncingBimFolderId}
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                className="gap-1 h-7 text-xs shrink-0 mr-1"
+                                                                            >
+                                                                                {isSyncingThisFolder ? (
+                                                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                ) : (
+                                                                                    <DatabaseIcon className="h-3 w-3" />
+                                                                                )}
+                                                                                {isSyncingThisFolder ? (bimSyncProgress || 'Synkar...') : 'Synka BIM-data'}
+                                                                            </Button>
                                                                         )}
-                                                                        <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                                                        <span className="font-medium truncate">{folder.name}</span>
-                                                                        <Badge variant="outline" className="ml-auto text-[10px] shrink-0">{folder.items?.length || 0} filer</Badge>
-                                                                    </button>
+                                                                    </div>
                                                                     
                                                                     {expandedFolders.has(folder.id) && folder.items && folder.items.length > 0 && (
                                                                         <div className="px-2.5 pb-2 pl-8 space-y-0.5">
@@ -2093,6 +2175,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                                 <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
                                                                                     <File className="h-3 w-3 text-muted-foreground shrink-0" />
                                                                                     <span className="truncate">{item.name}</span>
+                                                                                    {item.versionUrn && (
+                                                                                        <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
+                                                                                    )}
                                                                                     <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
                                                                                     {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
                                                                                 </div>
@@ -2104,7 +2189,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                         <p className="px-2.5 pb-2 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
                                                                     )}
                                                                 </div>
-                                                            ))}
+                                                                );
+                                                            })}
 
                                                             {accTopLevelItems.length > 0 && (
                                                                 <div className="pt-1 border-t">
