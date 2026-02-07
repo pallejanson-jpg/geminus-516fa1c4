@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface BuildingWithIvion {
   fm_guid: string;
@@ -129,7 +130,7 @@ const IvionInventory: React.FC = () => {
     }
 
     // Build Ivion URL
-    const baseUrl = 'https://swg.iv.navvis.com';
+    const baseUrl = IVION_DEFAULT_BASE_URL;
     setIvionUrl(`${baseUrl}/?site=${building.ivion_site_id}`);
     
     // Reset connection status when building changes

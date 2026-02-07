@@ -20,6 +20,7 @@ import RoomSelector from './selectors/RoomSelector';
 import ImageUpload from './ImageUpload';
 import PositionPickerDialog from './PositionPickerDialog';
 import type { InventoryItem } from '@/pages/Inventory';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface AnnotationSymbol {
   id: string;
@@ -224,7 +225,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
     // Use configured URL or default to swg.iv.navvis.com
     // FIX: Use /?site= query parameter format instead of /site/
-    const baseUrl = ivionUrl || 'https://swg.iv.navvis.com';
+    const baseUrl = ivionUrl || IVION_DEFAULT_BASE_URL;
     const fullUrl = `${baseUrl}/?site=${siteId}`;
 
     // If callback exists (desktop inline view), use it. Otherwise open in new tab.
