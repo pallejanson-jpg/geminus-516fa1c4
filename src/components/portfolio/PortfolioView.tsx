@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
-import { BUILDING_IMAGES } from '@/lib/constants';
+import { BUILDING_IMAGES, IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import FacilityCard from './FacilityCard';
@@ -178,7 +178,7 @@ const PortfolioView: React.FC = () => {
       // Build the full URL - use configured URL or default to ivion.se
       const baseUrl = ivionConfig.url && ivionConfig.url.trim() !== '' 
         ? ivionConfig.url.replace(/\/$/, '') // Remove trailing slash
-        : 'https://swg.iv.navvis.com';
+        : IVION_DEFAULT_BASE_URL;
       // FIX: Use /?site= query parameter format instead of /site/
       const fullUrl = `${baseUrl}/?site=${siteId}`;
       

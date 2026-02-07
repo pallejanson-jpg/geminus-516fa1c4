@@ -4,6 +4,7 @@ import { ArrowLeft, Building2 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { AppButton } from '@/components/common/AppButton';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Mobile building selector component
@@ -111,7 +112,7 @@ const Mobile360Viewer: React.FC = () => {
   
   // Build Ivion URL
   const configured = appConfigs?.radar?.url?.trim();
-  const baseUrl = configured ? configured.replace(/\/$/, '') : 'https://swg.iv.navvis.com';
+  const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_DEFAULT_BASE_URL;
   const ivionUrl = selectedBuilding.ivionSiteId 
     ? `${baseUrl}/?site=${selectedBuilding.ivionSiteId}`
     : ivion360Context?.ivionUrl || '';
