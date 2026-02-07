@@ -1381,6 +1381,105 @@ serve(async (req: Request) => {
         }
       }
 
+      // ---- LIST MODEL SETS (Model Coordination API - alternative to DM API) ----
+      case "list-model-sets": {
+        if (!projectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "projectId is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+        const containerId = projectId.replace(/^b\./, "");
+        const regionHeaders = getRegionHeader(region);
+
+        console.log(`list-model-sets: containerId=${containerId}`);
+
+        // Step 1: List all model sets in the project
+        const msUrl = `https://developer.api.autodesk.com/bim360/modelcoordination/v3/containers/${containerId}/modelsets`;
+        console.log(`Fetching model sets: ${msUrl}`);
+        const msRes = await fetch(msUrl, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+            ...regionHeaders,
+          },
+        });
+
+        if (!msRes.ok) {
+          const errorText = await msRes.text();
+          console.error(`Model sets API failed: ${msRes.status} - ${errorText}`);
+          return new Response(
+            JSON.stringify({ success: false, error: `Model Coordination API failed (${msRes.status}): ${errorText}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const msData = await msRes.json();
+        const modelSets = msData.modelSets || msData.items || msData || [];
+        console.log(`Found ${Array.isArray(modelSets) ? modelSets.length : 'unknown'} model sets`);
+
+        // Step 2: For each model set, get its latest version to find model URNs
+        const results: any[] = [];
+        const modelSetList = Array.isArray(modelSets) ? modelSets : [modelSets];
+        
+        for (const ms of modelSetList.slice(0, 5)) { // Limit to 5 for testing
+          const msId = ms.modelSetId || ms.id;
+          const msName = ms.name || ms.modelSetId || 'Unknown';
+          
+          try {
+            // Get latest version of this model set
+            const versionUrl = `https://developer.api.autodesk.com/bim360/modelcoordination/v3/containers/${containerId}/modelsets/${msId}:latest`;
+            const versionRes = await fetch(versionUrl, {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json",
+                ...regionHeaders,
+              },
+            });
+
+            let versionData = null;
+            if (versionRes.ok) {
+              versionData = await versionRes.json();
+            } else {
+              const vErr = await versionRes.text();
+              console.warn(`Version fetch failed for ${msName}: ${versionRes.status} - ${vErr}`);
+            }
+
+            results.push({
+              modelSetId: msId,
+              name: msName,
+              status: ms.status,
+              folderUrn: ms.folderUrn || null,
+              latestVersion: versionData ? {
+                versionNumber: versionData.versionNumber,
+                documentCount: versionData.documentCount || versionData.documents?.length,
+                documents: (versionData.documents || []).slice(0, 10).map((d: any) => ({
+                  displayName: d.displayName,
+                  versionUrn: d.versionUrn,
+                  bubbleUrn: d.bubbleUrn,
+                  isHead: d.isHead,
+                })),
+              } : null,
+            });
+          } catch (err) {
+            console.warn(`Error fetching model set ${msName}:`, err);
+            results.push({ modelSetId: msId, name: msName, error: true });
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            rawModelSetsKeys: Array.isArray(modelSets) ? undefined : Object.keys(msData),
+            totalModelSets: modelSetList.length,
+            modelSets: results,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
