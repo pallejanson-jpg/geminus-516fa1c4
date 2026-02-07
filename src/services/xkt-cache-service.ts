@@ -75,22 +75,16 @@ export class XktCacheService {
             );
           });
 
-          if (match) {
-            if (match.file_url) {
-              console.log('XKT found in database:', modelId);
-              return { cached: true, url: match.file_url };
-            }
-
-            // If we have storage_path but no file_url, generate a new signed URL
-            if (match.storage_path) {
-              const { data: urlData } = await supabase.storage
-                .from('xkt-models')
-                .createSignedUrl(match.storage_path, 3600);
-              
-              if (urlData?.signedUrl) {
-                console.log('XKT signed URL generated:', modelId);
-                return { cached: true, url: urlData.signedUrl };
-              }
+      if (match && match.storage_path) {
+            // Always generate a fresh signed URL from storage_path
+            // (file_url may contain an expired signed URL)
+            const { data: urlData } = await supabase.storage
+              .from('xkt-models')
+              .createSignedUrl(match.storage_path, 3600);
+            
+            if (urlData?.signedUrl) {
+              console.log('XKT cache hit (signed URL):', modelId);
+              return { cached: true, url: urlData.signedUrl };
             }
           }
         }
@@ -259,10 +253,11 @@ export class XktCacheService {
       
       console.log(`XKT save: Uploading ${modelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
       
-      // Upload to storage
+      // Upload to storage - wrap in Blob for proper binary handling
+      const blob = new Blob([xktData], { type: 'application/octet-stream' });
       const { error: uploadError } = await supabase.storage
         .from('xkt-models')
-        .upload(storagePath, xktData, {
+        .upload(storagePath, blob, {
           contentType: 'application/octet-stream',
           upsert: true,
         });
@@ -272,12 +267,9 @@ export class XktCacheService {
         return false;
       }
       
-      // Get signed URL for immediate access
-      const { data: urlData } = await supabase.storage
-        .from('xkt-models')
-        .createSignedUrl(storagePath, 86400); // 24 hour expiry
+      // No need to generate signed URL here - checkCache generates fresh ones on demand
       
-      // Save metadata to database
+      // Save metadata to database (don't store signed URL - it expires)
       const { error: dbError } = await supabase
         .from('xkt_models')
         .upsert({
@@ -287,7 +279,7 @@ export class XktCacheService {
           file_name: fileName,
           file_size: xktData.byteLength,
           storage_path: storagePath,
-          file_url: urlData?.signedUrl || null,
+          file_url: null,
           synced_at: new Date().toISOString(),
         }, {
           onConflict: 'building_fm_guid,model_id',
