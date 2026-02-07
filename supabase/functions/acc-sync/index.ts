@@ -695,14 +695,26 @@ serve(async (req: Request) => {
           const storeys = mapped.filter(m => m.category === "Building Storey").length;
           const spaces = mapped.filter(m => m.category === "Space").length;
 
+          // Build a helpful message depending on the result
+          let message: string;
+          let hint: string | undefined;
+          if (buildings === 0 && storeys === 0 && spaces === 0) {
+            message = "ACC-projektet har inga platser konfigurerade i Locations-modulen (bara root-nod).";
+            hint = "Platsdata (byggnader, plan, rum) kan finnas i BIM-modellerna istället. Prova 'Visa mappar' för att se projektets mappstruktur och BIM-filer.";
+          } else {
+            message = `Synkade ${upserted} platser: ${buildings} byggnader, ${storeys} våningar, ${spaces} rum`;
+          }
+
           return new Response(
             JSON.stringify({
               success: true,
-              message: `Synkade ${upserted} platser: ${buildings} byggnader, ${storeys} våningar, ${spaces} rum`,
+              message,
+              hint,
               totalNodes: nodes.length,
               buildings,
               storeys,
               spaces,
+              emptyLocations: buildings === 0 && storeys === 0 && spaces === 0,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
@@ -845,7 +857,7 @@ serve(async (req: Request) => {
         const regionHeaders = getRegionHeader(region);
 
         // Step 1: Get top folders
-        const topFoldersUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/topFolders`;
+        const topFoldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${hubId}/projects/${fullProjectId}/topFolders`;
         console.log(`Fetching top folders: ${topFoldersUrl}`);
         const topRes = await fetch(topFoldersUrl, {
           headers: {
