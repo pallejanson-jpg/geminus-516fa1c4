@@ -727,6 +727,40 @@ serve(async (req) => {
           };
         }
         break;
+
+      case 'get-login-token':
+        // Return a valid Ivion JWT for frontend SDK loginToken authentication
+        // This reuses the existing token management (cached, refreshed, or new login)
+        try {
+          const token = await getIvionToken(params.buildingFmGuid || null);
+          
+          // Parse token expiry to tell frontend when to refresh
+          let expiresInMs = 10 * 60 * 1000; // Default 10 min
+          try {
+            const parts = token.split('.');
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1]));
+              if (payload.exp) {
+                const expiresAt = payload.exp * 1000;
+                expiresInMs = Math.max(0, expiresAt - Date.now() - 60000); // 60s buffer
+              }
+            }
+          } catch {
+            // Use default expiry
+          }
+          
+          result = {
+            success: true,
+            loginToken: token,
+            expiresInMs,
+          };
+        } catch (e: any) {
+          result = {
+            success: false,
+            error: e?.message || String(e),
+          };
+        }
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`);
