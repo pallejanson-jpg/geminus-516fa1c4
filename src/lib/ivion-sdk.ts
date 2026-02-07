@@ -1,0 +1,192 @@
+/**
+ * NavVis IVION Frontend API - Type definitions and dynamic loader.
+ * 
+ * The SDK renders the 360° viewer natively in a <div>/<ivion> element,
+ * providing full programmatic control vs the limited iframe approach.
+ * 
+ * @see https://ivion-api.docs.navvis.com
+ */
+
+export interface IvionVector3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface IvionQuaternion {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface IvionViewDir {
+  lon: number; // radians
+  lat: number; // radians
+}
+
+export interface IvionImage {
+  id: number;
+  location: IvionVector3;
+  orientation?: IvionQuaternion;
+  datasetId?: number;
+  datasetLocation?: IvionVector3;
+  datasetOrientation?: IvionQuaternion;
+}
+
+export interface IvionMainView {
+  /** Get currently active image (position in local/site coordinates) */
+  getImage(): IvionImage | null;
+  /** Current viewing direction in radians (lon = yaw, lat = pitch) */
+  currViewingDir: IvionViewDir;
+  /** Update camera orientation */
+  updateOrientation?(dir: Partial<IvionViewDir>): void;
+}
+
+export interface IvionPointOfView {
+  /** Subscribe to point-of-view changes */
+  onChange?(callback: () => void): (() => void) | void;
+  /** Set point of view */
+  set?(location: IvionVector3, orientation: IvionQuaternion, fov?: number, imageId?: number): void;
+}
+
+export interface IvionApi {
+  /** Get the main panorama view */
+  getMainView(): IvionMainView;
+  /** Navigate to an image by its ID */
+  moveToImageId(imageId: number, viewDir?: IvionViewDir, fov?: number): Promise<void>;
+  /** Navigate to a geographic or local position */
+  moveToGeoLocation(
+    loc: IvionVector3,
+    isLocal: boolean,
+    viewDir?: IvionViewDir,
+    fixedLat?: number,
+    fov?: number,
+    normal?: IvionVector3,
+    forceLoc?: boolean,
+    sameFloor?: boolean,
+  ): Promise<void>;
+  /** Navigate to an image object */
+  moveToImage(image: IvionImage, viewDir?: IvionViewDir, viewDistance?: number, fov?: number): Promise<void>;
+  /** Check if licensed */
+  isLicensed?(): boolean;
+  /** Check if currently moving */
+  isMoving?(): boolean;
+  /** Point of view interface (events + setter) */
+  pov?: IvionPointOfView;
+  /** Reset to starting location */
+  resetView?(): void;
+  /** Get current share URL with position params */
+  getShareUrl?(): string;
+}
+
+/** Load status for the SDK */
+export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
+
+/**
+ * Dynamically load the NavVis IVION SDK from an instance URL.
+ * 
+ * The SDK must be loaded from the Ivion instance itself (e.g., https://swg.iv.navvis.com).
+ * This requires proper CORS configuration on the Ivion instance to allow our domain.
+ * 
+ * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
+ * @param timeoutMs - Maximum time to wait for SDK load (default 20s)
+ * @returns Promise resolving to the Ivion API interface
+ */
+export function loadIvionSdk(baseUrl: string, timeoutMs: number = 20000): Promise<IvionApi> {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded from a previous mount
+    const existingGetApi = (window as any).NavVis?.getApi || (window as any).getApi;
+    if (existingGetApi) {
+      console.log('[Ivion SDK] getApi already available, initializing...');
+      existingGetApi(baseUrl)
+        .then((iv: IvionApi) => {
+          console.log('[Ivion SDK] Initialized from existing global');
+          resolve(iv);
+        })
+        .catch((err: any) => {
+          console.error('[Ivion SDK] Failed to initialize from existing global:', err);
+          reject(err);
+        });
+      return;
+    }
+
+    // Create and load the script
+    const script = document.createElement('script');
+    script.src = `${baseUrl}/ivion.js`;
+    script.async = true;
+    script.id = 'navvis-ivion-sdk';
+
+    const timeout = setTimeout(() => {
+      console.warn('[Ivion SDK] Load timeout after', timeoutMs, 'ms');
+      reject(new Error(`SDK load timeout after ${timeoutMs}ms`));
+      cleanup();
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+
+    script.onload = () => {
+      clearTimeout(timeout);
+      
+      const getApi = (window as any).NavVis?.getApi || (window as any).getApi;
+      if (!getApi) {
+        console.error('[Ivion SDK] Script loaded but getApi not found on window');
+        reject(new Error('getApi function not found after script load'));
+        return;
+      }
+
+      console.log('[Ivion SDK] Script loaded, calling getApi()...');
+      
+      getApi(baseUrl)
+        .then((iv: IvionApi) => {
+          console.log('[Ivion SDK] ✅ API ready');
+          resolve(iv);
+        })
+        .catch((err: any) => {
+          console.error('[Ivion SDK] getApi() failed:', err);
+          reject(err);
+        });
+    };
+
+    script.onerror = (event) => {
+      clearTimeout(timeout);
+      console.warn('[Ivion SDK] Script load failed (likely CORS or network issue)');
+      reject(new Error('Failed to load ivion.js - CORS or network error'));
+      cleanup();
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+/**
+ * Create the <ivion> custom element that the SDK renders into.
+ * Must be in the DOM before calling getApi().
+ */
+export function createIvionElement(container: HTMLElement): HTMLElement {
+  const ivionEl = document.createElement('ivion');
+  ivionEl.style.width = '100%';
+  ivionEl.style.height = '100%';
+  ivionEl.style.display = 'block';
+  ivionEl.style.position = 'relative';
+  container.appendChild(ivionEl);
+  return ivionEl;
+}
+
+/**
+ * Remove the <ivion> element and clean up.
+ */
+export function destroyIvionElement(container: HTMLElement, element: HTMLElement): void {
+  try {
+    if (container.contains(element)) {
+      container.removeChild(element);
+    }
+  } catch (e) {
+    console.warn('[Ivion SDK] Cleanup error:', e);
+  }
+}
