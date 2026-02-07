@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.acc-sync]
 verify_jwt = false
+
+[functions.acc-auth]
+verify_jwt = false
