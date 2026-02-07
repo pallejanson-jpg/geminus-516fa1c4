@@ -1,191 +1,133 @@
 
-# Fix Split View: 3D-laddning och kamerasynkronisering
 
-## Problem
+# Full Ivion SDK Integration with loginToken Authentication
 
-Split View har tva kritiska buggar:
-1. **3D-modellen laddar inte korrekt** -- AssetPlusViewer far ett fmGuid som ar ett byggnads-GUID, men modellerna kraschar eller visas inte i split-kontextet
-2. **Kamerorna foljer inte varandra** -- nuvarande implementation forsaker anvanda postMessage-kommandon till Ivion-iframen, men Ivion stodjer INTE dessa kommandon i iframe-lage. Den enda kanalen for att styra Ivion programmatiskt ar genom NavVis Frontend API SDK (`@navvis/ivion`), som maste laddas dynamiskt fran Ivion-instansen
+## Background
 
-## Grundorsaker
+The Split View needs the NavVis Frontend API SDK for bi-directional camera synchronization. Currently the SDK loading fails because:
+1. The Ivion instance may not have CORS configured for our domain
+2. Even if the SDK loads, the user would need to manually log into Ivion in the rendered viewer
 
-### Problem 1: 3D-modellsladdning
-- AssetPlusViewer tar emot `fmGuid` och saker efter motsvarande post i `allData` (AppContext)
-- I split view-laget passas byggnadens fmGuid, men `xktCacheService.ensureBuildingModels()` kan timeoutas eller misslyckas tyst
-- Det finns ingen felatergivning nar modeller inte hittas eller nar cache-synk misslyckas
-- Viewern visar bara en tom container istallet for att rapportera problemet
+The NavVis Frontend API supports a `loginToken` parameter in the `ConfigurationInterface` passed to `getApi()`, which automatically authenticates the user without requiring manual login. We already have backend token management in `ivion-auth.ts`.
 
-### Problem 2: Kamerasynk (allvarligaste problemet)
-Den nuvarande synk-strategin ar felaktig:
-
-**3D till 360 (fungerar inte):**
-- Koden skickar `postMessage({ type: 'navvis-command', action: 'moveToLocation', ... })` till Ivion-iframen
-- Ivion reagerar INTE pa dessa meddelanden -- det ar inte ett stott API
-- Fallback: andrar `iframe.src` med ny `&image=XXX` -- detta tvingar en FULLSTANDIG omladdning av Ivion (tar 5-10 sekunder), satt aven detta ar oanvandbart for realtidssynk
-
-**360 till 3D (fungerar inte):**
-- Koden lysnar efter `postMessage` fran Ivion men Ivion sander INGA sadana meddelanden spontant
-- Prenumerationskommandona (`subscribe`) ar ogiltiga i Ivions iframe-API
-- Resultatet: `postMessageActive` forblir `false` och ingen automatisk synk sker
-
-### Korrekt losning: NavVis Frontend API (SDK)
-Enligt NavVis-dokumentationen ar det ratta sattet att integrera Ivion:
+## Solution Overview
 
 ```text
-import { getApi, ApiInterface } from "@navvis/ivion";
-
-// Ladda SDK dynamiskt fran Ivion-instansen:
-getApi("https://swg.iv.navvis.com/").then((iv: ApiInterface) => {
-  // Lasa position (MainViewInterface):
-  const image = iv.getMainView().getImage();  // Aktiv bild med position
-  const viewDir = iv.getMainView().currViewingDir;  // lon/lat i radianer
-
-  // Navigera till position:
-  iv.moveToGeoLocation(position, isLocal, viewDir, fixedLat, fov, normal, forceLoc);
-  iv.moveToImageId(imageId, viewDir, fov);
-});
++-------------------+       1. Request loginToken        +-------------------+
+|                   | ---------------------------------> |                   |
+|   Ivion360View    |                                    |   ivion-poi       |
+|   (Frontend)      | <--------------------------------- |   Edge Function   |
+|                   |       2. Return JWT token           |                   |
++-------------------+                                    +-------------------+
+         |                                                        |
+         | 3. getApi(baseUrl, { loginToken })                     | Uses ivion-auth.ts
+         v                                                        | (cached tokens,
++-------------------+                                            | refresh, login)
+|   NavVis SDK      |                                             |
+|   (ivion.js)      |                                    +-------------------+
++-------------------+                                    | building_settings |
+         |                                               | (token cache)     |
+         | 4. api.auth.updateToken() every ~10 min       +-------------------+
+         v
++-------------------+
+|   Full API access |
+|   moveToImageId() |
+|   getMainView()   |
++-------------------+
 ```
 
-Dock kraver `@navvis/ivion` NPM-paketet att Ivion renderas som en `<div>` (inte iframe). For iframe-embeddings maste vi anvanda en alternativ strategi.
+## Implementation Steps
 
-## Losning: Ivion URL-polling + nearest-image navigation
+### Step 1: Add `get-login-token` action to `ivion-poi` edge function
 
-Eftersom vi anvander iframe-embedding och inte kan ladda `@navvis/ivion` SDK:t direkt, implementerar vi en robust synk-mekanism baserad pa:
+Add a new action that returns a valid Ivion JWT for the frontend SDK to use. This reuses the existing `getIvionToken()` from `ivion-auth.ts`.
 
-### 3D till 360: Nearest Image Navigation via URL-uppdatering
-1. Nar 3D-kameran andras, hitta narmaste Ivion-bild till 3D-positionen (redan implementerat i `findNearestImage`)
-2. Istallet for att andra `iframe.src` (som tvingar omladdning), anvand URL hash-fragment eller `window.history.replaceState` - men detta fungerar inte cross-origin
-3. **NY STRATEGI**: Byt fran iframe till `@navvis/ivion` SDK-rendering direkt i en `<div>`. SDK:t laddas dynamiskt fran Ivion-instansens URL
+**File: `supabase/functions/ivion-poi/index.ts`**
 
-### 360 till 3D: Periodisk URL-polling
-1. **NY STRATEGI**: Lasa Ivion iframe-URL:en periodiskt (via `getShareUrl()` om SDK ar tillgangligt, annars URL-polling)
-2. Extrahera `image=XXX` och `vlon`/`vlat` fran URL:en
-3. Slaa upp bild-positionen i image cache
-4. Uppdatera 3D-viewern
+New action `get-login-token`:
+- Accepts `buildingFmGuid` parameter
+- Calls `getIvionToken(buildingFmGuid)` to get a valid access token
+- Returns `{ success: true, loginToken, expiresInMs }` so the frontend knows when to refresh
+- The token is already managed (cached, refreshed, or obtained via login) by `ivion-auth.ts`
 
-## Implementationsplan
+### Step 2: Update SDK initialization to pass `loginToken`
 
-### Steg 1: Byt Ivion fran iframe till SDK-rendering
+**File: `src/lib/ivion-sdk.ts`**
 
-**Fil: `src/components/viewer/Ivion360View.tsx`**
-- Byt fran `<iframe>` till en `<div id="ivion-container">`
-- Ladda NavVis SDK dynamiskt fran Ivion-instansens URL med ett script-element: `<script src="https://swg.iv.navvis.com/ivion.js">`
-- Anvand `getApi(ivionUrl)` for att fa `ApiInterface`
-- Exponera API-instansen via en ref for synk-hooken
+Update `loadIvionSdk()` signature to accept an optional `loginToken`:
+- `loadIvionSdk(baseUrl, timeoutMs, loginToken?)` 
+- Pass `{ loginToken }` as second argument to `getApi(baseUrl, { loginToken })`
+- Update the `IvionApi` interface to include `auth` property with `updateToken()` and `getToken()` methods
 
-### Steg 2: Implementera riktig bi-direktionell synk med SDK
+### Step 3: Fetch token and pass to SDK in Ivion360View
 
-**Fil: `src/hooks/useIvionCameraSync.ts`**
-Skriv om hooken helt for att anvanda SDK:t:
+**File: `src/components/viewer/Ivion360View.tsx`**
 
-**360 till 3D (Ivion leder):**
-1. Anvand `iv.getMainView().getImage()` for att lasa aktiv bild (position i lokala koordinater)
-2. Anvand `iv.getMainView().currViewingDir` for att lasa kamerariktning (lon/lat radianer)
-3. Polla dessa varden med `requestAnimationFrame` eller `setInterval(200ms)`
-4. Nar position andras: uppdatera `ViewerSyncContext` -> 3D-viewern flyer till positionen
+Before attempting SDK load:
+1. Call `ivion-poi` with `action: 'get-login-token'` to get a JWT
+2. Pass the token to `loadIvionSdk(baseUrl, timeout, loginToken)`
+3. Set up a periodic refresh (every 10 minutes) using `api.auth.updateToken(newToken)` to keep the session alive
+4. On refresh failure, log a warning but don't crash (the SDK may still work with the current token for a while)
 
-**3D till 360 (3D-viewern leder):**
-1. Nar 3D-kameran andras, hamta eye-position och heading
-2. Hitta narmaste Ivion-bild i image cache (redan implementerat)
-3. Anvand `iv.moveToImageId(nearestImageId, viewDir, fov)` for att navigera Ivion
-4. Anvand `iv.getMainView().updateOrientation({ lon, lat })` for att satta kamerariktning
+### Step 4: Add token refresh loop
 
-### Steg 3: Fixa initial synk-position
+**File: `src/components/viewer/Ivion360View.tsx`**
 
-**Fil: `src/pages/SplitViewer.tsx`**
-1. Nar split view oppnas, hamta startbild fran `building_settings.ivion_start_vlon/vlat`
-2. Ladda narmaste Ivion-bild till 3D-viewerns initiala kameraposition
-3. Navigera bade 3D och 360 till samma startpunkt
+Add a `useEffect` that:
+- Runs when `sdkStatus === 'ready'` and `ivApiRef.current` exists
+- Sets up an interval (every 10 minutes)
+- Fetches a fresh token via `ivion-poi` `get-login-token`
+- Calls `ivApiRef.current.auth.updateToken(newToken)` to refresh
+- Cleans up interval on unmount
 
-### Steg 4: Fixa 3D-modell-laddning i split view
+### Step 5: Update IvionApi type definitions
 
-**Fil: `src/pages/SplitViewer.tsx` och `src/components/viewer/AssetPlusViewer.tsx`**
-1. Lagg till tydlig felhantering nar XKT-modeller inte hittas
-2. Visa laddningsstatus tydligt (spinner + meddelande)
-3. Kontrollera att `allData` faktiskt innehaller byggnaden innan rendering
+**File: `src/lib/ivion-sdk.ts`**
 
-### Steg 5: Koordinattransformation
-
-**Fil: `src/lib/coordinate-transform.ts`**
-- Ivion SDK ger positioner i lokala koordinater (meter, samma som BIM)
-- Om koordinatsystemen inte matchar, anvand `moveToGeoLocation` med `isLocal=true` for att undvika WGS84-konvertering
-- Heading-konvertering: Ivion anvander lon/lat (radianer), xeokit anvander heading (grader) -- konverteringsfunktionerna finns redan
-
-## Tekniska detaljer
-
-### NavVis SDK dynamisk laddning
+Add auth-related interfaces:
 ```text
-// Ladda SDK script fran Ivion-instansen
-const script = document.createElement('script');
-script.src = `${ivionBaseUrl}/ivion.js`;
-script.onload = () => {
-  const getApi = (window as any).NavVis?.getApi || (window as any).getApi;
-  getApi(ivionBaseUrl).then((iv) => {
-    ivApiRef.current = iv;
-    // SDK redo -- starta synk
-  });
-};
-document.head.appendChild(script);
-```
+interface IvionAuthApi {
+  getToken(): string;
+  updateToken(token: string, uploadToken?: string): void;
+  loginWithToken(token: string, awaitDataLoad?: boolean): Promise<any>;
+  currentUser: any;
+}
 
-### Synk-loop (huvudlogik)
-```text
-// Polling varje 200ms
-setInterval(() => {
-  if (!syncLocked || !ivApiRef.current) return;
-
-  const mainView = ivApiRef.current.getMainView();
-  const image = mainView.getImage();
-  const viewDir = mainView.currViewingDir; // { lon, lat } radianer
-
-  if (image && image.id !== lastImageIdRef.current) {
-    lastImageIdRef.current = image.id;
-    const pos = image.location; // { x, y, z } meter
-    const heading = viewDir.lon * (180 / Math.PI);
-    const pitch = viewDir.lat * (180 / Math.PI);
-    updateFromIvion({ x: pos.x, y: pos.y, z: pos.z }, heading, pitch);
-  }
-}, 200);
-```
-
-### 3D till 360 navigering
-```text
-// Nar 3D-kameran andras och syncLocked=true:
-const nearestImage = findNearestImage(eye3D);
-if (nearestImage && nearestImage.id !== lastSentImageId) {
-  lastSentImageId = nearestImage.id;
-  const viewDir = { lon: headingRad, lat: pitchRad };
-  ivApiRef.current.moveToImageId(nearestImage.id, viewDir, undefined);
+interface IvionApi {
+  // ... existing methods ...
+  auth?: IvionAuthApi;
 }
 ```
 
-### Fallback for iframe-lage
-Om SDK-laddning misslyckas (t.ex. CORS-problem), behall nuvarande iframe-baserade losning men med forbattrad URL-polling:
-- Anvand `setInterval` for att lasa iframe-URL:en (om same-origin)
-- Fallback till manuell synk-knapp som finns idag
+## CORS Consideration
 
-## Andringar per fil
+The SDK script (`ivion.js`) must still be loadable from the Ivion instance. If the Ivion instance doesn't serve CORS headers for our domain, the script won't load regardless of authentication.
 
-| Fil | Andringar |
-|-----|-----------|
-| `src/components/viewer/Ivion360View.tsx` | Byt fran iframe till div + SDK-rendering. Exponera API-ref. Behall iframe som fallback. |
-| `src/hooks/useIvionCameraSync.ts` | Skriv om for SDK-baserad synk (polling position + moveToImageId). Behall image-cache for nearest-image-sokning. |
-| `src/pages/SplitViewer.tsx` | Fixa initial synk-position. Forbattra felhantering for modell-laddning. |
-| `src/context/ViewerSyncContext.tsx` | Inga stora andringar -- bara eventuellt lagre debounce (50ms istf 100ms) |
-| `src/hooks/useViewerCameraSync.ts` | Smarre fix: sakerstalla att isSyncing-flaggan nollstalls korrekt |
-| `src/lib/coordinate-transform.ts` | Eventuella justeringar for Ivion lon/lat konvertering |
+**Two paths forward:**
+1. **Preferred**: Ask the Ivion admin to add our domain to their CORS allowlist. This is a one-time configuration change on the Ivion server.
+2. **Fallback**: If CORS can't be configured, the iframe approach remains the only option. With `loginToken`, we can still improve the iframe experience by appending the token as a URL parameter (if supported by the Ivion instance).
 
-## Implementationsordning
+The current fetch-probe already handles this gracefully -- if `ivion.js` is unreachable, it falls back to iframe mode immediately.
 
-1. Forst: Undersok om `@navvis/ivion` SDK:t kan laddas dynamiskt i vart anvandningsfall (CORS, licens)
-2. Implementera SDK-baserad rendering i Ivion360View (byt fran iframe till div)
-3. Implementera bi-direktionell synk med SDK (polling + moveToImageId)
-4. Fixa initial startposition
-5. Fixa 3D-modell-laddningsproblem
-6. Testa hela flodet end-to-end
+## Files Changed
 
-## Risker och alternativ
+| File | Change |
+|------|--------|
+| `supabase/functions/ivion-poi/index.ts` | Add `get-login-token` action that returns a valid JWT for frontend SDK use |
+| `src/lib/ivion-sdk.ts` | Add `IvionAuthApi` interface, update `loadIvionSdk` to accept `loginToken`, pass to `getApi()` config |
+| `src/components/viewer/Ivion360View.tsx` | Fetch loginToken before SDK init, set up periodic token refresh via `api.auth.updateToken()` |
 
-- **Risk**: Ivion SDK kraver licens (`isLicensed()` returnerar false) -- DA: fallback till forbattrad iframe-polling
-- **Risk**: CORS blockerar SDK-laddning -- DA: proxyera via edge function eller anvand iframe med periodisk URL-lasning
-- **Risk**: Ivion koordinater matchar inte BIM-koordinater -- DA: behover offset-kalibrering per byggnad (laggs i building_settings)
+## Token Flow Summary
+
+1. **Initial load**: Frontend calls `get-login-token` -> edge function uses `ivion-auth.ts` -> returns cached/refreshed/new JWT
+2. **SDK init**: `getApi(baseUrl, { loginToken: jwt })` -> SDK authenticates automatically, no manual login needed
+3. **Token refresh**: Every 10 min, frontend fetches new token -> calls `api.auth.updateToken(newJwt)` -> SDK continues working
+4. **Failure handling**: If token fetch fails, SDK loads without token (user sees Ivion login page in the viewer). If SDK load fails entirely (CORS), falls back to iframe.
+
+## Technical Notes
+
+- The `loginToken` config option removes the logout button from the Ivion UI, which is desirable in an embedded context
+- `updateToken()` must be called before the current token expires (tokens last ~15 min, refresh at 10 min is safe)
+- The same token works for both local accounts and OAuth Resource Server setups
+- No new secrets or database changes needed -- all infrastructure already exists
+
