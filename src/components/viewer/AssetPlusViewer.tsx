@@ -1804,62 +1804,69 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Setup hover highlight listener
   const setupHoverHighlight = useCallback(() => {
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.scene) return;
+    if (!xeokitViewer?.scene || !xeokitViewer?.cameraControl) {
+      console.warn('[AssetPlusViewer] Hover setup failed - viewer/cameraControl not available');
+      return;
+    }
 
     let lastHighlightedEntity: any = null;
+    const cameraControl = xeokitViewer.cameraControl;
 
-    const handleMouseMove = (coordsOrEvent: any, hitResult?: any) => {
-      // Reset previous highlight
-      if (lastHighlightedEntity) {
-        try {
-          lastHighlightedEntity.highlighted = false;
-        } catch (e) {
-          // Entity may have been disposed
-        }
-        lastHighlightedEntity = null;
+    const highlightEntity = (entity: any) => {
+      if (lastHighlightedEntity && lastHighlightedEntity !== entity) {
+        try { lastHighlightedEntity.highlighted = false; } catch (e) {}
       }
-
-      // xeokit hover event passes (canvasCoords, hit) as two separate args
-      // Use the hit result directly if available (more reliable)
-      let entity = hitResult?.entity;
-
-      // Fallback: manual pick if no hit from event
-      if (!entity) {
-        const canvasPos = coordsOrEvent?.canvasPos || coordsOrEvent;
-        if (canvasPos && Array.isArray(canvasPos)) {
-          const hit = xeokitViewer.scene.pick({
-            canvasPos,
-            pickSurface: false,
-          });
-          entity = hit?.entity;
-        }
-      }
-
       if (entity) {
         entity.highlighted = true;
         lastHighlightedEntity = entity;
       }
     };
 
-    console.log('[AssetPlusViewer] Hover highlight setup - cameraControl available:', !!xeokitViewer.cameraControl);
+    const clearHighlight = () => {
+      if (lastHighlightedEntity) {
+        try { lastHighlightedEntity.highlighted = false; } catch (e) {}
+        lastHighlightedEntity = null;
+      }
+    };
 
-    // Subscribe to mouse move events
-    const cameraControl = xeokitViewer.cameraControl;
-    if (cameraControl) {
-      cameraControl.on('hover', handleMouseMove);
-      
-      // Store cleanup function
-      hoverListenerRef.current = () => {
-        cameraControl.off('hover', handleMouseMove);
-        if (lastHighlightedEntity) {
-          try {
-            lastHighlightedEntity.highlighted = false;
-          } catch (e) {
-            // Ignore
-          }
-        }
-      };
-    }
+    // "hover" fires when pointer enters a new entity
+    const onHover = (_canvasCoords: any, hit: any) => {
+      if (hit?.entity) {
+        highlightEntity(hit.entity);
+      }
+    };
+
+    // "hoverSurface" fires continuously while pointer moves over entity surface
+    const onHoverSurface = (_canvasCoords: any, hit: any) => {
+      if (hit?.entity) {
+        highlightEntity(hit.entity);
+      }
+    };
+
+    // "hoverOut" fires when pointer leaves last entity
+    const onHoverOut = () => {
+      clearHighlight();
+    };
+
+    // "hoverOff" fires when pointer is over empty space
+    const onHoverOff = () => {
+      clearHighlight();
+    };
+
+    cameraControl.on('hover', onHover);
+    cameraControl.on('hoverSurface', onHoverSurface);
+    cameraControl.on('hoverOut', onHoverOut);
+    cameraControl.on('hoverOff', onHoverOff);
+
+    console.log('[AssetPlusViewer] Hover highlight active (4 events subscribed)');
+
+    hoverListenerRef.current = () => {
+      cameraControl.off('hover', onHover);
+      cameraControl.off('hoverSurface', onHoverSurface);
+      cameraControl.off('hoverOut', onHoverOut);
+      cameraControl.off('hoverOff', onHoverOff);
+      clearHighlight();
+    };
   }, []);
 
   // Cleanup hover highlight listener
