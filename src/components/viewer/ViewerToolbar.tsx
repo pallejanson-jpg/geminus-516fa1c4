@@ -649,13 +649,32 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
               const viewer = getXeokitViewer();
               if (viewer?.scene) {
                 const ids = viewer.scene.objectIds || [];
-                const currentlyXrayed = (viewer.scene.xrayedObjectIds?.length || 0) > 0;
-                viewer.scene.setObjectsXRayed(ids, !currentlyXrayed);
+                // Detect current state with multiple fallbacks
+                let currentlyXrayed = false;
+                if (typeof viewer.scene.numXRayedObjects === 'number') {
+                  currentlyXrayed = viewer.scene.numXRayedObjects > 0;
+                } else {
+                  try { currentlyXrayed = (viewer.scene.xrayedObjectIds?.length || 0) > 0; } catch {}
+                }
+                // Toggle with fallback
+                if (typeof viewer.scene.setObjectsXRayed === 'function') {
+                  viewer.scene.setObjectsXRayed(ids, !currentlyXrayed);
+                } else {
+                  const objects = viewer.scene.objects || {};
+                  for (const id of Object.keys(objects)) {
+                    const entity = objects[id];
+                    if (entity?.isObject) entity.xrayed = !currentlyXrayed;
+                  }
+                }
               }
             },
             active: (() => {
               const viewer = getXeokitViewer();
-              return (viewer?.scene?.xrayedObjectIds?.length || 0) > 0;
+              if (!viewer?.scene) return false;
+              if (typeof viewer.scene.numXRayedObjects === 'number') {
+                return viewer.scene.numXRayedObjects > 0;
+              }
+              try { return (viewer.scene.xrayedObjectIds?.length || 0) > 0; } catch { return false; }
             })()
           });
           break;

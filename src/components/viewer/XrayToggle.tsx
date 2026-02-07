@@ -17,12 +17,30 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
   const handleToggleXray = useCallback((enabled: boolean) => {
     setXrayEnabled(enabled);
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (xeokitViewer?.scene) {
-      const objectIds = xeokitViewer.scene.objectIds || [];
-      console.log('[XrayToggle] Setting X-ray:', enabled, 'on', objectIds.length, 'objects');
-      xeokitViewer.scene.setObjectsXRayed(objectIds, enabled);
+    if (!xeokitViewer?.scene) {
+      console.warn('[XrayToggle] Viewer not available');
+      return;
+    }
+
+    const scene = xeokitViewer.scene;
+
+    // Primary: batch API
+    if (typeof scene.setObjectsXRayed === 'function') {
+      const objectIds = scene.objectIds || [];
+      scene.setObjectsXRayed(objectIds, enabled);
+      console.log('[XrayToggle] setObjectsXRayed:', enabled, objectIds.length, 'objects');
     } else {
-      console.warn('[XrayToggle] xeokit viewer not available');
+      // Fallback: iterate objects directly
+      const objects = scene.objects || {};
+      let count = 0;
+      for (const id of Object.keys(objects)) {
+        const entity = objects[id];
+        if (entity && entity.isObject) {
+          entity.xrayed = enabled;
+          count++;
+        }
+      }
+      console.log('[XrayToggle] Fallback xray on', count, 'entities');
     }
   }, [viewerRef]);
 
