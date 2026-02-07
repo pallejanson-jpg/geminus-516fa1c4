@@ -1,110 +1,100 @@
 
-# 3-legged OAuth for Autodesk Construction Cloud
+# Spara ACC-inställningar och förbättra ACC-synkroniseringen
 
-## Problem
+## Sammanfattning
 
-All ACC data APIs (Locations, Assets, Categories, Projects) return 403 Forbidden because the APS application has not been added as a "Custom Integration" in the ACC Account Admin. This is a requirement for 2-legged (app-only) OAuth.
+Två huvudsakliga förbättringar:
+1. **Spara ACC-inställningar persistent** -- Projekt-ID och region laddas automatiskt vid start
+2. **Mappstruktur-browsning** -- Nytt "Visa mappar"-flöde som listar mappar i ACC via Data Management API (varje mapp kan motsvara en byggnad)
 
-The manual project ID workaround only bypasses project listing -- the actual sync calls to Locations API and Assets API still fail with 403 for the same reason.
+---
 
-## Solution: 3-legged OAuth (User Login)
+## Del 1: Spara projekt-ID och region
 
-With 3-legged OAuth, the user logs in with their own Autodesk account and grants the app permission to access their data. The API calls then run with the user's own permissions, bypassing the Custom Integration requirement entirely.
+### Problem
+Idag skriver du in projekt-ID och väljer region varje gång du öppnar inställningarna. Projekt-ID sparas redan i bakgrunden under synkronisering, men UI:t laddar inte tillbaka det i textfältet. Regionen sparas inte alls.
 
-### How it works
+### Lösning
+- Spara `acc_region` som en separat nyckel i `asset_plus_endpoint_cache` (samma tabell som redan används för `acc_project_id`)
+- Ladda både projekt-ID och region automatiskt via `check-status`-anropet som körs vid start
+- Fyll i textfältet och regionknappen med sparade värden
+
+### Ändringar
+
+**`supabase/functions/acc-sync/index.ts`**
+- I `sync-locations`-casen: spara även `acc_region` i `asset_plus_endpoint_cache`
+- I `check-status`-casen: hämta även `acc_region` och returnera `savedRegion`
+
+**`src/components/settings/ApiSettingsModal.tsx`**
+- I `handleCheckAccStatus`: populera `manualAccProjectId` med `savedProjectId` och `accRegion` med `savedRegion`
+- Kör `handleCheckAccStatus()` automatiskt när ACC-sektionen öppnas (i `useEffect` vid mount)
+
+---
+
+## Del 2: Visa mappstrukturen i ACC (Data Management API)
+
+### Problem
+Användaren vill se vilka mappar (= byggnader) som finns i ACC-projektet, och vilka BIM-modeller (RVT/IFC) som finns i varje mapp. Idag synkas bara Locations API-data (Byggnader/Plan/Rum) och Assets API-data, men mappstrukturen med filerna visas aldrig.
+
+### Hur ACC:s Data Management API fungerar
 
 ```text
-User Flow:
-
-1. User clicks "Logga in med Autodesk" in ACC settings
-         |
-         v
-2. Browser opens Autodesk login page (popup or redirect)
-         |
-         v
-3. User logs in and grants permission
-         |
-         v
-4. Autodesk redirects back to app with authorization code
-         |
-         v
-5. Edge function exchanges code for access + refresh tokens
-         |
-         v
-6. Tokens stored securely in database (encrypted)
-         |
-         v
-7. All ACC API calls now use the user's token
-         |
-         v
-8. Automatic token refresh when expired
+Hub (b.{accountId})
+  |
+  +-- Project (b.{projectId})
+        |
+        +-- Top Folders (GET topFolders)
+              |
+              +-- "Project Files" (vanlig rot-mapp)
+                    |
+                    +-- "Småviken" (mapp = byggnad)
+                    |     +-- Model_A.rvt (item = BIM-modell)
+                    |     +-- Model_B.ifc (item = BIM-modell)
+                    |
+                    +-- "Storängen" (mapp = byggnad)
+                          +-- Model_C.rvt
 ```
 
-## Changes Required
+### Lösning
+Lägga till ett nytt `list-folders`-action i `acc-sync` som:
+1. Hämtar top-level mappar via `GET /data/v1/projects/b.{projectId}/topFolders`
+2. Hittar "Project Files"-mappen (eller liknande)
+3. Listar undermappar (= byggnader) och filer (= BIM-modeller) i varje mapp
+4. Returnerar en trädstruktur till UI:t
 
-### 1. New Edge Function: `acc-auth` (token exchange and refresh)
+I UI:t visas mapparna i en lista med expanderbara rader. Varje mapp visar sina BIM-filer.
 
-A new edge function to handle the OAuth callback:
+### Ändringar
 
-- **`exchange-code` action**: Receives the authorization code from the frontend, exchanges it with Autodesk for access and refresh tokens, stores them in a new `acc_tokens` table
-- **`refresh-token` action**: Uses the stored refresh token to get a new access token when the current one expires
-- **`check-auth` action**: Returns whether the user has a valid Autodesk session
-- **`logout` action**: Deletes stored tokens
+**`supabase/functions/acc-sync/index.ts`** -- Nytt action `list-folders`:
+- Ny funktion `fetchTopFolders(token, projectId, hubId, region)` som anropar:
+  - `GET /data/v1/projects/b.{projectId}/topFolders` (kräver `data:read` scope, redan konfigurerat)
+- Ny funktion `fetchFolderContents(token, projectId, folderId, region)` som anropar:
+  - `GET /data/v1/projects/b.{projectId}/folders/{folderId}/contents`
+- Returnerar `{ folders: [{ id, name, items: [{ id, name, type, size }] }] }`
 
-### 2. New Database Table: `acc_oauth_tokens`
+**`src/components/settings/ApiSettingsModal.tsx`**:
+- Ny knapp "Visa mappar" bredvid "Hämta projekt"
+- Ny state `accFolders` med mappträdet
+- Rendera mapplistan med expanderbara rader som visar BIM-filerna (namn, typ, storlek)
 
-Stores the user's Autodesk tokens securely:
+---
 
-- `id` (uuid, primary key)
-- `user_id` (uuid, references auth user)
-- `access_token` (text, encrypted)
-- `refresh_token` (text, encrypted)
-- `expires_at` (timestamptz)
-- `created_at` / `updated_at` (timestamptz)
-- RLS: Users can only see/manage their own tokens
+## Teknisk sammanfattning
 
-### 3. Update Edge Function: `acc-sync/index.ts`
+| Fil | Ändring |
+|-----|---------|
+| `supabase/functions/acc-sync/index.ts` | Spara/ladda `acc_region`, nytt `list-folders` action med Data Management API |
+| `src/components/settings/ApiSettingsModal.tsx` | Auto-populera sparade inställningar, ny "Visa mappar"-knapp och mappvisning |
 
-Modify the existing function to support both authentication methods:
+### Inga databasändringar krävs
+Alla nya värden lagras i den befintliga tabellen `asset_plus_endpoint_cache`.
 
-- New helper `getAccTokenForUser(userId)` that:
-  - Checks `acc_oauth_tokens` for a valid 3-legged token
-  - If expired, automatically refreshes it
-  - Falls back to 2-legged `getApsAccessToken()` if no user token exists
-- All API calls (`fetchAllLocationNodes`, `fetchAccAssets`, etc.) use whichever token is available
-- The `list-projects` action benefits the most -- 3-legged tokens typically have direct access to the user's projects
+### API-endpoints som används (alla med 3-legged token)
+- `GET /data/v1/projects/b.{projectId}/topFolders` -- lista rot-mappar
+- `GET /data/v1/projects/b.{projectId}/folders/{folderId}/contents` -- lista mappinnehåll
+- Befintliga: Locations API v2, Assets API v2, Categories API v1
 
-### 4. Update UI: `ApiSettingsModal.tsx` (ACC tab)
-
-Add Autodesk login flow to the ACC settings:
-
-- "Logga in med Autodesk" button that opens the Autodesk authorization URL in a popup
-- Listen for the callback with the authorization code
-- Show login status (logged in as / not logged in)
-- "Logga ut" button to clear stored tokens
-- Once logged in, "Hamta projekt" and sync buttons work as before but use the user's own permissions
-
-### 5. App Configuration
-
-The APS application in Autodesk Developer Portal needs a **Callback URL** configured. This will be the app's URL (e.g., `https://[project].lovable.app/auth/autodesk/callback`).
-
-A simple callback page is needed to capture the authorization code and send it back to the parent window.
-
-## File Changes Summary
-
-| File | Change |
-|------|--------|
-| `supabase/functions/acc-auth/index.ts` | New edge function for token exchange/refresh |
-| `supabase/functions/acc-sync/index.ts` | Add 3-legged token support alongside 2-legged |
-| `src/components/settings/ApiSettingsModal.tsx` | Add "Logga in med Autodesk" button and status |
-| `src/pages/AutodeskCallback.tsx` | New callback page to capture authorization code |
-| `src/App.tsx` | Add route for `/auth/autodesk/callback` |
-| `supabase/config.toml` | Register new `acc-auth` function with `verify_jwt = false` |
-| Database migration | Create `acc_oauth_tokens` table with RLS |
-
-## Important Notes
-
-- The **APS_CLIENT_ID** and **APS_CLIENT_SECRET** secrets are already configured and will be reused
-- A **Callback URL** must be added in the Autodesk Developer Portal (APS app settings) -- this is a one-time manual step
-- 3-legged tokens expire after 1 hour but can be refreshed using the refresh token (valid for 15 days)
-- Both 2-legged and 3-legged methods will coexist -- if 3-legged is available it takes priority, otherwise falls back to 2-legged
+### Ordning
+1. Först: Spara och ladda projekt-ID + region (Del 1)
+2. Sedan: Mappbrowsning (Del 2)
