@@ -52,6 +52,7 @@ export default function Ivion360View({
 
   // SDK mode state
   const [sdkStatus, setSdkStatus] = useState<IvionSdkStatus>('idle');
+  const sdkStatusRef = useRef<IvionSdkStatus>('idle');
   const ivApiRef = useRef<IvionApi | null>(null);
   const sdkContainerRef = useRef<HTMLDivElement>(null);
   const ivionElementRef = useRef<HTMLElement | null>(null);
@@ -103,36 +104,71 @@ export default function Ivion360View({
 
   // ─── SDK Loading ──────────────────────────────────────────────────
 
+  // SDK loading with robust fallback
   useEffect(() => {
     if (!ivionUrl || !syncEnabled) {
-      // Only try SDK when sync is enabled (Split View)
       setSdkStatus('idle');
+      sdkStatusRef.current = 'idle';
       return;
     }
 
     let cancelled = false;
 
+    const updateStatus = (status: IvionSdkStatus) => {
+      sdkStatusRef.current = status;
+      setSdkStatus(status);
+    };
+
+    const cleanupSdkElement = () => {
+      if (sdkContainerRef.current && ivionElementRef.current) {
+        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
+        ivionElementRef.current = null;
+      }
+    };
+
     const tryLoadSdk = async () => {
-      setSdkStatus('loading');
+      updateStatus('loading');
       
       try {
-        // Extract base URL from Ivion URL
         const parsedUrl = new URL(ivionUrl);
         const baseUrl = parsedUrl.origin;
         
-        // Create the <ivion> container element before loading SDK
-        if (sdkContainerRef.current) {
+        // Step 1: Quick reachability probe using fetch
+        // fetch() properly throws on network errors (ERR_TUNNEL_CONNECTION_FAILED, etc.)
+        // unlike script.onerror which may not fire in all environments
+        console.log('[Ivion360View] Probing SDK endpoint:', `${baseUrl}/ivion.js`);
+        try {
+          const probeController = new AbortController();
+          const probeTimeout = setTimeout(() => probeController.abort(), 5000);
+          await fetch(`${baseUrl}/ivion.js`, {
+            method: 'HEAD',
+            signal: probeController.signal,
+            mode: 'no-cors', // Allows cross-origin probe without CORS headers
+          });
+          clearTimeout(probeTimeout);
+          console.log('[Ivion360View] SDK endpoint reachable');
+        } catch (probeErr) {
+          if (cancelled) return;
+          console.log('[Ivion360View] SDK endpoint not reachable, using iframe fallback:', probeErr);
+          updateStatus('failed');
+          return;
+        }
+        
+        if (cancelled) return;
+        
+        // Step 2: Endpoint is reachable - create container and load SDK
+        if (sdkContainerRef.current && !ivionElementRef.current) {
           const ivionEl = createIvionElement(sdkContainerRef.current);
           ivionElementRef.current = ivionEl;
         }
         
         console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
-        const api = await loadIvionSdk(baseUrl, 15000);
+        const api = await loadIvionSdk(baseUrl, 10000);
         
         if (cancelled) return;
         
         ivApiRef.current = api;
-        setSdkStatus('ready');
+        updateStatus('ready');
         setIsLoading(false);
         
         console.log('[Ivion360View] ✅ SDK mode active');
@@ -140,14 +176,9 @@ export default function Ivion360View({
       } catch (err) {
         if (cancelled) return;
         
-        console.warn('[Ivion360View] SDK load failed, falling back to iframe:', err);
-        setSdkStatus('failed');
-        
-        // Clean up the <ivion> element since we're switching to iframe
-        if (sdkContainerRef.current && ivionElementRef.current) {
-          destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
-          ivionElementRef.current = null;
-        }
+        console.log('[Ivion360View] SDK load failed, falling back to iframe:', err);
+        updateStatus('failed');
+        cleanupSdkElement();
       }
     };
 
@@ -155,11 +186,7 @@ export default function Ivion360View({
 
     return () => {
       cancelled = true;
-      // Clean up SDK on unmount
-      if (sdkContainerRef.current && ivionElementRef.current) {
-        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
-        ivionElementRef.current = null;
-      }
+      cleanupSdkElement();
       ivApiRef.current = null;
     };
   }, [ivionUrl, syncEnabled]);

@@ -93,8 +93,18 @@ export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
  * @param timeoutMs - Maximum time to wait for SDK load (default 20s)
  * @returns Promise resolving to the Ivion API interface
  */
-export function loadIvionSdk(baseUrl: string, timeoutMs: number = 20000): Promise<IvionApi> {
+export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000): Promise<IvionApi> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    
+    const settle = (action: 'resolve' | 'reject', value: any) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (action === 'resolve') resolve(value);
+      else reject(value);
+    };
+
     // Check if already loaded from a previous mount
     const existingGetApi = (window as any).NavVis?.getApi || (window as any).getApi;
     if (existingGetApi) {
@@ -102,11 +112,11 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 20000): Promis
       existingGetApi(baseUrl)
         .then((iv: IvionApi) => {
           console.log('[Ivion SDK] Initialized from existing global');
-          resolve(iv);
+          settle('resolve', iv);
         })
         .catch((err: any) => {
           console.error('[Ivion SDK] Failed to initialize from existing global:', err);
-          reject(err);
+          settle('reject', err);
         });
       return;
     }
@@ -115,28 +125,39 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 20000): Promis
     const script = document.createElement('script');
     script.src = `${baseUrl}/ivion.js`;
     script.async = true;
-    script.id = 'navvis-ivion-sdk';
+    script.id = `navvis-ivion-sdk-${Date.now()}`; // Unique ID to avoid conflicts
 
     const timeout = setTimeout(() => {
       console.warn('[Ivion SDK] Load timeout after', timeoutMs, 'ms');
-      reject(new Error(`SDK load timeout after ${timeoutMs}ms`));
+      settle('reject', new Error(`SDK load timeout after ${timeoutMs}ms`));
       cleanup();
     }, timeoutMs);
 
     const cleanup = () => {
-      clearTimeout(timeout);
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+      try {
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      } catch (e) {
+        // Ignore cleanup errors
       }
     };
 
+    const handleError = () => {
+      console.warn('[Ivion SDK] Script load failed (likely CORS or network issue)');
+      settle('reject', new Error('Failed to load ivion.js - CORS or network error'));
+      cleanup();
+    };
+
+    // Use both onerror and addEventListener for maximum compatibility
+    script.onerror = handleError;
+    script.addEventListener('error', handleError);
+
     script.onload = () => {
-      clearTimeout(timeout);
-      
       const getApi = (window as any).NavVis?.getApi || (window as any).getApi;
       if (!getApi) {
         console.error('[Ivion SDK] Script loaded but getApi not found on window');
-        reject(new Error('getApi function not found after script load'));
+        settle('reject', new Error('getApi function not found after script load'));
         return;
       }
 
@@ -145,19 +166,12 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 20000): Promis
       getApi(baseUrl)
         .then((iv: IvionApi) => {
           console.log('[Ivion SDK] ✅ API ready');
-          resolve(iv);
+          settle('resolve', iv);
         })
         .catch((err: any) => {
           console.error('[Ivion SDK] getApi() failed:', err);
-          reject(err);
+          settle('reject', err);
         });
-    };
-
-    script.onerror = (event) => {
-      clearTimeout(timeout);
-      console.warn('[Ivion SDK] Script load failed (likely CORS or network issue)');
-      reject(new Error('Failed to load ivion.js - CORS or network error'));
-      cleanup();
     };
 
     document.head.appendChild(script);
