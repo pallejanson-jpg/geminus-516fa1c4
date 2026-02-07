@@ -4,6 +4,14 @@
  * The SDK renders the 360° viewer natively in a <div>/<ivion> element,
  * providing full programmatic control vs the limited iframe approach.
  * 
+ * IMPORTANT: The NavVis IVION SDK requires the @navvis/ivion npm package.
+ * Loading main.js from the NavVis instance does NOT expose getApi globally —
+ * it bootstraps the full Angular application which manages getApi internally.
+ * 
+ * A CORS proxy edge function (ivion-proxy) is available at:
+ *   /functions/v1/ivion-proxy/<path>
+ * This can be used to proxy any NavVis asset requests.
+ * 
  * @see https://ivion-api.docs.navvis.com
  */
 
@@ -97,10 +105,16 @@ export interface IvionApi {
 export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
- * Dynamically load the NavVis IVION SDK from an instance URL.
+ * Dynamically load the NavVis IVION SDK.
  * 
- * The SDK must be loaded from the Ivion instance itself (e.g., https://swg.iv.navvis.com).
- * This requires proper CORS configuration on the Ivion instance to allow our domain.
+ * This attempts to load the SDK from a script URL. The NavVis IVION SDK
+ * must be available either:
+ *   1. Via the @navvis/ivion npm package (preferred, exposes getApi as import)
+ *   2. Via a custom script that exposes window.getApi or window.NavVis.getApi
+ * 
+ * NOTE: Loading main.js from the NavVis instance does NOT work — it boots
+ * the full Angular app without exposing getApi globally. If the SDK is not
+ * available, the caller should fall back to iframe mode.
  * 
  * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
  * @param timeoutMs - Maximum time to wait for SDK load (default 10s)
@@ -126,7 +140,7 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginTo
       console.log('[Ivion SDK] Using loginToken for auto-authentication');
     }
 
-    // Check if already loaded from a previous mount
+    // Check if already loaded (e.g., from @navvis/ivion npm package)
     const existingGetApi = (window as any).NavVis?.getApi || (window as any).getApi;
     if (existingGetApi) {
       console.log('[Ivion SDK] getApi already available, initializing...');
@@ -142,60 +156,17 @@ export function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginTo
       return;
     }
 
-    // Create and load the script
-    const script = document.createElement('script');
-    script.src = `${baseUrl}/ivion.js`;
-    script.async = true;
-    script.id = `navvis-ivion-sdk-${Date.now()}`; // Unique ID to avoid conflicts
-
-    const timeout = setTimeout(() => {
-      console.warn('[Ivion SDK] Load timeout after', timeoutMs, 'ms');
-      settle('reject', new Error(`SDK load timeout after ${timeoutMs}ms`));
-      cleanup();
-    }, timeoutMs);
-
-    const cleanup = () => {
-      try {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-    };
-
-    const handleError = () => {
-      console.warn('[Ivion SDK] Script load failed (likely CORS or network issue)');
-      settle('reject', new Error('Failed to load ivion.js - CORS or network error'));
-      cleanup();
-    };
-
-    // Use both onerror and addEventListener for maximum compatibility
-    script.onerror = handleError;
-    script.addEventListener('error', handleError);
-
-    script.onload = () => {
-      const getApi = (window as any).NavVis?.getApi || (window as any).getApi;
-      if (!getApi) {
-        console.error('[Ivion SDK] Script loaded but getApi not found on window');
-        settle('reject', new Error('getApi function not found after script load'));
-        return;
-      }
-
-      console.log('[Ivion SDK] Script loaded, calling getApi()...');
-      
-      getApi(baseUrl, Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined)
-        .then((iv: IvionApi) => {
-          console.log('[Ivion SDK] ✅ API ready');
-          settle('resolve', iv);
-        })
-        .catch((err: any) => {
-          console.error('[Ivion SDK] getApi() failed:', err);
-          settle('reject', err);
-        });
-    };
-
-    document.head.appendChild(script);
+    // SDK not available — getApi is only provided by the @navvis/ivion npm package.
+    // Loading main.js from the NavVis instance boots the full Angular app and does NOT
+    // expose getApi as a global. Fall back to iframe mode.
+    console.log('[Ivion SDK] @navvis/ivion npm package not detected, falling back to iframe mode');
+    console.log('[Ivion SDK] To enable SDK mode, install @navvis/ivion and import getApi');
+    
+    const timeout = setTimeout(() => {}, 0); // dummy for settle()
+    settle('reject', new Error(
+      'NavVis SDK not available. Install @navvis/ivion npm package for SDK mode. ' +
+      'CORS proxy (ivion-proxy) is available for other NavVis asset requests.'
+    ));
   });
 }
 
