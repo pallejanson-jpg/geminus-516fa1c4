@@ -151,24 +151,7 @@ export default function Ivion360View({
         const parsedUrl = new URL(ivionUrl);
         const baseUrl = parsedUrl.origin;
         
-        // Step 1: Quick reachability probe using fetch
-        console.log('[Ivion360View] Probing SDK endpoint:', `${baseUrl}/ivion.js`);
-        try {
-          const probeController = new AbortController();
-          const probeTimeout = setTimeout(() => probeController.abort(), 5000);
-          await fetch(`${baseUrl}/ivion.js`, {
-            method: 'HEAD',
-            signal: probeController.signal,
-            mode: 'no-cors',
-          });
-          clearTimeout(probeTimeout);
-          console.log('[Ivion360View] SDK endpoint reachable');
-        } catch (probeErr) {
-          if (cancelled) return;
-          console.log('[Ivion360View] SDK endpoint not reachable, using iframe fallback:', probeErr);
-          updateStatus('failed');
-          return;
-        }
+        // SDK is loaded via CORS proxy — no reachability probe needed
         
         if (cancelled) return;
         
