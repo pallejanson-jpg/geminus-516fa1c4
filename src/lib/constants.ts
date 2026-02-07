@@ -1,5 +1,7 @@
 import { BarChart2, Building2, Box, Zap, Archive, Radar } from 'lucide-react';
 
+export const IVION_DEFAULT_BASE_URL = 'https://swg.iv.navvis.com';
+
 export const NORDIC_CITIES = [
     { name: "Stockholm", lat: 59.3293, lng: 18.0686 },
     { name: "Oslo", lat: 59.9139, lng: 10.7522 },
@@ -68,7 +70,7 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
     iot: { label: 'IoT+', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
-    radar: { label: '360+', url: 'https://ivion.se', icon: Radar, openMode: 'external', username: '', password: '' },
+    radar: { label: '360+', url: 'https://swg.iv.navvis.com', icon: Radar, openMode: 'external', username: '', password: '' },
 };
 
 export interface SidebarItem {
