@@ -1,98 +1,129 @@
 
 
-# Felanmalan till FM-systemet via FM Access API
+# Koppla Felanmälan till er-rep.com API
 
 ## Sammanfattning
 
-Nuvarande implementation sparar felanmalan lokalt i 'work_orders'-tabellen i databasen. Det riktiga flödet ska istallet skicka felanmalan till FM Access API:t (samma system som er-rep.com anvander). Dessutom ska QR-kodens artikelnummer (t.ex. 000000042) anvandas for att sla upp installationsinformation via 'qr_report_configs'-tabellen, och felkoderna i comboboxen ska matcha de som finns i FM-systemet.
+Felanmälan ska skickas till er-rep.com:s API istallet for att sparas lokalt i work_orders-tabellen. Baserat pa nätverksanalysen från er-rep.com har vi identifierat följande API-mönster:
 
-## Identifierade brister
+| Egenskap | Värde |
+|----------|-------|
+| Hämta konfiguration | `GET https://er-rep.com/api/v1/errorreport/register/{qr_key}` |
+| Skicka felanmälan | `PUT https://er-rep.com/api/v1/errorreport/register/{qr_key}` |
+| Autentisering | Ingen (publikt API, QR-nyckeln fungerar som identifierare) |
 
-| Problem | Beskrivning |
-|---------|-------------|
-| Skicka-logik | Sparar lokalt i 'work_orders' istallet for att skicka till FM Access API |
-| QR-uppslag | Tabellen 'qr_report_configs' ar tom -- behover fyllas med data, t.ex. for artikelnummer 000000042 |
-| Felkoder | Hardkodade platshallare (EL001, VVS001 etc.) -- ska hamtas fran FM Access eller konfigureras ratt |
-| FM Access edge function | Har bara 'test-connection', 'get-drawings', 'get-documents' -- saknar 'create-work-order'/'submit-fault-report' |
+**Payload-format (PUT):**
+```text
+{
+  "errorDescription": "Beskrivning av felet",
+  "attachments": [],
+  "contactEmail": "email@example.com",
+  "contactPhone": "0701234567",
+  "errorCode": {
+    "description": "",
+    "context": null,
+    "guid": 4400051551,
+    "id": "avkalka",
+    "title": "Kalka av kaffemaskin"
+  }
+}
+```
+
+## Arkitekturandringar
+
+Istallet for att anvanda FM Access-konfigurationen (Keycloak, token URL etc.) skapas en dedikerad edge function som proxar direkt till er-rep.com. API:t ar publikt och kraver ingen autentisering -- QR-nyckeln fungerar som identifierare.
+
+GET-anropet vid sidladdning returnerar installationsinfo OCH tillgangliga felkoder, vilket innebar att vi kan ta bort den hardkodade felkodslistan och istallet anvanda dynamiska felkoder fran API:t.
 
 ## Plan
 
-### Steg 1: Utoka fm-access-query edge function
+### Steg 1: Skapa ny edge function -- errorreport-proxy
 
-Lagga till en ny action 'create-fault-report' i 'supabase/functions/fm-access-query/index.ts' som:
+Ny fil: `supabase/functions/errorreport-proxy/index.ts`
 
-1. Tar emot felanmalans data (beskrivning, felkod, e-post, telefon, bilder, installationsnummer)
-2. Autentiserar mot FM Access via samma Keycloak-flode som redan finns
-3. Skickar en POST till FM Access API:t for att skapa en arbetsorder/felanmalan
-4. Returnerar det skapade arende-ID:t tillbaka till klienten
+Denna edge function proxar anrop till er-rep.com:s API:
 
-Eftersom er-rep.com anvander samma FM Access API behover vi ta reda pa exakt vilken endpoint som anvands. Baserat pa FM Access-konfigurationen i projektet (auth via Keycloak pa auth.bim.cloud med realm 'swg_demo') kommer vi att:
-- Anvanda samma autentiseringsflode som redan finns i 'getToken()' och 'getVersionId()'
-- Anropa en endpoint som '/api/workorders' eller liknande (standard FM Access mönster)
+- **action: 'get-config'** -- Gor GET till `er-rep.com/api/v1/errorreport/register/{qrKey}` och returnerar installationsinfo och tillgangliga felkoder
+- **action: 'submit'** -- Gor PUT till `er-rep.com/api/v1/errorreport/register/{qrKey}` med formulardatan
 
-Steg 1 kraver att vi far veta exakt API-endpoint och payload-format. Jag foreslår att vi borjar med en rimlig implementation baserad pa vanliga FM Access-mönster, och sen justerar om det behövs.
+Edge functionen behover inget JWT (publikt formulär) och konfigureras i `supabase/config.toml` med `verify_jwt = false`.
 
-### Steg 2: Uppdatera FaultReport.tsx -- handleSubmit
+Basen-URL:en (`https://er-rep.com`) lagras som en Supabase-secret (`ERRORREPORT_API_URL`) for flexibilitet.
 
-Andra 'handleSubmit' i 'src/pages/FaultReport.tsx' fran att skriva till 'work_orders'-tabellen till att anropa edge function:
+### Steg 2: Uppdatera FaultReport.tsx
 
+Andrar den publika QR-baserade felanmälans flöde:
+
+**Nuvarande flöde:**
+1. Lasa QR-nyckel fran `?key=XXX`
+2. Sla upp i `qr_report_configs`-tabellen
+3. Visa formulär med lokal data
+4. Spara i `work_orders`-tabellen
+
+**Nytt flöde:**
+1. Lasa QR-nyckel fran `?key=XXX`
+2. Anropa edge function GET for att hamta installationsinfo och felkoder fran er-rep.com
+3. Visa formulär med data fran API:t (inklusive dynamiska felkoder)
+4. Vid "Skicka" -- anropa edge function PUT for att skicka till er-rep.com
+5. (Valfritt) Spara en lokal kopia i `work_orders` for historik
+
+### Steg 3: Uppdatera ErrorCodeCombobox
+
+Andrar fran hardkodade felkoder till dynamiska:
+
+**Nuvarande:** Hardkodade platshallare (EL001, VVS001 etc.)
+
+**Nytt:** Tar emot en lista med felkoder som prop fran API-svaret:
 ```text
-Nuvarande:  supabase.from('work_orders').insert(workOrder)
-Nytt:       supabase.functions.invoke('fm-access-query', { body: { action: 'create-fault-report', ... } })
+interface ErrorCode {
+  guid: number;
+  id: string;
+  title: string;
+  description: string;
+  context: string | null;
+}
 ```
 
-Samma andring i 'src/components/fault-report/InAppFaultReport.tsx'.
+Comboboxen visar `title` (t.ex. "Kalka av kaffemaskin") och returnerar hela errorCode-objektet vid val.
 
-Optionellt kan vi spara en lokal kopia i work_orders-tabellen ocksa (for historik), men primarflodet ska vara att skicka till FM Access.
+### Steg 4: Uppdatera FaultReportForm och MobileFaultReport
 
-### Steg 3: Fylla QR-konfigtabellen
+- Lagg till en ny prop `errorCodes` som skickas till ErrorCodeCombobox
+- Andra `errorCode`-fältet i formulärdata fran `string` till det strukturerade errorCode-objektet (med guid, id, title etc.)
+- Uppdatera `FaultReportFormData`-typen for att matcha det nya payload-formatet
 
-Tabellen 'qr_report_configs' ar tom. For att QR-koden med artikelnummer 000000042 ska fungera behover vi lagga in minst en rad, t.ex.:
+### Steg 5: Uppdatera InAppFaultReport.tsx
 
-```text
-qr_key: "000000042"
-building_fm_guid: [ratt GUID fran assets-tabellen]
-building_name: [byggnadens namn]
-asset_fm_guid: [om det finns]
-asset_name: "Kaffemaskin K12" (eller liknande)
-installation_number: "000000042"
-```
+Samma andring av submit-logik -- skicka till edge function istallet for `work_orders`. 
+Dock beror in-app-versionen pa `faultReportPrefill` fran AppContext istallet for QR-nyckel. Om ingen QR-nyckel finns tillganglig faller vi tillbaka till lokal sparning.
 
-Jag slar upp ratt data i assets-tabellen baserat pa artikelnumret.
+### Steg 6: Uppdatera FaultReportSuccess
 
-### Steg 4: Uppdatera felkoderna i ErrorCodeCombobox
+Visa referensnumret/bekraftelsen fran er-rep.com API:ts svar istallet for det lokalt genererade `FR-xxxx`-ID:t.
 
-De nuvarande platshallarna (EL001, VVS001 etc.) ska bytas ut mot riktiga felkoder. Tva alternativ:
-
-1. **Dynamiskt fran FM Access** -- lagga till en action 'get-error-codes' i edge function som hamtar tillgangliga felkoder
-2. **Statisk lista** -- konfigurera felkoderna manuellt om FM Access inte har ett sadant endpoint
-
-Borjar med alternativ 2 (statisk lista) och kan bygga ut till dynamisk hamtning senare.
-
-### Steg 5: Justera QR-flodet
-
-Nuvarande QR-URL-format: '/fault-report?key=XXX'
-er-rep.com-format: Artikelnumret ar direkt i URL:en
-
-Vi behover mojligtvis justera URL-formatet sa att det matchar QR-koderna som redan finns utskrivna, t.ex.:
-- '/fault-report?key=000000042' (nuvarande format, fungerar redan)
-- Alternativt: '/fault-report/000000042' (om QR-koderna pekar hit)
-
-### Filer som andras
+## Filer som andras
 
 | Fil | Andring |
 |-----|---------|
-| 'supabase/functions/fm-access-query/index.ts' | Lagg till 'create-fault-report' action |
-| 'src/pages/FaultReport.tsx' | Andra handleSubmit fran lokal sparning till FM Access API-anrop |
-| 'src/components/fault-report/InAppFaultReport.tsx' | Samma andring av handleSubmit |
-| 'src/components/fault-report/ErrorCodeCombobox.tsx' | Uppdatera felkodslistan |
-| 'src/components/fault-report/FaultReportSuccess.tsx' | Visa FM Access-referensnummer istallet for lokalt ID |
+| `supabase/functions/errorreport-proxy/index.ts` | **Ny** -- proxy-edge function for er-rep.com API |
+| `supabase/config.toml` | Lagg till `[functions.errorreport-proxy]` med `verify_jwt = false` |
+| `src/pages/FaultReport.tsx` | Byt fran lokal DB-sparning till edge function-anrop |
+| `src/components/fault-report/InAppFaultReport.tsx` | Samma andring av submit-logik |
+| `src/components/fault-report/FaultReportForm.tsx` | Ny prop for dynamiska felkoder, uppdaterad formulärdatatyp |
+| `src/components/fault-report/MobileFaultReport.tsx` | Samma andring som FaultReportForm |
+| `src/components/fault-report/ErrorCodeCombobox.tsx` | Dynamiska felkoder via props istallet for hardkodade |
+| `src/components/fault-report/FaultReportSuccess.tsx` | Visa API-referensnummer |
 
-### Databas
+## Secrets som behövs
 
-- Infoga testdata i 'qr_report_configs' for artikelnummer 000000042
+| Secret | Värde | Syfte |
+|--------|-------|-------|
+| `ERRORREPORT_API_URL` | `https://er-rep.com` | Bas-URL for er-rep.com API |
 
-### Osakerhet: FM Access API-endpoint
+## Risker och osäkerheter
 
-Den kritiska osakerheten ar exakt vilken endpoint FM Access API:t har for att skapa arbetsordrar. Baserat pa README-dokumentationen finns 'GET /workorders' for lasning, men vi behover POST-endpointen. Jag implementerar en rimlig standard (POST till '/api/workorders' eller '/api/errorreports') och vi justerar om det behövs efter testning.
+1. **GET-svarets exakta format** -- Vi vet PUT-payloaden men inte exakt hur GET-svaret ser ut (vilka falt som returneras for installationsinfo och felkoder). Implementationen görs flexibelt och justeras efter testning.
 
+2. **Bilagor (attachments)** -- Nuvarande payload har `attachments: []`. Om er-rep.com stodjer bilduppladdning behover vi ta reda pa formatet (base64, URL, multipart). Tills vidare skickas en tom array och bilder sparas lokalt.
+
+3. **InApp-felanmälan utan QR-nyckel** -- In-app-versionen har ingen QR-nyckel. Behover utredas om den ocksa ska anvanda er-rep.com eller fortsatta spara lokalt.
