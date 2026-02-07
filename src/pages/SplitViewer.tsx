@@ -15,8 +15,7 @@ import { toast } from 'sonner';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-
-const IVION_FALLBACK_URL = 'https://swg.iv.navvis.com';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface BuildingData {
   fmGuid: string;
@@ -63,7 +62,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
 
   // Construct Ivion URL using config (same pattern as IvionInventory)
   const configured = appConfigs?.radar?.url?.trim();
-  const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_FALLBACK_URL;
+  const baseUrl = configured ? configured.replace(/\/$/, '') : IVION_DEFAULT_BASE_URL;
   
   // Build URL with optional start view coordinates
   let ivionUrl = `${baseUrl}/?site=${buildingData.ivionSiteId}`;

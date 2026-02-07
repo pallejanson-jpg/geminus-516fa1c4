@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import PositionPickerDialog from '@/components/inventory/PositionPickerDialog';
 import type { WizardFormData } from './MobileInventoryWizard';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface PositionPickerStepProps {
   formData: WizardFormData;
@@ -61,7 +62,7 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
   const handleOpen360 = () => {
     if (ivionSiteId) {
       // Open Ivion in a new tab - user creates POI there and syncs later
-      const ivionUrl = `https://swg.iv.navvis.com/?site=${ivionSiteId}`;
+      const ivionUrl = `${IVION_DEFAULT_BASE_URL}/?site=${ivionSiteId}`;
       window.open(ivionUrl, '_blank');
     }
   };
