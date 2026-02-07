@@ -1,186 +1,184 @@
 
 
-# Synka BIM-hierarki fran ACC via Model Properties API
+# Plan: Alternativ vag for BIM-synk + 3D-modellkonvertering
 
-## Sammanfattning
+## Del 1: versionUrn utan extra API-anrop
 
-Vi bygger ut ACC-integrationen med ett nytt `sync-bim-data` action i edge-funktionen `acc-sync`. Nar du klickar "Synka BIM-data" pa en mapp (t.ex. "Jonkoping Science Tower") hamtas vaningsplan och rum direkt fran Autodesks Model Properties API -- utan att ladda ner nagon fil. Resultatet lagras i den befintliga `assets`-tabellen med samma monster som befintlig Location-synk.
+### Problemet
+Vi trodde att vi behövde anropa en separat `tip`-endpoint for att hamta `versionUrn` for varje BIM-fil, men den endpointen gav 403 (kräver Custom Integration-registrering).
 
-Testfall: mappen **"Jonkoping Science Tower"** med A-modeller (arkitekt).
+### Losningen
+Folder contents API (`GET /data/v1/projects/{pid}/folders/{folderId}/contents`) returnerar redan all information vi behover! Varje item i svaret har:
+
+```text
+data[].relationships.tip.data.id = "urn:adsk.wipprod:fs.file:vf.xxx?version=N"
+```
+
+Det ar precis den `versionUrn` vi behover for Model Properties API. Dessutom finns det ett `included`-falt i svaret som innehaller:
+
+```text
+included[].relationships.derivatives.data.id = base64-encoded derivative URN
+```
+
+Vi behover alltsa INGA extra API-anrop -- bara extrahera data fran det svar vi redan far.
+
+### Andringar i `list-folders` (acc-sync/index.ts, rad 942-953)
+
+Nuvarande kod extraherar bara `id`, `name`, `type`, `size`, `createTime` fran varje item. Vi utökar med:
+
+```text
+versionUrn: item.relationships?.tip?.data?.id || null
+derivativeUrn: included?.find(v => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null
+```
+
+Ingen ny endpoint behövs, inget permissions-problem.
 
 ---
 
-## Hur det fungerar
+## Del 2: sync-bim-data med Model Properties API
 
-```text
-1. Anvandaren klickar "Visa mappar"
-   --> Listar mappar, t.ex. "Jonkoping Science Tower"
-       --> Visar BIM-filer: A-xxx.rvt, K-xxx.rvt, etc.
+Samma flode som i den godkanda planen, men nu med versionUrn direkt fran folder contents:
 
-2. Anvandaren klickar "Synka BIM-data" pa en mapp
-   --> Edge function:
-       a) Hamtar versionUrn for varje BIM-fil (tip-endpoint)
-       b) Triggrar indexering via batch-status
-       c) Pollar tills indexeringen ar klar (FINISHED)
-       d) Hamtar fields (faltdefinitioner)
-       e) Laddar ner alla properties (NDJSON med alla objekt)
-       f) Filtrerar ut Revit Levels = vaningsplan, Revit Rooms = rum
-       g) Skapar Building fran mappnamnet
-       h) Upserta till assets-tabellen
+1. Anvandaren klickar "Synka BIM-data" pa en mapp
+2. Items har redan versionUrn fran list-folders
+3. Edge function anropar Model Properties API:
+   - POST `indexes:batch-status` med versionUrns
+   - Polla tills FINISHED
+   - Hamta fields + properties
+   - Filtrera ut Levels och Rooms
+4. Upserta till assets-tabellen
 
-3. Resultat visas i UI:
-   "Skapade: 1 byggnad, 5 vaningsplan, 28 rum fran 2 modeller"
-```
+### Teknisk forandring
+
+`sync-bim-data` actionet behover INTE langre hamta versionUrn -- det skickas med fran UI:t som redan har det fran list-folders.
 
 ---
 
-## Andringslista
+## Del 3: 3D-modeller fran ACC till XKT
 
-### Fil 1: `supabase/functions/acc-sync/index.ts`
+### Bakgrund
 
-#### 1a. Nya hjalpfunktioner (efter rad ~519, fore SYNC STATE HELPERS)
+Nar en RVT/IFC-fil laddas upp till ACC konverteras den automatiskt till SVF2-format (Autodesks 3D-visningsformat). Vi behover fa den till XKT-format for att anvanda i xeokit-viewern i Geminus.
 
-- **`isBimFile(filename)`** -- Returnerar true om filen ar rvt/ifc/nwc/dwg
-- **`fetchItemTip(token, projectId, itemId, regionHeaders)`** -- Anropar `GET /data/v1/projects/b.{pid}/items/{itemId}/tip` for att hamta versionUrn
-- **`parseLDJSON(text)`** -- Parsar line-delimited JSON (en JSON-rad per rad)
-- **`extractBimHierarchy(token, projectId, versionUrns, regionHeaders)`** -- Hela Model Properties-flodet:
-  1. POST till `indexes:batch-status` med versionUrns
-  2. Polla `indexes/{indexId}` tills FINISHED (max ~50 sek, 3 sek intervall)
-  3. Hamta fields via `fieldsUrl` (fran batch-status-svaret)
-  4. Hamta properties via `propertiesUrl` (NDJSON-format)
-  5. Filtrera ut "Revit Level" och "Revit Rooms" baserat pa kategori-falt (`p5eddc473`)
-  6. Returnera `{ levels: [...], rooms: [...] }` med namn, externalId och level-referens
-- **`upsertBimAssets(supabase, folderName, folderId, levels, rooms, projectId)`** -- Konverterar BIM-data till assets-rader och upserta med samma monster som `upsertLocationAssets`:
-  - Building: `fm_guid: "acc-bim-building-{folderId}"`
-  - Building Storey: `fm_guid: "acc-bim-level-{externalId}"`, med `building_fm_guid` = building
-  - Space: `fm_guid: "acc-bim-room-{externalId}"`, med `level_fm_guid` baserat pa level-match och `building_fm_guid` = building
-  - Alla med `attributes.source = "acc-bim"`
-
-#### 1b. Utoka `list-folders`-casen (rad ~942-953)
-
-For varje BIM-fil (rvt/ifc/nwc) som listas i en mapp, anropa `fetchItemTip` och inkludera `versionUrn` i retur-objektet. Icke-BIM-filer (PDF etc.) far versionUrn = null.
-
-Nuvarande items-mappning:
-```text
-items = subData.data.map(item => ({
-  id, name, type, size, createTime
-}))
-```
-Utokad:
-```text
-items = await Promise.all(subData.data.map(async item => ({
-  id, name, type, size, createTime,
-  versionUrn: isBimFile(name) ? await fetchItemTip(...) : null
-})))
-```
-
-#### 1c. Nytt action `sync-bim-data` (fore `default`-casen, rad ~987)
-
-Tar emot:
-```text
-{
-  action: "sync-bim-data",
-  projectId: "92e08fc7-...",
-  region: "EMEA",
-  folderName: "Jonkoping Science Tower",
-  folderId: "urn:adsk.wipprod:dm.folder:xxx",
-  items: [{ id, name, versionUrn }]
-}
-```
-
-Gor:
-1. Filtrera ut items med giltiga versionUrns
-2. Anropa `extractBimHierarchy` med alla versionUrns
-3. Anropa `upsertBimAssets` med resultatet
-4. Returnera `{ success, message, building, levels, rooms, modelsIndexed }`
-
-Om indexeringen inte ar klar inom timeout returneras `{ success: false, state: "PROCESSING", message: "Indexeringen pagar..." }` sa anvandaren kan prova igen.
-
-### Fil 2: `src/components/settings/ApiSettingsModal.tsx`
-
-#### 2a. Ny state (vid rad ~176)
+### Konverteringskedjan
 
 ```text
-syncingBimFolderId: string | null  -- vilken mapp som synkas just nu
-bimSyncProgress: string | null     -- progressmeddelande
-bimSyncResult: { ... } | null      -- resultat att visa
+RVT/IFC (original i ACC)
+    |
+    v
+SVF2 (konverteras automatiskt av ACC vid uppladdning)
+    |
+    v  [svf-utils / forge-convert-utils]
+glTF 2.0 (oppet 3D-format)
+    |
+    v  [convert2xkt]
+XKT (xeokit-format, redan anvant i Geminus)
 ```
 
-#### 2b. Ny handler `handleSyncBimData(folder)` (efter `toggleFolder`, rad ~445)
+### Tre alternativ for 3D-visning
 
-1. Satt `syncingBimFolderId = folder.id`
-2. Satt `bimSyncProgress = "Indexerar modeller..."`
-3. Anropa `acc-sync` med `action: "sync-bim-data"`, mappdata och items (med versionUrns)
-4. Vid resultat: visa toast med "Skapade X byggnad, Y vaningsplan, Z rum"
-5. Vid PROCESSING: visa info att indexeringen pagar och prova igen
-6. Nollstall state
+#### Alternativ A: SVF2 --> glTF --> XKT (rekommenderat)
 
-#### 2c. "Synka BIM-data"-knapp i mappvyn (rad ~2074-2107)
+**Verktyg:**
+- `svf-utils` (npm: svf-utils, av Petr Broz): Konverterar SVF2 till glTF. Stödjer SVF2 direkt med kommandot `svf2-to-gltf`.
+- `convert2xkt` (npm: @xeokit/xeokit-convert): Konverterar glTF till XKT.
 
-Lagg till en knapp bredvid varje mapp-rads chevron/namn:
+**Flode:**
+1. Hamta derivative URN fran folder contents (redan tillgangligt i `included`-arrayen)
+2. En ny edge function laddar ner SVF2-datat via Model Derivative API
+3. Konverterar SVF2 till glTF (med svf-utils)
+4. Konverterar glTF till XKT (med convert2xkt)
+5. Laddar upp XKT till Supabase Storage (befintlig `xkt-models`-bucket)
+
+**Fordelar:**
+- Anvander befintlig xeokit-viewer -- ingen ny viewer behövs
+- Automatisk pipeline -- klicka "Konvertera" och vanta
+- Samma visningssatt som idag
+
+**Utmaning:**
+- Kräver Node.js-runtime (edge functions kör Deno, inte Node.js)
+- `svf-utils` och `convert2xkt` ar Node.js-paket
+- Losning: En separat konverteringstjänst, eller anvanda Autodesks experimentella AWS-baserade tjänst
+
+#### Alternativ B: Autodesks experimentella SVF-till-glTF-tjänst
+
+Autodesk har en offentlig experimentell tjänst (`aps-extra-derivatives`) som konverterar SVF direkt till glTF/GLB/USDZ via ett REST-API.
 
 ```text
-[V] [mapp-ikon] Jonkoping Science Tower  [2 filer] [Synka BIM-data]
+POST https://m5ey85w3lk.execute-api.us-west-2.amazonaws.com/...
 ```
 
-- Knappen visas bara om mappen har BIM-filer (minst en item med versionUrn)
-- Under synkning: visa Loader2-spinner + progresstext istallet for knapptext
-- Efter resultat: kort feedback i toast
+**Flode:**
+1. Skicka derivative URN till tjänsten
+2. Vanta pa konvertering
+3. Ladda ner glTF-resultatet
+4. Konvertera till XKT med convert2xkt
+5. Ladda upp till Supabase Storage
+
+**Fordelar:**
+- Slipper kora svf-utils sjalv
+- REST-API som gar att anropa fran edge function
+
+**Utmaning:**
+- "Experimentell" -- kan forsvinna eller andras
+- Stödjer mojligtvis inte SVF2 (bara SVF1)
+- Fortfarande behover convert2xkt koras nagonstans
+
+#### Alternativ C: Autodesk Viewer (backup)
+
+Integrera Autodesks egen Viewer SDK direkt i Geminus. Modellerna visas direkt fran ACC utan konvertering.
+
+**Flode:**
+1. Hamta derivative URN fran folder contents
+2. Ladda Autodesk Viewer SDK i browsern
+3. Visa modellen direkt
+
+**Fordelar:**
+- Ingen konvertering behovs
+- Alltid senaste versionen av modellen
+- Stödjer alla Autodesk-format
+
+**Nackdelar:**
+- Kräver en andra viewer i Geminus (bade xeokit och Autodesk Viewer)
+- Annorlunda UX -- tva olika 3D-visningssatt
+- Kräver Autodesk-inloggning for att visa modeller
+- Mer komplex kodbas
+
+### Rekommendation
+
+**Steg 1 (nu):** Implementera BIM-synk (Del 1 + 2) for att hamta byggnadsstruktur (plan, rum) fran Model Properties API. Detta behöver inte 3D-konvertering.
+
+**Steg 2 (nasta):** Undersök Alternativ A (SVF2 --> glTF --> XKT) genom att bygga en test-pipeline. De tva huvudsakliga utmaningarna ar:
+- Kora `svf-utils` i Deno (edge function) -- kan behova en extern tjanst
+- Kora `convert2xkt` for att fa slutligt XKT-format
+
+**Steg 3 (backup):** Om konverteringspipelinen visar sig for komplex, implementera Alternativ C (Autodesk Viewer) som ett sekundart visningslage i Geminus.
 
 ---
 
-## Tekniska detaljer
+## Andringslista for denna sprint
 
-### API-endpoints (alla med 3-legged token)
+### Prioritet 1: BIM-hierarki (Building, Storey, Space)
 
-| Endpoint | Syfte |
-|----------|-------|
-| `GET /data/v1/projects/b.{pid}/items/{itemId}/tip` | Hamta versionUrn |
-| `POST /construction/index/v2/projects/{pid}/indexes:batch-status` | Starta/kolla indexering |
-| `GET /construction/index/v2/projects/{pid}/indexes/{indexId}` | Polla status |
-| `GET fieldsUrl` (fran batch-status-svar) | Faltdefinitioner (NDJSON) |
-| `GET propertiesUrl` (fran batch-status-svar) | Alla objektegenskaper (NDJSON) |
+| Fil | Andring |
+|-----|---------|
+| `supabase/functions/acc-sync/index.ts` | Utoka `list-folders` att extrahera `versionUrn` och `derivativeUrn` fran befintligt folder contents-svar |
+| `supabase/functions/acc-sync/index.ts` | Nytt `sync-bim-data` action med Model Properties-flödet |
+| `src/components/settings/ApiSettingsModal.tsx` | "Synka BIM-data"-knapp med progress |
 
-### Kanda faltnycklar (Revit-modeller)
+### Prioritet 2: 3D-modellkonvertering (framtid)
 
-| Nyckel | Betydelse | Anvands for |
-|--------|-----------|-------------|
-| `p153cb174` | Namn (display name) | Objektnamn ("Plan 1", "Kok 101") |
-| `p5eddc473` | Kategori | "Revit Level", "Revit Rooms" |
-| `pdf1348b1` | Elevation | Vaningshojd (for levels) |
-| `pbadfe721` | Level-referens | Koppla rum till vaningsplan |
+| Fil | Andring |
+|-----|---------|
+| Ny edge function eller extern tjanst | SVF2-nedladdning + glTF-konvertering |
+| Ev. ny edge function | glTF --> XKT-konvertering |
+| Befintlig XKT-cache | Lagring av konverterade modeller |
 
-Nycklarna verifieras dynamiskt via fields-hamtningen.
+### Implementationsordning
 
-### Mappning till assets-tabellen
-
-| BIM-data | assets.category | assets.fm_guid | Relationer |
-|----------|----------------|----------------|------------|
-| Mappnamn | Building | `acc-bim-building-{folderId}` | -- |
-| Revit Level | Building Storey | `acc-bim-level-{externalId}` | building_fm_guid = building |
-| Revit Room | Space | `acc-bim-room-{externalId}` | level_fm_guid = matchad level, building_fm_guid = building |
-
-Alla poster far `attributes.source = "acc-bim"` for att skilja dem fran Location-synkade poster (`source: "acc"`).
-
-### Timeout-hantering
-
-- Edge functions har ~60s timeout
-- Indexering kan ta langre for forsta gangen (modellen har aldrig indexerats)
-- Losning: gor max ~50 sekunders polling, returnera sedan `{ state: "PROCESSING" }` sa att UI visar "Prova igen om en stund"
-- Autodesk fortsatter indexeringen i bakgrunden, cachas 30 dagar
-
-### Inga databasandringar kravs
-
-Allt lagras i befintliga `assets`-tabellen med `fm_guid`-upsert.
-
----
-
-## Implementationsordning
-
-1. Lagg till hjalpfunktioner i edge function (`isBimFile`, `fetchItemTip`, `parseLDJSON`, `extractBimHierarchy`, `upsertBimAssets`)
-2. Utoka `list-folders` med versionUrn-hamtning
-3. Lagg till `sync-bim-data` action
-4. Lagg till state, handler och synk-knapp i UI
-5. Deploya edge function
-6. Testa med "Jonkoping Science Tower"
+1. Utoka `list-folders` med versionUrn/derivativeUrn fran befintligt svar
+2. Implementera `sync-bim-data` action (Model Properties-flödet)
+3. Lagga till synk-knapp i UI
+4. Testa med "Jonkoping Science Tower"
+5. (Framtid) Prototyp for SVF2 --> glTF --> XKT-pipeline
 
