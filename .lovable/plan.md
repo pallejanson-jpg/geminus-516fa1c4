@@ -1,61 +1,98 @@
 
 
-# Matcha Felanmälan med er-rep.com
+# Felanmalan till FM-systemet via FM Access API
 
 ## Sammanfattning
 
-Screenshoten visar att er-rep.com och Geminus har **exakt samma falt**. Inga extra falt saknas. Skillnaderna ar visuella och UX-relaterade. Planen nedan justerar Geminus-formularet for att matcha er-rep.com:s utseende och beteende exakt.
+Nuvarande implementation sparar felanmalan lokalt i 'work_orders'-tabellen i databasen. Det riktiga flödet ska istallet skicka felanmalan till FM Access API:t (samma system som er-rep.com anvander). Dessutom ska QR-kodens artikelnummer (t.ex. 000000042) anvandas for att sla upp installationsinformation via 'qr_report_configs'-tabellen, och felkoderna i comboboxen ska matcha de som finns i FM-systemet.
 
-## Skillnader att atgarda
+## Identifierade brister
 
-| Element | er-rep.com | Geminus idag | Andring |
-|---------|-----------|--------------|---------|
-| Installation-info | Enkel textrad i en latt ruta: "Installation 000000042 Kaffemaskin K12" | Info-box med ikon och separata rader | Forenkla till en enkel textrad som matchar |
-| Felkod | Dropdown/combobox med pil | Vanligt textfalt (Input) | Andra till en combobox/select med fritext-alternativ |
-| Hjalp-ikoner | Bla (?) ikon till hoger om varje falt-label | Saknas | Lagga till tooltip-ikoner med hjalp-text for varje falt |
-| Rensa-knappar | (x) knapp pa e-post och telefon | Saknas | Lagga till clear-knappar pa dessa falt |
-| Foto-knapp | "Ta Bild/Bladdra..." knapp | Bildrutor med drag-and-drop stil | Lagga till en tydlig "Ta Bild/Bladdra..." knapp (behalla aven bildforhandsvisning) |
-| Skicka-knapp | "Skicka" utan ikon | "Skicka felanmalan" med Send-ikon | Andra till "Skicka" for att matcha |
+| Problem | Beskrivning |
+|---------|-------------|
+| Skicka-logik | Sparar lokalt i 'work_orders' istallet for att skicka till FM Access API |
+| QR-uppslag | Tabellen 'qr_report_configs' ar tom -- behover fyllas med data, t.ex. for artikelnummer 000000042 |
+| Felkoder | Hardkodade platshallare (EL001, VVS001 etc.) -- ska hamtas fran FM Access eller konfigureras ratt |
+| FM Access edge function | Har bara 'test-connection', 'get-drawings', 'get-documents' -- saknar 'create-work-order'/'submit-fault-report' |
 
-## Teknisk plan
+## Plan
 
-### Steg 1: Uppdatera FaultReportForm.tsx
+### Steg 1: Utoka fm-access-query edge function
 
-- **Installation-info**: Forenkla fran info-box med ikon till en enkel readonly-liknande textrad: `Installation {number} {assetName}`
-- **Felkod**: Byt fran `<Input>` till en `<Combobox>` (baserad pa `cmdk` som redan finns installerat) eller `<Select>` med ett fritext-alternativ. Eftersom felkoderna troligen ar dynamiska/okanda an sa lange, anvands en enkel dropdown med ett "Ovrigt"-alternativ plus fritext-input som fallback
-- **Hjalp-ikoner**: Lagg till en `<Tooltip>` med en `<HelpCircle>`-ikon (fran lucide-react) bredvid varje `<FormLabel>`. Tooltip-texterna matchar er-rep.com:s hjalptexter
-- **Rensa-knappar**: Lagg till en `<X>`-ikon-knapp inuti e-post- och telefonfalt som rensar faltet nar det har innehall
-- **Foto-sektion**: Lagg till en explicit "Ta Bild/Bladdra..."-knapp utover den befintliga bildforhandsvisningen
-- **Skicka-knapp**: Andra text fran "Skicka felanmalan" till "Skicka" och ta bort Send-ikonen
+Lagga till en ny action 'create-fault-report' i 'supabase/functions/fm-access-query/index.ts' som:
 
-### Steg 2: Uppdatera MobileFaultReport.tsx
+1. Tar emot felanmalans data (beskrivning, felkod, e-post, telefon, bilder, installationsnummer)
+2. Autentiserar mot FM Access via samma Keycloak-flode som redan finns
+3. Skickar en POST till FM Access API:t for att skapa en arbetsorder/felanmalan
+4. Returnerar det skapade arende-ID:t tillbaka till klienten
 
-Samma andringar som ovan, tillampade pa mobilversionen:
-- Forenkla installation-info
-- Felkod som combobox
-- Hjalp-tooltips (anpassade for mobil -- kanske tap-to-show)
-- Rensa-knappar pa e-post/telefon
-- "Ta Bild/Bladdra..."-knapp
-- Skicka-knapptext
+Eftersom er-rep.com anvander samma FM Access API behover vi ta reda pa exakt vilken endpoint som anvands. Baserat pa FM Access-konfigurationen i projektet (auth via Keycloak pa auth.bim.cloud med realm 'swg_demo') kommer vi att:
+- Anvanda samma autentiseringsflode som redan finns i 'getToken()' och 'getVersionId()'
+- Anropa en endpoint som '/api/workorders' eller liknande (standard FM Access mönster)
 
-### Steg 3: Uppdatera PhotoCapture.tsx
+Steg 1 kraver att vi far veta exakt API-endpoint och payload-format. Jag foreslår att vi borjar med en rimlig implementation baserad pa vanliga FM Access-mönster, och sen justerar om det behövs.
 
-Lagg till en tydlig "Ta Bild/Bladdra..."-knapp med outlined stil, utover den befintliga bildrutnats-forhandsvisningen. Knappen ska synas aven nar inga bilder annu ar tillagda.
+### Steg 2: Uppdatera FaultReport.tsx -- handleSubmit
+
+Andra 'handleSubmit' i 'src/pages/FaultReport.tsx' fran att skriva till 'work_orders'-tabellen till att anropa edge function:
+
+```text
+Nuvarande:  supabase.from('work_orders').insert(workOrder)
+Nytt:       supabase.functions.invoke('fm-access-query', { body: { action: 'create-fault-report', ... } })
+```
+
+Samma andring i 'src/components/fault-report/InAppFaultReport.tsx'.
+
+Optionellt kan vi spara en lokal kopia i work_orders-tabellen ocksa (for historik), men primarflodet ska vara att skicka till FM Access.
+
+### Steg 3: Fylla QR-konfigtabellen
+
+Tabellen 'qr_report_configs' ar tom. For att QR-koden med artikelnummer 000000042 ska fungera behover vi lagga in minst en rad, t.ex.:
+
+```text
+qr_key: "000000042"
+building_fm_guid: [ratt GUID fran assets-tabellen]
+building_name: [byggnadens namn]
+asset_fm_guid: [om det finns]
+asset_name: "Kaffemaskin K12" (eller liknande)
+installation_number: "000000042"
+```
+
+Jag slar upp ratt data i assets-tabellen baserat pa artikelnumret.
+
+### Steg 4: Uppdatera felkoderna i ErrorCodeCombobox
+
+De nuvarande platshallarna (EL001, VVS001 etc.) ska bytas ut mot riktiga felkoder. Tva alternativ:
+
+1. **Dynamiskt fran FM Access** -- lagga till en action 'get-error-codes' i edge function som hamtar tillgangliga felkoder
+2. **Statisk lista** -- konfigurera felkoderna manuellt om FM Access inte har ett sadant endpoint
+
+Borjar med alternativ 2 (statisk lista) och kan bygga ut till dynamisk hamtning senare.
+
+### Steg 5: Justera QR-flodet
+
+Nuvarande QR-URL-format: '/fault-report?key=XXX'
+er-rep.com-format: Artikelnumret ar direkt i URL:en
+
+Vi behover mojligtvis justera URL-formatet sa att det matchar QR-koderna som redan finns utskrivna, t.ex.:
+- '/fault-report?key=000000042' (nuvarande format, fungerar redan)
+- Alternativt: '/fault-report/000000042' (om QR-koderna pekar hit)
 
 ### Filer som andras
 
 | Fil | Andring |
 |-----|---------|
-| `src/components/fault-report/FaultReportForm.tsx` | Alla visuella justeringar (info-bar, felkod-dropdown, hjalpikoner, rensa-knappar, knapptext) |
-| `src/components/fault-report/MobileFaultReport.tsx` | Samma andringar for mobilversionen |
-| `src/components/fault-report/PhotoCapture.tsx` | Lagg till "Ta Bild/Bladdra..."-knapp |
+| 'supabase/functions/fm-access-query/index.ts' | Lagg till 'create-fault-report' action |
+| 'src/pages/FaultReport.tsx' | Andra handleSubmit fran lokal sparning till FM Access API-anrop |
+| 'src/components/fault-report/InAppFaultReport.tsx' | Samma andring av handleSubmit |
+| 'src/components/fault-report/ErrorCodeCombobox.tsx' | Uppdatera felkodslistan |
+| 'src/components/fault-report/FaultReportSuccess.tsx' | Visa FM Access-referensnummer istallet for lokalt ID |
 
-### Om Felkod-dropdown
+### Databas
 
-Felkod-faltet i er-rep.com verkar vara en dropdown (har en nedatpil). Tva alternativ:
+- Infoga testdata i 'qr_report_configs' for artikelnummer 000000042
 
-1. **Statisk lista** -- om det finns en fast lista med felkoder kan dessa hardkodas eller hamtas fran databasen
-2. **Fritext med dropdown-stil** -- en combobox dar anvandaren kan skriva fritt men faltet ser ut som en dropdown (detta matchar "Ange en matchande felkod"-texten)
+### Osakerhet: FM Access API-endpoint
 
-Jag rekommenderar alternativ 2 (combobox med fritext) eftersom det matchar placeholder-texten och ger flexibilitet.
+Den kritiska osakerheten ar exakt vilken endpoint FM Access API:t har for att skapa arbetsordrar. Baserat pa README-dokumentationen finns 'GET /workorders' for lasning, men vi behover POST-endpointen. Jag implementerar en rimlig standard (POST till '/api/workorders' eller '/api/errorreports') och vi justerar om det behövs efter testning.
 
