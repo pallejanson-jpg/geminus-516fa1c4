@@ -1808,7 +1808,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
     let lastHighlightedEntity: any = null;
 
-    const handleMouseMove = (coords: number[]) => {
+    const handleMouseMove = (coordsOrEvent: any) => {
       // Reset previous highlight
       if (lastHighlightedEntity) {
         try {
@@ -1819,9 +1819,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         lastHighlightedEntity = null;
       }
 
+      // Handle both event object format ({ canvasPos: [x,y] }) and raw coords ([x,y])
+      const canvasPos = coordsOrEvent?.canvasPos || coordsOrEvent;
+      if (!canvasPos || !Array.isArray(canvasPos)) return;
+
       // Pick entity under mouse
       const hit = xeokitViewer.scene.pick({
-        canvasPos: coords,
+        canvasPos,
         pickSurface: false,
       });
 

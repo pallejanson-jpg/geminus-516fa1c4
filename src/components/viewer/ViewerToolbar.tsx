@@ -17,6 +17,7 @@ import {
   Settings,
   Sparkles,
   Hand,
+  Box,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -82,7 +83,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [isExpanded, setIsExpanded] = useState(true);
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getNavigationToolSettings());
   const [isViewerReady, setIsViewerReady] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const toolChangeDebounceRef = useRef(false);
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [settingsKey, setSettingsKey] = useState(0); // Force re-render key
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
@@ -129,19 +130,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     };
   }, []);
 
-  // Safety reset for isProcessing - prevent toolbar from getting stuck
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    if (isProcessing) {
-      timeoutId = setTimeout(() => {
-        console.warn('[ViewerToolbar] isProcessing stuck, resetting...');
-        setIsProcessing(false);
-      }, 2000); // 2 second safety reset
-    }
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [isProcessing]);
+  // (isProcessing removed — replaced by per-action toolChangeDebounceRef)
 
   // Get AssetView reference with safety checks
   const getAssetView = useCallback(() => {
@@ -281,16 +270,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
   // Navigation controls with readiness check
   const handleResetView = useCallback(() => {
-    if (!isViewerReady || isProcessing) return;
+    if (!isViewerReady) return;
     
     const assetView = getAssetView();
     if (assetView) {
       assetView.viewFit(undefined, true);
     }
-  }, [getAssetView, isViewerReady, isProcessing]);
+  }, [getAssetView, isViewerReady]);
 
   const handleZoomIn = useCallback(() => {
-    if (!isViewerReady || isProcessing) return;
+    if (!isViewerReady) return;
     
     const viewer = getXeokitViewer();
     if (viewer?.cameraFlight) {
@@ -304,10 +293,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       ];
       viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
     }
-  }, [getXeokitViewer, isViewerReady, isProcessing]);
+  }, [getXeokitViewer, isViewerReady]);
 
   const handleZoomOut = useCallback(() => {
-    if (!isViewerReady || isProcessing) return;
+    if (!isViewerReady) return;
     
     const viewer = getXeokitViewer();
     if (viewer?.cameraFlight) {
@@ -321,10 +310,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       ];
       viewer.cameraFlight.flyTo({ eye: newEye, look, duration: 0.3 });
     }
-  }, [getXeokitViewer, isViewerReady, isProcessing]);
+  }, [getXeokitViewer, isViewerReady]);
 
   const handleViewFit = useCallback(() => {
-    if (!isViewerReady || isProcessing) return;
+    if (!isViewerReady) return;
     
     const viewer = viewerRef.current;
     if (viewer?.assetViewer?.$refs?.assetView) {
@@ -336,27 +325,27 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         assetView.viewFit(undefined, true);
       }
     }
-  }, [viewerRef, isViewerReady, isProcessing]);
+  }, [viewerRef, isViewerReady]);
 
-  // Navigation mode with debounce
+  // Navigation mode change
   const handleNavModeChange = useCallback((mode: NavMode) => {
-    if (!isViewerReady || isProcessing) return;
+    if (!isViewerReady) return;
     
     const assetView = getAssetView();
     if (assetView) {
       assetView.setNavMode(mode);
       setNavMode(mode);
     }
-  }, [getAssetView, isViewerReady, isProcessing]);
+  }, [getAssetView, isViewerReady]);
 
-  // Tools - with proper state cleanup, mutual exclusivity, and debounce
+  // Tools - with proper state cleanup, mutual exclusivity, and per-action debounce
   const handleToolChange = useCallback((tool: ViewerTool) => {
-    if (!isViewerReady || isProcessing) {
-      console.debug('Viewer not ready for tool change');
+    if (!isViewerReady || toolChangeDebounceRef.current) {
+      console.debug('Viewer not ready or debounced for tool change');
       return;
     }
     
-    setIsProcessing(true);
+    toolChangeDebounceRef.current = true;
     
     try {
       const assetView = getAssetView();
@@ -385,10 +374,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       // Reset to safe state
       setActiveTool('select');
     } finally {
-      // Debounce - prevent rapid clicks
-      setTimeout(() => setIsProcessing(false), 100);
+      // Short debounce only for tool-change (useTool calls)
+      setTimeout(() => { toolChangeDebounceRef.current = false; }, 150);
     }
-  }, [getAssetView, activeTool, isViewerReady, isProcessing]);
+  }, [getAssetView, activeTool, isViewerReady]);
 
   // Switch between 3D and 2D (top-down) view with SectionPlane clipping
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -556,7 +545,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     if (toolId && !isToolVisible(toolId)) return null;
     if (toolId && isToolInOverflow(toolId) && !isMobile) return null;
     
-    const isDisabled = disabled || !isViewerReady || isProcessing;
+    const isDisabled = disabled || !isViewerReady;
     
     return (
       <Tooltip>
@@ -650,6 +639,25 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
               active: hoverHighlightEnabled
             });
           }
+          break;
+        case 'xray':
+          items.push({
+            id: tool.id,
+            label: 'X-ray läge',
+            icon: <Box className="h-4 w-4" />,
+            onClick: () => {
+              const viewer = getXeokitViewer();
+              if (viewer?.scene) {
+                const ids = viewer.scene.objectIds || [];
+                const currentlyXrayed = (viewer.scene.xrayedObjectIds?.length || 0) > 0;
+                viewer.scene.setObjectsXRayed(ids, !currentlyXrayed);
+              }
+            },
+            active: (() => {
+              const viewer = getXeokitViewer();
+              return (viewer?.scene?.xrayedObjectIds?.length || 0) > 0;
+            })()
+          });
           break;
       }
     });

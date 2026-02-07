@@ -24,6 +24,7 @@ import FloatingIssueListPanel, { type BcfIssue } from "./FloatingIssueListPanel"
 import IssueDetailSheet from "./IssueDetailSheet";
 import ViewerThemeSelector from "./ViewerThemeSelector";
 import RoomVisualizationPanel from "./RoomVisualizationPanel";
+import XrayToggle from "./XrayToggle";
 import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
@@ -535,6 +536,11 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       </div>
                       <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                     </div>
+                  )}
+
+                  {/* X-ray Toggle */}
+                  {isToolVisible('xray') && (
+                    <XrayToggle viewerRef={viewerRef} />
                   )}
 
                   {/* Annotations Toggle + Category List */}
