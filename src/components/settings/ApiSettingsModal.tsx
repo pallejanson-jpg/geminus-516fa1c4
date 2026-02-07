@@ -166,6 +166,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
     const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>('US');
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
+    const [accLocationsHint, setAccLocationsHint] = useState<string | null>(null);
     
     // ACC folder browsing state
     const [accFolders, setAccFolders] = useState<any[] | null>(null);
@@ -326,6 +327,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
             if (data?.success) {
                 toast({ title: 'Synk klar', description: data.message });
+                if (data.hint) {
+                    setAccLocationsHint(data.hint);
+                } else {
+                    setAccLocationsHint(null);
+                }
                 handleCheckAccStatus();
             } else {
                 toast({ variant: 'destructive', title: 'Synk misslyckades', description: data?.error });
@@ -2027,6 +2033,25 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                                                             Status
                                                         </Button>
+                                                    </div>
+                                                )}
+
+                                                {/* Hint banner when ACC has no locations */}
+                                                {accLocationsHint && (
+                                                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 flex gap-2 items-start">
+                                                        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                                                        <div className="space-y-1">
+                                                            <p className="text-sm text-blue-800 dark:text-blue-200">{accLocationsHint}</p>
+                                                            <Button
+                                                                variant="link"
+                                                                size="sm"
+                                                                className="h-auto p-0 text-blue-600 dark:text-blue-400"
+                                                                onClick={() => { setAccLocationsHint(null); handleFetchAccFolders(); }}
+                                                            >
+                                                                <FolderOpen className="h-3.5 w-3.5 mr-1" />
+                                                                Visa mappar nu
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 )}
 
