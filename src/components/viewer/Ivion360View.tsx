@@ -124,7 +124,7 @@ export default function Ivion360View({
 
   // SDK loading with loginToken and robust fallback
   useEffect(() => {
-    if (!ivionUrl || !syncEnabled) {
+    if (!ivionUrl) {
       setSdkStatus('idle');
       sdkStatusRef.current = 'idle';
       return;
