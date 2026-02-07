@@ -1,194 +1,208 @@
 
 
-# Systematisk fix av alla verktyg i 3D-viewerns toolbar
+# Fix Hover Highlight, X-ray, and Verify Split View SDK
 
-## Sammanfattning
+## Investigation Findings
 
-Jag har granskat samtliga verktyg i nedre toolbaren (`ViewerToolbar.tsx`), hogerpanelen (`ViewerRightPanel.tsx`), och visualiseringsmenyn (`VisualizationToolbar.tsx`). Tre grundlaggande problem paverkar manga verktyg:
+### 1. Hover Highlight -- Why It Does Not Work
 
-1. **Global `isProcessing`-las blockerar ALLA knappar** -- varje knapptryckning laser hela toolbaren i 100ms (upp till 2 sek vid fel)
-2. **Hover highlight har fel event-signatur** -- xeokit-eventet skickar `(canvasCoords, hit)` men handleren tolkar forsta parametern fel
-3. **X-ray saknar UI-implementation** -- finns i installningarna men ingen kod renderar eller togglar det
+The current code subscribes to xeokit's `cameraControl.on('hover', ...)` event. According to xeokit's API, the `hover` event only fires **once when entering a new object**, not continuously. More critically, there is no handler for `hoverOut` or `hoverOff`, so highlights are never cleared when the mouse leaves an object and moves to empty space.
 
-## Verktygsaudit -- alla 11 navigationsverktyg + 8 visualiseringsverktyg
+Additionally, the AssetPlus bundled xeokit version may not fire the `hover` event at all when certain tools (select, measure, slicer) are active via `useTool()`, because the CameraControl's pointer events can be suppressed by the active tool.
 
-### Nedre toolbar (ViewerToolbar.tsx) -- Navigationsverktyg
+**Fix**: Subscribe to ALL four hover events from CameraControl:
+- `hover` -- pointer enters a new entity (highlight it)
+- `hoverSurface` -- pointer continues over an entity surface (keep highlighting)
+- `hoverOut` -- pointer left the last entity (clear highlight)
+- `hoverOff` -- pointer is over empty space (clear highlight)
 
-| Verktyg | Status | Problem |
-|---------|--------|---------|
-| orbit | Fungerar varannan gang | `isProcessing`-las blockerar klick |
-| firstPerson | Fungerar varannan gang | Samma `isProcessing`-las |
-| zoomIn | Fungerar varannan gang | `isProcessing` blockar; anropar aldrig `useTool()` men las andamolost |
-| zoomOut | Fungerar varannan gang | Samma som zoomIn |
-| viewFit | Fungerar varannan gang | Samma `isProcessing`-las |
-| resetView | Fungerar varannan gang | Samma `isProcessing`-las |
-| select | Fungerar varannan gang | `isProcessing` + `handleToolChange` debounce |
-| measure | Fungerar varannan gang | Samma som select |
-| slicer | Fungerar varannan gang | Samma som select |
-| flashOnSelect | Fungerar varannan gang | `isProcessing` paverkar aven toggle-knappar |
-| hoverHighlight | Fungerar inte alls | Toggle blockeras av `isProcessing` + event-handler bugg i `AssetPlusViewer.tsx` |
+This matches how `RoomVisualizationPanel.tsx` works (line 539), which successfully uses the same `(canvasCoords, hit)` signature.
 
-### Hogerpanel / Visualiseringsmeny -- Visualiseringsverktyg
+### 2. X-ray -- Why It Does Not Work
 
-| Verktyg | Status | Problem |
-|---------|--------|---------|
-| xray | Fungerar inte | Ingen UI-kod finns -- bara en ToolbarSettings-post utan rendering |
-| spaces | Fungerar (OK) | Inget problem hittat |
-| navCube | Fungerar (OK) | Hanteras separat i AssetPlusViewer |
-| minimap | Fungerar (OK) | Hanteras separat i AssetPlusViewer |
-| treeView | Fungerar (OK) | Hanteras separat |
-| visualization | Fungerar (OK) | RoomVisualizationPanel hanterar |
-| objectInfo | Fungerar (OK) | Asset+ dialog |
-| properties | Fungerar (OK) | Lovable properties dialog |
-
-### Overflow-meny (nar verktyg flyttas dit)
-
-| Problem | Beskrivning |
-|---------|-------------|
-| X-ray i overflow | Saknas helt -- `getOverflowItems` har inget `case 'xray'` |
-| Alla overflow-items | Blockas av samma `isProcessing`-las nar de anropas |
-
-## Detaljerad fixplan
-
-### Fix 1: Ta bort global `isProcessing`-las (ViewerToolbar.tsx)
-
-**Rotorsak**: Rad 85 definierar `isProcessing` som en global boolean. Rad 354 (`handleToolChange`), 284 (`handleResetView`), 293 (`handleZoomIn`), 309 (`handleZoomOut`), 327 (`handleViewFit`), 343 (`handleNavModeChange`) -- ALLA kontrollerar `if (!isViewerReady || isProcessing) return;`. Nar nagon av dessa satter `isProcessing = true`, ar hela toolbaren last.
-
-**Fix**:
-- Ta bort `isProcessing`-state helt (rad 85)
-- Ta bort 2-sekunders safety timeout (rad 132-144)
-- Behall debounce ENBART i `handleToolChange` som en lokal `useRef` med 150ms cooldown -- detta ar det enda stallet dar `useTool()` kallas och dubbelklick kan orsaka problem
-- Alla andra handlers (zoom, reset, nav mode, toggles) ska INTE ha nagon debounce
-
-Andringar i detalj:
-```typescript
-// Ta bort rad 85:
-// const [isProcessing, setIsProcessing] = useState(false);
-
-// Lagg till istallet en ref for enbart tool-change:
-const toolChangeDebounceRef = useRef(false);
-
-// handleToolChange -- enda stallet med debounce:
-const handleToolChange = useCallback((tool: ViewerTool) => {
-  if (!isViewerReady || toolChangeDebounceRef.current) return;
-  toolChangeDebounceRef.current = true;
-  // ... tool change logic (behall befintlig logik)
-  setTimeout(() => { toolChangeDebounceRef.current = false; }, 150);
-}, [getAssetView, activeTool, isViewerReady]);
-
-// ALLA andra handlers: ta bort isProcessing-check:
-const handleZoomIn = useCallback(() => {
-  if (!isViewerReady) return;
-  // ... rest unchanged
-}, [getXeokitViewer, isViewerReady]);
-// Samma for: handleZoomOut, handleViewFit, handleResetView, handleNavModeChange
+The `XrayToggle` component accesses the viewer via:
+```
+viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
 ```
 
-- Uppdatera `ToolButton`-komponenten (rad 559): ta bort `isProcessing` fran `isDisabled`
+This is the correct path. However, xeokit's `scene.setObjectsXRayed(objectIds, enabled)` may silently fail if:
 
-### Fix 2: Fixa hover highlight event-signatur (AssetPlusViewer.tsx)
+a) The xeokit version bundled in AssetPlus uses a different method name or signature
+b) The `objectIds` array is empty at the moment of toggling (models not yet loaded)
 
-**Rotorsak**: Rad 1811 definierar `handleMouseMove = (coords: number[])`, men `RoomVisualizationPanel.tsx` (rad 539) visar att xeokits `cameraControl.on('hover', ...)` skickar TVA argument: `(canvasCoords, hit)`. Alternativt kan det skicka ett event-objekt. For maximal kompatibilitet maste vi hantera bada formaten.
+The overflow menu check `viewer.scene.xrayedObjectIds?.length` may also fail because xeokit exposes `xrayedObjectIds` as a **getter** that returns a snapshot array, and it might be named differently in the bundled version (`numXRayedObjects` or the `xrayedObjects` map).
 
-**Fix** (rad 1811 i AssetPlusViewer.tsx):
+**Fix**: 
+- Add a fallback approach: iterate `scene.objects` directly and set `.xrayed = true/false` on each entity
+- Add logging to confirm the viewer reference is reachable at toggle time
+- Track state internally rather than reading back from xeokit
+
+### 3. Split View SDK -- Why No Logs Appear
+
+In `Ivion360View.tsx` line 127, SDK loading is gated by:
 ```typescript
-const handleMouseMove = (coordsOrEvent: any) => {
-  // Reset previous highlight
-  if (lastHighlightedEntity) {
-    try { lastHighlightedEntity.highlighted = false; } catch (e) {}
-    lastHighlightedEntity = null;
+if (!ivionUrl || !syncEnabled) {
+  setSdkStatus('idle');
+  return;
+}
+```
+
+In `SplitViewer.tsx`, the `syncEnabled` prop is bound to `syncLocked`, which defaults to `false` (line from ViewerSyncContext). This means **the SDK never attempts to load** until the user clicks the "Sync ON" toggle button. That is why zero SDK logs appeared in the console.
+
+**Fix**: Change SDK loading to trigger when `ivionUrl` is available, regardless of `syncEnabled`. The `syncEnabled` flag should only control whether camera synchronization polling is active, not whether the SDK itself loads. This way the SDK pre-loads in the background and is ready when sync is toggled on.
+
+## Implementation Plan
+
+### Step 1: Fix Hover Highlight (AssetPlusViewer.tsx)
+
+In `setupHoverHighlight` (around line 1805), replace the single `hover` subscription with all four xeokit hover events:
+
+```typescript
+const setupHoverHighlight = useCallback(() => {
+  const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+  if (!xeokitViewer?.scene || !xeokitViewer?.cameraControl) {
+    console.warn('[AssetPlusViewer] Hover setup failed - viewer/cameraControl not available');
+    return;
   }
 
-  // Handle both event object format and raw coords
-  const canvasPos = coordsOrEvent?.canvasPos || coordsOrEvent;
-  if (!canvasPos || !Array.isArray(canvasPos)) return;
+  let lastHighlightedEntity: any = null;
+  const cameraControl = xeokitViewer.cameraControl;
 
-  const hit = xeokitViewer.scene.pick({
-    canvasPos,
-    pickSurface: false,
-  });
+  const highlightEntity = (entity: any) => {
+    if (lastHighlightedEntity && lastHighlightedEntity !== entity) {
+      try { lastHighlightedEntity.highlighted = false; } catch (e) {}
+    }
+    if (entity) {
+      entity.highlighted = true;
+      lastHighlightedEntity = entity;
+    }
+  };
 
-  if (hit?.entity) {
-    hit.entity.highlighted = true;
-    lastHighlightedEntity = hit.entity;
-  }
-};
+  const clearHighlight = () => {
+    if (lastHighlightedEntity) {
+      try { lastHighlightedEntity.highlighted = false; } catch (e) {}
+      lastHighlightedEntity = null;
+    }
+  };
+
+  // "hover" fires when pointer enters a new entity
+  const onHover = (canvasCoords: any, hit: any) => {
+    if (hit?.entity) {
+      highlightEntity(hit.entity);
+    }
+  };
+
+  // "hoverSurface" fires continuously while pointer moves over entity surface
+  const onHoverSurface = (canvasCoords: any, hit: any) => {
+    if (hit?.entity) {
+      highlightEntity(hit.entity);
+    }
+  };
+
+  // "hoverOut" fires when pointer leaves last entity
+  const onHoverOut = () => {
+    clearHighlight();
+  };
+
+  // "hoverOff" fires when pointer is over empty space
+  const onHoverOff = () => {
+    clearHighlight();
+  };
+
+  cameraControl.on('hover', onHover);
+  cameraControl.on('hoverSurface', onHoverSurface);
+  cameraControl.on('hoverOut', onHoverOut);
+  cameraControl.on('hoverOff', onHoverOff);
+
+  console.log('[AssetPlusViewer] Hover highlight active (4 events subscribed)');
+
+  hoverListenerRef.current = () => {
+    cameraControl.off('hover', onHover);
+    cameraControl.off('hoverSurface', onHoverSurface);
+    cameraControl.off('hoverOut', onHoverOut);
+    cameraControl.off('hoverOff', onHoverOff);
+    clearHighlight();
+  };
+}, []);
 ```
 
-### Fix 3: Implementera X-ray toggle (ViewerToolbar.tsx + ViewerRightPanel.tsx + VisualizationToolbar.tsx)
+### Step 2: Fix X-ray Toggle (XrayToggle.tsx)
 
-**Rotorsak**: `ToolbarSettings.tsx` definierar `{ id: 'xray', label: 'X-ray lage' }` som ett visualiseringsverktyg, men ingen UI-komponent renderar det. `AssetPlusViewer.tsx` har `changeXrayMaterial()` som konfigurerar x-ray-utseendet, men ingen toggle som aktiverar/avaktiverar det.
+Use a dual approach -- try `setObjectsXRayed` first, fall back to iterating `scene.objects`:
 
-**Fix -- Lagg till i tre stallen**:
-
-**a) ViewerRightPanel.tsx** -- Lagg till X-ray Switch i Display-sektionen (efter "Visa rum"):
 ```typescript
-{isToolVisible('xray') && (
-  <div className="flex items-center justify-between py-1.5">
-    <div className="flex items-center gap-2">
-      <div className={cn("p-1.5 rounded-md", xrayEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-        <Box className="h-4 w-4" />
-      </div>
-      <span className="text-sm">X-ray</span>
-    </div>
-    <Switch checked={xrayEnabled} onCheckedChange={handleToggleXray} />
-  </div>
-)}
-```
-
-Lagg till state och handler:
-```typescript
-const [xrayEnabled, setXrayEnabled] = useState(false);
-
 const handleToggleXray = useCallback((enabled: boolean) => {
   setXrayEnabled(enabled);
   const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-  if (xeokitViewer?.scene) {
-    const objectIds = xeokitViewer.scene.objectIds || [];
-    xeokitViewer.scene.setObjectsXRayed(objectIds, enabled);
+  if (!xeokitViewer?.scene) {
+    console.warn('[XrayToggle] Viewer not available');
+    return;
+  }
+
+  const scene = xeokitViewer.scene;
+
+  // Primary: batch API
+  if (typeof scene.setObjectsXRayed === 'function') {
+    const objectIds = scene.objectIds || [];
+    scene.setObjectsXRayed(objectIds, enabled);
+    console.log('[XrayToggle] setObjectsXRayed:', enabled, objectIds.length, 'objects');
+  } else {
+    // Fallback: iterate objects directly
+    const objects = scene.objects || {};
+    let count = 0;
+    for (const id of Object.keys(objects)) {
+      const entity = objects[id];
+      if (entity && entity.isObject) {
+        entity.xrayed = enabled;
+        count++;
+      }
+    }
+    console.log('[XrayToggle] Fallback xray on', count, 'entities');
   }
 }, [viewerRef]);
 ```
 
-**b) VisualizationToolbar.tsx** -- Lagg till i "Visa"-sektionen:
-Samma Switch som ovan, anpassat till VisualizationToolbar-styling.
+Also fix the overflow menu X-ray active state detection in `ViewerToolbar.tsx`:
 
-**c) ViewerToolbar.tsx** -- Lagg till `case 'xray'` i `getOverflowItems`:
 ```typescript
-case 'xray':
-  items.push({
-    id: tool.id,
-    label: 'X-ray lage',
-    icon: <Box className="h-4 w-4" />,
-    onClick: () => {
-      const viewer = getXeokitViewer();
-      if (viewer?.scene) {
-        const ids = viewer.scene.objectIds || [];
-        const currentlyXrayed = viewer.scene.xrayedObjectIds?.length > 0;
-        viewer.scene.setObjectsXRayed(ids, !currentlyXrayed);
-      }
-    },
-    active: (() => {
-      const viewer = getXeokitViewer();
-      return (viewer?.scene?.xrayedObjectIds?.length || 0) > 0;
-    })()
-  });
-  break;
+active: (() => {
+  const viewer = getXeokitViewer();
+  if (!viewer?.scene) return false;
+  // Check numXRayedObjects or iterate
+  if (typeof viewer.scene.numXRayedObjects === 'number') {
+    return viewer.scene.numXRayedObjects > 0;
+  }
+  // Fallback
+  try {
+    return (viewer.scene.xrayedObjectIds?.length || 0) > 0;
+  } catch { return false; }
+})()
 ```
 
-## Filer som andras
+### Step 3: Fix SDK Loading Gate (Ivion360View.tsx)
 
-| Fil | Andring |
-|-----|--------|
-| `src/components/viewer/ViewerToolbar.tsx` | Ta bort global `isProcessing`, infor per-tool debounce ref, lagg till xray i overflow |
-| `src/components/viewer/AssetPlusViewer.tsx` | Fixa hover event-signatur i `setupHoverHighlight` |
-| `src/components/viewer/ViewerRightPanel.tsx` | Lagg till X-ray toggle i Display-sektionen |
-| `src/components/viewer/VisualizationToolbar.tsx` | Lagg till X-ray toggle i Visa-sektionen |
+Change the SDK loading condition from requiring `syncEnabled` to only requiring `ivionUrl`:
 
-## Forvantad effekt
+```typescript
+// Before (line 127):
+if (!ivionUrl || !syncEnabled) {
 
-- **Alla knappar** (orbit, zoom, reset, select, measure, slicer, flash, hover) svarar direkt vid klick -- ingen mer "varannan gang"-problem
-- **Hover highlight** visar ratt entity-highlight nar musen ror sig over objekt
-- **X-ray** fungerar som toggle i bade hogerpanelen, visualiseringsmenyn och overflowmenyn
-- **Overflow-meny** fungerar for samtliga verktyg inklusive X-ray
+// After:
+if (!ivionUrl) {
+```
+
+This pre-loads the SDK whenever the Ivion URL is available, making it ready for sync when the user toggles sync on. The camera sync polling in `useIvionCameraSync` is already separately gated by the `enabled` prop.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/viewer/AssetPlusViewer.tsx` | Subscribe to all 4 hover events (hover, hoverSurface, hoverOut, hoverOff) |
+| `src/components/viewer/XrayToggle.tsx` | Add fallback entity iteration for X-ray; better logging |
+| `src/components/viewer/ViewerToolbar.tsx` | Fix X-ray active state detection in overflow menu |
+| `src/components/viewer/Ivion360View.tsx` | Remove `syncEnabled` gate from SDK loading so it pre-loads |
+
+## About the Uploaded Files
+
+The uploaded files (styles.css, polyfills.js, runtime.js, main.js) are compiled Angular/webpack bundles from the AssetPlus viewer's internal build (DevExtreme 18.1.6). These are the source files that get compiled into `assetplusviewer.umd.min.js`. They are not directly relevant to the toolbar bugs since the toolbar is built in React and only calls into the AssetPlus viewer's API (`useTool()`, `cameraControl`, `scene`).
 
