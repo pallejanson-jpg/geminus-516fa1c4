@@ -155,6 +155,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // ACC (Autodesk Construction Cloud) state
     const [accProjects, setAccProjects] = useState<any[]>([]);
     const [selectedAccProjectId, setSelectedAccProjectId] = useState('');
+    const [manualAccProjectId, setManualAccProjectId] = useState('');
     const [isLoadingAccProjects, setIsLoadingAccProjects] = useState(false);
     const [isTestingAcc, setIsTestingAcc] = useState(false);
     const [accConnectionStatus, setAccConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -217,14 +218,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     };
 
     const handleSyncAccLocations = async () => {
-        if (!selectedAccProjectId) {
-            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt först.' });
+        const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
+        if (!effectiveProjectId) {
+            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt eller ange ett projekt-ID manuellt.' });
             return;
         }
         setIsSyncingAccLocations(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'sync-locations', projectId: selectedAccProjectId, region: accRegion }
+                body: { action: 'sync-locations', projectId: effectiveProjectId, region: accRegion }
             });
             if (error) throw error;
             if (data?.success) {
@@ -241,14 +243,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     };
 
     const handleSyncAccAssets = async () => {
-        if (!selectedAccProjectId) {
-            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt först.' });
+        const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
+        if (!effectiveProjectId) {
+            toast({ variant: 'destructive', title: 'Välj projekt', description: 'Välj ett ACC-projekt eller ange ett projekt-ID manuellt.' });
             return;
         }
         setIsSyncingAccAssets(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'sync-assets', projectId: selectedAccProjectId, region: accRegion }
+                body: { action: 'sync-assets', projectId: effectiveProjectId, region: accRegion }
             });
             if (error) throw error;
             if (data?.success) {
@@ -1775,7 +1778,21 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                 )}
 
-                                                {selectedAccProjectId && (
+                                                {/* Manual project ID input */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium text-muted-foreground">Eller ange projekt-ID manuellt</Label>
+                                                    <Input
+                                                        placeholder="Klistra in ACC projekt-ID (GUID från URL:en)"
+                                                        value={manualAccProjectId}
+                                                        onChange={(e) => setManualAccProjectId(e.target.value)}
+                                                        className="font-mono text-xs"
+                                                    />
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Om projekthämtningen inte fungerar kan du kopiera projekt-ID:t från ACC-webbadressen och klistra in det här.
+                                                    </p>
+                                                </div>
+
+                                                {(selectedAccProjectId || manualAccProjectId.trim()) && (
                                                     <div className="flex gap-2 flex-wrap">
                                                         <Button
                                                             onClick={handleSyncAccLocations}

@@ -176,6 +176,43 @@ async function fetchAccCategories(
   return categories;
 }
 
+async function fetchAccProjectsViaDataManagement(
+  token: string,
+  accountId: string,
+  region?: string,
+): Promise<any[]> {
+  // Data Management API uses hub format "b.{accountId}"
+  const cleanAccountId = accountId.replace(/^b\./, "");
+  const hubId = `b.${cleanAccountId}`;
+  const regionHeaders = getRegionHeader(region);
+  const url = `https://developer.api.autodesk.com/project/v1/hubs/${hubId}/projects`;
+
+  const res = await fetch(url, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/json",
+      ...regionHeaders,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Data Management Projects API failed (${res.status}): ${errorText}`);
+  }
+
+  const data = await res.json();
+  // Data Management API returns { data: [...] } with different shape
+  const projects = data.data || [];
+  return projects.map((p: any) => ({
+    id: p.id?.replace(/^b\./, "") || p.id,
+    name: p.attributes?.name || p.id,
+    status: p.attributes?.status || "active",
+    type: p.attributes?.type || null,
+    startDate: p.attributes?.startDate || null,
+    endDate: p.attributes?.endDate || null,
+  }));
+}
+
 async function fetchAccProjects(
   token: string,
   accountId: string,
@@ -475,19 +512,49 @@ serve(async (req: Request) => {
         }
 
         const token = await getApsAccessToken();
-        const projects = await fetchAccProjects(token, accountId, region);
+        let projects: any[] = [];
+        let usedApi = "";
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            projects: projects.map((p: any) => ({
+        // Strategy 1: Try Data Management API first (lower permission requirements)
+        try {
+          console.log("Trying Data Management API for project list...");
+          projects = await fetchAccProjectsViaDataManagement(token, accountId, region);
+          usedApi = "data-management";
+          console.log(`Data Management API returned ${projects.length} projects`);
+        } catch (dmError) {
+          console.log(`Data Management API failed: ${dmError instanceof Error ? dmError.message : String(dmError)}`);
+          
+          // Strategy 2: Fallback to Construction Admin API
+          try {
+            console.log("Falling back to Construction Admin API...");
+            const rawProjects = await fetchAccProjects(token, accountId, region);
+            projects = rawProjects.map((p: any) => ({
               id: p.id,
               name: p.name,
               status: p.status,
               type: p.type,
               startDate: p.startDate,
               endDate: p.endDate,
-            })),
+            }));
+            usedApi = "admin";
+            console.log(`Admin API returned ${projects.length} projects`);
+          } catch (adminError) {
+            console.error(`Both APIs failed. Admin error: ${adminError instanceof Error ? adminError.message : String(adminError)}`);
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: `Kunde inte hämta projekt. Data Management API och Admin API misslyckades båda. Du kan ange projekt-ID manuellt istället.\n\nAdmin-fel: ${adminError instanceof Error ? adminError.message : String(adminError)}`,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            projects,
+            usedApi,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
