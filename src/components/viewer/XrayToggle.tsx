@@ -19,7 +19,10 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (xeokitViewer?.scene) {
       const objectIds = xeokitViewer.scene.objectIds || [];
+      console.log('[XrayToggle] Setting X-ray:', enabled, 'on', objectIds.length, 'objects');
       xeokitViewer.scene.setObjectsXRayed(objectIds, enabled);
+    } else {
+      console.warn('[XrayToggle] xeokit viewer not available');
     }
   }, [viewerRef]);
 

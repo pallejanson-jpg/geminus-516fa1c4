@@ -1808,7 +1808,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
     let lastHighlightedEntity: any = null;
 
-    const handleMouseMove = (coordsOrEvent: any) => {
+    const handleMouseMove = (coordsOrEvent: any, hitResult?: any) => {
       // Reset previous highlight
       if (lastHighlightedEntity) {
         try {
@@ -1819,21 +1819,29 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         lastHighlightedEntity = null;
       }
 
-      // Handle both event object format ({ canvasPos: [x,y] }) and raw coords ([x,y])
-      const canvasPos = coordsOrEvent?.canvasPos || coordsOrEvent;
-      if (!canvasPos || !Array.isArray(canvasPos)) return;
+      // xeokit hover event passes (canvasCoords, hit) as two separate args
+      // Use the hit result directly if available (more reliable)
+      let entity = hitResult?.entity;
 
-      // Pick entity under mouse
-      const hit = xeokitViewer.scene.pick({
-        canvasPos,
-        pickSurface: false,
-      });
+      // Fallback: manual pick if no hit from event
+      if (!entity) {
+        const canvasPos = coordsOrEvent?.canvasPos || coordsOrEvent;
+        if (canvasPos && Array.isArray(canvasPos)) {
+          const hit = xeokitViewer.scene.pick({
+            canvasPos,
+            pickSurface: false,
+          });
+          entity = hit?.entity;
+        }
+      }
 
-      if (hit?.entity) {
-        hit.entity.highlighted = true;
-        lastHighlightedEntity = hit.entity;
+      if (entity) {
+        entity.highlighted = true;
+        lastHighlightedEntity = entity;
       }
     };
+
+    console.log('[AssetPlusViewer] Hover highlight setup - cameraControl available:', !!xeokitViewer.cameraControl);
 
     // Subscribe to mouse move events
     const cameraControl = xeokitViewer.cameraControl;
