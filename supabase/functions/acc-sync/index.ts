@@ -36,6 +36,92 @@ async function getApsAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+// ============ 3-LEGGED TOKEN HELPER ============
+
+/**
+ * Try to get a valid 3-legged access token for the given user.
+ * Returns the token string if available (refreshing if expired),
+ * or null if no 3-legged session exists.
+ */
+async function getThreeLeggedToken(userId: string, serviceClient: any): Promise<string | null> {
+  const { data: tokenRow, error } = await serviceClient
+    .from("acc_oauth_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !tokenRow) return null;
+
+  const isExpired = new Date(tokenRow.expires_at) < new Date();
+
+  if (!isExpired) {
+    return tokenRow.access_token;
+  }
+
+  // Try to refresh
+  try {
+    const clientId = Deno.env.get("APS_CLIENT_ID")!;
+    const clientSecret = Deno.env.get("APS_CLIENT_SECRET")!;
+
+    const res = await fetch("https://developer.api.autodesk.com/authentication/v2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`3-legged token refresh failed (${res.status})`);
+      // Delete invalid tokens
+      await serviceClient.from("acc_oauth_tokens").delete().eq("user_id", userId);
+      return null;
+    }
+
+    const data = await res.json();
+    const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+
+    await serviceClient
+      .from("acc_oauth_tokens")
+      .update({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: expiresAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId);
+
+    console.log("3-legged token refreshed successfully");
+    return data.access_token;
+  } catch (err) {
+    console.error("3-legged token refresh error:", err);
+    return null;
+  }
+}
+
+/**
+ * Get the best available token for ACC API calls.
+ * Prefers 3-legged (user) token, falls back to 2-legged (app) token.
+ */
+async function getAccToken(userId: string | null, serviceClient: any): Promise<{ token: string; is3Legged: boolean }> {
+  if (userId) {
+    const threeLeggedToken = await getThreeLeggedToken(userId, serviceClient);
+    if (threeLeggedToken) {
+      console.log("Using 3-legged (user) token for ACC API calls");
+      return { token: threeLeggedToken, is3Legged: true };
+    }
+  }
+  console.log("Using 2-legged (app) token for ACC API calls");
+  const token = await getApsAccessToken();
+  return { token, is3Legged: false };
+}
+
 // ============ REGION HELPERS ============
 
 function getBaseUrl(region?: string): string {
@@ -490,12 +576,16 @@ serve(async (req: Request) => {
     switch (action) {
       // ---- TEST CONNECTION ----
       case "test-connection": {
-        const token = await getApsAccessToken();
+        // Test both 2-legged and 3-legged
+        const { token, is3Legged } = await getAccToken(auth.userId, supabase);
         return new Response(
           JSON.stringify({
             success: true,
-            message: "Anslutning till Autodesk lyckades!",
+            message: is3Legged 
+              ? "Anslutning via användarinloggning lyckades!" 
+              : "Anslutning till Autodesk lyckades (app-token)!",
             tokenPreview: token.substring(0, 8) + "...",
+            is3Legged,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -511,7 +601,7 @@ serve(async (req: Request) => {
           );
         }
 
-        const token = await getApsAccessToken();
+        const { token } = await getAccToken(auth.userId, supabase);
         let projects: any[] = [];
         let usedApi = "";
 
@@ -572,7 +662,8 @@ serve(async (req: Request) => {
         await updateSyncState(supabase, "acc-locations", "running");
 
         try {
-          const token = await getApsAccessToken();
+          const { token, is3Legged } = await getAccToken(auth.userId, supabase);
+          console.log(`Using ${is3Legged ? '3-legged' : '2-legged'} token for location sync`);
           const nodes = await fetchAllLocationNodes(token, projectId, region);
           console.log(`Fetched ${nodes.length} location nodes from ACC`);
 
@@ -625,7 +716,8 @@ serve(async (req: Request) => {
         await updateSyncState(supabase, "acc-assets", "running");
 
         try {
-          const token = await getApsAccessToken();
+          const { token, is3Legged } = await getAccToken(auth.userId, supabase);
+          console.log(`Using ${is3Legged ? '3-legged' : '2-legged'} token for asset sync`);
 
           // First, fetch location tree to resolve locationId -> building/level/room
           const nodes = await fetchAllLocationNodes(token, projectId, region);

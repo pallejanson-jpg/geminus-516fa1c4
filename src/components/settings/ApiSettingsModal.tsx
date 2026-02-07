@@ -166,6 +166,93 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
     const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>('US');
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
+    
+    // Autodesk 3-legged OAuth state
+    const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+    const [isAccLoggingIn, setIsAccLoggingIn] = useState(false);
+    const [isAccLoggingOut, setIsAccLoggingOut] = useState(false);
+
+    // Check Autodesk 3-legged auth status on mount
+    useEffect(() => {
+        const checkAccAuth = async () => {
+            try {
+                const { data, error } = await supabase.functions.invoke('acc-auth', {
+                    body: { action: 'check-auth' }
+                });
+                if (error) throw error;
+                setAccAuthStatus(data?.authenticated ? 'authenticated' : 'unauthenticated');
+            } catch {
+                setAccAuthStatus('unauthenticated');
+            }
+        };
+        if (isOpen) checkAccAuth();
+    }, [isOpen]);
+
+    // Listen for OAuth callback messages from popup
+    useEffect(() => {
+        const handleMessage = async (event: MessageEvent) => {
+            if (event.data?.type === 'autodesk-oauth-callback' && event.data.code) {
+                setIsAccLoggingIn(true);
+                try {
+                    const redirectUri = `${window.location.origin}/auth/autodesk/callback`;
+                    const { data, error } = await supabase.functions.invoke('acc-auth', {
+                        body: { action: 'exchange-code', code: event.data.code, redirectUri }
+                    });
+                    if (error) throw error;
+                    if (data?.success) {
+                        setAccAuthStatus('authenticated');
+                        toast({ title: 'Autodesk-inloggning lyckades', description: 'Du är nu inloggad med ditt Autodesk-konto.' });
+                    } else {
+                        throw new Error(data?.error || 'Token exchange failed');
+                    }
+                } catch (err: any) {
+                    toast({ variant: 'destructive', title: 'Inloggning misslyckades', description: err.message });
+                } finally {
+                    setIsAccLoggingIn(false);
+                }
+            } else if (event.data?.type === 'autodesk-oauth-error') {
+                toast({ variant: 'destructive', title: 'Autodesk-inloggning avbruten', description: event.data.error });
+            }
+        };
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [toast]);
+
+    // Autodesk login via popup
+    const handleAutodeskLogin = async () => {
+        try {
+            const redirectUri = `${window.location.origin}/auth/autodesk/callback`;
+            const { data, error } = await supabase.functions.invoke('acc-auth', {
+                body: { action: 'get-auth-url', redirectUri }
+            });
+            if (error) throw error;
+            if (data?.authUrl) {
+                const width = 600, height = 700;
+                const left = window.screenX + (window.outerWidth - width) / 2;
+                const top = window.screenY + (window.outerHeight - height) / 2;
+                window.open(data.authUrl, 'autodesk-login', `width=${width},height=${height},left=${left},top=${top},popup=yes`);
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        }
+    };
+
+    // Autodesk logout
+    const handleAutodeskLogout = async () => {
+        setIsAccLoggingOut(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-auth', {
+                body: { action: 'logout' }
+            });
+            if (error) throw error;
+            setAccAuthStatus('unauthenticated');
+            toast({ title: 'Utloggad', description: 'Du har loggats ut från Autodesk.' });
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsAccLoggingOut(false);
+        }
+    };
 
     // ACC handlers
     const handleTestAccConnection = async () => {
@@ -1696,16 +1783,52 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Layers className="h-5 w-5 text-blue-500" />
                                                 <span className="font-medium">Autodesk Construction Cloud</span>
-                                                {accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Ansluten</Badge>}
-                                                {accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
+                                                {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Inloggad</Badge>}
+                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">App-token</Badge>}
+                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">ACC</Badge>}
+                                                {accAuthStatus === 'checking' && <Loader2 className="ml-auto mr-2 h-3.5 w-3.5 animate-spin" />}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    Integration med Autodesk Construction Cloud för byggnads-, vånings- och rumsdata via APS OAuth 2.0 (2-legged).
-                                                    Secrets (APS_CLIENT_ID, APS_CLIENT_SECRET, ACC_ACCOUNT_ID) konfigureras i Lovable Cloud.
+                                                    Integration med Autodesk Construction Cloud. Logga in med ditt Autodesk-konto för att ge appen tillgång till dina ACC-projekt.
                                                 </p>
+
+                                                {/* Autodesk Login Section */}
+                                                <div className="rounded-lg border p-3 space-y-3">
+                                                    <Label className="text-sm font-medium">Autodesk-inloggning (3-legged OAuth)</Label>
+                                                    {accAuthStatus === 'authenticated' ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                            <span className="text-sm text-green-700 dark:text-green-400">Inloggad med Autodesk-konto</span>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={handleAutodeskLogout}
+                                                                disabled={isAccLoggingOut}
+                                                                className="ml-auto"
+                                                            >
+                                                                {isAccLoggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Logga ut'}
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <Button
+                                                                onClick={handleAutodeskLogin}
+                                                                disabled={isAccLoggingIn}
+                                                                size="sm"
+                                                                className="gap-1.5"
+                                                            >
+                                                                {isAccLoggingIn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
+                                                                Logga in med Autodesk
+                                                            </Button>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Öppnar Autodesk-inloggning i ett popup-fönster. Dina API-anrop använder sedan dina egna behörigheter.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
 
                                                 <div className="space-y-2">
                                                     <Label className="text-sm font-medium">Region</Label>
