@@ -1,184 +1,191 @@
 
+# Fix Split View: 3D-laddning och kamerasynkronisering
 
-# Plan: Alternativ vag for BIM-synk + 3D-modellkonvertering
+## Problem
 
-## Del 1: versionUrn utan extra API-anrop
+Split View har tva kritiska buggar:
+1. **3D-modellen laddar inte korrekt** -- AssetPlusViewer far ett fmGuid som ar ett byggnads-GUID, men modellerna kraschar eller visas inte i split-kontextet
+2. **Kamerorna foljer inte varandra** -- nuvarande implementation forsaker anvanda postMessage-kommandon till Ivion-iframen, men Ivion stodjer INTE dessa kommandon i iframe-lage. Den enda kanalen for att styra Ivion programmatiskt ar genom NavVis Frontend API SDK (`@navvis/ivion`), som maste laddas dynamiskt fran Ivion-instansen
 
-### Problemet
-Vi trodde att vi behövde anropa en separat `tip`-endpoint for att hamta `versionUrn` for varje BIM-fil, men den endpointen gav 403 (kräver Custom Integration-registrering).
+## Grundorsaker
 
-### Losningen
-Folder contents API (`GET /data/v1/projects/{pid}/folders/{folderId}/contents`) returnerar redan all information vi behover! Varje item i svaret har:
+### Problem 1: 3D-modellsladdning
+- AssetPlusViewer tar emot `fmGuid` och saker efter motsvarande post i `allData` (AppContext)
+- I split view-laget passas byggnadens fmGuid, men `xktCacheService.ensureBuildingModels()` kan timeoutas eller misslyckas tyst
+- Det finns ingen felatergivning nar modeller inte hittas eller nar cache-synk misslyckas
+- Viewern visar bara en tom container istallet for att rapportera problemet
 
-```text
-data[].relationships.tip.data.id = "urn:adsk.wipprod:fs.file:vf.xxx?version=N"
-```
+### Problem 2: Kamerasynk (allvarligaste problemet)
+Den nuvarande synk-strategin ar felaktig:
 
-Det ar precis den `versionUrn` vi behover for Model Properties API. Dessutom finns det ett `included`-falt i svaret som innehaller:
+**3D till 360 (fungerar inte):**
+- Koden skickar `postMessage({ type: 'navvis-command', action: 'moveToLocation', ... })` till Ivion-iframen
+- Ivion reagerar INTE pa dessa meddelanden -- det ar inte ett stott API
+- Fallback: andrar `iframe.src` med ny `&image=XXX` -- detta tvingar en FULLSTANDIG omladdning av Ivion (tar 5-10 sekunder), satt aven detta ar oanvandbart for realtidssynk
 
-```text
-included[].relationships.derivatives.data.id = base64-encoded derivative URN
-```
+**360 till 3D (fungerar inte):**
+- Koden lysnar efter `postMessage` fran Ivion men Ivion sander INGA sadana meddelanden spontant
+- Prenumerationskommandona (`subscribe`) ar ogiltiga i Ivions iframe-API
+- Resultatet: `postMessageActive` forblir `false` och ingen automatisk synk sker
 
-Vi behover alltsa INGA extra API-anrop -- bara extrahera data fran det svar vi redan far.
-
-### Andringar i `list-folders` (acc-sync/index.ts, rad 942-953)
-
-Nuvarande kod extraherar bara `id`, `name`, `type`, `size`, `createTime` fran varje item. Vi utökar med:
-
-```text
-versionUrn: item.relationships?.tip?.data?.id || null
-derivativeUrn: included?.find(v => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null
-```
-
-Ingen ny endpoint behövs, inget permissions-problem.
-
----
-
-## Del 2: sync-bim-data med Model Properties API
-
-Samma flode som i den godkanda planen, men nu med versionUrn direkt fran folder contents:
-
-1. Anvandaren klickar "Synka BIM-data" pa en mapp
-2. Items har redan versionUrn fran list-folders
-3. Edge function anropar Model Properties API:
-   - POST `indexes:batch-status` med versionUrns
-   - Polla tills FINISHED
-   - Hamta fields + properties
-   - Filtrera ut Levels och Rooms
-4. Upserta till assets-tabellen
-
-### Teknisk forandring
-
-`sync-bim-data` actionet behover INTE langre hamta versionUrn -- det skickas med fran UI:t som redan har det fran list-folders.
-
----
-
-## Del 3: 3D-modeller fran ACC till XKT
-
-### Bakgrund
-
-Nar en RVT/IFC-fil laddas upp till ACC konverteras den automatiskt till SVF2-format (Autodesks 3D-visningsformat). Vi behover fa den till XKT-format for att anvanda i xeokit-viewern i Geminus.
-
-### Konverteringskedjan
+### Korrekt losning: NavVis Frontend API (SDK)
+Enligt NavVis-dokumentationen ar det ratta sattet att integrera Ivion:
 
 ```text
-RVT/IFC (original i ACC)
-    |
-    v
-SVF2 (konverteras automatiskt av ACC vid uppladdning)
-    |
-    v  [svf-utils / forge-convert-utils]
-glTF 2.0 (oppet 3D-format)
-    |
-    v  [convert2xkt]
-XKT (xeokit-format, redan anvant i Geminus)
+import { getApi, ApiInterface } from "@navvis/ivion";
+
+// Ladda SDK dynamiskt fran Ivion-instansen:
+getApi("https://swg.iv.navvis.com/").then((iv: ApiInterface) => {
+  // Lasa position (MainViewInterface):
+  const image = iv.getMainView().getImage();  // Aktiv bild med position
+  const viewDir = iv.getMainView().currViewingDir;  // lon/lat i radianer
+
+  // Navigera till position:
+  iv.moveToGeoLocation(position, isLocal, viewDir, fixedLat, fov, normal, forceLoc);
+  iv.moveToImageId(imageId, viewDir, fov);
+});
 ```
 
-### Tre alternativ for 3D-visning
+Dock kraver `@navvis/ivion` NPM-paketet att Ivion renderas som en `<div>` (inte iframe). For iframe-embeddings maste vi anvanda en alternativ strategi.
 
-#### Alternativ A: SVF2 --> glTF --> XKT (rekommenderat)
+## Losning: Ivion URL-polling + nearest-image navigation
 
-**Verktyg:**
-- `svf-utils` (npm: svf-utils, av Petr Broz): Konverterar SVF2 till glTF. Stödjer SVF2 direkt med kommandot `svf2-to-gltf`.
-- `convert2xkt` (npm: @xeokit/xeokit-convert): Konverterar glTF till XKT.
+Eftersom vi anvander iframe-embedding och inte kan ladda `@navvis/ivion` SDK:t direkt, implementerar vi en robust synk-mekanism baserad pa:
 
-**Flode:**
-1. Hamta derivative URN fran folder contents (redan tillgangligt i `included`-arrayen)
-2. En ny edge function laddar ner SVF2-datat via Model Derivative API
-3. Konverterar SVF2 till glTF (med svf-utils)
-4. Konverterar glTF till XKT (med convert2xkt)
-5. Laddar upp XKT till Supabase Storage (befintlig `xkt-models`-bucket)
+### 3D till 360: Nearest Image Navigation via URL-uppdatering
+1. Nar 3D-kameran andras, hitta narmaste Ivion-bild till 3D-positionen (redan implementerat i `findNearestImage`)
+2. Istallet for att andra `iframe.src` (som tvingar omladdning), anvand URL hash-fragment eller `window.history.replaceState` - men detta fungerar inte cross-origin
+3. **NY STRATEGI**: Byt fran iframe till `@navvis/ivion` SDK-rendering direkt i en `<div>`. SDK:t laddas dynamiskt fran Ivion-instansens URL
 
-**Fordelar:**
-- Anvander befintlig xeokit-viewer -- ingen ny viewer behövs
-- Automatisk pipeline -- klicka "Konvertera" och vanta
-- Samma visningssatt som idag
+### 360 till 3D: Periodisk URL-polling
+1. **NY STRATEGI**: Lasa Ivion iframe-URL:en periodiskt (via `getShareUrl()` om SDK ar tillgangligt, annars URL-polling)
+2. Extrahera `image=XXX` och `vlon`/`vlat` fran URL:en
+3. Slaa upp bild-positionen i image cache
+4. Uppdatera 3D-viewern
 
-**Utmaning:**
-- Kräver Node.js-runtime (edge functions kör Deno, inte Node.js)
-- `svf-utils` och `convert2xkt` ar Node.js-paket
-- Losning: En separat konverteringstjänst, eller anvanda Autodesks experimentella AWS-baserade tjänst
+## Implementationsplan
 
-#### Alternativ B: Autodesks experimentella SVF-till-glTF-tjänst
+### Steg 1: Byt Ivion fran iframe till SDK-rendering
 
-Autodesk har en offentlig experimentell tjänst (`aps-extra-derivatives`) som konverterar SVF direkt till glTF/GLB/USDZ via ett REST-API.
+**Fil: `src/components/viewer/Ivion360View.tsx`**
+- Byt fran `<iframe>` till en `<div id="ivion-container">`
+- Ladda NavVis SDK dynamiskt fran Ivion-instansens URL med ett script-element: `<script src="https://swg.iv.navvis.com/ivion.js">`
+- Anvand `getApi(ivionUrl)` for att fa `ApiInterface`
+- Exponera API-instansen via en ref for synk-hooken
 
+### Steg 2: Implementera riktig bi-direktionell synk med SDK
+
+**Fil: `src/hooks/useIvionCameraSync.ts`**
+Skriv om hooken helt for att anvanda SDK:t:
+
+**360 till 3D (Ivion leder):**
+1. Anvand `iv.getMainView().getImage()` for att lasa aktiv bild (position i lokala koordinater)
+2. Anvand `iv.getMainView().currViewingDir` for att lasa kamerariktning (lon/lat radianer)
+3. Polla dessa varden med `requestAnimationFrame` eller `setInterval(200ms)`
+4. Nar position andras: uppdatera `ViewerSyncContext` -> 3D-viewern flyer till positionen
+
+**3D till 360 (3D-viewern leder):**
+1. Nar 3D-kameran andras, hamta eye-position och heading
+2. Hitta narmaste Ivion-bild i image cache (redan implementerat)
+3. Anvand `iv.moveToImageId(nearestImageId, viewDir, fov)` for att navigera Ivion
+4. Anvand `iv.getMainView().updateOrientation({ lon, lat })` for att satta kamerariktning
+
+### Steg 3: Fixa initial synk-position
+
+**Fil: `src/pages/SplitViewer.tsx`**
+1. Nar split view oppnas, hamta startbild fran `building_settings.ivion_start_vlon/vlat`
+2. Ladda narmaste Ivion-bild till 3D-viewerns initiala kameraposition
+3. Navigera bade 3D och 360 till samma startpunkt
+
+### Steg 4: Fixa 3D-modell-laddning i split view
+
+**Fil: `src/pages/SplitViewer.tsx` och `src/components/viewer/AssetPlusViewer.tsx`**
+1. Lagg till tydlig felhantering nar XKT-modeller inte hittas
+2. Visa laddningsstatus tydligt (spinner + meddelande)
+3. Kontrollera att `allData` faktiskt innehaller byggnaden innan rendering
+
+### Steg 5: Koordinattransformation
+
+**Fil: `src/lib/coordinate-transform.ts`**
+- Ivion SDK ger positioner i lokala koordinater (meter, samma som BIM)
+- Om koordinatsystemen inte matchar, anvand `moveToGeoLocation` med `isLocal=true` for att undvika WGS84-konvertering
+- Heading-konvertering: Ivion anvander lon/lat (radianer), xeokit anvander heading (grader) -- konverteringsfunktionerna finns redan
+
+## Tekniska detaljer
+
+### NavVis SDK dynamisk laddning
 ```text
-POST https://m5ey85w3lk.execute-api.us-west-2.amazonaws.com/...
+// Ladda SDK script fran Ivion-instansen
+const script = document.createElement('script');
+script.src = `${ivionBaseUrl}/ivion.js`;
+script.onload = () => {
+  const getApi = (window as any).NavVis?.getApi || (window as any).getApi;
+  getApi(ivionBaseUrl).then((iv) => {
+    ivApiRef.current = iv;
+    // SDK redo -- starta synk
+  });
+};
+document.head.appendChild(script);
 ```
 
-**Flode:**
-1. Skicka derivative URN till tjänsten
-2. Vanta pa konvertering
-3. Ladda ner glTF-resultatet
-4. Konvertera till XKT med convert2xkt
-5. Ladda upp till Supabase Storage
+### Synk-loop (huvudlogik)
+```text
+// Polling varje 200ms
+setInterval(() => {
+  if (!syncLocked || !ivApiRef.current) return;
 
-**Fordelar:**
-- Slipper kora svf-utils sjalv
-- REST-API som gar att anropa fran edge function
+  const mainView = ivApiRef.current.getMainView();
+  const image = mainView.getImage();
+  const viewDir = mainView.currViewingDir; // { lon, lat } radianer
 
-**Utmaning:**
-- "Experimentell" -- kan forsvinna eller andras
-- Stödjer mojligtvis inte SVF2 (bara SVF1)
-- Fortfarande behover convert2xkt koras nagonstans
+  if (image && image.id !== lastImageIdRef.current) {
+    lastImageIdRef.current = image.id;
+    const pos = image.location; // { x, y, z } meter
+    const heading = viewDir.lon * (180 / Math.PI);
+    const pitch = viewDir.lat * (180 / Math.PI);
+    updateFromIvion({ x: pos.x, y: pos.y, z: pos.z }, heading, pitch);
+  }
+}, 200);
+```
 
-#### Alternativ C: Autodesk Viewer (backup)
+### 3D till 360 navigering
+```text
+// Nar 3D-kameran andras och syncLocked=true:
+const nearestImage = findNearestImage(eye3D);
+if (nearestImage && nearestImage.id !== lastSentImageId) {
+  lastSentImageId = nearestImage.id;
+  const viewDir = { lon: headingRad, lat: pitchRad };
+  ivApiRef.current.moveToImageId(nearestImage.id, viewDir, undefined);
+}
+```
 
-Integrera Autodesks egen Viewer SDK direkt i Geminus. Modellerna visas direkt fran ACC utan konvertering.
+### Fallback for iframe-lage
+Om SDK-laddning misslyckas (t.ex. CORS-problem), behall nuvarande iframe-baserade losning men med forbattrad URL-polling:
+- Anvand `setInterval` for att lasa iframe-URL:en (om same-origin)
+- Fallback till manuell synk-knapp som finns idag
 
-**Flode:**
-1. Hamta derivative URN fran folder contents
-2. Ladda Autodesk Viewer SDK i browsern
-3. Visa modellen direkt
+## Andringar per fil
 
-**Fordelar:**
-- Ingen konvertering behovs
-- Alltid senaste versionen av modellen
-- Stödjer alla Autodesk-format
+| Fil | Andringar |
+|-----|-----------|
+| `src/components/viewer/Ivion360View.tsx` | Byt fran iframe till div + SDK-rendering. Exponera API-ref. Behall iframe som fallback. |
+| `src/hooks/useIvionCameraSync.ts` | Skriv om for SDK-baserad synk (polling position + moveToImageId). Behall image-cache for nearest-image-sokning. |
+| `src/pages/SplitViewer.tsx` | Fixa initial synk-position. Forbattra felhantering for modell-laddning. |
+| `src/context/ViewerSyncContext.tsx` | Inga stora andringar -- bara eventuellt lagre debounce (50ms istf 100ms) |
+| `src/hooks/useViewerCameraSync.ts` | Smarre fix: sakerstalla att isSyncing-flaggan nollstalls korrekt |
+| `src/lib/coordinate-transform.ts` | Eventuella justeringar for Ivion lon/lat konvertering |
 
-**Nackdelar:**
-- Kräver en andra viewer i Geminus (bade xeokit och Autodesk Viewer)
-- Annorlunda UX -- tva olika 3D-visningssatt
-- Kräver Autodesk-inloggning for att visa modeller
-- Mer komplex kodbas
+## Implementationsordning
 
-### Rekommendation
+1. Forst: Undersok om `@navvis/ivion` SDK:t kan laddas dynamiskt i vart anvandningsfall (CORS, licens)
+2. Implementera SDK-baserad rendering i Ivion360View (byt fran iframe till div)
+3. Implementera bi-direktionell synk med SDK (polling + moveToImageId)
+4. Fixa initial startposition
+5. Fixa 3D-modell-laddningsproblem
+6. Testa hela flodet end-to-end
 
-**Steg 1 (nu):** Implementera BIM-synk (Del 1 + 2) for att hamta byggnadsstruktur (plan, rum) fran Model Properties API. Detta behöver inte 3D-konvertering.
+## Risker och alternativ
 
-**Steg 2 (nasta):** Undersök Alternativ A (SVF2 --> glTF --> XKT) genom att bygga en test-pipeline. De tva huvudsakliga utmaningarna ar:
-- Kora `svf-utils` i Deno (edge function) -- kan behova en extern tjanst
-- Kora `convert2xkt` for att fa slutligt XKT-format
-
-**Steg 3 (backup):** Om konverteringspipelinen visar sig for komplex, implementera Alternativ C (Autodesk Viewer) som ett sekundart visningslage i Geminus.
-
----
-
-## Andringslista for denna sprint
-
-### Prioritet 1: BIM-hierarki (Building, Storey, Space)
-
-| Fil | Andring |
-|-----|---------|
-| `supabase/functions/acc-sync/index.ts` | Utoka `list-folders` att extrahera `versionUrn` och `derivativeUrn` fran befintligt folder contents-svar |
-| `supabase/functions/acc-sync/index.ts` | Nytt `sync-bim-data` action med Model Properties-flödet |
-| `src/components/settings/ApiSettingsModal.tsx` | "Synka BIM-data"-knapp med progress |
-
-### Prioritet 2: 3D-modellkonvertering (framtid)
-
-| Fil | Andring |
-|-----|---------|
-| Ny edge function eller extern tjanst | SVF2-nedladdning + glTF-konvertering |
-| Ev. ny edge function | glTF --> XKT-konvertering |
-| Befintlig XKT-cache | Lagring av konverterade modeller |
-
-### Implementationsordning
-
-1. Utoka `list-folders` med versionUrn/derivativeUrn fran befintligt svar
-2. Implementera `sync-bim-data` action (Model Properties-flödet)
-3. Lagga till synk-knapp i UI
-4. Testa med "Jonkoping Science Tower"
-5. (Framtid) Prototyp for SVF2 --> glTF --> XKT-pipeline
-
+- **Risk**: Ivion SDK kraver licens (`isLicensed()` returnerar false) -- DA: fallback till forbattrad iframe-polling
+- **Risk**: CORS blockerar SDK-laddning -- DA: proxyera via edge function eller anvand iframe med periodisk URL-lasning
+- **Risk**: Ivion koordinater matchar inte BIM-koordinater -- DA: behover offset-kalibrering per byggnad (laggs i building_settings)
