@@ -105,19 +105,73 @@ export interface IvionApi {
 /** Load status for the SDK */
 export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
+type GetApiFn = (baseUrl: string, config?: any) => Promise<IvionApi>;
+
+/**
+ * Load the getApi bootstrap function from a remote script URL.
+ * The NavVis IVION instance (and the CORS proxy) serve ivion.js at the root.
+ * After loading, getApi is available on window.IV.getApi (or window.getApi).
+ */
+function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
+  return new Promise((resolve, reject) => {
+    // Check if already loaded from a previous attempt
+    const win = window as any;
+    const existing: GetApiFn | undefined =
+      win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
+    if (existing) {
+      resolve(existing);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.crossOrigin = 'anonymous';
+
+    const cleanup = () => {
+      script.onload = null;
+      script.onerror = null;
+    };
+
+    script.onload = () => {
+      cleanup();
+      const fn: GetApiFn | undefined =
+        win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
+      if (fn) {
+        resolve(fn);
+      } else {
+        reject(new Error('ivion.js loaded but getApi not found on window'));
+      }
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error(`Failed to load script: ${scriptUrl}`));
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
 /**
  * Dynamically load the NavVis IVION SDK.
- * 
- * This attempts to import getApi from the @navvis/ivion npm package.
- * If the package is installed (via .tgz), it initializes the SDK directly.
- * If not installed, it rejects so the caller can fall back to iframe mode.
- * 
+ *
+ * Loading priority:
+ * 1. Try the @navvis/ivion npm package (fastest, preferred if installed)
+ * 2. Try loading ivion.js directly from the IVION instance (script tag)
+ * 3. Try loading ivion.js through the CORS proxy edge function
+ *
+ * If all methods fail the caller falls back to iframe mode.
+ *
  * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
- * @param timeoutMs - Maximum time to wait for SDK initialization (default 10s)
+ * @param timeoutMs - Maximum time to wait for SDK initialization (default 15s)
  * @param loginToken - Optional JWT token for automatic authentication
  * @returns Promise resolving to the Ivion API interface
  */
-export async function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, loginToken?: string): Promise<IvionApi> {
+export async function loadIvionSdk(
+  baseUrl: string,
+  timeoutMs: number = 15000,
+  loginToken?: string,
+): Promise<IvionApi> {
   // Build config object for getApi
   const sdkConfig: Record<string, any> = {};
   if (loginToken) {
@@ -125,38 +179,64 @@ export async function loadIvionSdk(baseUrl: string, timeoutMs: number = 10000, l
     console.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
-  // Try to dynamically import the @navvis/ivion npm package
-  let getApi: ((baseUrl: string, config?: any) => Promise<IvionApi>) | null = null;
+  let getApi: GetApiFn | null = null;
 
+  // ── Attempt 1: npm package ────────────────────────────────────────
   try {
-    // Use a variable to prevent bundler from statically analyzing the import
     const moduleName = '@navvis/ivion';
     const ivionModule = await import(/* @vite-ignore */ moduleName);
-    getApi = ivionModule.getApi || ivionModule.default?.getApi;
-    console.log('[Ivion SDK] @navvis/ivion npm package loaded successfully');
+    getApi = ivionModule.getApi || ivionModule.default?.getApi || null;
+    if (getApi) {
+      console.log('[Ivion SDK] Loaded via @navvis/ivion npm package');
+    }
   } catch {
-    console.log('[Ivion SDK] @navvis/ivion npm package not installed');
-    console.log('[Ivion SDK] To enable SDK mode, download the .tgz from NavVis Knowledge Base');
-    console.log('[Ivion SDK] and add "@navvis/ivion": "file:navvis-ivion-X.X.X.tgz" to package.json');
-    throw new Error(
-      'NavVis SDK not available. Install @navvis/ivion npm package (.tgz from NavVis Knowledge Base) for SDK mode.'
-    );
+    console.log('[Ivion SDK] npm package not installed, trying script-tag…');
+  }
+
+  // ── Attempt 2: script tag from IVION instance ─────────────────────
+  if (!getApi) {
+    const directUrl = `${baseUrl.replace(/\/$/, '')}/ivion.js`;
+    try {
+      getApi = await loadGetApiViaScript(directUrl);
+      console.log('[Ivion SDK] Loaded via direct script tag:', directUrl);
+    } catch (e) {
+      console.log('[Ivion SDK] Direct script-tag failed:', (e as Error).message);
+    }
+  }
+
+  // ── Attempt 3: script tag through CORS proxy ──────────────────────
+  if (!getApi) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (supabaseUrl) {
+      const proxyUrl = `${supabaseUrl}/functions/v1/ivion-proxy/ivion.js`;
+      try {
+        getApi = await loadGetApiViaScript(proxyUrl);
+        console.log('[Ivion SDK] Loaded via CORS proxy:', proxyUrl);
+      } catch (e) {
+        console.log('[Ivion SDK] CORS proxy script-tag failed:', (e as Error).message);
+      }
+    }
   }
 
   if (!getApi) {
-    throw new Error('NavVis SDK package found but getApi export is missing. Check package version.');
+    throw new Error(
+      'NavVis SDK not available. All loading methods failed (npm, direct, proxy).',
+    );
   }
 
   // Initialize with timeout
   const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
-  
+
   const apiPromise = getApi(baseUrl, config);
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Ivion SDK initialization timed out after ${timeoutMs}ms`)), timeoutMs)
+    setTimeout(
+      () => reject(new Error(`Ivion SDK initialization timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    ),
   );
 
   const iv = await Promise.race([apiPromise, timeoutPromise]);
-  console.log('[Ivion SDK] Initialized successfully via @navvis/ivion package');
+  console.log('[Ivion SDK] Initialized successfully');
   return iv;
 }
 
