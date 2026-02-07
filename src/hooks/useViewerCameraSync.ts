@@ -118,6 +118,8 @@ export function useViewerCameraSync({
     // Call the callback if provided (for custom fly-to behavior)
     if (onSyncReceived) {
       onSyncReceived(syncState.position, syncState.heading, syncState.pitch);
+      // Ensure isSyncing is always cleared even if callback doesn't handle it
+      setTimeout(() => { isSyncing.current = false; }, 1000);
     } else {
       // Default behavior: fly to the position
       const camera = xeokitViewer.scene.camera;
@@ -138,6 +140,8 @@ export function useViewerCameraSync({
             isSyncing.current = false;
           }
         );
+        // Safety timeout: clear isSyncing after max 2s even if callback not fired
+        setTimeout(() => { isSyncing.current = false; }, 2000);
       } else {
         // Fallback to direct camera set
         camera.eye = eye;

@@ -86,7 +86,7 @@ export const ViewerSyncProvider: React.FC<ViewerSyncProviderProps> = ({
   
   // Debounce ref to prevent rapid updates
   const lastUpdateRef = useRef<number>(0);
-  const DEBOUNCE_MS = 100;
+  const DEBOUNCE_MS = 50; // Reduced for faster SDK-based sync
 
   const updateFrom3D = useCallback((position: LocalCoords, heading: number, pitch: number = 0) => {
     const now = Date.now();
