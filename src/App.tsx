@@ -26,6 +26,8 @@ const SplitViewer = lazy(() => import("@/pages/SplitViewer"));
 const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
 // Fault Report page (public, no auth required)
 const FaultReport = lazy(() => import("@/pages/FaultReport"));
+// Autodesk OAuth callback page (public, no auth required)
+const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 
 const queryClient = new QueryClient();
 
@@ -130,6 +132,16 @@ const App = () => (
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <FaultReport />
+              </Suspense>
+            } 
+          />
+          
+          {/* Autodesk OAuth callback - public, captures auth code */}
+          <Route 
+            path="/auth/autodesk/callback" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <AutodeskCallback />
               </Suspense>
             } 
           />
