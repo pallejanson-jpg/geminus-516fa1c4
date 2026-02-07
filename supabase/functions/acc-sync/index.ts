@@ -672,13 +672,22 @@ serve(async (req: Request) => {
 
           const upserted = await upsertLocationAssets(supabase, mapped, projectId);
 
-          // Save project ID to cache for future reference
+          // Save project ID and region to cache for future reference
           await supabase
             .from("asset_plus_endpoint_cache")
             .upsert(
               { key: "acc_project_id", value: projectId, updated_at: new Date().toISOString() },
               { onConflict: "key" },
             );
+
+          if (region) {
+            await supabase
+              .from("asset_plus_endpoint_cache")
+              .upsert(
+                { key: "acc_region", value: region, updated_at: new Date().toISOString() },
+                { onConflict: "key" },
+              );
+          }
 
           await updateSyncState(supabase, "acc-locations", "completed", upserted);
 
@@ -788,12 +797,14 @@ serve(async (req: Request) => {
           .select("id", { count: "exact", head: true })
           .like("fm_guid", "acc-asset-%");
 
-        // Get saved project ID
-        const { data: cachedProject } = await supabase
+        // Get saved project ID and region
+        const { data: cachedValues } = await supabase
           .from("asset_plus_endpoint_cache")
-          .select("value")
-          .eq("key", "acc_project_id")
-          .maybeSingle();
+          .select("key, value")
+          .in("key", ["acc_project_id", "acc_region"]);
+
+        const savedProjectId = cachedValues?.find((c: any) => c.key === "acc_project_id")?.value || null;
+        const savedRegion = cachedValues?.find((c: any) => c.key === "acc_region")?.value || null;
 
         return new Response(
           JSON.stringify({
@@ -802,7 +813,160 @@ serve(async (req: Request) => {
             assetsSyncState: syncStates?.find((s: any) => s.subtree_id === "acc-assets") || null,
             localLocationCount: locCount || 0,
             localAssetCount: assetCount || 0,
-            savedProjectId: cachedProject?.value || null,
+            savedProjectId,
+            savedRegion,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- LIST FOLDERS (Data Management API) ----
+      case "list-folders": {
+        if (!projectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "projectId is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+        const accountId = Deno.env.get("ACC_ACCOUNT_ID");
+        if (!accountId) {
+          return new Response(
+            JSON.stringify({ success: false, error: "ACC_ACCOUNT_ID not configured" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const cleanAccountId = accountId.replace(/^b\./, "");
+        const hubId = `b.${cleanAccountId}`;
+        const cleanProjectId = projectId.replace(/^b\./, "");
+        const fullProjectId = `b.${cleanProjectId}`;
+        const regionHeaders = getRegionHeader(region);
+
+        // Step 1: Get top folders
+        const topFoldersUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/topFolders`;
+        console.log(`Fetching top folders: ${topFoldersUrl}`);
+        const topRes = await fetch(topFoldersUrl, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+            ...regionHeaders,
+          },
+        });
+
+        if (!topRes.ok) {
+          const errorText = await topRes.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Top folders API failed (${topRes.status}): ${errorText}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const topData = await topRes.json();
+        const topFolders = topData.data || [];
+        console.log(`Found ${topFolders.length} top-level folders`);
+
+        // Step 2: Find "Project Files" folder (or similar)
+        const projectFilesFolder = topFolders.find((f: any) => {
+          const name = f.attributes?.name?.toLowerCase() || "";
+          return name.includes("project file") || name.includes("projektfiler") || name === "project files";
+        }) || topFolders[0]; // Fallback to first folder
+
+        if (!projectFilesFolder) {
+          return new Response(
+            JSON.stringify({ success: true, folders: [], message: "No top-level folders found" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const rootFolderId = projectFilesFolder.id;
+        const rootFolderName = projectFilesFolder.attributes?.name || "Root";
+        console.log(`Using root folder: "${rootFolderName}" (${rootFolderId})`);
+
+        // Step 3: List contents of root folder (sub-folders = buildings)
+        const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/folders/${rootFolderId}/contents`;
+        const contentsRes = await fetch(contentsUrl, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+            ...regionHeaders,
+          },
+        });
+
+        if (!contentsRes.ok) {
+          const errorText = await contentsRes.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Folder contents API failed (${contentsRes.status}): ${errorText}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const contentsData = await contentsRes.json();
+        const allItems = contentsData.data || [];
+
+        // Separate folders (buildings) and items (loose files)
+        const subFolders = allItems.filter((item: any) => item.type === "folders");
+        const looseItems = allItems.filter((item: any) => item.type === "items");
+
+        console.log(`Found ${subFolders.length} sub-folders, ${looseItems.length} loose items`);
+
+        // Step 4: For each sub-folder, fetch its contents (BIM files)
+        const folders: any[] = [];
+        for (const folder of subFolders) {
+          const folderId = folder.id;
+          const folderName = folder.attributes?.name || folderId;
+
+          try {
+            const subUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/folders/${folderId}/contents`;
+            const subRes = await fetch(subUrl, {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json",
+                ...regionHeaders,
+              },
+            });
+
+            let items: any[] = [];
+            if (subRes.ok) {
+              const subData = await subRes.json();
+              items = (subData.data || [])
+                .filter((item: any) => item.type === "items")
+                .map((item: any) => ({
+                  id: item.id,
+                  name: item.attributes?.displayName || item.attributes?.name || item.id,
+                  type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
+                  size: item.attributes?.storageSize || null,
+                  createTime: item.attributes?.createTime || null,
+                }));
+            }
+
+            folders.push({
+              id: folderId,
+              name: folderName,
+              items,
+            });
+          } catch (err) {
+            console.error(`Error fetching contents of folder "${folderName}":`, err);
+            folders.push({ id: folderId, name: folderName, items: [], error: true });
+          }
+        }
+
+        // Include any top-level items not in subfolders
+        const topLevelItems = looseItems.map((item: any) => ({
+          id: item.id,
+          name: item.attributes?.displayName || item.attributes?.name || item.id,
+          type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
+          size: item.attributes?.storageSize || null,
+          createTime: item.attributes?.createTime || null,
+        }));
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            rootFolder: rootFolderName,
+            folders,
+            topLevelItems,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
