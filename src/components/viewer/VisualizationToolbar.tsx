@@ -15,6 +15,7 @@ import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVEN
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
 import SidePopPanel from "./SidePopPanel";
+import XrayToggle from "./XrayToggle";
 import AnnotationCategoryList from "./AnnotationCategoryList";
 import CreateViewDialog from "./CreateViewDialog";
 import CreateIssueDialog from "./CreateIssueDialog";
@@ -902,6 +903,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       </div>
                       <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                     </div>
+                  )}
+
+                  {/* X-ray Toggle */}
+                  {isToolVisible('xray') && (
+                    <XrayToggle viewerRef={viewerRef} />
                   )}
 
                   {isToolVisible('annotations') && (
