@@ -104,7 +104,25 @@ export default function Ivion360View({
 
   // ─── SDK Loading ──────────────────────────────────────────────────
 
-  // SDK loading with robust fallback
+  // Fetch a loginToken from the backend
+  const fetchLoginToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ivion-poi', {
+        body: { action: 'get-login-token', buildingFmGuid },
+      });
+      if (error || !data?.success) {
+        console.warn('[Ivion360View] Failed to fetch loginToken:', error || data?.error);
+        return null;
+      }
+      console.log('[Ivion360View] loginToken obtained, expires in', Math.round((data.expiresInMs || 0) / 1000), 's');
+      return data.loginToken;
+    } catch (e) {
+      console.warn('[Ivion360View] loginToken fetch error:', e);
+      return null;
+    }
+  }, [buildingFmGuid]);
+
+  // SDK loading with loginToken and robust fallback
   useEffect(() => {
     if (!ivionUrl || !syncEnabled) {
       setSdkStatus('idle');
@@ -134,8 +152,6 @@ export default function Ivion360View({
         const baseUrl = parsedUrl.origin;
         
         // Step 1: Quick reachability probe using fetch
-        // fetch() properly throws on network errors (ERR_TUNNEL_CONNECTION_FAILED, etc.)
-        // unlike script.onerror which may not fire in all environments
         console.log('[Ivion360View] Probing SDK endpoint:', `${baseUrl}/ivion.js`);
         try {
           const probeController = new AbortController();
@@ -143,7 +159,7 @@ export default function Ivion360View({
           await fetch(`${baseUrl}/ivion.js`, {
             method: 'HEAD',
             signal: probeController.signal,
-            mode: 'no-cors', // Allows cross-origin probe without CORS headers
+            mode: 'no-cors',
           });
           clearTimeout(probeTimeout);
           console.log('[Ivion360View] SDK endpoint reachable');
@@ -156,14 +172,24 @@ export default function Ivion360View({
         
         if (cancelled) return;
         
-        // Step 2: Endpoint is reachable - create container and load SDK
+        // Step 2: Fetch loginToken for auto-authentication
+        const loginToken = await fetchLoginToken();
+        if (cancelled) return;
+        
+        if (loginToken) {
+          console.log('[Ivion360View] Will use loginToken for SDK auto-auth');
+        } else {
+          console.log('[Ivion360View] No loginToken available, SDK will require manual login');
+        }
+        
+        // Step 3: Create container and load SDK with loginToken
         if (sdkContainerRef.current && !ivionElementRef.current) {
           const ivionEl = createIvionElement(sdkContainerRef.current);
           ivionElementRef.current = ivionEl;
         }
         
         console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
-        const api = await loadIvionSdk(baseUrl, 10000);
+        const api = await loadIvionSdk(baseUrl, 10000, loginToken || undefined);
         
         if (cancelled) return;
         
@@ -171,8 +197,10 @@ export default function Ivion360View({
         updateStatus('ready');
         setIsLoading(false);
         
-        console.log('[Ivion360View] ✅ SDK mode active');
-        toast.success('360° SDK ansluten', { description: 'Automatisk synkronisering aktiv' });
+        console.log('[Ivion360View] ✅ SDK mode active', loginToken ? '(auto-authenticated)' : '(manual login needed)');
+        toast.success('360° SDK ansluten', { 
+          description: loginToken ? 'Automatisk autentisering aktiv' : 'Automatisk synkronisering aktiv',
+        });
       } catch (err) {
         if (cancelled) return;
         
@@ -189,7 +217,29 @@ export default function Ivion360View({
       cleanupSdkElement();
       ivApiRef.current = null;
     };
-  }, [ivionUrl, syncEnabled]);
+  }, [ivionUrl, syncEnabled, fetchLoginToken]);
+
+  // Token refresh loop — keep SDK authenticated
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || !ivApiRef.current?.auth) return;
+
+    const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+
+    const refreshToken = async () => {
+      try {
+        const newToken = await fetchLoginToken();
+        if (newToken && ivApiRef.current?.auth) {
+          ivApiRef.current.auth.updateToken(newToken);
+          console.log('[Ivion360View] Token refreshed successfully');
+        }
+      } catch (e) {
+        console.warn('[Ivion360View] Token refresh failed (SDK may still work):', e);
+      }
+    };
+
+    const interval = setInterval(refreshToken, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [sdkStatus, fetchLoginToken]);
 
   // ─── Token renewal ────────────────────────────────────────────────
 
