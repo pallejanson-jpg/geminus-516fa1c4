@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -166,6 +166,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
     const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>('US');
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
+    
+    // ACC folder browsing state
+    const [accFolders, setAccFolders] = useState<any[] | null>(null);
+    const [accTopLevelItems, setAccTopLevelItems] = useState<any[]>([]);
+    const [accRootFolderName, setAccRootFolderName] = useState('');
+    const [isLoadingAccFolders, setIsLoadingAccFolders] = useState(false);
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+    const [hasLoadedAccSettings, setHasLoadedAccSettings] = useState(false);
     
     // Autodesk 3-legged OAuth state
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
@@ -363,8 +371,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (error) throw error;
             if (data?.success) {
                 setAccStatus(data);
-                if (data.savedProjectId && !selectedAccProjectId) {
-                    setSelectedAccProjectId(data.savedProjectId);
+                if (data.savedProjectId) {
+                    if (!manualAccProjectId) setManualAccProjectId(data.savedProjectId);
+                    if (!selectedAccProjectId) setSelectedAccProjectId(data.savedProjectId);
+                }
+                if (data.savedRegion) {
+                    setAccRegion(data.savedRegion as 'US' | 'EMEA');
                 }
             }
         } catch (err: any) {
@@ -372,6 +384,65 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         } finally {
             setIsCheckingAccStatus(false);
         }
+    };
+
+    // Auto-load saved ACC settings on mount
+    useEffect(() => {
+        if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
+            setHasLoadedAccSettings(true);
+            handleCheckAccStatus();
+        }
+    }, [isOpen, accAuthStatus, hasLoadedAccSettings]);
+
+    // Reset ACC settings loaded flag when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            setHasLoadedAccSettings(false);
+        }
+    }, [isOpen]);
+
+    // Fetch ACC folders via Data Management API
+    const handleFetchAccFolders = async () => {
+        const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
+        if (!effectiveProjectId) {
+            toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
+            return;
+        }
+        setIsLoadingAccFolders(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'list-folders', projectId: effectiveProjectId, region: accRegion }
+            });
+            if (error) throw error;
+            if (data?.success) {
+                setAccFolders(data.folders || []);
+                setAccTopLevelItems(data.topLevelItems || []);
+                setAccRootFolderName(data.rootFolder || '');
+                toast({ title: 'Mappar hämtade', description: `Hittade ${(data.folders || []).length} mappar i "${data.rootFolder}".` });
+            } else {
+                toast({ variant: 'destructive', title: 'Fel', description: data?.error || 'Kunde inte hämta mappar' });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsLoadingAccFolders(false);
+        }
+    };
+
+    const toggleFolder = (folderId: string) => {
+        setExpandedFolders(prev => {
+            const next = new Set(prev);
+            if (next.has(folderId)) next.delete(folderId);
+            else next.add(folderId);
+            return next;
+        });
+    };
+
+    const formatFileSize = (bytes: number | null) => {
+        if (!bytes) return '';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
     // Save app configs to localStorage (no backend table for apps currently)
@@ -1937,6 +2008,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             Synka tillgångar
                                                         </Button>
                                                         <Button
+                                                            onClick={handleFetchAccFolders}
+                                                            disabled={isLoadingAccFolders}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="gap-1"
+                                                        >
+                                                            {isLoadingAccFolders ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                                                            Visa mappar
+                                                        </Button>
+                                                        <Button
                                                             onClick={handleCheckAccStatus}
                                                             disabled={isCheckingAccStatus}
                                                             size="sm"
@@ -1946,6 +2027,74 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                                                             Status
                                                         </Button>
+                                                    </div>
+                                                )}
+
+                                                {/* ACC Folder Browser */}
+                                                {accFolders !== null && (
+                                                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <Label className="text-sm font-medium flex items-center gap-1.5">
+                                                                <FolderOpen className="h-4 w-4" />
+                                                                {accRootFolderName || 'Mappar'}
+                                                            </Label>
+                                                            <span className="text-xs text-muted-foreground">{accFolders.length} mappar</span>
+                                                        </div>
+                                                        
+                                                        {accFolders.length === 0 && accTopLevelItems.length === 0 && (
+                                                            <p className="text-xs text-muted-foreground italic">Inga mappar eller filer hittades.</p>
+                                                        )}
+
+                                                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                                                            {accFolders.map((folder: any) => (
+                                                                <div key={folder.id} className="rounded border bg-background">
+                                                                    <button
+                                                                        onClick={() => toggleFolder(folder.id)}
+                                                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left hover:bg-muted/50 rounded text-sm"
+                                                                    >
+                                                                        {expandedFolders.has(folder.id) ? (
+                                                                            <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                        ) : (
+                                                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                        )}
+                                                                        <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                                                        <span className="font-medium truncate">{folder.name}</span>
+                                                                        <Badge variant="outline" className="ml-auto text-[10px] shrink-0">{folder.items?.length || 0} filer</Badge>
+                                                                    </button>
+                                                                    
+                                                                    {expandedFolders.has(folder.id) && folder.items && folder.items.length > 0 && (
+                                                                        <div className="px-2.5 pb-2 pl-8 space-y-0.5">
+                                                                            {folder.items.map((item: any) => (
+                                                                                <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
+                                                                                    <File className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                                                    <span className="truncate">{item.name}</span>
+                                                                                    <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
+                                                                                    {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+
+                                                                    {expandedFolders.has(folder.id) && (!folder.items || folder.items.length === 0) && (
+                                                                        <p className="px-2.5 pb-2 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+
+                                                            {accTopLevelItems.length > 0 && (
+                                                                <div className="pt-1 border-t">
+                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2.5 py-1">Filer i rotkatalogen</p>
+                                                                    {accTopLevelItems.map((item: any) => (
+                                                                        <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-2.5 rounded hover:bg-muted/50">
+                                                                            <File className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                                            <span className="truncate">{item.name}</span>
+                                                                            <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
+                                                                            {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )}
 
