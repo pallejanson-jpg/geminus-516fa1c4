@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Camera, X, Plus, ImagePlus } from 'lucide-react';
+import { Camera, X, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -79,41 +79,46 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
     onPhotosChange(photos.filter((_, i) => i !== index));
   };
 
+  const canAddMore = photos.length < maxPhotos;
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
-        {photos.map((url, index) => (
-          <div key={index} className="relative aspect-square rounded-lg overflow-hidden border border-border bg-muted">
-            <img src={url} alt={`Foto ${index + 1}`} className="w-full h-full object-cover" />
-            <Button
-              variant="destructive"
-              size="icon"
-              className="absolute top-1 right-1 h-6 w-6 rounded-full"
-              onClick={() => removePhoto(index)}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-        ))}
+      {/* Explicit "Ta Bild / Bläddra..." button */}
+      {canAddMore && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-2"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+        >
+          {isUploading ? (
+            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Camera className="h-4 w-4" />
+          )}
+          Ta Bild / Bläddra...
+        </Button>
+      )}
 
-        {photos.length < maxPhotos && (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary/50 bg-muted/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-          >
-            {isUploading ? (
-              <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <ImagePlus className="h-6 w-6" />
-                <span className="text-[10px]">Lägg till</span>
-              </>
-            )}
-          </button>
-        )}
-      </div>
+      {/* Photo thumbnails */}
+      {photos.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {photos.map((url, index) => (
+            <div key={index} className="relative aspect-square rounded-lg overflow-hidden border border-border bg-muted">
+              <img src={url} alt={`Foto ${index + 1}`} className="w-full h-full object-cover" />
+              <Button
+                variant="destructive"
+                size="icon"
+                className="absolute top-1 right-1 h-6 w-6 rounded-full"
+                onClick={() => removePhoto(index)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <input
         ref={fileInputRef}

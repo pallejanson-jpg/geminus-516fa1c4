@@ -2,14 +2,16 @@ import React, { useState, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Send, Info } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import { Form, FormField, FormItem, FormControl, FormMessage } from '@/components/ui/form';
 import PhotoCapture from './PhotoCapture';
+import FormFieldWithHelp from './FormFieldWithHelp';
+import ClearableInput from './ClearableInput';
+import ErrorCodeCombobox from './ErrorCodeCombobox';
 
 const faultReportSchema = z.object({
   description: z.string().trim().min(1, 'Beskrivning krävs').max(2000, 'Max 2000 tecken'),
@@ -63,29 +65,17 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
         <CardTitle className="text-lg">Anmäl fel</CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Installation info box */}
-        {(installationNumber || assetName || buildingName) && (
-          <div className="rounded-md bg-muted/60 border border-border p-3 mb-5">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div className="space-y-0.5 min-w-0">
-                {(installationNumber || assetName) && (
-                  <p className="text-sm font-medium">
-                    {installationNumber && (
-                      <span className="font-mono">{installationNumber}</span>
-                    )}
-                    {installationNumber && assetName && ' — '}
-                    {assetName}
-                  </p>
-                )}
-                {(buildingName || spaceName) && (
-                  <p className="text-xs text-muted-foreground">
-                    {buildingName}
-                    {spaceName && ` — ${spaceName}`}
-                  </p>
-                )}
-              </div>
-            </div>
+        {/* Installation info – simple text line matching er-rep.com */}
+        {(installationNumber || assetName) && (
+          <div className="rounded-md bg-muted/40 border border-border px-3 py-2 mb-5">
+            <p className="text-sm">
+              <span className="text-muted-foreground">Installation</span>{' '}
+              {installationNumber && (
+                <span className="font-mono font-medium">{installationNumber}</span>
+              )}
+              {installationNumber && assetName && ' '}
+              {assetName && <span className="font-medium">{assetName}</span>}
+            </p>
           </div>
         )}
 
@@ -97,7 +87,11 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Beskrivning *</FormLabel>
+                  <FormFieldWithHelp
+                    label="Beskrivning"
+                    required
+                    helpText="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer."
+                  />
                   <FormControl>
                     <Textarea
                       placeholder="Beskriv felet så tydligt du kan för att underlätta processen för alla involverade personer"
@@ -110,33 +104,20 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Error code */}
+            {/* Error code – combobox */}
             <FormField
               control={form.control}
               name="errorCode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Felkod</FormLabel>
+                  <FormFieldWithHelp
+                    label="Felkod"
+                    helpText="Ange en matchande felkod om en sådan finns angiven på installationen."
+                  />
                   <FormControl>
-                    <Input placeholder="Ange en matchande felkod" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Email */}
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Återkoppling via e-post</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="Fyll i e-post om du vill ha återkoppling"
-                      {...field}
+                    <ErrorCodeCombobox
+                      value={field.value || ''}
+                      onChange={field.onChange}
                     />
                   </FormControl>
                   <FormMessage />
@@ -144,18 +125,51 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Phone */}
+            {/* Email – clearable */}
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormFieldWithHelp
+                    label="Återkoppling via e-post"
+                    helpText="Fyll i din e-postadress om du vill ha återkoppling om ärendet."
+                  />
+                  <FormControl>
+                    <ClearableInput
+                      type="email"
+                      placeholder="Fyll i e-post om du vill ha återkoppling"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      onClear={() => field.onChange('')}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Phone – clearable */}
             <FormField
               control={form.control}
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Kontakt, telefonnummer</FormLabel>
+                  <FormFieldWithHelp
+                    label="Kontakt, telefonnummer"
+                    helpText="Fyll i ditt telefonnummer om du vill bli kontaktad."
+                  />
                   <FormControl>
-                    <Input
+                    <ClearableInput
                       type="tel"
                       placeholder="Fyll i telefonnummer om du vill bli kontaktad"
-                      {...field}
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      onClear={() => field.onChange('')}
                     />
                   </FormControl>
                   <FormMessage />
@@ -179,12 +193,10 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               className="w-full"
               size="lg"
             >
-              {isSubmitting ? (
+              {isSubmitting && (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
               )}
-              Skicka felanmälan
+              Skicka
             </Button>
           </form>
         </Form>
