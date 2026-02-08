@@ -2572,14 +2572,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // defaultHeightAboveAABB
-        defaultHeightAboveAABB,
-        // defaultMinimumHeightAboveBase
-        defaultMinimumHeightAboveBase,
-        // lookAtSpaceAndInstanceFlyToDuration
-        lookAtSpaceAndInstanceFlyToDuration,
-        // targetElement
-        document.getElementById('AssetPlusViewer'),
+        // additionalDefaultPredicate - undefined = load all models (default behavior)
+        undefined,
+        // externalCustomObjectContextMenuItems
+        undefined,
+        // horizontalAngle (use default)
+        undefined,
+        // verticalAngle (use default)
+        undefined,
       );
 
       console.log("AssetPlusViewer: Viewer mounted successfully");
