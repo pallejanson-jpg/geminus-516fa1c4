@@ -98,6 +98,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             return;
         }
         setSelectedFacility(null);
+        // When navigating to 3D viewer via header, always show building selector
+        if (app === 'assetplus_viewer') {
+            setViewer3dFmGuid(null);
+        }
         setActiveApp(app);
         if (mode) {
             setViewMode(mode);
