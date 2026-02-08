@@ -8,6 +8,7 @@ import IvionRegistrationPanel from "@/components/inventory/IvionRegistrationPane
 import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
 import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
 import type { BuildingOrigin } from "@/lib/coordinate-transform";
+import type { IvionBimTransform } from "@/lib/ivion-bim-transform";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi, type IvionSdkStatus } from "@/lib/ivion-sdk";
 
@@ -33,6 +34,8 @@ interface Ivion360ViewProps {
   ivionSiteIdProp?: string;
   /** Callback when manual sync button is clicked */
   onSyncRequest?: () => void;
+  /** Ivion-to-BIM coordinate transform */
+  ivionBimTransform?: IvionBimTransform;
 }
 
 export default function Ivion360View({ 
@@ -43,6 +46,7 @@ export default function Ivion360View({
   buildingFmGuid: propBuildingFmGuid,
   ivionSiteIdProp,
   onSyncRequest,
+  ivionBimTransform,
 }: Ivion360ViewProps) {
   const isMobile = useIsMobile();
   const { ivion360Context, setIvion360Context } = useContext(AppContext);
@@ -97,6 +101,7 @@ export default function Ivion360View({
     buildingOrigin,
     ivionSiteId: ivionSiteId || '',
     buildingFmGuid,
+    buildingTransform: ivionBimTransform,
   });
 
   // Token renewal state
