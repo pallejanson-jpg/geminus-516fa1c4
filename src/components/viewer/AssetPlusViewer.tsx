@@ -153,6 +153,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const loadLocalAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Keep refs in sync with state
+  useEffect(() => { cacheStatusRef.current = cacheStatus; }, [cacheStatus]);
+  useEffect(() => { showNavCubeRef.current = showNavCube; }, [showNavCube]);
+
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -1245,6 +1249,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [resolveBuildingFmGuid, showAnnotations]);
 
+  // Keep annotation function refs in sync so handleAllModelsLoaded can call latest versions
+  useEffect(() => { loadLocalAnnotationsRef.current = loadLocalAnnotations; }, [loadLocalAnnotations]);
+  useEffect(() => { loadAlarmAnnotationsRef.current = loadAlarmAnnotations; }, [loadAlarmAnnotations]);
+
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
     try {
@@ -1275,7 +1283,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       setXktSyncStatus('done');
       
       // Update cache status if we had a cache interaction
-      if (cacheStatus === 'checking') {
+      if (cacheStatusRef.current === 'checking') {
         setCacheStatus('stored');
       }
 
@@ -1334,12 +1342,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Load local annotations from database
       // IMPORTANT: These are async functions – try/catch only catches synchronous errors.
       // We must use .catch() to handle promise rejections and prevent unhandled crashes.
-      loadLocalAnnotations().catch(e => {
+      // Read from refs to avoid adding these callbacks as dependencies (which would destabilize initializeViewer).
+      loadLocalAnnotationsRef.current?.().catch(e => {
         console.error('loadLocalAnnotations failed:', e);
       });
       
       // Load alarm annotations from BIM geometry
-      loadAlarmAnnotations().catch(e => {
+      loadAlarmAnnotationsRef.current?.().catch(e => {
         console.error('loadAlarmAnnotations failed:', e);
       });
 
@@ -1354,7 +1363,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         if (navCubeCanvas) {
           navCubeRef.current = new NavCubePlugin(xeokitViewer, {
             canvasId: 'navCubeCanvas',
-            visible: showNavCube,
+            visible: showNavCubeRef.current,
             cameraFly: true,
             cameraFlyDuration: 0.5,
             color: '#CFCFCF',
@@ -1396,7 +1405,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     } catch (e) {
       console.error('[handleAllModelsLoaded] Unexpected error:', e);
     }
-  }, [executeDisplayAction, cacheStatus, showNavCube, loadLocalAnnotations, loadAlarmAnnotations]);
+  }, [executeDisplayAction, transparentBackground, ghostOpacity]);
 
   // NavCube visibility is now controlled via React style prop on the canvas
   // The navCubeRef.setVisible() method is NOT used to avoid DOM manipulation crashes
