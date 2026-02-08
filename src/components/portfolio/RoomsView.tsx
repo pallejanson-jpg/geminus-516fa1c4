@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   X,
   Search,
@@ -189,14 +189,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   // Properties dialog state - supports multiple selection
   const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
 
-  // Auto-show properties dialog when items are selected
-  useEffect(() => {
-    if (selectedRows.size > 0) {
-      setShowPropertiesFor(Array.from(selectedRows));
-    } else {
-      setShowPropertiesFor(null);
-    }
-  }, [selectedRows]);
+  // Properties are shown only via explicit "Egenskaper" button click
 
   // DnD sensors
   const sensors = useSensors(
@@ -597,7 +590,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                 onDragEnd={handleDragEnd}
               >
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       {/* Checkbox column header */}
                       <TableHead className="bg-muted/50 w-10">
@@ -648,18 +641,32 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           </TableCell>
                         ))}
                         <TableCell className="py-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpen3D(room);
-                            }}
-                            title="Visa i 3D"
-                          >
-                            <Cuboid size={14} />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowPropertiesFor([room.fmGuid]);
+                              }}
+                              title="Egenskaper"
+                            >
+                              <Info size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpen3D(room);
+                              }}
+                              title="Visa i 3D"
+                            >
+                              <Cuboid size={14} />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -199,14 +199,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   // Properties dialog state - supports multiple selection
   const [showPropertiesFor, setShowPropertiesFor] = useState<string[] | null>(null);
 
-  // Auto-show properties dialog when items are selected
-  useEffect(() => {
-    if (selectedRows.size > 0) {
-      setShowPropertiesFor(Array.from(selectedRows));
-    } else {
-      setShowPropertiesFor(null);
-    }
-  }, [selectedRows]);
+  // Properties are shown only via explicit "Egenskaper" button click
 
   // Sync localAssets when props change
   useEffect(() => {
@@ -313,9 +306,82 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // All available columns
+  // Helper to extract readable name from attribute key
+  const extractPropertyName = (key: string): string => {
+    const match = key.match(/^([a-zA-ZåäöÅÄÖ]+)/);
+    if (match) {
+      const baseName = match[1].toLowerCase();
+      return baseName.charAt(0).toUpperCase() + baseName.slice(1);
+    }
+    return key;
+  };
+
+  // Dynamically extract ALL available columns from asset data (including User Defined)
   const allColumns: ColumnDef[] = useMemo(() => {
-    return [...SYSTEM_COLUMNS, ...STATUS_COLUMNS];
+    const discoveredColumns = new Map<string, ColumnDef>();
+
+    // Add system columns first
+    SYSTEM_COLUMNS.forEach(col => {
+      discoveredColumns.set(col.key, col);
+    });
+
+    // Add status columns
+    STATUS_COLUMNS.forEach(col => {
+      discoveredColumns.set(col.key, col);
+    });
+
+    // Scan all assets to find User Defined Properties
+    localAssets.forEach(asset => {
+      const attrs = asset.attributes || {};
+      
+      Object.entries(attrs).forEach(([key, value]: [string, any]) => {
+        if (discoveredColumns.has(key)) return;
+        if (key.startsWith('_') || key === 'tenantId' || key === 'checkedOut' || key === 'createdInModel') return;
+        if (typeof value !== 'object' || !value) return;
+        
+        // This is a User Defined Property (has structure like {name, value, dataType, ...})
+        if ('name' in value && 'value' in value) {
+          const propertyName = value.name || extractPropertyName(key);
+          discoveredColumns.set(key, {
+            key,
+            label: propertyName,
+            category: 'userDefined',
+          });
+        }
+      });
+    });
+
+    return Array.from(discoveredColumns.values());
+  }, [localAssets]);
+
+  // Helper to extract property values from attributes
+  const extractPropertyValue = useCallback((
+    attributes: Record<string, any> | undefined,
+    key: string
+  ): any => {
+    if (!attributes) return null;
+
+    // Direct access first
+    if (key in attributes) {
+      const val = attributes[key];
+      if (val && typeof val === 'object' && 'value' in val) {
+        return val.value;
+      }
+      return val;
+    }
+
+    // Try prefix matching for keys with hash suffixes
+    const keyLower = key.toLowerCase();
+    for (const attrKey of Object.keys(attributes)) {
+      if (attrKey.toLowerCase().startsWith(keyLower)) {
+        const propObj = attributes[attrKey];
+        if (propObj && typeof propObj === 'object' && 'value' in propObj) {
+          return propObj.value;
+        }
+      }
+    }
+
+    return null;
   }, []);
 
   // Transform raw asset data with deduplication
@@ -331,7 +397,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
     
     return uniqueAssets.map((asset) => {
       const attrs = asset.attributes || {};
-      return {
+      const result: AssetData = {
         fmGuid: asset.fm_guid || asset.fmGuid,
         designation: asset.name || attrs.designation || '-',
         commonName: asset.common_name || attrs.commonName || '-',
@@ -341,15 +407,23 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         levelCommonName: attrs.levelCommonName || '-',
         roomFmGuid: asset.in_room_fm_guid || attrs.inRoomFmGuid,
         roomName: attrs.inRoomCommonName || '-',
-        // FIXED: Explicit boolean check - only true if explicitly set to true
         createdInModel: asset.created_in_model === true,
         annotationPlaced: asset.annotation_placed ?? false,
         buildingFmGuid: asset.building_fm_guid || attrs.buildingFmGuid,
         isLocal: asset.is_local ?? false,
         raw: asset,
       };
+
+      // Extract User Defined property values
+      allColumns.forEach(col => {
+        if (col.category === 'userDefined') {
+          result[col.key] = extractPropertyValue(attrs, col.key) || '-';
+        }
+      });
+
+      return result;
     });
-  }, [localAssets]);
+  }, [localAssets, allColumns, extractPropertyValue]);
 
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
@@ -770,6 +844,21 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                 {col.label}
               </DropdownMenuCheckboxItem>
             ))}
+            {allColumns.filter(c => c.category === 'userDefined').length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Användardefinierade</DropdownMenuLabel>
+                {allColumns.filter(c => c.category === 'userDefined').map(col => (
+                  <DropdownMenuCheckboxItem
+                    key={col.key}
+                    checked={visibleColumns.includes(col.key)}
+                    onCheckedChange={() => toggleColumn(col.key)}
+                  >
+                    {col.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -838,7 +927,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             <div className="border rounded-lg overflow-hidden overflow-x-auto">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     {/* Checkbox column header */}
                     <TableHead className="bg-muted/50 w-10">
@@ -893,7 +982,22 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => handleOpen3D(asset)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowPropertiesFor([asset.fmGuid]);
+                            }}
+                            title="Egenskaper"
+                          >
+                            <Info size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpen3D(asset);
+                            }}
                             title="Öppna i 3D"
                           >
                             <Cuboid size={14} />
@@ -904,7 +1008,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-amber-500 hover:text-amber-600"
-                              onClick={() => handlePlaceAnnotation(asset)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlaceAnnotation(asset);
+                              }}
                               title="Placera annotation"
                             >
                               <MapPin size={14} />
@@ -915,7 +1022,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-blue-500 hover:text-blue-600"
-                              onClick={() => handleSyncToAssetPlus(asset)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSyncToAssetPlus(asset);
+                              }}
                               disabled={syncingAssetIds.has(asset.fmGuid)}
                               title="Synka till Asset+"
                             >
