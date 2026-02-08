@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Building2 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
+import ViewerErrorBoundary from '@/components/common/ViewerErrorBoundary';
 import { AppButton } from '@/components/common/AppButton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -131,10 +132,12 @@ const Mobile3DViewer: React.FC = () => {
   return (
     <div className="h-screen w-screen relative bg-background overflow-hidden" style={{ touchAction: 'none' }}>
       {/* 3D Viewer - fullscreen */}
-      <AssetPlusViewer 
-        fmGuid={selectedBuildingFmGuid} 
-        onClose={handleClose}
-      />
+      <ViewerErrorBoundary onReset={handleClose}>
+        <AssetPlusViewer 
+          fmGuid={selectedBuildingFmGuid} 
+          onClose={handleClose}
+        />
+      </ViewerErrorBoundary>
     </div>
   );
 };
