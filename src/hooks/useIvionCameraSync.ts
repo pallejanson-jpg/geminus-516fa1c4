@@ -16,6 +16,7 @@ import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
+import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 
 export interface IvionImage {
   id: number;
@@ -36,6 +37,8 @@ interface UseIvionCameraSyncOptions {
   ivionSiteId: string;
   /** Building FM GUID for token auth */
   buildingFmGuid?: string;
+  /** Ivion-to-BIM coordinate transform (defaults to identity) */
+  buildingTransform?: IvionBimTransform;
 }
 
 interface UseIvionCameraSyncResult {
@@ -74,7 +77,9 @@ export function useIvionCameraSync({
   buildingOrigin,
   ivionSiteId,
   buildingFmGuid,
+  buildingTransform,
 }: UseIvionCameraSyncOptions): UseIvionCameraSyncResult {
+  const transform = buildingTransform ?? IDENTITY_TRANSFORM;
   const { syncLocked, syncState, updateFromIvion } = useViewerSync();
   
   const [imageCache, setImageCache] = useState<IvionImage[]>([]);
@@ -197,19 +202,25 @@ export function useIvionCameraSync({
           lastImageId = image.id;
           lastLon = viewDir?.lon ?? 0;
           
-          const pos: LocalCoords = {
+          const ivionPos = {
             x: image.location.x,
             y: image.location.y,
             z: image.location.z,
           };
           
           // Convert lon/lat radians to heading/pitch degrees
-          const heading = (viewDir?.lon ?? 0) * (180 / Math.PI);
+          const rawHeading = (viewDir?.lon ?? 0) * (180 / Math.PI);
           const pitch = (viewDir?.lat ?? 0) * (180 / Math.PI);
           
-          console.log('[Ivion Sync] SDK position:', { imageId: image.id, pos, heading: heading.toFixed(1) });
+          // Apply Ivion-to-BIM transform
+          const bimPos = ivionToBim(ivionPos, transform);
+          const bimHeading = ivionHeadingToBim(rawHeading, transform);
           
-          updateFromIvion(pos, heading, pitch);
+          const pos: LocalCoords = { x: bimPos.x, y: bimPos.y, z: bimPos.z };
+          
+          console.log('[Ivion Sync] SDK position:', { imageId: image.id, ivionPos, bimPos: pos, heading: bimHeading.toFixed(1) });
+          
+          updateFromIvion(pos, bimHeading, pitch);
           setCurrentImageId(image.id);
           setLastSyncSource('ivion');
           lastSyncedImageIdRef.current = image.id;
@@ -240,7 +251,7 @@ export function useIvionCameraSync({
         unsubscribe();
       }
     };
-  }, [ivApiRef?.current, enabled, syncLocked, updateFromIvion]);
+  }, [ivApiRef?.current, enabled, syncLocked, updateFromIvion, transform]);
 
   // SDK: Navigate Ivion from 3D position (3D → 360°)
   const syncToIvionSdk = useCallback(() => {
@@ -249,13 +260,18 @@ export function useIvionCameraSync({
     
     isSyncingRef.current = true;
     
-    const nearestImage = findNearestImage(syncState.position);
+    // Convert BIM position back to Ivion space for image lookup
+    const ivionPos = bimToIvion(syncState.position, transform);
+    const ivionSearchPos: LocalCoords = { x: ivionPos.x, y: ivionPos.y, z: ivionPos.z };
+    
+    const nearestImage = findNearestImage(ivionSearchPos);
     if (nearestImage && nearestImage.id !== lastSyncedImageIdRef.current) {
       lastSyncedImageIdRef.current = nearestImage.id;
       
-      // Convert heading/pitch to radians for Ivion viewDir
+      // Convert heading from BIM space to Ivion space, then to radians
+      const ivionHeading = bimHeadingToIvion(syncState.heading, transform);
       const viewDir = {
-        lon: (syncState.heading * Math.PI) / 180,
+        lon: (ivionHeading * Math.PI) / 180,
         lat: (syncState.pitch * Math.PI) / 180,
       };
       
@@ -287,7 +303,7 @@ export function useIvionCameraSync({
       }
       setTimeout(() => { isSyncingRef.current = false; }, 100);
     }
-  }, [ivApiRef?.current, syncState, findNearestImage]);
+  }, [ivApiRef?.current, syncState, findNearestImage, transform]);
 
   // ─── IFRAME MODE: Limited fallback sync ───────────────────────────
 
@@ -299,14 +315,21 @@ export function useIvionCameraSync({
     if (now - syncThrottleRef.current < IFRAME_SYNC_THROTTLE_MS) return;
     syncThrottleRef.current = now;
     
-    const nearestImage = findNearestImage(syncState.position);
+    // Convert BIM position back to Ivion space for image lookup
+    const ivionPos = bimToIvion(syncState.position, transform);
+    const ivionSearchPos: LocalCoords = { x: ivionPos.x, y: ivionPos.y, z: ivionPos.z };
+    
+    const nearestImage = findNearestImage(ivionSearchPos);
     if (nearestImage && nearestImage.id !== lastSyncedImageIdRef.current) {
       lastSyncedImageIdRef.current = nearestImage.id;
+      
+      // Convert heading from BIM space to Ivion space
+      const ivionHeading = bimHeadingToIvion(syncState.heading, transform);
       
       try {
         const currentUrl = new URL(iframeRef.current.src);
         currentUrl.searchParams.set('image', String(nearestImage.id));
-        currentUrl.searchParams.set('vlon', ((syncState.heading * Math.PI) / 180).toFixed(2));
+        currentUrl.searchParams.set('vlon', ((ivionHeading * Math.PI) / 180).toFixed(2));
         currentUrl.searchParams.set('vlat', ((syncState.pitch * Math.PI) / 180).toFixed(2));
         
         console.log('[Ivion Sync] Iframe: Navigating to image:', nearestImage.id);
@@ -317,7 +340,7 @@ export function useIvionCameraSync({
         console.error('[Ivion Sync] Iframe URL update failed:', err);
       }
     }
-  }, [iframeRef, syncState, findNearestImage]);
+  }, [iframeRef, syncState, findNearestImage, transform]);
 
   // ─── Unified sync dispatch ────────────────────────────────────────
   
@@ -356,12 +379,16 @@ export function useIvionCameraSync({
       // Try image cache first
       const cachedImage = imageCache.find(img => img.id === imageId);
       if (cachedImage) {
-        const position: LocalCoords = {
+        const ivionPos = {
           x: cachedImage.location.x,
           y: cachedImage.location.y,
           z: cachedImage.location.z,
         };
-        updateFromIvion(position, heading, pitch);
+        // Apply Ivion-to-BIM transform
+        const bimPos = ivionToBim(ivionPos, transform);
+        const bimHeading = ivionHeadingToBim(heading, transform);
+        const position: LocalCoords = { x: bimPos.x, y: bimPos.y, z: bimPos.z };
+        updateFromIvion(position, bimHeading, pitch);
         setCurrentImageId(imageId);
         setLastSyncSource('ivion');
         lastSyncedImageIdRef.current = imageId;
@@ -382,13 +409,18 @@ export function useIvionCameraSync({
         return false;
       }
       
-      const position: LocalCoords = {
+      const ivionPos = {
         x: data.location.x,
         y: data.location.y,
         z: data.location.z,
       };
       
-      updateFromIvion(position, heading, pitch);
+      // Apply Ivion-to-BIM transform
+      const bimPos = ivionToBim(ivionPos, transform);
+      const bimHeading = ivionHeadingToBim(heading, transform);
+      const position: LocalCoords = { x: bimPos.x, y: bimPos.y, z: bimPos.z };
+      
+      updateFromIvion(position, bimHeading, pitch);
       setCurrentImageId(imageId);
       setLastSyncSource('ivion');
       lastSyncedImageIdRef.current = imageId;
@@ -398,7 +430,7 @@ export function useIvionCameraSync({
       console.error('[Ivion Sync] Failed to parse URL:', err);
       return false;
     }
-  }, [buildingFmGuid, imageCache, updateFromIvion]);
+  }, [buildingFmGuid, imageCache, updateFromIvion, transform]);
 
   // Auto-sync when 3D camera changes (both modes)
   useEffect(() => {
