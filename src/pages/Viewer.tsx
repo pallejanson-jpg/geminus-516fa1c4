@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo } from "react";
 import { AppContext } from "@/context/AppContext";
 import AssetPlusViewer from "@/components/viewer/AssetPlusViewer";
 import BuildingSelector from "@/components/viewer/BuildingSelector";
+import ViewerErrorBoundary from "@/components/common/ViewerErrorBoundary";
 
 export default function Viewer() {
   const { viewer3dFmGuid, setViewer3dFmGuid, allData, isLoadingData } = useContext(AppContext);
@@ -72,11 +73,13 @@ export default function Viewer() {
   if (buildingFmGuid && targetFacility) {
     return (
       <div className="h-full">
-        <AssetPlusViewer 
-          fmGuid={buildingFmGuid} 
-          initialFmGuidToFocus={viewer3dFmGuid}
-          onClose={handleClose} 
-        />
+        <ViewerErrorBoundary onReset={handleClose}>
+          <AssetPlusViewer 
+            fmGuid={buildingFmGuid} 
+            initialFmGuidToFocus={viewer3dFmGuid}
+            onClose={handleClose} 
+          />
+        </ViewerErrorBoundary>
       </div>
     );
   }
