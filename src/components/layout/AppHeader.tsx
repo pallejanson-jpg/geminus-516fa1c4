@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { 
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon, 
     Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow
@@ -48,6 +49,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     } = useContext(AppContext);
     
     const { user, profile, isAdmin, signOut } = useAuth();
+    const isMobile = useIsMobile();
     const { toast } = useToast();
     const [globalSearch, setGlobalSearch] = useState('');
     const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -90,6 +92,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
 
     const handleMenuClick = (app: string, mode?: string) => {
+        // On mobile, redirect immersive apps to fullscreen routes
+        if (isMobile && app === 'assetplus_viewer') {
+            navigate('/viewer');
+            return;
+        }
         setSelectedFacility(null);
         setActiveApp(app);
         if (mode) {
