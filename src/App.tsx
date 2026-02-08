@@ -43,6 +43,18 @@ const App = () => {
     return () => window.removeEventListener('unhandledrejection', handleRejection);
   }, []);
 
+  // Global handler for uncaught synchronous errors from external libraries (e.g. Asset+ UMD bundle).
+  // Complements the unhandledrejection handler above – catches errors thrown outside React's
+  // render cycle that neither Error Boundaries nor the rejection handler can intercept.
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('[Global] Uncaught error:', event.error);
+      event.preventDefault(); // Prevent default browser error reporting / crash
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
   return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
