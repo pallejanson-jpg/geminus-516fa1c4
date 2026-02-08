@@ -147,6 +147,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [showMinimap, setShowMinimap] = useState(false);
   const [showNavCube, setShowNavCube] = useState(true);
 
+  // Refs to track volatile state for stable callbacks (prevents re-init cascade)
+  const cacheStatusRef = useRef(cacheStatus);
+  const showNavCubeRef = useRef(showNavCube);
+  const loadLocalAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -2442,7 +2448,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
 
     // Initialization timeout – prevents infinite spinner on slow/unstable mobile connections
-    const INIT_TIMEOUT_MS = isMobile ? 20_000 : 45_000;
+    const INIT_TIMEOUT_MS = isMobile ? 30_000 : 45_000;
     const timeoutId = setTimeout(() => {
       // If we're still loading after the timeout, force an error
       setState(prev => {

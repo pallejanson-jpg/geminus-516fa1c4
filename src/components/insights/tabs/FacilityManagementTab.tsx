@@ -222,32 +222,32 @@ export default function FacilityManagementTab() {
 
     const kpiCards = [
         { 
-            title: 'Active Issues', 
+            title: isMobile ? 'Active' : 'Active Issues', 
             value: totals.totalActive, 
             icon: AlertTriangle, 
             color: 'text-yellow-500',
-            badge: 'Open + In Progress'
+            badge: isMobile ? 'Open' : 'Open + In Progress'
         },
         { 
             title: 'Pending', 
             value: totals.totalPending, 
             icon: Clock, 
             color: 'text-purple-500',
-            badge: 'Awaiting'
+            badge: isMobile ? 'Wait' : 'Awaiting'
         },
         { 
-            title: 'Completed (month)', 
+            title: isMobile ? 'Done' : 'Completed (month)', 
             value: totals.totalCompleted, 
             icon: CheckCircle2, 
             color: 'text-green-500',
-            badge: 'This period'
+            badge: isMobile ? 'Period' : 'This period'
         },
         { 
-            title: 'SLA Compliance', 
+            title: isMobile ? 'SLA' : 'SLA Compliance', 
             value: `${totals.avgSla}%`, 
             icon: TrendingUp, 
             color: 'text-primary',
-            badge: 'Average'
+            badge: isMobile ? 'Avg' : 'Average'
         },
     ];
 
@@ -268,15 +268,15 @@ export default function FacilityManagementTab() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
                     <Card key={index}>
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-2">
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
-                                <Badge variant="secondary" className="text-xs">
+                                <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
+                                <Badge variant="secondary" className="text-[10px] sm:text-xs max-w-[60px] sm:max-w-none truncate">
                                     {kpi.badge}
                                 </Badge>
                             </div>
-                            <p className="text-2xl font-bold text-purple-400">{kpi.value}</p>
-                            <p className="text-xs text-muted-foreground">{kpi.title}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-purple-400 truncate">{kpi.value}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
