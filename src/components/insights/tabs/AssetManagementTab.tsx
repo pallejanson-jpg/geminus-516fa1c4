@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -12,6 +12,7 @@ import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
 
 // Truncate name for chart display
 const truncateName = (name: string, maxLen = 12) => 
@@ -21,6 +22,9 @@ const truncateName = (name: string, maxLen = 12) =>
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
+
+// Hierarchy categories to exclude when counting "assets"
+const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -34,61 +38,88 @@ interface AssetManagementTabProps {
 }
 
 export default function AssetManagementTab({ onNavigateToAssets }: AssetManagementTabProps) {
-    const { navigatorTreeData, allData } = useContext(AppContext);
+    const { navigatorTreeData } = useContext(AppContext);
     const isMobile = useIsMobile();
 
-    // Count REAL assets from allData
-    const assetStats = useMemo(() => {
-        const assets = allData.filter(item => 
-            item.category !== 'Building' && 
-            item.category !== 'Building Storey' && 
-            item.category !== 'Space' &&
-            item.category !== 'IfcBuilding' &&
-            item.category !== 'IfcBuildingStorey' &&
-            item.category !== 'IfcSpace'
-        );
-        
-        const categories: Record<string, number> = {};
-        assets.forEach(asset => {
-            const cat = asset.assetType || asset.category || 'Unknown';
-            categories[cat] = (categories[cat] || 0) + 1;
-        });
+    // Query database directly for real asset counts
+    const [dbAssetCount, setDbAssetCount] = useState<number>(0);
+    const [dbPerBuilding, setDbPerBuilding] = useState<Record<string, number>>({});
+    const [dbCategories, setDbCategories] = useState<Record<string, number>>({});
+    const [isLoadingDb, setIsLoadingDb] = useState(true);
 
-        // Count per building (REAL)
-        const perBuilding: Record<string, number> = {};
-        assets.forEach(asset => {
-            const bGuid = asset.buildingFmGuid;
-            if (bGuid) {
-                perBuilding[bGuid] = (perBuilding[bGuid] || 0) + 1;
+    useEffect(() => {
+        const fetchAssetCounts = async () => {
+            setIsLoadingDb(true);
+            try {
+                // Total count
+                const { count: totalCount } = await supabase
+                    .from('assets')
+                    .select('*', { count: 'exact', head: true })
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`);
+
+                setDbAssetCount(totalCount || 0);
+
+                // Per building counts
+                const { data: buildingCounts } = await supabase
+                    .from('assets')
+                    .select('building_fm_guid')
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`)
+                    .not('building_fm_guid', 'is', null);
+
+                if (buildingCounts) {
+                    const perBuilding: Record<string, number> = {};
+                    buildingCounts.forEach((row: any) => {
+                        if (row.building_fm_guid) {
+                            perBuilding[row.building_fm_guid] = (perBuilding[row.building_fm_guid] || 0) + 1;
+                        }
+                    });
+                    setDbPerBuilding(perBuilding);
+                }
+
+                // Category distribution
+                const { data: categoryCounts } = await supabase
+                    .from('assets')
+                    .select('asset_type')
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`)
+                    .limit(10000);
+
+                if (categoryCounts) {
+                    const categories: Record<string, number> = {};
+                    categoryCounts.forEach((row: any) => {
+                        const cat = row.asset_type || 'Unknown';
+                        categories[cat] = (categories[cat] || 0) + 1;
+                    });
+                    setDbCategories(categories);
+                }
+            } catch (e) {
+                console.error('Failed to fetch asset counts:', e);
+            } finally {
+                setIsLoadingDb(false);
             }
-        });
-
-        return {
-            totalAssets: assets.length,
-            categories,
-            perBuilding,
         };
-    }, [allData]);
 
-    // REAL: Asset data per building
+        fetchAssetCounts();
+    }, []);
+
+    // REAL: Asset data per building using DB counts
     const assetsByBuilding = useMemo(() => {
         return navigatorTreeData.slice(0, 10).map((building) => {
             const hash = hashString(building.fmGuid || '');
             const fullName = building.commonName || building.name || 'Building';
-            const realCount = assetStats.perBuilding[building.fmGuid || ''] || 0;
+            const realCount = dbPerBuilding[building.fmGuid || ''] || 0;
             return {
                 fmGuid: building.fmGuid,
                 name: truncateName(fullName),
                 fullName,
-                assetCount: realCount, // REAL
+                assetCount: realCount, // REAL from DB
                 avgAge: 3 + (hash % 12), // MOCK
                 replacementValue: 500000 + (hash % 2000000), // MOCK
                 maintenanceStatus: hash % 100 > 70 ? 'Critical' : hash % 100 > 40 ? 'Planned' : 'OK', // MOCK
             };
         });
-    }, [navigatorTreeData, assetStats.perBuilding]);
+    }, [navigatorTreeData, dbPerBuilding]);
 
-    // REAL: Category distribution from actual data
+    // REAL: Category distribution from database
     const categoryDistribution = useMemo(() => {
         const colors = [
             'hsl(220, 80%, 55%)',
@@ -100,7 +131,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
             'hsl(var(--muted-foreground))',
         ];
 
-        const entries = Object.entries(assetStats.categories)
+        const entries = Object.entries(dbCategories)
             .sort((a, b) => b[1] - a[1]);
 
         // Take top 6 and group rest as "Other"
@@ -118,7 +149,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
         }
 
         return result;
-    }, [assetStats.categories]);
+    }, [dbCategories]);
 
     // Maintenance status distribution (MOCK)
     const maintenanceDistribution = useMemo(() => {
@@ -134,15 +165,15 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
 
     const kpiCards = [
         { 
-            title: 'Total Assets', 
-            value: assetStats.totalAssets.toLocaleString(), 
+            title: isMobile ? 'Assets' : 'Total Assets', 
+            value: isLoadingDb ? '...' : dbAssetCount.toLocaleString(), 
             icon: Package, 
             color: 'text-primary',
             isMock: false,
             clickable: true,
         },
         { 
-            title: 'Average Age (years)', 
+            title: isMobile ? 'Avg. Age' : 'Average Age (years)', 
             value: assetsByBuilding.length > 0 
                 ? Math.round(assetsByBuilding.reduce((s, b) => s + b.avgAge, 0) / assetsByBuilding.length) 
                 : 'N/A', 
@@ -151,14 +182,14 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
             isMock: true,
         },
         { 
-            title: 'Replacement Value', 
+            title: isMobile ? 'Value' : 'Replacement Value', 
             value: `${(assetsByBuilding.reduce((s, b) => s + b.replacementValue, 0) / 1000000).toFixed(1)} MSEK`, 
             icon: CircleDollarSign, 
             color: 'text-green-500',
             isMock: true,
         },
         { 
-            title: 'Needs Maintenance', 
+            title: isMobile ? 'Maint.' : 'Needs Maintenance', 
             value: assetsByBuilding.filter(b => b.maintenanceStatus !== 'OK').length, 
             icon: Wrench, 
             color: 'text-yellow-500',
@@ -194,15 +225,15 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                         className={kpi.clickable ? 'cursor-pointer hover:border-primary/50 transition-colors' : ''}
                         onClick={() => kpi.clickable && onNavigateToAssets?.()}
                     >
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                        <CardContent className="p-3 sm:p-4">
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
                                 {kpi.isMock && <MockBadge />}
                             </div>
-                            <p className={`text-2xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
                                 {kpi.value}
                             </p>
-                            <p className="text-xs text-muted-foreground">{kpi.title}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
@@ -251,7 +282,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="h-full flex items-center justify-center text-muted-foreground">
-                                    No asset data available
+                                    {isLoadingDb ? 'Loading asset data...' : 'No asset data available'}
                                 </div>
                             )}
                         </div>

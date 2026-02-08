@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -14,6 +14,9 @@ import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
+
+const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
 interface EntityInsightsViewProps {
     facility: Facility;
@@ -63,25 +66,70 @@ export default function EntityInsightsView({ facility, onBack }: EntityInsightsV
     const isStorey = facility.category === 'Building Storey' || facility.category === 'IfcBuildingStorey';
     const isSpace = facility.category === 'Space' || facility.category === 'IfcSpace';
 
-    // Calculate actual stats (REAL)
+    // Query database for real asset count for this entity
+    const [dbAssetCount, setDbAssetCount] = useState<number>(0);
+    const [dbAssetCategories, setDbAssetCategories] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        const fetchEntityAssets = async () => {
+            try {
+                let query = supabase
+                    .from('assets')
+                    .select('*', { count: 'exact', head: true })
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`);
+
+                if (isBuilding) {
+                    query = query.eq('building_fm_guid', facility.fmGuid);
+                } else if (isStorey) {
+                    query = query.eq('level_fm_guid', facility.fmGuid);
+                } else if (isSpace) {
+                    query = query.eq('in_room_fm_guid', facility.fmGuid);
+                }
+
+                const { count } = await query;
+                setDbAssetCount(count || 0);
+
+                // Category distribution
+                let catQuery = supabase
+                    .from('assets')
+                    .select('asset_type')
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`)
+                    .limit(5000);
+
+                if (isBuilding) {
+                    catQuery = catQuery.eq('building_fm_guid', facility.fmGuid);
+                } else if (isStorey) {
+                    catQuery = catQuery.eq('level_fm_guid', facility.fmGuid);
+                } else if (isSpace) {
+                    catQuery = catQuery.eq('in_room_fm_guid', facility.fmGuid);
+                }
+
+                const { data: catData } = await catQuery;
+                if (catData) {
+                    const cats: Record<string, number> = {};
+                    catData.forEach((row: any) => {
+                        const cat = (row.asset_type || 'Unknown').replace('Ifc', '');
+                        cats[cat] = (cats[cat] || 0) + 1;
+                    });
+                    setDbAssetCategories(cats);
+                }
+            } catch (e) {
+                console.error('Failed to fetch entity asset counts:', e);
+            }
+        };
+        fetchEntityAssets();
+    }, [facility.fmGuid, isBuilding, isStorey, isSpace]);
+
+    // Calculate actual stats (hierarchy from allData, assets from DB)
     const stats = useMemo(() => {
         let spaces: any[] = [];
         let storeys: any[] = [];
-        let assets: any[] = [];
-
-        const isAssetCategory = (cat: string) => 
-            cat !== 'Building' && cat !== 'Building Storey' && cat !== 'Space' &&
-            cat !== 'IfcBuilding' && cat !== 'IfcBuildingStorey' && cat !== 'IfcSpace';
 
         if (isBuilding) {
             spaces = allData.filter((a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid);
             storeys = allData.filter((a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid);
-            assets = allData.filter((a: any) => isAssetCategory(a.category) && a.buildingFmGuid === facility.fmGuid);
         } else if (isStorey) {
             spaces = allData.filter((a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.levelFmGuid === facility.fmGuid);
-            assets = allData.filter((a: any) => isAssetCategory(a.category) && a.levelFmGuid === facility.fmGuid);
-        } else if (isSpace) {
-            assets = allData.filter((a: any) => isAssetCategory(a.category) && a.inRoomFmGuid === facility.fmGuid);
         }
         
         let totalArea = 0;
@@ -99,21 +147,14 @@ export default function EntityInsightsView({ facility, onBack }: EntityInsightsV
             }
         });
 
-        // Asset categories (REAL)
-        const assetCategories: Record<string, number> = {};
-        assets.forEach((a: any) => {
-            const cat = (a.assetType || a.category || 'Unknown').replace('Ifc', '');
-            assetCategories[cat] = (assetCategories[cat] || 0) + 1;
-        });
-
         return { 
             floorCount: storeys.length,
             roomCount: spaces.length, 
-            assetCount: assets.length,
+            assetCount: dbAssetCount,
             totalArea: Math.round(totalArea),
-            assetCategories,
+            assetCategories: dbAssetCategories,
         };
-    }, [allData, facility.fmGuid, isBuilding, isStorey, isSpace, facility]);
+    }, [allData, facility.fmGuid, isBuilding, isStorey, isSpace, facility, dbAssetCount, dbAssetCategories]);
 
     // Energy breakdown (MOCK)
     const energyBreakdown = useMemo(() => {

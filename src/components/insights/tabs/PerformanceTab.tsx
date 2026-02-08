@@ -125,7 +125,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
 
     const kpiCards = [
         { 
-            title: 'Building Count', 
+            title: isMobile ? 'Buildings' : 'Building Count', 
             value: stats.buildingCount, 
             icon: Building2, 
             trend: '+2', 
@@ -134,7 +134,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             isMock: false,
         },
         { 
-            title: 'Avg. Energy (kWh/m²)', 
+            title: isMobile ? 'Energy' : 'Avg. Energy (kWh/m²)', 
             value: energyByBuilding.length > 0 
                 ? Math.round(energyByBuilding.reduce((s, b) => s + b.kwhPerSqm, 0) / energyByBuilding.length)
                 : 'N/A', 
@@ -145,7 +145,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             isMock: true,
         },
         { 
-            title: 'CO₂ Emissions (tons)', 
+            title: isMobile ? 'CO₂ (tons)' : 'CO₂ Emissions (tons)', 
             value: Math.round(stats.totalArea * 0.012).toLocaleString(), 
             icon: Leaf, 
             trend: '-12%', 
@@ -154,7 +154,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             isMock: true,
         },
         { 
-            title: 'Avg. Energy Rating', 
+            title: isMobile ? 'Rating' : 'Avg. Energy Rating', 
             value: 'B+', 
             icon: Gauge, 
             trend: 'Improved', 
@@ -184,24 +184,25 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
                     <Card key={index}>
-                        <CardContent className="p-4">
+                        <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-1">
-                                    <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                                    <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
                                     {kpi.isMock && <MockBadge />}
                                 </div>
                                 <Badge 
                                     variant={kpi.trendUp ? "default" : "secondary"} 
-                                    className={`text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-green-600' : 'bg-blue-600'}`}
+                                    className={`text-[10px] sm:text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-green-600' : 'bg-blue-600'}`}
                                 >
-                                    {kpi.trendUp ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                                    {kpi.trend}
+                                    {kpi.trendUp ? <TrendingUp className="h-3 w-3 mr-0.5 sm:mr-1" /> : <TrendingDown className="h-3 w-3 mr-0.5 sm:mr-1" />}
+                                    <span className="hidden sm:inline">{kpi.trend}</span>
+                                    <span className="sm:hidden">{kpi.trend.replace('%', '')}</span>
                                 </Badge>
                             </div>
-                            <p className={`text-2xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
                                 {kpi.value}
                             </p>
-                            <p className="text-xs text-muted-foreground">{kpi.title}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
