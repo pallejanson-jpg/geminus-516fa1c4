@@ -1,134 +1,123 @@
 
+# Fix: 3D-viewer kraschar fortfarande pa mobil
 
-# Fix: 3D-viewer kraschar pa mobil
+## Problemanalys (djupare)
 
-## Problemanalys
+Trots Error Boundary, unhandledrejection-handler och WebGL context lost-hantering kraschar 3D-viewern fortfarande pa mobil. Efter djupanalys av 3000+ rader i AssetPlusViewer.tsx har jag identifierat 5 kvarvarande kraschvektorer:
 
-Efter att ha granskat hela flödet har jag identifierat flera potentiella kraschkällor:
+### 1. Unawaited async promises (rad 1303-1315)
+`loadLocalAnnotations()` och `loadAlarmAnnotations()` ar async-funktioner som anropas utan `.catch()`. try/catch runt dem fangar BARA synkrona fel, inte promise rejections.
 
-1. **Inga felgränser (Error Boundaries)**: Om AssetPlusViewer eller det underliggande Asset+-biblioteket kastar ett ohanterligt fel, kraschar hela React-appen till en vit skärm. Det finns ingen React Error Boundary som fångar detta.
+### 2. Ingen window.onerror-handler
+Endast `unhandledrejection` fangas globalt. Asset+ UMD-biblioteket kan kasta synkrona fel utanfor Reacts render-cykel som varken fangas av Error Boundary eller rejection-handleren.
 
-2. **Ohanterade asynkrona avvisningar (unhandled rejections)**: `handleAllModelsLoaded`-callbacken anropar `loadLocalAnnotations()` och `loadAlarmAnnotations()` -- om dessa kastar fel utanför try/catch (t.ex. nätverksfel eller timeout), kraschar appen. Dessutom kan Asset+-biblioteket generera ohanterade promise-rejections internt.
+### 3. XKT Cache Interceptor dubblerar minneanvandning
+Fetch-interceptorn klonar VARJE XKT-respons via `.clone()` + `arrayBuffer()`, vilket fordubblar minnesanvandningen for stora BIM-modeller. Pa mobila enheter med begransat minne kan detta orsaka en total tab-krasch (out-of-memory) som INGEN JavaScript-handler kan fanga.
 
-3. **WebGL-kontextförlust**: Mobila GPU:er har begränsat minne. När stora BIM-modeller laddas kan WebGL-kontexten förloras (context lost), vilket kraschar viewer-canvasen utan möjlighet till återhämtning.
+### 4. Ingen initieringstimeout
+Om `initializeViewer` hangs (natverksforfragan som aldrig returnerar pa instabil mobilanslutning) ser anvandaren en evig spinner utan aterhamtningsmojlighet.
 
-4. **Fetch-interceptorn återställs inte vid krasch**: `setupCacheInterceptor` ersätter `window.fetch` globalt. Om viewern kraschar innan `restoreFetch` anropas, förblir den modifierade fetch-funktionen aktiv, vilket kan orsaka följdproblem.
-
----
-
-## Lösning: 4 ändringar
-
-### Steg 1: Lägg till global unhandledrejection-handler
-
-**Fil:** `src/App.tsx`
-
-Lägg till en `useEffect` i App-komponenten som lyssnar på `unhandledrejection`-event. Detta fångar alla ohanterade promise-avvisningar (t.ex. från Asset+-biblioteket) och förhindrar att hela appen kraschar. Visar ett toast-meddelande istället.
-
-```
-useEffect(() => {
-  const handleRejection = (event: PromiseRejectionEvent) => {
-    console.error("Unhandled rejection:", event.reason);
-    event.preventDefault(); // Prevent crash
-  };
-  window.addEventListener("unhandledrejection", handleRejection);
-  return () => window.removeEventListener("unhandledrejection", handleRejection);
-}, []);
-```
-
-### Steg 2: Lägg till React Error Boundary
-
-**Ny fil:** `src/components/common/ViewerErrorBoundary.tsx`
-
-Skapa en React Error Boundary-komponent som fångar rendering-fel i AssetPlusViewer. Visar ett användarvänligt felmeddelande med en "Försök igen"-knapp istället för en vit skärm.
-
-**Fil:** `src/pages/Mobile3DViewer.tsx`
-
-Wrappa `<AssetPlusViewer>` i `<ViewerErrorBoundary>` med en `onReset`-callback som navigerar tillbaka.
-
-**Fil:** `src/pages/Viewer.tsx`
-
-Wrappa `<AssetPlusViewer>` i `<ViewerErrorBoundary>` på samma sätt.
-
-### Steg 3: Hantera WebGL context lost
-
-**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
-
-Lägg till en `useEffect` som lyssnar på `webglcontextlost` och `webglcontextrestored` på viewer-canvasen. Vid context lost:
-- Visa ett felmeddelande: "3D-motorn förlorade anslutningen. Klicka 'Försök igen'."
-- Förhindra default-beteende (`event.preventDefault()`)
-- Vid context restored: rensa felmeddelandet och försök initiera om viewern
-
-```
-useEffect(() => {
-  const canvas = viewerContainerRef.current?.querySelector('canvas');
-  if (!canvas) return;
-  
-  const handleContextLost = (e: Event) => {
-    e.preventDefault();
-    setState(prev => ({
-      ...prev,
-      error: 'WebGL-kontext förlorad. Enheten har slut på grafikminne.',
-      isLoading: false,
-    }));
-    setShowError(true);
-  };
-  
-  canvas.addEventListener('webglcontextlost', handleContextLost);
-  return () => canvas.removeEventListener('webglcontextlost', handleContextLost);
-}, [state.isInitialized]);
-```
-
-### Steg 4: Defensiv wrapping av handleAllModelsLoaded
-
-**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
-
-Wrappa hela `handleAllModelsLoaded`-callbackens body i en try/catch. Specifikt:
-- Wrappa `loadLocalAnnotations()` och `loadAlarmAnnotations()` i individuella try/catch-block
-- Wrappa NavCube-initieringen (redan har try/catch, behåll)
-- Säkerställ att `restoreFetch` alltid anropas vid cleanup, även vid krasch
+### 5. Cleanup race condition i fetch-interceptorn
+Om komponenten avmonteras medan en interceptad fetch ar aktiv, nullstalls `originalFetchRef.current` av `restoreFetch()`, men interceptor-closuren refererar fortfarande till den, vilket kan orsaka ett null-referensfel.
 
 ---
 
-## Sammanfattning av filändringar
+## Losning: 5 andringar
 
-| Fil | Ändring |
-|-----|---------|
-| `src/App.tsx` | Global unhandledrejection-handler |
-| `src/components/common/ViewerErrorBoundary.tsx` | Ny Error Boundary-komponent |
-| `src/pages/Mobile3DViewer.tsx` | Wrappa AssetPlusViewer i ErrorBoundary |
-| `src/pages/Viewer.tsx` | Wrappa AssetPlusViewer i ErrorBoundary |
-| `src/components/viewer/AssetPlusViewer.tsx` | WebGL context lost-hantering + defensiv try/catch i handleAllModelsLoaded |
+### Steg 1: Lagg till window.onerror-handler (App.tsx)
 
-## Tekniska detaljer
+Utoka den globala skyddsmekanismen i `src/App.tsx` med en `window.onerror`-handler som fangar synkrona fel fran Asset+ UMD-biblioteket. Denna handler kompletterar den befintliga `unhandledrejection`-handleren.
 
-### Error Boundary-komponent (pseudokod)
+### Steg 2: Lagg till .catch() pa unawaited promises (AssetPlusViewer.tsx)
+
+I `handleAllModelsLoaded` (rad 1303-1315), lagg till `.catch()` pa bade `loadLocalAnnotations()` och `loadAlarmAnnotations()` sa att deras promise-rejections fangas direkt, utan att forlita sig pa den globala handleren.
+
+Fran:
 ```text
-class ViewerErrorBoundary extends Component {
-  state = { hasError: false, error: null };
-  
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  
-  componentDidCatch(error, info) {
-    console.error('Viewer crashed:', error, info);
-  }
-  
-  handleReset() {
-    this.setState({ hasError: false, error: null });
-    this.props.onReset?.();
-  }
-  
-  render() {
-    if (this.state.hasError) {
-      return <CrashUI onRetry={this.handleReset} />;
-    }
-    return this.props.children;
-  }
+try {
+  loadLocalAnnotations();
+} catch (e) { ... }
+```
+
+Till:
+```text
+loadLocalAnnotations().catch(e =>
+  console.error('loadLocalAnnotations failed:', e)
+);
+```
+
+### Steg 3: Inaktivera XKT Cache Interceptor pa mobil (AssetPlusViewer.tsx)
+
+Den storsta minnesbesparingen: pa mobila enheter ska `setupCacheInterceptor()` INTE anropas. Detta eliminerar dubblerad minnesanvandning fran `.clone()` + `arrayBuffer()` pa varje XKT-modell. Mobila anvandare far fortfarande modellerna fran API:et, men de cachas inte lokalt.
+
+I `initializeViewer` (rad 2407):
+```text
+// Setup cache interceptor before viewer initialization
+// SKIP on mobile to save memory - cache-on-load doubles memory usage
+if (!isMobile) {
+  setupCacheInterceptor();
 }
 ```
 
-### Risker och begränsningar
-- Error Boundary fångar bara synkrona rendering-fel, inte asynkrona. Därför behövs BÅDE error boundary OCH unhandledrejection-handler.
-- WebGL context lost kan bero på att enheten har för lite minne -- i det fallet hjälper inte en omstart, men åtminstone kraschar inte appen.
+### Steg 4: Lagg till initieringstimeout (AssetPlusViewer.tsx)
 
+Lagg till en timeout pa 30 sekunder i `initializeViewer`. Om viewern inte lyckats initiera inom den tiden visas ett felmeddelande med "Forsok igen"-knapp. Pa mobil satter vi 20 sekunders timeout.
+
+### Steg 5: Saker fetch-interceptor cleanup (AssetPlusViewer.tsx)
+
+Skydda fetch-interceptorn mot null-referensfel vid avmontering:
+
+```text
+window.fetch = async (input, init) => {
+  const original = originalFetchRef.current;
+  if (!original) {
+    // Interceptor has been cleaned up, use native fetch
+    return fetch(input, init);
+  }
+  // ... rest of interceptor logic
+};
+```
+
+Dessutom: i cleanup-funktionen (rad 2654-2696), anropa `restoreFetch()` FORST, innan viewer-cleanup, sa att interceptorn tas bort medan den fortfarande ar i ett konsistent tillstand.
+
+---
+
+## Sammanfattning av filandringar
+
+| Fil | Andring |
+|-----|---------|
+| `src/App.tsx` | Lagg till window.onerror global handler |
+| `src/components/viewer/AssetPlusViewer.tsx` | 4 andringar: .catch() pa async calls, inaktivera cache pa mobil, initieringstimeout, saker fetch-interceptor |
+
+## Tekniska detaljer
+
+### Global onerror-handler (App.tsx)
+```text
+useEffect(() => {
+  const handleError = (event: ErrorEvent) => {
+    console.error('[Global] Uncaught error:', event.error);
+    event.preventDefault();
+  };
+  window.addEventListener('error', handleError);
+  return () => window.removeEventListener('error', handleError);
+}, []);
+```
+
+### Initieringstimeout (AssetPlusViewer.tsx)
+En `AbortController`-baserad timeout laggs till i `initializeViewer`:
+- Mobil: 20 sekunder
+- Desktop: 45 sekunder
+- Vid timeout: setState med felmeddelande "Initiering tog for lang tid", visa retry-knapp
+
+### Minnesbesparingseffekt
+Genom att inaktivera cache-interceptorn pa mobil elimineras:
+- `.clone()` av varje XKT Response-objekt (kopierar HTTP-headers + stream)
+- `.arrayBuffer()` av den klonade responsen (allokerar hela modellen i minne en gang till)
+- Bakgrundsuppladdning till Supabase Storage (ytterligare minnesanvandning)
+
+For en byggnad med 5 XKT-modeller a 10 MB = 50 MB extra minnesanvandning som nu undviks pa mobil.
+
+### Risker och begransningar
+- Mobila anvandare far inte XKT-caching, vilket innebar att modeller alltid laddas fran API:et. Detta ar en avvagning for stabilitet.
+- Tab-krascher fran out-of-memory kan INTE fangas av nagon JavaScript-handler. Cache-optimeringen minskar risken men eliminerar den inte helt for mycket stora modeller.
+- `window.onerror` kan inte fanga alla feltyper (t.ex. CORS-relaterade fel), men fangar de flesta synkrona fel fran tredjepartsbibliotek.
