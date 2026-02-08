@@ -155,6 +155,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const assetDataRef = useRef<any>(null);
   const allDataRef = useRef<any[]>(allData);
 
+  // Refs for callbacks used inside initializeViewer (stabilizes its dependency array)
+  const handleAllModelsLoadedRef = useRef<() => void>(() => {});
+  const changeXrayMaterialRef = useRef<() => void>(() => {});
+  const processDeferredRef = useRef<() => void>(() => {});
+  const displayFmGuidRef = useRef<(fmGuid: string, displayAction?: any) => void>(() => {});
+  const setupCacheInterceptorRef = useRef<() => void>(() => {});
+
   // Keep refs in sync with state
   useEffect(() => { cacheStatusRef.current = cacheStatus; }, [cacheStatus]);
   useEffect(() => { showNavCubeRef.current = showNavCube; }, [showNavCube]);
@@ -1411,6 +1418,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [executeDisplayAction, transparentBackground, ghostOpacity]);
 
+
   // NavCube visibility is now controlled via React style prop on the canvas
   // The navCubeRef.setVisible() method is NOT used to avoid DOM manipulation crashes
   // Visibility is handled in the canvas element's style: display: showNavCube ? 'block' : 'none'
@@ -2397,6 +2405,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     console.log(`XKT cache: Interceptor active (memory: ${stats.modelCount} models, ${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB)`);
   }, [buildingFmGuid]);
 
+  // Keep callback refs in sync for stable initializeViewer dependency array
+  useEffect(() => { handleAllModelsLoadedRef.current = handleAllModelsLoaded; }, [handleAllModelsLoaded]);
+  useEffect(() => { changeXrayMaterialRef.current = changeXrayMaterial; }, [changeXrayMaterial]);
+  useEffect(() => { processDeferredRef.current = processDeferred; }, [processDeferred]);
+  useEffect(() => { displayFmGuidRef.current = displayFmGuid; }, [displayFmGuid]);
+  useEffect(() => { setupCacheInterceptorRef.current = setupCacheInterceptor; }, [setupCacheInterceptor]);
+
   // Restore original fetch
   const restoreFetch = useCallback(() => {
     if (originalFetchRef.current) {
@@ -2457,7 +2472,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // SKIP on mobile to save memory – cache-on-load doubles memory usage via .clone() + .arrayBuffer()
     // on every XKT model. For a building with 5 models × 10 MB = ~50 MB extra memory avoided on mobile.
     if (!isMobile) {
-      setupCacheInterceptor();
+      setupCacheInterceptorRef.current();
     }
 
     // Initialization timeout – prevents infinite spinner on slow/unstable mobile connections
@@ -2563,8 +2578,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           console.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
           setSelectedFmGuids(items || []);
         },
-        // allModelsLoadedCallback
-        handleAllModelsLoaded,
+        // allModelsLoadedCallback - call via ref for stable identity
+        () => handleAllModelsLoadedRef.current(),
         // isItemIdEditableCallback (for BimObjectId instead of FmGuid)
         undefined,
         // isFmGuidEditableCallback
@@ -2588,11 +2603,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       (window as any).__assetPlusViewerInstance = viewer;
 
       // Apply x-ray material changes
-      changeXrayMaterial();
+      changeXrayMaterialRef.current();
 
       // Mark viewer ready for direct calls
       deferCallsRef.current = false;
-      processDeferred();
+      processDeferredRef.current();
 
       // Determine what to focus on
       const focusFmGuid = initialFmGuidToFocus || fmGuid;
@@ -2620,7 +2635,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         };
       }
       
-      displayFmGuid(focusFmGuid, displayAction);
+      displayFmGuidRef.current(focusFmGuid, displayAction);
 
       // Clear any pending error display on successful init
       if (showErrorTimeoutRef.current) {
@@ -2663,7 +2678,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         setShowError(true);
       }, 800); // 800ms delay to allow retry to succeed
     }
-  }, [fmGuid, initialFmGuidToFocus, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor, isMobile]);
+  }, [fmGuid, initialFmGuidToFocus, isMobile]);
 
   const handleRetry = useCallback(() => {
     // If we're already initializing, ignore retry clicks.
@@ -2968,7 +2983,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             height={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
             className="absolute right-3 z-[25]"
             style={{
-              bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)',
+              bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)',
               width: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               height: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               display: showNavCube ? 'block' : 'none',
