@@ -152,10 +152,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const showNavCubeRef = useRef(showNavCube);
   const loadLocalAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const assetDataRef = useRef<any>(null);
+  const allDataRef = useRef<any[]>(allData);
 
   // Keep refs in sync with state
   useEffect(() => { cacheStatusRef.current = cacheStatus; }, [cacheStatus]);
   useEffect(() => { showNavCubeRef.current = showNavCube; }, [showNavCube]);
+  useEffect(() => { allDataRef.current = allData; }, [allData]);
 
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
@@ -271,6 +274,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Find the asset data for the given fmGuid
   const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
+  useEffect(() => { assetDataRef.current = assetData; }, [assetData]);
   
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
@@ -2592,7 +2596,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       // Determine what to focus on
       const focusFmGuid = initialFmGuidToFocus || fmGuid;
-      const focusData = allData.find((a: any) => a.fmGuid === focusFmGuid);
+      const focusData = allDataRef.current.find((a: any) => a.fmGuid === focusFmGuid);
       
       let displayAction: any = undefined;
       
@@ -2632,9 +2636,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         isInitialized: true,
         error: null, // Ensure error is cleared on success
         modelInfo: {
-          name: assetData?.commonName || assetData?.name || 'Unknown model',
+          name: assetDataRef.current?.commonName || assetDataRef.current?.name || 'Unknown model',
           type: 'IFC/XKT',
-          lastUpdated: assetData?.sourceUpdatedAt || new Date().toISOString().split('T')[0],
+          lastUpdated: assetDataRef.current?.sourceUpdatedAt || new Date().toISOString().split('T')[0],
         },
       }));
 
@@ -2659,7 +2663,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         setShowError(true);
       }, 800); // 800ms delay to allow retry to succeed
     }
-  }, [fmGuid, initialFmGuidToFocus, assetData, allData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor, isMobile]);
+  }, [fmGuid, initialFmGuidToFocus, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor, isMobile]);
 
   const handleRetry = useCallback(() => {
     // If we're already initializing, ignore retry clicks.
