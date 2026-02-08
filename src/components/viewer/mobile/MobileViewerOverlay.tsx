@@ -127,7 +127,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   return (
     <>
       {/* Compact Header - absolute positioned over the canvas */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-2 bg-gradient-to-b from-background/90 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-2 bg-gradient-to-b from-background/90 to-transparent" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         {/* Left side: Back button */}
         {onClose && (
           <Button variant="secondary" size="icon" onClick={onClose} className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border">

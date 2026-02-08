@@ -739,11 +739,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         <div 
           key={`mobile-toolbar-${settingsKey}`}
           className={cn(
-            "absolute bottom-3 left-1/2 -translate-x-1/2 z-20",
+            "absolute left-1/2 -translate-x-1/2 z-20",
             "flex items-center gap-1 p-1.5 rounded-lg",
             "bg-card/95 backdrop-blur-sm border shadow-lg",
             className
           )}
+          style={{
+            bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
+          }}
         >
           <ToolButton
             icon={<ZoomIn className="h-4 w-4" />}

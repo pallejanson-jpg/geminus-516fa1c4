@@ -14,7 +14,7 @@ export interface GunnarSettingsData {
 }
 
 const DEFAULT_SETTINGS: GunnarSettingsData = {
-  visible: true,
+  visible: false,
   buttonPosition: null,
 };
 
