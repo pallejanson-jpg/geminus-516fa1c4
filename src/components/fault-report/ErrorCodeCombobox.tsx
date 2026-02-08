@@ -16,34 +16,56 @@ import {
   CommandList,
 } from '@/components/ui/command';
 
-interface ErrorCodeComboboxProps {
-  value: string;
-  onChange: (value: string) => void;
+export interface ErrorCode {
+  guid: number;
+  id: string;
+  title: string;
+  description: string;
+  context: string | null;
 }
 
-// Placeholder error codes – can be extended or fetched dynamically
-const ERROR_CODES = [
-  { value: 'EL001', label: 'EL001 – Elektriskt fel' },
-  { value: 'VVS001', label: 'VVS001 – VVS-fel' },
-  { value: 'VENT001', label: 'VENT001 – Ventilationsfel' },
-  { value: 'HISS001', label: 'HISS001 – Hissfel' },
-  { value: 'BRAND001', label: 'BRAND001 – Brandskyddsfel' },
+interface ErrorCodeComboboxProps {
+  value: ErrorCode | null;
+  onChange: (value: ErrorCode | null) => void;
+  errorCodes?: ErrorCode[];
+}
+
+// Fallback error codes when none are provided from API
+const FALLBACK_ERROR_CODES: ErrorCode[] = [
+  { guid: 0, id: 'EL001', title: 'EL001 – Elektriskt fel', description: '', context: null },
+  { guid: 0, id: 'VVS001', title: 'VVS001 – VVS-fel', description: '', context: null },
+  { guid: 0, id: 'VENT001', title: 'VENT001 – Ventilationsfel', description: '', context: null },
+  { guid: 0, id: 'HISS001', title: 'HISS001 – Hissfel', description: '', context: null },
+  { guid: 0, id: 'BRAND001', title: 'BRAND001 – Brandskyddsfel', description: '', context: null },
 ];
 
-const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange }) => {
+const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange, errorCodes }) => {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const selectedLabel = ERROR_CODES.find((c) => c.value === value)?.label;
+  const codes = errorCodes && errorCodes.length > 0 ? errorCodes : FALLBACK_ERROR_CODES;
 
-  const handleSelect = (selectedValue: string) => {
-    onChange(selectedValue === value ? '' : selectedValue);
+  const selectedLabel = value?.title || null;
+
+  const handleSelect = (code: ErrorCode) => {
+    // Toggle off if same code selected
+    if (value && value.id === code.id && value.guid === code.guid) {
+      onChange(null);
+    } else {
+      onChange(code);
+    }
     setOpen(false);
   };
 
   const handleFreeText = () => {
     if (searchQuery.trim()) {
-      onChange(searchQuery.trim());
+      onChange({
+        guid: 0,
+        id: searchQuery.trim(),
+        title: searchQuery.trim(),
+        description: '',
+        context: null,
+      });
       setOpen(false);
       setSearchQuery('');
     }
@@ -59,7 +81,7 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange }
           className="w-full justify-between font-normal h-10"
         >
           <span className={cn('truncate', !value && 'text-muted-foreground')}>
-            {value ? (selectedLabel || value) : 'Ange en matchande felkod'}
+            {selectedLabel || 'Ange en matchande felkod'}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -92,19 +114,21 @@ const ErrorCodeCombobox: React.FC<ErrorCodeComboboxProps> = ({ value, onChange }
               )}
             </CommandEmpty>
             <CommandGroup>
-              {ERROR_CODES.map((code) => (
+              {codes.map((code) => (
                 <CommandItem
-                  key={code.value}
-                  value={code.label}
-                  onSelect={() => handleSelect(code.value)}
+                  key={`${code.guid}-${code.id}`}
+                  value={code.title}
+                  onSelect={() => handleSelect(code)}
                 >
                   <Check
                     className={cn(
                       'mr-2 h-4 w-4',
-                      value === code.value ? 'opacity-100' : 'opacity-0'
+                      value && value.id === code.id && value.guid === code.guid
+                        ? 'opacity-100'
+                        : 'opacity-0'
                     )}
                   />
-                  {code.label}
+                  {code.title}
                 </CommandItem>
               ))}
             </CommandGroup>
