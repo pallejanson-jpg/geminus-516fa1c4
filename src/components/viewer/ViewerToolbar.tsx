@@ -745,7 +745,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             className
           )}
           style={{
-            bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
+            bottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)',
           }}
         >
           <ToolButton

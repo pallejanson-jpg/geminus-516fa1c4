@@ -34,7 +34,7 @@ const MobileBuildingSelector: React.FC<MobileBuildingSelectorProps> = ({ onSelec
   };
 
   return (
-    <div className="h-screen w-screen bg-background flex flex-col">
+    <div className="w-screen bg-background flex flex-col" style={{ height: '100dvh' }}>
       {/* Header with back button */}
       <div 
         className="flex items-center gap-3 px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm"
@@ -119,7 +119,7 @@ const Mobile3DViewer: React.FC = () => {
   
   // Fullscreen 3D viewer - let MobileViewerOverlay handle the close button
   return (
-    <div className="h-screen w-screen relative bg-background overflow-hidden" style={{ touchAction: 'none' }}>
+    <div className="w-screen relative bg-background overflow-hidden" style={{ height: '100dvh', touchAction: 'none' }}>
       {/* 3D Viewer - fullscreen */}
       <ViewerErrorBoundary onReset={handleClose}>
         <AssetPlusViewer 
