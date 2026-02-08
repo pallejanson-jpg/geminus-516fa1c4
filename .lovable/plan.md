@@ -1,198 +1,282 @@
 
 
-# Comprehensive Fixes: Grid Styling, 3D Mobile, Insights with Real Data
+# Virtual Twin: 360-degree + 3D Overlay Implementation
 
-This plan addresses multiple areas: visual consistency between Rooms and Assets grids, 3D mobile loading fixes, Insights real data integration, and navigation improvements.
+## Overview
 
----
+A new viewing mode where the 3D BIM model is rendered as a semi-transparent overlay on top of the live 360-degree panorama. The user navigates panoramas in 360-degree as usual, while the BIM geometry is ghosted on top, providing a "digital twin" visualization that merges real-world imagery with the BIM model.
 
-## 1. Assets Grid -- Match Rooms View Styling + Mobile Fix
-
-**Problem:** AssetsView header, toolbar, and table lack the compact responsive classes that RoomsView has. The `border rounded-lg` on the table wrapper only shows border on the left side on mobile because it overflows horizontally without proper containment.
-
-**Changes in `src/components/portfolio/AssetsView.tsx`:**
-
-- Match the header pattern from RoomsView: use `px-2 sm:px-3 md:px-4 py-2 sm:py-3` instead of `px-4 py-3`
-- Match the search input: use `pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm` instead of `pl-9 h-9`
-- Match icon sizes: use `h-4 w-4 sm:h-5 sm:w-5` instead of `h-5 w-5`
-- Match title sizes: `text-sm sm:text-base md:text-lg font-bold truncate` instead of `font-semibold text-lg`
-- Match close button: `h-8 w-8 sm:h-9 sm:w-9` instead of default
-- Match toolbar: `px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 flex gap-1.5 sm:gap-2` instead of `px-4 py-2`
-- Match table wrapper: add `overflow-hidden` to parent and ensure border wraps properly on mobile
-- Match table cell text: `text-[11px] sm:text-sm` in TableCell for compact mobile rendering
-- Fix `min-w-[200px]` on search input to `min-w-0` to prevent overflow on small screens
-- Match gallery grid: use `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4` to match RoomsView's gallery layout (currently uses `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5`)
-- Add gallery card gradient header matching RoomsView (with icon and level badge)
+This feature reuses the existing Asset+ viewer and Ivion SDK components with minimal new infrastructure, and the Ivion-to-BIM coordinate transform it introduces will also fix the existing Split View camera sync issues.
 
 ---
 
-## 2. 3D Mobile Fix -- Remove XKT Preloading
+## Architecture
 
-**Problem:** The 3D viewer is not rendering on mobile. The user suspects XKT preloading may be interfering. On mobile, the `useXktPreload` hook fetches model data into memory before the viewer loads, potentially consuming all available memory before the viewer even starts, or causing race conditions with model loading.
-
-**Changes:**
-
-- **`src/hooks/useXktPreload.ts`**: Add mobile detection at the start of the hook. On mobile devices, skip all preloading entirely to avoid memory competition with the viewer:
-  ```text
-  export function useXktPreload(buildingFmGuid: string | null | undefined) {
-    const preloadStartedRef = useRef(false);
-    useEffect(() => {
-      if (!buildingFmGuid) return;
-      // Skip preloading on mobile to prevent memory competition with 3D viewer
-      const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent);
-      if (isMobile) return;
-      // ... rest of preloading logic
-    }, [buildingFmGuid]);
-  }
-  ```
-  This is the least invasive change -- it keeps preloading working on desktop where memory is abundant.
-
----
-
-## 3. Insights -- Back Button on Mobile
-
-**Problem:** When navigating to BuildingInsightsView, the back button exists but there is no way to navigate back from the main Insights tabs on mobile (no header visible in immersive mode).
-
-**Changes in `src/components/insights/InsightsView.tsx`:**
-- The main InsightsView is shown inside AppLayout, so the AppHeader and MobileNav provide navigation. No change needed for the main view.
-- For `BuildingInsightsView`, the back button already exists. Verified it renders correctly.
-- For `EntityInsightsView`, the back button already exists.
-
-**No changes needed** -- the back buttons are already present in both BuildingInsightsView and EntityInsightsView.
-
----
-
-## 4. Insights -- Real Data Integration + Mockup Color Coding
-
-This is the largest change. The goal is to replace mockup values with real data from the database, color-code mockup values as purple and real values as white, and make real values clickable.
-
-### 4a. AssetManagementTab Real Data
-
-**File:** `src/components/insights/tabs/AssetManagementTab.tsx`
-
-Current state: Uses `allData` for total asset count, but **hardcoded pie chart** for category distribution and **hash-based random** for per-building counts.
-
-**Changes:**
-- **"Assets by Category"** pie chart: Replace hardcoded `categoryDistribution` with real data computed from `allData`. Group by `assetType` (e.g., IfcDoor, IfcWindow, IfcWall, etc.), take top 6 categories, rest as "Other". Mark as **real data (white text)**.
-- **"Assets per Building"** bar chart: Replace hash-based `assetCount` with real counts from `allData` grouped by `buildingFmGuid`. Match building names from `navigatorTreeData`. Mark as **real data (white text)**.
-- **"Asset Overview per Building"** table: Replace mockup counts with real per-building asset counts. Keep avg age, value, and maintenance status as **purple (mockup)**. Make the Count column **clickable** -- navigates to Assets list for that building.
-- **KPI "Total Assets"**: Already uses real data from allData -- mark as **white**.
-- **KPI "Average Age"**: Mockup -- mark as **purple**.
-- **KPI "Replacement Value"**: Mockup -- mark as **purple**.
-- **KPI "Needs Maintenance"**: Mockup -- mark as **purple**.
-
-### 4b. SpaceManagementTab Real Data
-
-**File:** `src/components/insights/tabs/SpaceManagementTab.tsx`
-
-Current state: Uses `navigatorTreeData.children` for space counts and area (works since it's a tree). Uses hash-based random for occupancy/vacancy.
-
-**Changes:**
-- **KPI "Total Rooms"**: Already real -- from tree traversal counting spaces. Mark **white**.
-- **KPI "Total Area"**: Already real -- from NTA attributes. Mark **white**.
-- **KPI "Average Occupancy"**: Mockup. Mark **purple**.
-- **KPI "Avg. Vacancy Rate"**: Mockup. Mark **purple**.
-- **"Space Efficiency per Building"** section: The `spaceCount` and `totalArea` are real. The `occupancy` percentage is mockup. Show room count and area in **white**, occupancy bar/badge in **purple**.
-- **"Occupancy per Building"**: All mockup. Mark **purple**.
-- **"Room Types"** pie chart: Already real (from space attributes). Mark **white**.
-- Make **"Total Rooms" KPI clickable** -- navigate to Rooms list.
-
-### 4c. PerformanceTab
-
-**File:** `src/components/insights/tabs/PerformanceTab.tsx`
-
-Current state: Uses `navigatorTreeData` tree for building/room/area counts (real). Energy data is hash-based (mockup).
-
-**Changes:**
-- **KPI "Building Count"**: Already real. Mark **white**. Make clickable to Portfolio.
-- **KPI "Avg. Energy"**: Mockup. Mark **purple**.
-- **KPI "CO2 Emissions"**: Mockup. Mark **purple**.
-- **KPI "Avg. Energy Rating"**: Mockup. Mark **purple**.
-- **Building list cards**: Building names are real. Energy rating/kWh are mockup. Name in **white**, energy data in **purple**.
-- All chart data is mockup -- mark **purple**.
-
-### 4d. FacilityManagementTab
-
-**File:** `src/components/insights/tabs/FacilityManagementTab.tsx`
-
-All data is mockup (generated work orders). Mark all values **purple**.
-
-### 4e. PortfolioManagementTab
-
-**File:** `src/components/insights/tabs/PortfolioManagementTab.tsx`
-
-Building names and areas are real. Financial data (value, rent, ROI) is mockup. Names/area in **white**, financial data in **purple**.
-
-### Color Coding Implementation
-
-Add a utility component/class for distinguishing real vs mockup values:
+The Virtual Twin page layers two existing components:
 
 ```text
-// In each tab, wrap mockup values:
-<span className="text-purple-400">{mockupValue}</span>
-
-// Real values use default foreground:
-<span className="text-foreground">{realValue}</span>
++--------------------------------------------------+
+| Header: [Back] [Building Name]  [Align] [Ghost]  |
++--------------------------------------------------+
+|                                                    |
+|  z-index: 0  -- Ivion SDK <div> (360-degree)       |
+|    - Full viewport, receives all pointer events    |
+|    - User navigates panorama naturally             |
+|                                                    |
+|  z-index: 10 -- Asset+ 3D <canvas>                |
+|    - Transparent background (CSS)                  |
+|    - pointer-events: none                          |
+|    - All objects at 30% opacity ("ghost mode")     |
+|    - Camera locked to Ivion camera pose            |
+|                                                    |
++--------------------------------------------------+
+| Alignment Panel (slide-out, when activated)        |
+| [Offset X] [Offset Y] [Offset Z] [Rotation]       |
+| [Save]  [Reset]                                    |
++--------------------------------------------------+
 ```
 
-For KPI cards, add a small indicator:
-- Real data: no indicator (default styling)
-- Mockup data: purple text color on the value + a small "Demo" badge
-
-### Clickable Real Values
-
-Add `onClick` handlers to real-data KPIs and table cells that navigate to the relevant detail views:
-- Total Assets count --> navigate to Assets list (set `activeApp` to portfolio, select building, show assets)
-- Total Rooms count --> navigate to Rooms list
-- Asset count per building --> navigate to that building's assets
-- Room count per building --> navigate to that building's rooms
-
-This will use the existing `AppContext` patterns (`setActiveApp`, `setSelectedFacility`).
-
-### Props Changes
-
-- `AssetManagementTab`: Add `onNavigateToAssets?: (buildingFmGuid?: string) => void`
-- `SpaceManagementTab`: Add `onNavigateToRooms?: (buildingFmGuid?: string) => void`
-- These callbacks will be wired in `InsightsView.tsx` to set the appropriate app context.
+Camera sync is one-directional: Ivion drives, 3D follows. The sync loop runs via polling (same as the existing `useIvionCameraSync` hook) but writes directly to the xeokit camera without going through the `ViewerSyncContext`.
 
 ---
 
-## 5. Building/Floor/Room Level Insights Tabs
+## Phase 1: Ivion-to-BIM Transform
 
-**Problem:** The per-building insights view (`BuildingInsightsView`) only shows energy charts. The user wants the same tab structure (Performance, FM, Space, Asset) at each hierarchy level.
+**The core problem:** Ivion SDK reports positions in its own local coordinate space (meters relative to site origin). The BIM model (xeokit) uses its own local coordinate space. These are not the same. Currently the sync code passes Ivion coordinates straight to xeokit, which is why Split View cameras don't follow each other correctly.
 
-**Changes in `src/components/insights/BuildingInsightsView.tsx`:**
-- Replace the current single-view with a tabbed layout matching the main InsightsView
-- Add Tabs: Performance, FM, Space, Asset
-- Each tab filters data to the selected building's `fmGuid`
-- Reuse the same data computation patterns but scoped to the building
+**Solution:** Store a per-building offset + rotation that maps Ivion space to BIM space.
 
-**Changes in `src/components/insights/EntityInsightsView.tsx`:**
-- Same tabbed layout for Floor and Room levels
-- Scope data to `levelFmGuid` for floors, `inRoomFmGuid` for rooms
+### New file: `src/lib/ivion-bim-transform.ts`
+
+```text
+Interface IvionBimTransform {
+  offsetX: number;  // meters
+  offsetY: number;  // meters
+  offsetZ: number;  // meters
+  rotation: number; // degrees
+}
+
+function ivionToBim(pos, transform) -> { x, y, z }
+function bimToIvion(pos, transform) -> { x, y, z }
+function ivionHeadingToBim(heading, transform) -> heading
+function bimHeadingToIvion(heading, transform) -> heading
+```
+
+The transform applies: (1) rotation around Y axis by `transform.rotation`, then (2) translation by offsets.
+
+### Database migration
+
+Add four columns to `building_settings`:
+- `ivion_bim_offset_x` numeric DEFAULT 0
+- `ivion_bim_offset_y` numeric DEFAULT 0
+- `ivion_bim_offset_z` numeric DEFAULT 0
+- `ivion_bim_rotation` numeric DEFAULT 0
+
+---
+
+## Phase 2: Virtual Twin Page
+
+### New file: `src/pages/VirtualTwin.tsx`
+
+Route: `/virtual-twin?building=<fmGuid>`
+
+**Data loading** (reuses SplitViewer pattern):
+- Reads `building` param from URL
+- Finds building in `allData`
+- Fetches `building_settings` for ivion_site_id + alignment offsets
+- If no ivion_site_id configured, shows error with "Back" button
+
+**Layout:**
+- Full viewport, two stacked layers
+- Bottom layer: SDK container `<div>` with Ivion SDK loaded exactly as in `Ivion360View` (reuse `loadIvionSdk`, `createIvionElement`, `fetchLoginToken`)
+- Top layer: Asset+ viewer `<div id="AssetPlusVirtualTwin">` with CSS overrides:
+  - `pointer-events: none` on the wrapper
+  - Background gradient replaced with `transparent`
+  - Canvas background set via CSS to transparent
+
+**Transparent 3D canvas approach:**
+
+The Asset+ viewer creates a xeokit instance internally. After initialization, we access the xeokit canvas:
+```text
+const xeokitViewer = viewerInstance.$refs.AssetViewer.$refs.assetView.viewer;
+const canvas = xeokitViewer.scene.canvas.canvas;
+canvas.style.background = 'transparent';
+```
+
+The Asset+ viewer container background gradient (line 2819 of AssetPlusViewer.tsx) is set via inline style. For Virtual Twin, we use a new prop `transparentBackground` that omits this gradient.
+
+**Ghost mode:**
+
+After models load, apply reduced opacity to all objects:
+```text
+const objectIds = xeokitViewer.scene.objectIds;
+xeokitViewer.scene.setObjectsOpacity(objectIds, 0.3);
+```
+
+This makes geometry semi-transparent so the panorama shows through.
+
+**Camera sync loop:**
+
+A `useEffect` that polls the Ivion SDK every 100ms:
+```text
+1. const image = ivApi.getMainView().getImage()
+2. if (!image) return
+3. const viewDir = ivApi.getMainView().currViewingDir
+4. Apply ivionToBim transform to image.location
+5. Set xeokitCamera.eye = transformedPosition
+6. Set xeokitCamera.look = calculated from heading/pitch
+7. Set xeokitCamera.perspective.fov = 90 (match panorama)
+```
+
+This runs in `requestAnimationFrame` for smooth tracking.
+
+**Header toolbar:**
+- Back button (navigate(-1))
+- Building name
+- Ghost opacity slider (0-100%, default 30%)
+- Alignment mode toggle button
+- Fullscreen toggle
+
+### New file: `src/hooks/useVirtualTwinSync.ts`
+
+Dedicated hook for one-directional Ivion-to-3D sync:
+- Takes `ivApiRef`, `viewerInstanceRef`, `transform` (IvionBimTransform)
+- Polls Ivion SDK position at 60fps via requestAnimationFrame
+- Directly sets xeokit camera (no ViewerSyncContext needed)
+- Returns `{ isActive, currentImageId }`
+
+---
+
+## Phase 3: Alignment Panel
+
+### New file: `src/components/viewer/AlignmentPanel.tsx`
+
+A slide-out panel for calibrating the Ivion-to-BIM transform:
+
+**Controls:**
+- Offset X slider: -50m to +50m, step 0.01m
+- Offset Y slider: -50m to +50m, step 0.01m
+- Offset Z slider: -50m to +50m, step 0.01m
+- Rotation slider: -180deg to +180deg, step 0.1deg
+- "Save" button: upserts to `building_settings`
+- "Reset" button: set all to 0
+
+**Live preview:** Adjusting any slider immediately updates the transform used by the sync loop, so the user sees the BIM model shift in real-time relative to the panorama.
+
+**Styling:** Dark semi-transparent panel (matches viewer overlay aesthetic), positioned on the left side.
+
+---
+
+## Phase 4: Apply Transform to Split View
+
+The same `ivionToBim` / `bimToIvion` functions fix the existing Split View sync.
+
+### Modified: `src/hooks/useIvionCameraSync.ts`
+
+In the SDK polling loop (lines 179-216), apply the transform:
+
+```text
+// BEFORE (current - broken):
+const pos = { x: image.location.x, y: image.location.y, z: image.location.z };
+updateFromIvion(pos, heading, pitch);
+
+// AFTER (with transform):
+const bimPos = ivionToBim(image.location, buildingTransform);
+const bimHeading = ivionHeadingToBim(heading, buildingTransform);
+updateFromIvion(bimPos, bimHeading, pitch);
+```
+
+In the 3D-to-360 direction (`syncToIvionSdk`, lines 246-290), apply inverse transform when finding nearest image:
+
+```text
+// When comparing positions, transform the 3D position to Ivion space first
+const ivionPos = bimToIvion(syncState.position, buildingTransform);
+const nearestImage = findNearestImage(ivionPos);
+```
+
+Also transform heading when setting viewDir for `moveToImageId()`.
+
+### Modified: `src/hooks/useIvionCameraSync.ts` (interface)
+
+Add `buildingTransform?: IvionBimTransform` to `UseIvionCameraSyncOptions`.
+
+### Modified: `src/components/viewer/Ivion360View.tsx`
+
+Fetch `ivion_bim_offset_x/y/z` and `ivion_bim_rotation` from building_settings and pass to the sync hook.
+
+### Modified: `src/pages/SplitViewer.tsx`
+
+Fetch the new alignment columns and pass them through to both viewers.
+
+---
+
+## Phase 5: AssetPlusViewer - transparentBackground Prop
+
+### Modified: `src/components/viewer/AssetPlusViewer.tsx`
+
+Add optional prop `transparentBackground?: boolean`:
+- When true, omit the radial gradient background style on the container div (line 2819)
+- After viewer initialization, set `canvas.style.background = 'transparent'`
+- Disable NavCube, toolbar, floor switcher, and other UI overlays
+- After all models load, apply ghost opacity to all objects
+
+This keeps the existing AssetPlusViewer fully functional for normal use while enabling overlay mode for Virtual Twin.
+
+---
+
+## Phase 6: Route and Navigation
+
+### Modified: `src/App.tsx`
+
+Add Virtual Twin route:
+```text
+<Route
+  path="/virtual-twin"
+  element={
+    <Suspense fallback={...}>
+      <ProtectedRoute>
+        <VirtualTwin />
+      </ProtectedRoute>
+    </Suspense>
+  }
+/>
+```
+
+### Modified: `src/components/portfolio/QuickActions.tsx`
+
+Add "Virtual Twin" as a quick action alongside existing "Split View":
+- Icon: Layers or similar
+- Navigates to `/virtual-twin?building=<fmGuid>`
+- Only shows when building has Ivion site ID configured
+
+### Modified: `src/components/portfolio/FacilityLandingPage.tsx`
+
+Add "Virtual Twin" button near the existing "Split View" launch.
 
 ---
 
 ## File Summary
 
-| File | Changes |
-|------|---------|
-| `src/components/portfolio/AssetsView.tsx` | Match RoomsView responsive styling, fix border overflow on mobile |
-| `src/hooks/useXktPreload.ts` | Skip preloading on mobile devices |
-| `src/components/insights/tabs/AssetManagementTab.tsx` | Replace mockup with real asset counts/categories, purple/white color coding, clickable values |
-| `src/components/insights/tabs/SpaceManagementTab.tsx` | Mark real vs mockup values, purple/white coding, clickable room counts |
-| `src/components/insights/tabs/PerformanceTab.tsx` | Mark real vs mockup values with color coding |
-| `src/components/insights/tabs/FacilityManagementTab.tsx` | Mark all values as purple (mockup) |
-| `src/components/insights/tabs/PortfolioManagementTab.tsx` | Mark real (names/area) vs mockup (financial) with color coding |
-| `src/components/insights/BuildingInsightsView.tsx` | Add tabbed layout (Performance, FM, Space, Asset) with building-scoped data |
-| `src/components/insights/EntityInsightsView.tsx` | Add tabbed layout for Floor/Room levels |
-| `src/components/insights/InsightsView.tsx` | Wire navigation callbacks for clickable values |
+| File | Type | Description |
+|---|---|---|
+| `src/lib/ivion-bim-transform.ts` | New | Transform functions between Ivion and BIM coordinate spaces |
+| `src/pages/VirtualTwin.tsx` | New | Main Virtual Twin page with layered 360+3D viewers |
+| `src/hooks/useVirtualTwinSync.ts` | New | One-directional Ivion-to-3D camera sync hook |
+| `src/components/viewer/AlignmentPanel.tsx` | New | Calibration UI for coordinate alignment |
+| `src/components/viewer/AssetPlusViewer.tsx` | Modified | Add `transparentBackground` prop for overlay mode |
+| `src/hooks/useIvionCameraSync.ts` | Modified | Apply ivion-to-BIM transform in sync loop |
+| `src/pages/SplitViewer.tsx` | Modified | Fetch and pass alignment data for improved sync |
+| `src/components/viewer/Ivion360View.tsx` | Modified | Pass transform data to sync hook |
+| `src/App.tsx` | Modified | Add `/virtual-twin` route |
+| `src/components/portfolio/QuickActions.tsx` | Modified | Add Virtual Twin navigation entry |
+| `src/components/portfolio/FacilityLandingPage.tsx` | Modified | Add Virtual Twin launch button |
+| Database migration | New | Add ivion_bim_offset_x/y/z and ivion_bim_rotation to building_settings |
 
-## Risk Assessment
+## Technical Risks
 
-- **Assets grid**: Low risk -- pure styling alignment.
-- **XKT preload skip on mobile**: Low risk -- mobile never had working preloading anyway (models loaded too much memory). Viewer will load models directly from API.
-- **Insights real data**: Medium risk -- relies on `allData` having correct `assetType` and `buildingFmGuid` fields, which the database query confirms are populated.
-- **Color coding**: Low risk -- pure visual change using Tailwind classes.
-- **Clickable navigation**: Medium risk -- needs careful wiring through AppContext to navigate correctly.
+- **Canvas transparency:** The Asset+ UMD bundle wraps xeokit and may set its own canvas background. After initialization we can override it via DOM access. If the UMD resets it, we fall back to CSS `mix-blend-mode: multiply` on the 3D layer.
+- **FOV matching:** The panorama's FOV must match xeokit's perspective camera FOV. The Ivion SDK may not expose FOV directly -- we default to 90 degrees and allow fine-tuning via the alignment panel.
+- **Performance:** Running both viewers simultaneously is memory-intensive. On mobile, the Virtual Twin option will be hidden or show a warning.
+- **Two Asset+ instances:** Having Asset+ viewer in both normal mode and Virtual Twin mode on different pages is fine since they're never active simultaneously (different routes).
+- **Alignment persistence:** The offsets are stored per building in the database, so once calibrated they persist across sessions and users.
 
