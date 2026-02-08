@@ -224,6 +224,32 @@ export default function Ivion360View({
     return () => clearInterval(interval);
   }, [sdkStatus, fetchLoginToken]);
 
+  // Hide Ivion sidebar items on mobile when SDK is ready
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || !isMobile || !ivApiRef.current) return;
+
+    try {
+      // Try to hide all sidebar menu items
+      const menuItems = ivApiRef.current.getMenuItems?.();
+      if (menuItems && Array.isArray(menuItems)) {
+        menuItems.forEach(item => {
+          if (item.setVisible) {
+            item.setVisible(false);
+          } else if (item.isVisible) {
+            // Override isVisible to always return false
+            item.isVisible = () => false;
+          }
+        });
+        console.log('[Ivion360View] Hidden', menuItems.length, 'sidebar menu items on mobile');
+      }
+
+      // Try to close the sidebar menu
+      ivApiRef.current.closeMenu?.();
+    } catch (e) {
+      console.warn('[Ivion360View] Could not hide SDK sidebar items:', e);
+    }
+  }, [sdkStatus, isMobile]);
+
   // ─── Token renewal ────────────────────────────────────────────────
 
   useEffect(() => {
@@ -266,17 +292,21 @@ export default function Ivion360View({
   const handleIframeLoad = useCallback(() => {
     setIsLoading(false);
     
+    // On mobile, aggressively hide Ivion sidebar with multiple retries
     if (isMobile && iframeRef.current?.contentWindow) {
-      setTimeout(() => {
-        try {
-          iframeRef.current?.contentWindow?.postMessage({
-            command: 'setSidebarVisibility',
-            params: { visible: false }
-          }, '*');
-        } catch (e) {
-          console.warn('[Ivion360View] Could not send sidebar postMessage:', e);
-        }
-      }, 3000);
+      const RETRY_DELAYS = [1000, 3000, 5000, 8000];
+      RETRY_DELAYS.forEach(delay => {
+        setTimeout(() => {
+          try {
+            iframeRef.current?.contentWindow?.postMessage({
+              command: 'setSidebarVisibility',
+              params: { visible: false }
+            }, '*');
+          } catch (e) {
+            console.warn('[Ivion360View] Could not send sidebar postMessage:', e);
+          }
+        }, delay);
+      });
     }
   }, [isMobile]);
 
@@ -386,7 +416,10 @@ export default function Ivion360View({
   }
 
   return (
-    <div className={`h-full flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}>
+    <div 
+      className={`h-full flex flex-col overflow-hidden ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : ''}`}
+      style={isMobile ? { touchAction: 'none' } : undefined}
+    >
       {/* Toolbar - hidden on mobile */}
       {!isMobile && (
         <div className="flex items-center justify-between p-2 border-b bg-background/95 backdrop-blur-sm">
