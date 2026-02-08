@@ -1,90 +1,100 @@
 
 
-# Fix Asset Grid and Room Grid: Sticky Header, User Defined Columns, and Selection Behavior
+# Fix 3D Viewer and Standardize Back Buttons
 
-## Problem Summary
+## Issue 1: 3D Viewer Not Working
 
-Three issues to fix in the Asset grid (`AssetsView.tsx`) and Room grid (`RoomsView.tsx`):
+### Root Cause
 
-1. **Header row scrolls away** -- when scrolling down in either grid, the column header row disappears
-2. **Missing User Defined property columns in Asset grid** -- the Room grid already discovers and shows User Defined properties from the `attributes` object, but the Asset grid only shows hardcoded System and Status columns
-3. **Properties dialog opens immediately on selection** -- clicking a row in the grid opens the properties dialog right away. The correct behavior is: click to select/highlight, then use the "Egenskaper" button in the toolbar to view properties
+The 3D viewer (Asset+ xeokit) **is actually loading correctly** -- the console shows `AssetPlusViewer version: 2.5.1.0` and `Viewer mounted successfully`. The problem is specifically on the **Virtual Twin page** (`/virtual-twin`), where the 3D canvas has `pointer-events: none` and `transparentBackground`, and the Ivion SDK layer underneath it fails to load (404 on `ivion.js`). This means:
 
----
+- The 3D model is rendered but fully transparent (ghost mode) on a black/empty background
+- No panorama is visible behind it because the SDK didn't load
+- The page looks blank or broken
 
-## Change 1: Sticky Table Header (both grids)
+The standalone 3D viewer (accessed via the portfolio/building selector) works fine -- it uses `AssetPlusViewer` in its standard mode with the normal gradient background.
 
-**Files:** `AssetsView.tsx`, `RoomsView.tsx`
+### Fix
 
-Both grids render `<TableHeader>` inside a `<ScrollArea>`. The fix is to make the header row sticky so it stays at the top when scrolling.
+The Virtual Twin page needs a **fallback UI** when the Ivion SDK fails to load, instead of showing a blank screen. It should also handle the "SDK load failed" state more gracefully -- show an error toast with a retry option and optionally fall back to showing the 3D model with its normal (non-transparent) background so the user at least sees something.
 
-In the `SortableColumnHeader` component (shared by both files), the `<TableHead>` already has `className="bg-muted/50"`. Add `sticky top-0 z-10` to make it stick to the top of the scroll container.
+**Changes to `src/pages/VirtualTwin.tsx`:**
+- Track an `sdkError` state when the Ivion SDK fails to load
+- When `sdkError` is true, show the 3D viewer in non-transparent mode (so the BIM model is visible on its normal background), plus an error banner explaining that the 360-degree panorama could not be loaded
+- Add a "Retry" button to re-attempt SDK loading
+- This ensures the 3D view always works even if the 360-degree layer fails
 
-Also add the same sticky classes to the non-sortable header cells (the checkbox column and the actions column) so the entire header row stays pinned.
+**Changes to `src/lib/ivion-sdk.ts`:**
+- Review `loadIvionSdk` to ensure it propagates errors correctly (currently the Virtual Twin catches the error but only shows a toast -- needs to also set state)
 
-Specifically for `<TableHeader>`:
-- Add `className="sticky top-0 z-10 bg-background"` to the `<TableHeader>` element
-- This ensures the entire row stays visible, including checkbox and action columns
+## Issue 2: Inconsistent Back Buttons
 
----
+### Current Inventory
 
-## Change 2: Add User Defined Columns to Asset Grid
+There are **four different back button patterns** used across the application:
 
-**File:** `AssetsView.tsx`
+| Pattern | Where Used |
+|---|---|
+| **ArrowLeft icon only** (no text) | MapView (mobile), Mobile3DViewer selector, Mobile360Viewer, InsightsView, SplitViewer (mobile header), MobileFaultReport |
+| **ChevronLeft icon** | MobileViewerOverlay (3D viewer header) |
+| **ArrowLeft + "Tillbaka" text** | SplitViewer (desktop), VirtualTwin header |
+| **X (close) icon** top-right | FacilityLandingPage, AssetPlusViewer error state |
 
-The Room grid already has this logic (lines 207-245 in `RoomsView.tsx`). The same approach will be applied to the Asset grid:
+### Standardized Design
 
-- Scan all asset `attributes` objects to discover User Defined Properties (objects with `{name, value, dataType}` structure)
-- Add them to `allColumns` alongside the existing System and Status columns
-- Extract values using the same `extractPropertyValue` pattern from RoomsView
-- Add a "Anvandardefinierade" (User Defined) section in the column selector dropdown so users can toggle them on/off
+Adopt **two patterns only**, based on navigation context:
 
-**Current state** (`AssetsView.tsx` line 317):
-```
-const allColumns = [...SYSTEM_COLUMNS, ...STATUS_COLUMNS];
-```
+1. **"Back" button (ArrowLeft)** -- Used when navigating **away from a standalone page** back to a previous page. Consistent: icon-only on mobile, icon + "Tillbaka" text on desktop.
+   - Used in: VirtualTwin, SplitViewer, Mobile3DViewer, Mobile360Viewer, MobileFaultReport, InsightsViews
 
-**After change:** Dynamic discovery identical to RoomsView -- scans `localAssets` for attribute keys that are objects with `name` and `value` properties.
+2. **"Close" button (X)** -- Used when **closing a panel/overlay within the same page** (e.g. closing a facility detail card to return to the portfolio grid). Positioned top-right.
+   - Used in: FacilityLandingPage (closing facility detail back to portfolio grid)
 
-Also update the column selector dropdown (currently only shows "Systemegenskaper" and "Status" sections) to include a third "Anvandardefinierade" section.
+The **ChevronLeft** variant in `MobileViewerOverlay` should be changed to **ArrowLeft** for consistency with all other back buttons.
 
-Update the `assetData` mapping (lines 322-352) to also extract User Defined property values using the same `extractPropertyValue` helper.
+### Changes
 
----
+**`src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
+- Change `ChevronLeft` import to `ArrowLeft`
+- Replace `<ChevronLeft>` with `<ArrowLeft>` in the back button
 
-## Change 3: Decouple Selection from Properties Dialog
+**`src/components/insights/EntityInsightsView.tsx`:**
+- No change needed -- already uses ArrowLeft icon-only
 
-**Files:** `AssetsView.tsx`, `RoomsView.tsx`
+**`src/components/insights/BuildingInsightsView.tsx`:**
+- No change needed -- already uses ArrowLeft icon-only
 
-Both files have a `useEffect` that auto-opens the properties dialog whenever rows are selected:
+**`src/pages/SplitViewer.tsx`:**
+- Mobile header: already uses ArrowLeft icon-only (correct)
+- Desktop header: already uses ArrowLeft + "Tillbaka" (correct)
 
-```typescript
-// AssetsView lines 202-209, RoomsView lines 192-199
-useEffect(() => {
-  if (selectedRows.size > 0) {
-    setShowPropertiesFor(Array.from(selectedRows));
-  } else {
-    setShowPropertiesFor(null);
-  }
-}, [selectedRows]);
-```
+**`src/pages/VirtualTwin.tsx`:**
+- Already uses ArrowLeft + "Tillbaka" (correct)
 
-**Fix:** Remove this `useEffect` entirely from both files. The `showPropertiesFor` state should only be set when the user explicitly clicks the "Egenskaper" button in the selection toolbar (which already exists and calls `handleShowSelectedProperties`).
+**`src/components/portfolio/FacilityLandingPage.tsx`:**
+- Already uses X icon top-right (correct for "close panel" context)
 
-Additionally, add an "Egenskaper" button to the per-row actions column so users can open properties for a single row without having to select it first via checkbox.
-
----
+**`src/components/viewer/AssetPlusViewer.tsx`:**
+- Error state uses X icon for close (correct -- closing the viewer panel)
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/components/portfolio/AssetsView.tsx` | Sticky header, discover User Defined columns from attributes, remove auto-open useEffect, add per-row edit button |
-| `src/components/portfolio/RoomsView.tsx` | Sticky header, remove auto-open useEffect, add per-row edit button |
+| `src/pages/VirtualTwin.tsx` | Add `sdkError` state, show fallback 3D with error banner when SDK fails, add retry |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Change `ChevronLeft` to `ArrowLeft` for back button consistency |
 
-## Behavior After Changes
+## Technical Details
 
-1. **Scrolling**: The header row with column names stays fixed at the top as you scroll through rows
-2. **Column selector** (Asset grid): Now shows three sections -- Systemegenskaper, Status, and Anvandardefinierade -- with all discovered properties available as toggleable columns
-3. **Selection flow**: Click checkbox or row to select/highlight (no dialog opens). Click "Egenskaper" in the toolbar to view properties of selected items. Or click the edit icon in the row's action column to open properties for that specific item.
+The 3D viewer fix in VirtualTwin.tsx involves:
+
+1. Adding an `sdkError` boolean state
+2. In the `loadSdk` catch block, set `setSdkError(true)` alongside the existing toast
+3. When `sdkError` is true AND `buildingInfo` exists:
+   - Render the `AssetPlusViewer` without `transparentBackground` (normal mode)
+   - Show a warning banner at the top: "360-graders panorama kunde inte laddas. Visar enbart 3D-modell."
+   - Include a "Forsok igen" (Retry) button that resets `sdkError` and re-triggers the SDK load effect
+4. The `pointer-events: none` on the 3D layer is only applied when the SDK loaded successfully
+
+The back button fix is a single-line change: replacing `ChevronLeft` with `ArrowLeft` in MobileViewerOverlay.
 
