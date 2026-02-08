@@ -1,131 +1,144 @@
 
 
-# Implementera er-rep.com API-integration
+# Mobiloptimering: 3D-viewer, Header och 360-vy
 
-## Oversikt
+## Sammanfattning
 
-Hardkoda `https://er-rep.com` som bas-URL i en ny edge function och koppla felanmälan-formuläret till det externa API:t istallet for lokal databasskrivning.
+Tre separata problem ska fixas:
 
-## Steg-for-steg
+1. **3D-viewern fungerar inte i AppLayout pa mobil** -- Pa desktop renderas den inuti AppLayout med header/sidebars. Pa mobil tar headern onodig plats och touch-interaktion med 3D:n fungerar daligt. Losningen: omdirigera till fullskarmssidan `/viewer` pa mobil.
 
-### 1. Skapa edge function `errorreport-proxy`
+2. **Headern tar onodig skarmyta pa mobil** -- AppHeader (56px) visas alltid, aven i fullskarmsappar (3D, 360, karta). Pa mobil ska headern doljas for dessa appar och ersattas av en tillbaka-knapp som overlay.
 
-Ny fil: `supabase/functions/errorreport-proxy/index.ts`
+3. **360-vyn "flyter" och Ivion-komponenter ar for stora** -- Sidans overflow ar inte lastad, och Ivions sidebar visas trots att vi forsaker dolja den. Behover mer aggressiv dolning och stabilisering.
 
-- Stodjer tva actions via JSON body:
-  - `action: "get-config"` med `qrKey` -- gor `GET` till `https://er-rep.com/api/v1/errorreport/register/{qrKey}` och returnerar konfiguration + felkoder
-  - `action: "submit"` med `qrKey` + `payload` -- gor `PUT` till `https://er-rep.com/api/v1/errorreport/register/{qrKey}` med payload
-- Hardkodad bas-URL: `https://er-rep.com`
-- CORS-headers for webbappanrop
-- `verify_jwt = false` i config.toml (publikt formulär)
+---
 
-### 2. Uppdatera `ErrorCodeCombobox`
+## Steg 1: Omdirigera 3D-viewer till fullskarm pa mobil
 
-Fil: `src/components/fault-report/ErrorCodeCombobox.tsx`
+**Fil:** `src/components/layout/AppHeader.tsx`
 
-- Exportera ett nytt `ErrorCode`-interface: `{ guid: number; id: string; title: string; description: string; context: string | null }`
-- Ny prop `errorCodes: ErrorCode[]` (valfri, fallback till hardkodade om tom/undefined)
-- Andrad `value`/`onChange` fran `string` till `ErrorCode | null` for att skicka hela objektet
-- Visa `title` i comboboxen (t.ex. "Kalka av kaffemaskin")
+Nar `isMobile` ar true och anvandaren klickar "3D Viewer"-knappen, navigera till `/viewer` istallet for att satta `setActiveApp('assetplus_viewer')`. MobileNav gor redan detta korrekt -- den anvander `navigate('/viewer')`.
 
-### 3. Uppdatera `FaultReportForm`
+**Andring:**
+- I `viewButtons`-arrayen (rad 111-116), lagg till en `mobileRoute`-egenskap for `assetplus_viewer`
+- I `handleMenuClick`, kontrollera `isMobile` och om knappen har `mobileRoute`, anvand `navigate()` istallet for `setActiveApp()`
 
-Fil: `src/components/fault-report/FaultReportForm.tsx`
+---
 
-- Ny prop `errorCodes?: ErrorCode[]` som skickas vidare till `ErrorCodeCombobox`
-- Andra zod-schema: `errorCode`-faltet fran `string` till `any` (strukturerat ErrorCode-objekt eller null)
-- Uppdatera `FaultReportFormData`-typen
+## Steg 2: Dolj header pa mobil for "immersive" appar
 
-### 4. Uppdatera `MobileFaultReport`
+**Fil:** `src/components/layout/AppLayout.tsx`
 
-Fil: `src/components/fault-report/MobileFaultReport.tsx`
+Definiera en lista av "immersive" appar som ska dolja headern pa mobil: `assetplus_viewer`, `viewer`, `radar`, `map`.
 
-- Samma andringar som FaultReportForm: ny `errorCodes`-prop och uppdaterat zod-schema
+Nar `isMobile && activeApp` ar en immersive app:
+- Dolj `AppHeader`, `SyncProgressBanner`, `DataConsistencyBanner`
+- Dolj `LeftSidebar` och `RightSidebar`
+- Lat `MainContent` fylla hela skarmen
 
-### 5. Uppdatera `FaultReport.tsx` (QR-baserad sida)
+Varje immersive app-komponent har redan sina egna tillbaka-knappar (MobileViewerOverlay for 3D, back-overlay for 360).
 
-Fil: `src/pages/FaultReport.tsx`
+**Fil:** `src/context/AppContext.tsx` (las activeApp)
 
-- Ta bort `qr_report_configs`-uppslag
-- Vid sidladdning: anropa edge function med `action: "get-config"` for att hamta installationsinfo och felkoder fran er-rep.com
-- Vid submit: anropa edge function med `action: "submit"` istallet for att skriva till `work_orders`
-- Skicka dynamiska felkoder till formulärkomponenterna
-- Visa API-svar (referensnummer) vid lyckad inskickning
+AppLayout behover lasa `activeApp` fran context -- den gor det redan via att importera och anvanda `useContext(AppContext)` indirekt via barnen, men sjalva `AppLayoutInner` lser inte context. Behover lagga till `useContext(AppContext)` for att lasa `activeApp`.
 
-### 6. Uppdatera `InAppFaultReport.tsx`
+---
 
-Fil: `src/components/fault-report/InAppFaultReport.tsx`
+## Steg 3: Stabilisera 360-vyn pa mobil
 
-- InApp-versionen har ingen QR-nyckel, sa den fortsatter att spara lokalt i `work_orders` (oforandrad submit-logik)
-- Skickar dock den uppdaterade `errorCode`-typen (strukturerat objekt istallet for string)
+**Fil:** `src/components/viewer/Ivion360View.tsx`
 
-### 7. Uppdatera `FaultReportSuccess`
+- Pa mobil: lagg till `overflow-hidden` och `style={{ touchAction: 'none' }}` pa rot-containern (rad 389) for att forhindra sidans scrollning
+- Oka postMessage-retry for `setSidebarVisibility`: skicka meddelandet tre ganger med 1s, 3s, 5s fordrojning istallet for bara en gang vid 3s
 
-Fil: `src/components/fault-report/FaultReportSuccess.tsx`
+**Fil:** `src/pages/Mobile360Viewer.tsx`
 
-- Stodjer API-referensnummer fran er-rep.com-svaret (om tillgangligt)
-- Fallback till lokalt genererat ID om inget API-svar finns
+- Lagg till `style={{ touchAction: 'none' }}` pa rot-containern (redan `overflow-hidden` -- bra)
+- Sakerstall att hela sidan ar lastad med `position: fixed` for att undvika iOS-studs
 
-### 8. Uppdatera `supabase/config.toml`
+---
 
-Lagg till:
-```text
-[functions.errorreport-proxy]
-verify_jwt = false
-```
+## Steg 4: Minimera Ivion UI-element pa mobil
+
+**Fil:** `src/components/viewer/Ivion360View.tsx`
+
+**SDK-lage (api ar tillgangligt):**
+Nar SDK ar `ready` och `isMobile`:
+- Forsok anropa `api.getMenuItems()` och satta `isVisible = () => false` for varje item
+- Forsok anropa `api.closeMenu?.()` eller liknande for att dolja sidebaren
+
+**Iframe-lage:**
+- Skicka `setSidebarVisibility` med fler retries (1s, 3s, 5s, 8s)
+- Skicka postMessage for att dolja eventuella andra UI-element om mojligt
+
+**Fil:** `src/lib/ivion-sdk.ts`
+
+Utoka `IvionApi`-interfacet med:
+- `getMenuItems?: () => any[]` -- for att hamta och manipulera sidebar-poster
+- `closeMenu?: () => void` -- for att stanga sidebaren programmatiskt
+
+**Begransningar:**
+- Floor changer-widgeten och sokrutan kan inte doljas programmatiskt -- de maste konfigureras i NavVis IVION Site Configuration av en admin
+- Rekommendation till anvandaren: ga till IVION admin-panelen och avmarkera "Floor changer widget" och "Search box" under Site Configuration
+
+---
+
+## Sammanfattning av filandringar
+
+| Fil | Andring |
+|-----|---------|
+| `src/components/layout/AppLayout.tsx` | Dolj header/sidebars pa mobil for immersive appar |
+| `src/components/layout/AppHeader.tsx` | Omdirigera till `/viewer` pa mobil for 3D-knappen |
+| `src/components/viewer/Ivion360View.tsx` | Touch-fix, fler postMessage-retries, SDK sidebar-dolning |
+| `src/lib/ivion-sdk.ts` | Utoka IvionApi-typer med getMenuItems/closeMenu |
+| `src/pages/Mobile360Viewer.tsx` | Sakerstall touch-action och position-fixed |
+
+---
 
 ## Tekniska detaljer
 
-### Edge function payload-format
-
-**GET config:**
+### Immersive app-lista
 ```text
-POST /errorreport-proxy
-Body: { "action": "get-config", "qrKey": "iEybZKPDykiVFrhDo8AJng" }
+const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
 ```
 
-**Submit:**
+### AppLayout conditional rendering (pseudokod)
 ```text
-POST /errorreport-proxy
-Body: {
-  "action": "submit",
-  "qrKey": "iEybZKPDykiVFrhDo8AJng",
-  "payload": {
-    "errorDescription": "Felet ar...",
-    "attachments": [],
-    "contactEmail": "test@test.com",
-    "contactPhone": "070123456",
-    "errorCode": {
-      "guid": 4400051551,
-      "id": "avkalka",
-      "title": "Kalka av kaffemaskin",
-      "description": "",
-      "context": null
-    }
-  }
-}
+const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
+
+return (
+  <div>
+    {!isImmersive && <LeftSidebar />}
+    <div>
+      {!isImmersive && <AppHeader ... />}
+      {!isImmersive && <SyncProgressBanner />}
+      {!isImmersive && <DataConsistencyBanner />}
+      <MainContent />
+    </div>
+    {!isImmersive && <RightSidebar />}
+    ...
+  </div>
+);
 ```
 
-### Filer som andras
+### PostMessage retry-strategi
+```text
+const RETRY_DELAYS = [1000, 3000, 5000, 8000];
+RETRY_DELAYS.forEach(delay => {
+  setTimeout(() => {
+    iframeRef.current?.contentWindow?.postMessage({
+      command: 'setSidebarVisibility',
+      params: { visible: false }
+    }, '*');
+  }, delay);
+});
+```
 
-| Fil | Typ |
-|-----|-----|
-| `supabase/functions/errorreport-proxy/index.ts` | Ny |
-| `supabase/config.toml` | Lagg till entry |
-| `src/components/fault-report/ErrorCodeCombobox.tsx` | Uppdatera |
-| `src/components/fault-report/FaultReportForm.tsx` | Uppdatera |
-| `src/components/fault-report/MobileFaultReport.tsx` | Uppdatera |
-| `src/pages/FaultReport.tsx` | Uppdatera |
-| `src/components/fault-report/InAppFaultReport.tsx` | Uppdatera |
-| `src/components/fault-report/FaultReportSuccess.tsx` | Uppdatera |
+### Risker och begransningar
 
-### Ingen secret behovs
-
-Bas-URL:en hardkodas direkt i edge function:en som `https://er-rep.com`.
-
-### Risker
-
-- **GET-svarets format ar okant** -- vi tolkar svaret flexibelt och loggar det for felsökning
-- **Bilagor** -- skickas som tom array tills vidare (`attachments: []`)
-- **InApp saknar QR-nyckel** -- fortsatter anvanda lokal databasskrivning
+- **Floor changer och sokruta** kan inte doljas via API -- kraver NavVis admin-andring
+- **Kartvyn (MapView)** pa mobil ar redan relativt fullskarm men kan gynnas av att headern doljs
+- **Tillbaka-navigering** -- varje immersive vy behover sin egen tillbaka-knapp. 3D har `MobileViewerOverlay`, 360 har back-overlay, men kartvyn kan behova en tillagd tillbaka-knapp
+- **Steg 1 (omdirigering)** gor att 3D pa mobil aldrig renderas i AppLayout, sa Steg 2 paverkar framsfor allt 360 och karta
 
