@@ -13,7 +13,7 @@ export interface IleanSettingsData {
 }
 
 const DEFAULT_SETTINGS: IleanSettingsData = {
-  visible: true,
+  visible: false,
   buttonPosition: null,
 };
 
