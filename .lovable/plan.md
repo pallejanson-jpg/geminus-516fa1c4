@@ -1,86 +1,99 @@
 
-# Fix 3D Viewer: Wrong Parameter Order in assetplusviewer() Call
 
-## Root Cause
+# Fix 3D Viewer: Navigation Bypass + Crash on Load
 
-The `assetplusviewer()` initialization call in `AssetPlusViewer.tsx` passes parameters in the **wrong order** starting from position 9.
+## Two Issues
 
-The official API signature (from `docs/3D_viewer_package.md`):
+### Issue 1: Skips building/view selector, jumps directly into 3D
 
-```text
-assetplusviewer(
-  1. baseUrl,                              // String
-  2. apiKey,                               // String
-  3. getAccessTokenCallback,               // Function
-  4. selectionChangedCallback,             // Function
-  5. selectedFmGuidsChangedCallback,       // Function
-  6. allModelsLoadedCallback,              // Function
-  7. isItemIdEditableCallback,             // Function (or undefined)
-  8. isFmGuidEditableCallback,             // Function
-  9. additionalDefaultPredicate,           // Function - DECIDES WHICH MODELS TO LOAD
-  10. externalCustomObjectContextMenuItems, // Array (or undefined)
-  11. horizontalAngle,                     // Number (or undefined)
-  12. verticalAngle,                       // Number (or undefined)
-  13. annotationTopOffset,                 // Number (or undefined)
-  14. annotationLeftOffset                 // Number (or undefined)
-)
+**Root cause**: When the user navigates away from the 3D viewer by clicking another header button (e.g., Portfolio, Navigator), `viewer3dFmGuid` is **never cleared**. It stays set from the previous session. When the user later clicks the "3D Viewer" button in the header, `setActiveApp('assetplus_viewer')` is called, and `Viewer.tsx` sees the old `viewer3dFmGuid` is still set -- so it skips `BuildingSelector` and jumps straight into `AssetPlusViewer`.
+
+**Fix**: Two changes:
+
+1. **`AppHeader.tsx`**: When clicking the "3D Viewer" header button, clear `viewer3dFmGuid` first so the building selector always appears for fresh navigation.
+
+2. **`Viewer.tsx`**: The line `setViewer3dFmGuid(null)` on line 64 is called **during render** (a React anti-pattern that can cause loops and double-renders). Move it into a `useEffect`.
+
+### Issue 2: 3D crashes ("something loads but then crashes")
+
+**Root cause**: Looking at `Viewer.tsx` line 62-70, there's a problematic render-time side effect:
+
+```
+if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
+    setViewer3dFmGuid(null); // <-- STATE UPDATE DURING RENDER!
+    return <BuildingSelector />;
+}
 ```
 
-What our code currently passes (lines 2525-2583):
+This calls `setViewer3dFmGuid(null)` during render, which triggers a re-render mid-render cycle. Combined with the fact that `setViewer3dFmGuid(null)` also changes `activeApp` (navigating away from the viewer), this creates a race condition: `AssetPlusViewer` may mount, begin initialization, then get torn down immediately by the app switch -- causing the crash.
 
-```text
-  1. baseUrl                               -- correct
-  2. apiKey                                 -- correct
-  3. getAccessTokenCallback                 -- correct
-  4. selectionChangedCallback               -- correct
-  5. selectedFmGuidsChangedCallback         -- correct
-  6. handleAllModelsLoaded                  -- correct
-  7. undefined (isItemIdEditableCallback)   -- correct
-  8. isFmGuidEditableCallback               -- correct
-  9. defaultHeightAboveAABB (NUMBER!)       -- WRONG: expects model filter FUNCTION
-  10. defaultMinimumHeightAboveBase (NUMBER) -- WRONG: expects context menu items ARRAY
-  11. lookAtSpaceAndInstanceFlyToDuration    -- mapped to horizontalAngle (unrelated)
-  12. document.getElementById(...)           -- WRONG: expects verticalAngle NUMBER
+Additionally, `Viewer.tsx` line 64 calls `setViewer3dFmGuid(null)` which calls `setActiveApp(previousAppBeforeViewer)`. Then the BuildingSelector is returned, but on the next render, the app has already switched away from the viewer. The user sees a brief flash or crash.
+
+**Fix**: Remove the render-time state update. Handle invalid GUIDs properly using `useEffect` with a guard.
+
+## Changes
+
+### File 1: `src/components/layout/AppHeader.tsx`
+
+In `handleMenuClick`, when the target app is `assetplus_viewer`, clear the previous viewer selection so the building selector is shown:
+
+```typescript
+const handleMenuClick = (app: string, mode?: string) => {
+    if (isMobile && app === 'assetplus_viewer') {
+        navigate('/viewer');
+        return;
+    }
+    setSelectedFacility(null);
+    // When navigating to 3D viewer via header, always show building selector
+    if (app === 'assetplus_viewer') {
+        setViewer3dFmGuid(null);
+    }
+    setActiveApp(app);
+    if (mode) {
+        setViewMode(mode);
+    }
+};
 ```
 
-Parameter 9 (`additionalDefaultPredicate`) is the critical one. The Asset+ docs say: "Allows custom logic to determine which additional models should be loaded into the viewer." When a non-function value (a number) is passed, the viewer's internal model loading logic likely treats it as falsy/invalid and loads **no models at all**.
+With React 18 automatic batching, `setViewer3dFmGuid(null)` and `setActiveApp('assetplus_viewer')` are batched into one render. The intermediate `setActiveApp(previousApp)` inside `setViewer3dFmGuid(null)` is overridden by the subsequent `setActiveApp('assetplus_viewer')`. Final state: `viewer3dFmGuid=null`, `activeApp='assetplus_viewer'`.
 
-The official example uses: `(model) => (model?.name || "").toLowerCase().startsWith("a")` -- loading all models whose name starts with "a". A common pattern to load ALL models is `() => true`.
+### File 2: `src/pages/Viewer.tsx`
 
-## Fix
+Remove the render-time `setViewer3dFmGuid(null)` call and replace with a proper `useEffect`:
 
-Correct the parameter order in the `assetplusviewer()` call, and remove the `targetElement` parameter (which does not exist in the API -- the viewer always mounts to `#AssetPlusViewer`).
+```typescript
+// Replace the render-time side effect (lines 62-70)
+// with a useEffect that handles invalid GUIDs
 
-### Changes to `src/components/viewer/AssetPlusViewer.tsx`:
-
-At the viewer initialization call (around line 2525-2583), change parameters 9-12 from:
-
-```text
-defaultHeightAboveAABB,
-defaultMinimumHeightAboveBase,
-lookAtSpaceAndInstanceFlyToDuration,
-document.getElementById('AssetPlusViewer'),
+useEffect(() => {
+    if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
+        // Invalid GUID - clear it
+        setViewer3dFmGuid(null);
+    }
+}, [viewer3dFmGuid, isLoadingData, allData, buildingFmGuid, setViewer3dFmGuid]);
 ```
 
-To:
+And in the render logic, simply show the BuildingSelector when there's no valid building (without calling state setters):
 
-```text
-undefined,    // additionalDefaultPredicate -- undefined = load all models (default behavior)
-undefined,    // externalCustomObjectContextMenuItems
-undefined,    // horizontalAngle (use default)
-undefined,    // verticalAngle (use default)
+```typescript
+// If GUID is set but we couldn't resolve a building, show selector
+if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
+    return (
+        <div className="h-full">
+            <BuildingSelector />
+        </div>
+    );
+}
 ```
-
-The `defaultHeightAboveAABB`, `defaultMinimumHeightAboveBase`, and `lookAtSpaceAndInstanceFlyToDuration` values are not part of the `assetplusviewer()` constructor. If they are needed, they should be applied after initialization using the viewer's API methods (e.g., `viewer.setViewerAngles()`).
-
-The `document.getElementById('AssetPlusViewer')` target element is also not a parameter -- the Asset+ library always mounts to the DOM element with id `AssetPlusViewer`.
 
 ### File Summary
 
-| File | Changes |
+| File | Change |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | Fix parameters 9-12 of `assetplusviewer()` call to match the official API signature |
+| `src/components/layout/AppHeader.tsx` | Clear `viewer3dFmGuid` when clicking the 3D Viewer header button |
+| `src/pages/Viewer.tsx` | Move render-time state update to `useEffect`, fix race condition |
 
 ### Risk Assessment
 
-Low risk -- this aligns the code with the documented API. The current parameter mismatch is clearly the cause of "viewer starts but nothing loads" since the model filter function receives a number instead of a callable predicate.
+Low risk. The header change only affects the explicit "click 3D Viewer button" flow. The `Viewer.tsx` fix removes a React anti-pattern (state update during render) that was causing unpredictable behavior. All other navigation paths (from Portfolio, Navigator, search results) are unchanged -- they still set `viewer3dFmGuid` and navigate to the viewer with the building pre-selected.
+
