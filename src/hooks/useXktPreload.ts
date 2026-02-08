@@ -102,6 +102,13 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
   useEffect(() => {
     if (!buildingFmGuid) return;
+
+    // Skip preloading on mobile to prevent memory competition with 3D viewer
+    const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (isMobile) {
+      console.log('XKT Preload: Skipped on mobile device');
+      return;
+    }
     
     // Prevent duplicate preloads - check global cache
     if (globalPreloadedBuildings.has(buildingFmGuid)) {

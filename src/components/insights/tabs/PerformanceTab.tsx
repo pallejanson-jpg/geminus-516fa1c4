@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,6 +13,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+
+// Mockup indicator badge
+const MockBadge = () => (
+    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
+        Demo
+    </Badge>
+);
 
 const energyDistribution = [
     { name: 'Heating', value: 45, color: 'hsl(var(--destructive))' },
@@ -49,7 +56,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
     const { navigatorTreeData } = useContext(AppContext);
     const isMobile = useIsMobile();
 
-    // Calculate actual stats from tree data
+    // Calculate actual stats from tree data (REAL)
     const stats = useMemo(() => {
         const buildingCount = navigatorTreeData.length;
         let totalRooms = 0;
@@ -75,10 +82,9 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
         return { buildingCount, totalRooms, totalArea: Math.round(totalArea) };
     }, [navigatorTreeData]);
 
-    // Generate energy data for actual buildings (deterministic based on fmGuid)
+    // Generate energy data for actual buildings (MOCK values, REAL building names)
     const energyByBuilding = useMemo(() => {
         return navigatorTreeData.slice(0, 8).map((building) => {
-            // Use fmGuid hash for deterministic random values
             const hash = building.fmGuid?.split('').reduce((a, c) => a + c.charCodeAt(0), 0) || 0;
             const kwhPerSqm = 80 + (hash % 70);
             let rating = 'C';
@@ -124,7 +130,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Building2, 
             trend: '+2', 
             trendUp: true,
-            color: 'text-primary'
+            color: 'text-primary',
+            isMock: false,
         },
         { 
             title: 'Avg. Energy (kWh/m²)', 
@@ -134,7 +141,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Zap, 
             trend: '-8%', 
             trendUp: false,
-            color: 'text-yellow-500'
+            color: 'text-yellow-500',
+            isMock: true,
         },
         { 
             title: 'CO₂ Emissions (tons)', 
@@ -142,7 +150,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Leaf, 
             trend: '-12%', 
             trendUp: false,
-            color: 'text-green-500'
+            color: 'text-green-500',
+            isMock: true,
         },
         { 
             title: 'Avg. Energy Rating', 
@@ -150,7 +159,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Gauge, 
             trend: 'Improved', 
             trendUp: true,
-            color: 'text-primary'
+            color: 'text-primary',
+            isMock: true,
         },
     ];
 
@@ -176,23 +186,28 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <Card key={index}>
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-2">
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                                <div className="flex items-center gap-1">
+                                    <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                                    {kpi.isMock && <MockBadge />}
+                                </div>
                                 <Badge 
                                     variant={kpi.trendUp ? "default" : "secondary"} 
-                                    className={`text-xs ${kpi.trendUp ? 'bg-green-600' : 'bg-blue-600'}`}
+                                    className={`text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-green-600' : 'bg-blue-600'}`}
                                 >
                                     {kpi.trendUp ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
                                     {kpi.trend}
                                 </Badge>
                             </div>
-                            <p className="text-2xl font-bold">{kpi.value}</p>
+                            <p className={`text-2xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                                {kpi.value}
+                            </p>
                             <p className="text-xs text-muted-foreground">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
             </div>
 
-            {/* Building List */}
+            {/* Building List - REAL names, MOCK energy data */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
@@ -213,18 +228,17 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                     onClick={() => onSelectBuilding(building as Facility)}
                                 >
                                     <div className="min-w-0 flex-1">
-                                        <p className="font-medium text-sm truncate">
+                                        <p className="font-medium text-sm truncate text-foreground">
                                             {building.commonName || building.name}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
                                             <Badge 
                                                 variant="secondary" 
-                                                className="text-[10px] px-1.5 text-white"
-                                                style={{ backgroundColor: energyData?.color }}
+                                                className="text-[10px] px-1.5 text-purple-300 bg-purple-500/20 border-purple-500/30"
                                             >
                                                 {energyData?.rating || 'C'}
                                             </Badge>
-                                            <span className="text-xs text-muted-foreground">
+                                            <span className="text-xs text-purple-400">
                                                 {energyData?.kwhPerSqm || '?'} kWh/m²
                                             </span>
                                         </div>
@@ -237,14 +251,15 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 </CardContent>
             </Card>
 
-            {/* Charts Grid */}
+            {/* Charts Grid - ALL MOCK */}
             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Energy per Building Bar Chart */}
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Zap className="h-4 w-4 text-yellow-500" />
-                            Energy Consumption per Building
+                            <span className="text-purple-400">Energy Consumption per Building</span>
+                            <MockBadge />
                         </CardTitle>
                         <CardDescription>kWh per m² (lower is better)</CardDescription>
                     </CardHeader>
@@ -295,7 +310,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <ThermometerSun className="h-4 w-4 text-orange-500" />
-                            Energy Distribution by Category
+                            <span className="text-purple-400">Energy Distribution by Category</span>
+                            <MockBadge />
                         </CardTitle>
                         <CardDescription>Breakdown of energy usage</CardDescription>
                     </CardHeader>
@@ -333,13 +349,14 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 </Card>
             </div>
 
-            {/* Monthly Trend */}
+            {/* Monthly Trend - MOCK */}
             <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
                 <Card className="lg:col-span-2">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Droplets className="h-4 w-4 text-blue-500" />
-                            Monthly Energy Trend
+                            <span className="text-purple-400">Monthly Energy Trend</span>
+                            <MockBadge />
                         </CardTitle>
                         <CardDescription>Actual vs Target consumption (MWh)</CardDescription>
                     </CardHeader>
@@ -393,7 +410,8 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Gauge className="h-4 w-4 text-primary" />
-                            Energy Ratings
+                            <span className="text-purple-400">Energy Ratings</span>
+                            <MockBadge />
                         </CardTitle>
                         <CardDescription>Buildings per rating</CardDescription>
                     </CardHeader>

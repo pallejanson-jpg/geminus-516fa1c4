@@ -23,6 +23,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 
+// Mockup indicator badge
+const MockBadge = () => (
+    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
+        Demo
+    </Badge>
+);
+
 // Helper for deterministic pseudo-random based on string
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -251,6 +258,12 @@ export default function FacilityManagementTab() {
 
     return (
         <div className="space-y-6">
+            {/* All data is MOCK */}
+            <div className="flex items-center gap-2 mb-2">
+                <MockBadge />
+                <span className="text-xs text-purple-400">All FM data is demo data</span>
+            </div>
+
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
@@ -262,7 +275,7 @@ export default function FacilityManagementTab() {
                                     {kpi.badge}
                                 </Badge>
                             </div>
-                            <p className="text-2xl font-bold">{kpi.value}</p>
+                            <p className="text-2xl font-bold text-purple-400">{kpi.value}</p>
                             <p className="text-xs text-muted-foreground">{kpi.title}</p>
                         </CardContent>
                     </Card>
