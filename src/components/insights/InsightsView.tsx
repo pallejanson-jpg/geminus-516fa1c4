@@ -14,7 +14,29 @@ interface InsightsViewProps {
 }
 
 export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
+    const { setActiveApp, setSelectedFacility, navigatorTreeData } = useContext(AppContext);
     const [viewingBuilding, setViewingBuilding] = useState<Facility | null>(selectedBuilding || null);
+
+    // Navigation callbacks for clickable real values
+    const handleNavigateToAssets = (buildingFmGuid?: string) => {
+        if (buildingFmGuid) {
+            const building = navigatorTreeData.find(b => b.fmGuid === buildingFmGuid);
+            if (building) {
+                setSelectedFacility(building);
+            }
+        }
+        setActiveApp('portfolio');
+    };
+
+    const handleNavigateToRooms = (buildingFmGuid?: string) => {
+        if (buildingFmGuid) {
+            const building = navigatorTreeData.find(b => b.fmGuid === buildingFmGuid);
+            if (building) {
+                setSelectedFacility(building);
+            }
+        }
+        setActiveApp('portfolio');
+    };
 
     // If viewing a specific building, show the building insights view
     if (viewingBuilding) {
@@ -67,11 +89,11 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                 </TabsContent>
 
                 <TabsContent value="space" className="mt-0">
-                    <SpaceManagementTab />
+                    <SpaceManagementTab onNavigateToRooms={handleNavigateToRooms} />
                 </TabsContent>
 
                 <TabsContent value="asset" className="mt-0">
-                    <AssetManagementTab />
+                    <AssetManagementTab onNavigateToAssets={handleNavigateToAssets} />
                 </TabsContent>
 
                 <TabsContent value="portfolio" className="mt-0">
