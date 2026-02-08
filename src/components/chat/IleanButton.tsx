@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { getIleanSettings, saveIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT, type IleanSettingsData } from '@/components/settings/IleanSettings';
 import { AppContext } from '@/context/AppContext';
 
+const BUTTON_SIZE = 56; // h-14 w-14
+
 /**
  * Floating Ilean AI assistant button available throughout the application.
  * Opens a draggable floating panel with an iframe to Senslinc's Ilean service.
@@ -33,27 +35,38 @@ export default function IleanButton() {
   const panelRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
-  // Panel dimensions
-  const panelWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? window.innerWidth - 32 : 420;
-  const panelHeight = typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 580;
+  // Detect mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  
+  // Panel dimensions — fullscreen on mobile
+  const panelWidth = isMobile ? window.innerWidth : 420;
+  const panelHeight = isMobile ? window.innerHeight : (typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 580);
 
-  // Load saved position on mount
+  // Load saved position on mount — clamp to current viewport
   useEffect(() => {
     const settings = getIleanSettings();
     if (settings.buttonPosition) {
-      setTriggerPosition(settings.buttonPosition);
+      const maxX = window.innerWidth - BUTTON_SIZE;
+      const maxY = window.innerHeight - BUTTON_SIZE;
+      setTriggerPosition({
+        x: Math.max(0, Math.min(settings.buttonPosition.x, maxX)),
+        y: Math.max(0, Math.min(settings.buttonPosition.y, maxY)),
+      });
     }
   }, []);
 
   // Initialize panel position on first open
   useEffect(() => {
     if (isOpen && position.x === -1) {
-      // Position in bottom-left by default (different from Gunnar)
-      const x = 16;
-      const y = typeof window !== 'undefined' ? window.innerHeight - panelHeight - 80 : 100;
-      setPosition({ x, y: Math.max(16, y) });
+      if (isMobile) {
+        setPosition({ x: 0, y: 0 });
+      } else {
+        const x = 16;
+        const y = typeof window !== 'undefined' ? window.innerHeight - panelHeight - 80 : 100;
+        setPosition({ x, y: Math.max(16, y) });
+      }
     }
-  }, [isOpen, position.x, panelHeight]);
+  }, [isOpen, position.x, panelHeight, isMobile]);
 
   // Extract Ilean URL from selected facility or global config
   useEffect(() => {
@@ -101,6 +114,7 @@ export default function IleanButton() {
 
   // Drag handlers for panel
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (isMobile) return; // No drag on mobile — fullscreen panel
     e.preventDefault();
     setIsDragging(true);
     
@@ -111,7 +125,7 @@ export default function IleanButton() {
       x: clientX - position.x,
       y: clientY - position.y,
     };
-  }, [position]);
+  }, [position, isMobile]);
 
   const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
     if (!isDragging) return;
@@ -122,7 +136,6 @@ export default function IleanButton() {
     const newX = clientX - dragOffsetRef.current.x;
     const newY = clientY - dragOffsetRef.current.y;
     
-    // Constrain to viewport
     const maxX = window.innerWidth - panelWidth;
     const maxY = window.innerHeight - 50;
     
@@ -174,9 +187,8 @@ export default function IleanButton() {
     const newY = clientY - triggerDragOffsetRef.current.y;
     
     // Constrain to viewport
-    const buttonSize = 56;
-    const maxX = window.innerWidth - buttonSize;
-    const maxY = window.innerHeight - buttonSize;
+    const maxX = window.innerWidth - BUTTON_SIZE;
+    const maxY = window.innerHeight - BUTTON_SIZE;
     
     setTriggerPosition({
       x: Math.max(0, Math.min(newX, maxX)),
@@ -278,9 +290,11 @@ export default function IleanButton() {
       <div 
         className={cn(
           "fixed z-50",
-          !triggerPosition && "bottom-20 left-4 sm:bottom-6"
+          !triggerPosition && "left-4 sm:bottom-6"
         )}
-        style={triggerStyle}
+        style={triggerPosition ? triggerStyle : {
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
+        }}
       >
         <Tooltip>
           <TooltipTrigger asChild>
@@ -320,7 +334,8 @@ export default function IleanButton() {
       {/* Minimized bubble */}
       {isOpen && isMinimized && (
         <div 
-          className="fixed bottom-20 left-4 z-[60] cursor-pointer sm:bottom-6"
+          className="fixed left-4 z-[60] cursor-pointer"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}
           onClick={handleExpand}
         >
           <div className={cn(
@@ -341,30 +356,35 @@ export default function IleanButton() {
           className={cn(
             "fixed z-[60] flex flex-col",
             "border rounded-lg shadow-xl",
-            // Semi-transparent frosted glass effect
             "bg-card/70 backdrop-blur-lg",
             isDragging && "cursor-grabbing select-none"
           )}
-          style={{
+          style={isMobile ? {
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            borderRadius: 0,
+          } : {
             left: position.x,
             top: position.y,
             width: panelWidth,
             height: panelHeight,
           }}
         >
-          {/* Draggable header */}
+          {/* Header — simplified on mobile (no drag grip) */}
           <div
             className={cn(
               "flex items-center justify-between px-3 py-2",
-              "border-b border-border/50 rounded-t-lg",
-              "bg-gradient-to-r from-cyan-500/10 to-teal-500/10 cursor-grab",
+              "border-b border-border/50",
+              !isMobile && "rounded-t-lg cursor-grab",
+              "bg-gradient-to-r from-cyan-500/10 to-teal-500/10",
               isDragging && "cursor-grabbing"
             )}
-            onMouseDown={handleDragStart}
-            onTouchStart={handleDragStart}
+            onMouseDown={isMobile ? undefined : handleDragStart}
+            onTouchStart={isMobile ? undefined : handleDragStart}
           >
             <div className="flex items-center gap-2">
-              <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+              {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
               <div className="flex items-center gap-1.5">
                 <FileQuestion className="h-4 w-4 text-cyan-500" />
                 <span className="font-medium text-sm">Ilean AI</span>
@@ -398,19 +418,21 @@ export default function IleanButton() {
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">Öppna i ny flik</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 hover:bg-muted/50"
-                    onClick={handleMinimize}
-                  >
-                    <Minimize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
-              </Tooltip>
+              {!isMobile && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 hover:bg-muted/50"
+                      onClick={handleMinimize}
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
+                </Tooltip>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
