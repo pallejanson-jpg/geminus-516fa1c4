@@ -1,123 +1,162 @@
 
-# Fix: 3D-viewer kraschar fortfarande pa mobil
 
-## Problemanalys (djupare)
+# Mobile 3D Viewer: Fix XKT loading, toolbar positioning, and assistant defaults
 
-Trots Error Boundary, unhandledrejection-handler och WebGL context lost-hantering kraschar 3D-viewern fortfarande pa mobil. Efter djupanalys av 3000+ rader i AssetPlusViewer.tsx har jag identifierat 5 kvarvarande kraschvektorer:
+## Problem Summary
 
-### 1. Unawaited async promises (rad 1303-1315)
-`loadLocalAnnotations()` och `loadAlarmAnnotations()` ar async-funktioner som anropas utan `.catch()`. try/catch runt dem fangar BARA synkrona fel, inte promise rejections.
+Four distinct issues need to be fixed for mobile:
 
-### 2. Ingen window.onerror-handler
-Endast `unhandledrejection` fangas globalt. Asset+ UMD-biblioteket kan kasta synkrona fel utanfor Reacts render-cykel som varken fangas av Error Boundary eller rejection-handleren.
+1. **3D content not displaying (blank canvas)**: The `Mobile3DViewer` page (route `/viewer`) uses a recursive tree traversal looking for `children` in `allData` to find buildings. However, `allData` is a **flat array** without nested `children`. This means the building list is always empty, and the viewer never receives a valid `fmGuid` to load models. The desktop `BuildingSelector` correctly uses `allData.filter(item => item.category === 'Building')`.
 
-### 3. XKT Cache Interceptor dubblerar minneanvandning
-Fetch-interceptorn klonar VARJE XKT-respons via `.clone()` + `arrayBuffer()`, vilket fordubblar minnesanvandningen for stora BIM-modeller. Pa mobila enheter med begransat minne kan detta orsaka en total tab-krasch (out-of-memory) som INGEN JavaScript-handler kan fanga.
+2. **Toolbars hidden under browser chrome**: The mobile toolbar uses `absolute bottom-3` which positions it at the bottom of the viewport -- directly under the mobile browser's navigation bar. The header overlay at `absolute top-0` can clip under the status bar.
 
-### 4. Ingen initieringstimeout
-Om `initializeViewer` hangs (natverksforfragan som aldrig returnerar pa instabil mobilanslutning) ser anvandaren en evig spinner utan aterhamtningsmojlighet.
+3. **Header not hidden in immersive mode (in-app path)**: When the 3D viewer loads inside `AppLayout` (via the `assetplus_viewer` activeApp), the immersive mode already works. But when navigating via `/viewer` route, the `Mobile3DViewer` page renders outside `AppLayout` entirely, so this is already fullscreen. The issue is that within the in-app path, `BuildingSelector` also needs proper immersive handling.
 
-### 5. Cleanup race condition i fetch-interceptorn
-Om komponenten avmonteras medan en interceptad fetch ar aktiv, nullstalls `originalFetchRef.current` av `restoreFetch()`, men interceptor-closuren refererar fortfarande till den, vilket kan orsaka ett null-referensfel.
+4. **Gunnar and Ilean floating buttons visible by default**: Both assistants default to `visible: true` in their settings, cluttering mobile screens.
 
 ---
 
-## Losning: 5 andringar
+## Changes
 
-### Steg 1: Lagg till window.onerror-handler (App.tsx)
+### 1. Fix Mobile3DViewer building extraction (Critical)
 
-Utoka den globala skyddsmekanismen i `src/App.tsx` med en `window.onerror`-handler som fangar synkrona fel fran Asset+ UMD-biblioteket. Denna handler kompletterar den befintliga `unhandledrejection`-handleren.
+**File:** `src/pages/Mobile3DViewer.tsx`
 
-### Steg 2: Lagg till .catch() pa unawaited promises (AssetPlusViewer.tsx)
-
-I `handleAllModelsLoaded` (rad 1303-1315), lagg till `.catch()` pa bade `loadLocalAnnotations()` och `loadAlarmAnnotations()` sa att deras promise-rejections fangas direkt, utan att forlita sig pa den globala handleren.
-
-Fran:
-```text
-try {
-  loadLocalAnnotations();
-} catch (e) { ... }
-```
-
-Till:
-```text
-loadLocalAnnotations().catch(e =>
-  console.error('loadLocalAnnotations failed:', e)
-);
-```
-
-### Steg 3: Inaktivera XKT Cache Interceptor pa mobil (AssetPlusViewer.tsx)
-
-Den storsta minnesbesparingen: pa mobila enheter ska `setupCacheInterceptor()` INTE anropas. Detta eliminerar dubblerad minnesanvandning fran `.clone()` + `arrayBuffer()` pa varje XKT-modell. Mobila anvandare far fortfarande modellerna fran API:et, men de cachas inte lokalt.
-
-I `initializeViewer` (rad 2407):
-```text
-// Setup cache interceptor before viewer initialization
-// SKIP on mobile to save memory - cache-on-load doubles memory usage
-if (!isMobile) {
-  setupCacheInterceptor();
-}
-```
-
-### Steg 4: Lagg till initieringstimeout (AssetPlusViewer.tsx)
-
-Lagg till en timeout pa 30 sekunder i `initializeViewer`. Om viewern inte lyckats initiera inom den tiden visas ett felmeddelande med "Forsok igen"-knapp. Pa mobil satter vi 20 sekunders timeout.
-
-### Steg 5: Saker fetch-interceptor cleanup (AssetPlusViewer.tsx)
-
-Skydda fetch-interceptorn mot null-referensfel vid avmontering:
+Replace the recursive tree traversal with the same flat-array filter used by the working desktop `BuildingSelector`:
 
 ```text
-window.fetch = async (input, init) => {
-  const original = originalFetchRef.current;
-  if (!original) {
-    // Interceptor has been cleaned up, use native fetch
-    return fetch(input, init);
+// BEFORE (broken - looks for .children which doesn't exist on flat allData)
+const extractBuildings = (nodes) => {
+  for (const node of nodes) {
+    if (node.category === 'Building') result.push(node);
+    if (node.children) result.push(...extractBuildings(node.children));
   }
-  // ... rest of interceptor logic
+};
+const rootNodes = Array.isArray(allData) ? allData : allData?.children || [];
+return extractBuildings(rootNodes);
+
+// AFTER (correct - matches BuildingSelector pattern)
+return allData.filter(item => item.category === 'Building');
+```
+
+Also fix `getFloorCount` to count floors from the flat array instead of non-existent `children`:
+
+```text
+// BEFORE
+const getFloorCount = (building) => {
+  if (!building?.children) return 0;
+  return building.children.filter(c => c.category === 'Level').length;
+};
+
+// AFTER
+const getFloorCount = (building) => {
+  return allData.filter(item =>
+    item.buildingFmGuid === building.fmGuid &&
+    (item.category === 'Building Storey' || item.category === 'IfcBuildingStorey')
+  ).length;
 };
 ```
 
-Dessutom: i cleanup-funktionen (rad 2654-2696), anropa `restoreFetch()` FORST, innan viewer-cleanup, sa att interceptorn tas bort medan den fortfarande ar i ett konsistent tillstand.
+### 2. Fix toolbar positioning with safe-area-insets
+
+**File:** `src/components/viewer/ViewerToolbar.tsx`
+
+For the mobile toolbar (around line 742), change `bottom-3` to account for the mobile browser's bottom chrome using CSS `env(safe-area-inset-bottom)`:
+
+```text
+// BEFORE
+className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 ..."
+
+// AFTER - use safe-area padding
+style={{
+  bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
+  left: '50%',
+  transform: 'translateX(-50%)',
+}}
+```
+
+**File:** `src/components/viewer/mobile/MobileViewerOverlay.tsx`
+
+For the header overlay (line 130), add safe-area-inset-top padding:
+
+```text
+// BEFORE
+className="absolute top-0 left-0 right-0 z-30 ..."
+
+// AFTER
+style={{
+  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+}}
+```
+
+Also position the NavCube canvas higher to avoid the toolbar:
+
+**File:** `src/components/viewer/AssetPlusViewer.tsx`
+
+Change the NavCube bottom positioning on mobile (around line 2920):
+
+```text
+// BEFORE
+className="absolute bottom-[70px] right-3 z-[25]"
+
+// AFTER (account for safe area)
+className="absolute right-3 z-[25]"
+style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)' }}
+```
+
+### 3. Default Gunnar and Ilean to hidden
+
+**File:** `src/components/settings/GunnarSettings.tsx`
+
+Change default `visible` from `true` to `false`:
+
+```text
+const DEFAULT_SETTINGS: GunnarSettingsData = {
+  visible: false,  // was: true
+  buttonPosition: null,
+};
+```
+
+**File:** `src/components/settings/IleanSettings.tsx`
+
+Same change:
+
+```text
+const DEFAULT_SETTINGS: IleanSettingsData = {
+  visible: false,  // was: true
+  buttonPosition: null,
+};
+```
+
+Note: Existing users who have already saved settings in localStorage will not be affected by this change. Only new users or users who have never toggled these settings will see the new default.
+
+### 4. Add viewport meta tag for safe-area support
+
+**File:** `index.html`
+
+Ensure the viewport meta tag includes `viewport-fit=cover` so that `env(safe-area-inset-*)` values are available:
+
+```text
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+```
 
 ---
 
-## Sammanfattning av filandringar
+## File Summary
 
-| Fil | Andring |
-|-----|---------|
-| `src/App.tsx` | Lagg till window.onerror global handler |
-| `src/components/viewer/AssetPlusViewer.tsx` | 4 andringar: .catch() pa async calls, inaktivera cache pa mobil, initieringstimeout, saker fetch-interceptor |
+| File | Change |
+|------|--------|
+| `src/pages/Mobile3DViewer.tsx` | Fix building extraction to use flat array filter instead of recursive tree traversal |
+| `src/components/viewer/ViewerToolbar.tsx` | Add safe-area-inset-bottom padding to mobile toolbar |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Add safe-area-inset-top padding to header overlay |
+| `src/components/viewer/AssetPlusViewer.tsx` | Adjust NavCube positioning with safe-area padding |
+| `src/components/settings/GunnarSettings.tsx` | Default `visible` to `false` |
+| `src/components/settings/IleanSettings.tsx` | Default `visible` to `false` |
+| `index.html` | Add `viewport-fit=cover` to viewport meta tag |
 
-## Tekniska detaljer
+## Risk Assessment
 
-### Global onerror-handler (App.tsx)
-```text
-useEffect(() => {
-  const handleError = (event: ErrorEvent) => {
-    console.error('[Global] Uncaught error:', event.error);
-    event.preventDefault();
-  };
-  window.addEventListener('error', handleError);
-  return () => window.removeEventListener('error', handleError);
-}, []);
-```
+- **Building extraction fix**: Low risk -- aligns with proven desktop BuildingSelector pattern.
+- **Safe-area insets**: Low risk -- gracefully falls back to default values on non-mobile browsers.
+- **Assistant defaults**: Minimal risk -- only affects new users or those without saved localStorage settings.
 
-### Initieringstimeout (AssetPlusViewer.tsx)
-En `AbortController`-baserad timeout laggs till i `initializeViewer`:
-- Mobil: 20 sekunder
-- Desktop: 45 sekunder
-- Vid timeout: setState med felmeddelande "Initiering tog for lang tid", visa retry-knapp
-
-### Minnesbesparingseffekt
-Genom att inaktivera cache-interceptorn pa mobil elimineras:
-- `.clone()` av varje XKT Response-objekt (kopierar HTTP-headers + stream)
-- `.arrayBuffer()` av den klonade responsen (allokerar hela modellen i minne en gang till)
-- Bakgrundsuppladdning till Supabase Storage (ytterligare minnesanvandning)
-
-For en byggnad med 5 XKT-modeller a 10 MB = 50 MB extra minnesanvandning som nu undviks pa mobil.
-
-### Risker och begransningar
-- Mobila anvandare far inte XKT-caching, vilket innebar att modeller alltid laddas fran API:et. Detta ar en avvagning for stabilitet.
-- Tab-krascher fran out-of-memory kan INTE fangas av nagon JavaScript-handler. Cache-optimeringen minskar risken men eliminerar den inte helt for mycket stora modeller.
-- `window.onerror` kan inte fanga alla feltyper (t.ex. CORS-relaterade fel), men fangar de flesta synkrona fel fran tredjepartsbibliotek.
