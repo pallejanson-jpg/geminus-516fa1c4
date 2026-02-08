@@ -1,155 +1,198 @@
 
 
-# Fix: Gunnars mobilposition + responsivitetsgranskning
+# Comprehensive Fixes: Grid Styling, 3D Mobile, Insights with Real Data
 
-## Sammanfattning
-
-Gunnar och Ilean-knapparnas position ar felaktig pa mobil, och flera skarmvyer saknar optimeringar for sma skarmar. Har ar en fullstandig genomgang med atgarder.
+This plan addresses multiple areas: visual consistency between Rooms and Assets grids, 3D mobile loading fixes, Insights real data integration, and navigation improvements.
 
 ---
 
-## 1. Gunnar-knappens mobilposition (Kritiskt)
+## 1. Assets Grid -- Match Rooms View Styling + Mobile Fix
 
-**Problem:** Gunnar-knappens standardposition (`bottom-20 right-4 sm:bottom-6`) placerar den pa `bottom-20` (80px) pa mobil, men `bottom-6` (24px) pa desktop (`sm:`). Problemet ar att `bottom-20` kolliderar med MobileNav-overlayens y-position nar den ar oppen, och pa manga mobiler hamnar den bakom browser chrome eller utanfor skarmen.
+**Problem:** AssetsView header, toolbar, and table lack the compact responsive classes that RoomsView has. The `border rounded-lg` on the table wrapper only shows border on the left side on mobile because it overflows horizontally without proper containment.
 
-Dessutom: nar en position sparas i localStorage (via drag), anvands `top/left` pixelvarden fran en annan skarmstorlek, vilket kan placera knappen helt utanfor skarmen vid byte av orientering eller enhet.
+**Changes in `src/components/portfolio/AssetsView.tsx`:**
 
-**Samma problem finns for Ilean-knappen** (`bottom-20 left-4 sm:bottom-6`).
+- Match the header pattern from RoomsView: use `px-2 sm:px-3 md:px-4 py-2 sm:py-3` instead of `px-4 py-3`
+- Match the search input: use `pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm` instead of `pl-9 h-9`
+- Match icon sizes: use `h-4 w-4 sm:h-5 sm:w-5` instead of `h-5 w-5`
+- Match title sizes: `text-sm sm:text-base md:text-lg font-bold truncate` instead of `font-semibold text-lg`
+- Match close button: `h-8 w-8 sm:h-9 sm:w-9` instead of default
+- Match toolbar: `px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 flex gap-1.5 sm:gap-2` instead of `px-4 py-2`
+- Match table wrapper: add `overflow-hidden` to parent and ensure border wraps properly on mobile
+- Match table cell text: `text-[11px] sm:text-sm` in TableCell for compact mobile rendering
+- Fix `min-w-[200px]` on search input to `min-w-0` to prevent overflow on small screens
+- Match gallery grid: use `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4` to match RoomsView's gallery layout (currently uses `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5`)
+- Add gallery card gradient header matching RoomsView (with icon and level badge)
 
-**Atgard i `src/components/chat/GunnarButton.tsx`:**
-- Andra standardpositionen till `bottom-24 right-4` (96px fran botten) pa mobil for att placera den ovanfor MobileNavs bottenomrade
-- Lagg till safe-area-inset-bottom i berakningen
-- Nar sparad position laddas fran localStorage: validera mot aktuell viewport-storlek och klamma till synligt omrade
-- Anvand `sm:bottom-6` for desktop som idag
+---
 
-**Atgard i `src/components/chat/IleanButton.tsx`:**
-- Samma fix: `bottom-24 left-4` pa mobil, validering av sparad position
+## 2. 3D Mobile Fix -- Remove XKT Preloading
 
-**Atgard i bada filer - position-validering vid laddning:**
-```text
-// When loading saved position, clamp to current viewport
-useEffect(() => {
-  const settings = getGunnarSettings();
-  if (settings.buttonPosition) {
-    const maxX = window.innerWidth - 56;
-    const maxY = window.innerHeight - 56;
-    setTriggerPosition({
-      x: Math.max(0, Math.min(settings.buttonPosition.x, maxX)),
-      y: Math.max(0, Math.min(settings.buttonPosition.y, maxY)),
-    });
+**Problem:** The 3D viewer is not rendering on mobile. The user suspects XKT preloading may be interfering. On mobile, the `useXktPreload` hook fetches model data into memory before the viewer loads, potentially consuming all available memory before the viewer even starts, or causing race conditions with model loading.
+
+**Changes:**
+
+- **`src/hooks/useXktPreload.ts`**: Add mobile detection at the start of the hook. On mobile devices, skip all preloading entirely to avoid memory competition with the viewer:
+  ```text
+  export function useXktPreload(buildingFmGuid: string | null | undefined) {
+    const preloadStartedRef = useRef(false);
+    useEffect(() => {
+      if (!buildingFmGuid) return;
+      // Skip preloading on mobile to prevent memory competition with 3D viewer
+      const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobile) return;
+      // ... rest of preloading logic
+    }, [buildingFmGuid]);
   }
-}, []);
-```
+  ```
+  This is the least invasive change -- it keeps preloading working on desktop where memory is abundant.
 
 ---
 
-## 2. Gunnars chatpanel pa mobil
+## 3. Insights -- Back Button on Mobile
 
-**Problem:** Chatpanelen har `width: window.innerWidth - 32` pa mobil, men positionen ar beraknad fran `window.innerWidth - panelWidth - 16` som kan ge negativa varden. Panelen ar ocksa for hog pa sma skarmar.
+**Problem:** When navigating to BuildingInsightsView, the back button exists but there is no way to navigate back from the main Insights tabs on mobile (no header visible in immersive mode).
 
-**Atgard i `src/components/chat/GunnarButton.tsx`:**
-- Pa mobil (< 640px): ta over hela skarmen med `inset-0` istallet for att anvanda draggbar position
-- Dold drag-header pa mobil -- ersatt med vanlig stangknapp
-- Panelhojd: `100vh` pa mobil, befintlig berakning pa desktop
+**Changes in `src/components/insights/InsightsView.tsx`:**
+- The main InsightsView is shown inside AppLayout, so the AppHeader and MobileNav provide navigation. No change needed for the main view.
+- For `BuildingInsightsView`, the back button already exists. Verified it renders correctly.
+- For `EntityInsightsView`, the back button already exists.
 
-**Atgard i `src/components/chat/IleanButton.tsx`:**
-- Samma fullskarms-fix pa mobil
-
----
-
-## 3. Minimerad bubbla -- safe area
-
-**Problem:** Minimerade bubblan anvander `bottom-20 sm:bottom-6` precis som triggerknappen, och hamnar bakom browser chrome pa mobil.
-
-**Atgard:** Andra till `bottom-24` pa mobil, med `style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}` for konsekvent positionering.
+**No changes needed** -- the back buttons are already present in both BuildingInsightsView and EntityInsightsView.
 
 ---
 
-## 4. Responsivitetsgranskning -- skarmvyer utan dedikerad mobillayout
+## 4. Insights -- Real Data Integration + Mockup Color Coding
 
-### 4a. NavigatorView (`src/components/navigator/NavigatorView.tsx`)
-**Status:** Bra responsivitet. Anvander `p-2 sm:p-3 md:p-4`, kompakta soksomraden och virtualiserad lista. Tradvyn har `h-[calc(100vh-200px)]` som ar ok.
-**Atgard:** Ingen andring behovs.
+This is the largest change. The goal is to replace mockup values with real data from the database, color-code mockup values as purple and real values as white, and make real values clickable.
 
-### 4b. HomeLanding (`src/components/home/HomeLanding.tsx`)
-**Status:** Bra responsivitet. Anvander sm/md-breakpoints genomgaende, grid som anpassas fran 1-3 kolumner.
-**Atgard:** Ingen andring behovs.
+### 4a. AssetManagementTab Real Data
 
-### 4c. PortfolioView (`src/components/portfolio/PortfolioView.tsx`)
-**Status:** Bra. Anvander responsiva grid (2-4 kolumner), kompakta paddings pa mobil, dold grid/list-vaxxlare pa mobil, carousel med swipe-indikator.
-**Atgard:** Ingen andring behovs.
+**File:** `src/components/insights/tabs/AssetManagementTab.tsx`
 
-### 4d. FacilityLandingPage (`src/components/portfolio/FacilityLandingPage.tsx`)
-**Status:** Bra. Responsiva paddings, kompakta knappar pa mobil, ScrollArea for langinnehall. Hero-bakgrund och KPI-kort ar responsiva.
-**Atgard:** Ingen andring behovs.
+Current state: Uses `allData` for total asset count, but **hardcoded pie chart** for category distribution and **hash-based random** for per-building counts.
 
-### 4e. RoomsView (`src/components/portfolio/RoomsView.tsx`)
-**Status:** Bra. Responsiva header, toolbars, och tabellinnehall med kompakta storlekar pa sma skarmar.
-**Atgard:** Ingen andring behovs.
+**Changes:**
+- **"Assets by Category"** pie chart: Replace hardcoded `categoryDistribution` with real data computed from `allData`. Group by `assetType` (e.g., IfcDoor, IfcWindow, IfcWall, etc.), take top 6 categories, rest as "Other". Mark as **real data (white text)**.
+- **"Assets per Building"** bar chart: Replace hash-based `assetCount` with real counts from `allData` grouped by `buildingFmGuid`. Match building names from `navigatorTreeData`. Mark as **real data (white text)**.
+- **"Asset Overview per Building"** table: Replace mockup counts with real per-building asset counts. Keep avg age, value, and maintenance status as **purple (mockup)**. Make the Count column **clickable** -- navigates to Assets list for that building.
+- **KPI "Total Assets"**: Already uses real data from allData -- mark as **white**.
+- **KPI "Average Age"**: Mockup -- mark as **purple**.
+- **KPI "Replacement Value"**: Mockup -- mark as **purple**.
+- **KPI "Needs Maintenance"**: Mockup -- mark as **purple**.
 
-### 4f. InsightsView (`src/components/insights/InsightsView.tsx`)
-**Status:** Bra. Tabs-listan ar scrollbar horisontellt pa mobil, responsiva texterstorlekar.
-**Atgard:** Ingen andring behovs.
+### 4b. SpaceManagementTab Real Data
 
-### 4g. QuickActions (`src/components/portfolio/QuickActions.tsx`)
-**Status:** Bra. Grid ar `grid-cols-3 sm:grid-cols-4` med kompakta storlekar.
-**Atgard:** Ingen andring behovs.
+**File:** `src/components/insights/tabs/SpaceManagementTab.tsx`
 
-### 4h. InAppFaultReport (`src/components/fault-report/InAppFaultReport.tsx`)
-**Status:** Bra. Har redan dedikerad `MobileFaultReport` for mobil.
-**Atgard:** Ingen andring behovs.
+Current state: Uses `navigatorTreeData.children` for space counts and area (works since it's a tree). Uses hash-based random for occupancy/vacancy.
 
-### 4i. AppHeader (`src/components/layout/AppHeader.tsx`)
-**Status:** Bra. Responsive hojd (`h-14 sm:h-16`), dolda menyalternativ pa mobil (visas i MobileNav istallet), kompakt sok.
-**Atgard:** Ingen andring behovs.
+**Changes:**
+- **KPI "Total Rooms"**: Already real -- from tree traversal counting spaces. Mark **white**.
+- **KPI "Total Area"**: Already real -- from NTA attributes. Mark **white**.
+- **KPI "Average Occupancy"**: Mockup. Mark **purple**.
+- **KPI "Avg. Vacancy Rate"**: Mockup. Mark **purple**.
+- **"Space Efficiency per Building"** section: The `spaceCount` and `totalArea` are real. The `occupancy` percentage is mockup. Show room count and area in **white**, occupancy bar/badge in **purple**.
+- **"Occupancy per Building"**: All mockup. Mark **purple**.
+- **"Room Types"** pie chart: Already real (from space attributes). Mark **white**.
+- Make **"Total Rooms" KPI clickable** -- navigate to Rooms list.
 
-### 4j. ApiSettingsModal (`src/components/settings/ApiSettingsModal.tsx`)
-**Problem:** Ar en stor Dialog (2591 rader) som pa mobil kan vara svar att navigera. Dialog-standarder fran Radix borde hantera grundlaggande responsivitet. Behovs ingen andring for detta pass.
-**Atgard:** Ingen andring behovs i detta pass.
+### 4c. PerformanceTab
 
----
+**File:** `src/components/insights/tabs/PerformanceTab.tsx`
 
-## Sammanfattning av filandringar
+Current state: Uses `navigatorTreeData` tree for building/room/area counts (real). Energy data is hash-based (mockup).
 
-| Fil | Andring |
-|------|---------|
-| `src/components/chat/GunnarButton.tsx` | Fix standardposition pa mobil (bottom-24), validera sparad position mot viewport, fullskarmpanel pa mobil |
-| `src/components/chat/IleanButton.tsx` | Samma fix som Gunnar: standardposition, positionsvalidering, fullskarmpanel pa mobil |
+**Changes:**
+- **KPI "Building Count"**: Already real. Mark **white**. Make clickable to Portfolio.
+- **KPI "Avg. Energy"**: Mockup. Mark **purple**.
+- **KPI "CO2 Emissions"**: Mockup. Mark **purple**.
+- **KPI "Avg. Energy Rating"**: Mockup. Mark **purple**.
+- **Building list cards**: Building names are real. Energy rating/kWh are mockup. Name in **white**, energy data in **purple**.
+- All chart data is mockup -- mark **purple**.
 
-## Tekniska detaljer
+### 4d. FacilityManagementTab
 
-### Gunnar/Ilean fullskarms-panel pa mobil
+**File:** `src/components/insights/tabs/FacilityManagementTab.tsx`
 
-Pa mobil (< 640px) ska chatpanelen renderas som en fullskarms-overlay istallet for en draggbar panel:
+All data is mockup (generated work orders). Mark all values **purple**.
+
+### 4e. PortfolioManagementTab
+
+**File:** `src/components/insights/tabs/PortfolioManagementTab.tsx`
+
+Building names and areas are real. Financial data (value, rent, ROI) is mockup. Names/area in **white**, financial data in **purple**.
+
+### Color Coding Implementation
+
+Add a utility component/class for distinguishing real vs mockup values:
 
 ```text
-// Mobile: fullscreen overlay
-const isMobilePanel = typeof window !== 'undefined' && window.innerWidth < 640;
+// In each tab, wrap mockup values:
+<span className="text-purple-400">{mockupValue}</span>
 
-// In render:
-style={isMobilePanel ? {
-  inset: 0,
-  width: '100%',
-  height: '100%',
-  borderRadius: 0,
-} : {
-  left: position.x,
-  top: position.y,
-  width: panelWidth,
-  height: panelHeight,
-}}
+// Real values use default foreground:
+<span className="text-foreground">{realValue}</span>
 ```
 
-### Position-validering
+For KPI cards, add a small indicator:
+- Real data: no indicator (default styling)
+- Mockup data: purple text color on the value + a small "Demo" badge
 
-Nar `triggerPosition` laddas fran localStorage, klamma x/y till aktuell viewport:
-- `x`: max `window.innerWidth - buttonSize` (56px)
-- `y`: max `window.innerHeight - buttonSize`
-- Min 0 for bada
+### Clickable Real Values
 
-Detta forhindrar att knappen hamnar utanfor skarmen vid orienteringsbyte eller om positionen sparades pa en storskarm.
+Add `onClick` handlers to real-data KPIs and table cells that navigate to the relevant detail views:
+- Total Assets count --> navigate to Assets list (set `activeApp` to portfolio, select building, show assets)
+- Total Rooms count --> navigate to Rooms list
+- Asset count per building --> navigate to that building's assets
+- Room count per building --> navigate to that building's rooms
 
-### Risker
-- Befintliga anvandare med sparade positioner i localStorage far sin position klammad till synligt omrade, men den atergar alltid till en giltig plats.
-- Fullskarmpanelen pa mobil ar en stilandring -- chatfunktionaliteten forblir identisk.
+This will use the existing `AppContext` patterns (`setActiveApp`, `setSelectedFacility`).
+
+### Props Changes
+
+- `AssetManagementTab`: Add `onNavigateToAssets?: (buildingFmGuid?: string) => void`
+- `SpaceManagementTab`: Add `onNavigateToRooms?: (buildingFmGuid?: string) => void`
+- These callbacks will be wired in `InsightsView.tsx` to set the appropriate app context.
+
+---
+
+## 5. Building/Floor/Room Level Insights Tabs
+
+**Problem:** The per-building insights view (`BuildingInsightsView`) only shows energy charts. The user wants the same tab structure (Performance, FM, Space, Asset) at each hierarchy level.
+
+**Changes in `src/components/insights/BuildingInsightsView.tsx`:**
+- Replace the current single-view with a tabbed layout matching the main InsightsView
+- Add Tabs: Performance, FM, Space, Asset
+- Each tab filters data to the selected building's `fmGuid`
+- Reuse the same data computation patterns but scoped to the building
+
+**Changes in `src/components/insights/EntityInsightsView.tsx`:**
+- Same tabbed layout for Floor and Room levels
+- Scope data to `levelFmGuid` for floors, `inRoomFmGuid` for rooms
+
+---
+
+## File Summary
+
+| File | Changes |
+|------|---------|
+| `src/components/portfolio/AssetsView.tsx` | Match RoomsView responsive styling, fix border overflow on mobile |
+| `src/hooks/useXktPreload.ts` | Skip preloading on mobile devices |
+| `src/components/insights/tabs/AssetManagementTab.tsx` | Replace mockup with real asset counts/categories, purple/white color coding, clickable values |
+| `src/components/insights/tabs/SpaceManagementTab.tsx` | Mark real vs mockup values, purple/white coding, clickable room counts |
+| `src/components/insights/tabs/PerformanceTab.tsx` | Mark real vs mockup values with color coding |
+| `src/components/insights/tabs/FacilityManagementTab.tsx` | Mark all values as purple (mockup) |
+| `src/components/insights/tabs/PortfolioManagementTab.tsx` | Mark real (names/area) vs mockup (financial) with color coding |
+| `src/components/insights/BuildingInsightsView.tsx` | Add tabbed layout (Performance, FM, Space, Asset) with building-scoped data |
+| `src/components/insights/EntityInsightsView.tsx` | Add tabbed layout for Floor/Room levels |
+| `src/components/insights/InsightsView.tsx` | Wire navigation callbacks for clickable values |
+
+## Risk Assessment
+
+- **Assets grid**: Low risk -- pure styling alignment.
+- **XKT preload skip on mobile**: Low risk -- mobile never had working preloading anyway (models loaded too much memory). Viewer will load models directly from API.
+- **Insights real data**: Medium risk -- relies on `allData` having correct `assetType` and `buildingFmGuid` fields, which the database query confirms are populated.
+- **Color coding**: Low risk -- pure visual change using Tailwind classes.
+- **Clickable navigation**: Medium risk -- needs careful wiring through AppContext to navigate correctly.
 
