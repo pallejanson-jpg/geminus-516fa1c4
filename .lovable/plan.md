@@ -1,78 +1,90 @@
 
-# Apply Ivion-to-BIM Transform to Split View Camera Sync
 
-## Problem
+# Fix Asset Grid and Room Grid: Sticky Header, User Defined Columns, and Selection Behavior
 
-The Split View (`SplitViewer.tsx`) currently passes Ivion positions directly to the `ViewerSyncContext` without any coordinate transformation. When the Ivion SDK reports a panorama position like `{x: 42, y: 1.6, z: -18}`, that position goes straight into `updateFromIvion()` and then into the 3D viewer's `camera.eye` -- but Ivion coordinates and BIM coordinates use different coordinate systems (different origins, potentially different rotations). This causes the 3D camera to point at the wrong location.
+## Problem Summary
 
-The `ivion-bim-transform.ts` module and the database columns (`ivion_bim_offset_x/y/z`, `ivion_bim_rotation`) already exist from the Virtual Twin implementation. We just need to wire them into the Split View flow.
+Three issues to fix in the Asset grid (`AssetsView.tsx`) and Room grid (`RoomsView.tsx`):
 
-## Changes
+1. **Header row scrolls away** -- when scrolling down in either grid, the column header row disappears
+2. **Missing User Defined property columns in Asset grid** -- the Room grid already discovers and shows User Defined properties from the `attributes` object, but the Asset grid only shows hardcoded System and Status columns
+3. **Properties dialog opens immediately on selection** -- clicking a row in the grid opens the properties dialog right away. The correct behavior is: click to select/highlight, then use the "Egenskaper" button in the toolbar to view properties
 
-### 1. `src/hooks/useIvionCameraSync.ts` -- Apply transform in both sync directions
+---
 
-**Interface change:** Add `buildingTransform?: IvionBimTransform` to `UseIvionCameraSyncOptions`.
+## Change 1: Sticky Table Header (both grids)
 
-**360-degree to 3D direction** (SDK polling loop, lines 179-216):
-- Import `ivionToBim`, `ivionHeadingToBim`, `bimToIvion`, `bimHeadingToIvion` from `ivion-bim-transform.ts`
-- After reading `image.location` and computing heading, apply `ivionToBim()` to position and `ivionHeadingToBim()` to heading before calling `updateFromIvion()`
-- Same transform applied in `syncFrom360Url` (manual URL sync)
+**Files:** `AssetsView.tsx`, `RoomsView.tsx`
 
-**3D to 360-degree direction** (syncToIvionSdk, lines 246-290):
-- Before calling `findNearestImage()`, apply `bimToIvion()` to convert the 3D sync position back to Ivion space (since the image cache stores Ivion-space positions)
-- Apply `bimHeadingToIvion()` to heading when constructing the `viewDir` for `moveToImageId()`
+Both grids render `<TableHeader>` inside a `<ScrollArea>`. The fix is to make the header row sticky so it stays at the top when scrolling.
 
-**3D to 360-degree iframe fallback** (syncToIvionIframe, lines 295-320):
-- Same inverse transform before `findNearestImage()` and when constructing vlon/vlat
+In the `SortableColumnHeader` component (shared by both files), the `<TableHead>` already has `className="bg-muted/50"`. Add `sticky top-0 z-10` to make it stick to the top of the scroll container.
 
-### 2. `src/pages/SplitViewer.tsx` -- Fetch transform data and pass it through
+Also add the same sticky classes to the non-sortable header cells (the checkbox column and the actions column) so the entire header row stays pinned.
 
-**Data loading** (lines 498-503): Expand the `building_settings` query to also fetch `ivion_bim_offset_x`, `ivion_bim_offset_y`, `ivion_bim_offset_z`, `ivion_bim_rotation`.
+Specifically for `<TableHeader>`:
+- Add `className="sticky top-0 z-10 bg-background"` to the `<TableHeader>` element
+- This ensures the entire row stays visible, including checkbox and action columns
 
-**BuildingData interface**: Add `ivionBimTransform?: IvionBimTransform` field.
+---
 
-**Pass to Ivion360View**: Add a new prop `ivionBimTransform` on the `Ivion360View` component for forwarding to `useIvionCameraSync`.
+## Change 2: Add User Defined Columns to Asset Grid
 
-### 3. `src/components/viewer/Ivion360View.tsx` -- Accept and forward transform
+**File:** `AssetsView.tsx`
 
-**Props**: Add `ivionBimTransform?: IvionBimTransform` to `Ivion360ViewProps`.
+The Room grid already has this logic (lines 207-245 in `RoomsView.tsx`). The same approach will be applied to the Asset grid:
 
-**Pass to hook**: Forward the transform to `useIvionCameraSync()` as `buildingTransform`.
+- Scan all asset `attributes` objects to discover User Defined Properties (objects with `{name, value, dataType}` structure)
+- Add them to `allColumns` alongside the existing System and Status columns
+- Extract values using the same `extractPropertyValue` pattern from RoomsView
+- Add a "Anvandardefinierade" (User Defined) section in the column selector dropdown so users can toggle them on/off
 
-### 4. `src/hooks/useViewerCameraSync.ts` -- No changes needed
-
-This hook operates entirely in BIM space. The `syncState.position` it receives from `ViewerSyncContext` will already be in BIM coordinates (because `useIvionCameraSync` now transforms before writing to the context). The 3D camera positions it broadcasts are also in BIM coordinates. No transform needed here.
-
-## Data Flow After Changes
-
-```text
-360-degree to 3D:
-  Ivion SDK image.location (Ivion space)
-    --> ivionToBim(pos, transform)  [NEW]
-    --> ivionHeadingToBim(heading, transform)  [NEW]
-    --> updateFromIvion(bimPos, bimHeading, pitch)
-    --> ViewerSyncContext
-    --> useViewerCameraSync sets camera.eye/look (BIM space)
-
-3D to 360-degree:
-  xeokit camera.eye (BIM space)
-    --> updateFrom3D(bimPos, bimHeading, bimPitch)
-    --> ViewerSyncContext
-    --> bimToIvion(pos, transform)  [NEW]
-    --> bimHeadingToIvion(heading, transform)  [NEW]
-    --> findNearestImage(ivionPos) + moveToImageId(viewDir)
+**Current state** (`AssetsView.tsx` line 317):
 ```
+const allColumns = [...SYSTEM_COLUMNS, ...STATUS_COLUMNS];
+```
+
+**After change:** Dynamic discovery identical to RoomsView -- scans `localAssets` for attribute keys that are objects with `name` and `value` properties.
+
+Also update the column selector dropdown (currently only shows "Systemegenskaper" and "Status" sections) to include a third "Anvandardefinierade" section.
+
+Update the `assetData` mapping (lines 322-352) to also extract User Defined property values using the same `extractPropertyValue` helper.
+
+---
+
+## Change 3: Decouple Selection from Properties Dialog
+
+**Files:** `AssetsView.tsx`, `RoomsView.tsx`
+
+Both files have a `useEffect` that auto-opens the properties dialog whenever rows are selected:
+
+```typescript
+// AssetsView lines 202-209, RoomsView lines 192-199
+useEffect(() => {
+  if (selectedRows.size > 0) {
+    setShowPropertiesFor(Array.from(selectedRows));
+  } else {
+    setShowPropertiesFor(null);
+  }
+}, [selectedRows]);
+```
+
+**Fix:** Remove this `useEffect` entirely from both files. The `showPropertiesFor` state should only be set when the user explicitly clicks the "Egenskaper" button in the selection toolbar (which already exists and calls `handleShowSelectedProperties`).
+
+Additionally, add an "Egenskaper" button to the per-row actions column so users can open properties for a single row without having to select it first via checkbox.
+
+---
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/hooks/useIvionCameraSync.ts` | Add `buildingTransform` prop, apply `ivionToBim`/`bimToIvion` in both sync directions |
-| `src/pages/SplitViewer.tsx` | Fetch `ivion_bim_offset_x/y/z` and `ivion_bim_rotation` from DB, pass as transform to Ivion360View |
-| `src/components/viewer/Ivion360View.tsx` | Accept `ivionBimTransform` prop and forward to `useIvionCameraSync` |
+| `src/components/portfolio/AssetsView.tsx` | Sticky header, discover User Defined columns from attributes, remove auto-open useEffect, add per-row edit button |
+| `src/components/portfolio/RoomsView.tsx` | Sticky header, remove auto-open useEffect, add per-row edit button |
 
-## Risk Assessment
+## Behavior After Changes
 
-- **Low risk**: The transform defaults to identity (all zeros) when no calibration has been configured, so buildings without alignment data behave exactly as before.
-- **No breaking changes**: The new `buildingTransform` prop is optional with a fallback to `IDENTITY_TRANSFORM`.
-- **Shared with Virtual Twin**: The same `ivion-bim-transform.ts` module is already validated in the Virtual Twin implementation.
+1. **Scrolling**: The header row with column names stays fixed at the top as you scroll through rows
+2. **Column selector** (Asset grid): Now shows three sections -- Systemegenskaper, Status, and Anvandardefinierade -- with all discovered properties available as toggleable columns
+3. **Selection flow**: Click checkbox or row to select/highlight (no dialog opens). Click "Egenskaper" in the toolbar to view properties of selected items. Or click the edit icon in the row's action column to open properties for that specific item.
+
