@@ -16,32 +16,21 @@ interface MobileBuildingSelectorProps {
 const MobileBuildingSelector: React.FC<MobileBuildingSelectorProps> = ({ onSelect, onClose }) => {
   const { allData } = useContext(AppContext);
   
-  // Extract buildings from allData
+  // Extract buildings from flat allData array (same pattern as BuildingSelector)
   const buildings = React.useMemo(() => {
-    if (!allData) return [];
-    
-    const extractBuildings = (nodes: any[]): any[] => {
-      const result: any[] = [];
-      for (const node of nodes) {
-        if (node.category === 'Building') {
-          result.push(node);
-        }
-        if (node.children) {
-          result.push(...extractBuildings(node.children));
-        }
-      }
-      return result;
-    };
-    
-    // allData can be an array or an object with children
-    const rootNodes: any[] = Array.isArray(allData) ? allData : ((allData as any)?.children || []);
-    return extractBuildings(rootNodes);
+    if (!allData || !Array.isArray(allData)) return [];
+    return allData.filter((item: any) => 
+      item.category === 'Building' || item.category === 'IfcBuilding'
+    );
   }, [allData]);
   
-  // Count floors for a building
+  // Count floors for a building from the flat array
   const getFloorCount = (building: any): number => {
-    if (!building?.children) return 0;
-    return building.children.filter((c: any) => c.category === 'Level').length;
+    if (!allData || !Array.isArray(allData)) return 0;
+    return allData.filter((item: any) =>
+      item.buildingFmGuid === building.fmGuid &&
+      (item.category === 'Building Storey' || item.category === 'IfcBuildingStorey' || item.category === 'Level')
+    ).length;
   };
 
   return (
