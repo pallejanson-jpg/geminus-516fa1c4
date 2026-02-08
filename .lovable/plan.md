@@ -1,99 +1,100 @@
 
 
-# Fix 3D Viewer: Navigation Bypass + Crash on Load
+# Fix 3D Viewer: iPhone Safe Area Overlap + Intermittent Crash
 
-## Two Issues
+## Problem 1: Toolbar hidden behind iPhone browser chrome
 
-### Issue 1: Skips building/view selector, jumps directly into 3D
+On iPhone Safari, the browser has a dynamic address bar at the top and a bottom toolbar with navigation buttons. The 3D viewer's UI elements overlap with these:
 
-**Root cause**: When the user navigates away from the 3D viewer by clicking another header button (e.g., Portfolio, Navigator), `viewer3dFmGuid` is **never cleared**. It stays set from the previous session. When the user later clicks the "3D Viewer" button in the header, `setActiveApp('assetplus_viewer')` is called, and `Viewer.tsx` sees the old `viewer3dFmGuid` is still set -- so it skips `BuildingSelector` and jumps straight into `AssetPlusViewer`.
+- **Top**: The `MobileViewerOverlay` header (back button, building name, settings) uses `paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)'` -- this handles the notch/Dynamic Island but does NOT account for the Safari address bar, which sits below the safe area inset.
+- **Bottom**: The `ViewerToolbar` uses `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)'` -- this only adds 12px above the safe area inset, which is not enough to clear the Safari bottom toolbar (approximately 44px tall).
+- **Bottom**: The NavCube uses `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)'` -- same problem, offset from an insufficient base.
 
-**Fix**: Two changes:
+The root issue: `env(safe-area-inset-bottom)` on iPhone Safari reports around 34px for the home indicator, but the Safari toolbar buttons add another ~50px that is NOT part of the safe area. This means the ViewerToolbar with only 12px extra margin sits directly behind the Safari toolbar.
 
-1. **`AppHeader.tsx`**: When clicking the "3D Viewer" header button, clear `viewer3dFmGuid` first so the building selector always appears for fresh navigation.
+Similarly at the top, `env(safe-area-inset-top)` covers the notch/Dynamic Island but not the Safari address bar (~50px). With only 8px of padding, the header buttons are behind the address bar.
 
-2. **`Viewer.tsx`**: The line `setViewer3dFmGuid(null)` on line 64 is called **during render** (a React anti-pattern that can cause loops and double-renders). Move it into a `useEffect`.
+### Fix
 
-### Issue 2: 3D crashes ("something loads but then crashes")
+Use `100dvh` (dynamic viewport height) for the viewer container instead of `100vh`/`h-screen`. The `dvh` unit automatically excludes browser chrome (address bar + bottom toolbar) on mobile Safari. Then increase the padding values for the top header and bottom toolbar to account for the remaining UI spacing:
 
-**Root cause**: Looking at `Viewer.tsx` line 62-70, there's a problematic render-time side effect:
+**Files to change:**
 
-```
-if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
-    setViewer3dFmGuid(null); // <-- STATE UPDATE DURING RENDER!
-    return <BuildingSelector />;
-}
-```
+1. **`src/pages/Mobile3DViewer.tsx`**: Change the outer container from `h-screen` to use `100dvh` so the viewer fills only the visible area (excluding browser chrome).
 
-This calls `setViewer3dFmGuid(null)` during render, which triggers a re-render mid-render cycle. Combined with the fact that `setViewer3dFmGuid(null)` also changes `activeApp` (navigating away from the viewer), this creates a race condition: `AssetPlusViewer` may mount, begin initialization, then get torn down immediately by the app switch -- causing the crash.
+2. **`src/components/viewer/ViewerToolbar.tsx`** (mobile section, line 748): Increase the bottom offset from `12px` to `16px` to give more breathing room above the Safari bottom indicator.
 
-Additionally, `Viewer.tsx` line 64 calls `setViewer3dFmGuid(null)` which calls `setActiveApp(previousAppBeforeViewer)`. Then the BuildingSelector is returned, but on the next render, the app has already switched away from the viewer. The user sees a brief flash or crash.
+3. **`src/components/viewer/mobile/MobileViewerOverlay.tsx`** (line 130): Increase the top padding from `8px` to `12px` for better clearance below the address bar area.
 
-**Fix**: Remove the render-time state update. Handle invalid GUIDs properly using `useEffect` with a guard.
+4. **`src/components/viewer/AssetPlusViewer.tsx`** (NavCube, line 2971): Adjust NavCube bottom offset to stay consistent with the toolbar.
 
-## Changes
+5. **`src/components/viewer/MobileViewerOverlay.tsx`** -- the building selector in Mobile3DViewer also uses `h-screen`, change to `h-dvh`.
 
-### File 1: `src/components/layout/AppHeader.tsx`
+The key insight is that `100dvh` does the heavy lifting. On iPhone Safari, `100vh` equals the full screen height including browser chrome, but `100dvh` equals only the visible area. By constraining the viewer to `100dvh`, the toolbar positioned at `bottom: calc(env(safe-area-inset-bottom) + 16px)` will be comfortably above the Safari toolbar.
 
-In `handleMenuClick`, when the target app is `assetplus_viewer`, clear the previous viewer selection so the building selector is shown:
+## Problem 2: Intermittent 3D crash during loading
 
-```typescript
-const handleMenuClick = (app: string, mode?: string) => {
-    if (isMobile && app === 'assetplus_viewer') {
-        navigate('/viewer');
-        return;
-    }
-    setSelectedFacility(null);
-    // When navigating to 3D viewer via header, always show building selector
-    if (app === 'assetplus_viewer') {
-        setViewer3dFmGuid(null);
-    }
-    setActiveApp(app);
-    if (mode) {
-        setViewMode(mode);
-    }
-};
-```
+After the previous fixes (ref-based stabilization, parameter order fix), the main remaining crash vector is the `initializeViewer` dependency on `handleAllModelsLoaded`. Looking at the dependency chain:
 
-With React 18 automatic batching, `setViewer3dFmGuid(null)` and `setActiveApp('assetplus_viewer')` are batched into one render. The intermediate `setActiveApp(previousApp)` inside `setViewer3dFmGuid(null)` is overridden by the subsequent `setActiveApp('assetplus_viewer')`. Final state: `viewer3dFmGuid=null`, `activeApp='assetplus_viewer'`.
+- `handleAllModelsLoaded` depends on `executeDisplayAction`, `transparentBackground`, `ghostOpacity`
+- `executeDisplayAction` is another callback
 
-### File 2: `src/pages/Viewer.tsx`
+If `executeDisplayAction` changes identity, `handleAllModelsLoaded` changes identity, which changes `initializeViewer` identity, triggering the cleanup+re-init cycle during loading.
 
-Remove the render-time `setViewer3dFmGuid(null)` call and replace with a proper `useEffect`:
+Additionally, `changeXrayMaterial` and `processDeferred` and `displayFmGuid` are also in the dependency array. If any of these change identity during the async initialization window, the viewer gets torn down mid-load.
 
-```typescript
-// Replace the render-time side effect (lines 62-70)
-// with a useEffect that handles invalid GUIDs
+### Fix
 
-useEffect(() => {
-    if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
-        // Invalid GUID - clear it
-        setViewer3dFmGuid(null);
-    }
-}, [viewer3dFmGuid, isLoadingData, allData, buildingFmGuid, setViewer3dFmGuid]);
-```
+Apply the same ref-based pattern to stabilize the remaining volatile callbacks:
 
-And in the render logic, simply show the BuildingSelector when there's no valid building (without calling state setters):
+1. Add refs for `handleAllModelsLoaded`, `changeXrayMaterial`, `processDeferred`, `displayFmGuid`, and `setupCacheInterceptor`.
+2. Keep them in sync with useEffect.
+3. Update `initializeViewer` to call from refs instead of closure variables.
+4. Remove them from the dependency array, leaving only `[fmGuid, initialFmGuidToFocus, isMobile]`.
 
-```typescript
-// If GUID is set but we couldn't resolve a building, show selector
-if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
-    return (
-        <div className="h-full">
-            <BuildingSelector />
-        </div>
-    );
-}
-```
+This ensures the viewer ONLY re-initializes when the user navigates to a different building or the mobile state changes -- never due to callback identity changes.
 
-### File Summary
+## File Summary
 
-| File | Change |
+| File | Changes |
 |---|---|
-| `src/components/layout/AppHeader.tsx` | Clear `viewer3dFmGuid` when clicking the 3D Viewer header button |
-| `src/pages/Viewer.tsx` | Move render-time state update to `useEffect`, fix race condition |
+| `src/pages/Mobile3DViewer.tsx` | Change `h-screen` to `h-dvh` on viewer container and building selector |
+| `src/components/viewer/ViewerToolbar.tsx` | Increase mobile bottom offset for Safari toolbar clearance |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Increase top padding for Safari address bar clearance |
+| `src/components/viewer/AssetPlusViewer.tsx` | (1) Adjust NavCube bottom offset, (2) Stabilize all remaining callback dependencies with refs |
+
+## Technical Details
+
+### dvh vs vh on iPhone Safari
+
+```text
+100vh  = Full screen including address bar + bottom toolbar
+100dvh = Current visible viewport (shrinks when bars are visible)
+100svh = Smallest possible viewport (bars visible)
+100lvh = Largest possible viewport (bars hidden)
+```
+
+Using `100dvh` is the modern standard for fullscreen mobile views. It is supported in Safari 15.4+ (iOS 15.4+, March 2022), covering all actively used iPhones.
+
+### Stabilized initializeViewer dependency array
+
+Changes from:
+```
+[fmGuid, initialFmGuidToFocus, handleAllModelsLoaded,
+ changeXrayMaterial, processDeferred, displayFmGuid,
+ setupCacheInterceptor, isMobile]
+```
+To:
+```
+[fmGuid, initialFmGuidToFocus, isMobile]
+```
+
+All callbacks are accessed via refs inside the function body, which always point to the latest version without causing re-initialization.
 
 ### Risk Assessment
 
-Low risk. The header change only affects the explicit "click 3D Viewer button" flow. The `Viewer.tsx` fix removes a React anti-pattern (state update during render) that was causing unpredictable behavior. All other navigation paths (from Portfolio, Navigator, search results) are unchanged -- they still set `viewer3dFmGuid` and navigate to the viewer with the building pre-selected.
+Low risk.
+- `dvh` units are well-supported on modern iOS Safari (15.4+).
+- The ref-based callback pattern is identical to what was already applied for `cacheStatus`, `showNavCube`, `assetData`, and `allData`.
+- No behavioral changes -- only stability improvements and positioning fixes.
 
