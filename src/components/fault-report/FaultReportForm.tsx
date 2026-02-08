@@ -11,11 +11,11 @@ import { Form, FormField, FormItem, FormControl, FormMessage } from '@/component
 import PhotoCapture from './PhotoCapture';
 import FormFieldWithHelp from './FormFieldWithHelp';
 import ClearableInput from './ClearableInput';
-import ErrorCodeCombobox from './ErrorCodeCombobox';
+import ErrorCodeCombobox, { type ErrorCode } from './ErrorCodeCombobox';
 
 const faultReportSchema = z.object({
   description: z.string().trim().min(1, 'Beskrivning krävs').max(2000, 'Max 2000 tecken'),
-  errorCode: z.string().trim().max(100, 'Max 100 tecken').optional().or(z.literal('')),
+  errorCode: z.any().optional(),
   email: z.string().trim().max(255).optional().or(z.literal('')).refine(
     (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
     { message: 'Ogiltig e-postadress' }
@@ -30,6 +30,7 @@ interface FaultReportFormProps {
   spaceName?: string;
   installationNumber?: string;
   assetName?: string;
+  errorCodes?: ErrorCode[];
   onSubmit: (data: FaultReportFormData, photos: string[]) => Promise<void>;
   isSubmitting: boolean;
 }
@@ -39,6 +40,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
   spaceName,
   installationNumber,
   assetName,
+  errorCodes,
   onSubmit,
   isSubmitting,
 }) => {
@@ -49,7 +51,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
     resolver: zodResolver(faultReportSchema),
     defaultValues: {
       description: '',
-      errorCode: '',
+      errorCode: null,
       email: '',
       phone: '',
     },
@@ -116,8 +118,9 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
                   />
                   <FormControl>
                     <ErrorCodeCombobox
-                      value={field.value || ''}
+                      value={field.value as ErrorCode | null}
                       onChange={field.onChange}
+                      errorCodes={errorCodes}
                     />
                   </FormControl>
                   <FormMessage />

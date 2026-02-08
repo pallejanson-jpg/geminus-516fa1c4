@@ -8,15 +8,15 @@ import FaultReportForm from '@/components/fault-report/FaultReportForm';
 import MobileFaultReport from '@/components/fault-report/MobileFaultReport';
 import FaultReportSuccess from '@/components/fault-report/FaultReportSuccess';
 import type { FaultReportFormData } from '@/components/fault-report/FaultReportForm';
+import type { ErrorCode } from '@/components/fault-report/ErrorCodeCombobox';
 
-interface QrConfig {
-  building_fm_guid: string;
-  building_name: string | null;
-  space_fm_guid: string | null;
-  space_name: string | null;
-  asset_fm_guid: string | null;
-  asset_name: string | null;
-  installation_number: string | null;
+interface ApiConfig {
+  installationNumber?: string;
+  assetName?: string;
+  buildingName?: string;
+  spaceName?: string;
+  errorCodes: ErrorCode[];
+  rawConfig: any;
 }
 
 const FaultReport: React.FC = () => {
@@ -24,85 +24,113 @@ const FaultReport: React.FC = () => {
   const isMobile = useIsMobile();
   const qrKey = searchParams.get('key');
 
-  const [qrConfig, setQrConfig] = useState<QrConfig | null>(null);
-  const [isLoadingQr, setIsLoadingQr] = useState(!!qrKey);
-  const [qrError, setQrError] = useState<string | null>(null);
+  const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(!!qrKey);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
-  // Look up QR config if key is present
+  // Fetch config from er-rep.com via edge function
   useEffect(() => {
     if (!qrKey) return;
 
-    const lookupQr = async () => {
-      setIsLoadingQr(true);
-      setQrError(null);
+    const fetchConfig = async () => {
+      setIsLoadingConfig(true);
+      setConfigError(null);
       try {
-        const { data, error } = await supabase
-          .from('qr_report_configs')
-          .select('building_fm_guid, building_name, space_fm_guid, space_name, asset_fm_guid, asset_name, installation_number')
-          .eq('qr_key', qrKey)
-          .eq('is_active', true)
-          .maybeSingle();
+        const { data, error } = await supabase.functions.invoke('errorreport-proxy', {
+          body: { action: 'get-config', qrKey },
+        });
 
         if (error) throw error;
-        if (!data) {
-          setQrError('Ogiltig eller inaktiv QR-kod');
-          return;
+
+        console.log('[FaultReport] API config response:', data);
+
+        // Parse the config response flexibly
+        const errorCodes: ErrorCode[] = [];
+        if (data?.errorCodes && Array.isArray(data.errorCodes)) {
+          for (const ec of data.errorCodes) {
+            errorCodes.push({
+              guid: ec.guid ?? 0,
+              id: ec.id ?? '',
+              title: ec.title ?? ec.id ?? '',
+              description: ec.description ?? '',
+              context: ec.context ?? null,
+            });
+          }
         }
-        setQrConfig(data);
+
+        setApiConfig({
+          installationNumber: data?.articleNumber || data?.installationNumber || data?.installation_number || undefined,
+          assetName: data?.articleName || data?.assetName || data?.asset_name || data?.name || undefined,
+          buildingName: data?.buildingName || data?.building_name || undefined,
+          spaceName: data?.spaceName || data?.space_name || undefined,
+          errorCodes,
+          rawConfig: data,
+        });
       } catch (err: any) {
-        console.error('QR lookup error:', err);
-        setQrError('Kunde inte läsa QR-koden. Försök igen.');
+        console.error('Config fetch error:', err);
+        setConfigError('Kunde inte läsa QR-koden. Försök igen.');
       } finally {
-        setIsLoadingQr(false);
+        setIsLoadingConfig(false);
       }
     };
 
-    lookupQr();
+    fetchConfig();
   }, [qrKey]);
 
   const handleSubmit = async (data: FaultReportFormData, photos: string[]) => {
     setIsSubmitting(true);
     try {
-      const externalId = `FR-${Date.now()}`;
-      const assetLabel = qrConfig?.asset_name || qrConfig?.installation_number || '';
-      const descSnippet = data.description.slice(0, 50);
-      const autoTitle = assetLabel
-        ? `Felanmälan: ${assetLabel}`
-        : `Felanmälan: ${descSnippet}`;
+      if (qrKey) {
+        // Submit to er-rep.com via edge function
+        const payload = {
+          errorDescription: data.description,
+          attachments: [],
+          contactEmail: data.email || '',
+          contactPhone: data.phone || '',
+          errorCode: data.errorCode || null,
+        };
 
-      const workOrder = {
-        title: autoTitle,
-        description: data.description,
-        category: null,
-        priority: 'medium' as const,
-        status: 'open' as const,
-        external_id: externalId,
-        reported_by: null,
-        reported_at: new Date().toISOString(),
-        building_fm_guid: qrConfig?.building_fm_guid || null,
-        building_name: qrConfig?.building_name || null,
-        space_fm_guid: qrConfig?.space_fm_guid || null,
-        space_name: qrConfig?.space_name || null,
-        attributes: {
-          error_code: data.errorCode || null,
-          reporter_email: data.email || null,
-          reporter_phone: data.phone || null,
-          images: photos,
-          source: 'fault_report',
-          qr_key: qrKey || null,
-          asset_fm_guid: qrConfig?.asset_fm_guid || null,
-          asset_name: qrConfig?.asset_name || null,
-          installation_number: qrConfig?.installation_number || null,
-        },
-      };
+        const { data: responseData, error } = await supabase.functions.invoke('errorreport-proxy', {
+          body: { action: 'submit', qrKey, payload },
+        });
 
-      const { error } = await supabase.from('work_orders').insert(workOrder);
-      if (error) throw error;
+        if (error) throw error;
 
-      setSubmittedId(externalId);
-      toast.success('Felanmälan skickad!');
+        console.log('[FaultReport] Submit response:', responseData);
+
+        // Use API reference number or fall back to local ID
+        const refId = responseData?.referenceNumber || responseData?.id || responseData?.externalId || `FR-${Date.now()}`;
+        setSubmittedId(String(refId));
+        toast.success('Felanmälan skickad!');
+      } else {
+        // No QR key – fall back to local work_orders insert
+        const externalId = `FR-${Date.now()}`;
+        const workOrder = {
+          title: `Felanmälan: ${data.description.slice(0, 50)}`,
+          description: data.description,
+          category: null,
+          priority: 'medium' as const,
+          status: 'open' as const,
+          external_id: externalId,
+          reported_by: null,
+          reported_at: new Date().toISOString(),
+          attributes: {
+            error_code: data.errorCode || null,
+            reporter_email: data.email || null,
+            reporter_phone: data.phone || null,
+            images: photos,
+            source: 'fault_report',
+          },
+        };
+
+        const { error } = await supabase.from('work_orders').insert(workOrder);
+        if (error) throw error;
+
+        setSubmittedId(externalId);
+        toast.success('Felanmälan skickad!');
+      }
     } catch (err: any) {
       console.error('Submit error:', err);
       toast.error('Kunde inte skicka felanmälan', {
@@ -117,8 +145,8 @@ const FaultReport: React.FC = () => {
     setSubmittedId(null);
   };
 
-  // Loading QR config
-  if (isLoadingQr) {
+  // Loading config
+  if (isLoadingConfig) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -129,14 +157,14 @@ const FaultReport: React.FC = () => {
     );
   }
 
-  // QR error
-  if (qrError) {
+  // Config error
+  if (configError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background p-4">
         <div className="flex flex-col items-center gap-3 text-center">
           <AlertTriangle className="h-10 w-10 text-destructive" />
           <h2 className="text-lg font-semibold">Något gick fel</h2>
-          <p className="text-sm text-muted-foreground">{qrError}</p>
+          <p className="text-sm text-muted-foreground">{configError}</p>
         </div>
       </div>
     );
@@ -144,26 +172,27 @@ const FaultReport: React.FC = () => {
 
   // Success state
   if (submittedId) {
+    const installInfo = apiConfig?.installationNumber || apiConfig?.assetName
+      ? `${apiConfig?.installationNumber || ''} ${apiConfig?.assetName || ''}`.trim()
+      : undefined;
+
     return (
       <div className="min-h-screen bg-background">
         <FaultReportSuccess
           externalId={submittedId}
-          buildingName={qrConfig?.building_name || undefined}
-          installationInfo={
-            qrConfig?.installation_number || qrConfig?.asset_name
-              ? `${qrConfig?.installation_number || ''} ${qrConfig?.asset_name || ''}`.trim()
-              : undefined
-          }
+          buildingName={apiConfig?.buildingName}
+          installationInfo={installInfo}
           onNewReport={handleReset}
         />
       </div>
     );
   }
 
-  const buildingName = qrConfig?.building_name || undefined;
-  const spaceName = qrConfig?.space_name || undefined;
-  const installationNumber = qrConfig?.installation_number || undefined;
-  const assetName = qrConfig?.asset_name || undefined;
+  const installationNumber = apiConfig?.installationNumber;
+  const assetName = apiConfig?.assetName;
+  const buildingName = apiConfig?.buildingName;
+  const spaceName = apiConfig?.spaceName;
+  const errorCodes = apiConfig?.errorCodes;
 
   // Mobile layout
   if (isMobile) {
@@ -174,6 +203,7 @@ const FaultReport: React.FC = () => {
           spaceName={spaceName}
           installationNumber={installationNumber}
           assetName={assetName}
+          errorCodes={errorCodes}
           onSubmit={handleSubmit}
           isSubmitting={isSubmitting}
           onBack={() => window.history.back()}
@@ -190,6 +220,7 @@ const FaultReport: React.FC = () => {
         spaceName={spaceName}
         installationNumber={installationNumber}
         assetName={assetName}
+        errorCodes={errorCodes}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
