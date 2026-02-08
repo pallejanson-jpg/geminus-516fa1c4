@@ -22,6 +22,8 @@ const Mobile3DViewer = lazy(() => import("@/pages/Mobile3DViewer"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 // Split Viewer - 3D + 360° side-by-side
 const SplitViewer = lazy(() => import("@/pages/SplitViewer"));
+// Virtual Twin - 3D overlay on 360° panorama
+const VirtualTwin = lazy(() => import("@/pages/VirtualTwin"));
 // Mobile 360° Viewer page (fullscreen)
 const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
 // Fault Report page (public, no auth required)
@@ -133,6 +135,18 @@ const App = () => {
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <ProtectedRoute>
                   <SplitViewer />
+                </ProtectedRoute>
+              </Suspense>
+            } 
+          />
+          
+          {/* Virtual Twin - 3D overlay on 360° */}
+          <Route 
+            path="/virtual-twin" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <VirtualTwin />
                 </ProtectedRoute>
               </Suspense>
             } 

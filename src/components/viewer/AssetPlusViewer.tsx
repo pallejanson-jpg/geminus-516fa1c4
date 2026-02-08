@@ -50,6 +50,11 @@ interface AssetPlusViewerProps {
   syncPosition?: LocalCoords | null;
   syncHeading?: number;
   syncPitch?: number;
+  // Virtual Twin overlay mode
+  /** When true, canvas background is transparent and UI overlays are hidden */
+  transparentBackground?: boolean;
+  /** Ghost opacity for all objects (0-1). Only applied in transparent mode. */
+  ghostOpacity?: number;
 }
 
 interface ViewerState {
@@ -99,6 +104,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   syncPosition,
   syncHeading,
   syncPitch,
+  transparentBackground = false,
+  ghostOpacity,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -1239,6 +1246,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       setModelLoadState('loaded');
       setInitStep('ready');
+
+      // Virtual Twin: apply ghost opacity after all models load
+      if (transparentBackground && ghostOpacity !== undefined) {
+        try {
+          const xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+          if (xv?.scene) {
+            const ids = xv.scene.objectIds;
+            if (ids?.length) {
+              xv.scene.setObjectsOpacity(ids, ghostOpacity);
+              // Make canvas background transparent
+              const canvas = xv.scene.canvas?.canvas;
+              if (canvas) canvas.style.background = 'transparent';
+            }
+          }
+        } catch (e) {
+          console.debug('Ghost opacity apply error:', e);
+        }
+      }
       
       // CRITICAL: Clear XKT sync status to hide the loading spinner
       setXktSyncStatus('done');
@@ -2540,6 +2565,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log("AssetPlusViewer: Viewer mounted successfully");
       viewerInstanceRef.current = viewer;
+      // Expose instance globally for Virtual Twin mode
+      (window as any).__assetPlusViewerInstance = viewer;
 
       // Apply x-ray material changes
       changeXrayMaterial();
@@ -2816,10 +2843,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             style={{
               display: 'flex',
               flex: '1 0 auto',
-              background: 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
-              touchAction: 'none',
+              background: transparentBackground
+                ? 'transparent'
+                : 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
+              touchAction: transparentBackground ? 'none' : 'none',
               WebkitTouchCallout: 'none',
               WebkitUserSelect: 'none',
+              pointerEvents: transparentBackground ? 'none' : undefined,
             } as React.CSSProperties}
           />
 

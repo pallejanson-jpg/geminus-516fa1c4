@@ -422,6 +422,10 @@ export type Database = {
           id: string
           is_favorite: boolean
           ivion_access_token: string | null
+          ivion_bim_offset_x: number | null
+          ivion_bim_offset_y: number | null
+          ivion_bim_offset_z: number | null
+          ivion_bim_rotation: number | null
           ivion_refresh_token: string | null
           ivion_site_id: string | null
           ivion_start_vlat: number | null
@@ -440,6 +444,10 @@ export type Database = {
           id?: string
           is_favorite?: boolean
           ivion_access_token?: string | null
+          ivion_bim_offset_x?: number | null
+          ivion_bim_offset_y?: number | null
+          ivion_bim_offset_z?: number | null
+          ivion_bim_rotation?: number | null
           ivion_refresh_token?: string | null
           ivion_site_id?: string | null
           ivion_start_vlat?: number | null
@@ -458,6 +466,10 @@ export type Database = {
           id?: string
           is_favorite?: boolean
           ivion_access_token?: string | null
+          ivion_bim_offset_x?: number | null
+          ivion_bim_offset_y?: number | null
+          ivion_bim_offset_z?: number | null
+          ivion_bim_rotation?: number | null
           ivion_refresh_token?: string | null
           ivion_site_id?: string | null
           ivion_start_vlat?: number | null
