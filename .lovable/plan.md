@@ -1,100 +1,137 @@
 
 
-# Fix 3D Viewer and Standardize Back Buttons
+# Fix 3D Viewer on Mobile, Insights Data, and Text Overflow
 
-## Issue 1: 3D Viewer Not Working
+## Three Issues to Fix
 
-### Root Cause
+### Issue 1: 3D Viewer Loads But Nothing Displays (Mobile and Desktop)
 
-The 3D viewer (Asset+ xeokit) **is actually loading correctly** -- the console shows `AssetPlusViewer version: 2.5.1.0` and `Viewer mounted successfully`. The problem is specifically on the **Virtual Twin page** (`/virtual-twin`), where the 3D canvas has `pointer-events: none` and `transparentBackground`, and the Ivion SDK layer underneath it fails to load (404 on `ivion.js`). This means:
+**Root Cause Found**: Callback identity instability causes the viewer to be torn down while still loading models.
 
-- The 3D model is rendered but fully transparent (ghost mode) on a black/empty background
-- No panorama is visible behind it because the SDK didn't load
-- The page looks blank or broken
+The chain of events:
 
-The standalone 3D viewer (accessed via the portfolio/building selector) works fine -- it uses `AssetPlusViewer` in its standard mode with the normal gradient background.
+1. `initializeViewer` starts, which sets `cacheStatus` state to `'checking'`
+2. `cacheStatus` is in the dependency array of `handleAllModelsLoaded`
+3. When `cacheStatus` changes, `handleAllModelsLoaded` gets a new identity
+4. `handleAllModelsLoaded` is in the dependency array of `initializeViewer`
+5. `initializeViewer` gets a new identity
+6. The `useEffect` that calls `initializeViewer` re-runs
+7. The cleanup function runs: it calls `viewer.clearData()` and sets `viewerInstanceRef.current = null`
+8. The Asset+ viewer was mid-loading XKT models -- now its data is wiped
 
-### Fix
+The result: the viewer container appears (initialization started), but the 3D models never render because `clearData()` was called mid-load. On desktop, timing may allow models to finish loading before the cascade. On mobile, slower network/GPU means models are still loading when cleanup fires.
 
-The Virtual Twin page needs a **fallback UI** when the Ivion SDK fails to load, instead of showing a blank screen. It should also handle the "SDK load failed" state more gracefully -- show an error toast with a retry option and optionally fall back to showing the 3D model with its normal (non-transparent) background so the user at least sees something.
+**Fix**: Remove volatile state variables from `handleAllModelsLoaded` dependencies by using refs instead.
 
-**Changes to `src/pages/VirtualTwin.tsx`:**
-- Track an `sdkError` state when the Ivion SDK fails to load
-- When `sdkError` is true, show the 3D viewer in non-transparent mode (so the BIM model is visible on its normal background), plus an error banner explaining that the 360-degree panorama could not be loaded
-- Add a "Retry" button to re-attempt SDK loading
-- This ensures the 3D view always works even if the 360-degree layer fails
+```text
+File: src/components/viewer/AssetPlusViewer.tsx
 
-**Changes to `src/lib/ivion-sdk.ts`:**
-- Review `loadIvionSdk` to ensure it propagates errors correctly (currently the Virtual Twin catches the error but only shows a toast -- needs to also set state)
+1. Add refs to track `cacheStatus` and `showNavCube`:
+   - const cacheStatusRef = useRef(cacheStatus)
+   - const showNavCubeRef = useRef(showNavCube)
+   - Keep refs in sync with state via useEffect
 
-## Issue 2: Inconsistent Back Buttons
+2. In handleAllModelsLoaded, read from refs instead of state:
+   - cacheStatusRef.current instead of cacheStatus
+   - showNavCubeRef.current instead of showNavCube
 
-### Current Inventory
+3. Remove cacheStatus and showNavCube from handleAllModelsLoaded
+   dependency array
 
-There are **four different back button patterns** used across the application:
+4. This stabilizes initializeViewer's identity, preventing
+   the effect from re-running and tearing down the viewer
+   during model loading
+```
 
-| Pattern | Where Used |
-|---|---|
-| **ArrowLeft icon only** (no text) | MapView (mobile), Mobile3DViewer selector, Mobile360Viewer, InsightsView, SplitViewer (mobile header), MobileFaultReport |
-| **ChevronLeft icon** | MobileViewerOverlay (3D viewer header) |
-| **ArrowLeft + "Tillbaka" text** | SplitViewer (desktop), VirtualTwin header |
-| **X (close) icon** top-right | FacilityLandingPage, AssetPlusViewer error state |
+Additionally, increase the mobile initialization timeout from 20 seconds to 30 seconds to give more time for model loading on slow connections.
 
-### Standardized Design
+---
 
-Adopt **two patterns only**, based on navigation context:
+### Issue 2: Insights Asset Count Shows Zero
 
-1. **"Back" button (ArrowLeft)** -- Used when navigating **away from a standalone page** back to a previous page. Consistent: icon-only on mobile, icon + "Tillbaka" text on desktop.
-   - Used in: VirtualTwin, SplitViewer, Mobile3DViewer, Mobile360Viewer, MobileFaultReport, InsightsViews
+**Root Cause Found**: `allData` in AppContext only loads hierarchy data at startup (Building, Building Storey, Space). Instance/asset category items are excluded for performance (lazy-loaded per building). But `AssetManagementTab` counts assets by filtering `allData` for items that are NOT Building/Storey/Space -- which returns zero because those are the only items loaded.
 
-2. **"Close" button (X)** -- Used when **closing a panel/overlay within the same page** (e.g. closing a facility detail card to return to the portfolio grid). Positioned top-right.
-   - Used in: FacilityLandingPage (closing facility detail back to portfolio grid)
+Database confirms: 82,558 Instance records, 2,731 Spaces, 60 Storeys, 11 Buildings. But `allData` only has ~2,802 items (hierarchy only).
 
-The **ChevronLeft** variant in `MobileViewerOverlay` should be changed to **ArrowLeft** for consistency with all other back buttons.
+**Fix**: Query the database directly for asset counts in Insights tabs, instead of relying on `allData`.
 
-### Changes
+```text
+File: src/components/insights/tabs/AssetManagementTab.tsx
 
-**`src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
-- Change `ChevronLeft` import to `ArrowLeft`
-- Replace `<ChevronLeft>` with `<ArrowLeft>` in the back button
+1. Add a database query using supabase to count assets:
+   - Total count: SELECT count(*) FROM assets 
+     WHERE category NOT IN ('Building', 'Building Storey', 'Space', ...)
+   - Per building: SELECT building_fm_guid, count(*) FROM assets
+     WHERE category NOT IN (...) GROUP BY building_fm_guid
+   - Category distribution: SELECT asset_type, count(*) FROM assets
+     WHERE category NOT IN (...) GROUP BY asset_type
 
-**`src/components/insights/EntityInsightsView.tsx`:**
-- No change needed -- already uses ArrowLeft icon-only
+2. Use these counts instead of filtering allData
 
-**`src/components/insights/BuildingInsightsView.tsx`:**
-- No change needed -- already uses ArrowLeft icon-only
+3. Show loading state while query runs, fallback to 0 on error
+```
 
-**`src/pages/SplitViewer.tsx`:**
-- Mobile header: already uses ArrowLeft icon-only (correct)
-- Desktop header: already uses ArrowLeft + "Tillbaka" (correct)
+```text
+File: src/components/insights/BuildingInsightsView.tsx
 
-**`src/pages/VirtualTwin.tsx`:**
-- Already uses ArrowLeft + "Tillbaka" (correct)
+Same fix for the building-level Insights view:
+- Query assets WHERE building_fm_guid = facility.fmGuid
+  AND category NOT IN (hierarchy categories)
+```
 
-**`src/components/portfolio/FacilityLandingPage.tsx`:**
-- Already uses X icon top-right (correct for "close panel" context)
+```text
+File: src/components/insights/EntityInsightsView.tsx
 
-**`src/components/viewer/AssetPlusViewer.tsx`:**
-- Error state uses X icon for close (correct -- closing the viewer panel)
+Same fix for entity-level insights:
+- Building: WHERE building_fm_guid = fmGuid
+- Storey: WHERE level_fm_guid = fmGuid
+- Space: WHERE in_room_fm_guid = fmGuid
+```
+
+---
+
+### Issue 3: Text Overflow on Insights Pages
+
+**Root Cause**: Several KPI card titles and chart labels are too long for mobile screens, especially when combined with the "Demo" badge.
+
+**Fix**: Shorten titles on mobile and add text truncation.
+
+```text
+Files: All Insights tabs
+
+1. KPI Card titles -- use shorter text on mobile:
+   - "Average Age (years)" -> "Avg. Age" on mobile
+   - "Replacement Value" -> "Value" on mobile  
+   - "Needs Maintenance" -> "Maint." on mobile
+   - "Average Occupancy" -> "Occupancy" on mobile
+   - "Avg. Vacancy Rate" -> "Vacancy" on mobile
+   - "CO2 Emissions (tons)" -> "CO2 (tons)" on mobile
+
+2. Card title text: add truncate class and max-width
+   to prevent overflow with Demo badge
+
+3. KPI value text: ensure text-2xl doesn't overflow
+   on small cards by using responsive text sizes
+```
+
+---
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/pages/VirtualTwin.tsx` | Add `sdkError` state, show fallback 3D with error banner when SDK fails, add retry |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Change `ChevronLeft` to `ArrowLeft` for back button consistency |
+| `src/components/viewer/AssetPlusViewer.tsx` | Add refs for cacheStatus/showNavCube, stabilize handleAllModelsLoaded identity, increase mobile timeout to 30s |
+| `src/components/insights/tabs/AssetManagementTab.tsx` | Query database directly for asset counts instead of filtering allData |
+| `src/components/insights/BuildingInsightsView.tsx` | Query database for building-specific asset count |
+| `src/components/insights/EntityInsightsView.tsx` | Query database for entity-specific asset count |
+| `src/components/insights/tabs/SpaceManagementTab.tsx` | Responsive KPI labels |
+| `src/components/insights/tabs/PerformanceTab.tsx` | Responsive KPI labels |
+| `src/components/insights/tabs/PortfolioManagementTab.tsx` | Responsive KPI labels |
+| `src/components/insights/tabs/FacilityManagementTab.tsx` | Responsive KPI labels |
 
-## Technical Details
+## Risk Assessment
 
-The 3D viewer fix in VirtualTwin.tsx involves:
-
-1. Adding an `sdkError` boolean state
-2. In the `loadSdk` catch block, set `setSdkError(true)` alongside the existing toast
-3. When `sdkError` is true AND `buildingInfo` exists:
-   - Render the `AssetPlusViewer` without `transparentBackground` (normal mode)
-   - Show a warning banner at the top: "360-graders panorama kunde inte laddas. Visar enbart 3D-modell."
-   - Include a "Forsok igen" (Retry) button that resets `sdkError` and re-triggers the SDK load effect
-4. The `pointer-events: none` on the 3D layer is only applied when the SDK loaded successfully
-
-The back button fix is a single-line change: replacing `ChevronLeft` with `ArrowLeft` in MobileViewerOverlay.
+- **3D Viewer fix**: Low risk -- only changes callback dependency management (refs instead of state), keeping the same runtime behavior. If calibration offsets haven't been entered, the identity transform (no change) applies.
+- **Insights data fix**: Low risk -- adds database queries that run alongside existing logic. Falls back to 0 if query fails. Does not affect data loading elsewhere.
+- **Text overflow fix**: No risk -- purely visual CSS/label changes, no logic changes.
 
