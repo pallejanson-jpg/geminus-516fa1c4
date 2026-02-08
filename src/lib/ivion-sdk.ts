@@ -70,6 +70,17 @@ export interface IvionAuthApi {
   currentUser: any;
 }
 
+export interface IvionMenuItem {
+  /** Unique key for the menu item */
+  key?: string;
+  /** Display label */
+  label?: string;
+  /** Whether the item is visible — can be overridden to hide */
+  isVisible?: () => boolean;
+  /** Override to control visibility */
+  setVisible?: (visible: boolean) => void;
+}
+
 export interface IvionApi {
   /** Get the main panorama view */
   getMainView(): IvionMainView;
@@ -100,6 +111,10 @@ export interface IvionApi {
   getShareUrl?(): string;
   /** Authentication API (available when loginToken is used) */
   auth?: IvionAuthApi;
+  /** Get sidebar menu items for programmatic control */
+  getMenuItems?(): IvionMenuItem[];
+  /** Close the sidebar menu */
+  closeMenu?(): void;
 }
 
 /** Load status for the SDK */
