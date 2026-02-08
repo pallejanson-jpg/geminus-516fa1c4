@@ -1,5 +1,8 @@
 project_id = "diqfthpfncdojlnqnicq"
 
+[functions.errorreport-proxy]
+verify_jwt = false
+
 [functions.ivion-proxy]
 verify_jwt = false
 
