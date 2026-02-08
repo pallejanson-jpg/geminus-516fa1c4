@@ -14,7 +14,7 @@
 
 import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye } from 'lucide-react';
+import { ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -53,6 +53,8 @@ const VirtualTwin: React.FC = () => {
 
   // Ivion SDK
   const [sdkReady, setSdkReady] = useState(false);
+  const [sdkError, setSdkError] = useState(false);
+  const [sdkRetryKey, setSdkRetryKey] = useState(0);
   const ivApiRef = useRef<IvionApi | null>(null);
   const sdkContainerRef = useRef<HTMLDivElement>(null);
   const ivionElementRef = useRef<HTMLElement | null>(null);
@@ -160,11 +162,13 @@ const VirtualTwin: React.FC = () => {
 
         ivApiRef.current = api;
         setSdkReady(true);
+        setSdkError(false);
         console.log('[VirtualTwin] Ivion SDK ready');
       } catch (err) {
         console.error('[VirtualTwin] SDK load failed:', err);
         if (!cancelled) {
-          toast.error('Kunde inte ladda 360° SDK');
+          setSdkError(true);
+          toast.error('360°-panorama kunde inte laddas. Visar enbart 3D-modell.');
         }
       }
     };
@@ -180,7 +184,7 @@ const VirtualTwin: React.FC = () => {
       ivApiRef.current = null;
       setSdkReady(false);
     };
-  }, [buildingInfo]);
+  }, [buildingInfo, sdkRetryKey]);
 
   // Token refresh loop
   useEffect(() => {
@@ -265,6 +269,20 @@ const VirtualTwin: React.FC = () => {
     return () => clearInterval(interval);
   }, [buildingInfo]);
 
+  // ─── Retry SDK handler ──────────────────────────────────────────────
+  const handleRetrySDK = useCallback(() => {
+    setSdkError(false);
+    setSdkReady(false);
+    ivApiRef.current = null;
+    if (sdkContainerRef.current && ivionElementRef.current) {
+      destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
+      ivionElementRef.current = null;
+    }
+    setSdkRetryKey(k => k + 1);
+  }, []);
+
+  const showFallback3D = sdkError && !sdkReady;
+
   // ─── Render ────────────────────────────────────────────────────────
 
   if (isLoading) {
@@ -294,24 +312,43 @@ const VirtualTwin: React.FC = () => {
 
   return (
     <div className="h-screen w-screen relative overflow-hidden bg-black">
-      {/* Layer 1: Ivion SDK (bottom) - receives all pointer events */}
-      <div
-        ref={sdkContainerRef}
-        className="absolute inset-0 z-0"
-        style={{ width: '100%', height: '100%' }}
-      />
+      {/* Layer 1: Ivion SDK (bottom) - receives all pointer events (hidden when fallback) */}
+      {!showFallback3D && (
+        <div
+          ref={sdkContainerRef}
+          className="absolute inset-0 z-0"
+          style={{ width: '100%', height: '100%' }}
+        />
+      )}
 
-      {/* Layer 2: Asset+ 3D viewer (top) - transparent, no pointer events */}
+      {/* Layer 2: Asset+ 3D viewer - transparent overlay when SDK works, full mode as fallback */}
       <div
         className="absolute inset-0 z-10"
-        style={{ pointerEvents: 'none' }}
+        style={{ pointerEvents: showFallback3D ? 'auto' : 'none' }}
       >
         <AssetPlusViewer
           fmGuid={buildingInfo.fmGuid}
-          transparentBackground
-          ghostOpacity={ghostOpacity / 100}
+          transparentBackground={!showFallback3D}
+          ghostOpacity={showFallback3D ? 1 : ghostOpacity / 100}
         />
       </div>
+
+      {/* SDK error banner */}
+      {showFallback3D && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 bg-destructive/90 backdrop-blur-sm text-destructive-foreground px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg max-w-md">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="text-sm">360°-panorama kunde inte laddas. Visar enbart 3D-modell.</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shrink-0 h-7 text-xs"
+            onClick={handleRetrySDK}
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Försök igen
+          </Button>
+        </div>
+      )}
 
       {/* Header toolbar */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-2 bg-black/40 backdrop-blur-sm">

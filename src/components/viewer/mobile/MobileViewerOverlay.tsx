@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronDown, TreeDeciduous, Layers, Eye, EyeOff, Home, X, Menu, Settings2, Box, Tag, LayoutDashboard, Palette, Check } from 'lucide-react';
+import { ArrowLeft, ChevronDown, TreeDeciduous, Layers, Eye, EyeOff, Home, X, Menu, Settings2, Box, Tag, LayoutDashboard, Palette, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -131,7 +131,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
         {/* Left side: Back button */}
         {onClose && (
           <Button variant="secondary" size="icon" onClick={onClose} className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border">
-            <ChevronLeft className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
         
