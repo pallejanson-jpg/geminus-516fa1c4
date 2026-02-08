@@ -1,162 +1,155 @@
 
 
-# Mobile 3D Viewer: Fix XKT loading, toolbar positioning, and assistant defaults
+# Fix: Gunnars mobilposition + responsivitetsgranskning
 
-## Problem Summary
+## Sammanfattning
 
-Four distinct issues need to be fixed for mobile:
-
-1. **3D content not displaying (blank canvas)**: The `Mobile3DViewer` page (route `/viewer`) uses a recursive tree traversal looking for `children` in `allData` to find buildings. However, `allData` is a **flat array** without nested `children`. This means the building list is always empty, and the viewer never receives a valid `fmGuid` to load models. The desktop `BuildingSelector` correctly uses `allData.filter(item => item.category === 'Building')`.
-
-2. **Toolbars hidden under browser chrome**: The mobile toolbar uses `absolute bottom-3` which positions it at the bottom of the viewport -- directly under the mobile browser's navigation bar. The header overlay at `absolute top-0` can clip under the status bar.
-
-3. **Header not hidden in immersive mode (in-app path)**: When the 3D viewer loads inside `AppLayout` (via the `assetplus_viewer` activeApp), the immersive mode already works. But when navigating via `/viewer` route, the `Mobile3DViewer` page renders outside `AppLayout` entirely, so this is already fullscreen. The issue is that within the in-app path, `BuildingSelector` also needs proper immersive handling.
-
-4. **Gunnar and Ilean floating buttons visible by default**: Both assistants default to `visible: true` in their settings, cluttering mobile screens.
+Gunnar och Ilean-knapparnas position ar felaktig pa mobil, och flera skarmvyer saknar optimeringar for sma skarmar. Har ar en fullstandig genomgang med atgarder.
 
 ---
 
-## Changes
+## 1. Gunnar-knappens mobilposition (Kritiskt)
 
-### 1. Fix Mobile3DViewer building extraction (Critical)
+**Problem:** Gunnar-knappens standardposition (`bottom-20 right-4 sm:bottom-6`) placerar den pa `bottom-20` (80px) pa mobil, men `bottom-6` (24px) pa desktop (`sm:`). Problemet ar att `bottom-20` kolliderar med MobileNav-overlayens y-position nar den ar oppen, och pa manga mobiler hamnar den bakom browser chrome eller utanfor skarmen.
 
-**File:** `src/pages/Mobile3DViewer.tsx`
+Dessutom: nar en position sparas i localStorage (via drag), anvands `top/left` pixelvarden fran en annan skarmstorlek, vilket kan placera knappen helt utanfor skarmen vid byte av orientering eller enhet.
 
-Replace the recursive tree traversal with the same flat-array filter used by the working desktop `BuildingSelector`:
+**Samma problem finns for Ilean-knappen** (`bottom-20 left-4 sm:bottom-6`).
 
+**Atgard i `src/components/chat/GunnarButton.tsx`:**
+- Andra standardpositionen till `bottom-24 right-4` (96px fran botten) pa mobil for att placera den ovanfor MobileNavs bottenomrade
+- Lagg till safe-area-inset-bottom i berakningen
+- Nar sparad position laddas fran localStorage: validera mot aktuell viewport-storlek och klamma till synligt omrade
+- Anvand `sm:bottom-6` for desktop som idag
+
+**Atgard i `src/components/chat/IleanButton.tsx`:**
+- Samma fix: `bottom-24 left-4` pa mobil, validering av sparad position
+
+**Atgard i bada filer - position-validering vid laddning:**
 ```text
-// BEFORE (broken - looks for .children which doesn't exist on flat allData)
-const extractBuildings = (nodes) => {
-  for (const node of nodes) {
-    if (node.category === 'Building') result.push(node);
-    if (node.children) result.push(...extractBuildings(node.children));
+// When loading saved position, clamp to current viewport
+useEffect(() => {
+  const settings = getGunnarSettings();
+  if (settings.buttonPosition) {
+    const maxX = window.innerWidth - 56;
+    const maxY = window.innerHeight - 56;
+    setTriggerPosition({
+      x: Math.max(0, Math.min(settings.buttonPosition.x, maxX)),
+      y: Math.max(0, Math.min(settings.buttonPosition.y, maxY)),
+    });
   }
-};
-const rootNodes = Array.isArray(allData) ? allData : allData?.children || [];
-return extractBuildings(rootNodes);
-
-// AFTER (correct - matches BuildingSelector pattern)
-return allData.filter(item => item.category === 'Building');
-```
-
-Also fix `getFloorCount` to count floors from the flat array instead of non-existent `children`:
-
-```text
-// BEFORE
-const getFloorCount = (building) => {
-  if (!building?.children) return 0;
-  return building.children.filter(c => c.category === 'Level').length;
-};
-
-// AFTER
-const getFloorCount = (building) => {
-  return allData.filter(item =>
-    item.buildingFmGuid === building.fmGuid &&
-    (item.category === 'Building Storey' || item.category === 'IfcBuildingStorey')
-  ).length;
-};
-```
-
-### 2. Fix toolbar positioning with safe-area-insets
-
-**File:** `src/components/viewer/ViewerToolbar.tsx`
-
-For the mobile toolbar (around line 742), change `bottom-3` to account for the mobile browser's bottom chrome using CSS `env(safe-area-inset-bottom)`:
-
-```text
-// BEFORE
-className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 ..."
-
-// AFTER - use safe-area padding
-style={{
-  bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
-  left: '50%',
-  transform: 'translateX(-50%)',
-}}
-```
-
-**File:** `src/components/viewer/mobile/MobileViewerOverlay.tsx`
-
-For the header overlay (line 130), add safe-area-inset-top padding:
-
-```text
-// BEFORE
-className="absolute top-0 left-0 right-0 z-30 ..."
-
-// AFTER
-style={{
-  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
-}}
-```
-
-Also position the NavCube canvas higher to avoid the toolbar:
-
-**File:** `src/components/viewer/AssetPlusViewer.tsx`
-
-Change the NavCube bottom positioning on mobile (around line 2920):
-
-```text
-// BEFORE
-className="absolute bottom-[70px] right-3 z-[25]"
-
-// AFTER (account for safe area)
-className="absolute right-3 z-[25]"
-style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)' }}
-```
-
-### 3. Default Gunnar and Ilean to hidden
-
-**File:** `src/components/settings/GunnarSettings.tsx`
-
-Change default `visible` from `true` to `false`:
-
-```text
-const DEFAULT_SETTINGS: GunnarSettingsData = {
-  visible: false,  // was: true
-  buttonPosition: null,
-};
-```
-
-**File:** `src/components/settings/IleanSettings.tsx`
-
-Same change:
-
-```text
-const DEFAULT_SETTINGS: IleanSettingsData = {
-  visible: false,  // was: true
-  buttonPosition: null,
-};
-```
-
-Note: Existing users who have already saved settings in localStorage will not be affected by this change. Only new users or users who have never toggled these settings will see the new default.
-
-### 4. Add viewport meta tag for safe-area support
-
-**File:** `index.html`
-
-Ensure the viewport meta tag includes `viewport-fit=cover` so that `env(safe-area-inset-*)` values are available:
-
-```text
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+}, []);
 ```
 
 ---
 
-## File Summary
+## 2. Gunnars chatpanel pa mobil
 
-| File | Change |
-|------|--------|
-| `src/pages/Mobile3DViewer.tsx` | Fix building extraction to use flat array filter instead of recursive tree traversal |
-| `src/components/viewer/ViewerToolbar.tsx` | Add safe-area-inset-bottom padding to mobile toolbar |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Add safe-area-inset-top padding to header overlay |
-| `src/components/viewer/AssetPlusViewer.tsx` | Adjust NavCube positioning with safe-area padding |
-| `src/components/settings/GunnarSettings.tsx` | Default `visible` to `false` |
-| `src/components/settings/IleanSettings.tsx` | Default `visible` to `false` |
-| `index.html` | Add `viewport-fit=cover` to viewport meta tag |
+**Problem:** Chatpanelen har `width: window.innerWidth - 32` pa mobil, men positionen ar beraknad fran `window.innerWidth - panelWidth - 16` som kan ge negativa varden. Panelen ar ocksa for hog pa sma skarmar.
 
-## Risk Assessment
+**Atgard i `src/components/chat/GunnarButton.tsx`:**
+- Pa mobil (< 640px): ta over hela skarmen med `inset-0` istallet for att anvanda draggbar position
+- Dold drag-header pa mobil -- ersatt med vanlig stangknapp
+- Panelhojd: `100vh` pa mobil, befintlig berakning pa desktop
 
-- **Building extraction fix**: Low risk -- aligns with proven desktop BuildingSelector pattern.
-- **Safe-area insets**: Low risk -- gracefully falls back to default values on non-mobile browsers.
-- **Assistant defaults**: Minimal risk -- only affects new users or those without saved localStorage settings.
+**Atgard i `src/components/chat/IleanButton.tsx`:**
+- Samma fullskarms-fix pa mobil
+
+---
+
+## 3. Minimerad bubbla -- safe area
+
+**Problem:** Minimerade bubblan anvander `bottom-20 sm:bottom-6` precis som triggerknappen, och hamnar bakom browser chrome pa mobil.
+
+**Atgard:** Andra till `bottom-24` pa mobil, med `style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}` for konsekvent positionering.
+
+---
+
+## 4. Responsivitetsgranskning -- skarmvyer utan dedikerad mobillayout
+
+### 4a. NavigatorView (`src/components/navigator/NavigatorView.tsx`)
+**Status:** Bra responsivitet. Anvander `p-2 sm:p-3 md:p-4`, kompakta soksomraden och virtualiserad lista. Tradvyn har `h-[calc(100vh-200px)]` som ar ok.
+**Atgard:** Ingen andring behovs.
+
+### 4b. HomeLanding (`src/components/home/HomeLanding.tsx`)
+**Status:** Bra responsivitet. Anvander sm/md-breakpoints genomgaende, grid som anpassas fran 1-3 kolumner.
+**Atgard:** Ingen andring behovs.
+
+### 4c. PortfolioView (`src/components/portfolio/PortfolioView.tsx`)
+**Status:** Bra. Anvander responsiva grid (2-4 kolumner), kompakta paddings pa mobil, dold grid/list-vaxxlare pa mobil, carousel med swipe-indikator.
+**Atgard:** Ingen andring behovs.
+
+### 4d. FacilityLandingPage (`src/components/portfolio/FacilityLandingPage.tsx`)
+**Status:** Bra. Responsiva paddings, kompakta knappar pa mobil, ScrollArea for langinnehall. Hero-bakgrund och KPI-kort ar responsiva.
+**Atgard:** Ingen andring behovs.
+
+### 4e. RoomsView (`src/components/portfolio/RoomsView.tsx`)
+**Status:** Bra. Responsiva header, toolbars, och tabellinnehall med kompakta storlekar pa sma skarmar.
+**Atgard:** Ingen andring behovs.
+
+### 4f. InsightsView (`src/components/insights/InsightsView.tsx`)
+**Status:** Bra. Tabs-listan ar scrollbar horisontellt pa mobil, responsiva texterstorlekar.
+**Atgard:** Ingen andring behovs.
+
+### 4g. QuickActions (`src/components/portfolio/QuickActions.tsx`)
+**Status:** Bra. Grid ar `grid-cols-3 sm:grid-cols-4` med kompakta storlekar.
+**Atgard:** Ingen andring behovs.
+
+### 4h. InAppFaultReport (`src/components/fault-report/InAppFaultReport.tsx`)
+**Status:** Bra. Har redan dedikerad `MobileFaultReport` for mobil.
+**Atgard:** Ingen andring behovs.
+
+### 4i. AppHeader (`src/components/layout/AppHeader.tsx`)
+**Status:** Bra. Responsive hojd (`h-14 sm:h-16`), dolda menyalternativ pa mobil (visas i MobileNav istallet), kompakt sok.
+**Atgard:** Ingen andring behovs.
+
+### 4j. ApiSettingsModal (`src/components/settings/ApiSettingsModal.tsx`)
+**Problem:** Ar en stor Dialog (2591 rader) som pa mobil kan vara svar att navigera. Dialog-standarder fran Radix borde hantera grundlaggande responsivitet. Behovs ingen andring for detta pass.
+**Atgard:** Ingen andring behovs i detta pass.
+
+---
+
+## Sammanfattning av filandringar
+
+| Fil | Andring |
+|------|---------|
+| `src/components/chat/GunnarButton.tsx` | Fix standardposition pa mobil (bottom-24), validera sparad position mot viewport, fullskarmpanel pa mobil |
+| `src/components/chat/IleanButton.tsx` | Samma fix som Gunnar: standardposition, positionsvalidering, fullskarmpanel pa mobil |
+
+## Tekniska detaljer
+
+### Gunnar/Ilean fullskarms-panel pa mobil
+
+Pa mobil (< 640px) ska chatpanelen renderas som en fullskarms-overlay istallet for en draggbar panel:
+
+```text
+// Mobile: fullscreen overlay
+const isMobilePanel = typeof window !== 'undefined' && window.innerWidth < 640;
+
+// In render:
+style={isMobilePanel ? {
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  borderRadius: 0,
+} : {
+  left: position.x,
+  top: position.y,
+  width: panelWidth,
+  height: panelHeight,
+}}
+```
+
+### Position-validering
+
+Nar `triggerPosition` laddas fran localStorage, klamma x/y till aktuell viewport:
+- `x`: max `window.innerWidth - buttonSize` (56px)
+- `y`: max `window.innerHeight - buttonSize`
+- Min 0 for bada
+
+Detta forhindrar att knappen hamnar utanfor skarmen vid orienteringsbyte eller om positionen sparades pa en storskarm.
+
+### Risker
+- Befintliga anvandare med sparade positioner i localStorage far sin position klammad till synligt omrade, men den atergar alltid till en giltig plats.
+- Fullskarmpanelen pa mobil ar en stilandring -- chatfunktionaliteten forblir identisk.
 
