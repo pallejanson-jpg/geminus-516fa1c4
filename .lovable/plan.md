@@ -1,144 +1,134 @@
 
 
-# Mobiloptimering: 3D-viewer, Header och 360-vy
+# Fix: 3D-viewer kraschar pa mobil
 
-## Sammanfattning
+## Problemanalys
 
-Tre separata problem ska fixas:
+Efter att ha granskat hela flödet har jag identifierat flera potentiella kraschkällor:
 
-1. **3D-viewern fungerar inte i AppLayout pa mobil** -- Pa desktop renderas den inuti AppLayout med header/sidebars. Pa mobil tar headern onodig plats och touch-interaktion med 3D:n fungerar daligt. Losningen: omdirigera till fullskarmssidan `/viewer` pa mobil.
+1. **Inga felgränser (Error Boundaries)**: Om AssetPlusViewer eller det underliggande Asset+-biblioteket kastar ett ohanterligt fel, kraschar hela React-appen till en vit skärm. Det finns ingen React Error Boundary som fångar detta.
 
-2. **Headern tar onodig skarmyta pa mobil** -- AppHeader (56px) visas alltid, aven i fullskarmsappar (3D, 360, karta). Pa mobil ska headern doljas for dessa appar och ersattas av en tillbaka-knapp som overlay.
+2. **Ohanterade asynkrona avvisningar (unhandled rejections)**: `handleAllModelsLoaded`-callbacken anropar `loadLocalAnnotations()` och `loadAlarmAnnotations()` -- om dessa kastar fel utanför try/catch (t.ex. nätverksfel eller timeout), kraschar appen. Dessutom kan Asset+-biblioteket generera ohanterade promise-rejections internt.
 
-3. **360-vyn "flyter" och Ivion-komponenter ar for stora** -- Sidans overflow ar inte lastad, och Ivions sidebar visas trots att vi forsaker dolja den. Behover mer aggressiv dolning och stabilisering.
+3. **WebGL-kontextförlust**: Mobila GPU:er har begränsat minne. När stora BIM-modeller laddas kan WebGL-kontexten förloras (context lost), vilket kraschar viewer-canvasen utan möjlighet till återhämtning.
 
----
-
-## Steg 1: Omdirigera 3D-viewer till fullskarm pa mobil
-
-**Fil:** `src/components/layout/AppHeader.tsx`
-
-Nar `isMobile` ar true och anvandaren klickar "3D Viewer"-knappen, navigera till `/viewer` istallet for att satta `setActiveApp('assetplus_viewer')`. MobileNav gor redan detta korrekt -- den anvander `navigate('/viewer')`.
-
-**Andring:**
-- I `viewButtons`-arrayen (rad 111-116), lagg till en `mobileRoute`-egenskap for `assetplus_viewer`
-- I `handleMenuClick`, kontrollera `isMobile` och om knappen har `mobileRoute`, anvand `navigate()` istallet for `setActiveApp()`
+4. **Fetch-interceptorn återställs inte vid krasch**: `setupCacheInterceptor` ersätter `window.fetch` globalt. Om viewern kraschar innan `restoreFetch` anropas, förblir den modifierade fetch-funktionen aktiv, vilket kan orsaka följdproblem.
 
 ---
 
-## Steg 2: Dolj header pa mobil for "immersive" appar
+## Lösning: 4 ändringar
 
-**Fil:** `src/components/layout/AppLayout.tsx`
+### Steg 1: Lägg till global unhandledrejection-handler
 
-Definiera en lista av "immersive" appar som ska dolja headern pa mobil: `assetplus_viewer`, `viewer`, `radar`, `map`.
+**Fil:** `src/App.tsx`
 
-Nar `isMobile && activeApp` ar en immersive app:
-- Dolj `AppHeader`, `SyncProgressBanner`, `DataConsistencyBanner`
-- Dolj `LeftSidebar` och `RightSidebar`
-- Lat `MainContent` fylla hela skarmen
+Lägg till en `useEffect` i App-komponenten som lyssnar på `unhandledrejection`-event. Detta fångar alla ohanterade promise-avvisningar (t.ex. från Asset+-biblioteket) och förhindrar att hela appen kraschar. Visar ett toast-meddelande istället.
 
-Varje immersive app-komponent har redan sina egna tillbaka-knappar (MobileViewerOverlay for 3D, back-overlay for 360).
+```
+useEffect(() => {
+  const handleRejection = (event: PromiseRejectionEvent) => {
+    console.error("Unhandled rejection:", event.reason);
+    event.preventDefault(); // Prevent crash
+  };
+  window.addEventListener("unhandledrejection", handleRejection);
+  return () => window.removeEventListener("unhandledrejection", handleRejection);
+}, []);
+```
 
-**Fil:** `src/context/AppContext.tsx` (las activeApp)
+### Steg 2: Lägg till React Error Boundary
 
-AppLayout behover lasa `activeApp` fran context -- den gor det redan via att importera och anvanda `useContext(AppContext)` indirekt via barnen, men sjalva `AppLayoutInner` lser inte context. Behover lagga till `useContext(AppContext)` for att lasa `activeApp`.
+**Ny fil:** `src/components/common/ViewerErrorBoundary.tsx`
+
+Skapa en React Error Boundary-komponent som fångar rendering-fel i AssetPlusViewer. Visar ett användarvänligt felmeddelande med en "Försök igen"-knapp istället för en vit skärm.
+
+**Fil:** `src/pages/Mobile3DViewer.tsx`
+
+Wrappa `<AssetPlusViewer>` i `<ViewerErrorBoundary>` med en `onReset`-callback som navigerar tillbaka.
+
+**Fil:** `src/pages/Viewer.tsx`
+
+Wrappa `<AssetPlusViewer>` i `<ViewerErrorBoundary>` på samma sätt.
+
+### Steg 3: Hantera WebGL context lost
+
+**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+
+Lägg till en `useEffect` som lyssnar på `webglcontextlost` och `webglcontextrestored` på viewer-canvasen. Vid context lost:
+- Visa ett felmeddelande: "3D-motorn förlorade anslutningen. Klicka 'Försök igen'."
+- Förhindra default-beteende (`event.preventDefault()`)
+- Vid context restored: rensa felmeddelandet och försök initiera om viewern
+
+```
+useEffect(() => {
+  const canvas = viewerContainerRef.current?.querySelector('canvas');
+  if (!canvas) return;
+  
+  const handleContextLost = (e: Event) => {
+    e.preventDefault();
+    setState(prev => ({
+      ...prev,
+      error: 'WebGL-kontext förlorad. Enheten har slut på grafikminne.',
+      isLoading: false,
+    }));
+    setShowError(true);
+  };
+  
+  canvas.addEventListener('webglcontextlost', handleContextLost);
+  return () => canvas.removeEventListener('webglcontextlost', handleContextLost);
+}, [state.isInitialized]);
+```
+
+### Steg 4: Defensiv wrapping av handleAllModelsLoaded
+
+**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+
+Wrappa hela `handleAllModelsLoaded`-callbackens body i en try/catch. Specifikt:
+- Wrappa `loadLocalAnnotations()` och `loadAlarmAnnotations()` i individuella try/catch-block
+- Wrappa NavCube-initieringen (redan har try/catch, behåll)
+- Säkerställ att `restoreFetch` alltid anropas vid cleanup, även vid krasch
 
 ---
 
-## Steg 3: Stabilisera 360-vyn pa mobil
+## Sammanfattning av filändringar
 
-**Fil:** `src/components/viewer/Ivion360View.tsx`
-
-- Pa mobil: lagg till `overflow-hidden` och `style={{ touchAction: 'none' }}` pa rot-containern (rad 389) for att forhindra sidans scrollning
-- Oka postMessage-retry for `setSidebarVisibility`: skicka meddelandet tre ganger med 1s, 3s, 5s fordrojning istallet for bara en gang vid 3s
-
-**Fil:** `src/pages/Mobile360Viewer.tsx`
-
-- Lagg till `style={{ touchAction: 'none' }}` pa rot-containern (redan `overflow-hidden` -- bra)
-- Sakerstall att hela sidan ar lastad med `position: fixed` for att undvika iOS-studs
-
----
-
-## Steg 4: Minimera Ivion UI-element pa mobil
-
-**Fil:** `src/components/viewer/Ivion360View.tsx`
-
-**SDK-lage (api ar tillgangligt):**
-Nar SDK ar `ready` och `isMobile`:
-- Forsok anropa `api.getMenuItems()` och satta `isVisible = () => false` for varje item
-- Forsok anropa `api.closeMenu?.()` eller liknande for att dolja sidebaren
-
-**Iframe-lage:**
-- Skicka `setSidebarVisibility` med fler retries (1s, 3s, 5s, 8s)
-- Skicka postMessage for att dolja eventuella andra UI-element om mojligt
-
-**Fil:** `src/lib/ivion-sdk.ts`
-
-Utoka `IvionApi`-interfacet med:
-- `getMenuItems?: () => any[]` -- for att hamta och manipulera sidebar-poster
-- `closeMenu?: () => void` -- for att stanga sidebaren programmatiskt
-
-**Begransningar:**
-- Floor changer-widgeten och sokrutan kan inte doljas programmatiskt -- de maste konfigureras i NavVis IVION Site Configuration av en admin
-- Rekommendation till anvandaren: ga till IVION admin-panelen och avmarkera "Floor changer widget" och "Search box" under Site Configuration
-
----
-
-## Sammanfattning av filandringar
-
-| Fil | Andring |
+| Fil | Ändring |
 |-----|---------|
-| `src/components/layout/AppLayout.tsx` | Dolj header/sidebars pa mobil for immersive appar |
-| `src/components/layout/AppHeader.tsx` | Omdirigera till `/viewer` pa mobil for 3D-knappen |
-| `src/components/viewer/Ivion360View.tsx` | Touch-fix, fler postMessage-retries, SDK sidebar-dolning |
-| `src/lib/ivion-sdk.ts` | Utoka IvionApi-typer med getMenuItems/closeMenu |
-| `src/pages/Mobile360Viewer.tsx` | Sakerstall touch-action och position-fixed |
-
----
+| `src/App.tsx` | Global unhandledrejection-handler |
+| `src/components/common/ViewerErrorBoundary.tsx` | Ny Error Boundary-komponent |
+| `src/pages/Mobile3DViewer.tsx` | Wrappa AssetPlusViewer i ErrorBoundary |
+| `src/pages/Viewer.tsx` | Wrappa AssetPlusViewer i ErrorBoundary |
+| `src/components/viewer/AssetPlusViewer.tsx` | WebGL context lost-hantering + defensiv try/catch i handleAllModelsLoaded |
 
 ## Tekniska detaljer
 
-### Immersive app-lista
+### Error Boundary-komponent (pseudokod)
 ```text
-const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
+class ViewerErrorBoundary extends Component {
+  state = { hasError: false, error: null };
+  
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error, info) {
+    console.error('Viewer crashed:', error, info);
+  }
+  
+  handleReset() {
+    this.setState({ hasError: false, error: null });
+    this.props.onReset?.();
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <CrashUI onRetry={this.handleReset} />;
+    }
+    return this.props.children;
+  }
+}
 ```
 
-### AppLayout conditional rendering (pseudokod)
-```text
-const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
-
-return (
-  <div>
-    {!isImmersive && <LeftSidebar />}
-    <div>
-      {!isImmersive && <AppHeader ... />}
-      {!isImmersive && <SyncProgressBanner />}
-      {!isImmersive && <DataConsistencyBanner />}
-      <MainContent />
-    </div>
-    {!isImmersive && <RightSidebar />}
-    ...
-  </div>
-);
-```
-
-### PostMessage retry-strategi
-```text
-const RETRY_DELAYS = [1000, 3000, 5000, 8000];
-RETRY_DELAYS.forEach(delay => {
-  setTimeout(() => {
-    iframeRef.current?.contentWindow?.postMessage({
-      command: 'setSidebarVisibility',
-      params: { visible: false }
-    }, '*');
-  }, delay);
-});
-```
-
-### Risker och begransningar
-
-- **Floor changer och sokruta** kan inte doljas via API -- kraver NavVis admin-andring
-- **Kartvyn (MapView)** pa mobil ar redan relativt fullskarm men kan gynnas av att headern doljs
-- **Tillbaka-navigering** -- varje immersive vy behover sin egen tillbaka-knapp. 3D har `MobileViewerOverlay`, 360 har back-overlay, men kartvyn kan behova en tillagd tillbaka-knapp
-- **Steg 1 (omdirigering)** gor att 3D pa mobil aldrig renderas i AppLayout, sa Steg 2 paverkar framsfor allt 360 och karta
+### Risker och begränsningar
+- Error Boundary fångar bara synkrona rendering-fel, inte asynkrona. Därför behövs BÅDE error boundary OCH unhandledrejection-handler.
+- WebGL context lost kan bero på att enheten har för lite minne -- i det fallet hjälper inte en omstart, men åtminstone kraschar inte appen.
 
