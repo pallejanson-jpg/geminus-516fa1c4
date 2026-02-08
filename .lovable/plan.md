@@ -1,90 +1,86 @@
 
-
-# Fix 3D Viewer Model Loading Regression
-
-## Problem
-
-The 3D viewer container mounts and initializes (token + config fetched, Asset+ viewer mounted), but no XKT models render. The runtime error confirms:
-
-```
-undefined is not an object (evaluating 'this.assetViewer.setAvailableModelsByFmGuid')
-```
-
-This means the Asset+ viewer's internal `assetViewer` reference is `null` when `setAvailableModelsByFmGuid` is called. The viewer was either destroyed mid-setup or not fully initialized before model requests began.
+# Fix 3D Viewer: Wrong Parameter Order in assetplusviewer() Call
 
 ## Root Cause
 
-The `initializeViewer` function (line 2662) has `assetData` and `allData` in its dependency array:
+The `assetplusviewer()` initialization call in `AssetPlusViewer.tsx` passes parameters in the **wrong order** starting from position 9.
+
+The official API signature (from `docs/3D_viewer_package.md`):
 
 ```text
-[fmGuid, initialFmGuidToFocus, assetData, allData,
- handleAllModelsLoaded, changeXrayMaterial, processDeferred,
- displayFmGuid, setupCacheInterceptor, isMobile]
+assetplusviewer(
+  1. baseUrl,                              // String
+  2. apiKey,                               // String
+  3. getAccessTokenCallback,               // Function
+  4. selectionChangedCallback,             // Function
+  5. selectedFmGuidsChangedCallback,       // Function
+  6. allModelsLoadedCallback,              // Function
+  7. isItemIdEditableCallback,             // Function (or undefined)
+  8. isFmGuidEditableCallback,             // Function
+  9. additionalDefaultPredicate,           // Function - DECIDES WHICH MODELS TO LOAD
+  10. externalCustomObjectContextMenuItems, // Array (or undefined)
+  11. horizontalAngle,                     // Number (or undefined)
+  12. verticalAngle,                       // Number (or undefined)
+  13. annotationTopOffset,                 // Number (or undefined)
+  14. annotationLeftOffset                 // Number (or undefined)
+)
 ```
 
-`assetData` is derived from `allData` on every render (line 273):
+What our code currently passes (lines 2525-2583):
+
+```text
+  1. baseUrl                               -- correct
+  2. apiKey                                 -- correct
+  3. getAccessTokenCallback                 -- correct
+  4. selectionChangedCallback               -- correct
+  5. selectedFmGuidsChangedCallback         -- correct
+  6. handleAllModelsLoaded                  -- correct
+  7. undefined (isItemIdEditableCallback)   -- correct
+  8. isFmGuidEditableCallback               -- correct
+  9. defaultHeightAboveAABB (NUMBER!)       -- WRONG: expects model filter FUNCTION
+  10. defaultMinimumHeightAboveBase (NUMBER) -- WRONG: expects context menu items ARRAY
+  11. lookAtSpaceAndInstanceFlyToDuration    -- mapped to horizontalAngle (unrelated)
+  12. document.getElementById(...)           -- WRONG: expects verticalAngle NUMBER
 ```
-const assetData = allData.find((a) => a.fmGuid === fmGuid);
-```
 
-When `allData` updates (which happens during background data refresh, XKT sync status changes, or any AppContext update), `initializeViewer` gets a new identity. The `useEffect` (line 2698-2761) re-runs:
+Parameter 9 (`additionalDefaultPredicate`) is the critical one. The Asset+ docs say: "Allows custom logic to determine which additional models should be loaded into the viewer." When a non-function value (a number) is passed, the viewer's internal model loading logic likely treats it as falsy/invalid and loads **no models at all**.
 
-1. Cleanup runs first: calls `viewer.clearData()`, sets `viewerInstanceRef.current = null`
-2. New `initializeViewer()` starts from scratch
-3. During the gap between cleanup and re-init, the old viewer's `assetViewer` internal reference is gone
-4. If any pending operation (like `setAvailableModelsByFmGuid`) tries to execute on the destroyed instance, the crash occurs
-
-On mobile, slower initialization makes this window much larger, so it happens consistently.
-
-The previous fix stabilized `handleAllModelsLoaded` by removing `cacheStatus` and `showNavCube` from its deps (using refs). But `assetData` and `allData` were NOT addressed -- they remain volatile dependencies that trigger re-initialization.
+The official example uses: `(model) => (model?.name || "").toLowerCase().startsWith("a")` -- loading all models whose name starts with "a". A common pattern to load ALL models is `() => true`.
 
 ## Fix
 
-Apply the same ref-based pattern to `assetData` and `allData` inside `initializeViewer`, and remove them from the dependency array.
+Correct the parameter order in the `assetplusviewer()` call, and remove the `targetElement` parameter (which does not exist in the API -- the viewer always mounts to `#AssetPlusViewer`).
 
 ### Changes to `src/components/viewer/AssetPlusViewer.tsx`:
 
-1. **Add refs for `assetData` and `allData`**:
-   - `const assetDataRef = useRef(assetData)`
-   - `const allDataRef = useRef(allData)`
-   - Keep in sync with `useEffect(() => { assetDataRef.current = assetData }, [assetData])`
-   - Keep in sync with `useEffect(() => { allDataRef.current = allData }, [allData])`
+At the viewer initialization call (around line 2525-2583), change parameters 9-12 from:
 
-2. **Update `initializeViewer`** to read from refs instead of closure variables:
-   - Replace `assetData` references inside the function body with `assetDataRef.current`
-   - Replace `allData` references inside the function body with `allDataRef.current`
-   - Remove `assetData` and `allData` from the dependency array
+```text
+defaultHeightAboveAABB,
+defaultMinimumHeightAboveBase,
+lookAtSpaceAndInstanceFlyToDuration,
+document.getElementById('AssetPlusViewer'),
+```
 
-3. **Result**: `initializeViewer` only re-creates when `fmGuid` or `initialFmGuidToFocus` changes (actual navigation), not when background data refreshes.
+To:
+
+```text
+undefined,    // additionalDefaultPredicate -- undefined = load all models (default behavior)
+undefined,    // externalCustomObjectContextMenuItems
+undefined,    // horizontalAngle (use default)
+undefined,    // verticalAngle (use default)
+```
+
+The `defaultHeightAboveAABB`, `defaultMinimumHeightAboveBase`, and `lookAtSpaceAndInstanceFlyToDuration` values are not part of the `assetplusviewer()` constructor. If they are needed, they should be applied after initialization using the viewer's API methods (e.g., `viewer.setViewerAngles()`).
+
+The `document.getElementById('AssetPlusViewer')` target element is also not a parameter -- the Asset+ library always mounts to the DOM element with id `AssetPlusViewer`.
 
 ### File Summary
 
 | File | Changes |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | Add `assetDataRef` and `allDataRef` refs, update `initializeViewer` to use refs, remove `assetData` and `allData` from dependency array |
-
-### Technical Details
-
-The dependency array for `initializeViewer` changes from:
-```
-[fmGuid, initialFmGuidToFocus, assetData, allData,
- handleAllModelsLoaded, changeXrayMaterial, processDeferred,
- displayFmGuid, setupCacheInterceptor, isMobile]
-```
-to:
-```
-[fmGuid, initialFmGuidToFocus,
- handleAllModelsLoaded, changeXrayMaterial, processDeferred,
- displayFmGuid, setupCacheInterceptor, isMobile]
-```
-
-The `assetData` variable is used inside `initializeViewer` at lines 2595, 2635-2637 for:
-- Finding focus data in `allData` (line 2595): `allData.find((a) => a.fmGuid === focusFmGuid)` -- will use `allDataRef.current`
-- Setting model info name (lines 2635-2637): `assetData?.commonName` -- will use `assetDataRef.current`
-
-Both are read-once values that should use the latest snapshot at call time, which refs provide perfectly.
+| `src/components/viewer/AssetPlusViewer.tsx` | Fix parameters 9-12 of `assetplusviewer()` call to match the official API signature |
 
 ### Risk Assessment
 
-Low risk. The ref pattern is identical to what was already applied for `cacheStatus` and `showNavCube`. The runtime behavior is unchanged -- the only difference is that background `allData` updates no longer trigger a full viewer teardown and re-initialization. The viewer still initializes correctly on first mount and when the user navigates to a different building (`fmGuid` changes).
-
+Low risk -- this aligns the code with the documented API. The current parameter mismatch is clearly the cause of "viewer starts but nothing loads" since the model filter function receives a number instead of a callable predicate.
