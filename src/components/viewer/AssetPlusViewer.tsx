@@ -1300,19 +1300,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.log('Auto-enabling local annotations from AssetsView trigger');
       }
       
-      // Load local annotations from database - wrapped in try/catch to prevent crash
-      try {
-        loadLocalAnnotations();
-      } catch (e) {
-        console.error('Error starting loadLocalAnnotations:', e);
-      }
+      // Load local annotations from database
+      // IMPORTANT: These are async functions – try/catch only catches synchronous errors.
+      // We must use .catch() to handle promise rejections and prevent unhandled crashes.
+      loadLocalAnnotations().catch(e => {
+        console.error('loadLocalAnnotations failed:', e);
+      });
       
-      // Load alarm annotations from BIM geometry - wrapped in try/catch to prevent crash
-      try {
-        loadAlarmAnnotations();
-      } catch (e) {
-        console.error('Error starting loadAlarmAnnotations:', e);
-      }
+      // Load alarm annotations from BIM geometry
+      loadAlarmAnnotations().catch(e => {
+        console.error('loadAlarmAnnotations failed:', e);
+      });
 
     // Initialize NavCube using custom plugin
     try {
@@ -2254,6 +2252,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     originalFetchRef.current = window.fetch;
     
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      // Safety check: if the interceptor has been cleaned up (restoreFetch called while
+      // an intercepted fetch was still in flight), fall back to the native fetch.
+      const original = originalFetchRef.current;
+      if (!original) {
+        console.debug('XKT cache: Interceptor cleaned up, using native fetch');
+        return fetch(input, init);
+      }
+      
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
       
       // Check if this is an XKT model request
@@ -2263,7 +2269,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       if (!isXktRequest) {
         // Not an XKT request, pass through
-        return originalFetchRef.current!(input, init);
+        return original!(input, init);
       }
       
       // Extract model ID for caching
@@ -2286,7 +2292,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const cachedUrl = await xktCacheService.interceptModelRequest(url, resolvedBuildingGuid);
           if (cachedUrl) {
             console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
-            const cachedResponse = await originalFetchRef.current!(cachedUrl, init);
+            const cachedResponse = await original!(cachedUrl, init);
             if (cachedResponse.ok) {
               // Clone and store in memory
               const data = await cachedResponse.clone().arrayBuffer();
@@ -2303,7 +2309,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
       
       // Fetch from Asset+ API
-      const response = await originalFetchRef.current!(input, init);
+      const response = await original!(input, init);
       
       // Only process successful XKT responses
       if (response.ok && modelId) {
@@ -2403,8 +2409,31 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     setModelLoadState('idle');
     setCacheStatus(null);
     
-    // Setup cache interceptor before viewer initialization (currently disabled)
-    setupCacheInterceptor();
+    // Setup cache interceptor before viewer initialization
+    // SKIP on mobile to save memory – cache-on-load doubles memory usage via .clone() + .arrayBuffer()
+    // on every XKT model. For a building with 5 models × 10 MB = ~50 MB extra memory avoided on mobile.
+    if (!isMobile) {
+      setupCacheInterceptor();
+    }
+
+    // Initialization timeout – prevents infinite spinner on slow/unstable mobile connections
+    const INIT_TIMEOUT_MS = isMobile ? 20_000 : 45_000;
+    const timeoutId = setTimeout(() => {
+      // If we're still loading after the timeout, force an error
+      setState(prev => {
+        if (prev.isLoading && !prev.isInitialized) {
+          console.error(`[AssetPlusViewer] Initialization timed out after ${INIT_TIMEOUT_MS}ms`);
+          setInitStep('error');
+          setShowError(true);
+          return {
+            ...prev,
+            isLoading: false,
+            error: `Initiering tog för lång tid (${INIT_TIMEOUT_MS / 1000}s). Kontrollera nätverksanslutningen och försök igen.`,
+          };
+        }
+        return prev;
+      });
+    }, INIT_TIMEOUT_MS);
 
     try {
       setInitStep('fetch_token');
@@ -2499,48 +2528,39 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // additionalDefaultPredicate - show models with 'a' prefix by default
-        (model: any) => (model?.name || "").toLowerCase().startsWith("a"),
-        // Custom object context menu items
-        [],
-        // Horizontal and vertical default angles (undefined for defaults)
-        undefined, undefined,
-        // Annotation offsets (top, left) (undefined for defaults)
-        undefined, undefined
+        // defaultHeightAboveAABB
+        defaultHeightAboveAABB,
+        // defaultMinimumHeightAboveBase
+        defaultMinimumHeightAboveBase,
+        // lookAtSpaceAndInstanceFlyToDuration
+        lookAtSpaceAndInstanceFlyToDuration,
+        // targetElement
+        document.getElementById('AssetPlusViewer'),
       );
 
+      console.log("AssetPlusViewer: Viewer mounted successfully");
       viewerInstanceRef.current = viewer;
-      console.log("AssetPlusViewer: Mounted");
 
-      // Apply X-ray material settings
+      // Apply x-ray material changes
       changeXrayMaterial();
 
-      // CRITICAL: Stop deferring calls AFTER viewer is mounted
+      // Mark viewer ready for direct calls
       deferCallsRef.current = false;
-
-      // Process any deferred calls
       processDeferred();
 
-      // Now display the initial FMGUID with category-specific actions
-      // For Building Storey: cut out the floor using the storey's fmGuid
-      // For Space: cut out the parent floor (levelFmGuid) and look at the space
-      let displayAction: any = undefined;
-      
-      // Use initialFmGuidToFocus to determine the display action
+      // Determine what to focus on
       const focusFmGuid = initialFmGuidToFocus || fmGuid;
       const focusData = allData.find((a: any) => a.fmGuid === focusFmGuid);
       
-      console.log('AssetPlusViewer: Focus target -', focusFmGuid, 'category:', focusData?.category);
+      let displayAction: any = undefined;
       
-      if (!focusData || focusData.category === 'Building' || focusData.category === 'IfcBuilding') {
-        displayAction = { action: 'viewall' };
-      } else if (focusData.category === 'Building Storey' || focusData.category === 'IfcBuildingStorey') {
-        // Storey: use the storey's own fmGuid for floor cutout
+      // For Floors/BuildingStoreys: do a cutout-floor action
+      if (focusData?.category === 'Floor' || focusData?.category === 'IfcBuildingStorey') {
         displayAction = { 
           action: 'cutoutfloor', 
           parameter: { fmGuid: focusFmGuid, includeRelatedFloors: true } 
         };
-      } else if (focusData.category === 'Space' || focusData.category === 'IfcSpace') {
+      } else if (focusData?.category === 'Space' || focusData?.category === 'IfcSpace') {
         // Space: use the parent floor's fmGuid (levelFmGuid) for cutout, then look at the space
         const floorFmGuid = focusData.levelFmGuid || focusFmGuid;
         displayAction = { 
@@ -2562,6 +2582,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         showErrorTimeoutRef.current = null;
       }
       setShowError(false);
+      clearTimeout(timeoutId); // Cancel the initialization timeout on success
 
       setState(prev => ({
         ...prev,
@@ -2576,6 +2597,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }));
 
     } catch (error) {
+      clearTimeout(timeoutId); // Cancel the initialization timeout on error (we already handle it)
       console.error('Failed to initialize 3D viewer:', error);
       setInitStep('error');
       
@@ -2595,7 +2617,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         setShowError(true);
       }, 800); // 800ms delay to allow retry to succeed
     }
-  }, [fmGuid, initialFmGuidToFocus, assetData, allData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor]);
+  }, [fmGuid, initialFmGuidToFocus, assetData, allData, handleAllModelsLoaded, changeXrayMaterial, processDeferred, displayFmGuid, setupCacheInterceptor, isMobile]);
 
   const handleRetry = useCallback(() => {
     // If we're already initializing, ignore retry clicks.
