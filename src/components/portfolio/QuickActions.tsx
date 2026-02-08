@@ -1,7 +1,8 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList, SplitSquareHorizontal, AlertTriangle 
+  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList, SplitSquareHorizontal, AlertTriangle, Layers 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,6 +52,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   onOpenSplitView,
   onFaultReport
 }) => {
+  const navigate = useNavigate();
   const isBuilding = facility.category === 'Building';
   const isStorey = facility.category === 'Building Storey';
   const isSpace = facility.category === 'Space';
@@ -142,6 +144,26 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>{ivionSiteId ? "Synkroniserad 3D och 360°-vy" : ivionDisabledTooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Virtual Twin - Building only, disabled if no ivionSiteId */}
+            {isBuilding && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => ivionSiteId ? navigate(`/virtual-twin?building=${facility.fmGuid}`) : undefined} 
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!ivionSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={!ivionSiteId}
+                  >
+                    <Layers size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <span className={`text-[10px] sm:text-xs ${!ivionSiteId ? 'text-muted-foreground' : ''}`}>Virtual Twin</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{ivionSiteId ? "3D-modell överlagrad på 360°-panorama" : ivionDisabledTooltip}</p>
                 </TooltipContent>
               </Tooltip>
             )}
