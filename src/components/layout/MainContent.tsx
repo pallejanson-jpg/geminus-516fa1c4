@@ -2,6 +2,7 @@ import React, { useContext, useState, lazy, Suspense } from "react";
 import { Loader2, Box, Archive, Split } from "lucide-react";
 import { THEMES } from "@/lib/constants";
 import { AppContext } from "@/context/AppContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
@@ -19,10 +20,12 @@ const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 
+const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
+
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext } = useContext(AppContext);
+    const isMobile = useIsMobile();
     const t = THEMES[theme];
-    // Track previous app for 360 view close navigation
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
 
     const renderContent = () => {
@@ -142,8 +145,15 @@ const MainContent: React.FC = () => {
         }
     };
 
+    // On mobile, immersive viewer apps need overflow-hidden and touch-action: none
+    // to prevent the parent container from intercepting touch events meant for the 3D canvas
+    const isImmersiveViewer = isMobile && IMMERSIVE_VIEWER_APPS.includes(activeApp);
+
     return (
-        <main className={`flex-1 relative overflow-auto ${t.bg}`}>
+        <main 
+            className={`flex-1 relative ${isImmersiveViewer ? 'overflow-hidden' : 'overflow-auto'} ${t.bg}`}
+            style={isImmersiveViewer ? { touchAction: 'none' } : undefined}
+        >
             <div className="w-full h-full">
                 {renderContent()}
             </div>
