@@ -118,7 +118,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
 
     const kpiCards = [
         { 
-            title: 'Total Rooms', 
+            title: isMobile ? 'Rooms' : 'Total Rooms', 
             value: spaceStats.totalSpaces.toLocaleString(), 
             icon: LayoutGrid, 
             color: 'text-primary',
@@ -126,21 +126,21 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
             clickable: true,
         },
         { 
-            title: 'Total Area (m²)', 
+            title: isMobile ? 'Area (m²)' : 'Total Area (m²)', 
             value: spaceStats.totalArea.toLocaleString(), 
             icon: Maximize2, 
             color: 'text-blue-500',
             isMock: false,
         },
         { 
-            title: 'Average Occupancy', 
+            title: isMobile ? 'Occupancy' : 'Average Occupancy', 
             value: `${Math.round(occupancyData.reduce((s, b) => s + b.occupancy, 0) / Math.max(occupancyData.length, 1))}%`, 
             icon: Users, 
             color: 'text-green-500',
             isMock: true,
         },
         { 
-            title: 'Avg. Vacancy Rate', 
+            title: isMobile ? 'Vacancy' : 'Avg. Vacancy Rate', 
             value: `${Math.round(occupancyData.reduce((s, b) => s + b.vacancy, 0) / Math.max(occupancyData.length, 1))}%`, 
             icon: Percent, 
             color: 'text-yellow-500',
@@ -163,15 +163,15 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                         className={kpi.clickable ? 'cursor-pointer hover:border-primary/50 transition-colors' : ''}
                         onClick={() => kpi.clickable && onNavigateToRooms?.()}
                     >
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                        <CardContent className="p-3 sm:p-4">
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
                                 {kpi.isMock && <MockBadge />}
                             </div>
-                            <p className={`text-2xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
                                 {kpi.value}
                             </p>
-                            <p className="text-xs text-muted-foreground">{kpi.title}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}

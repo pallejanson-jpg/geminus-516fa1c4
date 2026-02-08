@@ -111,25 +111,25 @@ export default function PortfolioManagementTab() {
 
     const kpiCards = [
         { 
-            title: 'Total Portfolio Value', 
+            title: isMobile ? 'Value' : 'Total Portfolio Value', 
             value: `${(totals.totalValue / 1000000).toFixed(0)} MSEK`, 
             icon: CircleDollarSign, 
             color: 'text-primary'
         },
         { 
-            title: 'Annual Rental Income', 
+            title: isMobile ? 'Rent/yr' : 'Annual Rental Income', 
             value: `${(totals.totalRent / 1000000).toFixed(1)} MSEK`, 
             icon: Briefcase, 
             color: 'text-green-500'
         },
         { 
-            title: 'Average ROI', 
+            title: isMobile ? 'ROI' : 'Average ROI', 
             value: `${totals.avgRoi.toFixed(1)}%`, 
             icon: TrendingUp, 
             color: 'text-blue-500'
         },
         { 
-            title: 'Avg. Occupancy Rate', 
+            title: isMobile ? 'Occupancy' : 'Avg. Occupancy Rate', 
             value: `${totals.avgOccupancy}%`, 
             icon: Building2, 
             color: 'text-yellow-500'
@@ -160,13 +160,13 @@ export default function PortfolioManagementTab() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
                     <Card key={index}>
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                        <CardContent className="p-3 sm:p-4">
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
                                 <MockBadge />
                             </div>
-                            <p className="text-2xl font-bold text-purple-400">{kpi.value}</p>
-                            <p className="text-xs text-muted-foreground">{kpi.title}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-purple-400 truncate">{kpi.value}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
