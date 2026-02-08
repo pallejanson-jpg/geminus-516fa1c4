@@ -22,11 +22,22 @@ const hashString = (str: string) => {
 const truncateName = (name: string, maxLen = 12) => 
     name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
 
-export default function SpaceManagementTab() {
+// Mockup indicator badge
+const MockBadge = () => (
+    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
+        Demo
+    </Badge>
+);
+
+interface SpaceManagementTabProps {
+    onNavigateToRooms?: (buildingFmGuid?: string) => void;
+}
+
+export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagementTabProps) {
     const { navigatorTreeData } = useContext(AppContext);
     const isMobile = useIsMobile();
 
-    // Calculate actual space stats
+    // Calculate actual space stats (REAL)
     const spaceStats = useMemo(() => {
         let totalSpaces = 0;
         let totalArea = 0;
@@ -41,7 +52,6 @@ export default function SpaceManagementTab() {
                     const area = ntaKey ? Number(attrs[ntaKey]) : (space.grossArea || 0);
                     totalArea += area;
 
-                    // Categorize by space type
                     const spaceType = attrs.spaceType || attrs.roomType || 'Unknown';
                     if (!spaceTypes[spaceType]) {
                         spaceTypes[spaceType] = { count: 0, area: 0 };
@@ -55,7 +65,7 @@ export default function SpaceManagementTab() {
         return { totalSpaces, totalArea: Math.round(totalArea), spaceTypes };
     }, [navigatorTreeData]);
 
-    // Building occupancy data
+    // Building occupancy data - spaceCount/totalArea are REAL, occupancy/vacancy are MOCK
     const occupancyData = useMemo(() => {
         return navigatorTreeData.slice(0, 8).map((building) => {
             const hash = hashString(building.fmGuid || '');
@@ -76,15 +86,15 @@ export default function SpaceManagementTab() {
                 fmGuid: building.fmGuid,
                 name: truncateName(fullName),
                 fullName,
-                occupancy: 55 + (hash % 40),
-                spaceCount,
-                totalArea: Math.round(totalArea),
-                vacancy: 5 + (hash % 15),
+                occupancy: 55 + (hash % 40), // MOCK
+                spaceCount, // REAL
+                totalArea: Math.round(totalArea), // REAL
+                vacancy: 5 + (hash % 15), // MOCK
             };
         });
     }, [navigatorTreeData]);
 
-    // Space type distribution for pie chart
+    // Space type distribution for pie chart (REAL)
     const spaceTypeDistribution = useMemo(() => {
         const colors = [
             'hsl(var(--primary))',
@@ -111,25 +121,30 @@ export default function SpaceManagementTab() {
             title: 'Total Rooms', 
             value: spaceStats.totalSpaces.toLocaleString(), 
             icon: LayoutGrid, 
-            color: 'text-primary'
+            color: 'text-primary',
+            isMock: false,
+            clickable: true,
         },
         { 
             title: 'Total Area (m²)', 
             value: spaceStats.totalArea.toLocaleString(), 
             icon: Maximize2, 
-            color: 'text-blue-500'
+            color: 'text-blue-500',
+            isMock: false,
         },
         { 
             title: 'Average Occupancy', 
-            value: `${Math.round(occupancyData.reduce((s, b) => s + b.occupancy, 0) / occupancyData.length)}%`, 
+            value: `${Math.round(occupancyData.reduce((s, b) => s + b.occupancy, 0) / Math.max(occupancyData.length, 1))}%`, 
             icon: Users, 
-            color: 'text-green-500'
+            color: 'text-green-500',
+            isMock: true,
         },
         { 
             title: 'Avg. Vacancy Rate', 
-            value: `${Math.round(occupancyData.reduce((s, b) => s + b.vacancy, 0) / occupancyData.length)}%`, 
+            value: `${Math.round(occupancyData.reduce((s, b) => s + b.vacancy, 0) / Math.max(occupancyData.length, 1))}%`, 
             icon: Percent, 
-            color: 'text-yellow-500'
+            color: 'text-yellow-500',
+            isMock: true,
         },
     ];
 
@@ -143,12 +158,19 @@ export default function SpaceManagementTab() {
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
-                    <Card key={index}>
+                    <Card 
+                        key={index}
+                        className={kpi.clickable ? 'cursor-pointer hover:border-primary/50 transition-colors' : ''}
+                        onClick={() => kpi.clickable && onNavigateToRooms?.()}
+                    >
                         <CardContent className="p-4">
                             <div className="flex items-center gap-2 mb-2">
                                 <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                                {kpi.isMock && <MockBadge />}
                             </div>
-                            <p className="text-2xl font-bold">{kpi.value}</p>
+                            <p className={`text-2xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                                {kpi.value}
+                            </p>
                             <p className="text-xs text-muted-foreground">{kpi.title}</p>
                         </CardContent>
                     </Card>
@@ -157,12 +179,13 @@ export default function SpaceManagementTab() {
 
             {/* Charts */}
             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Occupancy per Building */}
+                {/* Occupancy per Building - MOCK */}
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Users className="h-4 w-4 text-primary" />
-                            Occupancy per Building
+                            <span className="text-purple-400">Occupancy per Building</span>
+                            <MockBadge />
                         </CardTitle>
                         <CardDescription>Percent of available space</CardDescription>
                     </CardHeader>
@@ -192,7 +215,7 @@ export default function SpaceManagementTab() {
                                     <Bar 
                                         dataKey="occupancy" 
                                         name="Occupancy"
-                                        fill="hsl(var(--primary))"
+                                        fill="hsl(262, 83%, 58%)"
                                         radius={[0, 4, 4, 0]}
                                     />
                                 </BarChart>
@@ -201,14 +224,14 @@ export default function SpaceManagementTab() {
                     </CardContent>
                 </Card>
 
-                {/* Space Type Distribution */}
+                {/* Space Type Distribution - REAL */}
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <SquareStack className="h-4 w-4 text-blue-500" />
                             Room Types
                         </CardTitle>
-                        <CardDescription>Distribution by category</CardDescription>
+                        <CardDescription>Distribution by category (real data)</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
@@ -264,9 +287,14 @@ export default function SpaceManagementTab() {
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="font-medium truncate max-w-[200px]">{building.fullName}</span>
                                     <div className="flex items-center gap-4 text-muted-foreground">
-                                        <span>{building.spaceCount} rooms</span>
-                                        <span>{building.totalArea.toLocaleString()} m²</span>
-                                        <Badge variant={building.occupancy >= 80 ? "default" : "secondary"}>
+                                        <span 
+                                            className="text-foreground cursor-pointer hover:text-primary underline-offset-2 hover:underline"
+                                            onClick={() => onNavigateToRooms?.(building.fmGuid)}
+                                        >
+                                            {building.spaceCount} rooms
+                                        </span>
+                                        <span className="text-foreground">{building.totalArea.toLocaleString()} m²</span>
+                                        <Badge variant={building.occupancy >= 80 ? "default" : "secondary"} className="text-purple-400 bg-purple-500/20 border-purple-500/30">
                                             {building.occupancy}%
                                         </Badge>
                                     </div>

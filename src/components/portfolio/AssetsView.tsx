@@ -670,12 +670,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   return (
     <div className="absolute inset-0 z-40 bg-background flex flex-col animate-in fade-in duration-300">
       {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <Box className="h-5 w-5 text-primary" />
-          <div>
-            <h2 className="font-semibold text-lg">{title}</h2>
-            <p className="text-sm text-muted-foreground">
+      <div className="border-b px-2 sm:px-3 md:px-4 py-2 sm:py-3 flex items-center justify-between shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Box className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-base md:text-lg font-bold truncate">{title}</h1>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
               {filteredAssets.length} av {assetData.length} assets
               {orphanCount > 0 && (
                 <span className="ml-2 text-amber-500">
@@ -685,20 +685,21 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-5 w-5" />
+        <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
+          <X size={16} className="sm:hidden" />
+          <X size={20} className="hidden sm:block" />
         </Button>
       </div>
 
       {/* Toolbar */}
-      <div className="border-b px-4 py-2 flex flex-wrap items-center gap-2 shrink-0">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="border-b px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Sök assets..."
-            className="pl-9 h-9"
+            className="pl-7 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
           />
         </div>
 
@@ -741,9 +742,9 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         {/* Column selector dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 gap-2">
               <Settings2 size={14} />
-              Kolumner
+              <span className="hidden sm:inline">Kolumner</span>
               <Badge variant="secondary" className="text-xs ml-1">{visibleColumns.length}</Badge>
             </Button>
           </DropdownMenuTrigger>
@@ -833,7 +834,8 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       {/* Content */}
       <ScrollArea className="flex-1">
         {viewMode === 'grid' ? (
-          <div className="p-4">
+          <div className="p-2 sm:p-4">
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <Table>
                 <TableHeader>
@@ -881,7 +883,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         />
                       </TableCell>
                       {orderedVisibleColumns.map((colKey) => (
-                        <TableCell key={colKey} className="py-2">
+                        <TableCell key={colKey} className="py-1.5 sm:py-2 whitespace-nowrap text-[11px] sm:text-sm">
                           {formatCellValue(colKey, asset[colKey])}
                         </TableCell>
                       ))}
@@ -942,10 +944,11 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                 </TableBody>
               </Table>
             </DndContext>
+            </div>
           </div>
         ) : (
-          <div className="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="p-2 sm:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {filteredAssets.map((asset) => (
                 <Card
                   key={asset.fmGuid}
