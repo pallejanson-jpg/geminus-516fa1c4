@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useContext } from 'react';
 import LeftSidebar from './LeftSidebar';
 import AppHeader from './AppHeader';
 import RightSidebar from './RightSidebar';
@@ -13,6 +13,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
 import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
 import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
+import { AppContext } from '@/context/AppContext';
+
+/** Apps that should hide header/sidebars on mobile for fullscreen experience */
+const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -20,6 +24,9 @@ const AppLayoutInner: React.FC = () => {
     const [gunnarVisible, setGunnarVisible] = useState(() => getGunnarSettings().visible);
     const [ileanVisible, setIleanVisible] = useState(() => getIleanSettings().visible);
     const isMobile = useIsMobile();
+    const { activeApp } = useContext(AppContext);
+
+    const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
 
     // Listen for voice settings changes
     useEffect(() => {
@@ -63,33 +70,37 @@ const AppLayoutInner: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden font-sans relative">
-            <LeftSidebar />
+            {!isImmersive && <LeftSidebar />}
             
             <div className="flex-1 flex flex-col min-w-0 w-full relative">
-                <AppHeader
-                    isLoading={false}
-                    onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
-                />
-                <SyncProgressBanner />
-                <DataConsistencyBanner />
+                {!isImmersive && (
+                    <AppHeader
+                        isLoading={false}
+                        onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+                    />
+                )}
+                {!isImmersive && <SyncProgressBanner />}
+                {!isImmersive && <DataConsistencyBanner />}
                 <MainContent />
             </div>
             
-            <RightSidebar />
+            {!isImmersive && <RightSidebar />}
             
-            <MobileNav 
-                isMobileMenuOpen={isMobileMenuOpen}
-                setIsMobileMenuOpen={setIsMobileMenuOpen}
-            />
+            {!isImmersive && (
+                <MobileNav 
+                    isMobileMenuOpen={isMobileMenuOpen}
+                    setIsMobileMenuOpen={setIsMobileMenuOpen}
+                />
+            )}
 
             {/* Voice Control - only visible when enabled in Settings */}
-            {voiceEnabled && <VoiceControlButton callbacks={voiceCallbacks()} />}
+            {voiceEnabled && !isImmersive && <VoiceControlButton callbacks={voiceCallbacks()} />}
 
             {/* Gunnar AI Assistant - visible based on settings */}
-            {gunnarVisible && <GunnarButton />}
+            {gunnarVisible && !isImmersive && <GunnarButton />}
 
             {/* Ilean AI Assistant - visible based on settings */}
-            {ileanVisible && <IleanButton />}
+            {ileanVisible && !isImmersive && <IleanButton />}
         </div>
     );
 };

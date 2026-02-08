@@ -118,7 +118,7 @@ const Mobile360Viewer: React.FC = () => {
     : ivion360Context?.ivionUrl || '';
 
   return (
-    <div className="h-screen w-screen relative bg-background overflow-hidden">
+    <div className="h-screen w-screen relative bg-background overflow-hidden fixed inset-0" style={{ touchAction: 'none' }}>
       {/* Back button overlay */}
       <div 
         className="absolute z-50 pointer-events-auto"
