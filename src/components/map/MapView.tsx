@@ -1,6 +1,7 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Popup, NavigationControl, GeolocateControl } from 'react-map-gl';
-import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp, Search, Palette } from 'lucide-react';
+import { Building2, MapPin, Maximize2, Layers, Loader2, ChevronDown, ChevronUp, Search, Palette, ArrowLeft } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -64,7 +65,7 @@ const BuildingSidebar: React.FC<{
   }, [facilities, searchQuery]);
 
   return (
-    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-1.5rem)] sm:max-h-[calc(100%-2rem)]">
+    <div className="absolute top-14 sm:top-4 left-3 sm:left-4 z-10 w-[calc(100%-1.5rem)] sm:w-72 max-h-[calc(100%-4.5rem)] sm:max-h-[calc(100%-2rem)]">
       <Card className="bg-card/95 backdrop-blur-sm shadow-xl">
         <CardHeader 
           className="pb-2 cursor-pointer sm:cursor-default p-3 sm:p-4"
@@ -163,6 +164,7 @@ const ColoringLegend: React.FC<{ mode: MapColoringMode }> = ({ mode }) => {
 
 const MapView: React.FC = () => {
   const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
+  const isMobile = useIsMobile();
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -411,6 +413,18 @@ const MapView: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full relative">
+      {/* Mobile back button overlay */}
+      {isMobile && (
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => setActiveApp('portfolio')}
+          className="absolute top-3 left-3 z-20 h-9 w-9 bg-card/90 backdrop-blur-sm shadow-lg rounded-full"
+        >
+          <ArrowLeft size={18} />
+        </Button>
+      )}
+
       {/* Map Controls */}
       <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-10 flex flex-col gap-2">
         {/* Coloring mode dropdown */}
