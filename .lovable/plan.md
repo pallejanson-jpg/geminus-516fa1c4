@@ -1,100 +1,117 @@
 
 
-# Fix 3D Viewer: iPhone Safe Area Overlap + Intermittent Crash
+# Fix 3D Viewer: 4 Remaining Issues
 
-## Problem 1: Toolbar hidden behind iPhone browser chrome
+## Issue 1: Room Toggling Performance (All Rooms Load Without Floor Isolation)
 
-On iPhone Safari, the browser has a dynamic address bar at the top and a bottom toolbar with navigation buttons. The 3D viewer's UI elements overlap with these:
+### Problem
+When "Visa rum" (Show Spaces) is toggled ON without a floor being isolated, the `filterSpacesToVisibleFloors` function in `AssetPlusViewer.tsx` (line 357) makes ALL IfcSpace entities visible across the entire building. On a large building, this can be hundreds of room geometries, causing severe performance degradation on mobile.
 
-- **Top**: The `MobileViewerOverlay` header (back button, building name, settings) uses `paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)'` -- this handles the notch/Dynamic Island but does NOT account for the Safari address bar, which sits below the safe area inset.
-- **Bottom**: The `ViewerToolbar` uses `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)'` -- this only adds 12px above the safe area inset, which is not enough to clear the Safari bottom toolbar (approximately 44px tall).
-- **Bottom**: The NavCube uses `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)'` -- same problem, offset from an insufficient base.
+### Solution
+Add a guard in the `handleShowSpacesChange` callback that checks whether all floors are currently visible. If all floors are visible (no isolation), show a warning toast and prevent enabling spaces.
 
-The root issue: `env(safe-area-inset-bottom)` on iPhone Safari reports around 34px for the home indicator, but the Safari toolbar buttons add another ~50px that is NOT part of the safe area. This means the ViewerToolbar with only 12px extra margin sits directly behind the Safari toolbar.
+**Changes to `src/components/viewer/AssetPlusViewer.tsx`:**
+- In `handleShowSpacesChange`: Before calling `onShowSpacesChanged(true)`, check `isAllFloorsVisibleRef.current`. If true, show a toast message informing the user that a floor must be isolated first, and return without enabling spaces.
 
-Similarly at the top, `env(safe-area-inset-top)` covers the notch/Dynamic Island but not the Safari address bar (~50px). With only 8px of padding, the header buttons are behind the address bar.
+**Changes to `src/components/viewer/ViewerRightPanel.tsx`:**
+- In `handleToggleSpaces`: Add the same guard -- check if all floors are visible by listening to the `FLOOR_SELECTION_CHANGED` event state. Show a toast warning if no floor is isolated.
 
-### Fix
+**Changes to `src/components/viewer/VisualizationToolbar.tsx`:**
+- Same guard in the spaces toggle handler.
 
-Use `100dvh` (dynamic viewport height) for the viewer container instead of `100vh`/`h-screen`. The `dvh` unit automatically excludes browser chrome (address bar + bottom toolbar) on mobile Safari. Then increase the padding values for the top header and bottom toolbar to account for the remaining UI spacing:
+**Changes to `src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
+- The "Show Spaces" toggle calls the parent's `onShowSpacesChange` callback, which routes to `handleShowSpacesChange` in `AssetPlusViewer.tsx`. No separate change needed here since the guard is in the parent.
 
-**Files to change:**
+Toast message (Swedish): "Isolera en vaningsplan forst for att visa rum. Att visa alla rum samtidigt gor viewern langsammare."
 
-1. **`src/pages/Mobile3DViewer.tsx`**: Change the outer container from `h-screen` to use `100dvh` so the viewer fills only the visible area (excluding browser chrome).
+---
 
-2. **`src/components/viewer/ViewerToolbar.tsx`** (mobile section, line 748): Increase the bottom offset from `12px` to `16px` to give more breathing room above the Safari bottom indicator.
+## Issue 2: Mobile Right Menu Crash (Building Disappears)
 
-3. **`src/components/viewer/mobile/MobileViewerOverlay.tsx`** (line 130): Increase the top padding from `8px` to `12px` for better clearance below the address bar area.
+### Problem
+When the Sheet (right-side settings drawer) opens on mobile, it overlays the viewer and may trigger DOM reflows or touch event conflicts that cause the WebGL canvas to lose its rendering context. The `Sheet` component from Radix UI uses a modal overlay with `pointer-events: none` on the body, which can interfere with the xeokit canvas.
 
-4. **`src/components/viewer/AssetPlusViewer.tsx`** (NavCube, line 2971): Adjust NavCube bottom offset to stay consistent with the toolbar.
+### Root Cause Analysis
+The `MobileViewerOverlay` uses a Radix `Sheet` component (line 220-485) with `side="right"`. When the Sheet opens:
+1. Radix injects a backdrop overlay that covers the entire viewport
+2. The Sheet's `ScrollArea` uses `h-[calc(100vh-80px)]` which can trigger layout recalculations
+3. On iOS, this DOM manipulation combined with the WebGL context can cause the canvas to lose context or crash
 
-5. **`src/components/viewer/MobileViewerOverlay.tsx`** -- the building selector in Mobile3DViewer also uses `h-screen`, change to `h-dvh`.
+### Solution
+1. **Prevent canvas interference**: Add `will-change: transform` to the viewer canvas container to promote it to its own compositing layer, isolating it from DOM reflows caused by the Sheet
+2. **Use non-modal Sheet**: Set `modal={false}` on the Sheet component to prevent Radix from adding a full-screen overlay and blocking pointer events on the body, which interferes with WebGL
+3. **Add manual backdrop**: Add a simple semi-transparent backdrop div that closes the sheet on tap, without the heavy modal behavior
 
-The key insight is that `100dvh` does the heavy lifting. On iPhone Safari, `100vh` equals the full screen height including browser chrome, but `100dvh` equals only the visible area. By constraining the viewer to `100dvh`, the toolbar positioned at `bottom: calc(env(safe-area-inset-bottom) + 16px)` will be comfortably above the Safari toolbar.
+**Changes to `src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
+- On the `Sheet` component: add `modal={false}` prop
+- Add a custom backdrop overlay that only covers the area outside the Sheet
+- On the viewer container in `AssetPlusViewer.tsx`: add `will-change: transform` CSS to the `#AssetPlusViewer` div to prevent compositor layer thrashing
 
-## Problem 2: Intermittent 3D crash during loading
+**Changes to `src/components/viewer/AssetPlusViewer.tsx`:**
+- Add `willChange: 'transform'` to the style of the `#AssetPlusViewer` div (line 2877) to isolate WebGL from DOM reflows
 
-After the previous fixes (ref-based stabilization, parameter order fix), the main remaining crash vector is the `initializeViewer` dependency on `handleAllModelsLoaded`. Looking at the dependency chain:
+---
 
-- `handleAllModelsLoaded` depends on `executeDisplayAction`, `transparentBackground`, `ghostOpacity`
-- `executeDisplayAction` is another callback
+## Issue 3: Incorrect BIM Model Names
 
-If `executeDisplayAction` changes identity, `handleAllModelsLoaded` changes identity, which changes `initializeViewer` identity, triggering the cleanup+re-init cycle during loading.
+### Problem
+The `xkt_models` database table is empty (confirmed by query), and the Asset+ `GetModels` API is the fallback for model names. The model IDs in the xeokit scene are file hashes (e.g., `abc123def.xkt`), and the name mapping from the API uses `model.id` and `model.xktFileUrl` to match. If the matching fails (which the debug log shows: "No name match for model:"), the fallback is to display the raw file hash with dashes replaced by spaces -- which produces "very strange" names.
 
-Additionally, `changeXrayMaterial` and `processDeferred` and `displayFmGuid` are also in the dependency array. If any of these change identity during the async initialization window, the viewer gets torn down mid-load.
+### Solution
+Improve the name resolution in `ModelVisibilitySelector.tsx`:
 
-### Fix
+1. **Use `model_name` from the `GetModels` API more aggressively**: The API returns objects with `id`, `name`, and `xktFileUrl`. Currently, the matching is done by xktFileUrl filename extraction, but the extracted filename may not match the scene model ID exactly.
 
-Apply the same ref-based pattern to stabilize the remaining volatile callbacks:
+2. **Add a position-based fallback**: If the API returns N models and the scene has N models, match by sorted position. This handles cases where IDs are completely different between the API and the scene.
 
-1. Add refs for `handleAllModelsLoaded`, `changeXrayMaterial`, `processDeferred`, `displayFmGuid`, and `setupCacheInterceptor`.
-2. Keep them in sync with useEffect.
-3. Update `initializeViewer` to call from refs instead of closure variables.
-4. Remove them from the dependency array, leaving only `[fmGuid, initialFmGuidToFocus, isMobile]`.
+3. **Cache API model names to the `xkt_models` table**: After fetching from the API, persist the mapping to the database for future loads. This avoids repeated API calls and ensures model names are available offline.
 
-This ensures the viewer ONLY re-initializes when the user navigates to a different building or the mobile state changes -- never due to callback identity changes.
+**Changes to `src/components/viewer/ModelVisibilitySelector.tsx`:**
+- In `fetchModelNames` (line 96): After a successful API call, also insert/upsert the results into the `xkt_models` table so subsequent loads use the cached names
+- In `extractModels` (line 221): Add a fallback matching strategy that uses the model's `metaScene` root object name (e.g., `IfcProject.name`) if the file name matching fails
+- Add Strategy 6: Search the model's metaScene root node for the project name, which often matches the model name from Asset+
+
+**Changes to add a backend function or direct insert:**
+- After fetching from the Asset+ API, upsert rows into `xkt_models` with `building_fm_guid`, `model_id`, `model_name`, and `file_name`
+
+---
+
+## Issue 4: Not All Models in Model Selector
+
+### Problem
+For buildings with multiple BIM models (like "sma Viken" with 4 models: A, 1B, 1E, etc.), not all models appear in the model selector. The `ModelVisibilitySelector` combines scene models with `dbModels` from the `xkt_models` table. Since `xkt_models` is empty, only scene-loaded models appear. If the viewer's `additionalDefaultPredicate` is `undefined` (as set in our recent fix), the Asset+ viewer loads all models by default. However, if the viewer only loaded ONE model (e.g., the A model), the others won't appear in the selector.
+
+### Root Cause
+The `additionalDefaultPredicate` parameter was fixed to `undefined` in the previous change. According to the Asset+ docs, `undefined` means "use default behavior" which loads all models. The issue may be that:
+1. The API only returns one model for some buildings
+2. Or the scene models are loaded asynchronously and the selector polls too early (max 10 attempts x 500ms = 5 seconds)
+
+### Solution
+1. **Ensure all API models appear in the selector**: Even if they're not loaded in the scene yet, the `dbModels` state should contain them from the API call. Since `xkt_models` is empty, the API fallback runs. We need to verify this path works.
+
+2. **Persist API models to database**: Same as Issue 3 -- once we write API results to `xkt_models`, the selector will always have the complete list regardless of which models are loaded in the scene.
+
+3. **Add a "load model" action**: For models listed in the selector but not loaded in the scene (marked `loaded: false`), toggling them ON should trigger a model load via the Asset+ API (`viewer.loadModel(modelId)` or similar).
+
+**Changes to `src/components/viewer/ModelVisibilitySelector.tsx`:**
+- In `handleModelToggle`: If the model has `loaded: false`, attempt to load it into the scene via the Asset+ viewer API before making it visible
+- After successful API fetch in `fetchModelNames`, upsert results to `xkt_models` for persistence
+
+---
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/pages/Mobile3DViewer.tsx` | Change `h-screen` to `h-dvh` on viewer container and building selector |
-| `src/components/viewer/ViewerToolbar.tsx` | Increase mobile bottom offset for Safari toolbar clearance |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Increase top padding for Safari address bar clearance |
-| `src/components/viewer/AssetPlusViewer.tsx` | (1) Adjust NavCube bottom offset, (2) Stabilize all remaining callback dependencies with refs |
+| `src/components/viewer/AssetPlusViewer.tsx` | (1) Guard spaces toggle to require floor isolation, (2) Add `willChange: 'transform'` to viewer container |
+| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Set Sheet to `modal={false}`, add custom backdrop |
+| `src/components/viewer/ViewerRightPanel.tsx` | Guard spaces toggle with floor isolation check |
+| `src/components/viewer/VisualizationToolbar.tsx` | Guard spaces toggle with floor isolation check |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | (1) Add metaScene name fallback, (2) Persist API names to xkt_models, (3) Handle loading unloaded models |
 
-## Technical Details
+## Risk Assessment
 
-### dvh vs vh on iPhone Safari
-
-```text
-100vh  = Full screen including address bar + bottom toolbar
-100dvh = Current visible viewport (shrinks when bars are visible)
-100svh = Smallest possible viewport (bars visible)
-100lvh = Largest possible viewport (bars hidden)
-```
-
-Using `100dvh` is the modern standard for fullscreen mobile views. It is supported in Safari 15.4+ (iOS 15.4+, March 2022), covering all actively used iPhones.
-
-### Stabilized initializeViewer dependency array
-
-Changes from:
-```
-[fmGuid, initialFmGuidToFocus, handleAllModelsLoaded,
- changeXrayMaterial, processDeferred, displayFmGuid,
- setupCacheInterceptor, isMobile]
-```
-To:
-```
-[fmGuid, initialFmGuidToFocus, isMobile]
-```
-
-All callbacks are accessed via refs inside the function body, which always point to the latest version without causing re-initialization.
-
-### Risk Assessment
-
-Low risk.
-- `dvh` units are well-supported on modern iOS Safari (15.4+).
-- The ref-based callback pattern is identical to what was already applied for `cacheStatus`, `showNavCube`, `assetData`, and `allData`.
-- No behavioral changes -- only stability improvements and positioning fixes.
-
+- **Spaces guard**: Low risk. Only adds a user-facing restriction with clear messaging. Power users who know what they're doing can isolate a floor first.
+- **Sheet modal fix**: Low risk. Using `modal={false}` is a documented Radix prop. The custom backdrop provides the same UX without WebGL interference.
+- **Model names**: Medium risk. The persistence to `xkt_models` requires an upsert that could fail silently. The metaScene fallback is a best-effort heuristic.
+- **Model loading**: Medium risk. The `viewer.loadModel()` API needs to be verified against the Asset+ documentation.
