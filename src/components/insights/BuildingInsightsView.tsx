@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -14,6 +14,9 @@ import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
+
+const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
 interface BuildingInsightsViewProps {
     facility: Facility;
@@ -60,18 +63,48 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
 
-    // Calculate actual stats from allData for this building (REAL)
+    // Query database for real asset count for this building
+    const [dbAssetCount, setDbAssetCount] = useState<number>(0);
+    const [dbAssetCategories, setDbAssetCategories] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        const fetchBuildingAssets = async () => {
+            try {
+                const { count } = await supabase
+                    .from('assets')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('building_fm_guid', facility.fmGuid)
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`);
+                setDbAssetCount(count || 0);
+
+                const { data: catData } = await supabase
+                    .from('assets')
+                    .select('asset_type')
+                    .eq('building_fm_guid', facility.fmGuid)
+                    .not('category', 'in', `(${HIERARCHY_CATEGORIES.join(',')})`)
+                    .limit(5000);
+                if (catData) {
+                    const cats: Record<string, number> = {};
+                    catData.forEach((row: any) => {
+                        const cat = (row.asset_type || 'Unknown').replace('Ifc', '');
+                        cats[cat] = (cats[cat] || 0) + 1;
+                    });
+                    setDbAssetCategories(cats);
+                }
+            } catch (e) {
+                console.error('Failed to fetch building asset counts:', e);
+            }
+        };
+        fetchBuildingAssets();
+    }, [facility.fmGuid]);
+
+    // Calculate actual stats from allData for this building (REAL for hierarchy, DB for assets)
     const stats = useMemo(() => {
         const spaces = allData.filter(
             (a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid
         );
         const storeys = allData.filter(
             (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
-        );
-        const assets = allData.filter(
-            (a: any) => a.category !== 'Building' && a.category !== 'Building Storey' && a.category !== 'Space' &&
-                         a.category !== 'IfcBuilding' && a.category !== 'IfcBuildingStorey' && a.category !== 'IfcSpace' &&
-                         a.buildingFmGuid === facility.fmGuid
         );
         
         let totalArea = 0;
@@ -87,14 +120,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
             }
         });
 
-        // Asset category distribution (REAL)
-        const assetCategories: Record<string, number> = {};
-        assets.forEach((asset: any) => {
-            const cat = (asset.assetType || asset.category || 'Unknown').replace('Ifc', '');
-            assetCategories[cat] = (assetCategories[cat] || 0) + 1;
-        });
-
-        // Space types (REAL)
+        // Space types (REAL from allData - hierarchy is always loaded)
         const spaceTypes: Record<string, number> = {};
         spaces.forEach((space: any) => {
             const attrs = space.attributes || {};
@@ -105,12 +131,12 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         return { 
             floorCount: storeys.length,
             roomCount: spaces.length, 
-            assetCount: assets.length,
+            assetCount: dbAssetCount,
             totalArea: Math.round(totalArea),
-            assetCategories,
+            assetCategories: dbAssetCategories,
             spaceTypes,
         };
-    }, [allData, facility.fmGuid]);
+    }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
 
     // Floor-by-floor energy data (MOCK)
     const energyByFloor = useMemo(() => {
