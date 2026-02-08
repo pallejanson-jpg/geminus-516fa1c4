@@ -42,12 +42,12 @@ export default function Viewer() {
     return { buildingFmGuid: null, targetFacility: null };
   }, [viewer3dFmGuid, allData]);
 
-  // Clear invalid GUID on unmount to ensure clean state
+  // Clear invalid GUID via useEffect instead of during render
   useEffect(() => {
-    return () => {
-      // Only clear if navigating away, not on initial mount
-    };
-  }, []);
+    if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
+      setViewer3dFmGuid(null);
+    }
+  }, [viewer3dFmGuid, isLoadingData, allData, buildingFmGuid, setViewer3dFmGuid]);
 
   // If we have a selected FMGUID but data is still loading, show loading state
   if (viewer3dFmGuid && isLoadingData) {
@@ -58,10 +58,8 @@ export default function Viewer() {
     );
   }
 
-  // If GUID is set but we couldn't resolve a building, show selector
+  // If GUID is set but we couldn't resolve a building, show selector (no state updates here)
   if (viewer3dFmGuid && !isLoadingData && allData.length > 0 && !buildingFmGuid) {
-    // Clear invalid GUID and show selector
-    setViewer3dFmGuid(null);
     return (
       <div className="h-full">
         <BuildingSelector />
