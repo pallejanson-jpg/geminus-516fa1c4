@@ -2917,8 +2917,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             id="navCubeCanvas" 
             width={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
             height={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
-            className="absolute bottom-[70px] right-3 z-[25]"
+            className="absolute right-3 z-[25]"
             style={{
+              bottom: 'calc(env(safe-area-inset-bottom, 12px) + 70px)',
               width: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               height: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               display: showNavCube ? 'block' : 'none',
