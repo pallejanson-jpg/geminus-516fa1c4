@@ -13,6 +13,7 @@ import Ivion360View from '@/components/viewer/Ivion360View';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
+import { buildTransformFromSettings, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
@@ -24,6 +25,7 @@ interface BuildingData {
   origin: BuildingOrigin | null;
   startVlon?: number;
   startVlat?: number;
+  ivionBimTransform?: IvionBimTransform;
 }
 
 interface SplitViewerContentProps {
@@ -258,6 +260,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               buildingOrigin={buildingData.origin}
               buildingFmGuid={buildingData.fmGuid}
               ivionSiteIdProp={buildingData.ivionSiteId}
+              ivionBimTransform={buildingData.ivionBimTransform}
             />
           )}
         </div>
@@ -402,6 +405,7 @@ const SplitViewerContent: React.FC<SplitViewerContentProps> = ({
               buildingOrigin={buildingData.origin}
               buildingFmGuid={buildingData.fmGuid}
               ivionSiteIdProp={buildingData.ivionSiteId}
+              ivionBimTransform={buildingData.ivionBimTransform}
             />
           </div>
         </ResizablePanel>
@@ -498,7 +502,7 @@ const SplitViewer: React.FC = () => {
       try {
         const { data: settings, error: settingsError } = await supabase
           .from('building_settings')
-          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat')
+          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat, ivion_bim_offset_x, ivion_bim_offset_y, ivion_bim_offset_z, ivion_bim_rotation')
           .eq('fm_guid', buildingFmGuid)
           .maybeSingle();
 
@@ -529,6 +533,7 @@ const SplitViewer: React.FC = () => {
           origin,
           startVlon: (settings as any).ivion_start_vlon ?? undefined,
           startVlat: (settings as any).ivion_start_vlat ?? undefined,
+          ivionBimTransform: buildTransformFromSettings(settings),
         });
       } catch (err) {
         console.error('Error loading building data:', err);
