@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { AppProvider } from "@/context/AppContext";
 import AppLayout from "@/components/layout/AppLayout";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
@@ -31,7 +31,19 @@ const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Global handler for unhandled promise rejections from external libraries (e.g. Asset+ 3D viewer).
+  // Prevents the entire app from crashing on async errors we can't catch locally.
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      console.error('[Global] Unhandled promise rejection:', event.reason);
+      event.preventDefault(); // Prevent crash / console uncaught error
+    };
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AppProvider>
@@ -162,6 +174,7 @@ const App = () => (
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

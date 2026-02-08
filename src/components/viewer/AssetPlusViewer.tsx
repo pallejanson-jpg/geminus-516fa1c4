@@ -1234,81 +1234,85 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
-    console.log("allModelsLoadedCallback");
-
-    setModelLoadState('loaded');
-    setInitStep('ready');
-    
-    // CRITICAL: Clear XKT sync status to hide the loading spinner
-    setXktSyncStatus('done');
-    
-    // Update cache status if we had a cache interaction
-    if (cacheStatus === 'checking') {
-      setCacheStatus('stored');
-    }
-
-    // Enable annotations after models are loaded
     try {
-      const viewer = viewerInstanceRef.current;
-      const assetViewer = viewer?.assetViewer;
-      if (assetViewer?.onToggleAnnotation) {
-        // Enable annotation visibility
-        assetViewer.onToggleAnnotation(true);
-        console.log("Annotations enabled");
-        
-        // Fetch existing annotations
-        if (assetViewer.getAnnotations) {
-          assetViewer.getAnnotations();
-        }
+      console.log("allModelsLoadedCallback");
+
+      setModelLoadState('loaded');
+      setInitStep('ready');
+      
+      // CRITICAL: Clear XKT sync status to hide the loading spinner
+      setXktSyncStatus('done');
+      
+      // Update cache status if we had a cache interaction
+      if (cacheStatus === 'checking') {
+        setCacheStatus('stored');
       }
-    } catch (e) {
-      console.debug("Could not enable annotations:", e);
-    }
 
-    // CRITICAL: Ensure spaces (rooms) are hidden by default
-    // This prevents rooms from showing when floor cutout is applied
-    try {
-      const viewer = viewerInstanceRef.current;
-      const assetViewer = viewer?.assetViewer;
-      if (assetViewer?.onShowSpacesChanged) {
-        assetViewer.onShowSpacesChanged(false);
-        console.log("Spaces hidden by default via Asset+ API");
+      // Enable annotations after models are loaded
+      try {
+        const viewer = viewerInstanceRef.current;
+        const assetViewer = viewer?.assetViewer;
+        if (assetViewer?.onToggleAnnotation) {
+          assetViewer.onToggleAnnotation(true);
+          console.log("Annotations enabled");
+          
+          if (assetViewer.getAnnotations) {
+            assetViewer.getAnnotations();
+          }
+        }
+      } catch (e) {
+        console.debug("Could not enable annotations:", e);
+      }
+
+      // CRITICAL: Ensure spaces (rooms) are hidden by default
+      try {
+        const viewer = viewerInstanceRef.current;
+        const assetViewer = viewer?.assetViewer;
+        if (assetViewer?.onShowSpacesChanged) {
+          assetViewer.onShowSpacesChanged(false);
+          console.log("Spaces hidden by default via Asset+ API");
+        }
+        
+        const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+        if (xeokitViewer?.metaScene?.metaObjects && xeokitViewer?.scene?.objects) {
+          const metaObjects = xeokitViewer.metaScene.metaObjects;
+          const sceneObjects = xeokitViewer.scene.objects;
+          let hiddenCount = 0;
+          Object.values(metaObjects).forEach((metaObj: any) => {
+            if (metaObj.type?.toLowerCase() === 'ifcspace') {
+              const entity = sceneObjects[metaObj.id];
+              if (entity && entity.visible) {
+                entity.visible = false;
+                hiddenCount++;
+              }
+            }
+          });
+          console.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
+        }
+      } catch (e) {
+        console.debug("Could not hide spaces:", e);
+      }
+
+      // Check if we should auto-enable local annotations (triggered from AssetsView)
+      const shouldAutoEnableLocalAnnotations = localStorage.getItem('viewer-show-local-annotations') === 'true';
+      if (shouldAutoEnableLocalAnnotations) {
+        localStorage.removeItem('viewer-show-local-annotations');
+        console.log('Auto-enabling local annotations from AssetsView trigger');
       }
       
-      // ALSO hide IfcSpace entities directly on xeokit level for redundancy
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (xeokitViewer?.metaScene?.metaObjects && xeokitViewer?.scene?.objects) {
-        const metaObjects = xeokitViewer.metaScene.metaObjects;
-        const sceneObjects = xeokitViewer.scene.objects;
-        let hiddenCount = 0;
-        Object.values(metaObjects).forEach((metaObj: any) => {
-          if (metaObj.type?.toLowerCase() === 'ifcspace') {
-            const entity = sceneObjects[metaObj.id];
-            if (entity && entity.visible) {
-              entity.visible = false;
-              hiddenCount++;
-            }
-          }
-        });
-        console.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
+      // Load local annotations from database - wrapped in try/catch to prevent crash
+      try {
+        loadLocalAnnotations();
+      } catch (e) {
+        console.error('Error starting loadLocalAnnotations:', e);
       }
-    } catch (e) {
-      console.debug("Could not hide spaces:", e);
-    }
-
-    // Check if we should auto-enable local annotations (triggered from AssetsView)
-    const shouldAutoEnableLocalAnnotations = localStorage.getItem('viewer-show-local-annotations') === 'true';
-    if (shouldAutoEnableLocalAnnotations) {
-      // Clear the flag after reading to prevent it from persisting
-      localStorage.removeItem('viewer-show-local-annotations');
-      console.log('Auto-enabling local annotations from AssetsView trigger');
-    }
-    
-    // Load local annotations from database (assets with annotation_placed=true)
-    loadLocalAnnotations();
-    
-    // Load alarm annotations from BIM geometry (IfcAlarm assets)
-    loadAlarmAnnotations();
+      
+      // Load alarm annotations from BIM geometry - wrapped in try/catch to prevent crash
+      try {
+        loadAlarmAnnotations();
+      } catch (e) {
+        console.error('Error starting loadAlarmAnnotations:', e);
+      }
 
     // Initialize NavCube using custom plugin
     try {
@@ -1359,6 +1363,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         executeDisplayAction(displayAction);
         viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
       }
+    }
+    } catch (e) {
+      console.error('[handleAllModelsLoaded] Unexpected error:', e);
     }
   }, [executeDisplayAction, cacheStatus, showNavCube, loadLocalAnnotations, loadAlarmAnnotations]);
 
@@ -2688,6 +2695,43 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       deferCallsRef.current = true;
     };
   }, [initializeViewer, restoreFetch]);
+
+  // WebGL context lost/restored recovery
+  // Mobile GPUs may run out of memory when loading large BIM models, causing the
+  // WebGL context to be lost. This handler prevents a blank canvas crash and offers recovery.
+  useEffect(() => {
+    if (!state.isInitialized) return;
+
+    // Find the canvas inside our viewer container
+    const canvas = viewerContainerRef.current?.querySelector('canvas');
+    if (!canvas) return;
+
+    const handleContextLost = (e: Event) => {
+      e.preventDefault(); // Allow context restoration
+      console.error('[AssetPlusViewer] WebGL context lost – GPU out of memory or tab backgrounded');
+      setState(prev => ({
+        ...prev,
+        error: 'WebGL-kontext förlorad. Enheten kan ha slut på grafikminne.',
+        isLoading: false,
+      }));
+      setShowError(true);
+    };
+
+    const handleContextRestored = () => {
+      console.log('[AssetPlusViewer] WebGL context restored');
+      // Clear the error and retry initialization
+      setState(prev => ({ ...prev, error: null }));
+      setShowError(false);
+    };
+
+    canvas.addEventListener('webglcontextlost', handleContextLost);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored);
+
+    return () => {
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+    };
+  }, [state.isInitialized]);
 
   // Viewer uses built-in Asset+ controls - no custom handlers needed
 
