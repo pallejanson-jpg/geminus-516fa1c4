@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
 
+const BUTTON_SIZE = 56; // h-14 w-14
+
 /**
  * Floating Gunnar AI assistant button available throughout the application.
  * Opens a draggable floating panel with semi-transparent background.
@@ -33,27 +35,38 @@ export default function GunnarButton() {
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   
-  // Panel dimensions
-  const panelWidth = typeof window !== 'undefined' && window.innerWidth < 640 ? window.innerWidth - 32 : 400;
-  const panelHeight = typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 550;
+  // Detect mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  
+  // Panel dimensions — fullscreen on mobile
+  const panelWidth = isMobile ? window.innerWidth : 400;
+  const panelHeight = isMobile ? window.innerHeight : (typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 550);
 
-  // Load saved position on mount
+  // Load saved position on mount — clamp to current viewport
   useEffect(() => {
     const settings = getGunnarSettings();
     if (settings.buttonPosition) {
-      setTriggerPosition(settings.buttonPosition);
+      const maxX = window.innerWidth - BUTTON_SIZE;
+      const maxY = window.innerHeight - BUTTON_SIZE;
+      setTriggerPosition({
+        x: Math.max(0, Math.min(settings.buttonPosition.x, maxX)),
+        y: Math.max(0, Math.min(settings.buttonPosition.y, maxY)),
+      });
     }
   }, []);
 
   // Initialize panel position on first open
   useEffect(() => {
     if (isOpen && position.x === -1) {
-      // Position in bottom-right by default
-      const x = typeof window !== 'undefined' ? window.innerWidth - panelWidth - 16 : 100;
-      const y = typeof window !== 'undefined' ? window.innerHeight - panelHeight - 80 : 100;
-      setPosition({ x: Math.max(16, x), y: Math.max(16, y) });
+      if (isMobile) {
+        setPosition({ x: 0, y: 0 });
+      } else {
+        const x = typeof window !== 'undefined' ? window.innerWidth - panelWidth - 16 : 100;
+        const y = typeof window !== 'undefined' ? window.innerHeight - panelHeight - 80 : 100;
+        setPosition({ x: Math.max(16, x), y: Math.max(16, y) });
+      }
     }
-  }, [isOpen, position.x, panelWidth, panelHeight]);
+  }, [isOpen, position.x, panelWidth, panelHeight, isMobile]);
 
   // Listen for viewer context changes
   useEffect(() => {
@@ -73,6 +86,7 @@ export default function GunnarButton() {
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (isMobile) return; // No drag on mobile — fullscreen panel
     e.preventDefault();
     setIsDragging(true);
     
@@ -83,7 +97,7 @@ export default function GunnarButton() {
       x: clientX - position.x,
       y: clientY - position.y,
     };
-  }, [position]);
+  }, [position, isMobile]);
 
   const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
     if (!isDragging) return;
@@ -146,9 +160,8 @@ export default function GunnarButton() {
     const newY = clientY - triggerDragOffsetRef.current.y;
     
     // Constrain to viewport
-    const buttonSize = 56; // h-14 w-14
-    const maxX = window.innerWidth - buttonSize;
-    const maxY = window.innerHeight - buttonSize;
+    const maxX = window.innerWidth - BUTTON_SIZE;
+    const maxY = window.innerHeight - BUTTON_SIZE;
     
     setTriggerPosition({
       x: Math.max(0, Math.min(newX, maxX)),
@@ -200,7 +213,6 @@ export default function GunnarButton() {
           fmGuid: selectedFacility.fmGuid,
           name: selectedFacility.commonName || selectedFacility.name,
         };
-        // Try to find parent building
         if (selectedFacility.buildingFmGuid) {
           const building = navigatorTreeData.find((b: any) => b.fmGuid === selectedFacility.buildingFmGuid);
           if (building) {
@@ -215,7 +227,6 @@ export default function GunnarButton() {
           fmGuid: selectedFacility.fmGuid,
           name: selectedFacility.commonName || selectedFacility.name,
         };
-        // Try to find parent building
         if (selectedFacility.buildingFmGuid) {
           const building = navigatorTreeData.find((b: any) => b.fmGuid === selectedFacility.buildingFmGuid);
           if (building) {
@@ -228,7 +239,6 @@ export default function GunnarButton() {
       }
     }
 
-    // If in 3D viewer, use viewer3dFmGuid to find building
     if (viewer3dFmGuid && !context.currentBuilding) {
       const building = navigatorTreeData.find((b: any) => b.fmGuid === viewer3dFmGuid);
       if (building) {
@@ -239,7 +249,6 @@ export default function GunnarButton() {
       }
     }
 
-    // Add viewer state if available
     if (viewerContext) {
       context.viewerState = viewerContext;
     }
@@ -297,9 +306,11 @@ export default function GunnarButton() {
       <div 
         className={cn(
           "fixed z-50",
-          !triggerPosition && "bottom-20 right-4 sm:bottom-6"
+          !triggerPosition && "right-4 sm:bottom-6"
         )}
-        style={triggerStyle}
+        style={triggerPosition ? triggerStyle : {
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
+        }}
       >
         <Tooltip>
           <TooltipTrigger asChild>
@@ -340,7 +351,8 @@ export default function GunnarButton() {
       {/* Minimized bubble */}
       {isOpen && isMinimized && (
         <div 
-          className="fixed bottom-20 right-4 z-[60] cursor-pointer sm:bottom-6"
+          className="fixed right-4 z-[60] cursor-pointer"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}
           onClick={handleExpand}
         >
           <div className={cn(
@@ -361,49 +373,56 @@ export default function GunnarButton() {
           className={cn(
             "fixed z-[60] flex flex-col",
             "border rounded-lg shadow-xl",
-            // Semi-transparent frosted glass effect
             "bg-card/70 backdrop-blur-lg",
             isDragging && "cursor-grabbing select-none"
           )}
-          style={{
+          style={isMobile ? {
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            borderRadius: 0,
+          } : {
             left: position.x,
             top: position.y,
             width: panelWidth,
             height: panelHeight,
           }}
         >
-          {/* Draggable header */}
+          {/* Header — simplified on mobile (no drag grip) */}
           <div
             className={cn(
               "flex items-center justify-between px-3 py-2",
-              "border-b border-border/50 rounded-t-lg",
-              "bg-muted/30 cursor-grab",
+              "border-b border-border/50",
+              !isMobile && "rounded-t-lg bg-muted/30 cursor-grab",
+              isMobile && "bg-muted/30",
               isDragging && "cursor-grabbing"
             )}
-            onMouseDown={handleDragStart}
-            onTouchStart={handleDragStart}
+            onMouseDown={isMobile ? undefined : handleDragStart}
+            onTouchStart={isMobile ? undefined : handleDragStart}
           >
             <div className="flex items-center gap-2">
-              <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+              {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <span className="font-medium text-sm">Gunnar AI</span>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 hover:bg-muted/50"
-                    onClick={handleMinimize}
-                  >
-                    <Minimize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
-              </Tooltip>
+              {!isMobile && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 hover:bg-muted/50"
+                      onClick={handleMinimize}
+                    >
+                      <Minimize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">Minimera</TooltipContent>
+                </Tooltip>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
