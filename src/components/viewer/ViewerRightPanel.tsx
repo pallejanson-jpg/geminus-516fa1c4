@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useContext, useRef } from "react";
 import {
   Layers, MessageSquare, MessageSquarePlus, Palette, Plus, X, Scissors,
-  Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2
+  Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2,
+  Pin, PinOff
 } from "lucide-react";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ interface ViewerRightPanelProps {
   onToggleTreeView?: (visible: boolean) => void;
   showTreeView?: boolean;
   onAddAsset?: () => void;
+  initialFloorFmGuid?: string;
 }
 
 /**
@@ -79,6 +81,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   onToggleTreeView,
   showTreeView = false,
   onAddAsset,
+  initialFloorFmGuid,
 }) => {
   const { allData } = useContext(AppContext);
   const { user } = useAuth();
@@ -128,6 +131,24 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const [showFloorPills, setShowFloorPills] = useState(() => {
     return localStorage.getItem('viewer-show-floor-pills') !== 'false';
   });
+
+  // Pinned state - persisted in localStorage
+  const [isPinned, setIsPinned] = useState(() => {
+    return localStorage.getItem('viewer-right-panel-pinned') === 'true';
+  });
+
+  const togglePinned = useCallback(() => {
+    setIsPinned(prev => {
+      const next = !prev;
+      localStorage.setItem('viewer-right-panel-pinned', String(next));
+      return next;
+    });
+  }, []);
+
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open && isPinned) return; // Don't close when pinned
+    onOpenChange(open);
+  }, [isPinned, onOpenChange]);
 
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -430,17 +451,27 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
-        <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card/95 backdrop-blur-md">
+      <Sheet open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+        <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card backdrop-blur-md">
           <SheetHeader className="p-4 pb-2 border-b">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <Settings2 className="h-4 w-4" />
-              Visning
+            <SheetTitle className="flex items-center justify-between text-base">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4" />
+                Visning
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={togglePinned}
+                title={isPinned ? "Lossa panelen" : "Fäst panelen"}
+              >
+                {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/60" />}
+              </Button>
             </SheetTitle>
           </SheetHeader>
 
           <ScrollArea className="h-[calc(100vh-80px)]">
-            {isOpen && (
             <div className="p-4 space-y-3">
 
               {/* BIM Models - Collapsible */}
@@ -481,6 +512,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       onVisibleFloorsChange={handleVisibleFloorsChange}
                       enableClipping={true}
                       listOnly={true}
+                      initialFloorFmGuid={initialFloorFmGuid}
                     />
                   </div>
                 </CollapsibleContent>
@@ -504,7 +536,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {/* 2D/3D Toggle */}
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <SquareDashed className="h-4 w-4" />
                       </div>
                       <span className="text-sm">2D/3D</span>
@@ -516,7 +548,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {onToggleTreeView && (
                     <div className="flex items-center justify-between py-1.5">
                       <div className="flex items-center gap-2">
-                        <div className={cn("p-1.5 rounded-md", showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        <div className={cn("p-1.5 rounded-md", showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                           <TreeDeciduous className="h-4 w-4" />
                         </div>
                         <span className="text-sm">Modellträd</span>
@@ -548,7 +580,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
                       <div className="flex items-center justify-between py-1.5">
                         <div className="flex items-center gap-2">
-                          <div className={cn("p-1.5 rounded-md", showAnnotations ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                          <div className={cn("p-1.5 rounded-md", showAnnotations ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                             <MessageSquare className="h-4 w-4" />
                           </div>
                           <span className="text-sm">Annotationer</span>
@@ -608,32 +640,32 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 <CollapsibleTrigger asChild>
                   <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
+                       <div className="p-1.5 rounded-md bg-muted text-foreground/70">
                         <Settings className="h-4 w-4" />
                       </div>
                       <span className="text-sm font-medium">Viewer settings</span>
                     </div>
-                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
+                    <ChevronDown className={cn("h-4 w-4 text-foreground/60 transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
                   {/* Clip height slider (2D) */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><Scissors className="h-4 w-4" /></div>
+                      <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Scissors className="h-4 w-4" /></div>
                       <span className="text-sm">Klipphöjd (2D-vy)</span>
                       <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-                      <p className="text-xs text-muted-foreground mt-1">Höjd ovanför golv</p>
+                      <p className="text-xs text-foreground/60 mt-1">Höjd ovanför golv</p>
                     </div>
                   </div>
 
                   {/* 3D Ceiling clip */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 mb-1">
-                      <div className={cn("p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Box className="h-4 w-4" />
                       </div>
                       <span className="text-sm">Takklipp (3D Solo)</span>
@@ -641,7 +673,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
-                      <p className="text-xs text-muted-foreground mt-1">
+                       <p className="text-xs text-foreground/60 mt-1">
                         {isSoloFloor && !is2DMode ? "Offset från nästa vånings golv" : "Aktiveras när en våning är isolerad i 3D"}
                       </p>
                     </div>
@@ -650,14 +682,14 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {/* Room Labels Selector */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Type className="h-4 w-4" />
                       </div>
                       <span className="text-sm">Rumsetiketter</span>
                     </div>
                     <div className="pl-10">
                       {loadingRoomLabelConfigs ? (
-                        <div className="text-xs text-muted-foreground">Laddar...</div>
+                        <div className="text-xs text-foreground/60">Laddar...</div>
                       ) : (
                         <div className="space-y-1">
                           <button
@@ -671,11 +703,11 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                               onClick={() => handleRoomLabelConfigSelect(config.id)}
                             >
                               {config.name}
-                              {config.is_default && <span className="ml-1 text-[10px] text-muted-foreground">(standard)</span>}
+                              {config.is_default && <span className="ml-1 text-[10px] text-foreground/50">(standard)</span>}
                             </button>
                           ))}
                           {roomLabelConfigs.length === 0 && (
-                            <div className="text-xs text-muted-foreground py-1">Inga konfigurationer. Skapa i Inställningar.</div>
+                            <div className="text-xs text-foreground/60 py-1">Inga konfigurationer. Skapa i Inställningar.</div>
                           )}
                         </div>
                       )}
@@ -688,7 +720,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {/* Background color palette */}
                   <div className="py-1.5">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="p-1.5 rounded-md bg-muted text-muted-foreground"><Palette className="h-4 w-4" /></div>
+                      <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Palette className="h-4 w-4" /></div>
                       <span className="text-sm">Bakgrundsfärg</span>
                     </div>
                     <div className="pl-10">
@@ -712,7 +744,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {/* Floor Pills Toggle */}
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Layers className="h-4 w-4" />
                       </div>
                       <span className="text-sm">Våningsväljare (pills)</span>
@@ -761,7 +793,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     onClick={() => setShowIssueList(!showIssueList)}
                   >
                     <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <MessageSquare className="h-4 w-4" />
                       </div>
                       <span className="text-sm">Visa ärenden</span>
@@ -777,7 +809,6 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 </CollapsibleContent>
               </Collapsible>
             </div>
-            )}
           </ScrollArea>
         </SheetContent>
       </Sheet>
