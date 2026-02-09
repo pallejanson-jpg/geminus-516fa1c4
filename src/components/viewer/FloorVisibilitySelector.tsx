@@ -26,6 +26,8 @@ interface FloorVisibilitySelectorProps {
   className?: string;
   /** When true, renders only the toggle list without header/collapsible wrapper */
   listOnly?: boolean;
+  /** When set on first init, overrides localStorage and selects only the floor matching this fmGuid */
+  initialFloorFmGuid?: string;
 }
 
 /**
@@ -36,7 +38,7 @@ interface FloorVisibilitySelectorProps {
  * Emits FLOOR_SELECTION_CHANGED_EVENT when floor selection changes.
  */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
-  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className, listOnly = false }, ref) => {
+  ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className, listOnly = false, initialFloorFmGuid }, ref) => {
     const [floors, setFloors] = useState<FloorInfo[]>([]);
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
@@ -65,13 +67,24 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       floorsRef.current = floors;
     }, [floors]);
 
-    // Always start with all floors visible - skip localStorage restoration
-    // so every viewer session begins fresh with all floors ON
+    // Restore floor selection from localStorage (persists across panel opens)
     useEffect(() => {
       if (!buildingFmGuid || localStorageLoaded) return;
-      // Don't restore from localStorage - always default to all floors
+      // Don't restore from localStorage if we have an initial floor override
+      if (!initialFloorFmGuid) {
+        const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const ids = JSON.parse(saved);
+            if (Array.isArray(ids) && ids.length > 0) {
+              setVisibleFloorIds(new Set(ids));
+            }
+          } catch { /* ignore */ }
+        }
+      }
       setLocalStorageLoaded(true);
-    }, [buildingFmGuid, localStorageLoaded]);
+    }, [buildingFmGuid, localStorageLoaded, initialFloorFmGuid]);
 
     // Save selection to localStorage when it changes
     useEffect(() => {
@@ -205,15 +218,28 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         if (newFloors.length > 0) {
           setFloors(newFloors);
           
-          // If localStorage already loaded a selection, validate and apply it
-          const savedSelection = visibleFloorIdsRef.current;
           const validFloorIds = new Set(newFloors.map(f => f.id));
+          
+          // Priority 1: initialFloorFmGuid prop — select only the matching floor
+          if (initialFloorFmGuid) {
+            const matchingFloor = newFloors.find(f =>
+              f.databaseLevelFmGuids.some(g => g.toLowerCase() === initialFloorFmGuid.toLowerCase()) ||
+              f.id.toLowerCase() === initialFloorFmGuid.toLowerCase()
+            );
+            if (matchingFloor) {
+              setVisibleFloorIds(new Set([matchingFloor.id]));
+              setIsInitialized(true);
+              return;
+            }
+          }
+          
+          // Priority 2: localStorage saved selection
+          const savedSelection = visibleFloorIdsRef.current;
           const validSavedSelection = new Set(
             Array.from(savedSelection).filter(id => validFloorIds.has(id))
           );
           
           if (validSavedSelection.size > 0) {
-            // Use saved selection
             setVisibleFloorIds(validSavedSelection);
           } else {
             // Default to all visible
