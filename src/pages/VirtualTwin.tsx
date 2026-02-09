@@ -462,17 +462,17 @@ const VirtualTwin: React.FC = () => {
           {!showFallback && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 bg-white/10 rounded px-2 py-1">
-                  <Eye className="h-3.5 w-3.5 text-white/70" />
+                <div className="flex items-center gap-2 bg-white/10 rounded px-3 py-1 min-w-[160px]">
+                  <Eye className="h-3.5 w-3.5 text-white/70 shrink-0" />
                   <Slider
                     value={[ghostOpacity]}
                     onValueChange={([v]) => setGhostOpacity(v)}
                     min={0}
                     max={100}
                     step={5}
-                    className="w-20"
+                    className="w-28"
                   />
-                  <span className="text-xs text-white/70 w-8 text-right">{ghostOpacity}%</span>
+                  <span className="text-xs text-white/70 w-8 text-right shrink-0">{ghostOpacity}%</span>
                 </div>
               </TooltipTrigger>
               <TooltipContent>3D-modellens synlighet</TooltipContent>
@@ -515,6 +515,7 @@ const VirtualTwin: React.FC = () => {
             transform={transform}
             onChange={setTransform}
             buildingFmGuid={buildingInfo.fmGuid}
+            onSaved={() => setShowAlignment(false)}
           />
         </div>
       )}
