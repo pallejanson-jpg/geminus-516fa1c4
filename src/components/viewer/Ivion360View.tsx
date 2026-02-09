@@ -127,6 +127,22 @@ export default function Ivion360View({
     }
   }, [buildingFmGuid]);
 
+  // Create <ivion> element on mount — BEFORE SDK loading starts
+  // This ensures the element exists with dimensions when getApi() is called.
+  useEffect(() => {
+    if (!sdkContainerRef.current || ivionElementRef.current) return;
+    const ivionEl = createIvionElement(sdkContainerRef.current);
+    ivionElementRef.current = ivionEl;
+    console.log('[Ivion360View] <ivion> element created on mount');
+
+    return () => {
+      if (sdkContainerRef.current && ivionElementRef.current) {
+        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
+        ivionElementRef.current = null;
+      }
+    };
+  }, []); // mount only
+
   // SDK loading with loginToken and robust fallback
   useEffect(() => {
     if (!ivionUrl) {
@@ -142,13 +158,6 @@ export default function Ivion360View({
       setSdkStatus(status);
     };
 
-    const cleanupSdkElement = () => {
-      if (sdkContainerRef.current && ivionElementRef.current) {
-        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
-        ivionElementRef.current = null;
-      }
-    };
-
     const tryLoadSdk = async () => {
       updateStatus('loading');
       
@@ -156,11 +165,9 @@ export default function Ivion360View({
         const parsedUrl = new URL(ivionUrl);
         const baseUrl = parsedUrl.origin;
         
-        // SDK is loaded via CORS proxy — no reachability probe needed
-        
         if (cancelled) return;
         
-        // Step 2: Fetch loginToken for auto-authentication
+        // Fetch loginToken for auto-authentication
         const loginToken = await fetchLoginToken();
         if (cancelled) return;
         
@@ -170,14 +177,8 @@ export default function Ivion360View({
           console.log('[Ivion360View] No loginToken available, SDK will require manual login');
         }
         
-        // Step 3: Create container and load SDK with loginToken
-        if (sdkContainerRef.current && !ivionElementRef.current) {
-          const ivionEl = createIvionElement(sdkContainerRef.current);
-          ivionElementRef.current = ivionEl;
-        }
-        
         console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
-        const api = await loadIvionSdk(baseUrl, 30000, loginToken || undefined, ivionSiteId || undefined);
+        const api = await loadIvionSdk(baseUrl, 45000, loginToken || undefined, ivionSiteId || undefined);
         
         if (cancelled) return;
         
@@ -194,7 +195,6 @@ export default function Ivion360View({
         
         console.log('[Ivion360View] SDK load failed, falling back to iframe:', err);
         updateStatus('failed');
-        cleanupSdkElement();
       }
     };
 
@@ -202,7 +202,6 @@ export default function Ivion360View({
 
     return () => {
       cancelled = true;
-      cleanupSdkElement();
       ivApiRef.current = null;
     };
   }, [ivionUrl, syncEnabled, fetchLoginToken]);
