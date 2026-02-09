@@ -29,8 +29,8 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 // Constants for responsive design
-const MAX_VISIBLE_PILLS_DESKTOP = 8;
-const MAX_VISIBLE_PILLS_MOBILE = 6;
+const MAX_VISIBLE_PILLS_DESKTOP = 5;
+const MAX_VISIBLE_PILLS_MOBILE = 4;
 
 /**
  * Floating floor switcher with pill buttons overlaid on the 3D viewer.
