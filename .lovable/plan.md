@@ -1,78 +1,75 @@
 
 
-# Fix Floor Selection Persistence, Text Contrast, Room Labels Scoping, and Pinnable Right Panel
+# Fix Floating Floor Switcher and Ivion SDK 403 Error
 
-## Issues and Fixes
+## 1. Floor Switcher Overhaul
 
-### 1. Floor Selector Resets to All Floors When Panel Opens
+### Problems
+- The panel stretches far beyond the pill content (visible in screenshot -- massive black area below the "+5" pill)
+- Drag functionality adds complexity the user doesn't want
+- Positioned on the right side instead of under the top-left buttons (X, expand, annotation)
 
-**Root cause**: `ViewerRightPanel.tsx` line 443 wraps all content in `{isOpen && (...)}`, which means `FloorVisibilitySelector` unmounts when the panel closes and remounts when it opens. Each remount resets `isInitialized`, `localStorageLoaded`, and `visibleFloorIds` to empty defaults. The component then re-runs its initialization effect, and since `initialFloorFmGuid` is never passed from `ViewerRightPanel`, it falls through to localStorage or defaults to all floors.
+### Root Cause
+The component uses `fixed` positioning with `left`/`top` set dynamically via drag state. The excessive height likely comes from CSS or the container not constraining to content height. The `bg-background/80` background fills the entire fixed-positioned box.
 
-**Fix**:
-- **`ViewerRightPanel.tsx`**: Remove `{isOpen && (...)}` guard so the content stays mounted even when the panel is closed (the Sheet handles visibility via CSS). This prevents the FloorVisibilitySelector from re-initializing every time the panel opens.
-- **`ViewerRightPanel.tsx`**: Forward the `initialFloorFmGuid` prop to `FloorVisibilitySelector` so navigation context flows through.
-- Add `initialFloorFmGuid?: string` to the `ViewerRightPanelProps` interface.
-- **`AssetPlusViewer.tsx`**: Pass `initialFmGuidToFocus` as `initialFloorFmGuid` to `ViewerRightPanel`.
+### Fix
 
-### 2. Room Labels Only on Selected Building
+**Remove all drag functionality:**
+- Delete `position` state, `isDragging` state, `dragOffsetRef`, `hasInitializedPosition`
+- Delete `handleDragStart`, mouse move/up listeners (lines 102-130)
+- Delete the GripVertical drag handle element (lines 572-585)
 
-Room labels already operate on the currently loaded building's metaScene (since the viewer loads one building at a time). However, the labels should be explicitly cleared when the building changes. The `useRoomLabels` hook's `createLabels` function already scopes to the viewer's metaScene, so this works. No code change needed -- will verify by ensuring labels are cleared on building change (which the existing cleanup already handles).
+**Fixed position below top-left buttons:**
+- Instead of `style={{ left: position.x, top: position.y }}`, use fixed CSS classes: `left-3 top-[140px]` (below the row of X, expand, annotation buttons which sit at ~top-20 with height ~40px each, stacked or in a row)
+- The `140px` top value places it right below those buttons with a small gap
 
-### 3. Text Contrast in Right Panel
+**Ensure height fits content exactly:**
+- The container already uses `flex flex-col` with `gap-px`, so it should auto-size. Remove any min-height or explicit height that might be causing the stretch
+- Add `h-auto` explicitly to prevent any inherited stretching
 
-**Root cause**: The panel uses `bg-card/95 backdrop-blur-md` which in dark mode is `hsl(0, 0%, 6%)` at 95% opacity. The text uses default `text-foreground` (`hsl(0, 0%, 96%)`), but many labels use `text-sm` or `text-muted-foreground` (`hsl(0, 0%, 65%)`), which is too dim against the semi-transparent dark background.
+### Technical Changes (`src/components/viewer/FloatingFloorSwitcher.tsx`)
 
-**Fix**: 
-- Change `text-muted-foreground` to `text-foreground/80` for better contrast on section labels and secondary text inside the right panel.
-- Change panel background from `bg-card/95` to `bg-card` (fully opaque) so text is always readable.
+1. Remove state: `position`, `isDragging`, `dragOffsetRef`, `hasInitializedPosition` (lines 54-58)
+2. Remove position initialization effect (lines 78-87)
+3. Remove drag handlers and mouse event listeners (lines 102-130)
+4. Remove GripVertical drag handle JSX (lines 572-585)
+5. Change container from `style={{ left: position.x, top: position.y }}` to class-based positioning: `left-3 top-[140px]`
+6. Remove `isDragging` conditional classes (`cursor-grabbing`, `shadow-xl`)
+7. Keep all pill logic, overflow menu, click/double-click behavior unchanged
 
-### 4. Pinnable Right Panel
+## 2. Ivion SDK 403 Error
 
-**Current behavior**: The Sheet closes when clicking outside. `modal={false}` is already set, but clicking elsewhere still triggers `onOpenChange(false)`.
+### Problem
+"Network request failed: OK (403) Full authentication is required to access this resource" when loading the Virtual Twin SDK.
 
-**Fix**:
-- Add a "pin" toggle button in the panel header.
-- When pinned, the `onOpenChange` callback ignores close requests (the user must explicitly unpin or click the close button).
-- Store pinned state in `localStorage` so it persists across sessions.
-- When pinned, show a pin icon; when unpinned, show an unpin icon.
+### Analysis
+This 403 means the `loginToken` fetched via `ivion-poi` edge function is either:
+- Not being obtained (the fetch fails silently and SDK loads without auth)
+- Expired or invalid
+- The Ivion instance requires re-authentication
 
-## Technical Details
+The `useIvionSdk` hook already handles this (fetches token, passes to SDK). The 403 suggests the token fetch returned null and the SDK loaded unauthenticated. The hook logs `[useIvionSdk] Will use loginToken for auto-auth` only when a token is obtained -- if missing, it proceeds without auth.
 
-### File: `src/components/viewer/ViewerRightPanel.tsx`
+### Fix
+Make the SDK initialization fail gracefully when no loginToken is available, and show a clear error message instead of loading unauthenticated (which causes the 403). In `useIvionSdk.ts`, if `loginToken` is null, set status to `'failed'` with a descriptive error rather than proceeding without auth.
 
-1. Add `initialFloorFmGuid?: string` to `ViewerRightPanelProps`.
-2. Add pinned state:
-   ```typescript
-   const [isPinned, setIsPinned] = useState(() => {
-     return localStorage.getItem('viewer-right-panel-pinned') === 'true';
-   });
-   ```
-3. Wrap `onOpenChange` to respect pinned state:
-   ```typescript
-   const handleOpenChange = (open: boolean) => {
-     if (!open && isPinned) return; // Don't close when pinned
-     onOpenChange(open);
-   };
-   ```
-4. Add pin button in SheetHeader next to title.
-5. Remove the `{isOpen && (...)}` conditional wrapper (line 443) -- render content always so FloorVisibilitySelector stays mounted.
-6. Pass `initialFloorFmGuid` to `FloorVisibilitySelector` (line 477).
-7. Improve text contrast: change `bg-card/95 backdrop-blur-md` to `bg-card/98 backdrop-blur-md`, and update `text-muted-foreground` spans to `text-foreground/70` for better readability.
+### Technical Changes (`src/hooks/useIvionSdk.ts`)
 
-### File: `src/components/viewer/AssetPlusViewer.tsx`
+Add early return when loginToken is null (after line 82):
+```typescript
+if (!loginToken) {
+  console.error('[useIvionSdk] No loginToken available - cannot authenticate with Ivion');
+  if (!cancelled) setSdkStatus('failed');
+  return;
+}
+```
 
-1. Pass `initialFmGuidToFocus` as `initialFloorFmGuid` to `ViewerRightPanel`:
-   ```typescript
-   <ViewerRightPanel
-     ...
-     initialFloorFmGuid={initialFmGuidToFocus}
-   />
-   ```
+This prevents the SDK from loading in an unauthenticated state that triggers 403 errors on every API call.
 
-## File Summary
+## Files to Modify
 
 | File | Changes |
 |---|---|
-| `src/components/viewer/ViewerRightPanel.tsx` | Add pin feature, remove isOpen conditional mount, forward initialFloorFmGuid, improve text contrast |
-| `src/components/viewer/AssetPlusViewer.tsx` | Pass initialFmGuidToFocus to ViewerRightPanel |
+| `src/components/viewer/FloatingFloorSwitcher.tsx` | Remove drag functionality, fix position to top-left below buttons, ensure height fits content |
+| `src/hooks/useIvionSdk.ts` | Fail early when loginToken is unavailable instead of loading without auth |
 
