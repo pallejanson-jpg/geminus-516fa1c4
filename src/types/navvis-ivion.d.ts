@@ -1,24 +1,26 @@
 /**
- * Type declarations for the @navvis/ivion npm package.
+ * Type declarations for the NavVis IVION Frontend API.
  * 
- * This package is distributed as a private .tgz from NavVis Knowledge Base
- * and must be installed locally via:
- *   "@navvis/ivion": "file:navvis-ivion-X.X.X.tgz" in package.json
+ * The SDK is loaded as a local UMD bundle from /lib/ivion/api.js
+ * which exports to window.IvApi (self.IvApi in UMD terms).
  * 
- * These declarations allow TypeScript to recognize the module even before
- * the package is installed.
+ * The primary TypeScript types are defined in src/lib/ivion-sdk.ts.
+ * Full SDK type definitions are available in public/lib/ivion/api.d.ts.
  */
-declare module '@navvis/ivion' {
-  import type { IvionApi } from '@/lib/ivion-sdk';
 
-  /**
-   * Initialize the NavVis IVION Frontend API.
-   * @param baseUrl - Base URL of the IVION instance
-   * @param config - Optional configuration (loginToken, etc.)
-   * @returns Promise resolving to the API interface
-   */
-  export function getApi(baseUrl: string, config?: Record<string, any>): Promise<IvionApi>;
-
-  /** The full API interface type (aliased as ApiInterface in NavVis docs) */
-  export type ApiInterface = IvionApi;
+/** Augment the global Window to include IvApi from the UMD bundle */
+interface Window {
+  IvApi?: {
+    getApi(baseUrl: string, config?: Record<string, any>): Promise<any>;
+    CustomLayer?: any;
+    BlendingMode?: any;
+  };
+  /** Legacy globals set by older NavVis loaders */
+  IV?: {
+    getApi?(baseUrl: string, config?: Record<string, any>): Promise<any>;
+    loaded?(cb: () => void): void;
+    ApiService?: any;
+    FeaturesService?: any;
+  };
+  Ivion?: new (config: any) => any;
 }
