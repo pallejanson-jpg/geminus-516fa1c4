@@ -200,7 +200,7 @@ async function logout(userId: string) {
 // Get the authorization URL for Autodesk login
 function getAuthUrl(redirectUri: string) {
   const { clientId } = getClientCredentials();
-  const scope = "data:read account:read";
+  const scope = "data:read data:write data:create account:read";
   const authUrl = `https://developer.api.autodesk.com/authentication/v2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
   return { authUrl };
 }
