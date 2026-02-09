@@ -184,7 +184,7 @@ function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
  */
 export async function loadIvionSdk(
   baseUrl: string,
-  timeoutMs: number = 15000,
+  timeoutMs: number = 30000,
   loginToken?: string,
   siteId?: string,
 ): Promise<IvionApi> {
