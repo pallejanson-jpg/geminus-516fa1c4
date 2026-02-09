@@ -429,11 +429,11 @@ const VirtualTwin: React.FC = () => {
                 } ${sdkError ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <Combine className="h-3.5 w-3.5" />
-                Split
+                VT
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {sdkError ? 'SDK ej tillgängligt' : '3D överlagrat på 360°'}
+              {sdkError ? 'SDK ej tillgängligt' : 'Virtual Twin – 3D overlay på 360°'}
             </TooltipContent>
           </Tooltip>
 

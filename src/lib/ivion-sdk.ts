@@ -195,6 +195,16 @@ export async function loadIvionSdk(
     console.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
+  // Append ?site=siteId to baseUrl so the SDK auto-selects the site on
+  // multi-site instances (mirrors the iframe URL pattern). Without this,
+  // getApi() blocks forever waiting for manual site selection.
+  let initUrl = baseUrl.replace(/\/$/, '');
+  if (siteId) {
+    const sep = initUrl.includes('?') ? '&' : '?';
+    initUrl = `${initUrl}${sep}site=${siteId}`;
+    console.log('[Ivion SDK] Using site-qualified URL:', initUrl);
+  }
+
   let getApi: GetApiFn | null = null;
 
   // ── Attempt 1: local SDK bundle (/lib/ivion/api.js) ────────────────
@@ -236,10 +246,10 @@ export async function loadIvionSdk(
     );
   }
 
-  // Initialize with timeout
+  // Initialize with timeout — use the site-qualified URL
   const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
 
-  const apiPromise = getApi(baseUrl, config);
+  const apiPromise = getApi(initUrl, config);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(
       () => reject(new Error(`Ivion SDK initialization timed out after ${timeoutMs}ms`)),
@@ -250,18 +260,24 @@ export async function loadIvionSdk(
   const iv = await Promise.race([apiPromise, timeoutPromise]);
   console.log('[Ivion SDK] Initialized successfully');
 
-  // ── Auto-navigate to site if siteId provided ─────────────────────
+  // ── Auto-navigate to site if siteId provided (fallback) ──────────
   if (siteId) {
     try {
       const siteApi = (iv as any).site;
       if (siteApi?.repository?.findOne && siteApi?.service?.loadSite) {
-        console.log('[Ivion SDK] Loading site:', siteId);
-        const site = await siteApi.repository.findOne(siteId);
-        if (site) {
-          await siteApi.service.loadSite(site);
-          console.log('[Ivion SDK] Site loaded successfully:', siteId);
+        // Check if site was already auto-selected via URL param
+        const activeSite = siteApi?.service?.activeSite;
+        if (activeSite) {
+          console.log('[Ivion SDK] Site already active (selected via URL param):', siteId);
         } else {
-          console.warn('[Ivion SDK] Site not found:', siteId);
+          console.log('[Ivion SDK] Loading site via API:', siteId);
+          const site = await siteApi.repository.findOne(Number(siteId));
+          if (site) {
+            await siteApi.service.loadSite(site);
+            console.log('[Ivion SDK] Site loaded successfully:', siteId);
+          } else {
+            console.warn('[Ivion SDK] Site not found:', siteId);
+          }
         }
       } else {
         console.warn('[Ivion SDK] Site API not available on SDK instance');
