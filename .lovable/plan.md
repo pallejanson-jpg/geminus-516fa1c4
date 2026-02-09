@@ -1,122 +1,96 @@
 
 
-# Fix Room Field Mapping + Add Room Properties + Extract BIM Instances
+# Fix API Settings Responsiveness, ACC Region Logic, and 3D Conversion
 
-## Three Changes
+## Issue 1: API Settings Responsiveness
 
-### 1. Fix Room Name/Number Mapping
+The dialog uses `sm:max-w-2xl` with 7 tabs crammed into a `grid-cols-7`, causing text to be cut off on narrow screens. Buttons in the ACC section also overflow horizontally.
 
-**Current (wrong):**
-- `name` = "10026" (Number)
-- `common_name` = "10026" (Number only)
+### Changes
 
-**Correct (matching ACC/Revit convention):**
-- `name` = "TRAPPA" (Room Name from ACC "Name" field)
-- `common_name` = "10026 TRAPPA" (Number + Name combined)
+**File: `src/components/settings/ApiSettingsModal.tsx`**
 
-The issue is in `extractBimHierarchy` (lines 757-798): the code sets `designation = number` and puts it in `room.name`, while the descriptive name goes only into `common_name` as a suffix. The logic needs to be swapped so that:
-- `room.name` = the descriptive name (from "Name", type/family, or Room Name field)
-- `room.commonName` = "Number DescriptiveName"
+- Widen the dialog: change `sm:max-w-2xl` to `sm:max-w-3xl` to give more breathing room
+- Change the TabsList from `grid-cols-7` to a horizontally scrollable `flex` layout so tabs don't compress on small screens
+- Add `overflow-x-auto` and `whitespace-nowrap` to the TabsList container
+- In the ACC section, wrap the action buttons (`flex-wrap`) and ensure they stack vertically on mobile using `flex-col sm:flex-row`
+- Make the folder browser `max-h` slightly larger on desktop and add horizontal scroll for long file names
+- Ensure the AccFolderNode items don't overflow by adding `overflow-hidden` and `min-w-0` to text containers
 
-### 2. Extract More Room Properties (Area, etc.)
+---
 
-Currently, room objects from BIM only store minimal attributes (`source`, `acc_project_id`, `bim_external_id`, `bim_level_ref`). Asset+ rooms have rich properties like Area, BRA, NTA, Department, etc.
+## Issue 2: ACC Region Not Controlling Folder Fetches
 
-The Model Properties API returns all Revit parameters for each room object. We need to:
-1. Resolve additional field keys from `fieldsMap`: "Area", "Perimeter"/"Omkrets", "Department"/"Avdelning", "Volume", "Unbounded Height"
-2. Store resolved values in the `attributes` JSON column (matching the Asset+ pattern with `name`, `value`, `dataType`)
-3. Populate `gross_area` DB column with the Area value when available
+The root cause: `list-folders` uses `ACC_ACCOUNT_ID` to construct the hub ID (`b.{accountId}`), and this is a single value. The Autodesk Data Management API scopes folders to a specific hub. If the hub belongs to an EMEA account, changing the region header to US won't make it return US folders -- the hub itself determines which data center and which projects are visible.
 
-### 3. Extract BIM Instances (Doors, Windows, Walls, etc.)
+**The fix needs to support separate US and EMEA account IDs**, or alternatively let the user specify an Account ID alongside the region switch.
 
-Currently `extractBimHierarchy` only looks for "Revit Level" and "Revit Rooms" categories. All other objects (doors, windows, walls, furniture, MEP equipment) are ignored.
+### Changes
 
-In Revit/ACC, these are elements with categories like:
-- "Revit Doors" / "Doors"
-- "Revit Windows" / "Windows"  
-- "Revit Walls" / "Walls"
-- "Revit Furniture" / "Furniture"
-- "Revit Mechanical Equipment" / "Mechanical Equipment"
-- Generic "Revit Family Instances"
+**File: `supabase/functions/acc-sync/index.ts`**
 
-These map to `category: 'Instance'` (objectType 4) in Asset+.
+- In `list-projects` and `list-folders` actions: check for `ACC_ACCOUNT_ID_US` and `ACC_ACCOUNT_ID_EMEA` environment variables alongside the existing `ACC_ACCOUNT_ID`
+- When `region === 'US'`, prefer `ACC_ACCOUNT_ID_US`, fall back to `ACC_ACCOUNT_ID`
+- When `region === 'EMEA'`, prefer `ACC_ACCOUNT_ID_EMEA`, fall back to `ACC_ACCOUNT_ID`
+- Log which account ID and region is being used for each request
+- In `list-folders` and `list-projects`, also save the used region to the cache so it persists
 
-**Approach:**
-- After extracting levels and rooms, do a second pass over all objects
-- Skip levels, rooms, and non-physical categories (views, grids, reference planes)
-- Extract: name, type/family, level reference, room reference (if available)
-- Store as `fm_guid: acc-bim-instance-{externalId}`, `category: 'Instance'`
-- Link to building, level, and room via the existing hierarchy
+**File: `src/components/settings/ApiSettingsModal.tsx`**
 
-**Important constraint:** BIM models can contain 10,000-50,000+ instances. To avoid overwhelming the database:
-- Only extract instances with meaningful categories (skip annotations, grids, reference planes)
-- Batch upsert in chunks of 200
-- Log count per category for diagnostics
+- Add a clear label next to the region switch showing which Account ID (abbreviated) is being used for the selected region
+- When region changes, automatically clear the folder cache (`setAccFolders(null)`) so stale EU/US data isn't shown
+- After switching region, if folders were previously loaded, show a hint to re-fetch
 
-## Technical Details
+---
 
-### File: `supabase/functions/acc-sync/index.ts`
+## Issue 3: 3D Conversion Error (Red Box)
 
-#### A. Fix `extractBimHierarchy` room naming (lines 757-798)
+The pipeline requests SVF2 format from the Model Derivative API (line 1828: `{ type: "svf2", views: ["3d"] }`), but the client-side converter uses `parseGLTFIntoXKTModel` which expects GLB/glTF data. SVF2 is Autodesk's proprietary format and cannot be parsed as glTF -- this causes the red error box.
 
-```text
-// BEFORE (wrong):
-room.name = designation;          // "10026" (Number)
-room.commonName = "10026 TRAPPA"; // or just "10026"
+### Solution: Request OBJ format instead of SVF2
 
-// AFTER (correct):
-room.name = descriptiveName;      // "TRAPPA" (Room Name)
-room.commonName = "10026 TRAPPA"; // Number + Name
-room.number = designation;        // "10026" (kept for reference)
-```
+The Autodesk Model Derivative API supports OBJ output, and `@xeokit/xeokit-convert` can parse OBJ via `parseGLTFIntoXKTModel` if provided as binary. However, the cleanest approach is:
 
-#### B. Add property extraction for rooms
+1. Keep SVF2 for the Autodesk Viewer (if ever needed)
+2. Additionally request OBJ output format for XKT conversion
+3. In `download-derivative`, prefer OBJ derivatives over SVF2
+4. In the client-side converter, detect the file format (OBJ vs GLB) and use the appropriate parser
 
-Resolve these additional field keys from `fieldsMap`:
-- "Area" / "area" 
-- "Perimeter" / "Omkrets" / "perimeter"
-- "Volume" / "volume"
-- "Department" / "Avdelning"
-- "Unbounded Height" / "Rumshojd"
+### Changes
 
-Store in room object and pass through to `upsertBimAssets`.
+**File: `supabase/functions/acc-sync/index.ts`** -- `translate-model` action
 
-#### C. Add instance extraction
+- Change output formats to include OBJ: `formats: [{ type: "svf2", views: ["3d"] }, { type: "obj" }]`
+- Update `output_format` in the DB record to `"svf2,obj"`
+- Log the translation request body for debugging
 
-Add a new collection pass in the props loop:
-- Identify instances by exclusion (not Level, not Room, not abstract categories)
-- Skip categories: "Views", "Grids", "Reference Planes", "Sheets", "Scope Boxes", "Matchline", "Detail Items", "Model Text"
-- Collect: externalId, name, category, type/family, level ref, room ref (if "Room" field exists)
-- Return as `instances[]` from `extractBimHierarchy`
+**File: `supabase/functions/acc-sync/index.ts`** -- `download-derivative` action
 
-#### D. Update `upsertBimAssets` (lines 864-960)
+- In the derivative selection logic, prefer OBJ derivatives (mime `application/octet-stream` with `.obj` extension or `obj` output type)
+- Log the available derivative formats so we can debug what Autodesk actually provides
+- Add format metadata to the response so the client knows what it downloaded
 
-- Accept `instances[]` parameter
-- Add room properties to attributes JSON (area, perimeter, department, etc.)
-- Set `gross_area` column for rooms when Area is available
-- Upsert instances as `category: 'Instance'` with `fm_guid: acc-bim-instance-{externalId}`
-- Link instances to levels and rooms using the level/room maps
+**File: `src/services/acc-xkt-converter.ts`**
 
-#### E. Update `sync-bim-data` action response
+- In `convertGlbToXkt`, add file format detection:
+  - Check first 4 bytes for GLB magic (`glTF` = `0x46546C67`)
+  - Check first bytes for OBJ signature (`#` or `v `)
+  - If SVF2 (neither GLB nor OBJ), throw a clear error: "SVF2-format stods inte for klientkonvertering. Kontakta support."
+- Add an `parseOBJIntoXKTModel` path if `@xeokit/xeokit-convert` supports it (check available exports)
+- Improve error messages to show what format was detected vs expected
 
-- Include instance count in response message
-- Update `upsertBimAssets` return type to include instance count
+---
 
-### File: `src/components/settings/ApiSettingsModal.tsx`
+## Files to Modify
 
-- Update sync result display to show instance count alongside levels and rooms
+| File | Changes |
+|---|---|
+| `src/components/settings/ApiSettingsModal.tsx` | Widen dialog, scrollable tabs, responsive button layout, clear folders on region change |
+| `supabase/functions/acc-sync/index.ts` | Region-specific Account IDs, OBJ output format in translate-model, derivative format logging |
+| `src/services/acc-xkt-converter.ts` | File format detection, OBJ parser support, better error messages |
 
-## Expected Result After Re-sync
+## Expected Results
 
-- Room `name` = "TRAPPA" (descriptive name from ACC)
-- Room `common_name` = "10026 TRAPPA" (number + name)
-- Room `gross_area` = 15.5 (from BIM Area property)
-- Room `attributes` includes Area, Perimeter, Department, etc.
-- Instances (doors, windows, walls) appear as `category: 'Instance'` in the database
-- Instance `common_name` = "Door Type A" (type/family name)
-- Instance `level_fm_guid` and `in_room_fm_guid` linked to hierarchy
-
-## Excluded Categories (Instances)
-
-These Revit categories will be skipped as they're not physical assets:
-"Views", "Grids", "Reference Planes", "Sheets", "Scope Boxes", "Matchline", "Detail Items", "Model Text", "Lines", "Filled Region", "Project Information", "Material Assets", "Schedules", "Legends"
+- Settings modal is usable on narrow screens without overflow
+- Switching US/EMEA fetches folders from the correct hub
+- 3D conversion either succeeds (with OBJ format) or shows a clear diagnostic error instead of a generic red box
