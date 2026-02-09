@@ -2587,8 +2587,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // additionalDefaultPredicate - undefined = load all models (default behavior)
-        undefined,
+        // additionalDefaultPredicate - () => true = load ALL models for this building
+        () => true,
         // externalCustomObjectContextMenuItems
         undefined,
         // horizontalAngle (use default)

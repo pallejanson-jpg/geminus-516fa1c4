@@ -430,7 +430,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
         <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card/95 backdrop-blur-md">
           <SheetHeader className="p-4 pb-2 border-b">
             <SheetTitle className="flex items-center gap-2 text-base">
