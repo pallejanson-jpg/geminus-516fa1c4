@@ -1,120 +1,135 @@
 
 
-# Fix Virtual Twin: Site ID, Object Selection, and Toolbar Customization
+# Fix Virtual Twin: Three View Modes with Top-Center Toolbar
 
-## Problem 1: Ivion shows site selection menu instead of the building
+## Current Problems
 
-The NavVis SDK's `getApi(baseUrl, config)` initializes the viewer but does NOT automatically navigate to a specific site. The `ConfigurationInterface` only accepts `loginToken`, `lang`, etc. -- there is no `siteId` config option.
+1. **SDK timeout** causes fallback to iframe mode with a tab switcher at the bottom
+2. The tab switcher only toggles between 360-degrees and 3D -- it does not split the screen
+3. The toolbar is at the bottom (`absolute bottom-6`) instead of top-center
+4. There is no "Split" option -- only 360-degrees and 3D tabs
+5. Iframe fallback is undesirable
 
-After the SDK loads, `api.site.service.activeSite` is undefined, and the user is shown Ivion's built-in site selection menu.
+## Solution: Unified Three-Mode Virtual Twin
 
-**Fix:** After `loadIvionSdk()` resolves, use the SDK's Site API to programmatically load the correct site:
+Replace the current binary (SDK-mode vs fallback-mode) logic with a proper three-mode view system:
 
-```
-api.site.repository.findOne(siteId)  -->  SiteInterface object
-api.site.service.loadSite(site)      -->  Navigates to that site
-```
+| Mode | Description | Default? |
+|------|-------------|----------|
+| **Split** | 3D transparent overlay on 360-degree (SDK mode) | Yes (default) |
+| **360** | Only the 360-degree panorama (SDK mode, 3D hidden) | No |
+| **3D** | Only the 3D BIM viewer (Ivion hidden) | No |
 
-The site ID is already available in `buildingInfo.ivionSiteId` (fetched from `building_settings`). After loading the site, also hide the sidebar menu items (same approach as `Ivion360View` already does on mobile).
+### View Mode Toolbar
 
-| File | Change |
-|---|---|
-| `src/lib/ivion-sdk.ts` | Accept optional `siteId` parameter in `loadIvionSdk()`. After `getApi()` resolves, call `api.site.repository.findOne(siteId)` then `api.site.service.loadSite(site)`. Also hide all sidebar menu items and close the sidebar. |
-| `src/pages/VirtualTwin.tsx` | Pass `buildingInfo.ivionSiteId` to `loadIvionSdk()` |
-| `src/components/viewer/Ivion360View.tsx` | Also pass `siteId` to `loadIvionSdk()` for consistency |
-
-## Problem 2: Cannot select objects in the 3D overlay
-
-The 3D overlay div (line 341 in VirtualTwin.tsx) has `pointer-events: none` so that navigation clicks pass through to Ivion. This is correct for pan/rotate, but it also prevents clicking on 3D objects to select them.
-
-**Fix:** Toggle pointer events on the 3D canvas based on the active tool in AssetPlusViewer. When the "select" tool is active, the canvas needs `pointer-events: auto` to receive clicks. When navigating (orbit, first person), it should be `pointer-events: none`.
-
-Implementation approach:
-- Add a custom event `VIEWER_TOOL_CHANGED` that ViewerToolbar dispatches whenever the active tool changes
-- VirtualTwin listens for this event and toggles `pointer-events` on the 3D overlay div
-- Default state: `pointer-events: none` (navigation mode)
-- When select/measure/slicer tool is active: `pointer-events: auto` on the overlay
-
-| File | Change |
-|---|---|
-| `src/lib/viewer-events.ts` | Add `VIEWER_TOOL_CHANGED_EVENT` constant and `ViewerToolChangedDetail` type |
-| `src/components/viewer/ViewerToolbar.tsx` | Dispatch `VIEWER_TOOL_CHANGED_EVENT` when active tool changes |
-| `src/pages/VirtualTwin.tsx` | Listen for `VIEWER_TOOL_CHANGED_EVENT` and toggle pointer-events on the 3D overlay accordingly |
+A centered toolbar at the top (below the header bar) with three buttons: **360**, **Split**, **3D**. The "Split" button sits between the other two, visually indicating the blended mode.
 
 ```text
-Tool is "select", "measure", or "slicer":
-  3D overlay: pointer-events: auto   (clicks go to 3D for object interaction)
-
-Tool is null (orbit/firstPerson/zoom navigation):
-  3D overlay: pointer-events: none   (clicks pass to Ivion for panorama navigation)
++--[Back]--[Building Name]----[360] [Split] [3D]----[Opacity] [Align] [FS]--+
+|                                                                             |
+|                      (viewport content based on mode)                       |
+|                                                                             |
++-----------------------------------------------------------------------------+
 ```
 
-## Problem 3: Toolbar customization does not take effect
+The toolbar is integrated into the existing header bar (line 447), not a separate floating element.
 
-There are two bugs in `getToolbarSettings()` and `getNavigationToolSettings()`:
+## Technical Changes
 
-**Bug A: User's custom order is always lost**
+### File: `src/pages/VirtualTwin.tsx`
 
-`getToolbarSettings()` iterates `DEFAULT_TOOLS.map(...)` which always returns tools in the hardcoded default order. The user's drag-and-drop reordering (stored in localStorage) is completely ignored because the merge uses the defaults as the iteration base.
+**1. Replace state variables:**
+- Remove: `fallbackTab` state (`FallbackTab` type)
+- Remove: `showFallback` derived boolean
+- Add: `viewMode` state of type `'split' | '360' | '3d'`, default `'split'`
 
-**Bug B: `getNavigationToolSettings()` also loses order**
+**2. Always attempt SDK loading:**
+- The SDK loads regardless of view mode (since both "Split" and "360" need it)
+- If SDK fails, show a toast notification and auto-switch to "3D" mode
+- Remove the iframe fallback entirely -- no more `<iframe>` tags
 
-Even if `getToolbarSettings()` preserved order, `getNavigationToolSettings()` iterates `NAVIGATION_TOOLS.map(...)` which again uses the default order.
+**3. Increase SDK timeout:**
+- Change timeout from 15000ms to 30000ms
+- The SDK sometimes takes longer to initialize depending on network conditions
 
-**Fix:** Change `getToolbarSettings()` to use the stored array's order as the base, only adding new tools that don't exist in stored settings. Change `getNavigationToolSettings()` and `getVisualizationToolSettings()` to filter from the ordered result instead of mapping from defaults.
+**4. Render logic based on viewMode:**
 
-| File | Change |
-|---|---|
-| `src/components/viewer/ToolbarSettings.tsx` | Rewrite `getToolbarSettings()` to preserve stored order. Rewrite `getNavigationToolSettings()` and `getVisualizationToolSettings()` to filter from ordered settings instead of mapping from defaults. |
+```text
+viewMode === 'split':
+  Show: Ivion SDK layer (z-0) + transparent 3D overlay (z-10)
+  Same as current SDK mode
 
-### Detailed fix for order preservation:
+viewMode === '360':
+  Show: Ivion SDK layer only (z-0)
+  Hide: 3D overlay (display: none, stays mounted)
 
-**Before (broken):**
-```
-getToolbarSettings():
-  DEFAULT_TOOLS.map(defaultTool => {
-    find in stored -> merge
-  })
-  // Always returns default order
-```
-
-**After (fixed):**
-```
-getToolbarSettings():
-  1. Start with stored tools in their saved order
-  2. For each stored tool, merge with default (to pick up label changes)
-  3. Append any new default tools not in stored settings
-  // Returns user's saved order
+viewMode === '3d':
+  Show: AssetPlusViewer only (full opacity, not transparent)
+  Hide: Ivion SDK layer (display: none, stays mounted)
 ```
 
-**Before (broken):**
-```
-getNavigationToolSettings():
-  NAVIGATION_TOOLS.map(navTool => find in allSettings)
-  // Always returns default navigation order
-```
+Keeping both layers mounted (but hidden with `display: none`) avoids re-initialization when switching modes.
 
-**After (fixed):**
-```
-getNavigationToolSettings():
-  allSettings.filter(t => NAVIGATION_TOOL_IDS.has(t.id))
-  // Returns user's saved order, filtered to navigation tools only
+**5. Move mode switcher into the header bar:**
+- Remove the bottom-positioned fallback tab switcher (lines 399-427)
+- Remove the fallback info banner (lines 429-443)
+- Remove the iframe block (lines 372-397)
+- Add three-button mode switcher inside the existing header toolbar (line 447)
+- Buttons styled like the existing fallback buttons but with a "Split" option in the middle
+- Ghost opacity slider and alignment button only visible when viewMode is 'split' or '3d'
+
+**6. SDK error handling:**
+- When SDK fails, show a toast: "360-SDK kunde inte laddas. Visar 3D-modell."
+- Auto-switch to '3d' mode
+- The 360 and Split buttons become disabled with a tooltip explaining SDK is unavailable
+- Add a small retry button next to the disabled buttons
+
+### Detailed render structure after changes:
+
+```text
+<div className="h-screen w-screen relative overflow-hidden bg-black">
+
+  <!-- Ivion SDK layer: visible in 'split' and '360' modes -->
+  <div
+    ref={sdkContainerRef}
+    className="absolute inset-0 z-0"
+    style={{ display: viewMode === '3d' ? 'none' : 'block' }}
+  />
+
+  <!-- 3D overlay: visible in 'split' mode (transparent) and '3d' mode (opaque) -->
+  <div
+    className="absolute inset-0 z-10"
+    style={{
+      display: viewMode === '360' ? 'none' : 'block',
+      pointerEvents: (viewMode === 'split' && !overlayInteractive) ? 'none' : 'auto',
+    }}
+  >
+    <AssetPlusViewer
+      transparentBackground={viewMode === 'split'}
+      ghostOpacity={viewMode === 'split' ? ghostOpacity / 100 : 1}
+      suppressOverlay={viewMode === 'split'}
+      ...
+    />
+  </div>
+
+  <!-- Header toolbar with integrated mode switcher -->
+  <div className="absolute top-0 left-0 right-0 z-40 ...">
+    <!-- Left: Back button + building name -->
+    <!-- Center: View mode switcher [360] [Split] [3D] -->
+    <!-- Right: Opacity slider + Alignment + Fullscreen -->
+  </div>
+</div>
 ```
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/lib/ivion-sdk.ts` | Add `siteId` parameter to `loadIvionSdk()`. After SDK init, auto-load site via `api.site.repository.findOne()` + `api.site.service.loadSite()`. Hide sidebar menu items. |
-| `src/lib/viewer-events.ts` | Add `VIEWER_TOOL_CHANGED_EVENT` constant and type |
-| `src/pages/VirtualTwin.tsx` | (1) Pass siteId to `loadIvionSdk()`, (2) listen for tool change events and toggle 3D overlay pointer-events |
-| `src/components/viewer/ViewerToolbar.tsx` | Dispatch `VIEWER_TOOL_CHANGED_EVENT` on tool changes |
-| `src/components/viewer/Ivion360View.tsx` | Pass siteId to `loadIvionSdk()` for consistency |
-| `src/components/viewer/ToolbarSettings.tsx` | Fix `getToolbarSettings()`, `getNavigationToolSettings()`, and `getVisualizationToolSettings()` to preserve user's saved order |
+| `src/pages/VirtualTwin.tsx` | (1) Replace fallbackTab with viewMode state, (2) Remove iframe fallback entirely, (3) Move mode switcher from bottom to header bar with Split/360/3D buttons, (4) Split as default mode, (5) Increase SDK timeout to 30s, (6) On SDK failure: toast + auto-switch to 3D + disable Split/360 buttons |
 
 ## Risk Assessment
 
-- **Site loading (low risk):** Uses the SDK's own documented API (`site.repository.findOne` + `site.service.loadSite`). If site loading fails, the user sees the same site selection menu as today -- no regression.
-- **Pointer-events toggle (low risk):** Only affects the Virtual Twin page. Default is `pointer-events: none` (same as today). Adds interactivity only when a tool is explicitly active.
-- **Toolbar order fix (low risk):** Only changes the merge logic in `getToolbarSettings`. The stored data format is unchanged. Existing users' saved settings will immediately work correctly.
+- **Removing iframe fallback (low risk):** The iframe was a degraded experience anyway. When SDK fails, showing 3D-only is better than a limited iframe.
+- **Three modes (low risk):** Uses the same layers as today, just toggles visibility with `display: none/block`. No re-initialization needed.
+- **SDK timeout increase (no risk):** Gives the SDK more time without any downside.
 
