@@ -32,6 +32,7 @@ import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi } from '@/lib/ivion-sdk';
 import { buildTransformFromSettings, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
+import { VIEWER_TOOL_CHANGED_EVENT, type ViewerToolChangedDetail } from '@/lib/viewer-events';
 import { toast } from 'sonner';
 
 interface BuildingInfo {
@@ -72,6 +73,9 @@ const VirtualTwin: React.FC = () => {
 
   // Fallback tab mode (when SDK fails)
   const [fallbackTab, setFallbackTab] = useState<FallbackTab>('360');
+
+  // Pointer-events toggle for 3D overlay based on active tool
+  const [overlayInteractive, setOverlayInteractive] = useState(false);
 
   const buildingFmGuid = searchParams.get('building');
 
@@ -173,7 +177,7 @@ const VirtualTwin: React.FC = () => {
         const parsedUrl = new URL(buildingInfo.ivionUrl);
         const baseUrl = parsedUrl.origin;
 
-        const api = await loadIvionSdk(baseUrl, 15000, loginToken);
+        const api = await loadIvionSdk(baseUrl, 15000, loginToken, buildingInfo.ivionSiteId);
         if (cancelled) return;
 
         ivApiRef.current = api;
@@ -294,6 +298,18 @@ const VirtualTwin: React.FC = () => {
     setSdkRetryKey(k => k + 1);
   }, []);
 
+  // ─── Listen for tool changes to toggle pointer-events ──────────────
+  useEffect(() => {
+    const handleToolChanged = (e: CustomEvent<ViewerToolChangedDetail>) => {
+      const { tool } = e.detail;
+      // When select/measure/slicer is active, the 3D overlay needs pointer events
+      setOverlayInteractive(tool === 'select' || tool === 'measure' || tool === 'slicer');
+    };
+
+    window.addEventListener(VIEWER_TOOL_CHANGED_EVENT, handleToolChanged as EventListener);
+    return () => window.removeEventListener(VIEWER_TOOL_CHANGED_EVENT, handleToolChanged as EventListener);
+  }, []);
+
   const showFallback = sdkError && !sdkReady;
 
   // ─── Render ────────────────────────────────────────────────────────
@@ -338,7 +354,7 @@ const VirtualTwin: React.FC = () => {
           {/* Layer 2: Asset+ 3D viewer - transparent overlay */}
           <div
             className="absolute inset-0 z-10"
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: overlayInteractive ? 'auto' : 'none' }}
           >
             <AssetPlusViewer
               fmGuid={buildingInfo.fmGuid}

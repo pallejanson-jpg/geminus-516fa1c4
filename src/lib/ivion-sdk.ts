@@ -186,6 +186,7 @@ export async function loadIvionSdk(
   baseUrl: string,
   timeoutMs: number = 15000,
   loginToken?: string,
+  siteId?: string,
 ): Promise<IvionApi> {
   // Build config object for getApi
   const sdkConfig: Record<string, any> = {};
@@ -248,6 +249,46 @@ export async function loadIvionSdk(
 
   const iv = await Promise.race([apiPromise, timeoutPromise]);
   console.log('[Ivion SDK] Initialized successfully');
+
+  // ── Auto-navigate to site if siteId provided ─────────────────────
+  if (siteId) {
+    try {
+      const siteApi = (iv as any).site;
+      if (siteApi?.repository?.findOne && siteApi?.service?.loadSite) {
+        console.log('[Ivion SDK] Loading site:', siteId);
+        const site = await siteApi.repository.findOne(siteId);
+        if (site) {
+          await siteApi.service.loadSite(site);
+          console.log('[Ivion SDK] Site loaded successfully:', siteId);
+        } else {
+          console.warn('[Ivion SDK] Site not found:', siteId);
+        }
+      } else {
+        console.warn('[Ivion SDK] Site API not available on SDK instance');
+      }
+    } catch (e) {
+      console.warn('[Ivion SDK] Failed to auto-load site (user will see site menu):', e);
+    }
+  }
+
+  // ── Hide sidebar menu items ───────────────────────────────────────
+  try {
+    const menuItems = iv.getMenuItems?.();
+    if (menuItems && Array.isArray(menuItems)) {
+      menuItems.forEach(item => {
+        if (item.setVisible) {
+          item.setVisible(false);
+        } else if (item.isVisible) {
+          item.isVisible = () => false;
+        }
+      });
+      console.log('[Ivion SDK] Hidden', menuItems.length, 'sidebar menu items');
+    }
+    iv.closeMenu?.();
+  } catch (e) {
+    console.debug('[Ivion SDK] Could not hide sidebar items:', e);
+  }
+
   return iv;
 }
 
