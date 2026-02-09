@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +30,7 @@ import ProfileSettings from './ProfileSettings';
 import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 import { SyncProgressCard } from './SyncProgressCard';
+import { accXktConverter, TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -99,7 +100,9 @@ const AccFolderNode: React.FC<{
     formatFileSize: (bytes: number | null) => string;
     selectedBimFiles: Set<string>;
     toggleBimFile: (itemId: string) => void;
-}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize, selectedBimFiles, toggleBimFile }) => {
+    translationStatuses: Record<string, TranslationStatus>;
+    onTranslate3D: (item: any, folder: any) => void;
+}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize, selectedBimFiles, toggleBimFile, translationStatuses, onTranslate3D }) => {
     const hasChildren = (folder.children || []).length > 0;
     const isSyncingThisFolder = syncingBimFolderId === folder.id;
     const isExpanded = expandedFolders.has(folder.id);
@@ -193,6 +196,32 @@ const AccFolderNode: React.FC<{
                                         {isBim && (
                                             <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
                                         )}
+                                        {isBim && item.versionUrn && (() => {
+                                            const ts = translationStatuses[item.versionUrn];
+                                            if (ts?.status === 'complete' || ts?.status === 'success') {
+                                                return <Badge className="text-[9px] shrink-0 px-1 py-0 bg-green-600">3D ✓</Badge>;
+                                            }
+                                            if (ts && ts.status !== 'idle' && ts.status !== 'failed') {
+                                                return (
+                                                    <Badge variant="outline" className="text-[9px] shrink-0 px-1 py-0 gap-0.5">
+                                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                                        {ts.progress || ts.status}
+                                                    </Badge>
+                                                );
+                                            }
+                                            return (
+                                                <Button
+                                                    onClick={(e) => { e.stopPropagation(); onTranslate3D(item, folder); }}
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-5 px-1.5 text-[9px] gap-0.5"
+                                                    disabled={ts?.status === 'pending' || ts?.status === 'inprogress'}
+                                                >
+                                                    <Cuboid className="h-2.5 w-2.5" />
+                                                    {ts?.status === 'failed' ? 'Försök igen' : 'Konvertera 3D'}
+                                                </Button>
+                                            );
+                                        })()}
                                         <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
                                         {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
                                     </div>
@@ -217,6 +246,8 @@ const AccFolderNode: React.FC<{
                                     formatFileSize={formatFileSize}
                                     selectedBimFiles={selectedBimFiles}
                                     toggleBimFile={toggleBimFile}
+                                    translationStatuses={translationStatuses}
+                                    onTranslate3D={onTranslate3D}
                                 />
                             ))}
                         </div>
@@ -328,6 +359,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [syncingBimFolderId, setSyncingBimFolderId] = useState<string | null>(null);
     const [bimSyncProgress, setBimSyncProgress] = useState<string | null>(null);
     const [selectedBimFiles, setSelectedBimFiles] = useState<Set<string>>(new Set());
+    
+    // 3D translation state
+    const [translationStatuses, setTranslationStatuses] = useState<Record<string, TranslationStatus>>({});
     
     // Autodesk 3-legged OAuth state
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
@@ -688,7 +722,47 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
+    // Handle 3D translation for a BIM file
+    const handleTranslate3D = async (item: any, folder: any) => {
+        if (!item.versionUrn) {
+            toast({ variant: 'destructive', title: 'Fel', description: 'Filen saknar versionUrn.' });
+            return;
+        }
 
+        const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
+        const buildingFmGuid = `acc-bim-building-${folder.id.replace(/[^a-zA-Z0-9-]/g, '')}`;
+
+        // Update status to pending
+        setTranslationStatuses(prev => ({ ...prev, [item.versionUrn]: { status: 'pending', message: 'Startar...' } }));
+
+        toast({ title: 'Konvertering startad', description: `Startar 3D-konvertering för ${item.name}...` });
+
+        const result = await accXktConverter.runFullPipeline(
+            item.versionUrn,
+            {
+                buildingFmGuid,
+                folderId: folder.id,
+                fileName: item.name,
+                region: accRegion,
+            },
+            (status) => {
+                setTranslationStatuses(prev => ({ ...prev, [item.versionUrn]: status }));
+            }
+        );
+
+        if (result.status === 'complete') {
+            toast({ title: '3D-konvertering klar', description: `${item.name} har konverterats och laddats upp.` });
+        } else if (result.status === 'failed') {
+            toast({ variant: 'destructive', title: 'Konvertering misslyckades', description: result.error || 'Okänt fel' });
+        }
+    };
+
+    // Cleanup translation polling on unmount
+    useEffect(() => {
+        return () => accXktConverter.stopAllPolling();
+    }, []);
+
+    
     // Save app configs to localStorage (no backend table for apps currently)
     const handleSaveAppConfigs = async () => {
         setIsSavingApps(true);
@@ -2322,6 +2396,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                     formatFileSize={formatFileSize}
                                                                     selectedBimFiles={selectedBimFiles}
                                                                     toggleBimFile={toggleBimFile}
+                                                                    translationStatuses={translationStatuses}
+                                                                    onTranslate3D={handleTranslate3D}
                                                                 />
                                                             ))}
 
