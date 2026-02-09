@@ -169,7 +169,7 @@ const AiAssetScan: React.FC = () => {
   // Show browser scan runner when active
   if (browserScanConfig) {
     return (
-      <div className="h-full flex flex-col p-3 md:p-6">
+      <div className="h-full flex flex-col p-3 md:p-6 bg-background">
         <div className="flex items-center gap-2 mb-4">
           <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0 h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
@@ -193,7 +193,7 @@ const AiAssetScan: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-3 md:p-6 overflow-hidden">
+    <div className="h-full flex flex-col p-3 md:p-6 overflow-hidden bg-background">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 md:mb-6 gap-2">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
