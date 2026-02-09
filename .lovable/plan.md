@@ -1,63 +1,50 @@
 
+# Fix AI Scanning: Button Visibility, Styling, and SDK Initialization
 
-# Fix ACC Folder Contents: Files Not Showing in "01 Modeller"
+## Problem 1: Start Button Hidden Below Scroll
+The "Starta AI-skanning" button sits after three full cards (Building Selection, Template Selection, Info Card) and is not visible without scrolling. On most screens it's completely off-screen.
 
-## Problem
+### Fix: `ScanConfigPanel.tsx`
+- Move the start button to a **sticky bottom bar** using `sticky bottom-0 bg-background` so it's always visible regardless of scroll position
+- Add a top border and padding for visual separation
 
-The ACC integration lists folders correctly but shows no files inside "01 Modeller". This is caused by two issues in the current `list-folders` action in `acc-sync`:
+## Problem 2: White Background / Poor Dark Mode Styling
+The scan config page uses default card backgrounds that appear as plain white in light mode with no visual hierarchy.
 
-1. **No pagination** -- The Data Management API paginates results and applies pagination *before* filtering. The current code makes a single request and never follows `links.next`, so it may get an empty first page or miss items entirely.
-2. **No recursive folder traversal** -- If "01 Modeller" contains sub-folders (common in ACC where models are organized in nested structures), the code only looks one level deep and won't find files in child folders.
-3. **Cloud Models (C4RModel)** -- ACC often stores Revit files as "Cloud Models" with a different extension type (`items:autodesk.bim360:C4RModel`). These may require different handling than regular uploaded items.
+### Fix: `AiAssetScan.tsx`
+- Add `bg-background` to the root container to ensure theme-aware background
+- The cards already use `Card` which should adapt, but the outer page container needs the correct background class
 
-## Solution
+## Problem 3: "Laddar 360-visare" Hangs Forever
+Console logs show repeated `TypeError: Cannot read properties of null (reading 'offsetHeight')` from Ivion's internal `LeftPanelComponent`. This means the `<ivion>` element is either:
+- Not yet mounted in the DOM when the SDK initializes
+- Has zero dimensions (the container has `min-h-[300px]` but may not have actual height in the flex layout)
 
-### 1. Add Pagination to Folder Contents Fetching
-
-In `supabase/functions/acc-sync/index.ts`, create a helper function `fetchAllFolderContents` that follows `links.next` until no more pages exist:
-
-```text
-fetchAllFolderContents(token, projectId, folderId, regionHeaders)
-  -> GET /data/v1/projects/{pid}/folders/{fid}/contents
-  -> Follow links.next until exhausted
-  -> Collect all data[] items and included[] metadata
-  -> Return combined results
-```
-
-### 2. Add Recursive Sub-folder Traversal
-
-When listing a folder's contents, if sub-folders are found inside (e.g., "01 Modeller" contains year-folders or discipline-folders), recursively fetch their contents too. Limit recursion depth to 3 levels to avoid infinite loops.
-
-### 3. Handle Cloud Models
-
-Recognize items with extension type `items:autodesk.bim360:C4RModel` as BIM files. These are Revit Cloud Worksharing models that should be treated the same as `.rvt` files for BIM sync purposes.
+### Fix: `BrowserScanRunner.tsx`
+- Give the viewer container **explicit pixel dimensions** instead of relying on flex-grow (`min-h-[400px]` and `width: 100%`)
+- Add a `useEffect` that waits for the container to have non-zero dimensions before setting `enabled=true` on `useIvionSdk`, instead of enabling immediately
+- Ensure the `<ivion>` element is `display: block` with `width: 100%; height: 100%` (the SDK requires the element to be visible and sized before init)
+- Handle the `sdkStatus === 'failed'` state to show an error message with retry instead of being stuck on "Laddar..."
 
 ## Technical Changes
 
-### File: `supabase/functions/acc-sync/index.ts`
+### File: `src/components/ai-scan/ScanConfigPanel.tsx`
+- Wrap the start button in a `sticky bottom-0` container with `bg-background border-t pt-3 pb-1`
+- Move it from inside the scrollable `space-y-6` div to a sibling position
 
-**New helper function**: `fetchAllFolderContents(token, projectId, folderId, regionHeaders)`
-- Fetches folder contents with full pagination (follow `links.next`)
-- Returns `{ items: [], folders: [], included: [] }`
+### File: `src/components/ai-scan/BrowserScanRunner.tsx`
+- Change viewer container from `flex-1 min-h-[300px]` to a fixed `min-h-[400px] h-[50vh]` to guarantee dimensions
+- Delay SDK initialization: use a ref check to confirm container has non-zero `offsetHeight` before enabling
+- Show "Fel: SDK kunde inte laddas" when `sdkStatus === 'failed'` instead of staying on "Laddar..."
+- Add background color `bg-muted` to viewer container for better visual appearance
 
-**Modified `list-folders` action** (line 1116):
-- Replace single `fetch` calls with `fetchAllFolderContents`
-- Add recursive traversal for nested sub-folders (max depth 3)
-- Include Cloud Model type detection (`items:autodesk.bim360:C4RModel` and `items:autodesk.bim360:File`)
-- Return nested folder structure so the UI can display the full hierarchy
-
-**Modified `isBimFile` function** (line 522):
-- Also return true for items with Cloud Model extension types, not just file extension matching
-
-### File: `src/components/settings/ApiSettingsModal.tsx`
-
-- Update folder display to support nested sub-folders (show expandable tree)
-- Show item count per folder including nested items
+### File: `src/pages/AiAssetScan.tsx`
+- Add `bg-background` to root container to fix white background in dark mode
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `supabase/functions/acc-sync/index.ts` | Add pagination helper, recursive folder traversal, Cloud Model support |
-| `src/components/settings/ApiSettingsModal.tsx` | Support nested folder display in UI |
-
+| `src/components/ai-scan/ScanConfigPanel.tsx` | Sticky bottom start button |
+| `src/components/ai-scan/BrowserScanRunner.tsx` | Fix SDK container sizing, add dimension check before init, handle failed state |
+| `src/pages/AiAssetScan.tsx` | Fix background color for dark mode |
