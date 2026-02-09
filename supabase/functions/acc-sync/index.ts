@@ -665,33 +665,63 @@ async function extractBimHierarchy(
           const propsText = await propsRes.text();
           const props = parseLDJSON(propsText);
 
-          // Known keys: p5eddc473 = Category, p153cb174 = Name
-          let categoryKey = 'p5eddc473';
-          let nameKey = 'p153cb174';
-          let elevationKey = 'pdf1348b1';
-          let levelKey = 'pbadfe721';
+          // === Dynamic field key resolution ===
+          let categoryKey = '';
+          let nameKey = '';
+          let elevationKey = '';
+          let levelKey = '';
           let numberKey = '';
+          let roomNameKey = '';  // Separate key for "Room Name" / "Rumsnamn"
+          let departmentKey = '';
 
-          // Try to find keys from fieldsMap for human-readable names
+          // Build reverse map: lowercase field name -> key
           for (const [key, name] of Object.entries(fieldsMap)) {
-            const lowerName = (name as string).toLowerCase();
+            const lowerName = (name as string).toLowerCase().trim();
             if (lowerName === 'category' || lowerName === 'kategori') categoryKey = key;
             if (lowerName === 'name' || lowerName === 'namn') nameKey = key;
-            if (lowerName === 'elevation' || lowerName === 'höjd') elevationKey = key;
+            if (lowerName === 'elevation' || lowerName === 'höjd' || lowerName === 'elev') elevationKey = key;
             if (lowerName === 'level' || lowerName === 'våning' || lowerName === 'nivå') levelKey = key;
             if (lowerName === 'number' || lowerName === 'nummer') numberKey = key;
+            // Additional room-specific name fields
+            if (lowerName === 'room name' || lowerName === 'room_name' || lowerName === 'rumsnamn' || lowerName === 'room: name') roomNameKey = key;
+            if (lowerName === 'department' || lowerName === 'avdelning' || lowerName === 'funktionsnamn') departmentKey = key;
           }
+
+          // Fallback to hardcoded keys if not found
+          if (!categoryKey) categoryKey = 'p5eddc473';
+          if (!nameKey) nameKey = 'p153cb174';
+          if (!elevationKey) elevationKey = 'pdf1348b1';
+          if (!levelKey) levelKey = 'pbadfe721';
+
+          // Debug logging for field discovery
+          console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}`);
+          console.log(`[BIM Fields] Total fields in fieldsMap: ${Object.keys(fieldsMap).length}`);
+          // Log all fields for debugging (first sync)
+          const fieldEntries = Object.entries(fieldsMap).map(([k, v]) => `${k}=${v}`).join(', ');
+          console.log(`[BIM Fields] All fields: ${fieldEntries.substring(0, 2000)}`);
+
+          let debugLevelLogged = false;
+          let debugRoomLogged = false;
 
           for (const obj of props) {
             const category = obj.props?.[categoryKey] || '';
             const rawName = obj.props?.[nameKey] || '';
             const number = numberKey ? (obj.props?.[numberKey] || '') : '';
+            const roomNameVal = roomNameKey ? (obj.props?.[roomNameKey] || '') : '';
+            const departmentVal = departmentKey ? (obj.props?.[departmentKey] || '') : '';
             const externalId = obj.externalId || obj.svf2Id?.toString() || '';
 
             if (category === 'Revit Level' || category === 'Levels') {
-              // For levels: prefer Name, fall back to "Level <elevation>" or "Level <objectId>"
+              // Debug: log first level's full props
+              if (!debugLevelLogged) {
+                console.log(`[BIM Debug] First level props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
+                debugLevelLogged = true;
+              }
+
+              // For levels: prefer Name property, fall back to elevation, then objectId
               let levelName = rawName;
-              if (!levelName || levelName === externalId || levelName.length > 40) {
+              // If Name is empty, is a GUID, or looks like an element type name (e.g. "Level")
+              if (!levelName || levelName === externalId || levelName.length > 40 || levelName === 'Level') {
                 const elev = obj.props?.[elevationKey];
                 levelName = elev != null ? `Level ${parseFloat(elev).toFixed(1)}m` : `Level ${obj.objectId || externalId.slice(-8)}`;
               }
@@ -703,20 +733,42 @@ async function extractBimHierarchy(
                 versionUrn: idx.versionUrn,
               });
             } else if (category === 'Revit Rooms' || category === 'Rooms') {
-              // For rooms: prefer "Number Name" (e.g. "101 Korridor"), fall back to Name, then "Room <objectId>"
-              let roomName = '';
-              if (number && rawName && rawName !== externalId) {
-                roomName = `${number} ${rawName}`;
-              } else if (number) {
-                roomName = number;
-              } else if (rawName && rawName !== externalId && rawName.length < 40) {
-                roomName = rawName;
-              } else {
-                roomName = `Room ${obj.objectId || externalId.slice(-8)}`;
+              // Debug: log first room's full props
+              if (!debugRoomLogged) {
+                console.log(`[BIM Debug] First room props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
+                debugRoomLogged = true;
               }
+
+              // Determine the best descriptive name for the room
+              // Priority: Room Name > Department > generic Name (if it's not just "Room")
+              let descriptiveName = '';
+              if (roomNameVal && roomNameVal !== externalId) {
+                descriptiveName = roomNameVal;
+              } else if (departmentVal && departmentVal !== externalId) {
+                descriptiveName = departmentVal;
+              } else if (rawName && rawName !== externalId && rawName !== 'Room' && rawName.length < 40) {
+                descriptiveName = rawName;
+              }
+
+              // Designation = Number (e.g. "K1-205", "08001")
+              const designation = number || '';
+
+              // common_name follows Asset+ convention: "Number Description" or just Number
+              let roomCommonName = '';
+              if (designation && descriptiveName) {
+                roomCommonName = `${designation} ${descriptiveName}`;
+              } else if (designation) {
+                roomCommonName = designation;
+              } else if (descriptiveName) {
+                roomCommonName = descriptiveName;
+              } else {
+                roomCommonName = `Room ${obj.objectId || externalId.slice(-8)}`;
+              }
+
               allRooms.push({
                 externalId,
-                name: roomName.trim(),
+                name: designation, // name = designation (like Asset+)
+                commonName: roomCommonName.trim(),
                 level: obj.props?.[levelKey] || null,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
@@ -731,6 +783,58 @@ async function extractBimHierarchy(
   }
 
   console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms from ${finishedIndexes.length} models`);
+
+  // === Post-processing: fix level names using room references ===
+  // If levels have GUID-like names but rooms reference human-readable level names,
+  // use the room references to back-fill level names.
+  const roomLevelRefs = new Set<string>();
+  for (const room of allRooms) {
+    if (room.level) roomLevelRefs.add(room.level);
+  }
+
+  if (roomLevelRefs.size > 0 && allLevels.length > 0) {
+    // Check if level names look like GUIDs (contain hex patterns or "Level <objectId>")
+    const levelsHaveBadNames = allLevels.every(l =>
+      /^Level\s+[0-9a-f]{6,}/i.test(l.name) || /^Level\s+\d+\.\d+m$/.test(l.name)
+    );
+
+    if (levelsHaveBadNames) {
+      console.log(`[BIM Fix] Levels have GUID-like names. Room level refs: ${[...roomLevelRefs].join(', ')}`);
+
+      // Sort levels by elevation (if available) or objectId
+      const sortedLevels = [...allLevels].sort((a, b) => {
+        const ea = a.elevation != null ? parseFloat(a.elevation) : (a.objectId || 0);
+        const eb = b.elevation != null ? parseFloat(b.elevation) : (b.objectId || 0);
+        return (ea as number) - (eb as number);
+      });
+
+      // Sort room level refs naturally
+      const sortedRefs = [...roomLevelRefs].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      // Try to match by count (if same number of levels and refs)
+      if (sortedLevels.length === sortedRefs.length) {
+        for (let i = 0; i < sortedLevels.length; i++) {
+          const oldName = sortedLevels[i].name;
+          sortedLevels[i].name = sortedRefs[i];
+          // Update in allLevels array
+          const origLevel = allLevels.find(l => l.externalId === sortedLevels[i].externalId);
+          if (origLevel) origLevel.name = sortedRefs[i];
+          console.log(`[BIM Fix] Level "${oldName}" -> "${sortedRefs[i]}"`);
+        }
+      } else {
+        // Different counts: assign refs to levels by best effort (order-based)
+        console.log(`[BIM Fix] Level count (${sortedLevels.length}) != ref count (${sortedRefs.length}), assigning by order`);
+        for (let i = 0; i < Math.min(sortedLevels.length, sortedRefs.length); i++) {
+          const origLevel = allLevels.find(l => l.externalId === sortedLevels[i].externalId);
+          if (origLevel) {
+            console.log(`[BIM Fix] Level "${origLevel.name}" -> "${sortedRefs[i]}"`);
+            origLevel.name = sortedRefs[i];
+          }
+        }
+      }
+    }
+  }
+
   return { levels: allLevels, rooms: allRooms, fieldsMap, indexState: overallState };
 }
 
@@ -804,8 +908,8 @@ async function upsertBimAssets(
     return {
       fm_guid: `acc-bim-room-${room.externalId}`,
       category: 'Space',
-      name: null,
-      common_name: room.name || `Room ${room.externalId}`,
+      name: room.name || null, // designation (Number), like Asset+
+      common_name: room.commonName || room.name || `Room ${room.externalId}`,
       building_fm_guid: buildingFmGuid,
       level_fm_guid: levelFmGuid,
       attributes: {
