@@ -50,6 +50,7 @@ const UnifiedViewerContent: React.FC<{
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const buildingFmGuid = searchParams.get('building');
+  const entityFmGuid = searchParams.get('entity');
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -404,6 +405,7 @@ const UnifiedViewerContent: React.FC<{
         <div style={viewerContainerStyle}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
+            initialFmGuidToFocus={entityFmGuid || undefined}
             transparentBackground={isVTMode}
             ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
             suppressOverlay={isVTMode}

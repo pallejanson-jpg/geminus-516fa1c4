@@ -2640,6 +2640,30 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       displayFmGuidRef.current(focusFmGuid, displayAction);
 
+      // Dispatch floor selection event so FloorVisibilitySelector and RoomVisualizationPanel sync
+      if (focusData && initialFmGuidToFocus && initialFmGuidToFocus !== fmGuid) {
+        const floorFmGuid = 
+          (focusData.category === 'Floor' || focusData.category === 'IfcBuildingStorey' || focusData.category === 'Building Storey')
+            ? focusFmGuid
+            : focusData.levelFmGuid;
+        
+        if (floorFmGuid) {
+          // Delay to allow viewer to finish loading models
+          setTimeout(() => {
+            console.log('AssetPlusViewer: Dispatching initial floor selection for', floorFmGuid);
+            window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+              detail: {
+                visibleMetaFloorIds: [],
+                visibleFloorFmGuids: [floorFmGuid],
+                isAllFloorsVisible: false,
+                isSoloFloor: true,
+                soloFloorName: focusData.commonName || focusData.name || '',
+              }
+            }));
+          }, 1500);
+        }
+      }
+
       // Clear any pending error display on successful init
       if (showErrorTimeoutRef.current) {
         clearTimeout(showErrorTimeoutRef.current);
