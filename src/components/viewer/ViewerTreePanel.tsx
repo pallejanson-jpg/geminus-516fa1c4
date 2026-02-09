@@ -523,6 +523,21 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
     }
   }, [getXeokitViewer, refreshVisibilityState]);
 
+  // Listen for external floor selection changes to refresh checkbox state
+  useEffect(() => {
+    const handleExternalFloorChange = () => {
+      // Delay slightly to allow scene visibility to be applied first
+      setTimeout(() => {
+        refreshVisibilityState();
+      }, 150);
+    };
+    
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
+    return () => {
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
+    };
+  }, [refreshVisibilityState]);
+
   // Build tree from xeokit metaScene with CHUNKED processing to prevent UI freeze
   const buildTree = useCallback(() => {
     const viewer = viewerRef.current;
