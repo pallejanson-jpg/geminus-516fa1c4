@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { Box, Menu as MenuIcon, Home, ClipboardList, AlertTriangle, BarChart2, Building2, Zap, Archive, Radar } from 'lucide-react';
+import { Box, Menu as MenuIcon, Home, ClipboardList, AlertTriangle, BarChart2, Building2, Zap, Archive, Radar, Scan } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
 import { THEMES, DEFAULT_APP_CONFIGS, DEFAULT_SIDEBAR_ORDER, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
 import type { SidebarItem } from '@/lib/constants';
@@ -21,6 +21,7 @@ const SIDEBAR_ITEM_META: Record<string, {
     iot: { icon: Zap, color: 'text-yellow-500', label: DEFAULT_APP_CONFIGS.iot.label, type: 'config' },
     original_archive: { icon: Archive, color: 'text-indigo-500', label: DEFAULT_APP_CONFIGS.original_archive.label, type: 'config' },
     radar: { icon: Radar, color: 'text-pink-500', label: DEFAULT_APP_CONFIGS.radar.label, type: 'config' },
+    ai_scan: { icon: Scan, color: 'text-emerald-500', label: 'AI Scan', type: 'internal' },
 };
 
 const LeftSidebar: React.FC = () => {

@@ -55,12 +55,14 @@ interface ScanConfigPanelProps {
   templates: DetectionTemplate[];
   buildings: Building[];
   onScanStarted: (job: any, browserConfig?: { ivionBaseUrl: string }) => void;
+  preselectedBuildingGuid?: string;
 }
 
 const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   templates,
   buildings,
   onScanStarted,
+  preselectedBuildingGuid,
 }) => {
   const { toast } = useToast();
   
@@ -78,6 +80,21 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   const [downloadTestResult, setDownloadTestResult] = useState<DownloadTestResult | null>(null);
   const [buildingSettings, setBuildingSettings] = useState<Record<string, BuildingSettings>>({});
   const [loadingSettings, setLoadingSettings] = useState(true);
+
+  // Pre-select all active templates on load
+  useEffect(() => {
+    if (templates.length > 0 && selectedTemplates.length === 0) {
+      const allActive = templates.filter(t => t.is_active).map(t => t.object_type);
+      if (allActive.length > 0) setSelectedTemplates(allActive);
+    }
+  }, [templates]);
+
+  // Pre-select building from context
+  useEffect(() => {
+    if (preselectedBuildingGuid && !selectedBuilding) {
+      setSelectedBuilding(preselectedBuildingGuid);
+    }
+  }, [preselectedBuildingGuid]);
 
   // Load building settings to check Ivion configuration
   useEffect(() => {
@@ -298,8 +315,9 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     ivionStatus?.connected;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto space-y-6 pb-4">
+    <div className="space-y-6 pb-4 max-w-4xl mx-auto">
+      {/* Two-column layout on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* Building Selection */}
       <Card>
         <CardHeader>
@@ -516,6 +534,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Info Card */}
       <Card className="bg-muted/50">
@@ -540,10 +559,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
         </CardContent>
       </Card>
 
-      </div>
-
-      {/* Sticky Start Button */}
-      <div className="sticky bottom-0 bg-background border-t pt-3 pb-1 flex justify-end">
+      {/* Start Button */}
+      <div className="flex justify-end">
         <Button
           size="lg"
           onClick={startScan}

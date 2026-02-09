@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { GripVertical, Save, RotateCcw, ClipboardList, AlertTriangle, BarChart2, Building2, Box, Zap, Archive, Radar } from 'lucide-react';
+import { GripVertical, Save, RotateCcw, ClipboardList, AlertTriangle, BarChart2, Building2, Box, Zap, Archive, Radar, Scan } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,7 @@ const SIDEBAR_ITEM_META: Record<string, { label: string; icon: React.ElementType
   iot: { label: DEFAULT_APP_CONFIGS.iot.label, icon: Zap, color: 'text-yellow-500' },
   original_archive: { label: DEFAULT_APP_CONFIGS.original_archive.label, icon: Archive, color: 'text-indigo-500' },
   radar: { label: DEFAULT_APP_CONFIGS.radar.label, icon: Radar, color: 'text-pink-500' },
+  ai_scan: { label: 'AI Scan', icon: Scan, color: 'text-emerald-500' },
 };
 
 export const getSidebarOrder = (): SidebarItem[] => {

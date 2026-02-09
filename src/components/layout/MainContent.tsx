@@ -19,11 +19,12 @@ const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
+const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 
 const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
 
 const MainContent: React.FC = () => {
-    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext } = useContext(AppContext);
+    const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility } = useContext(AppContext);
     const isMobile = useIsMobile();
     const t = THEMES[theme];
     const [previousAppBefore360, setPreviousAppBefore360] = useState('portfolio');
@@ -138,6 +139,16 @@ const MainContent: React.FC = () => {
                         </div>
                     }>
                         <InAppFaultReport />
+                    </Suspense>
+                );
+            case 'ai_scan':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <AiAssetScan preselectedBuildingGuid={selectedFacility?.fm_guid} />
                     </Suspense>
                 );
             default:
