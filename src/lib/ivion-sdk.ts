@@ -208,10 +208,19 @@ export async function loadIvionSdk(
   const loadPromise = doLoadIvionSdk(baseUrl, timeoutMs, loginToken, siteId);
   activeLoadPromise = loadPromise;
   
+  // Force-clear the guard on timeout so retries aren't blocked by a stale promise
+  const timeoutGuard = setTimeout(() => {
+    if (activeLoadPromise === loadPromise) {
+      console.warn('[Ivion SDK] Clearing stale activeLoadPromise after timeout');
+      activeLoadPromise = null;
+    }
+  }, timeoutMs + 500);
+
   try {
     const result = await loadPromise;
     return result;
   } finally {
+    clearTimeout(timeoutGuard);
     if (activeLoadPromise === loadPromise) {
       activeLoadPromise = null;
     }
