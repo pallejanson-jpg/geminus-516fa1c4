@@ -87,8 +87,128 @@ const getAppIcon = (key: string) => {
         default: return Box;
     }
 };
+// Recursive folder tree node for ACC folder browser
+const AccFolderNode: React.FC<{
+    folder: any;
+    depth: number;
+    expandedFolders: Set<string>;
+    toggleFolder: (id: string) => void;
+    syncingBimFolderId: string | null;
+    bimSyncProgress: string | null;
+    handleSyncBimData: (folder: any) => void;
+    formatFileSize: (bytes: number | null) => string;
+}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize }) => {
+    const hasBimFiles = (folder.items || []).some((item: any) => item.versionUrn || item.isBim);
+    const hasChildren = (folder.children || []).length > 0;
+    const isSyncingThisFolder = syncingBimFolderId === folder.id;
+    const isExpanded = expandedFolders.has(folder.id);
+    const totalCount = folder.totalItemCount ?? folder.items?.length ?? 0;
 
+    // Collect all BIM items recursively for sync
+    const collectAllBimItems = (f: any): any[] => {
+        const items = (f.items || []).filter((i: any) => i.versionUrn || i.isBim);
+        for (const child of (f.children || [])) {
+            items.push(...collectAllBimItems(child));
+        }
+        return items;
+    };
+
+    const allBimItems = collectAllBimItems(folder);
+    const hasAnyBimFiles = allBimItems.length > 0;
+
+    return (
+        <div className="rounded border bg-background" style={{ marginLeft: depth > 0 ? `${depth * 16}px` : undefined }}>
+            <div className="flex items-center">
+                <button
+                    onClick={() => toggleFolder(folder.id)}
+                    className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-1.5 text-left hover:bg-muted/50 rounded-l text-sm"
+                >
+                    {(hasChildren || (folder.items || []).length > 0) ? (
+                        isExpanded ? (
+                            <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )
+                    ) : (
+                        <span className="w-3.5 shrink-0" />
+                    )}
+                    <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    <span className="font-medium truncate">{folder.name}</span>
+                    <Badge variant="outline" className="ml-auto text-[10px] shrink-0">
+                        {totalCount} {totalCount === 1 ? 'fil' : 'filer'}
+                    </Badge>
+                </button>
+                {hasAnyBimFiles && (
+                    <Button
+                        onClick={(e) => { e.stopPropagation(); handleSyncBimData({ ...folder, items: allBimItems }); }}
+                        disabled={!!syncingBimFolderId}
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 h-7 text-xs shrink-0 mr-1"
+                    >
+                        {isSyncingThisFolder ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                            <DatabaseIcon className="h-3 w-3" />
+                        )}
+                        {isSyncingThisFolder ? (bimSyncProgress || 'Synkar...') : 'Synka BIM'}
+                    </Button>
+                )}
+            </div>
+
+            {isExpanded && (
+                <div className="pb-2">
+                    {/* Files in this folder */}
+                    {folder.items && folder.items.length > 0 && (
+                        <div className="px-2.5 pl-8 space-y-0.5">
+                            {folder.items.map((item: any) => (
+                                <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
+                                    <File className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    <span className="truncate">{item.name}</span>
+                                    {(item.versionUrn || item.isBim) && (
+                                        <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
+                                    )}
+                                    <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
+                                    {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Sub-folders (recursive) */}
+                    {hasChildren && (
+                        <div className="px-2.5 space-y-1 mt-1">
+                            {folder.children.map((child: any) => (
+                                <AccFolderNode
+                                    key={child.id}
+                                    folder={child}
+                                    depth={depth + 1}
+                                    expandedFolders={expandedFolders}
+                                    toggleFolder={toggleFolder}
+                                    syncingBimFolderId={syncingBimFolderId}
+                                    bimSyncProgress={bimSyncProgress}
+                                    handleSyncBimData={handleSyncBimData}
+                                    formatFileSize={formatFileSize}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Empty folder message */}
+                    {(!folder.items || folder.items.length === 0) && !hasChildren && (
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
+                    )}
+
+                    {folder.truncated && (
+                        <p className="px-2.5 pl-8 text-xs text-muted-foreground italic">Undermappar ej laddade (max djup nått).</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) => {
+
     const { toast } = useToast();
     const { appConfigs, setAppConfigs } = useContext(AppContext);
     const [activeTab, setActiveTab] = useState('apps');
@@ -2131,66 +2251,20 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             <p className="text-xs text-muted-foreground italic">Inga mappar eller filer hittades.</p>
                                                         )}
 
-                                                        <div className="space-y-1 max-h-64 overflow-y-auto">
-                                                            {accFolders.map((folder: any) => {
-                                                                const hasBimFiles = (folder.items || []).some((item: any) => item.versionUrn);
-                                                                const isSyncingThisFolder = syncingBimFolderId === folder.id;
-                                                                return (
-                                                                <div key={folder.id} className="rounded border bg-background">
-                                                                    <div className="flex items-center">
-                                                                        <button
-                                                                            onClick={() => toggleFolder(folder.id)}
-                                                                            className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-1.5 text-left hover:bg-muted/50 rounded-l text-sm"
-                                                                        >
-                                                                            {expandedFolders.has(folder.id) ? (
-                                                                                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                                            ) : (
-                                                                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                                            )}
-                                                                            <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                                                            <span className="font-medium truncate">{folder.name}</span>
-                                                                            <Badge variant="outline" className="ml-auto text-[10px] shrink-0">{folder.items?.length || 0} filer</Badge>
-                                                                        </button>
-                                                                        {hasBimFiles && (
-                                                                            <Button
-                                                                                onClick={(e) => { e.stopPropagation(); handleSyncBimData(folder); }}
-                                                                                disabled={!!syncingBimFolderId}
-                                                                                size="sm"
-                                                                                variant="ghost"
-                                                                                className="gap-1 h-7 text-xs shrink-0 mr-1"
-                                                                            >
-                                                                                {isSyncingThisFolder ? (
-                                                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                                                ) : (
-                                                                                    <DatabaseIcon className="h-3 w-3" />
-                                                                                )}
-                                                                                {isSyncingThisFolder ? (bimSyncProgress || 'Synkar...') : 'Synka BIM-data'}
-                                                                            </Button>
-                                                                        )}
-                                                                    </div>
-                                                                    
-                                                                    {expandedFolders.has(folder.id) && folder.items && folder.items.length > 0 && (
-                                                                        <div className="px-2.5 pb-2 pl-8 space-y-0.5">
-                                                                            {folder.items.map((item: any) => (
-                                                                                <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
-                                                                                    <File className="h-3 w-3 text-muted-foreground shrink-0" />
-                                                                                    <span className="truncate">{item.name}</span>
-                                                                                    {item.versionUrn && (
-                                                                                        <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
-                                                                                    )}
-                                                                                    <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
-                                                                                    {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-
-                                                                    {expandedFolders.has(folder.id) && (!folder.items || folder.items.length === 0) && (
-                                                                        <p className="px-2.5 pb-2 pl-8 text-xs text-muted-foreground italic">Inga filer i denna mapp.</p>
-                                                                    )}
-                                                                </div>
-                                                                );
-                                                            })}
+                                                        <div className="space-y-1 max-h-80 overflow-y-auto">
+                                                            {accFolders.map((folder: any) => (
+                                                                <AccFolderNode
+                                                                    key={folder.id}
+                                                                    folder={folder}
+                                                                    depth={0}
+                                                                    expandedFolders={expandedFolders}
+                                                                    toggleFolder={toggleFolder}
+                                                                    syncingBimFolderId={syncingBimFolderId}
+                                                                    bimSyncProgress={bimSyncProgress}
+                                                                    handleSyncBimData={handleSyncBimData}
+                                                                    formatFileSize={formatFileSize}
+                                                                />
+                                                            ))}
 
                                                             {accTopLevelItems.length > 0 && (
                                                                 <div className="pt-1 border-t">
