@@ -49,6 +49,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     // Ref to track if initial visibility has been applied (prevents re-triggering)
     const initialVisibilityAppliedRef = useRef(false);
     
+    // Ref to prevent dispatch loops when receiving external floor selection events
+    const isReceivingExternalEvent = useRef(false);
+    
     // Stable refs to preserve selection across re-renders
     const visibleFloorIdsRef = React.useRef<Set<string>>(new Set());
     const floorsRef = React.useRef<FloorInfo[]>([]);
@@ -354,6 +357,57 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       }
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
+    // Listen for external floor selection changes (from FloatingFloorSwitcher, ViewerTreePanel)
+    useEffect(() => {
+      const handleExternalFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
+        // Skip if this event was dispatched by us (prevent loops)
+        if (isReceivingExternalEvent.current) return;
+        
+        const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
+        
+        isReceivingExternalEvent.current = true;
+        
+        if (isAllFloorsVisible) {
+          const allIds = new Set(floorsRef.current.map(f => f.id));
+          setVisibleFloorIds(allIds);
+          applyFloorVisibility(allIds);
+          setClippingEnabled(false);
+          updateClipping(Array.from(allIds));
+        } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
+          const matchingIds = new Set(
+            floorsRef.current
+              .filter(f => visibleMetaFloorIds.some(metaId =>
+                f.id === metaId || f.metaObjectIds.includes(metaId)
+              ))
+              .map(f => f.id)
+          );
+          
+          if (matchingIds.size > 0) {
+            setVisibleFloorIds(matchingIds);
+            applyFloorVisibility(matchingIds);
+            
+            // Trigger clipping when solo floor is selected externally
+            if (matchingIds.size === 1) {
+              setClippingEnabled(true);
+              updateClipping(Array.from(matchingIds));
+            } else {
+              updateClipping(Array.from(matchingIds));
+            }
+          }
+        }
+        
+        // Reset flag after a tick to allow our own events again
+        setTimeout(() => {
+          isReceivingExternalEvent.current = false;
+        }, 100);
+      };
+      
+      window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
+      return () => {
+        window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
+      };
+    }, [applyFloorVisibility, updateClipping]);
+
     // Apply initial floor visibility when initialization completes
     // This ensures the 3D scene matches the saved selection from localStorage
     useEffect(() => {
@@ -382,6 +436,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         }
         
         // ALWAYS dispatch event on init with complete data
+        isReceivingExternalEvent.current = true;
         const eventDetail: FloorSelectionEventDetail = {
           floorId: soloFloorId,
           floorName: soloFloor?.name || null,
@@ -391,6 +446,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           isAllFloorsVisible: isAllVisible,
         };
         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
       }, 100);
       
       return () => clearTimeout(timeoutId);
@@ -426,6 +482,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           setClippingEnabled(true);
         }
         
+        isReceivingExternalEvent.current = true;
         const eventDetail: FloorSelectionEventDetail = {
           floorId: soloFloorId,
           floorName: soloFloor?.name || null,
@@ -435,6 +492,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           isAllFloorsVisible: isAllVisible,
         };
         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
         
         if (onVisibleFloorsChange) {
           onVisibleFloorsChange(allFmGuids);
@@ -465,6 +523,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       }
       
       // Emit event for other components with complete data
+      isReceivingExternalEvent.current = true;
       const floor = floors.find(f => f.id === floorId);
       const eventDetail: FloorSelectionEventDetail = {
         floorId,
@@ -475,6 +534,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         isAllFloorsVisible: false,
       };
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+      setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
       
       if (onVisibleFloorsChange) {
         if (floor) {
@@ -495,6 +555,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
       const allMetaIds = floors.flatMap(f => f.metaObjectIds);
       
+      isReceivingExternalEvent.current = true;
       const eventDetail: FloorSelectionEventDetail = {
         floorId: null,
         floorName: null,
@@ -504,6 +565,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         isAllFloorsVisible: true,
       };
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+      setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
       
       if (onVisibleFloorsChange) {
         onVisibleFloorsChange(allFmGuids);
