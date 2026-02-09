@@ -18,6 +18,9 @@ export const LOAD_SAVED_VIEW_EVENT = 'LOAD_SAVED_VIEW';
 /** Event dispatched when 3D viewer context changes (for Gunnar AI) */
 export const VIEWER_CONTEXT_CHANGED_EVENT = 'VIEWER_CONTEXT_CHANGED';
 
+/** Event dispatched when the active viewer tool changes (select, measure, slicer, null) */
+export const VIEWER_TOOL_CHANGED_EVENT = 'VIEWER_TOOL_CHANGED';
+
 /** Type for view mode request event detail */
 export interface ViewModeRequestedDetail {
   mode: '2d' | '3d';
@@ -32,6 +35,11 @@ export interface ViewerContextChangedDetail {
   visibleModelIds: string[];
   selectedFmGuids: string[];
   clipHeight: number;
+}
+
+/** Type for viewer tool change event detail */
+export interface ViewerToolChangedDetail {
+  tool: 'select' | 'measure' | 'slicer' | null;
 }
 
 /** Type for load saved view event detail */

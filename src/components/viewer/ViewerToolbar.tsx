@@ -40,7 +40,7 @@ import {
   FloorSelectionEventDetail,
   ClipHeightEventDetail
 } from '@/hooks/useSectionPlaneClipping';
-import { VIEW_MODE_REQUESTED_EVENT, ViewModeRequestedDetail } from '@/lib/viewer-events';
+import { VIEW_MODE_REQUESTED_EVENT, ViewModeRequestedDetail, VIEWER_TOOL_CHANGED_EVENT, type ViewerToolChangedDetail } from '@/lib/viewer-events';
 
 interface ViewerToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -347,6 +347,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     
     toolChangeDebounceRef.current = true;
     
+    let newTool: ViewerTool;
+    
     try {
       const assetView = getAssetView();
       if (assetView && typeof assetView.useTool === 'function') {
@@ -360,20 +362,27 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         // Toggle behavior: if clicking the same tool, switch to select
         if (tool === activeTool) {
           assetView.useTool('select');
-          setActiveTool('select');
+          newTool = 'select';
         } else {
           // Activate new tool
           assetView.useTool(tool);
-          setActiveTool(tool);
+          newTool = tool;
         }
+        setActiveTool(newTool);
       } else {
         console.warn('AssetView not ready for tool change');
+        newTool = activeTool;
       }
     } catch (error) {
       console.warn('Tool change failed:', error);
       // Reset to safe state
+      newTool = 'select';
       setActiveTool('select');
     } finally {
+      // Dispatch tool changed event for Virtual Twin pointer-events toggle
+      window.dispatchEvent(new CustomEvent<ViewerToolChangedDetail>(VIEWER_TOOL_CHANGED_EVENT, {
+        detail: { tool: newTool! },
+      }));
       // Short debounce only for tool-change (useTool calls)
       setTimeout(() => { toolChangeDebounceRef.current = false; }, 150);
     }

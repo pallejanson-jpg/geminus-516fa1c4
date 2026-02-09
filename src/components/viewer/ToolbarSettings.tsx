@@ -94,27 +94,30 @@ export const getToolbarSettings = (): ToolConfig[] => {
     }
     
     if (stored) {
-      const parsed = JSON.parse(stored);
+      const parsed: ToolConfig[] = JSON.parse(stored);
       
-      // Merge with defaults to handle new tools - add missing tools
-      const mergedTools = DEFAULT_TOOLS.map(defaultTool => {
-        const storedTool = parsed.find((t: ToolConfig) => t.id === defaultTool.id);
-        // CRITICAL: Use stored settings if they exist, otherwise use default
-        // This ensures new tools are always included with their default visibility
-        return storedTool ? { ...defaultTool, ...storedTool } : defaultTool;
-      });
+      // Build a lookup of default tools for merging labels/new properties
+      const defaultMap = new Map(DEFAULT_TOOLS.map(t => [t.id, t]));
       
-      // Check if any new tools were added (not in stored settings)
-      const hasNewTools = DEFAULT_TOOLS.some(
-        dt => !parsed.find((t: ToolConfig) => t.id === dt.id)
-      );
+      // Start with stored tools in their saved order, merging with defaults
+      const result: ToolConfig[] = parsed
+        .filter(t => defaultMap.has(t.id)) // Remove tools no longer in defaults
+        .map(storedTool => {
+          const defaultTool = defaultMap.get(storedTool.id)!;
+          // Keep user's visible/inOverflow/order, but pick up label changes from defaults
+          return { ...defaultTool, visible: storedTool.visible, inOverflow: storedTool.inOverflow };
+        });
       
-      // If new tools were added, save the merged settings
-      if (hasNewTools) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedTools));
+      // Append any NEW default tools not present in stored settings
+      const storedIds = new Set(parsed.map(t => t.id));
+      const newTools = DEFAULT_TOOLS.filter(t => !storedIds.has(t.id));
+      if (newTools.length > 0) {
+        result.push(...newTools);
+        // Persist so new tools are saved
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
       }
       
-      return mergedTools;
+      return result;
     }
   } catch (e) {
     console.warn('Failed to load toolbar settings:', e);
@@ -122,22 +125,22 @@ export const getToolbarSettings = (): ToolConfig[] => {
   return DEFAULT_TOOLS;
 };
 
-// Get only navigation tools
+// Navigation tool IDs for filtering
+const NAVIGATION_TOOL_IDS = new Set(NAVIGATION_TOOLS.map(t => t.id));
+
+// Visualization tool IDs for filtering
+const VISUALIZATION_TOOL_IDS = new Set(VISUALIZATION_TOOLS.map(t => t.id));
+
+// Get only navigation tools (preserving user's saved order)
 export const getNavigationToolSettings = (): ToolConfig[] => {
   const allSettings = getToolbarSettings();
-  return NAVIGATION_TOOLS.map(navTool => {
-    const setting = allSettings.find(t => t.id === navTool.id);
-    return setting || navTool;
-  });
+  return allSettings.filter(t => NAVIGATION_TOOL_IDS.has(t.id));
 };
 
-// Get only visualization tools  
+// Get only visualization tools (preserving user's saved order)
 export const getVisualizationToolSettings = (): ToolConfig[] => {
   const allSettings = getToolbarSettings();
-  return VISUALIZATION_TOOLS.map(vizTool => {
-    const setting = allSettings.find(t => t.id === vizTool.id);
-    return setting || vizTool;
-  });
+  return allSettings.filter(t => VISUALIZATION_TOOL_IDS.has(t.id));
 };
 
 export const saveToolbarSettings = (tools: ToolConfig[]) => {
