@@ -466,7 +466,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 onClick={togglePinned}
                 title={isPinned ? "Lossa panelen" : "Fäst panelen"}
               >
-                {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/60" />}
+                {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/70" />}
               </Button>
             </SheetTitle>
           </SheetHeader>
@@ -645,7 +645,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       </div>
                       <span className="text-sm font-medium">Viewer settings</span>
                     </div>
-                    <ChevronDown className={cn("h-4 w-4 text-foreground/60 transition-transform", viewerSettingsOpen && "rotate-180")} />
+                    <ChevronDown className={cn("h-4 w-4 text-foreground/70 transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
@@ -658,7 +658,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-                      <p className="text-xs text-foreground/60 mt-1">Höjd ovanför golv</p>
+                      <p className="text-xs text-foreground/70 mt-1">Höjd ovanför golv</p>
                     </div>
                   </div>
 
@@ -673,7 +673,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
-                       <p className="text-xs text-foreground/60 mt-1">
+                       <p className="text-xs text-foreground/70 mt-1">
                         {isSoloFloor && !is2DMode ? "Offset från nästa vånings golv" : "Aktiveras när en våning är isolerad i 3D"}
                       </p>
                     </div>
@@ -689,7 +689,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                     <div className="pl-10">
                       {loadingRoomLabelConfigs ? (
-                        <div className="text-xs text-foreground/60">Laddar...</div>
+                        <div className="text-xs text-foreground/70">Laddar...</div>
                       ) : (
                         <div className="space-y-1">
                           <button
@@ -703,11 +703,11 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                               onClick={() => handleRoomLabelConfigSelect(config.id)}
                             >
                               {config.name}
-                              {config.is_default && <span className="ml-1 text-[10px] text-foreground/50">(standard)</span>}
+                              {config.is_default && <span className="ml-1 text-[10px] text-foreground/70">(standard)</span>}
                             </button>
                           ))}
                           {roomLabelConfigs.length === 0 && (
-                            <div className="text-xs text-foreground/60 py-1">Inga konfigurationer. Skapa i Inställningar.</div>
+                            <div className="text-xs text-foreground/70 py-1">Inga konfigurationer. Skapa i Inställningar.</div>
                           )}
                         </div>
                       )}
