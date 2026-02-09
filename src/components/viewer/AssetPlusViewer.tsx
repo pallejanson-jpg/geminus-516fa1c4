@@ -55,6 +55,8 @@ interface AssetPlusViewerProps {
   transparentBackground?: boolean;
   /** Ghost opacity for all objects (0-1). Only applied in transparent mode. */
   ghostOpacity?: number;
+  /** When true, suppresses MobileViewerOverlay and desktop toolbar (used when embedded in Virtual Twin) */
+  suppressOverlay?: boolean;
 }
 
 interface ViewerState {
@@ -106,6 +108,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   syncPitch,
   transparentBackground = false,
   ghostOpacity,
+  suppressOverlay = false,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -2897,8 +2900,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             </div>
           )}
           
-          {/* Mobile UI Overlay - shown on mobile devices */}
-          {isMobile && state.isInitialized && (
+          {/* Mobile UI Overlay - shown on mobile devices (hidden when suppressOverlay) */}
+          {isMobile && state.isInitialized && !suppressOverlay && (
             <MobileViewerOverlay
               onClose={onClose}
               viewerInstanceRef={viewerInstanceRef}
@@ -2921,8 +2924,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             />
           )}
           
-          {/* Desktop UI - Top toolbar - hidden on mobile */}
-          {!isMobile && (
+          {/* Desktop UI - Top toolbar - hidden on mobile and when suppressOverlay */}
+          {!isMobile && !suppressOverlay && (
             <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
               {/* Close and fullscreen buttons - left side */}
               <div className="flex gap-1.5 pointer-events-auto">
