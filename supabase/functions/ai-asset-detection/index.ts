@@ -2035,6 +2035,113 @@ serve(async (req) => {
         result = await deleteTemplate(params.templateId);
         break;
 
+      case 'analyze-screenshot': {
+        // Browser-based scan: receives a screenshot captured by the frontend SDK
+        if (!params.scanJobId) throw new Error('scanJobId required');
+        if (!params.screenshotBase64) throw new Error('screenshotBase64 required');
+        
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        // Get scan job to find templates
+        const { data: scanJob, error: sjErr } = await supabase
+          .from('scan_jobs')
+          .select('*')
+          .eq('id', params.scanJobId)
+          .single();
+        if (sjErr || !scanJob) throw new Error('Scan job not found');
+        
+        // Get active templates for this job
+        const { data: tpls } = await supabase
+          .from('detection_templates')
+          .select('*')
+          .in('object_type', scanJob.templates)
+          .eq('is_active', true);
+        
+        if (!tpls || tpls.length === 0) {
+          result = { detections: 0, message: 'No active templates' };
+          break;
+        }
+        
+        // Run AI analysis on the screenshot
+        const detections = await analyzeImageWithAI(params.screenshotBase64, tpls);
+        
+        // Calculate 3D coordinates from image position if available
+        const cameraPos = params.imagePosition || { x: 0, y: 0, z: 0 };
+        
+        // Store detections
+        let savedCount = 0;
+        for (const det of detections) {
+          if (det.confidence < 0.3) continue;
+          
+          const bbox = {
+            ymin: det.bounding_box[0],
+            xmin: det.bounding_box[1],
+            ymax: det.bounding_box[2],
+            xmax: det.bounding_box[3],
+          };
+          
+          const worldCoords = imageToWorldCoords(bbox, cameraPos);
+          
+          const matchingTemplate = tpls.find(t => t.object_type === det.object_type);
+          
+          const detectionId = crypto.randomUUID();
+          
+          // Try to save thumbnail
+          let thumbnailUrl: string | null = null;
+          try {
+            thumbnailUrl = await saveThumbnail(params.screenshotBase64, bbox, detectionId);
+          } catch (e) {
+            console.error('Thumbnail save failed:', e);
+          }
+          
+          const { error: insertErr } = await supabase
+            .from('pending_detections')
+            .insert({
+              id: detectionId,
+              scan_job_id: params.scanJobId,
+              building_fm_guid: scanJob.building_fm_guid,
+              ivion_site_id: scanJob.ivion_site_id,
+              ivion_image_id: params.imageId || null,
+              ivion_dataset_name: params.datasetName || null,
+              object_type: det.object_type,
+              confidence: det.confidence,
+              bounding_box: bbox,
+              ai_description: det.description,
+              extracted_properties: det.extracted_properties || null,
+              coordinate_x: worldCoords.x,
+              coordinate_y: worldCoords.y,
+              coordinate_z: worldCoords.z,
+              thumbnail_url: thumbnailUrl,
+              detection_template_id: matchingTemplate?.id || null,
+              status: 'pending',
+            });
+          
+          if (!insertErr) savedCount++;
+        }
+        
+        // Update scan job progress
+        await supabase.from('scan_jobs').update({
+          processed_images: (scanJob.processed_images || 0) + 1,
+          detections_found: (scanJob.detections_found || 0) + savedCount,
+          status: 'running',
+          started_at: scanJob.started_at || new Date().toISOString(),
+        }).eq('id', params.scanJobId);
+        
+        result = { detections: savedCount, totalInImage: detections.length };
+        break;
+      }
+
+      case 'complete-browser-scan': {
+        if (!params.scanJobId) throw new Error('scanJobId required');
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        await supabase.from('scan_jobs').update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        }).eq('id', params.scanJobId);
+        result = { success: true };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
