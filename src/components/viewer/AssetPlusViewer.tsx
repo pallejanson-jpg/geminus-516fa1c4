@@ -3044,7 +3044,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   viewerRef={viewerInstanceRef}
                   buildingFmGuid={buildingFmGuid}
                   isViewerReady={true}
-                  className="absolute bottom-20 left-4 z-20"
+                  className="absolute bottom-20 left-4 z-20 pointer-events-auto"
                 />
               )}
               
@@ -3056,118 +3056,130 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 hoverHighlightEnabled={hoverHighlightEnabled}
                 onToggleHoverHighlight={setHoverHighlightEnabled}
                 disableSelectTool={pickModeEnabled}
+                className="pointer-events-auto"
               />
               
               {/* Tree View Panel - standalone mode (not in sheet) */}
               {showTreePanel && (
-                <ViewerTreePanel
+                <div className="pointer-events-auto">
+                  <ViewerTreePanel
+                    viewerRef={viewerInstanceRef}
+                    isVisible={showTreePanel}
+                    onClose={() => setShowTreePanel(false)}
+                    onNodeSelect={(nodeId, nodeFmGuid) => {
+                      console.log('TreePanel node selected:', nodeId, nodeFmGuid);
+                      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                      if (xeokitViewer?.scene) {
+                        flashEntityById(xeokitViewer.scene, nodeId, {
+                          color1: [0.3, 1, 0.3],
+                          color2: [1, 1, 1],
+                          interval: 200,
+                          duration: 2000,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              <div className="pointer-events-auto">
+                <MinimapPanel
                   viewerRef={viewerInstanceRef}
-                  isVisible={showTreePanel}
-                  onClose={() => setShowTreePanel(false)}
-                  onNodeSelect={(nodeId, nodeFmGuid) => {
-                    console.log('TreePanel node selected:', nodeId, nodeFmGuid);
-                    // Flash the selected node
-                    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-                    if (xeokitViewer?.scene) {
-                      flashEntityById(xeokitViewer.scene, nodeId, {
-                        color1: [0.3, 1, 0.3],
-                        color2: [1, 1, 1],
-                        interval: 200,
-                        duration: 2000,
-                      });
-                    }
+                  isVisible={showMinimap}
+                  onClose={() => setShowMinimap(false)}
+                  onRoomClick={(roomFmGuid) => {
+                    const roomData = allData.find((a: any) => a.fmGuid === roomFmGuid);
+                    const floorFmGuid = roomData?.levelFmGuid || roomFmGuid;
+                    const displayAction = { 
+                      action: 'cutoutfloor_and_lookatspace', 
+                      parameter: { 
+                        fmGuid: roomFmGuid,
+                        floorFmGuid,
+                        includeRelatedFloors: true, 
+                        heightAboveAABB: defaultHeightAboveAABB 
+                      } 
+                    };
+                    executeDisplayAction(displayAction);
+                    viewerInstanceRef.current?.selectFmGuid(roomFmGuid);
                   }}
                 />
-              )}
-              <MinimapPanel
-                viewerRef={viewerInstanceRef}
-                isVisible={showMinimap}
-                onClose={() => setShowMinimap(false)}
-                onRoomClick={(roomFmGuid) => {
-                  // Navigate to clicked room with floor cutout and look-at
-                  const roomData = allData.find((a: any) => a.fmGuid === roomFmGuid);
-                  const floorFmGuid = roomData?.levelFmGuid || roomFmGuid;
-                  const displayAction = { 
-                    action: 'cutoutfloor_and_lookatspace', 
-                    parameter: { 
-                      fmGuid: roomFmGuid,
-                      floorFmGuid,
-                      includeRelatedFloors: true, 
-                      heightAboveAABB: defaultHeightAboveAABB 
-                    } 
-                  };
-                  executeDisplayAction(displayAction);
-                  viewerInstanceRef.current?.selectFmGuid(roomFmGuid);
-                }}
-              />
-              <FloorCarousel
-                viewerRef={viewerInstanceRef}
-                onFloorSelect={handleFloorSelect}
-                selectedFloorId={selectedFloorId || undefined}
-              />
+              </div>
+              <div className="pointer-events-auto">
+                <FloorCarousel
+                  viewerRef={viewerInstanceRef}
+                  onFloorSelect={handleFloorSelect}
+                  selectedFloorId={selectedFloorId || undefined}
+                />
+              </div>
               
               {/* Right Side Panel (Sheet) - replaces floating VisualizationToolbar + RoomVisualizationPanel */}
-              <ViewerRightPanel
-                isOpen={rightPanelOpen}
-                onOpenChange={setRightPanelOpen}
-                viewerRef={viewerInstanceRef}
-                buildingFmGuid={buildingFmGuid}
-                buildingName={assetData?.commonName || assetData?.name}
-                isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
-                showSpaces={showSpaces}
-                onShowSpacesChange={handleShowSpacesChange}
-                visibleFloorFmGuids={visibleFloorFmGuids}
-                onVisibleFloorsChange={handleVisibleFloorsChange}
-                visibleModelIds={[]}
-                visibleFloorIds={visibleFloorFmGuids}
-                onToggleTreeView={(visible) => setShowTreePanel(visible)}
-                showTreeView={showTreePanel}
-                onAddAsset={handleOpenInventorySheet}
-              />
+              <div className="pointer-events-auto">
+                <ViewerRightPanel
+                  isOpen={rightPanelOpen}
+                  onOpenChange={setRightPanelOpen}
+                  viewerRef={viewerInstanceRef}
+                  buildingFmGuid={buildingFmGuid}
+                  buildingName={assetData?.commonName || assetData?.name}
+                  isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
+                  showSpaces={showSpaces}
+                  onShowSpacesChange={handleShowSpacesChange}
+                  visibleFloorFmGuids={visibleFloorFmGuids}
+                  onVisibleFloorsChange={handleVisibleFloorsChange}
+                  visibleModelIds={[]}
+                  visibleFloorIds={visibleFloorFmGuids}
+                  onToggleTreeView={(visible) => setShowTreePanel(visible)}
+                  showTreeView={showTreePanel}
+                  onAddAsset={handleOpenInventorySheet}
+                />
+              </div>
             </>
           )}
 
           {/* Properties Dialog - floating, dockable, supports both view/edit and create modes */}
-          <AssetPropertiesDialog
-            isOpen={propertiesDialogOpen || addAssetDialogOpen}
-            onClose={() => {
-              setPropertiesDialogOpen(false);
-              setAddAssetDialogOpen(false);
-              setPickedCoordinates(null);
-            }}
-            selectedFmGuids={addAssetDialogOpen ? [] : selectedFmGuids}
-            onUpdate={handleAssetCreated}
-            // Create mode props
-            createMode={addAssetDialogOpen}
-            parentSpaceFmGuid={addAssetParentNode?.fmGuid || null}
-            buildingFmGuid={buildingFmGuid || null}
-            levelFmGuid={assetData?.levelFmGuid || null}
-            initialCoordinates={pickedCoordinates}
-            onPickCoordinates={handleTogglePickMode}
-            isPickingCoordinates={isPickMode}
-          />
+          <div className="pointer-events-auto">
+            <AssetPropertiesDialog
+              isOpen={propertiesDialogOpen || addAssetDialogOpen}
+              onClose={() => {
+                setPropertiesDialogOpen(false);
+                setAddAssetDialogOpen(false);
+                setPickedCoordinates(null);
+              }}
+              selectedFmGuids={addAssetDialogOpen ? [] : selectedFmGuids}
+              onUpdate={handleAssetCreated}
+              createMode={addAssetDialogOpen}
+              parentSpaceFmGuid={addAssetParentNode?.fmGuid || null}
+              buildingFmGuid={buildingFmGuid || null}
+              levelFmGuid={assetData?.levelFmGuid || null}
+              initialCoordinates={pickedCoordinates}
+              onPickCoordinates={handleTogglePickMode}
+              isPickingCoordinates={isPickMode}
+            />
+          </div>
           
           {/* Inventory Form Sheet - opens from "Registrera tillgång" menu item */}
-          <InventoryFormSheet
-            isOpen={inventorySheetOpen}
-            onClose={() => {
-              setInventorySheetOpen(false);
-              setInventoryPendingPosition(null);
-            }}
-            buildingFmGuid={buildingFmGuid || ''}
-            levelFmGuid={assetData?.levelFmGuid}
-            roomFmGuid={assetData?.inRoomFmGuid || (assetData?.category === 'Space' ? assetData?.fmGuid : null)}
-            pendingPosition={inventoryPendingPosition}
-            onPickPositionRequest={handleInventoryPickRequest}
-            isPickingPosition={isPickMode && inventoryPickModeRef.current}
-            onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
-          />
+          <div className="pointer-events-auto">
+            <InventoryFormSheet
+              isOpen={inventorySheetOpen}
+              onClose={() => {
+                setInventorySheetOpen(false);
+                setInventoryPendingPosition(null);
+              }}
+              buildingFmGuid={buildingFmGuid || ''}
+              levelFmGuid={assetData?.levelFmGuid}
+              roomFmGuid={assetData?.inRoomFmGuid || (assetData?.category === 'Space' ? assetData?.fmGuid : null)}
+              pendingPosition={inventoryPendingPosition}
+              onPickPositionRequest={handleInventoryPickRequest}
+              isPickingPosition={isPickMode && inventoryPickModeRef.current}
+              onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
+            />
+          </div>
           
           {/* Toolbar Settings Modal */}
-          <ToolbarSettings
-            isOpen={toolbarSettingsOpen}
-            onClose={() => setToolbarSettingsOpen(false)}
-          />
+          <div className="pointer-events-auto">
+            <ToolbarSettings
+              isOpen={toolbarSettingsOpen}
+              onClose={() => setToolbarSettingsOpen(false)}
+            />
+          </div>
         </div>
       </div>
     </div>
