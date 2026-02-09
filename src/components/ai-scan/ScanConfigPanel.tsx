@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface DetectionTemplate {
   id: string;
@@ -53,7 +54,7 @@ interface IvionStatus {
 interface ScanConfigPanelProps {
   templates: DetectionTemplate[];
   buildings: Building[];
-  onScanStarted: (job: any) => void;
+  onScanStarted: (job: any, browserConfig?: { ivionBaseUrl: string }) => void;
 }
 
 const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
@@ -237,7 +238,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  // Start scan
+  // Start scan — browser-based mode
   const startScan = async () => {
     const siteId = getIvionSiteId();
     if (!selectedBuilding || !siteId || selectedTemplates.length === 0) {
@@ -252,6 +253,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     setIsStarting(true);
 
     try {
+      // Create scan job in DB
       const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
         body: {
           action: 'start-scan',
@@ -263,12 +265,16 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
 
       if (error) throw error;
 
+      // Use the same Ivion base URL as the rest of the app
+      const ivionBaseUrl = IVION_DEFAULT_BASE_URL;
+
       toast({
-        title: 'Skanning startad',
-        description: 'AI-skanningen har påbörjats',
+        title: 'Skanning startar',
+        description: 'Öppnar 360°-visaren för webbläsarbaserad skanning...',
       });
 
-      onScanStarted(data);
+      // Launch browser-based scan
+      onScanStarted(data, { ivionBaseUrl });
     } catch (error: any) {
       toast({
         title: 'Kunde inte starta skanning',
@@ -288,7 +294,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
   const canStartScan = selectedBuilding && 
     getIvionSiteId() && 
     selectedTemplates.length > 0 && 
-    !isStarting;
+    !isStarting &&
+    ivionStatus?.connected;
 
   return (
     <div className="space-y-6">
@@ -516,15 +523,16 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
             <Info className="h-5 w-5 text-muted-foreground mt-0.5" />
             <div className="text-sm text-muted-foreground space-y-2">
               <p>
-                <strong>Så fungerar det:</strong> AI:n analyserar alla panoramabilder i den valda byggnaden
-                och identifierar objekt baserat på valda mallar.
+                <strong>Så fungerar det:</strong> Skanningen körs direkt i webbläsaren via 360°-visaren.
+                AI:n analyserar skärmbilder tagna från panoramavyn och identifierar objekt baserat på valda mallar.
               </p>
               <p>
                 Detekterade objekt visas i granskningskön där du kan godkänna eller avvisa dem.
                 Godkända objekt skapas automatiskt som tillgångar i systemet.
               </p>
               <p>
-                <strong>Uppskattad tid:</strong> ~1-2 min per 100 panoramabilder beroende på bildstorlek.
+                <strong>OBS:</strong> Håll webbläsarfliken öppen under hela skanningen.
+                Du kan pausa och återuppta när som helst.
               </p>
             </div>
           </div>

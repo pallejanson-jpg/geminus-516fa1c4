@@ -11,6 +11,7 @@ import ScanConfigPanel from '@/components/ai-scan/ScanConfigPanel';
 import ScanProgressPanel from '@/components/ai-scan/ScanProgressPanel';
 import DetectionReviewQueue from '@/components/ai-scan/DetectionReviewQueue';
 import TemplateManagement from '@/components/ai-scan/TemplateManagement';
+import BrowserScanRunner from '@/components/ai-scan/BrowserScanRunner';
 
 interface DetectionTemplate {
   id: string;
@@ -40,6 +41,14 @@ interface Building {
   name: string;
 }
 
+interface BrowserScanConfig {
+  scanJobId: string;
+  buildingFmGuid: string;
+  ivionSiteId: string;
+  ivionBaseUrl: string;
+  templates: string[];
+}
+
 const AiAssetScan: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -51,8 +60,16 @@ const AiAssetScan: React.FC = () => {
   const [activeScanJob, setActiveScanJob] = useState<ScanJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('configure');
+  const [browserScanConfig, setBrowserScanConfig] = useState<BrowserScanConfig | null>(null);
 
   const handleBack = () => {
+    if (browserScanConfig) {
+      // Confirm leaving active scan
+      if (confirm('Avbryta pågående skanning?')) {
+        setBrowserScanConfig(null);
+      }
+      return;
+    }
     if (window.history.length > 2) {
       navigate(-1);
     } else {
@@ -60,7 +77,6 @@ const AiAssetScan: React.FC = () => {
     }
   };
 
-  // Load templates, scan jobs, and buildings on mount
   useEffect(() => {
     loadData();
   }, []);
@@ -68,36 +84,29 @@ const AiAssetScan: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Load templates
       const { data: templateData, error: templateError } = await supabase.functions.invoke('ai-asset-detection', {
         body: { action: 'get-templates' }
       });
-      
       if (templateError) throw templateError;
       setTemplates(templateData || []);
       
-      // Load scan jobs
       const { data: jobData, error: jobError } = await supabase.functions.invoke('ai-asset-detection', {
         body: { action: 'get-scan-jobs' }
       });
-      
       if (jobError) throw jobError;
       setScanJobs(jobData || []);
       
-      // Load buildings from assets (Category = "Building")
       const { data: buildingData, error: buildingError } = await supabase
         .from('assets')
         .select('fm_guid, name, common_name')
         .eq('category', 'Building')
         .order('name');
-      
       if (buildingError) throw buildingError;
       setBuildings((buildingData || []).map(b => ({
         fm_guid: b.fm_guid,
         name: b.name || b.common_name || 'Unnamed Building'
       })));
       
-      // Check if there's an active scan
       const runningJob = (jobData || []).find((j: ScanJob) => j.status === 'running' || j.status === 'queued');
       if (runningJob) {
         setActiveScanJob(runningJob);
@@ -114,17 +123,36 @@ const AiAssetScan: React.FC = () => {
     }
   };
 
-  const handleScanStarted = (job: ScanJob) => {
+  const handleScanStarted = (job: ScanJob, browserConfig?: { ivionBaseUrl: string }) => {
     setActiveScanJob(job);
     setScanJobs(prev => [job, ...prev]);
-    setActiveTab('progress');
+
+    if (browserConfig) {
+      // Launch browser-based scan
+      setBrowserScanConfig({
+        scanJobId: job.id,
+        buildingFmGuid: job.building_fm_guid,
+        ivionSiteId: job.ivion_site_id,
+        ivionBaseUrl: browserConfig.ivionBaseUrl,
+        templates: job.templates,
+      });
+    } else {
+      setActiveTab('progress');
+    }
   };
 
   const handleScanCompleted = (job: ScanJob) => {
     setActiveScanJob(null);
+    setBrowserScanConfig(null);
     setScanJobs(prev => prev.map(j => j.id === job.id ? job : j));
     setActiveTab('review');
-    loadData(); // Reload to get pending detections count
+    loadData();
+  };
+
+  const handleBrowserScanCancelled = () => {
+    setActiveScanJob(null);
+    setBrowserScanConfig(null);
+    loadData();
   };
 
   if (isLoading) {
@@ -134,6 +162,32 @@ const AiAssetScan: React.FC = () => {
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
           <p className="text-muted-foreground">Laddar...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Show browser scan runner when active
+  if (browserScanConfig) {
+    return (
+      <div className="h-full flex flex-col p-3 md:p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0 h-8 w-8">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="p-1.5 bg-primary/10 rounded-lg shrink-0">
+            <Scan className="h-5 w-5 text-primary" />
+          </div>
+          <h1 className="text-base md:text-xl font-semibold">AI-skanning pågår</h1>
+        </div>
+        <BrowserScanRunner
+          scanJobId={browserScanConfig.scanJobId}
+          buildingFmGuid={browserScanConfig.buildingFmGuid}
+          ivionSiteId={browserScanConfig.ivionSiteId}
+          ivionBaseUrl={browserScanConfig.ivionBaseUrl}
+          templates={browserScanConfig.templates}
+          onCompleted={handleScanCompleted}
+          onCancelled={handleBrowserScanCancelled}
+        />
       </div>
     );
   }
@@ -190,9 +244,7 @@ const AiAssetScan: React.FC = () => {
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-primary rounded-full md:hidden" />
             )}
             {activeScanJob && !isMobile && (
-              <Badge variant="secondary" className="ml-1 text-xs">
-                Aktiv
-              </Badge>
+              <Badge variant="secondary" className="ml-1 text-xs">Aktiv</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger 
