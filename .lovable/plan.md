@@ -1,110 +1,205 @@
 
 
-# Fix Ivion SDK, Toolbar Labeling, and Floor Switcher
+# Konsolidera 3D, Split och Virtual Twin till en Unified Viewer
 
-## Problem 1: SDK initialization times out (root cause)
+## Problemet idag
 
-According to the NavVis SDK documentation (`public/lib/ivion/api.d.ts` line 3628-3631):
+Tre separata sidor med nästan identisk kod:
 
-> "The promise resolves once data has been loaded and **the view has been moved to the startup location**. If private mode is enabled, the promise resolves only after a user has logged in."
+| Funktion | VirtualTwin.tsx (547 rader) | SplitViewer.tsx (593 rader) | Viewer.tsx (91 rader) |
+|---|---|---|---|
+| Byggnadsdata-laddning | Ja (rad 86-151) | Ja (rad 480-549) | Via AppContext |
+| SDK-laddning | Ja (rad 153-207) | Via Ivion360View | - |
+| Token-refresh | Ja (rad 210-228) | Via Ivion360View | - |
+| Alignment-panel | Ja | Nej (saknas!) | - |
+| Fullscreen | Ja (rad 254-269) | Ja (rad 171-188) | - |
+| Toolbar | Ja | Ja (annorlunda) | - |
 
-For multi-site Ivion instances (like `swg.iv.navvis.com`), `getApi()` waits for the user to manually select a site before resolving. With `loginToken`, authentication is instant, but site selection blocks the promise indefinitely -- causing the 30-second timeout.
+Ca 400 rader duplicerad logik. Och Alignment-panelen saknas helt i Split View, trots att den behövs lika mycket dar.
 
-The `ConfigurationInterface` has NO `siteId` property. The only options are `loginToken`, `lang`, `base_url` (hidden), and a few UI settings.
+## Losningen: En enda UnifiedViewer-sida
 
-When accessed via browser URL (iframe), `?site=3373717251911143` tells Ivion which site to auto-select. The SDK should behave similarly when the site parameter is included in the baseUrl.
-
-**Fix:** Include `?site=siteId` in the `baseUrl` parameter passed to `getApi()`. This mirrors how the iframe URL works and allows the SDK to determine the startup site during initialization, bypassing the site selection menu.
+En enda komponent som stodjer fyra lagen, styrda av en toolbar:
 
 ```text
-Before (hangs for multi-site):
-  getApi('https://swg.iv.navvis.com', { loginToken: '...' })
-
-After (auto-selects site):
-  getApi('https://swg.iv.navvis.com/?site=3373717251911143', { loginToken: '...' })
++--[Tillbaka]--[Byggnadsnamn]----[360] [Split] [VT] [3D]----[Opacity] [Align] [FS]--+
+|                                                                                     |
+|                       (innehall baserat pa aktivt lage)                              |
+|                                                                                     |
++-------------------------------------------------------------------------------------+
 ```
 
-Keep the post-resolve `loadSite()` call as a backup in case the URL approach does not work (SDK resolves via manual selection). Also keep the menu-hiding and sidebar-closing logic.
+| Lage | Beskrivning | Layout |
+|------|-------------|--------|
+| **3D** | Enbart 3D BIM-modell | Helskarm AssetPlusViewer |
+| **Split** | 3D och 360 sida vid sida | ResizablePanelGroup (50/50) |
+| **VT** | 3D overlay pa 360 (Virtual Twin) | Lager: SDK (z-0) + transparent 3D (z-10) |
+| **360** | Enbart 360-panorama | Helskarm SDK |
 
-This fix applies to ALL three views that use the SDK:
-- `src/pages/VirtualTwin.tsx`
-- `src/components/viewer/Ivion360View.tsx`
-- `src/pages/SplitViewer.tsx` (via Ivion360View)
+### Standardlage baserat pa inkommen route
 
-| File | Change |
-|---|---|
-| `src/lib/ivion-sdk.ts` | When `siteId` is provided, construct `baseUrl` with `?site=siteId` for `getApi()`. Keep post-resolve `loadSite()` as fallback. |
-| `src/pages/VirtualTwin.tsx` | Already passes `siteId` -- no change needed. |
-| `src/components/viewer/Ivion360View.tsx` | Already passes `siteId` -- no change needed. |
+- `/virtual-twin?building=X` --> startar i **VT**-lage
+- `/split-viewer?building=X` --> startar i **Split**-lage
+- Navigation fran 3D-knappar --> startar i **3D**-lage
 
-## Problem 2: Toolbar should say "VT" instead of "Split"
+Alla tre routes pekar pa samma komponent med olika `initialMode`.
 
-The user wants the Virtual Twin overlay mode (currently labeled "Split") renamed to "VT". This is the default mode and represents the core Virtual Twin experience.
+## Teknisk arkitektur
 
-| File | Change |
-|---|---|
-| `src/pages/VirtualTwin.tsx` | Rename "Split" button label to "VT", update tooltip to "Virtual Twin -- 3D overlay pa 360-grader" |
+### Ny hook: `useBuildingViewerData`
 
-## Problem 3: Floor switcher is too tall vertically
-
-The floating floor switcher currently shows up to 8 pills on desktop (`MAX_VISIBLE_PILLS_DESKTOP = 8`). With 10 floors (as in the Akerselva Atrium building), this creates a very tall vertical strip.
-
-**Fix:**
-- Reduce `MAX_VISIBLE_PILLS_DESKTOP` from 8 to 5
-- Reduce `MAX_VISIBLE_PILLS_MOBILE` from 6 to 4
-- In Virtual Twin mode, hide the floor switcher by default (dispatch `FLOOR_PILLS_TOGGLE` event with `visible: false` on mount)
-
-| File | Change |
-|---|---|
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | Change `MAX_VISIBLE_PILLS_DESKTOP` from 8 to 5, `MAX_VISIBLE_PILLS_MOBILE` from 6 to 4 |
-| `src/pages/VirtualTwin.tsx` | On mount in VT/split mode, dispatch `FLOOR_PILLS_TOGGLE` event with `visible: false` to hide the floor switcher by default |
-
-## Technical Details
-
-### SDK baseUrl construction
+Extraherar den duplicerade byggnadsdata-laddningen till en ateranvandbar hook:
 
 ```text
-// In loadIvionSdk():
-// Build the URL that getApi will use for initialization
-let initUrl = baseUrl;
-if (siteId) {
-  const sep = baseUrl.includes('?') ? '&' : '?';
-  initUrl = baseUrl + sep + 'site=' + siteId;
+useBuildingViewerData(buildingFmGuid: string)
+  --> buildingInfo: { fmGuid, name, ivionSiteId, ivionUrl, transform, origin, ... }
+  --> isLoading: boolean
+  --> error: string | null
+```
+
+Denna hook konsoliderar:
+- Byggnadsuppslag i allData (identiskt i VT rad 94-98 och Split rad 489-498)
+- Databasfraga for building_settings (identiskt i VT rad 107-111 och Split rad 503-506)
+- URL-konstruktion for Ivion (identiskt i VT rad 124-128 och Split rad 66-76)
+- Transform-bygge fran settings (identiskt i bada)
+
+### Ny hook: `useIvionSdk`
+
+Extraherar SDK-laddning, livscykel och token-refresh:
+
+```text
+useIvionSdk({ baseUrl, siteId, buildingFmGuid, containerRef, enabled })
+  --> sdkStatus: 'idle' | 'loading' | 'ready' | 'failed'
+  --> ivApiRef: MutableRefObject<IvionApi | null>
+  --> retry: () => void
+```
+
+Konsoliderar:
+- SDK-laddning (VT rad 153-207 och Ivion360View rad 131-208)
+- Token-refresh (VT rad 210-228 och Ivion360View rad 211-230)
+- Cleanup och retry-logik (VT rad 289-300)
+
+### Huvudkomponent: `UnifiedViewer`
+
+```text
+UnifiedViewer({ initialMode: '3d' | 'split' | 'vt' | '360' })
+  |
+  |-- useBuildingViewerData(fmGuid)     // Byggnadsdata (en gang)
+  |-- useIvionSdk(...)                  // SDK (en gang)
+  |-- useVirtualTwinSync(...)           // VT-synk (aktiv i VT-lage)
+  |-- useIvionCameraSync(...)           // Split-synk (aktiv i Split-lage)
+  |-- [viewMode] state                  // Aktuellt lage, default fran initialMode
+  |
+  |-- Render:
+  |     |-- <ViewerToolbar />           // Gemensam toolbar med lagvaljare
+  |     |-- if (viewMode === '3d')      --> <AssetPlusViewer />
+  |     |-- if (viewMode === 'split')   --> <ResizablePanelGroup>
+  |     |-- if (viewMode === 'vt')      --> Layered SDK + transparent 3D
+  |     |-- if (viewMode === '360')     --> SDK only
+  |     |-- <AlignmentPanel />          // Tillganglig i VT och Split
+```
+
+### Villkorlig rendering per lage
+
+```text
+Lage '3d':
+  - SDK-container: display: none (men forblir monterad)
+  - AssetPlusViewer: full opacity, vanliga pointer-events
+  - Alignment: dold
+  - Synk: inaktiv
+
+Lage 'split':
+  - ResizablePanelGroup med tva paneler
+  - Vanster: AssetPlusViewer (full opacity)
+  - Hoger: SDK-container (flyttas in i panelen via React portal eller ref)
+  - Alignment: tillganglig
+  - Synk: bi-direktionell via ViewerSyncContext
+
+Lage 'vt':
+  - SDK-container: z-0, synlig
+  - AssetPlusViewer: z-10, transparent, pointer-events: none (utom vid select-verktyg)
+  - Alignment: tillganglig
+  - Ghost opacity-slider: synlig
+  - Synk: en-vags via useVirtualTwinSync
+
+Lage '360':
+  - SDK-container: helskarm
+  - AssetPlusViewer: display: none (men forblir monterad)
+  - Alignment: dold
+  - Synk: inaktiv
+```
+
+### SDK-container i Split-lage
+
+En utmaning: I VT/360-lage ar SDK-containern en absolut-positionerad div. I Split-lage ska den sitta i en ResizablePanel. Losningen ar att alltid ha SDK-containern som en absolut div, men i Split-lage positionera den via CSS sa den taecker hogerpanelen:
+
+```text
+Split-lage:
+  <ResizablePanelGroup>
+    <Panel> <AssetPlusViewer /> </Panel>
+    <Handle />
+    <Panel ref={rightPanelRef}> <!-- tom, SDK positioneras over --> </Panel>
+  </ResizablePanelGroup>
+  
+  <div ref={sdkContainerRef}
+       style={ splitMode ? positionera over hogerpanelen : 'inset-0' }
+  />
+```
+
+Alternativt kan vi anvanda en enklare approach: i Split-lage anvanda CSS Grid eller flex istallet for ResizablePanelGroup, sa att SDK-containern naturligt placeras i ena halvan.
+
+### Lagvaljare-tillganglighet
+
+Om byggnaden saknar `ivionSiteId`, ar 360/VT/Split disabled:
+
+```text
+Har Ivion Site ID:  [360] [Split] [VT] [3D]   (alla tillgangliga)
+Saknar Site ID:     [3D]                        (bara 3D)
+SDK-fel:            [3D] [360°*] [Split*] [VT*] (360/Split/VT disabled + retry-knapp)
+```
+
+### Vaningsplan-valjare
+
+Dold som standard i VT-lage (samma som nuvarande plan). Synlig i 3D och Split.
+
+## Filandringar
+
+| Fil | Andring |
+|---|---|
+| `src/hooks/useBuildingViewerData.ts` | **NY** -- Extraherar byggnadsdata-laddning |
+| `src/hooks/useIvionSdk.ts` | **NY** -- Extraherar SDK-laddning och token-refresh |
+| `src/pages/UnifiedViewer.tsx` | **NY** -- Konsoliderad viewer med alla fyra lagen |
+| `src/pages/VirtualTwin.tsx` | **RENSAS** -- Tunnt wrapper som importerar UnifiedViewer med initialMode='vt' |
+| `src/pages/SplitViewer.tsx` | **RENSAS** -- Tunnt wrapper som importerar UnifiedViewer med initialMode='split' |
+| `src/pages/Viewer.tsx` | Behalls for inbaddad 3D i AppLayout (ingen andring, den ar redan minimal) |
+| `src/components/viewer/Ivion360View.tsx` | Behalls for standalone 360-vy (inbaddad i MainContent under 'radar' app) |
+| `src/App.tsx` | Routes uppdateras att ladda UnifiedViewer med ratt initialMode |
+
+### Tunna wrappers (for bakatkompabilitet)
+
+```text
+// src/pages/VirtualTwin.tsx
+export default function VirtualTwin() {
+  return <UnifiedViewer initialMode="vt" />;
 }
-const api = await getApi(initUrl, config);
 
-// Post-resolve backup: if site wasn't auto-selected, load it manually
-if (siteId && !api.site?.service?.activeSite) {
-  const site = await api.site.repository.findOne(Number(siteId));
-  await api.site.service.loadSite(site);
+// src/pages/SplitViewer.tsx  
+export default function SplitViewer() {
+  return <UnifiedViewer initialMode="split" />;
 }
 ```
 
-Note: `SiteRepositoryInterface.findOne(id: number)` takes a number, so the string site ID must be parsed with `Number()`.
+## Implementationsordning
 
-### Floor switcher hide in VT mode
+1. Skapa `useBuildingViewerData` hook (extrahera fran VirtualTwin.tsx)
+2. Skapa `useIvionSdk` hook (extrahera fran VirtualTwin.tsx + Ivion360View.tsx)
+3. Skapa `UnifiedViewer.tsx` med alla fyra lagen
+4. Uppdatera VirtualTwin.tsx och SplitViewer.tsx till tunna wrappers
+5. Testa alla lagen
 
-```text
-// In VirtualTwin.tsx, after SDK loads or on mount:
-useEffect(() => {
-  if (viewMode === 'split') {
-    window.dispatchEvent(new CustomEvent(FLOOR_PILLS_TOGGLE_EVENT, {
-      detail: { visible: false }
-    }));
-  }
-}, [viewMode]);
-```
+## Riskbedomning
 
-## File Summary
-
-| File | Changes |
-|---|---|
-| `src/lib/ivion-sdk.ts` | Include `?site=siteId` in baseUrl for `getApi()`. Parse siteId as number for `findOne()`. |
-| `src/pages/VirtualTwin.tsx` | (1) Rename "Split" to "VT" in toolbar, (2) Hide floor switcher by default in VT/split mode |
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | Reduce max visible pills: desktop 8 to 5, mobile 6 to 4 |
-
-## Risk Assessment
-
-- **SDK baseUrl with site param (medium risk):** This mirrors how the iframe URL works. If the SDK strips query params for API calls but uses them for initialization, it works perfectly. If not, the post-resolve `loadSite()` backup handles it. Worst case: SDK shows site selection briefly before auto-selecting.
-- **Toolbar rename (no risk):** Label-only change.
-- **Floor switcher reduction (low risk):** Remaining floors are accessible via the overflow menu. Hidden by default in VT mode is sensible since 3D floor controls conflict with the 360-degree panorama navigation.
+- **SDK-container delning (medel risk):** Samma `<ivion>` element maste funka bade som helskarmslager (VT/360) och som halva skarmens bredd (Split). Hanteras via dynamisk CSS-positionering baserat pa lage.
+- **Tva synk-mekanismer (lag risk):** `useVirtualTwinSync` (VT) och `useIvionCameraSync` (Split) aktiveras villkorligt baserat pa lage. Bara en ar aktiv at gangen.
+- **Bakatkompabilitet (ingen risk):** Routes behalls, bara underliggande komponent byts ut.
+- **Inbaddad 3D (ingen risk):** `Viewer.tsx` och dess anvandning i AppLayout paverkas inte.
