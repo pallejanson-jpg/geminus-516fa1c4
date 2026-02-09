@@ -5,16 +5,22 @@
  * The user navigates panoramas naturally while the BIM geometry is ghosted on top.
  * 
  * Architecture:
- *   Layer 1 (bottom, z-0): Ivion SDK <div> - receives all pointer events
- *   Layer 2 (top, z-10): Asset+ 3D <canvas> - transparent, pointer-events: none
- *   Camera sync: One-directional (Ivion drives → xeokit follows)
+ *   SDK mode (transparent overlay):
+ *     Layer 1 (bottom, z-0): Ivion SDK <div> - receives all pointer events
+ *     Layer 2 (top, z-10): Asset+ 3D <canvas> - transparent, pointer-events: none
+ *     Camera sync: One-directional (Ivion drives → xeokit follows)
+ * 
+ *   Fallback mode (tabbed):
+ *     Tab "360°": Ivion panorama in iframe (full viewport)
+ *     Tab "3D":   Asset+ 3D viewer (full viewport)
+ *     Both stay mounted to preserve state.
  * 
  * Route: /virtual-twin?building=<fmGuid>
  */
 
 import React, { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye, RefreshCw, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye, RefreshCw, AlertTriangle, View, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,6 +41,8 @@ interface BuildingInfo {
   ivionUrl: string;
   transform: IvionBimTransform;
 }
+
+type FallbackTab = '360' | '3d';
 
 const VirtualTwin: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -62,7 +70,15 @@ const VirtualTwin: React.FC = () => {
   // Asset+ viewer reference (for xeokit access)
   const viewerInstanceRef = useRef<any>(null);
 
+  // Fallback tab mode (when SDK fails)
+  const [fallbackTab, setFallbackTab] = useState<FallbackTab>('360');
+
   const buildingFmGuid = searchParams.get('building');
+
+  // Navigation handler - always works
+  const handleGoBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
   // ─── Load building data ────────────────────────────────────────────
   useEffect(() => {
@@ -168,7 +184,7 @@ const VirtualTwin: React.FC = () => {
         console.error('[VirtualTwin] SDK load failed:', err);
         if (!cancelled) {
           setSdkError(true);
-          toast.error('360°-panorama kunde inte laddas. Visar enbart 3D-modell.');
+          console.log('[VirtualTwin] Switching to iframe fallback mode');
         }
       }
     };
@@ -249,8 +265,6 @@ const VirtualTwin: React.FC = () => {
   }, []);
 
   // ─── Capture viewer instance from AssetPlusViewer ─────────────────
-  // The AssetPlusViewer sets window.__assetPlusViewer on init.
-  // We also use a MutationObserver as a backup.
   useEffect(() => {
     const checkForViewer = () => {
       const win = window as any;
@@ -261,7 +275,6 @@ const VirtualTwin: React.FC = () => {
       return false;
     };
 
-    // Poll briefly for the viewer instance
     const interval = setInterval(() => {
       if (checkForViewer()) clearInterval(interval);
     }, 500);
@@ -281,7 +294,7 @@ const VirtualTwin: React.FC = () => {
     setSdkRetryKey(k => k + 1);
   }, []);
 
-  const showFallback3D = sdkError && !sdkReady;
+  const showFallback = sdkError && !sdkReady;
 
   // ─── Render ────────────────────────────────────────────────────────
 
@@ -302,7 +315,7 @@ const VirtualTwin: React.FC = () => {
         <div className="text-center max-w-md">
           <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-destructive font-medium mb-2">{error || 'Byggnadsdata saknas'}</p>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={handleGoBack}>
             Tillbaka
           </Button>
         </div>
@@ -312,51 +325,115 @@ const VirtualTwin: React.FC = () => {
 
   return (
     <div className="h-screen w-screen relative overflow-hidden bg-black">
-      {/* Layer 1: Ivion SDK (bottom) - receives all pointer events (hidden when fallback) */}
-      {!showFallback3D && (
-        <div
-          ref={sdkContainerRef}
-          className="absolute inset-0 z-0"
-          style={{ width: '100%', height: '100%' }}
-        />
-      )}
+      {/* ─── SDK MODE: Transparent overlay ─── */}
+      {!showFallback && (
+        <>
+          {/* Layer 1: Ivion SDK (bottom) - receives all pointer events */}
+          <div
+            ref={sdkContainerRef}
+            className="absolute inset-0 z-0"
+            style={{ width: '100%', height: '100%' }}
+          />
 
-      {/* Layer 2: Asset+ 3D viewer - transparent overlay when SDK works, full mode as fallback */}
-      <div
-        className="absolute inset-0 z-10"
-        style={{ pointerEvents: showFallback3D ? 'auto' : 'none' }}
-      >
-        <AssetPlusViewer
-          fmGuid={buildingInfo.fmGuid}
-          transparentBackground={!showFallback3D}
-          ghostOpacity={showFallback3D ? 1 : ghostOpacity / 100}
-        />
-      </div>
-
-      {/* SDK error banner */}
-      {showFallback3D && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 bg-destructive/90 backdrop-blur-sm text-destructive-foreground px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg max-w-md">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span className="text-sm">360°-panorama kunde inte laddas. Visar enbart 3D-modell.</span>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="shrink-0 h-7 text-xs"
-            onClick={handleRetrySDK}
+          {/* Layer 2: Asset+ 3D viewer - transparent overlay */}
+          <div
+            className="absolute inset-0 z-10"
+            style={{ pointerEvents: 'none' }}
           >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Försök igen
-          </Button>
-        </div>
+            <AssetPlusViewer
+              fmGuid={buildingInfo.fmGuid}
+              transparentBackground={true}
+              ghostOpacity={ghostOpacity / 100}
+              suppressOverlay={true}
+              onClose={handleGoBack}
+            />
+          </div>
+        </>
       )}
 
-      {/* Header toolbar */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-2 bg-black/40 backdrop-blur-sm">
+      {/* ─── FALLBACK MODE: Tabbed 360/3D ─── */}
+      {showFallback && (
+        <>
+          {/* 360° iframe - hidden when 3D tab is active, but stays mounted */}
+          <div
+            className="absolute inset-0 z-0"
+            style={{ display: fallbackTab === '360' ? 'block' : 'none' }}
+          >
+            <iframe
+              src={buildingInfo.ivionUrl}
+              className="w-full h-full border-0"
+              allow="fullscreen"
+              title="360° Panorama"
+            />
+          </div>
+
+          {/* 3D viewer - hidden when 360 tab is active, but stays mounted */}
+          <div
+            className="absolute inset-0 z-0"
+            style={{ display: fallbackTab === '3d' ? 'block' : 'none' }}
+          >
+            <AssetPlusViewer
+              fmGuid={buildingInfo.fmGuid}
+              transparentBackground={false}
+              suppressOverlay={true}
+              onClose={handleGoBack}
+            />
+          </div>
+
+          {/* Tab switcher */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex gap-1 bg-black/60 backdrop-blur-md rounded-lg p-1 shadow-2xl border border-white/10">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFallbackTab('360')}
+              className={`gap-1.5 px-4 h-9 rounded-md transition-all ${
+                fallbackTab === '360'
+                  ? 'bg-white/20 text-white shadow-inner'
+                  : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <View className="h-4 w-4" />
+              360°
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFallbackTab('3d')}
+              className={`gap-1.5 px-4 h-9 rounded-md transition-all ${
+                fallbackTab === '3d'
+                  ? 'bg-white/20 text-white shadow-inner'
+                  : 'text-white/60 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Box className="h-4 w-4" />
+              3D
+            </Button>
+          </div>
+
+          {/* Fallback info banner */}
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-amber-900/80 backdrop-blur-sm text-amber-100 px-4 py-2 rounded-lg flex items-center gap-3 shadow-lg max-w-md">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="text-xs">SDK ej tillgängligt – visas i delat läge</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shrink-0 h-7 text-xs"
+              onClick={handleRetrySDK}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Försök igen
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* Header toolbar - z-40 to stay above ALL child overlays */}
+      <div className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-2 bg-black/40 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(-1)}
+            onClick={handleGoBack}
             className="text-white hover:bg-white/20 gap-1.5"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -373,47 +450,51 @@ const VirtualTwin: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Sync status */}
-          {syncActive && (
+          {/* Sync status - only in SDK mode */}
+          {!showFallback && syncActive && (
             <span className="text-xs text-green-400 bg-green-900/40 px-2 py-0.5 rounded flex items-center gap-1 mr-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
               Synk aktiv
             </span>
           )}
 
-          {/* Ghost opacity slider */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2 bg-white/10 rounded px-2 py-1">
-                <Eye className="h-3.5 w-3.5 text-white/70" />
-                <Slider
-                  value={[ghostOpacity]}
-                  onValueChange={([v]) => setGhostOpacity(v)}
-                  min={0}
-                  max={100}
-                  step={5}
-                  className="w-20"
-                />
-                <span className="text-xs text-white/70 w-8 text-right">{ghostOpacity}%</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>3D-modellens synlighet</TooltipContent>
-          </Tooltip>
+          {/* Ghost opacity slider - only in SDK mode */}
+          {!showFallback && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 bg-white/10 rounded px-2 py-1">
+                  <Eye className="h-3.5 w-3.5 text-white/70" />
+                  <Slider
+                    value={[ghostOpacity]}
+                    onValueChange={([v]) => setGhostOpacity(v)}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="w-20"
+                  />
+                  <span className="text-xs text-white/70 w-8 text-right">{ghostOpacity}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>3D-modellens synlighet</TooltipContent>
+            </Tooltip>
+          )}
 
-          {/* Alignment toggle */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`text-white hover:bg-white/20 h-8 w-8 ${showAlignment ? 'bg-white/20' : ''}`}
-                onClick={() => setShowAlignment(!showAlignment)}
-              >
-                <Move3D className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Alignment-kalibrering</TooltipContent>
-          </Tooltip>
+          {/* Alignment toggle - only in SDK mode */}
+          {!showFallback && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`text-white hover:bg-white/20 h-8 w-8 ${showAlignment ? 'bg-white/20' : ''}`}
+                  onClick={() => setShowAlignment(!showAlignment)}
+                >
+                  <Move3D className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Alignment-kalibrering</TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Fullscreen */}
           <Button
@@ -429,7 +510,7 @@ const VirtualTwin: React.FC = () => {
 
       {/* Alignment panel (slide-out) */}
       {showAlignment && buildingInfo && (
-        <div className="absolute top-14 left-4 z-20">
+        <div className="absolute top-14 left-4 z-40">
           <AlignmentPanel
             transform={transform}
             onChange={setTransform}
