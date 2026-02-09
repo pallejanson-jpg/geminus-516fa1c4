@@ -110,7 +110,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const [modelsOpen, setModelsOpen] = useState(false);
   const [floorsOpen, setFloorsOpen] = useState(false);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
-  const [displayOpen, setDisplayOpen] = useState(true);       // Expanded by default
+  const [displayOpen, setDisplayOpen] = useState(false);       // Collapsed by default
   const [roomVizOpen, setRoomVizOpen] = useState(false);       // Collapsed by default
   const [actionsOpen, setActionsOpen] = useState(false);        // Collapsed by default
 
