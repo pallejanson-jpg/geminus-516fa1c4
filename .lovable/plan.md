@@ -1,132 +1,95 @@
 
-# Fix Virtual Twin: SDK Loading, Back Button, and Iframe Fallback
 
-## Problem Summary
+# Kopiera NavVis SDK till projektet och fixa Virtual Twin
 
-The Virtual Twin page cannot load the 360-degree panorama because the NavVis IVION SDK fails to load through all three methods. After this failure, the page becomes unresponsive because the back button is hidden behind a UI overlay.
+## Bakgrund
 
-## Root Cause Analysis
+NavVis IVION SDK:n bestaar av tvaa filer:
+- `api.js` (13 KB, UMD-bundle med allt inbyggt)
+- `api.d.ts` (3635 rader TypeScript-typer)
 
-### Why the SDK fails to load
+Paketet kan inte installeras via npm i denna byggmiljoe. Loesningen aer att kopiera filerna direkt till projektet och uppdatera importerna.
 
-The SDK loading tries three methods in sequence, all fail:
+## Steg 1: Kopiera SDK-filerna till projektet
 
-1. **npm package** (`@navvis/ivion`): Not installed. The file `navvis-ivion-11.9.8.tgz` exists in the project root but is not listed in `package.json`.
-2. **Direct script tag** (`swg.iv.navvis.com/ivion.js`): Blocked by CORS.
-3. **CORS proxy** (`ivion-proxy/ivion.js`): The proxy fetches `https://swg.iv.navvis.com/ivion.js` which returns 404 - the file does not exist at that URL.
+Kopiera de uppladdade filerna till `public/lib/ivion/`:
 
-The standalone 360-view (Ivion360View) works because it gracefully falls back to an iframe when the SDK fails.
-
-### Why the back button breaks
-
-When SDK fails, `showFallback3D = true`, and AssetPlusViewer is rendered with `transparentBackground=false` and `pointerEvents: 'auto'`. On mobile, AssetPlusViewer renders its `MobileViewerOverlay` at z-index 30, which covers the Virtual Twin's own header at z-index 20. Since Virtual Twin does not pass an `onClose` prop to AssetPlusViewer, the mobile overlay's back button is also conditionally hidden (`{onClose && ...}`). Result: no back button is visible or clickable.
-
-## Fix Plan
-
-### Fix 1: Install the NavVis SDK npm package
-
-Add `@navvis/ivion` to `package.json` using the local `.tgz` file. This enables Attempt 1 of the SDK loading chain, which loads the SDK from the bundled JavaScript (no CORS issues for the code itself).
-
-| File | Change |
+| Fil | Destination |
 |---|---|
-| `package.json` | Add `"@navvis/ivion": "file:./navvis-ivion-11.9.8.tgz"` to dependencies |
+| `api.js` | `public/lib/ivion/api.js` |
+| `api.d.ts` | `public/lib/ivion/api.d.ts` |
 
-This is the approach documented in the existing type declarations file (`src/types/navvis-ivion.d.ts`, line 6-7).
+Att laegga dem i `public/` goer dem tillgaengliga som en statisk resurs via `/lib/ivion/api.js`.
 
-### Fix 2: Suppress mobile overlay in Virtual Twin mode
+## Steg 2: Uppdatera SDK-laddaren
 
-Add a new prop `suppressOverlay` to AssetPlusViewer. When true, the MobileViewerOverlay and desktop toolbar are not rendered, allowing the parent (Virtual Twin) to control its own UI.
-
-| File | Change |
-|---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | Add `suppressOverlay?: boolean` prop; skip MobileViewerOverlay and desktop toolbar when true |
-| `src/pages/VirtualTwin.tsx` | Pass `suppressOverlay={true}` to AssetPlusViewer |
-
-### Fix 3: Make the Virtual Twin header always accessible
-
-Raise the Virtual Twin's header z-index above any child overlays, and ensure it is always rendered regardless of SDK or 3D viewer state.
-
-| File | Change |
-|---|---|
-| `src/pages/VirtualTwin.tsx` | Change header from z-20 to z-40; ensure header renders unconditionally |
-
-### Fix 4: Add iframe fallback for Virtual Twin
-
-When the SDK fails to load, instead of showing only the 3D model, show the 360-degree panorama in a regular iframe. Since an iframe cannot be made transparent, the Virtual Twin will switch to a "tabbed" mode: the user can toggle between 3D view and 360 view using buttons. When the SDK loads successfully, the original transparent overlay mode is used.
-
-| File | Change |
-|---|---|
-| `src/pages/VirtualTwin.tsx` | Add iframe fallback mode with 3D/360 toggle buttons when SDK fails |
+Aendra `src/lib/ivion-sdk.ts` saa att Attempt 1 (npm-import) ersaetts med att ladda scriptet fraan den lokala `/lib/ivion/api.js`:
 
 ```text
-SDK succeeds:     Layer 1: Ivion SDK (bottom, receives events)
-                  Layer 2: 3D transparent overlay (top, pointer-events: none)
-                  --> Full Virtual Twin experience
+Ny laddningsordning:
+1. Ladda /lib/ivion/api.js via script-tag (lokal fil, inga CORS-problem)
+2. (fallback) Ladda ivion.js direkt fraan NavVis-instansen
+3. (fallback) Ladda ivion.js via CORS-proxyn
 
-SDK fails:        Tab A: 360 in iframe (full viewport)
-                  Tab B: 3D viewer (full viewport)
-                  --> Degraded but functional experience
+Efter laddning: window.IvApi.getApi finns tillgaengligt
 ```
 
-### Fix 5: Improve error recovery
+SDK:ns UMD-bundle exporterar till `self.IvApi`, saa vi letar efter `window.IvApi.getApi` efter script-laddning.
 
-Add `navigate(-1)` as a reliable escape route. Currently the only way back is the header button which gets covered. Add a handler so that pressing the browser back button or the hardware back button on mobile always works.
-
-| File | Change |
+| Fil | Aendring |
 |---|---|
-| `src/pages/VirtualTwin.tsx` | Ensure `navigate(-1)` is called on back button click even during error states; add `onClose` prop to AssetPlusViewer as additional safety |
+| `src/lib/ivion-sdk.ts` | Byt ut npm-import (Attempt 1) mot lokal script-laddning av `/lib/ivion/api.js` |
 
-## Complete File Summary
+## Steg 3: Uppdatera TypeScript-deklarationer
 
-| File | Changes |
+Uppdatera `src/types/navvis-ivion.d.ts` saa att den inte refererar till `@navvis/ivion` npm-paketet laengre. Istallet pekar vi paa den lokala `api.d.ts` eller goer den oeverbloedig daa vi redan har egna typdefinitioner i `ivion-sdk.ts`.
+
+| Fil | Aendring |
 |---|---|
-| `package.json` | Add `@navvis/ivion` dependency from local `.tgz` file |
-| `src/components/viewer/AssetPlusViewer.tsx` | Add `suppressOverlay` prop to hide mobile/desktop UI when embedded in Virtual Twin |
-| `src/pages/VirtualTwin.tsx` | (1) Pass `suppressOverlay` to AssetPlusViewer, (2) raise header z-index, (3) add iframe fallback with tab switcher, (4) pass `onClose` as safety |
+| `src/types/navvis-ivion.d.ts` | Uppdatera att referera lokala SDK istallet foer npm-paket |
 
-## Technical Details
+## Steg 4: Installera tween.js-beroendet
 
-### npm package installation
+SDK:ns `api.d.ts` importerar fraan `@tweenjs/tween.js`. Lagg till detta som ett beroende:
 
-The `navvis-ivion-11.9.8.tgz` file in the project root is the official NavVis IVION Frontend API SDK, distributed as a tarball. The type declarations in `src/types/navvis-ivion.d.ts` already reference this package and document the installation method:
+| Aendring |
+|---|
+| Lagg till `@tweenjs/tween.js` i package.json dependencies |
 
-```
-"@navvis/ivion": "file:./navvis-ivion-11.9.8.tgz"
-```
+Alternativt: Om bara typerna behoevs (SDK:n ar redan bundlad) kan vi skapa en enkel type-stub istallet.
 
-When installed, the `loadIvionSdk` function's Attempt 1 will succeed:
-```typescript
-const ivionModule = await import('@navvis/ivion');
-getApi = ivionModule.getApi;
-```
+## Steg 5: Verifiera att laddningskedjan fungerar
 
-### Iframe fallback tab switcher
+Naar `loadIvionSdk()` anropas:
+1. Den skapar en `<script src="/lib/ivion/api.js">` tag
+2. UMD-bundlen koeris och satter `window.IvApi = { getApi: ... }`
+3. `getApi(baseUrl, config)` anropas med NavVis-instansens URL + loginToken
+4. SDK:n renderar 360-panoramat i den `<ivion>` DOM-element som skapats
 
-When SDK fails, the Virtual Twin page shows two tab buttons: "360" and "3D". The 360 tab shows the panorama in a standard iframe (same as Ivion360View uses). The 3D tab shows the AssetPlusViewer. Only one is visible at a time, but both stay mounted to preserve state.
+## Om Alignment (foer referens)
 
-### suppressOverlay prop
+Alignment mellan BIM-modell och 360-panorama aer en **manuell engaangskalibrering per byggnad**:
 
-```typescript
-// AssetPlusViewer.tsx
-interface AssetPlusViewerProps {
-  // ... existing props
-  suppressOverlay?: boolean;
-}
+1. Admin oeppnar Virtual Twin och klickar paa "Alignment"-knappen i verktygsfaeltet
+2. Fyra reglage visas: Offset X/Y/Z (meter) och Rotation (grader)
+3. Admin justerar tills BIM-geometrin matchar panoraman visuellt
+4. Vaerdena sparas till databasen (`building_settings`)
+5. Alla framtida sessioner anvaender de sparade vaerdena automatiskt
 
-// In render:
-{isMobile && state.isInitialized && !suppressOverlay && (
-  <MobileViewerOverlay ... />
-)}
-{!isMobile && !suppressOverlay && (
-  <div className="absolute top-2 ...">
-    {/* Desktop toolbar */}
-  </div>
-)}
-```
+Just nu har alla byggnader offset/rotation = 0,0,0,0 (ej kalibrerade). Foerst maste SDK:n kunna ladda (Steg 1-4) innan alignment kan testas.
 
-## Risk Assessment
+## Filsammanfattning
 
-- **npm package install**: Medium risk. The `.tgz` file exists but has never been installed as a dependency in this project. If the build system does not support `file:` dependencies, it will fail gracefully and fall back to Attempt 2 and 3 (which also fail, triggering the iframe fallback).
-- **suppressOverlay**: Low risk. Simply skips rendering child overlays when a boolean prop is true. No behavioral changes to existing AssetPlusViewer usage.
-- **Header z-index**: Low risk. Only affects the Virtual Twin page layout.
-- **Iframe fallback**: Low risk. Reuses the same iframe approach that Ivion360View already uses successfully.
+| Fil | Aendring |
+|---|---|
+| `public/lib/ivion/api.js` | Ny fil - kopierad fraan NavVis SDK |
+| `public/lib/ivion/api.d.ts` | Ny fil - kopierad fraan NavVis SDK |
+| `src/lib/ivion-sdk.ts` | Byt npm-import mot lokal script-laddning |
+| `src/types/navvis-ivion.d.ts` | Uppdatera att referera lokala SDK |
+
+## Risk
+
+- **SDK-laddning (laag risk)**: UMD-bundles fungerar alltid via script-taggar. Den exporterar till `self.IvApi` vilket aer standard UMD-beteende.
+- **tween.js-beroende (laag risk)**: SDK:ns api.js har redan tween.js inbakat i sin bundle. Beroendet behoevs bara foer TypeScript-typerna i api.d.ts.
+- **Alignment (ingen risk)**: Befintlig funktionalitet, ingen kod aendras. Kalibrering goers manuellt av admin.
+
