@@ -1714,7 +1714,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-2xl h-full sm:h-[85vh] flex flex-col">
+            <DialogContent className="sm:max-w-3xl h-full sm:h-[85vh] flex flex-col">
                 <DialogHeader className="flex-shrink-0 pr-8">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
@@ -1726,32 +1726,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
-                        <TabsTrigger value="apps" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                    <TabsList className="flex w-full overflow-x-auto flex-shrink-0 gap-0.5">
+                        <TabsTrigger value="apps" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Apps</span>
                         </TabsTrigger>
-                        <TabsTrigger value="apis" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="apis" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Settings2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">API's</span>
                         </TabsTrigger>
-                        <TabsTrigger value="sync" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="sync" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Database className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Sync</span>
                         </TabsTrigger>
-                        <TabsTrigger value="symbols" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="symbols" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Symboler</span>
                         </TabsTrigger>
-                        <TabsTrigger value="viewer" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="viewer" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <View className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Viewer</span>
                         </TabsTrigger>
-                        <TabsTrigger value="voice" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="voice" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Röst</span>
                         </TabsTrigger>
-                        <TabsTrigger value="gunnar" className="gap-1 px-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3">
+                        <TabsTrigger value="gunnar" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden sm:inline">Gunnar</span>
                         </TabsTrigger>
@@ -2234,27 +2234,38 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         <Button
                                                             variant={accRegion === 'US' ? 'default' : 'outline'}
                                                             size="sm"
-                                                            onClick={() => setAccRegion('US')}
+                                                            onClick={() => {
+                                                                setAccRegion('US');
+                                                                setAccFolders(null);
+                                                                setAccTopLevelItems([]);
+                                                                setAccProjects([]);
+                                                            }}
                                                         >
                                                             US
                                                         </Button>
                                                         <Button
                                                             variant={accRegion === 'EMEA' ? 'default' : 'outline'}
                                                             size="sm"
-                                                            onClick={() => setAccRegion('EMEA')}
+                                                            onClick={() => {
+                                                                setAccRegion('EMEA');
+                                                                setAccFolders(null);
+                                                                setAccTopLevelItems([]);
+                                                                setAccProjects([]);
+                                                            }}
                                                         >
                                                             EMEA
                                                         </Button>
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground">Välj den region där ditt ACC-konto finns (EU-projekt kräver EMEA).</p>
+                                                    <p className="text-xs text-muted-foreground">Välj den region där ditt ACC-konto finns. Varje region använder sitt eget Account ID (ACC_ACCOUNT_ID_US / ACC_ACCOUNT_ID_EMEA).</p>
                                                 </div>
 
-                                                <div className="flex gap-2 flex-wrap">
+                                                <div className="flex gap-2 flex-col sm:flex-row sm:flex-wrap">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={handleTestAccConnection}
                                                         disabled={isTestingAcc}
+                                                        className="w-full sm:w-auto"
                                                     >
                                                         {isTestingAcc ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
                                                         Testa anslutning
@@ -2264,6 +2275,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         size="sm"
                                                         onClick={handleFetchAccProjects}
                                                         disabled={isLoadingAccProjects}
+                                                        className="w-full sm:w-auto"
                                                     >
                                                         {isLoadingAccProjects ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Database className="h-3.5 w-3.5 mr-1.5" />}
                                                         Hämta projekt
@@ -2314,12 +2326,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 </div>
 
                                                 {(selectedAccProjectId || manualAccProjectId.trim()) && (
-                                                    <div className="flex gap-2 flex-wrap">
+                                                    <div className="flex gap-2 flex-col sm:flex-row sm:flex-wrap">
                                                         <Button
                                                             onClick={handleSyncAccLocations}
                                                             disabled={isSyncingAccLocations || isSyncingAccAssets}
                                                             size="sm"
-                                                            className="gap-1"
+                                                            className="gap-1 w-full sm:w-auto"
                                                         >
                                                             {isSyncingAccLocations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Building2 className="h-3.5 w-3.5" />}
                                                             Synka platser
@@ -2329,7 +2341,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             disabled={isSyncingAccLocations || isSyncingAccAssets}
                                                             size="sm"
                                                             variant="secondary"
-                                                            className="gap-1"
+                                                            className="gap-1 w-full sm:w-auto"
                                                         >
                                                             {isSyncingAccAssets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
                                                             Synka tillgångar
@@ -2339,7 +2351,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             disabled={isLoadingAccFolders}
                                                             size="sm"
                                                             variant="outline"
-                                                            className="gap-1"
+                                                            className="gap-1 w-full sm:w-auto"
                                                         >
                                                             {isLoadingAccFolders ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
                                                             Visa mappar
@@ -2349,7 +2361,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             disabled={isCheckingAccStatus}
                                                             size="sm"
                                                             variant="ghost"
-                                                            className="gap-1"
+                                                            className="gap-1 w-full sm:w-auto"
                                                         >
                                                             {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                                                             Status
@@ -2391,7 +2403,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             <p className="text-xs text-muted-foreground italic">Inga mappar eller filer hittades.</p>
                                                         )}
 
-                                                        <div className="space-y-1 max-h-80 overflow-y-auto">
+                                                        <div className="space-y-1 max-h-[50vh] sm:max-h-96 overflow-y-auto overflow-x-hidden">
                                                             {accFolders.map((folder: any) => (
                                                                 <AccFolderNode
                                                                     key={folder.id}
