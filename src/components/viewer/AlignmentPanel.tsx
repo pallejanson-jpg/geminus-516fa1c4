@@ -1,17 +1,18 @@
 /**
  * Alignment calibration panel for Virtual Twin mode.
  * 
- * Provides sliders for real-time adjustment of the Ivion-to-BIM transform
- * (offset X/Y/Z and rotation). Changes are applied live and can be saved
- * to the database per building.
+ * Provides coarse + fine sliders for real-time adjustment of the Ivion-to-BIM
+ * transform (offset X/Y/Z and rotation). Changes are applied live and can be
+ * saved to the database per building.
  */
 
 import React, { useState, useCallback } from 'react';
-import { Save, RotateCcw, Move3D } from 'lucide-react';
+import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
@@ -25,23 +26,41 @@ interface AlignmentPanelProps {
   buildingFmGuid: string;
   /** Called after successful save */
   onSaved?: () => void;
+  /** Whether crosshair is shown (controlled by parent) */
+  showCrosshair?: boolean;
+  /** Toggle crosshair overlay */
+  onToggleCrosshair?: (show: boolean) => void;
 }
 
-const OFFSET_RANGE = 100;  // ±100m
-const OFFSET_STEP = 0.01;
-const ROTATION_STEP = 0.1;
+const COARSE_OFFSET_RANGE = 100; // ±100m
+const COARSE_OFFSET_STEP = 0.1;
+const FINE_OFFSET_RANGE = 2;    // ±2m
+const FINE_OFFSET_STEP = 0.01;
+const NUDGE_OFFSET = 0.05;      // m
+const NUDGE_ROTATION = 0.5;     // °
 
 const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   transform,
   onChange,
   buildingFmGuid,
   onSaved,
+  showCrosshair,
+  onToggleCrosshair,
 }) => {
   const [isSaving, setIsSaving] = useState(false);
+  const [fineOpen, setFineOpen] = useState(false);
 
   const updateField = useCallback(
     (field: keyof IvionBimTransform, value: number) => {
       onChange({ ...transform, [field]: value });
+    },
+    [transform, onChange]
+  );
+
+  const nudge = useCallback(
+    (field: keyof IvionBimTransform, delta: number) => {
+      const current = transform[field];
+      onChange({ ...transform, [field]: parseFloat((current + delta).toFixed(4)) });
     },
     [transform, onChange]
   );
@@ -76,7 +95,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   }, [transform, buildingFmGuid, onSaved]);
 
   return (
-    <div className="w-72 bg-background/90 backdrop-blur-md border border-border rounded-lg shadow-lg p-4 space-y-4">
+    <div className="w-80 bg-background/90 backdrop-blur-md border border-border rounded-lg shadow-lg p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -100,62 +119,138 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
         </div>
       </div>
 
-      {/* Offset X */}
-      <SliderField
-        label="Offset X"
-        value={transform.offsetX}
-        min={-OFFSET_RANGE}
-        max={OFFSET_RANGE}
-        step={OFFSET_STEP}
-        unit="m"
-        onChange={(v) => updateField('offsetX', v)}
-      />
+      {/* Help text */}
+      <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
+        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Navigera i 360° till en plats med tydliga element (dörr, vägg, pelare). 
+          Justera värdena tills 3D-modellen överlappar panoramabilden.
+        </p>
+      </div>
 
-      {/* Offset Y */}
-      <SliderField
-        label="Offset Y"
-        value={transform.offsetY}
-        min={-OFFSET_RANGE}
-        max={OFFSET_RANGE}
-        step={OFFSET_STEP}
-        unit="m"
-        onChange={(v) => updateField('offsetY', v)}
-      />
+      {/* Coarse sliders */}
+      <div className="space-y-2.5">
+        <CoarseSliderField
+          label="Offset X"
+          value={transform.offsetX}
+          min={-COARSE_OFFSET_RANGE}
+          max={COARSE_OFFSET_RANGE}
+          step={COARSE_OFFSET_STEP}
+          unit="m"
+          nudgeStep={NUDGE_OFFSET}
+          onChange={(v) => updateField('offsetX', v)}
+          onNudge={(d) => nudge('offsetX', d)}
+        />
+        <CoarseSliderField
+          label="Offset Y"
+          value={transform.offsetY}
+          min={-COARSE_OFFSET_RANGE}
+          max={COARSE_OFFSET_RANGE}
+          step={COARSE_OFFSET_STEP}
+          unit="m"
+          nudgeStep={NUDGE_OFFSET}
+          onChange={(v) => updateField('offsetY', v)}
+          onNudge={(d) => nudge('offsetY', d)}
+        />
+        <CoarseSliderField
+          label="Offset Z"
+          value={transform.offsetZ}
+          min={-COARSE_OFFSET_RANGE}
+          max={COARSE_OFFSET_RANGE}
+          step={COARSE_OFFSET_STEP}
+          unit="m"
+          nudgeStep={NUDGE_OFFSET}
+          onChange={(v) => updateField('offsetZ', v)}
+          onNudge={(d) => nudge('offsetZ', d)}
+        />
+        <CoarseSliderField
+          label="Rotation"
+          value={transform.rotation}
+          min={-180}
+          max={180}
+          step={0.5}
+          unit="°"
+          nudgeStep={NUDGE_ROTATION}
+          onChange={(v) => updateField('rotation', v)}
+          onNudge={(d) => nudge('rotation', d)}
+        />
+      </div>
 
-      {/* Offset Z */}
-      <SliderField
-        label="Offset Z"
-        value={transform.offsetZ}
-        min={-OFFSET_RANGE}
-        max={OFFSET_RANGE}
-        step={OFFSET_STEP}
-        unit="m"
-        onChange={(v) => updateField('offsetZ', v)}
-      />
+      {/* Fine-tuning section */}
+      <Collapsible open={fineOpen} onOpenChange={setFineOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="w-full justify-between h-7 text-xs text-muted-foreground hover:text-foreground px-1">
+            Finjustera
+            {fineOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2.5 pt-2">
+          <FineSliderField
+            label="Fine X"
+            value={transform.offsetX}
+            min={transform.offsetX - FINE_OFFSET_RANGE}
+            max={transform.offsetX + FINE_OFFSET_RANGE}
+            step={FINE_OFFSET_STEP}
+            unit="m"
+            nudgeStep={FINE_OFFSET_STEP}
+            onChange={(v) => updateField('offsetX', v)}
+            onNudge={(d) => nudge('offsetX', d)}
+          />
+          <FineSliderField
+            label="Fine Y"
+            value={transform.offsetY}
+            min={transform.offsetY - FINE_OFFSET_RANGE}
+            max={transform.offsetY + FINE_OFFSET_RANGE}
+            step={FINE_OFFSET_STEP}
+            unit="m"
+            nudgeStep={FINE_OFFSET_STEP}
+            onChange={(v) => updateField('offsetY', v)}
+            onNudge={(d) => nudge('offsetY', d)}
+          />
+          <FineSliderField
+            label="Fine Z"
+            value={transform.offsetZ}
+            min={transform.offsetZ - FINE_OFFSET_RANGE}
+            max={transform.offsetZ + FINE_OFFSET_RANGE}
+            step={FINE_OFFSET_STEP}
+            unit="m"
+            nudgeStep={FINE_OFFSET_STEP}
+            onChange={(v) => updateField('offsetZ', v)}
+            onNudge={(d) => nudge('offsetZ', d)}
+          />
+          <FineSliderField
+            label="Fine Rot"
+            value={transform.rotation}
+            min={transform.rotation - 10}
+            max={transform.rotation + 10}
+            step={0.1}
+            unit="°"
+            nudgeStep={0.1}
+            onChange={(v) => updateField('rotation', v)}
+            onNudge={(d) => nudge('rotation', d)}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
-      {/* Rotation */}
-      <SliderField
-        label="Rotation"
-        value={transform.rotation}
-        min={-180}
-        max={180}
-        step={ROTATION_STEP}
-        unit="°"
-        onChange={(v) => updateField('rotation', v)}
-      />
+      {/* Crosshair toggle */}
+      {onToggleCrosshair && (
+        <label className="flex items-center gap-2 cursor-pointer select-none px-1">
+          <input
+            type="checkbox"
+            checked={showCrosshair ?? false}
+            onChange={(e) => onToggleCrosshair(e.target.checked)}
+            className="rounded border-border"
+          />
+          <span className="text-xs text-muted-foreground">Visa korsmarkering</span>
+        </label>
+      )}
     </div>
   );
 };
 
-/** Reusable slider + numeric input field */
-function SliderField({
-  label,
-  value,
-  min,
-  max,
-  step,
-  unit,
-  onChange,
+/** Coarse slider with nudge buttons */
+function CoarseSliderField({
+  label, value, min, max, step, unit, nudgeStep, onChange, onNudge,
 }: {
   label: string;
   value: number;
@@ -163,13 +258,23 @@ function SliderField({
   max: number;
   step: number;
   unit: string;
+  nudgeStep: number;
   onChange: (v: number) => void;
+  onNudge: (delta: number) => void;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <div className="flex items-center justify-between">
         <Label className="text-xs text-muted-foreground">{label}</Label>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost" size="icon"
+            className="h-5 w-5"
+            onClick={() => onNudge(-nudgeStep)}
+            title={`-${nudgeStep}${unit}`}
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
           <Input
             type="number"
             value={value}
@@ -180,7 +285,67 @@ function SliderField({
             step={step}
             className="h-6 w-20 text-xs text-right px-1.5"
           />
+          <Button
+            variant="ghost" size="icon"
+            className="h-5 w-5"
+            onClick={() => onNudge(nudgeStep)}
+            title={`+${nudgeStep}${unit}`}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
           <span className="text-xs text-muted-foreground w-4">{unit}</span>
+        </div>
+      </div>
+      <Slider
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
+        min={min}
+        max={max}
+        step={step}
+        className="py-0"
+      />
+    </div>
+  );
+}
+
+/** Fine-tuning slider with tight range centered on current value */
+function FineSliderField({
+  label, value, min, max, step, unit, nudgeStep, onChange, onNudge,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  nudgeStep: number;
+  onChange: (v: number) => void;
+  onNudge: (delta: number) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] text-muted-foreground">{label}</Label>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost" size="icon"
+            className="h-5 w-5"
+            onClick={() => onNudge(-nudgeStep)}
+            title={`-${nudgeStep}${unit}`}
+          >
+            <Minus className="h-2.5 w-2.5" />
+          </Button>
+          <span className="text-[11px] text-foreground w-16 text-right font-mono">
+            {value.toFixed(unit === '°' ? 1 : 2)}{unit}
+          </span>
+          <Button
+            variant="ghost" size="icon"
+            className="h-5 w-5"
+            onClick={() => onNudge(nudgeStep)}
+            title={`+${nudgeStep}${unit}`}
+          >
+            <Plus className="h-2.5 w-2.5" />
+          </Button>
         </div>
       </div>
       <Slider

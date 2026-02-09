@@ -181,8 +181,9 @@ function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
  * If all methods fail the caller falls back to iframe mode.
  *
  * @param baseUrl - Base URL of the Ivion instance (no trailing slash)
- * @param timeoutMs - Maximum time to wait for SDK initialization (default 15s)
+ * @param timeoutMs - Maximum time to wait for SDK initialization (default 45s)
  * @param loginToken - Optional JWT token for automatic authentication
+ * @param siteId - Optional site ID for auto-selection
  * @returns Promise resolving to the Ivion API interface
  */
 export async function loadIvionSdk(
@@ -230,24 +231,11 @@ async function doLoadIvionSdk(
     console.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
-  // The NavVis SDK reads window.location.search for ?site= to auto-select
-  // the site on multi-site instances. Without this, getApi() blocks forever
-  // waiting for manual site selection. We inject the param into the URL
-  // using replaceState (doesn't trigger React Router re-render) and clean
-  // it up after initialization.
-  let injectedSiteParam = false;
+  // Pass siteId directly in SDK config instead of manipulating window.location
+  // This avoids triggering React Router re-renders from URL changes.
   if (siteId) {
-    try {
-      const currentUrl = new URL(window.location.href);
-      if (!currentUrl.searchParams.has('site')) {
-        currentUrl.searchParams.set('site', siteId);
-        window.history.replaceState(window.history.state, '', currentUrl.toString());
-        injectedSiteParam = true;
-        console.log('[Ivion SDK] Injected ?site= into window.location for auto-selection');
-      }
-    } catch (e) {
-      console.warn('[Ivion SDK] Could not inject site param:', e);
-    }
+    sdkConfig.siteId = siteId;
+    console.log('[Ivion SDK] Passing siteId in SDK config:', siteId);
   }
 
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
@@ -288,14 +276,6 @@ async function doLoadIvionSdk(
   }
 
   if (!getApi) {
-    // Clean up injected site param before throwing
-    if (injectedSiteParam) {
-      try {
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('site');
-        window.history.replaceState(window.history.state, '', cleanUrl.toString());
-      } catch (_) { /* ignore */ }
-    }
     throw new Error(
       'NavVis SDK not available. All loading methods failed (npm, direct, proxy).',
     );
@@ -333,31 +313,18 @@ async function doLoadIvionSdk(
     ),
   );
 
-  let iv: IvionApi;
-  try {
-    iv = await Promise.race([apiPromise, timeoutPromise]);
-    console.log('[Ivion SDK] Initialized successfully');
-  } finally {
-    // Clean up injected site param from URL regardless of success/failure
-    if (injectedSiteParam) {
-      try {
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('site');
-        window.history.replaceState(window.history.state, '', cleanUrl.toString());
-        console.log('[Ivion SDK] Cleaned up injected ?site= from URL');
-      } catch (_) { /* ignore */ }
-    }
-  }
+  const iv = await Promise.race([apiPromise, timeoutPromise]);
+  console.log('[Ivion SDK] Initialized successfully');
 
-  // ── Auto-navigate to site if siteId provided (fallback) ──────────
+  // ── Auto-navigate to site if siteId provided (API fallback) ──────
   if (siteId) {
     try {
       const siteApi = (iv as any).site;
       if (siteApi?.repository?.findOne && siteApi?.service?.loadSite) {
-        // Check if site was already auto-selected via URL param
+        // Check if site was already auto-selected via config
         const activeSite = siteApi?.service?.activeSite;
         if (activeSite) {
-          console.log('[Ivion SDK] Site already active (selected via URL param):', siteId);
+          console.log('[Ivion SDK] Site already active (selected via config):', siteId);
         } else {
           console.log('[Ivion SDK] Loading site via API:', siteId);
           const site = await siteApi.repository.findOne(Number(siteId));
