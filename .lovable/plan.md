@@ -1,107 +1,120 @@
 
 
-# Fix Virtual Twin: Slider, Alignment Close, and Toolbar Interactivity
+# Fix Virtual Twin: Site ID, Object Selection, and Toolbar Customization
 
-## Problem 1: Visibility slider not fully visible
+## Problem 1: Ivion shows site selection menu instead of the building
 
-The ghost opacity slider (line 473) has `className="w-20"` which is only 80px wide. In the header toolbar it gets cramped and partially clipped. The fix is to widen the slider and ensure the container has enough space.
+The NavVis SDK's `getApi(baseUrl, config)` initializes the viewer but does NOT automatically navigate to a specific site. The `ConfigurationInterface` only accepts `loginToken`, `lang`, etc. -- there is no `siteId` config option.
 
-**File:** `src/pages/VirtualTwin.tsx`
-- Change slider width from `w-20` to `w-28` (112px) for better usability
-- Add `min-w-[140px]` to the container div to prevent clipping
+After the SDK loads, `api.site.service.activeSite` is undefined, and the user is shown Ivion's built-in site selection menu.
 
-## Problem 2: Alignment menu does not close after saving
+**Fix:** After `loadIvionSdk()` resolves, use the SDK's Site API to programmatically load the correct site:
 
-The AlignmentPanel has an `onSaved` callback prop, but VirtualTwin never passes it (lines 514-518). After a successful save, `onSaved?.()` is called in AlignmentPanel but since VirtualTwin doesn't provide the callback, nothing happens.
+```
+api.site.repository.findOne(siteId)  -->  SiteInterface object
+api.site.service.loadSite(site)      -->  Navigates to that site
+```
 
-**File:** `src/pages/VirtualTwin.tsx`
-- Pass `onSaved={() => setShowAlignment(false)}` to AlignmentPanel so the panel closes automatically after saving
+The site ID is already available in `buildingInfo.ivionSiteId` (fetched from `building_settings`). After loading the site, also hide the sidebar menu items (same approach as `Ivion360View` already does on mobile).
 
-## Problem 3: 3D toolbars not functioning
+| File | Change |
+|---|---|
+| `src/lib/ivion-sdk.ts` | Accept optional `siteId` parameter in `loadIvionSdk()`. After `getApi()` resolves, call `api.site.repository.findOne(siteId)` then `api.site.service.loadSite(site)`. Also hide all sidebar menu items and close the sidebar. |
+| `src/pages/VirtualTwin.tsx` | Pass `buildingInfo.ivionSiteId` to `loadIvionSdk()` |
+| `src/components/viewer/Ivion360View.tsx` | Also pass `siteId` to `loadIvionSdk()` for consistency |
 
-This is the core issue. In SDK mode, the entire 3D layer is wrapped in a div with `pointer-events: none` (line 341):
+## Problem 2: Cannot select objects in the 3D overlay
+
+The 3D overlay div (line 341 in VirtualTwin.tsx) has `pointer-events: none` so that navigation clicks pass through to Ivion. This is correct for pan/rotate, but it also prevents clicking on 3D objects to select them.
+
+**Fix:** Toggle pointer events on the 3D canvas based on the active tool in AssetPlusViewer. When the "select" tool is active, the canvas needs `pointer-events: auto` to receive clicks. When navigating (orbit, first person), it should be `pointer-events: none`.
+
+Implementation approach:
+- Add a custom event `VIEWER_TOOL_CHANGED` that ViewerToolbar dispatches whenever the active tool changes
+- VirtualTwin listens for this event and toggles `pointer-events` on the 3D overlay div
+- Default state: `pointer-events: none` (navigation mode)
+- When select/measure/slicer tool is active: `pointer-events: auto` on the overlay
+
+| File | Change |
+|---|---|
+| `src/lib/viewer-events.ts` | Add `VIEWER_TOOL_CHANGED_EVENT` constant and `ViewerToolChangedDetail` type |
+| `src/components/viewer/ViewerToolbar.tsx` | Dispatch `VIEWER_TOOL_CHANGED_EVENT` when active tool changes |
+| `src/pages/VirtualTwin.tsx` | Listen for `VIEWER_TOOL_CHANGED_EVENT` and toggle pointer-events on the 3D overlay accordingly |
 
 ```text
-<div style={{ pointerEvents: 'none' }}>    <-- Blocks ALL clicks
-  <AssetPlusViewer ... />
-    <ViewerToolbar />                       <-- Can't receive clicks!
-    <FloatingFloorSwitcher />               <-- Can't receive clicks!
-    <ViewerTreePanel />                     <-- Can't receive clicks!
-</div>
+Tool is "select", "measure", or "slicer":
+  3D overlay: pointer-events: auto   (clicks go to 3D for object interaction)
+
+Tool is null (orbit/firstPerson/zoom navigation):
+  3D overlay: pointer-events: none   (clicks pass to Ivion for panorama navigation)
 ```
 
-The `pointer-events: none` is correct for the 3D **canvas** (so clicks pass through to Ivion below), but it also blocks all toolbar buttons inside AssetPlusViewer.
+## Problem 3: Toolbar customization does not take effect
 
-**Fix:** Add `pointer-events: auto` to the interactive UI elements inside AssetPlusViewer when in Virtual Twin mode. The toolbar, floor switcher, and tree panel need to opt back in to receiving pointer events.
+There are two bugs in `getToolbarSettings()` and `getNavigationToolSettings()`:
 
-**File:** `src/components/viewer/AssetPlusViewer.tsx`
-- Add `pointer-events: auto` to the ViewerToolbar container (line 3051)
-- Add `pointer-events: auto` to the FloatingFloorSwitcher container (line 3043)
-- Add `pointer-events: auto` to the ViewerTreePanel container (line 3062)
-- Add `pointer-events: auto` to the properties dialog and other interactive overlays
-- The 3D canvas itself remains `pointer-events: none` so Ivion still receives navigation events
+**Bug A: User's custom order is always lost**
 
-**Note:** The `suppressOverlay` prop already correctly hides the duplicate close/fullscreen/hamburger buttons (which Virtual Twin provides in its own header). The bottom ViewerToolbar should NOT be suppressed -- it provides essential tools like select, measure, section plane, rooms etc.
+`getToolbarSettings()` iterates `DEFAULT_TOOLS.map(...)` which always returns tools in the hardcoded default order. The user's drag-and-drop reordering (stored in localStorage) is completely ignored because the merge uses the defaults as the iteration base.
 
-## Technical Details
+**Bug B: `getNavigationToolSettings()` also loses order**
 
-### Pointer events fix approach
+Even if `getToolbarSettings()` preserved order, `getNavigationToolSettings()` iterates `NAVIGATION_TOOLS.map(...)` which again uses the default order.
 
-The ViewerToolbar already renders at `z-20` with `position: absolute`. By adding `pointer-events-auto` to it (and the other UI elements), clicks on the toolbar buttons will work, while clicks on the transparent 3D canvas still pass through to Ivion.
+**Fix:** Change `getToolbarSettings()` to use the stored array's order as the base, only adding new tools that don't exist in stored settings. Change `getNavigationToolSettings()` and `getVisualizationToolSettings()` to filter from the ordered result instead of mapping from defaults.
 
-```text
-After fix:
+| File | Change |
+|---|---|
+| `src/components/viewer/ToolbarSettings.tsx` | Rewrite `getToolbarSettings()` to preserve stored order. Rewrite `getNavigationToolSettings()` and `getVisualizationToolSettings()` to filter from ordered settings instead of mapping from defaults. |
 
-<div style={{ pointerEvents: 'none' }}>     <-- Canvas clicks pass to Ivion
-  <AssetPlusViewer>
-    <canvas ... />                            <-- 3D rendering (transparent)
-    <ViewerToolbar pointer-events-auto />     <-- Clickable!
-    <FloatingFloorSwitcher pointer-events-auto />  <-- Clickable!
-    <ViewerTreePanel pointer-events-auto />   <-- Clickable!
-  </AssetPlusViewer>
-</div>
+### Detailed fix for order preservation:
+
+**Before (broken):**
+```
+getToolbarSettings():
+  DEFAULT_TOOLS.map(defaultTool => {
+    find in stored -> merge
+  })
+  // Always returns default order
 ```
 
-### Alignment panel close
-
-```typescript
-// VirtualTwin.tsx - AlignmentPanel section
-<AlignmentPanel
-  transform={transform}
-  onChange={setTransform}
-  buildingFmGuid={buildingInfo.fmGuid}
-  onSaved={() => setShowAlignment(false)}  // <-- Close panel after save
-/>
+**After (fixed):**
+```
+getToolbarSettings():
+  1. Start with stored tools in their saved order
+  2. For each stored tool, merge with default (to pick up label changes)
+  3. Append any new default tools not in stored settings
+  // Returns user's saved order
 ```
 
-### Slider width
+**Before (broken):**
+```
+getNavigationToolSettings():
+  NAVIGATION_TOOLS.map(navTool => find in allSettings)
+  // Always returns default navigation order
+```
 
-```typescript
-// VirtualTwin.tsx - Ghost opacity slider
-<div className="flex items-center gap-2 bg-white/10 rounded px-3 py-1 min-w-[160px]">
-  <Eye className="h-3.5 w-3.5 text-white/70 shrink-0" />
-  <Slider
-    value={[ghostOpacity]}
-    onValueChange={([v]) => setGhostOpacity(v)}
-    min={0}
-    max={100}
-    step={5}
-    className="w-28"
-  />
-  <span className="text-xs text-white/70 w-8 text-right shrink-0">{ghostOpacity}%</span>
-</div>
+**After (fixed):**
+```
+getNavigationToolSettings():
+  allSettings.filter(t => NAVIGATION_TOOL_IDS.has(t.id))
+  // Returns user's saved order, filtered to navigation tools only
 ```
 
 ## File Summary
 
 | File | Changes |
 |---|---|
-| `src/pages/VirtualTwin.tsx` | (1) Widen slider from w-20 to w-28 with min-width container, (2) Pass `onSaved` to AlignmentPanel to close it after save |
-| `src/components/viewer/AssetPlusViewer.tsx` | Add `pointer-events-auto` to ViewerToolbar, FloatingFloorSwitcher, ViewerTreePanel, and other interactive UI elements so they work inside the `pointer-events: none` Virtual Twin wrapper |
+| `src/lib/ivion-sdk.ts` | Add `siteId` parameter to `loadIvionSdk()`. After SDK init, auto-load site via `api.site.repository.findOne()` + `api.site.service.loadSite()`. Hide sidebar menu items. |
+| `src/lib/viewer-events.ts` | Add `VIEWER_TOOL_CHANGED_EVENT` constant and type |
+| `src/pages/VirtualTwin.tsx` | (1) Pass siteId to `loadIvionSdk()`, (2) listen for tool change events and toggle 3D overlay pointer-events |
+| `src/components/viewer/ViewerToolbar.tsx` | Dispatch `VIEWER_TOOL_CHANGED_EVENT` on tool changes |
+| `src/components/viewer/Ivion360View.tsx` | Pass siteId to `loadIvionSdk()` for consistency |
+| `src/components/viewer/ToolbarSettings.tsx` | Fix `getToolbarSettings()`, `getNavigationToolSettings()`, and `getVisualizationToolSettings()` to preserve user's saved order |
 
 ## Risk Assessment
 
-- **Slider width**: No risk. Cosmetic change only.
-- **Alignment close**: No risk. Simple callback connection.
-- **Pointer events**: Low risk. Only adds `pointer-events: auto` to elements that are already absolutely positioned above the canvas. In standalone viewer mode (without Virtual Twin), the parent div does not have `pointer-events: none`, so adding `pointer-events: auto` has no effect. In Virtual Twin mode, it enables toolbar clicks while the canvas remains transparent to input.
+- **Site loading (low risk):** Uses the SDK's own documented API (`site.repository.findOne` + `site.service.loadSite`). If site loading fails, the user sees the same site selection menu as today -- no regression.
+- **Pointer-events toggle (low risk):** Only affects the Virtual Twin page. Default is `pointer-events: none` (same as today). Adds interactivity only when a tool is explicitly active.
+- **Toolbar order fix (low risk):** Only changes the merge logic in `getToolbarSettings`. The stored data format is unchanged. Existing users' saved settings will immediately work correctly.
 
