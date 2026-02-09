@@ -24,13 +24,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
-  Link2, Link2Off, Upload, RotateCcw, Loader2, AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
@@ -104,6 +102,7 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── UI state ──────────────────────────────────────────────────────
   const [showAlignment, setShowAlignment] = useState(false);
+  const [showCrosshair, setShowCrosshair] = useState(true);
   const [ghostOpacity, setGhostOpacity] = useState(30);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
@@ -193,60 +192,39 @@ const UnifiedViewerContent: React.FC<{
     setSync3DPitch(syncState.pitch);
   }, [syncLocked, syncState, viewMode]);
 
-  // Manual sync dialog (split mode)
-  const [showManualSyncDialog, setShowManualSyncDialog] = useState(false);
-  const [manualIvionUrl, setManualIvionUrl] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
+  // ─── Ghost opacity — rAF loop for continuous enforcement in VT mode ──
+  const ghostOpacityRef = useRef(ghostOpacity);
+  ghostOpacityRef.current = ghostOpacity;
 
-  const handleParseManualUrl = useCallback(async () => {
-    if (!manualIvionUrl.includes('image=') || !buildingData) return;
-    setIsSyncing(true);
-    try {
-      const url = new URL(manualIvionUrl);
-      const imageId = url.searchParams.get('image');
-      if (!imageId) { toast.error('Kunde inte hitta image-parameter'); return; }
-
-      const vlon = parseFloat(url.searchParams.get('vlon') || '0');
-      const vlat = parseFloat(url.searchParams.get('vlat') || '0');
-      const heading = (vlon * 180) / Math.PI;
-      const pitch = (vlat * 180) / Math.PI;
-
-      const { data, error: fnError } = await (await import('@/integrations/supabase/client')).supabase.functions.invoke('ivion-poi', {
-        body: { action: 'get-image-position', imageId: parseInt(imageId, 10), buildingFmGuid: buildingData.fmGuid },
-      });
-
-      if (fnError || !data?.success) { toast.error('Kunde inte hämta bildposition'); return; }
-
-      const position: LocalCoords = { x: data.location.x, y: data.location.y, z: data.location.z };
-      updateFromIvion(position, heading, pitch);
-      setSync3DPosition(position);
-      setSync3DHeading(heading);
-      setSync3DPitch(pitch);
-      toast.success('3D-vy synkad från 360°');
-      setShowManualSyncDialog(false);
-      setManualIvionUrl('');
-    } catch { toast.error('Ogiltig URL'); }
-    finally { setIsSyncing(false); }
-  }, [manualIvionUrl, buildingData, updateFromIvion]);
-
-  // ─── Ghost opacity for VT + Split modes ─────────────────────────────
   useEffect(() => {
-    if (viewMode !== 'vt' && viewMode !== 'split') return;
-    
-    // Try primary ref first, then fallback to global
-    let xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer) {
-      const win = window as any;
-      xeokitViewer = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    }
-    if (!xeokitViewer?.scene) return;
-    try {
-      const objectIds = xeokitViewer.scene.objectIds;
-      if (objectIds?.length) {
-        xeokitViewer.scene.setObjectsOpacity(objectIds, ghostOpacity / 100);
+    if (viewMode !== 'vt') return;
+    let running = true;
+
+    const getViewer = () => {
+      let xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xv) {
+        const win = window as any;
+        xv = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       }
-    } catch (e) { console.debug('[UnifiedViewer] Ghost opacity error:', e); }
-  }, [ghostOpacity, viewMode, viewerReady]);
+      return xv;
+    };
+
+    const loop = () => {
+      if (!running) return;
+      try {
+        const xv = getViewer();
+        if (xv?.scene) {
+          const ids = xv.scene.objectIds;
+          if (ids?.length) {
+            xv.scene.setObjectsOpacity(ids, ghostOpacityRef.current / 100);
+          }
+        }
+      } catch { /* ignore */ }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return () => { running = false; };
+  }, [viewMode]);
 
   // ─── Fullscreen ────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(() => {
@@ -306,8 +284,6 @@ const UnifiedViewerContent: React.FC<{
       ivApiRef={ivApiRef}
       sdkContainerRef={sdkContainerRef}
       transform={transform}
-      syncLocked={syncLocked}
-      setSyncLocked={setSyncLocked}
       handle3DCameraChange={handle3DCameraChange}
       sync3DPosition={sync3DPosition}
       sync3DHeading={sync3DHeading}
@@ -375,55 +351,6 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
-          {/* Split sync controls */}
-          {viewMode === 'split' && (
-            <>
-              {/* Sync status */}
-              <div className="flex items-center gap-1.5 text-xs text-white/70 px-2 py-1 bg-white/10 rounded">
-                <span className={`h-2 w-2 rounded-full transition-colors ${
-                  syncState.source === 'ivion' ? 'bg-primary' :
-                  syncState.source === '3d' ? 'bg-accent-foreground' : 'bg-white/30'
-                }`} />
-                <span className="hidden sm:inline">
-                  {syncState.source === 'ivion' ? '360° → 3D' :
-                   syncState.source === '3d' ? '3D → 360°' : 'Väntar...'}
-                </span>
-              </div>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => setSyncLocked(!syncLocked)}
-                    className={`gap-1.5 text-white hover:bg-white/20 ${syncLocked ? 'bg-white/10' : ''}`}
-                  >
-                    {syncLocked ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
-                    <span className="hidden sm:inline text-xs">{syncLocked ? 'Sync ON' : 'Sync OFF'}</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{syncLocked ? 'Klicka för att avsynka' : 'Klicka för att synka'}</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 h-8 w-8" onClick={() => setShowManualSyncDialog(true)}>
-                    <Upload className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Synka manuellt från URL</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 h-8 w-8" onClick={resetSync}>
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Återställ synk</TooltipContent>
-              </Tooltip>
-            </>
-          )}
-
           {/* VT sync status */}
           {viewMode === 'vt' && vtSyncActive && (
             <span className="text-xs text-green-400 bg-green-900/40 px-2 py-0.5 rounded flex items-center gap-1 mr-2">
@@ -432,8 +359,8 @@ const UnifiedViewerContent: React.FC<{
             </span>
           )}
 
-          {/* Ghost opacity slider (VT + Split mode) */}
-          {(viewMode === 'vt' || viewMode === 'split') && (
+          {/* Ghost opacity slider (VT mode only) */}
+          {viewMode === 'vt' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 bg-white/10 rounded px-3 py-1 min-w-[160px]">
@@ -503,6 +430,17 @@ const UnifiedViewerContent: React.FC<{
                 onClose={handleGoBack}
               />
             </div>
+
+            {/* Crosshair overlay for alignment */}
+            {showAlignment && showCrosshair && (
+              <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                <div className="relative w-16 h-16">
+                  <div className="absolute top-1/2 left-0 right-0 h-px bg-red-500/60" />
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-red-500/60" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-red-500/80" />
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -532,7 +470,7 @@ const UnifiedViewerContent: React.FC<{
                   </div>
                   <Ivion360View
                     url={buildingData.ivionUrl || undefined}
-                    syncEnabled={syncLocked}
+                    syncEnabled={false}
                     buildingOrigin={buildingData.origin}
                     buildingFmGuid={buildingData.fmGuid}
                     ivionSiteIdProp={buildingData.ivionSiteId || undefined}
@@ -552,34 +490,12 @@ const UnifiedViewerContent: React.FC<{
               onChange={setTransform}
               buildingFmGuid={buildingData.fmGuid}
               onSaved={() => setShowAlignment(false)}
+              showCrosshair={showCrosshair}
+              onToggleCrosshair={setShowCrosshair}
             />
           </div>
         )}
       </div>
-
-      {/* Manual sync dialog (split mode) */}
-      <Dialog open={showManualSyncDialog} onOpenChange={setShowManualSyncDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Synka från 360°</DialogTitle>
-            <DialogDescription>Klistra in en 360°-länk för att synka 3D-vyn.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <ol className="list-decimal list-inside text-sm space-y-2 text-muted-foreground">
-              <li>I 360°-vyn, klicka på <strong className="text-foreground">Dela</strong>-ikonen</li>
-              <li>Kopiera länken</li>
-              <li>Klistra in den nedan</li>
-            </ol>
-            <Input value={manualIvionUrl} onChange={(e) => setManualIvionUrl(e.target.value)} placeholder="https://swg.iv.navvis.com/?site=...&image=..." className="font-mono text-xs" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowManualSyncDialog(false); setManualIvionUrl(''); }}>Avbryt</Button>
-            <Button onClick={handleParseManualUrl} disabled={!manualIvionUrl.includes('image=') || isSyncing}>
-              {isSyncing ? 'Synkar...' : 'Synka'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
@@ -625,7 +541,7 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
 /** Mobile layout — simplified tab switcher */
 function MobileUnifiedViewer({
   buildingData, viewMode, setViewMode, sdkStatus, ivApiRef,
-  sdkContainerRef, transform, syncLocked, setSyncLocked,
+  sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
   hasIvion, onGoBack,
 }: {
@@ -636,8 +552,6 @@ function MobileUnifiedViewer({
   ivApiRef: React.MutableRefObject<any>;
   sdkContainerRef: React.RefObject<HTMLDivElement | null>;
   transform: IvionBimTransform;
-  syncLocked: boolean;
-  setSyncLocked: (v: boolean) => void;
   handle3DCameraChange: (pos: LocalCoords, heading: number, pitch: number) => void;
   sync3DPosition: LocalCoords | null;
   sync3DHeading: number;
@@ -665,24 +579,14 @@ function MobileUnifiedViewer({
           )}
         </div>
 
-        <div className="flex items-center gap-1">
-          {hasIvion && (
-            <Button
-              variant={syncLocked ? 'default' : 'outline'}
-              size="icon" className="h-8 w-8"
-              onClick={() => setSyncLocked(!syncLocked)}
-            >
-              {syncLocked ? <Link2 className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
-            </Button>
-          )}
-        </div>
+        <div className="w-9" /> {/* Spacer for balance */}
       </div>
 
       <div className="flex-1 min-h-0 relative">
         {activePanel === '3d' ? (
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
-            syncEnabled={syncLocked}
+            syncEnabled={false}
             onCameraChange={handle3DCameraChange}
             syncPosition={sync3DPosition}
             syncHeading={sync3DHeading}
@@ -691,7 +595,7 @@ function MobileUnifiedViewer({
         ) : (
           <Ivion360View
             url={buildingData.ivionUrl || undefined}
-            syncEnabled={syncLocked}
+            syncEnabled={false}
             buildingOrigin={buildingData.origin}
             buildingFmGuid={buildingData.fmGuid}
             ivionSiteIdProp={buildingData.ivionSiteId || undefined}
