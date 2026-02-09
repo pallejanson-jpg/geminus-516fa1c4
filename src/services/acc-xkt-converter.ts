@@ -38,7 +38,25 @@ async function loadXeokitConvert() {
 }
 
 /**
- * Convert a GLB/glTF ArrayBuffer into an XKT ArrayBuffer using xeokit-convert.
+ * Detect the format of binary data by inspecting magic bytes.
+ */
+function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'unknown' {
+  const view = new DataView(data);
+  // GLB magic: 0x46546C67 ("glTF" in little-endian)
+  if (data.byteLength >= 4 && view.getUint32(0, true) === 0x46546C67) {
+    return 'glb';
+  }
+  // OBJ: text file starting with '#' or 'v ' or 'mtllib'
+  const first = new Uint8Array(data, 0, Math.min(256, data.byteLength));
+  const text = new TextDecoder().decode(first).trim();
+  if (text.startsWith('#') || text.startsWith('v ') || text.startsWith('mtllib')) {
+    return 'obj';
+  }
+  return 'unknown';
+}
+
+/**
+ * Convert a GLB/glTF/OBJ ArrayBuffer into an XKT ArrayBuffer using xeokit-convert.
  * Returns the XKT binary ready for storage.
  */
 export async function convertGlbToXkt(
@@ -47,18 +65,54 @@ export async function convertGlbToXkt(
 ): Promise<ArrayBuffer> {
   const logger = log || ((msg: string) => console.log('[xkt-convert]', msg));
 
+  const format = detectFormat(glbData);
+  logger(`Detected input format: ${format} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+
+  if (format === 'unknown') {
+    // Check if it's SVF2 (proprietary Autodesk format)
+    const header = new Uint8Array(glbData, 0, Math.min(64, glbData.byteLength));
+    const headerHex = Array.from(header.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    throw new Error(
+      `Okänt filformat (header: ${headerHex}). SVF2-format stöds inte för klientkonvertering. ` +
+      `Kontrollera att Autodesk Model Derivative har genererat OBJ- eller glTF-format.`
+    );
+  }
+
   logger('Loading xeokit-convert...');
   const { XKTModel, writeXKTModelToArrayBuffer, parseGLTFIntoXKTModel } = await loadXeokitConvert();
 
   logger('Creating XKTModel...');
   const xktModel = new XKTModel();
 
-  logger('Parsing glTF/GLB into XKTModel...');
-  await parseGLTFIntoXKTModel({
-    data: glbData,
-    xktModel,
-    log: logger,
-  });
+  if (format === 'obj') {
+    logger('Parsing OBJ into XKTModel...');
+    // xeokit-convert's parseGLTFIntoXKTModel can handle OBJ too when passed as text
+    // But for proper OBJ support, we try the dedicated parser if available
+    const mod = await import('@xeokit/xeokit-convert');
+    if (typeof (mod as any).parseOBJIntoXKTModel === 'function') {
+      const objText = new TextDecoder().decode(glbData);
+      await (mod as any).parseOBJIntoXKTModel({
+        data: objText,
+        xktModel,
+        log: logger,
+      });
+    } else {
+      // Fallback: try parseGLTFIntoXKTModel with the raw data
+      logger('No dedicated OBJ parser found, trying glTF parser...');
+      await parseGLTFIntoXKTModel({
+        data: glbData,
+        xktModel,
+        log: logger,
+      });
+    }
+  } else {
+    logger('Parsing glTF/GLB into XKTModel...');
+    await parseGLTFIntoXKTModel({
+      data: glbData,
+      xktModel,
+      log: logger,
+    });
+  }
 
   logger('Finalizing XKTModel...');
   xktModel.finalize();
