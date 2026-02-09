@@ -49,7 +49,11 @@ interface BrowserScanConfig {
   templates: string[];
 }
 
-const AiAssetScan: React.FC = () => {
+interface AiAssetScanProps {
+  preselectedBuildingGuid?: string;
+}
+
+const AiAssetScan: React.FC<AiAssetScanProps> = ({ preselectedBuildingGuid }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -193,7 +197,7 @@ const AiAssetScan: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-3 md:p-6 overflow-hidden bg-background">
+    <div className="h-full flex flex-col p-3 md:p-6 overflow-auto bg-background">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 md:mb-6 gap-2">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -268,6 +272,7 @@ const AiAssetScan: React.FC = () => {
             templates={templates}
             buildings={buildings}
             onScanStarted={handleScanStarted}
+            preselectedBuildingGuid={preselectedBuildingGuid}
           />
         </TabsContent>
 

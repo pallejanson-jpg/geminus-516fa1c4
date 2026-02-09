@@ -71,7 +71,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     return () => clearInterval(interval);
   }, [sdkEnabled]);
 
-  const { sdkStatus, ivApiRef, retry } = useIvionSdk({
+  const { sdkStatus, ivApiRef, retry, errorMessage: sdkErrorMessage } = useIvionSdk({
     baseUrl: ivionBaseUrl,
     siteId: ivionSiteId,
     buildingFmGuid,
@@ -86,7 +86,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
     // Handle SDK failure
     if (sdkStatus === 'failed' && scanState === 'initializing') {
-      setErrorMessage('360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
+      setErrorMessage(sdkErrorMessage || '360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
       setScanState('error');
     }
   }, [sdkStatus, scanState]);
@@ -368,7 +368,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             {scanState === 'initializing' && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             {scanState === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
             <span className="text-sm font-medium">
-              {scanState === 'initializing' && (sdkEnabled ? 'Laddar 360°-visare...' : 'Förbereder visare...')}
+              {scanState === 'initializing' && !sdkEnabled && 'Förbereder visare...'}
+              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'loading' && 'Laddar SDK och autentiserar...'}
+              {scanState === 'initializing' && sdkEnabled && sdkStatus === 'idle' && 'Ansluter till site...'}
               {scanState === 'scanning' && 'Skannar...'}
               {scanState === 'paused' && 'Pausad'}
               {scanState === 'completing' && 'Sparar resultat...'}
