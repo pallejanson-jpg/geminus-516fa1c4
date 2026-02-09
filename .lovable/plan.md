@@ -1,95 +1,107 @@
 
 
-# Kopiera NavVis SDK till projektet och fixa Virtual Twin
+# Fix Virtual Twin: Slider, Alignment Close, and Toolbar Interactivity
 
-## Bakgrund
+## Problem 1: Visibility slider not fully visible
 
-NavVis IVION SDK:n bestaar av tvaa filer:
-- `api.js` (13 KB, UMD-bundle med allt inbyggt)
-- `api.d.ts` (3635 rader TypeScript-typer)
+The ghost opacity slider (line 473) has `className="w-20"` which is only 80px wide. In the header toolbar it gets cramped and partially clipped. The fix is to widen the slider and ensure the container has enough space.
 
-Paketet kan inte installeras via npm i denna byggmiljoe. Loesningen aer att kopiera filerna direkt till projektet och uppdatera importerna.
+**File:** `src/pages/VirtualTwin.tsx`
+- Change slider width from `w-20` to `w-28` (112px) for better usability
+- Add `min-w-[140px]` to the container div to prevent clipping
 
-## Steg 1: Kopiera SDK-filerna till projektet
+## Problem 2: Alignment menu does not close after saving
 
-Kopiera de uppladdade filerna till `public/lib/ivion/`:
+The AlignmentPanel has an `onSaved` callback prop, but VirtualTwin never passes it (lines 514-518). After a successful save, `onSaved?.()` is called in AlignmentPanel but since VirtualTwin doesn't provide the callback, nothing happens.
 
-| Fil | Destination |
-|---|---|
-| `api.js` | `public/lib/ivion/api.js` |
-| `api.d.ts` | `public/lib/ivion/api.d.ts` |
+**File:** `src/pages/VirtualTwin.tsx`
+- Pass `onSaved={() => setShowAlignment(false)}` to AlignmentPanel so the panel closes automatically after saving
 
-Att laegga dem i `public/` goer dem tillgaengliga som en statisk resurs via `/lib/ivion/api.js`.
+## Problem 3: 3D toolbars not functioning
 
-## Steg 2: Uppdatera SDK-laddaren
-
-Aendra `src/lib/ivion-sdk.ts` saa att Attempt 1 (npm-import) ersaetts med att ladda scriptet fraan den lokala `/lib/ivion/api.js`:
+This is the core issue. In SDK mode, the entire 3D layer is wrapped in a div with `pointer-events: none` (line 341):
 
 ```text
-Ny laddningsordning:
-1. Ladda /lib/ivion/api.js via script-tag (lokal fil, inga CORS-problem)
-2. (fallback) Ladda ivion.js direkt fraan NavVis-instansen
-3. (fallback) Ladda ivion.js via CORS-proxyn
-
-Efter laddning: window.IvApi.getApi finns tillgaengligt
+<div style={{ pointerEvents: 'none' }}>    <-- Blocks ALL clicks
+  <AssetPlusViewer ... />
+    <ViewerToolbar />                       <-- Can't receive clicks!
+    <FloatingFloorSwitcher />               <-- Can't receive clicks!
+    <ViewerTreePanel />                     <-- Can't receive clicks!
+</div>
 ```
 
-SDK:ns UMD-bundle exporterar till `self.IvApi`, saa vi letar efter `window.IvApi.getApi` efter script-laddning.
+The `pointer-events: none` is correct for the 3D **canvas** (so clicks pass through to Ivion below), but it also blocks all toolbar buttons inside AssetPlusViewer.
 
-| Fil | Aendring |
+**Fix:** Add `pointer-events: auto` to the interactive UI elements inside AssetPlusViewer when in Virtual Twin mode. The toolbar, floor switcher, and tree panel need to opt back in to receiving pointer events.
+
+**File:** `src/components/viewer/AssetPlusViewer.tsx`
+- Add `pointer-events: auto` to the ViewerToolbar container (line 3051)
+- Add `pointer-events: auto` to the FloatingFloorSwitcher container (line 3043)
+- Add `pointer-events: auto` to the ViewerTreePanel container (line 3062)
+- Add `pointer-events: auto` to the properties dialog and other interactive overlays
+- The 3D canvas itself remains `pointer-events: none` so Ivion still receives navigation events
+
+**Note:** The `suppressOverlay` prop already correctly hides the duplicate close/fullscreen/hamburger buttons (which Virtual Twin provides in its own header). The bottom ViewerToolbar should NOT be suppressed -- it provides essential tools like select, measure, section plane, rooms etc.
+
+## Technical Details
+
+### Pointer events fix approach
+
+The ViewerToolbar already renders at `z-20` with `position: absolute`. By adding `pointer-events-auto` to it (and the other UI elements), clicks on the toolbar buttons will work, while clicks on the transparent 3D canvas still pass through to Ivion.
+
+```text
+After fix:
+
+<div style={{ pointerEvents: 'none' }}>     <-- Canvas clicks pass to Ivion
+  <AssetPlusViewer>
+    <canvas ... />                            <-- 3D rendering (transparent)
+    <ViewerToolbar pointer-events-auto />     <-- Clickable!
+    <FloatingFloorSwitcher pointer-events-auto />  <-- Clickable!
+    <ViewerTreePanel pointer-events-auto />   <-- Clickable!
+  </AssetPlusViewer>
+</div>
+```
+
+### Alignment panel close
+
+```typescript
+// VirtualTwin.tsx - AlignmentPanel section
+<AlignmentPanel
+  transform={transform}
+  onChange={setTransform}
+  buildingFmGuid={buildingInfo.fmGuid}
+  onSaved={() => setShowAlignment(false)}  // <-- Close panel after save
+/>
+```
+
+### Slider width
+
+```typescript
+// VirtualTwin.tsx - Ghost opacity slider
+<div className="flex items-center gap-2 bg-white/10 rounded px-3 py-1 min-w-[160px]">
+  <Eye className="h-3.5 w-3.5 text-white/70 shrink-0" />
+  <Slider
+    value={[ghostOpacity]}
+    onValueChange={([v]) => setGhostOpacity(v)}
+    min={0}
+    max={100}
+    step={5}
+    className="w-28"
+  />
+  <span className="text-xs text-white/70 w-8 text-right shrink-0">{ghostOpacity}%</span>
+</div>
+```
+
+## File Summary
+
+| File | Changes |
 |---|---|
-| `src/lib/ivion-sdk.ts` | Byt ut npm-import (Attempt 1) mot lokal script-laddning av `/lib/ivion/api.js` |
+| `src/pages/VirtualTwin.tsx` | (1) Widen slider from w-20 to w-28 with min-width container, (2) Pass `onSaved` to AlignmentPanel to close it after save |
+| `src/components/viewer/AssetPlusViewer.tsx` | Add `pointer-events-auto` to ViewerToolbar, FloatingFloorSwitcher, ViewerTreePanel, and other interactive UI elements so they work inside the `pointer-events: none` Virtual Twin wrapper |
 
-## Steg 3: Uppdatera TypeScript-deklarationer
+## Risk Assessment
 
-Uppdatera `src/types/navvis-ivion.d.ts` saa att den inte refererar till `@navvis/ivion` npm-paketet laengre. Istallet pekar vi paa den lokala `api.d.ts` eller goer den oeverbloedig daa vi redan har egna typdefinitioner i `ivion-sdk.ts`.
-
-| Fil | Aendring |
-|---|---|
-| `src/types/navvis-ivion.d.ts` | Uppdatera att referera lokala SDK istallet foer npm-paket |
-
-## Steg 4: Installera tween.js-beroendet
-
-SDK:ns `api.d.ts` importerar fraan `@tweenjs/tween.js`. Lagg till detta som ett beroende:
-
-| Aendring |
-|---|
-| Lagg till `@tweenjs/tween.js` i package.json dependencies |
-
-Alternativt: Om bara typerna behoevs (SDK:n ar redan bundlad) kan vi skapa en enkel type-stub istallet.
-
-## Steg 5: Verifiera att laddningskedjan fungerar
-
-Naar `loadIvionSdk()` anropas:
-1. Den skapar en `<script src="/lib/ivion/api.js">` tag
-2. UMD-bundlen koeris och satter `window.IvApi = { getApi: ... }`
-3. `getApi(baseUrl, config)` anropas med NavVis-instansens URL + loginToken
-4. SDK:n renderar 360-panoramat i den `<ivion>` DOM-element som skapats
-
-## Om Alignment (foer referens)
-
-Alignment mellan BIM-modell och 360-panorama aer en **manuell engaangskalibrering per byggnad**:
-
-1. Admin oeppnar Virtual Twin och klickar paa "Alignment"-knappen i verktygsfaeltet
-2. Fyra reglage visas: Offset X/Y/Z (meter) och Rotation (grader)
-3. Admin justerar tills BIM-geometrin matchar panoraman visuellt
-4. Vaerdena sparas till databasen (`building_settings`)
-5. Alla framtida sessioner anvaender de sparade vaerdena automatiskt
-
-Just nu har alla byggnader offset/rotation = 0,0,0,0 (ej kalibrerade). Foerst maste SDK:n kunna ladda (Steg 1-4) innan alignment kan testas.
-
-## Filsammanfattning
-
-| Fil | Aendring |
-|---|---|
-| `public/lib/ivion/api.js` | Ny fil - kopierad fraan NavVis SDK |
-| `public/lib/ivion/api.d.ts` | Ny fil - kopierad fraan NavVis SDK |
-| `src/lib/ivion-sdk.ts` | Byt npm-import mot lokal script-laddning |
-| `src/types/navvis-ivion.d.ts` | Uppdatera att referera lokala SDK |
-
-## Risk
-
-- **SDK-laddning (laag risk)**: UMD-bundles fungerar alltid via script-taggar. Den exporterar till `self.IvApi` vilket aer standard UMD-beteende.
-- **tween.js-beroende (laag risk)**: SDK:ns api.js har redan tween.js inbakat i sin bundle. Beroendet behoevs bara foer TypeScript-typerna i api.d.ts.
-- **Alignment (ingen risk)**: Befintlig funktionalitet, ingen kod aendras. Kalibrering goers manuellt av admin.
+- **Slider width**: No risk. Cosmetic change only.
+- **Alignment close**: No risk. Simple callback connection.
+- **Pointer events**: Low risk. Only adds `pointer-events: auto` to elements that are already absolutely positioned above the canvas. In standalone viewer mode (without Virtual Twin), the parent div does not have `pointer-events: none`, so adding `pointer-events: auto` has no effect. In Virtual Twin mode, it enables toolbar clicks while the canvas remains transparent to input.
 
