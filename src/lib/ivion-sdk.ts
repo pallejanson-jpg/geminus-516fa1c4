@@ -122,6 +122,9 @@ export type IvionSdkStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
 type GetApiFn = (baseUrl: string, config?: any) => Promise<IvionApi>;
 
+// Module-level guard against concurrent SDK loads
+let activeLoadPromise: Promise<IvionApi> | null = null;
+
 /**
  * Load the getApi bootstrap function from a remote script URL.
  * The NavVis IVION instance (and the CORS proxy) serve ivion.js at the root.
@@ -184,7 +187,39 @@ function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
  */
 export async function loadIvionSdk(
   baseUrl: string,
-  timeoutMs: number = 30000,
+  timeoutMs: number = 45000,
+  loginToken?: string,
+  siteId?: string,
+): Promise<IvionApi> {
+  // Guard against concurrent loads — wait for any in-progress attempt
+  if (activeLoadPromise) {
+    console.log('[Ivion SDK] Another load is in progress, waiting for it…');
+    try {
+      const result = await activeLoadPromise;
+      console.log('[Ivion SDK] Reusing result from concurrent load');
+      return result;
+    } catch (e) {
+      console.log('[Ivion SDK] Concurrent load failed, starting fresh attempt');
+      // Fall through to start a new load
+    }
+  }
+
+  const loadPromise = doLoadIvionSdk(baseUrl, timeoutMs, loginToken, siteId);
+  activeLoadPromise = loadPromise;
+  
+  try {
+    const result = await loadPromise;
+    return result;
+  } finally {
+    if (activeLoadPromise === loadPromise) {
+      activeLoadPromise = null;
+    }
+  }
+}
+
+async function doLoadIvionSdk(
+  baseUrl: string,
+  timeoutMs: number,
   loginToken?: string,
   siteId?: string,
 ): Promise<IvionApi> {
@@ -265,6 +300,26 @@ export async function loadIvionSdk(
       'NavVis SDK not available. All loading methods failed (npm, direct, proxy).',
     );
   }
+
+  // Wait for <ivion> element to be in the DOM with non-zero dimensions
+  const waitForIvionElement = async () => {
+    const maxWait = 3000;
+    const interval = 100;
+    let elapsed = 0;
+    while (elapsed < maxWait) {
+      const el = document.querySelector('ivion');
+      if (el && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0) {
+        console.log('[Ivion SDK] <ivion> element found with dimensions');
+        return true;
+      }
+      await new Promise(r => setTimeout(r, interval));
+      elapsed += interval;
+    }
+    console.warn('[Ivion SDK] <ivion> element not found or has zero dimensions after', maxWait, 'ms');
+    return false;
+  };
+
+  await waitForIvionElement();
 
   // Initialize with timeout — pass clean baseUrl (no query params)
   const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
