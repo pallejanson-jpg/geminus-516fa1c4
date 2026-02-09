@@ -29,6 +29,8 @@ interface UseIvionSdkResult {
   ivApiRef: React.MutableRefObject<IvionApi | null>;
   /** Retry loading the SDK */
   retry: () => void;
+  /** Error message if SDK failed */
+  errorMessage: string | null;
 }
 
 /**
@@ -43,6 +45,7 @@ export function useIvionSdk({
 }: UseIvionSdkOptions): UseIvionSdkResult {
   const [sdkStatus, setSdkStatus] = useState<IvionSdkStatus>('idle');
   const [retryKey, setRetryKey] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const ivApiRef = useRef<IvionApi | null>(null);
   const ivionElementRef = useRef<HTMLElement | null>(null);
 
@@ -75,6 +78,7 @@ export function useIvionSdk({
 
     const tryLoadSdk = async () => {
       setSdkStatus('loading');
+      setErrorMessage(null);
 
       try {
         // Step 1: Fetch login token
@@ -103,9 +107,10 @@ export function useIvionSdk({
         ivApiRef.current = api;
         setSdkStatus('ready');
         console.log('[useIvionSdk] ✅ SDK ready');
-      } catch (err) {
+      } catch (err: any) {
         console.error('[useIvionSdk] SDK load failed:', err);
         if (!cancelled) {
+          setErrorMessage(err?.message || 'SDK initialization failed');
           setSdkStatus('failed');
           // Clean up element on failure
           if (containerRef.current && ivionElementRef.current) {
@@ -159,5 +164,5 @@ export function useIvionSdk({
     setRetryKey(k => k + 1);
   }, [containerRef]);
 
-  return { sdkStatus, ivApiRef, retry };
+  return { sdkStatus, ivApiRef, retry, errorMessage };
 }
