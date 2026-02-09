@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
-import { ChevronDown, GripVertical } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -51,11 +51,6 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
 
-  // Draggable position state
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-  const hasInitializedPosition = useRef(false);
 
   // Visibility state (controlled from VisualizationToolbar settings)
   const [isVisible, setIsVisible] = useState(() => {
@@ -74,17 +69,6 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     }
   }, [viewerRef]);
 
-  // Initialize position on right side
-  useEffect(() => {
-    if (hasInitializedPosition.current) return;
-    if (typeof window === 'undefined') return;
-    
-    // Position to the left of right panel (320px panel + some padding)
-    const x = window.innerWidth - 400;
-    const y = 150;
-    setPosition({ x, y });
-    hasInitializedPosition.current = true;
-  }, []);
 
   // Listen for visibility toggle events from settings
   useEffect(() => {
@@ -98,36 +82,6 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     };
   }, []);
 
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-    dragOffsetRef.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    };
-  }, [position]);
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOffsetRef.current.x)),
-        y: Math.max(50, Math.min(window.innerHeight - 200, e.clientY - dragOffsetRef.current.y)),
-      });
-    };
-
-    const handleMouseUp = () => setIsDragging(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging]);
 
   // Fetch floor names from database
   useEffect(() => {
@@ -559,30 +513,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   return (
     <div 
-      style={{ left: position.x, top: position.y }}
       className={cn(
-        'fixed z-20 flex flex-col items-center gap-px p-1 rounded-lg',
+        'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-px p-1 rounded-lg h-auto',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
-        'pointer-events-auto transition-shadow',
-        isDragging && 'cursor-grabbing shadow-xl',
+        'pointer-events-auto',
         className
       )}
     >
-      {/* Drag handle with tooltip */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div 
-            className="flex items-center justify-center w-full h-2 cursor-grab active:cursor-grabbing"
-            onMouseDown={handleDragStart}
-          >
-            <GripVertical className="h-2 w-2 text-muted-foreground" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          <p>Våningar ({visibleFloorIds.size}/{floors.length} synliga)</p>
-          <p className="text-xs text-muted-foreground">Klicka: solo | Ctrl+Klick: multi | Dubbelklick: alla</p>
-        </TooltipContent>
-      </Tooltip>
 
       {/* Vertical pills */}
       {visiblePills.map((floor) => {
