@@ -432,6 +432,8 @@ const UnifiedViewerContent: React.FC<{
               onSaved={() => setShowAlignment(false)}
               showCrosshair={showCrosshair}
               onToggleCrosshair={setShowCrosshair}
+              ivApiRef={isSplitMode ? ivApiRef : undefined}
+              canPointPick={isSplitMode && sdkStatus === 'ready'}
             />
           </div>
         )}

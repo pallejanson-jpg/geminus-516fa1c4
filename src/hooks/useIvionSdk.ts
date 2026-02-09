@@ -97,7 +97,7 @@ export function useIvionSdk({
         const cleanBaseUrl = baseUrl.replace(/\/$/, '');
         console.log('[useIvionSdk] Loading SDK from:', cleanBaseUrl, 'site:', siteId);
 
-        const api = await loadIvionSdk(cleanBaseUrl, 30000, loginToken || undefined, siteId);
+        const api = await loadIvionSdk(cleanBaseUrl, 45000, loginToken || undefined, siteId);
         if (cancelled) return;
 
         ivApiRef.current = api;
