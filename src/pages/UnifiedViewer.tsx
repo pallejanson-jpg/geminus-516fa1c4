@@ -175,39 +175,23 @@ const UnifiedViewerContent: React.FC<{
     setSync3DPitch(syncState.pitch);
   }, [syncLocked, syncState, viewMode]);
 
-  // ─── Ghost opacity — rAF loop for continuous enforcement in VT mode ──
-  const ghostOpacityRef = useRef(ghostOpacity);
-  ghostOpacityRef.current = ghostOpacity;
-
+  // ─── Ghost opacity — change-driven (no rAF loop) ──
   useEffect(() => {
     if (viewMode !== 'vt') return;
-    let running = true;
-
-    const getViewer = () => {
+    try {
       let xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xv) {
         const win = window as any;
         xv = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       }
-      return xv;
-    };
-
-    const loop = () => {
-      if (!running) return;
-      try {
-        const xv = getViewer();
-        if (xv?.scene) {
-          const ids = xv.scene.objectIds;
-          if (ids?.length) {
-            xv.scene.setObjectsOpacity(ids, ghostOpacityRef.current / 100);
-          }
+      if (xv?.scene) {
+        const ids = xv.scene.objectIds;
+        if (ids?.length) {
+          xv.scene.setObjectsOpacity(ids, ghostOpacity / 100);
         }
-      } catch { /* ignore */ }
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
-    return () => { running = false; };
-  }, [viewMode]);
+      }
+    } catch { /* ignore */ }
+  }, [viewMode, ghostOpacity, viewerReady]);
 
   // ─── Fullscreen ────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(() => {
