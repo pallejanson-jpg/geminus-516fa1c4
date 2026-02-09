@@ -670,33 +670,53 @@ async function extractBimHierarchy(
           let nameKey = 'p153cb174';
           let elevationKey = 'pdf1348b1';
           let levelKey = 'pbadfe721';
+          let numberKey = '';
 
-          // Try to find keys from fieldsMap
+          // Try to find keys from fieldsMap for human-readable names
           for (const [key, name] of Object.entries(fieldsMap)) {
             const lowerName = (name as string).toLowerCase();
             if (lowerName === 'category' || lowerName === 'kategori') categoryKey = key;
             if (lowerName === 'name' || lowerName === 'namn') nameKey = key;
             if (lowerName === 'elevation' || lowerName === 'höjd') elevationKey = key;
             if (lowerName === 'level' || lowerName === 'våning' || lowerName === 'nivå') levelKey = key;
+            if (lowerName === 'number' || lowerName === 'nummer') numberKey = key;
           }
 
           for (const obj of props) {
             const category = obj.props?.[categoryKey] || '';
-            const name = obj.props?.[nameKey] || '';
+            const rawName = obj.props?.[nameKey] || '';
+            const number = numberKey ? (obj.props?.[numberKey] || '') : '';
             const externalId = obj.externalId || obj.svf2Id?.toString() || '';
 
             if (category === 'Revit Level' || category === 'Levels') {
+              // For levels: prefer Name, fall back to "Level <elevation>" or "Level <objectId>"
+              let levelName = rawName;
+              if (!levelName || levelName === externalId || levelName.length > 40) {
+                const elev = obj.props?.[elevationKey];
+                levelName = elev != null ? `Level ${parseFloat(elev).toFixed(1)}m` : `Level ${obj.objectId || externalId.slice(-8)}`;
+              }
               allLevels.push({
                 externalId,
-                name,
+                name: levelName,
                 elevation: obj.props?.[elevationKey] || null,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
               });
             } else if (category === 'Revit Rooms' || category === 'Rooms') {
+              // For rooms: prefer "Number Name" (e.g. "101 Korridor"), fall back to Name, then "Room <objectId>"
+              let roomName = '';
+              if (number && rawName && rawName !== externalId) {
+                roomName = `${number} ${rawName}`;
+              } else if (number) {
+                roomName = number;
+              } else if (rawName && rawName !== externalId && rawName.length < 40) {
+                roomName = rawName;
+              } else {
+                roomName = `Room ${obj.objectId || externalId.slice(-8)}`;
+              }
               allRooms.push({
                 externalId,
-                name,
+                name: roomName.trim(),
                 level: obj.props?.[levelKey] || null,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
@@ -1330,13 +1350,13 @@ serve(async (req: Request) => {
         );
       }
 
-      // ---- SYNC BIM DATA (Model Properties API) ----
+      // ---- SYNC BIM DATA (Model Properties API) - single file at a time ----
       case "sync-bim-data": {
-        const { folderName, folderId, items: folderItems } = body;
+        const { folderName, folderId, items: folderItems, singleItem } = body;
 
-        if (!projectId || !folderId || !folderItems) {
+        if (!projectId || !folderId) {
           return new Response(
-            JSON.stringify({ success: false, error: "projectId, folderId, and items are required" }),
+            JSON.stringify({ success: false, error: "projectId and folderId are required" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
@@ -1344,22 +1364,33 @@ serve(async (req: Request) => {
         const { token } = await getAccToken(auth.userId, supabase);
         const regionHeaders = getRegionHeader(region);
 
-        // Filter to BIM items with valid versionUrns
-        const bimItems = (folderItems as any[]).filter(
-          (item: any) => item.versionUrn && isBimFile(item.name)
-        );
+        // If singleItem is provided, process just that one file
+        // Otherwise fall back to folderItems (legacy behavior)
+        let bimItems: any[];
+        if (singleItem) {
+          bimItems = [singleItem].filter((item: any) => item.versionUrn && isBimFile(item.name));
+        } else if (folderItems) {
+          bimItems = (folderItems as any[]).filter(
+            (item: any) => item.versionUrn && isBimFile(item.name)
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ success: false, error: "singleItem or items are required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
 
         if (bimItems.length === 0) {
           return new Response(
             JSON.stringify({
               success: false,
-              error: "Inga BIM-filer med versionUrn hittades i denna mapp. Se till att mappen innehåller RVT/IFC-filer.",
+              error: "Inga BIM-filer med versionUrn hittades. Se till att filen är en RVT/IFC-fil.",
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
 
-        console.log(`sync-bim-data: ${bimItems.length} BIM files in folder "${folderName}"`);
+        console.log(`sync-bim-data: ${bimItems.length} BIM file(s) in folder "${folderName}" (single=${!!singleItem})`);
         const versionUrns = bimItems.map((item: any) => item.versionUrn);
 
         try {
