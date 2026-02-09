@@ -19,7 +19,7 @@
  *   /split-viewer?building=X  → initialMode='split'
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
@@ -117,12 +117,16 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
   const viewerInstanceRef = useRef<any>(null);
+  const [viewerReady, setViewerReady] = useState(false);
 
   useEffect(() => {
+    setViewerReady(false);
     const checkForViewer = () => {
       const win = window as any;
-      if (win.__assetPlusViewerInstance) {
-        viewerInstanceRef.current = win.__assetPlusViewerInstance;
+      const instance = win.__assetPlusViewerInstance;
+      if (instance) {
+        viewerInstanceRef.current = instance;
+        setViewerReady(true);
         return true;
       }
       return false;
@@ -225,11 +229,9 @@ const UnifiedViewerContent: React.FC<{
     finally { setIsSyncing(false); }
   }, [manualIvionUrl, buildingData, updateFromIvion]);
 
-  // ─── Ghost opacity for VT mode ────────────────────────────────────
+  // ─── Ghost opacity for VT + Split modes ─────────────────────────────
   useEffect(() => {
     if (viewMode !== 'vt' && viewMode !== 'split') return;
-    // For VT mode, require SDK ready; for split mode, always apply
-    if (viewMode === 'vt' && sdkStatus !== 'ready') return;
     
     // Try primary ref first, then fallback to global
     let xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -244,7 +246,7 @@ const UnifiedViewerContent: React.FC<{
         xeokitViewer.scene.setObjectsOpacity(objectIds, ghostOpacity / 100);
       }
     } catch (e) { console.debug('[UnifiedViewer] Ghost opacity error:', e); }
-  }, [ghostOpacity, sdkStatus, viewMode]);
+  }, [ghostOpacity, viewMode, viewerReady]);
 
   // ─── Fullscreen ────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(() => {
