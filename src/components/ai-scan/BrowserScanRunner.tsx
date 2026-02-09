@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Pause, Play, StopCircle, Eye, Camera, Loader2 } from 'lucide-react';
+import { Pause, Play, StopCircle, Eye, Camera, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -20,8 +20,8 @@ interface BrowserScanRunnerProps {
 
 type ScanState = 'initializing' | 'scanning' | 'paused' | 'completing' | 'done' | 'error';
 
-const ROTATIONS_PER_POSITION = 6; // 360° / 60° per capture
-const ROTATION_DELAY_MS = 1500; // wait for render after rotation
+const ROTATIONS_PER_POSITION = 6;
+const ROTATION_DELAY_MS = 1500;
 const CAPTURE_DELAY_MS = 500;
 
 const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
@@ -44,19 +44,50 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   const [detectionsFound, setDetectionsFound] = useState(0);
   const [currentImageInfo, setCurrentImageInfo] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [sdkEnabled, setSdkEnabled] = useState(false);
+
+  // Wait for container to have dimensions before enabling SDK
+  useEffect(() => {
+    if (sdkEnabled) return;
+
+    const checkDimensions = () => {
+      const el = containerRef.current;
+      if (el && el.offsetHeight > 0 && el.offsetWidth > 0) {
+        console.log('[BrowserScan] Container ready:', el.offsetWidth, 'x', el.offsetHeight);
+        setSdkEnabled(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Check immediately
+    if (checkDimensions()) return;
+
+    // Poll until ready
+    const interval = setInterval(() => {
+      if (checkDimensions()) clearInterval(interval);
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [sdkEnabled]);
 
   const { sdkStatus, ivApiRef, retry } = useIvionSdk({
     baseUrl: ivionBaseUrl,
     siteId: ivionSiteId,
     buildingFmGuid,
     containerRef,
-    enabled: true,
+    enabled: sdkEnabled,
   });
 
   // Start scanning when SDK is ready
   useEffect(() => {
     if (sdkStatus === 'ready' && scanState === 'initializing') {
       startScan();
+    }
+    // Handle SDK failure
+    if (sdkStatus === 'failed' && scanState === 'initializing') {
+      setErrorMessage('360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
+      setScanState('error');
     }
   }, [sdkStatus, scanState]);
 
@@ -73,18 +104,15 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     if (!api) return null;
 
     try {
-      // Try getMainView().getScreenshot() or similar
       const mainView = api.getMainView?.();
       if (mainView && typeof (mainView as any).getScreenshot === 'function') {
         const dataUri = await (mainView as any).getScreenshot();
         if (dataUri && typeof dataUri === 'string') {
-          // Strip data:image/...;base64, prefix
           const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
           return base64;
         }
       }
 
-      // Fallback: try canvas capture from the ivion element
       const ivionEl = containerRef.current?.querySelector('ivion');
       if (ivionEl) {
         const canvas = ivionEl.querySelector('canvas');
@@ -163,7 +191,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
   const getImageList = async (): Promise<Array<{ id: number; datasetName?: string }>> => {
     try {
-      // Get datasets from edge function
       const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
         body: { action: 'test-image-access', siteId: ivionSiteId },
       });
@@ -173,11 +200,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         return [];
       }
 
-      // For each dataset, get images via the REST API
       const allImages: Array<{ id: number; datasetName?: string }> = [];
 
       for (const dsName of data.datasets) {
-        // Use the Ivion SDK to get image list if available
         const api = ivApiRef.current as any;
         if (api?.image?.repository?.findAll) {
           try {
@@ -187,7 +212,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
                 allImages.push({ id: img.id, datasetName: dsName });
               }
               console.log(`[BrowserScan] Got ${images.length} images from SDK`);
-              return allImages; // SDK returns all images across datasets
+              return allImages;
             }
           } catch (e) {
             console.warn('[BrowserScan] SDK image list failed, using fallback');
@@ -195,10 +220,8 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
       }
 
-      // Fallback: generate sequential IDs to try
       if (allImages.length === 0) {
         console.log('[BrowserScan] Using fallback: sequential navigation');
-        // We'll navigate sequentially using moveToImageId
         for (let i = 0; i < 200; i++) {
           allImages.push({ id: i });
         }
@@ -222,11 +245,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     setScanState('scanning');
 
     try {
-      // Get list of images to scan
       const images = await getImageList();
       
       if (images.length === 0) {
-        // Fallback: just scan current view + nearby
         toast({
           title: 'Kunde inte lista bilder',
           description: 'Skannar den aktuella positionen istället.',
@@ -236,7 +257,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         setTotalImages(images.length);
       }
 
-      // Update scan job total
       await supabase.from('scan_jobs').update({
         total_images: images.length || 1,
         status: 'running',
@@ -253,11 +273,10 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         const img = images[i];
         setCurrentImageInfo(`Bild ${i + 1} / ${images.length || 1}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
 
-        // Navigate to image
         if (img) {
           try {
             await api.moveToImageId(img.id);
-            await sleep(2000); // Wait for panorama to load
+            await sleep(2000);
           } catch (e) {
             console.warn(`[BrowserScan] Could not navigate to image ${img.id}, skipping`);
             setProcessedImages(i + 1);
@@ -265,7 +284,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           }
         }
 
-        // Capture multiple angles
         for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
           if (cancelledRef.current) break;
 
@@ -284,7 +302,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             setDetectionsFound(totalDetections);
           }
 
-          // Rotate for next capture
           if (rot < ROTATIONS_PER_POSITION - 1) {
             await rotateView(360 / ROTATIONS_PER_POSITION);
             await sleep(ROTATION_DELAY_MS);
@@ -294,7 +311,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         setProcessedImages(i + 1);
       }
 
-      // Mark scan as complete
       if (!cancelledRef.current) {
         setScanState('completing');
         await supabase.functions.invoke('ai-asset-detection', {
@@ -307,7 +323,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           description: `Hittade ${totalDetections} potentiella objekt i ${processedImages} bilder.`,
         });
 
-        // Get final job state
         const { data: finalJob } = await supabase.functions.invoke('ai-asset-detection', {
           body: { action: 'get-scan-status', scanJobId },
         });
@@ -351,8 +366,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             {scanState === 'scanning' && <Camera className="h-4 w-4 text-primary animate-pulse" />}
             {scanState === 'paused' && <Pause className="h-4 w-4 text-amber-500" />}
             {scanState === 'initializing' && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            {scanState === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
             <span className="text-sm font-medium">
-              {scanState === 'initializing' && 'Laddar 360°-visare...'}
+              {scanState === 'initializing' && (sdkEnabled ? 'Laddar 360°-visare...' : 'Förbereder visare...')}
               {scanState === 'scanning' && 'Skannar...'}
               {scanState === 'paused' && 'Pausad'}
               {scanState === 'completing' && 'Sparar resultat...'}
@@ -372,6 +388,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
         {errorMessage && (
           <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
@@ -402,18 +419,19 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             </>
           )}
           {scanState === 'error' && (
-            <Button variant="outline" size="sm" onClick={() => { retry(); setScanState('initializing'); }}>
+            <Button variant="outline" size="sm" onClick={() => { setSdkEnabled(false); retry(); setScanState('initializing'); setErrorMessage(''); }}>
+              <RefreshCw className="h-4 w-4 mr-1" />
               Försök igen
             </Button>
           )}
         </div>
       </div>
 
-      {/* Ivion SDK viewer container */}
+      {/* Ivion SDK viewer container — explicit dimensions for SDK init */}
       <div
         ref={containerRef}
-        className="flex-1 min-h-[300px] rounded-lg overflow-hidden border bg-background"
-        style={{ display: 'block' }}
+        className="rounded-lg overflow-hidden border bg-muted"
+        style={{ display: 'block', width: '100%', minHeight: '400px', height: '50vh' }}
       />
     </div>
   );

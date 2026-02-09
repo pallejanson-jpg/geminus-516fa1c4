@@ -298,7 +298,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
     ivionStatus?.connected;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-auto space-y-6 pb-4">
       {/* Building Selection */}
       <Card>
         <CardHeader>
@@ -539,8 +540,10 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
         </CardContent>
       </Card>
 
-      {/* Start Button */}
-      <div className="flex justify-end">
+      </div>
+
+      {/* Sticky Start Button */}
+      <div className="sticky bottom-0 bg-background border-t pt-3 pb-1 flex justify-end">
         <Button
           size="lg"
           onClick={startScan}
