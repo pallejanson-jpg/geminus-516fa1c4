@@ -3153,6 +3153,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   onToggleTreeView={(visible) => setShowTreePanel(visible)}
                   showTreeView={showTreePanel}
                   onAddAsset={handleOpenInventorySheet}
+                  initialFloorFmGuid={initialFmGuidToFocus}
                 />
               </div>
             </>
