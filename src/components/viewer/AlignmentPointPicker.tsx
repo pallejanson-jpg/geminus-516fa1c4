@@ -8,8 +8,9 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Crosshair, Check, X, MousePointerClick, RotateCcw } from 'lucide-react';
+import { Crosshair, Check, X, MousePointerClick, RotateCcw, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { ivionToBim, type IvionBimTransform, type Vec3 } from '@/lib/ivion-bim-transform';
 
 type PickStep = 'idle' | 'picking360' | 'picking3D' | 'done';
@@ -34,25 +35,76 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
   const [step, setStep] = useState<PickStep>('picking360');
   const [ivionPoint, setIvionPoint] = useState<Vec3 | null>(null);
   const [bimPoint, setBimPoint] = useState<Vec3 | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const pickListenerRef = useRef<((e: any) => void) | null>(null);
 
   // Step 1: Capture current 360° position
   const capture360Position = useCallback(() => {
+    setCaptureError(null);
     const api = ivApiRef.current;
-    if (!api) return;
+    if (!api) {
+      const msg = 'SDK ej redo – försök igen om några sekunder';
+      setCaptureError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    // Debug: log what the API ref actually contains
+    console.log('[AlignmentPicker] ivApiRef.current type:', typeof api);
+    console.log('[AlignmentPicker] ivApiRef.current keys:', Object.keys(api).slice(0, 20));
 
     try {
+      // Guard: check if getMainView exists
+      if (typeof api.getMainView !== 'function') {
+        console.warn('[AlignmentPicker] api.getMainView is not a function. Available keys:', Object.keys(api).slice(0, 30));
+        
+        // Fallback: try api.view or api.camera or other common SDK patterns
+        let position: Vec3 | null = null;
+        
+        // Try: api.camera?.position
+        if (api.camera?.position) {
+          const p = api.camera.position;
+          position = { x: p.x ?? p[0], y: p.y ?? p[1], z: p.z ?? p[2] };
+        }
+        // Try: api.view?.getImage
+        else if (typeof api.view?.getImage === 'function') {
+          const img = api.view.getImage();
+          if (img?.location) position = { x: img.location.x, y: img.location.y, z: img.location.z };
+        }
+
+        if (position) {
+          setIvionPoint(position);
+          setStep('picking3D');
+          toast.success(`360°-position fångad: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
+          console.log('[AlignmentPicker] 360° position captured via fallback:', position);
+          return;
+        }
+
+        const msg = 'SDK-funktionen getMainView saknas. Kontrollera att 360°-vyn är inladdad.';
+        setCaptureError(msg);
+        toast.error(msg);
+        return;
+      }
+
       const mainView = api.getMainView();
       const image = mainView?.getImage();
       if (image?.location) {
         const loc = image.location;
-        setIvionPoint({ x: loc.x, y: loc.y, z: loc.z });
+        const pt: Vec3 = { x: loc.x, y: loc.y, z: loc.z };
+        setIvionPoint(pt);
         setStep('picking3D');
+        toast.success(`360°-position fångad: (${pt.x.toFixed(1)}, ${pt.y.toFixed(1)}, ${pt.z.toFixed(1)})`);
         console.log('[AlignmentPicker] 360° position captured:', loc);
       } else {
+        const msg = 'Ingen panoramaposition tillgänglig. Navigera till en bild först.';
+        setCaptureError(msg);
+        toast.error(msg);
         console.warn('[AlignmentPicker] No image location available');
       }
-    } catch (e) {
+    } catch (e: any) {
+      const msg = `Fel vid positionsfångst: ${e.message || 'okänt fel'}`;
+      setCaptureError(msg);
+      toast.error(msg);
       console.error('[AlignmentPicker] Failed to capture 360 position:', e);
     }
   }, [ivApiRef]);
@@ -67,6 +119,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         const picked: Vec3 = { x: coords[0], y: coords[1], z: coords[2] };
         setBimPoint(picked);
         setStep('done');
+        toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
         console.log('[AlignmentPicker] 3D point picked:', picked);
       }
     };
@@ -90,6 +143,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           };
           setBimPoint(picked);
           setStep('done');
+          toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
           console.log('[AlignmentPicker] 3D point picked via xeokit:', picked);
         }
       });
@@ -118,12 +172,14 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     };
 
     console.log('[AlignmentPicker] Calculated offsets:', offsets);
+    toast.success('Offset beräknad och applicerad');
     onOffsetsCalculated(offsets);
   }, [ivionPoint, bimPoint, transform, onOffsetsCalculated]);
 
   const reset = useCallback(() => {
     setIvionPoint(null);
     setBimPoint(null);
+    setCaptureError(null);
     setStep('picking360');
   }, []);
 
@@ -151,19 +207,30 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         step === 'picking360' ? 'bg-primary/10 border border-primary/30' : 'bg-muted/50'
       }`}>
         <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-          ivionPoint ? 'bg-green-500 text-white' : 'bg-muted-foreground/20 text-muted-foreground'
+          ivionPoint ? 'bg-green-500 text-white' : 'bg-foreground/20 text-foreground/70'
         }`}>
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium">Navigera i 360° till en tydlig punkt</p>
+          <p className="font-medium text-foreground">Fånga 360°-position</p>
+          <p className="text-foreground/70 mt-0.5 leading-snug">
+            Navigera i 360°-vyn till en punkt du kan identifiera i 3D (t.ex. ett hörn, dörr eller pelare). Tryck sedan knappen nedan.
+          </p>
           {ivionPoint ? (
-            <p className="text-muted-foreground font-mono text-[10px] mt-1">{formatCoord(ivionPoint)}</p>
+            <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
-            <Button size="sm" variant="outline" className="h-6 text-[11px] mt-1.5 gap-1" onClick={capture360Position}>
-              <MousePointerClick className="h-3 w-3" />
-              Fånga position
-            </Button>
+            <div className="mt-1.5 space-y-1.5">
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1.5" onClick={capture360Position}>
+                <MousePointerClick className="h-3 w-3" />
+                Fånga position
+              </Button>
+              {captureError && (
+                <div className="flex items-start gap-1.5 text-destructive">
+                  <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                  <p className="text-[10px] leading-snug">{captureError}</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -173,28 +240,48 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
         step === 'picking3D' ? 'bg-primary/10 border border-primary/30' : 'bg-muted/50'
       }`}>
         <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-          bimPoint ? 'bg-green-500 text-white' : 'bg-muted-foreground/20 text-muted-foreground'
+          bimPoint ? 'bg-green-500 text-white' : 'bg-foreground/20 text-foreground/70'
         }`}>
           {bimPoint ? <Check className="h-3 w-3" /> : '2'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium">Klicka på samma punkt i 3D-modellen</p>
+          <p className="font-medium text-foreground">Klicka på samma punkt i 3D</p>
           {bimPoint ? (
-            <p className="text-muted-foreground font-mono text-[10px] mt-1">{formatCoord(bimPoint)}</p>
+            <p className="text-green-400 font-mono text-[10px] mt-1">✓ {formatCoord(bimPoint)}</p>
           ) : step === 'picking3D' ? (
-            <p className="text-muted-foreground mt-1 animate-pulse">Väntar på klick i 3D...</p>
+            <div className="mt-1 space-y-1">
+              <p className="text-foreground/70 leading-snug">
+                Klicka nu på <strong>exakt samma punkt</strong> i 3D-modellen till vänster. Klicka direkt på ytan (vägg, golv, dörr).
+              </p>
+              <div className="flex items-center gap-1.5 text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="text-[11px] font-medium animate-pulse">Väntar på klick i 3D-vyn...</span>
+              </div>
+            </div>
           ) : (
-            <p className="text-muted-foreground mt-1">Fånga 360°-position först</p>
+            <p className="text-foreground/60 mt-1">Fånga 360°-position först (steg 1)</p>
           )}
         </div>
       </div>
 
-      {/* Apply button */}
+      {/* Step 3: Result + Apply */}
       {step === 'done' && ivionPoint && bimPoint && (
-        <Button size="sm" className="w-full h-7 text-xs gap-1.5" onClick={applyOffsets}>
-          <Check className="h-3 w-3" />
-          Applicera offset
-        </Button>
+        <div className="space-y-2">
+          <div className="bg-muted/50 rounded-md p-2 text-[10px] font-mono space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-foreground/70">360°:</span>
+              <span className="text-foreground">{formatCoord(ivionPoint)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-foreground/70">3D:</span>
+              <span className="text-foreground">{formatCoord(bimPoint)}</span>
+            </div>
+          </div>
+          <Button size="sm" className="w-full h-7 text-xs gap-1.5" onClick={applyOffsets}>
+            <Check className="h-3 w-3" />
+            Applicera beräknad offset
+          </Button>
+        </div>
       )}
     </div>
   );
