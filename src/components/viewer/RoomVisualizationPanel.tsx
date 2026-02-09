@@ -45,8 +45,8 @@ interface RoomData {
 // Custom event for forcing spaces visibility
 export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 
-// Floor selection changed event (for cache invalidation)
-const FLOOR_SELECTION_CHANGED_EVENT = 'FLOOR_SELECTION_CHANGED';
+// Import floor selection event from the canonical source
+import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
@@ -61,11 +61,38 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   buildingFmGuid,
   onClose,
   onShowSpaces,
-  visibleFloorFmGuids,
+  visibleFloorFmGuids: visibleFloorFmGuidsProp,
   className,
   embedded = false,
 }) => {
   const { allData } = useContext(AppContext);
+
+  // Track floor selection from events — overrides prop when available
+  const [eventFloorGuids, setEventFloorGuids] = useState<string[] | null>(null);
+  const [eventIsAllVisible, setEventIsAllVisible] = useState(true);
+
+  // Listen for floor selection changes to get the latest floor state
+  useEffect(() => {
+    const handleFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
+      const { visibleFloorFmGuids: guids, isAllFloorsVisible } = e.detail;
+      setEventIsAllVisible(!!isAllFloorsVisible);
+      if (guids && guids.length > 0) {
+        setEventFloorGuids(guids);
+      } else if (isAllFloorsVisible) {
+        setEventFloorGuids(null); // null = all floors
+      }
+      // Also invalidate cache
+      setCacheKey(`${buildingFmGuid}-${Date.now()}`);
+    };
+    
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    return () => {
+      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange as EventListener);
+    };
+  }, [buildingFmGuid]);
+
+  // Effective visible floor guids: prefer event-based, fall back to prop
+  const visibleFloorFmGuids = eventFloorGuids ?? visibleFloorFmGuidsProp;
   
   // Load initial state from localStorage
   const [visualizationType, setVisualizationType] = useState<VisualizationType>(() => {
@@ -181,18 +208,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     } catch (e) { /* ignore */ }
   }, [visualizationType, useMockData]);
 
-  // Listen for floor selection changes to invalidate cache and re-apply visualization
-  useEffect(() => {
-    const handleFloorChange = () => {
-      // Invalidate cache by updating the cache key
-      setCacheKey(`${buildingFmGuid}-${Date.now()}`);
-    };
-    
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
-    return () => {
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleFloorChange);
-    };
-  }, [buildingFmGuid]);
+  // Cache invalidation is now handled by the event listener above
 
   // Get rooms from in-memory allData (FAST - no DB queries)
   const filteredRooms = useMemo(() => {
