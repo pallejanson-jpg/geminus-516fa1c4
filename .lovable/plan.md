@@ -1,117 +1,61 @@
 
+# Fix 3D Viewer: Dark Overlay, Model Names, and Floor Selection
 
-# Fix 3D Viewer: 4 Remaining Issues
+## Issue A: Screen too dark when side menu opens
 
-## Issue 1: Room Toggling Performance (All Rooms Load Without Floor Isolation)
+**Root cause**: The `Sheet` component in `ViewerRightPanel.tsx` uses the default Radix Dialog overlay which applies `bg-black/80` (80% opacity black) over the entire screen. This makes the 3D viewer nearly invisible when the settings panel is open.
 
-### Problem
-When "Visa rum" (Show Spaces) is toggled ON without a floor being isolated, the `filterSpacesToVisibleFloors` function in `AssetPlusViewer.tsx` (line 357) makes ALL IfcSpace entities visible across the entire building. On a large building, this can be hundreds of room geometries, causing severe performance degradation on mobile.
+**Fix**: Set `modal={false}` on the `Sheet` in `ViewerRightPanel.tsx`. This removes the dark overlay entirely while keeping the panel functional. The panel already has `bg-card/95 backdrop-blur-md` styling, so it remains readable without the overlay. A click-outside handler will be added to close the panel when clicking on the viewer area.
 
-### Solution
-Add a guard in the `handleShowSpacesChange` callback that checks whether all floors are currently visible. If all floors are visible (no isolation), show a warning toast and prevent enabling spaces.
-
-**Changes to `src/components/viewer/AssetPlusViewer.tsx`:**
-- In `handleShowSpacesChange`: Before calling `onShowSpacesChanged(true)`, check `isAllFloorsVisibleRef.current`. If true, show a toast message informing the user that a floor must be isolated first, and return without enabling spaces.
-
-**Changes to `src/components/viewer/ViewerRightPanel.tsx`:**
-- In `handleToggleSpaces`: Add the same guard -- check if all floors are visible by listening to the `FLOOR_SELECTION_CHANGED` event state. Show a toast warning if no floor is isolated.
-
-**Changes to `src/components/viewer/VisualizationToolbar.tsx`:**
-- Same guard in the spaces toggle handler.
-
-**Changes to `src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
-- The "Show Spaces" toggle calls the parent's `onShowSpacesChange` callback, which routes to `handleShowSpacesChange` in `AssetPlusViewer.tsx`. No separate change needed here since the guard is in the parent.
-
-Toast message (Swedish): "Isolera en vaningsplan forst for att visa rum. Att visa alla rum samtidigt gor viewern langsammare."
+| File | Change |
+|---|---|
+| `src/components/viewer/ViewerRightPanel.tsx` | Add `modal={false}` to the Sheet component |
 
 ---
 
-## Issue 2: Mobile Right Menu Crash (Building Disappears)
+## Issue B: BIM model names are wrong + not all models listed
 
-### Problem
-When the Sheet (right-side settings drawer) opens on mobile, it overlays the viewer and may trigger DOM reflows or touch event conflicts that cause the WebGL canvas to lose its rendering context. The `Sheet` component from Radix UI uses a modal overlay with `pointer-events: none` on the body, which can interfere with the xeokit canvas.
+**Root cause (names)**: The model name shown ("myModel undefined 0 6476.59593...") is the fallback applied when name resolution fails. The `ModelVisibilitySelector` tries to match scene model IDs (which are file hashes like `6476595934a...xkt`) against the `xkt_models` database table (which is empty) and then against the Asset+ GetModels API response (where matching by `xktFileUrl` extraction also fails because the URL structure doesn't align with the scene model ID).
 
-### Root Cause Analysis
-The `MobileViewerOverlay` uses a Radix `Sheet` component (line 220-485) with `side="right"`. When the Sheet opens:
-1. Radix injects a backdrop overlay that covers the entire viewport
-2. The Sheet's `ScrollArea` uses `h-[calc(100vh-80px)]` which can trigger layout recalculations
-3. On iOS, this DOM manipulation combined with the WebGL context can cause the canvas to lose context or crash
+**Root cause (missing models)**: The `additionalDefaultPredicate` parameter (position 9) is currently set to `undefined`. According to the Asset+ documentation, this predicate controls "which **additional** models should be loaded." The base model (referenced by the displayed fmGuid) always loads, but `undefined` means **no additional models** are loaded. For a building like Sma Viken with 4 models (A, 1B, 1E, V), only the base model loads, so the others never appear in the scene or the selector.
 
-### Solution
-1. **Prevent canvas interference**: Add `will-change: transform` to the viewer canvas container to promote it to its own compositing layer, isolating it from DOM reflows caused by the Sheet
-2. **Use non-modal Sheet**: Set `modal={false}` on the Sheet component to prevent Radix from adding a full-screen overlay and blocking pointer events on the body, which interferes with WebGL
-3. **Add manual backdrop**: Add a simple semi-transparent backdrop div that closes the sheet on tap, without the heavy modal behavior
+**Fix (load all models)**: Change `additionalDefaultPredicate` from `undefined` to `() => true` in the `assetplusviewer()` call. This tells Asset+ to load ALL available models for the building. The `ModelVisibilitySelector` already has logic to default only A-models to visible (line 359-371), so the other models will be loaded but hidden initially.
 
-**Changes to `src/components/viewer/mobile/MobileViewerOverlay.tsx`:**
-- On the `Sheet` component: add `modal={false}` prop
-- Add a custom backdrop overlay that only covers the area outside the Sheet
-- On the viewer container in `AssetPlusViewer.tsx`: add `will-change: transform` CSS to the `#AssetPlusViewer` div to prevent compositor layer thrashing
+**Fix (names)**: Add a new matching strategy in `ModelVisibilitySelector.extractModels()` that reads the model name from the xeokit metaScene. Each loaded model has a root `IfcProject` meta-object whose `name` property often contains the human-readable model name. This serves as a reliable fallback when the API-based name mapping fails. Additionally, after a successful API fetch, persist the model metadata to the `xkt_models` database table so future loads have cached names.
 
-**Changes to `src/components/viewer/AssetPlusViewer.tsx`:**
-- Add `willChange: 'transform'` to the style of the `#AssetPlusViewer` div (line 2877) to isolate WebGL from DOM reflows
+| File | Change |
+|---|---|
+| `src/components/viewer/AssetPlusViewer.tsx` | Change `additionalDefaultPredicate` from `undefined` to `() => true` |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Add Strategy 6: extract name from metaScene IfcProject root; persist API results to xkt_models table |
 
 ---
 
-## Issue 3: Incorrect BIM Model Names
+## Issue C: Only one floor selected on startup
 
-### Problem
-The `xkt_models` database table is empty (confirmed by query), and the Asset+ `GetModels` API is the fallback for model names. The model IDs in the xeokit scene are file hashes (e.g., `abc123def.xkt`), and the name mapping from the API uses `model.id` and `model.xktFileUrl` to match. If the matching fails (which the debug log shows: "No name match for model:"), the fallback is to display the raw file hash with dashes replaced by spaces -- which produces "very strange" names.
+**Root cause**: The `FloorVisibilitySelector` persists the user's floor selection to `localStorage` (key: `viewer-visible-floors-{buildingFmGuid}`). When the user previously isolated floor "03 Etasje" and then left the viewer, that selection was saved. On re-entry, the saved selection is restored, showing only 03 Etasje as selected -- even though the viewer renders all floors until `applyFloorVisibility` runs.
 
-### Solution
-Improve the name resolution in `ModelVisibilitySelector.tsx`:
+The user's requirement is clear: **all floors should be selected by default every time the 3D viewer starts**.
 
-1. **Use `model_name` from the `GetModels` API more aggressively**: The API returns objects with `id`, `name`, and `xktFileUrl`. Currently, the matching is done by xktFileUrl filename extraction, but the extracted filename may not match the scene model ID exactly.
+**Fix**: Remove the localStorage restoration for floor selections. The initialization in `FloorVisibilitySelector` will always default to all floors visible. The localStorage save logic can remain (it doesn't hurt), but the restoration on mount will be removed so every viewer session starts fresh with all floors ON.
 
-2. **Add a position-based fallback**: If the API returns N models and the scene has N models, match by sorted position. This handles cases where IDs are completely different between the API and the scene.
-
-3. **Cache API model names to the `xkt_models` table**: After fetching from the API, persist the mapping to the database for future loads. This avoids repeated API calls and ensures model names are available offline.
-
-**Changes to `src/components/viewer/ModelVisibilitySelector.tsx`:**
-- In `fetchModelNames` (line 96): After a successful API call, also insert/upsert the results into the `xkt_models` table so subsequent loads use the cached names
-- In `extractModels` (line 221): Add a fallback matching strategy that uses the model's `metaScene` root object name (e.g., `IfcProject.name`) if the file name matching fails
-- Add Strategy 6: Search the model's metaScene root node for the project name, which often matches the model name from Asset+
-
-**Changes to add a backend function or direct insert:**
-- After fetching from the Asset+ API, upsert rows into `xkt_models` with `building_fm_guid`, `model_id`, `model_name`, and `file_name`
+| File | Change |
+|---|---|
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Remove localStorage restoration of floor selection; always default to all floors visible |
 
 ---
 
-## Issue 4: Not All Models in Model Selector
-
-### Problem
-For buildings with multiple BIM models (like "sma Viken" with 4 models: A, 1B, 1E, etc.), not all models appear in the model selector. The `ModelVisibilitySelector` combines scene models with `dbModels` from the `xkt_models` table. Since `xkt_models` is empty, only scene-loaded models appear. If the viewer's `additionalDefaultPredicate` is `undefined` (as set in our recent fix), the Asset+ viewer loads all models by default. However, if the viewer only loaded ONE model (e.g., the A model), the others won't appear in the selector.
-
-### Root Cause
-The `additionalDefaultPredicate` parameter was fixed to `undefined` in the previous change. According to the Asset+ docs, `undefined` means "use default behavior" which loads all models. The issue may be that:
-1. The API only returns one model for some buildings
-2. Or the scene models are loaded asynchronously and the selector polls too early (max 10 attempts x 500ms = 5 seconds)
-
-### Solution
-1. **Ensure all API models appear in the selector**: Even if they're not loaded in the scene yet, the `dbModels` state should contain them from the API call. Since `xkt_models` is empty, the API fallback runs. We need to verify this path works.
-
-2. **Persist API models to database**: Same as Issue 3 -- once we write API results to `xkt_models`, the selector will always have the complete list regardless of which models are loaded in the scene.
-
-3. **Add a "load model" action**: For models listed in the selector but not loaded in the scene (marked `loaded: false`), toggling them ON should trigger a model load via the Asset+ API (`viewer.loadModel(modelId)` or similar).
-
-**Changes to `src/components/viewer/ModelVisibilitySelector.tsx`:**
-- In `handleModelToggle`: If the model has `loaded: false`, attempt to load it into the scene via the Asset+ viewer API before making it visible
-- After successful API fetch in `fetchModelNames`, upsert results to `xkt_models` for persistence
-
----
-
-## File Summary
+## Complete File Summary
 
 | File | Changes |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | (1) Guard spaces toggle to require floor isolation, (2) Add `willChange: 'transform'` to viewer container |
-| `src/components/viewer/mobile/MobileViewerOverlay.tsx` | Set Sheet to `modal={false}`, add custom backdrop |
-| `src/components/viewer/ViewerRightPanel.tsx` | Guard spaces toggle with floor isolation check |
-| `src/components/viewer/VisualizationToolbar.tsx` | Guard spaces toggle with floor isolation check |
-| `src/components/viewer/ModelVisibilitySelector.tsx` | (1) Add metaScene name fallback, (2) Persist API names to xkt_models, (3) Handle loading unloaded models |
+| `src/components/viewer/AssetPlusViewer.tsx` | Change `additionalDefaultPredicate` from `undefined` to `() => true` to load all building models |
+| `src/components/viewer/ViewerRightPanel.tsx` | Set `modal={false}` on Sheet to remove dark overlay |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Add metaScene IfcProject name fallback (Strategy 6); persist API model names to xkt_models table |
+| `src/components/viewer/FloorVisibilitySelector.tsx` | Remove localStorage floor selection restoration; always start with all floors selected |
 
 ## Risk Assessment
 
-- **Spaces guard**: Low risk. Only adds a user-facing restriction with clear messaging. Power users who know what they're doing can isolate a floor first.
-- **Sheet modal fix**: Low risk. Using `modal={false}` is a documented Radix prop. The custom backdrop provides the same UX without WebGL interference.
-- **Model names**: Medium risk. The persistence to `xkt_models` requires an upsert that could fail silently. The metaScene fallback is a best-effort heuristic.
-- **Model loading**: Medium risk. The `viewer.loadModel()` API needs to be verified against the Asset+ documentation.
+- **Dark overlay removal (A)**: Low risk. The `modal={false}` prop is documented Radix behavior. The panel remains fully functional.
+- **Model predicate (B)**: Low risk. `() => true` is the documented pattern for loading all models. The ModelVisibilitySelector already handles default visibility (A-models only).
+- **Model names (B)**: Medium risk. The metaScene fallback depends on the IfcProject node containing a meaningful name. If it doesn't, the existing fallback (cleaned filename) remains.
+- **Floor selection (C)**: Low risk. Simply removes stale state restoration. Users can still isolate floors during a session; the change only affects initial state.
