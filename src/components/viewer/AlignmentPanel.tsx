@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info } from 'lucide-react';
+import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info, Crosshair } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
+import AlignmentPointPicker from './AlignmentPointPicker';
 
 interface AlignmentPanelProps {
   /** Current transform values */
@@ -30,6 +31,10 @@ interface AlignmentPanelProps {
   showCrosshair?: boolean;
   /** Toggle crosshair overlay */
   onToggleCrosshair?: (show: boolean) => void;
+  /** Ivion API ref for point-picking (optional, only in split mode) */
+  ivApiRef?: React.MutableRefObject<any>;
+  /** Whether point-picking is available (split mode with SDK ready) */
+  canPointPick?: boolean;
 }
 
 const COARSE_OFFSET_RANGE = 100; // ±100m
@@ -46,9 +51,12 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   onSaved,
   showCrosshair,
   onToggleCrosshair,
+  ivApiRef,
+  canPointPick,
 }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [fineOpen, setFineOpen] = useState(false);
+  const [showPointPicker, setShowPointPicker] = useState(false);
 
   const updateField = useCallback(
     (field: keyof IvionBimTransform, value: number) => {
@@ -68,6 +76,11 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   const handleReset = useCallback(() => {
     onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
   }, [onChange]);
+
+  const handlePointPickOffsets = useCallback((offsets: { offsetX: number; offsetY: number; offsetZ: number }) => {
+    onChange({ ...transform, ...offsets });
+    setShowPointPicker(false);
+  }, [transform, onChange]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -127,6 +140,29 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
           Justera värdena tills 3D-modellen överlappar panoramabilden.
         </p>
       </div>
+
+      {/* Point-pick button (split mode only) */}
+      {canPointPick && ivApiRef && !showPointPicker && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-7 text-xs gap-1.5"
+          onClick={() => setShowPointPicker(true)}
+        >
+          <Crosshair className="h-3 w-3" />
+          Punktkalibrering (360° → 3D)
+        </Button>
+      )}
+
+      {/* Point picker UI */}
+      {showPointPicker && ivApiRef && (
+        <AlignmentPointPicker
+          transform={transform}
+          ivApiRef={ivApiRef}
+          onOffsetsCalculated={handlePointPickOffsets}
+          onClose={() => setShowPointPicker(false)}
+        />
+      )}
 
       {/* Coarse sliders */}
       <div className="space-y-2.5">
