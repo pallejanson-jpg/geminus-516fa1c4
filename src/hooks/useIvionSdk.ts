@@ -81,9 +81,12 @@ export function useIvionSdk({
         const loginToken = await fetchLoginToken();
         if (cancelled) return;
 
-        if (loginToken) {
-          console.log('[useIvionSdk] Will use loginToken for auto-auth');
+        if (!loginToken) {
+          console.error('[useIvionSdk] No loginToken available - cannot authenticate with Ivion');
+          if (!cancelled) setSdkStatus('failed');
+          return;
         }
+        console.log('[useIvionSdk] Will use loginToken for auto-auth');
 
         // Step 2: Create <ivion> element in container
         if (containerRef.current && !ivionElementRef.current) {
