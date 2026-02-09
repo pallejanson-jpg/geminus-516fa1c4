@@ -194,6 +194,31 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           
           console.debug("Model names map:", Object.fromEntries(nameMap));
           setModelNamesMap(nameMap);
+          
+          // Persist API model names to xkt_models table for future loads
+          try {
+            for (const m of apiModels) {
+              if (!m.name) continue;
+              const fileName = m.xktFileUrl
+                ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
+                : (m.id || '');
+              if (!fileName) continue;
+              
+              await supabase.from('xkt_models').upsert({
+                building_fm_guid: buildingFmGuid,
+                model_id: m.id || fileName,
+                model_name: m.name,
+                file_name: fileName,
+                storage_path: m.xktFileUrl || '',
+                source_url: m.xktFileUrl || null,
+              }, { onConflict: 'model_id' }).then(({ error }) => {
+                if (error) console.debug("Failed to cache model name:", m.name, error.message);
+              });
+            }
+            console.debug("Model names persisted to database");
+          } catch (persistErr) {
+            console.debug("Failed to persist model names:", persistErr);
+          }
         } else {
           console.debug("Asset+ GetModels failed:", response.status);
         }
@@ -260,6 +285,36 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
               matchedName = value;
               break;
             }
+          }
+        }
+        
+        // Strategy 6: Extract name from metaScene IfcProject root
+        // Each loaded model has a root IfcProject meta-object with a human-readable name
+        if (!matchedName && viewer?.metaScene) {
+          try {
+            const metaModel = viewer.metaScene.metaModels?.[modelId];
+            if (metaModel?.rootMetaObject) {
+              const rootObj = metaModel.rootMetaObject;
+              if (rootObj.type === 'IfcProject' && rootObj.name && !rootObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                matchedName = rootObj.name;
+                console.debug("Strategy 6 (metaScene IfcProject) matched:", modelId, "->", matchedName);
+              }
+            }
+            // Fallback: search all metaObjects for IfcProject belonging to this model
+            if (!matchedName) {
+              const metaObjects = viewer.metaScene.metaObjects || {};
+              for (const metaObj of Object.values(metaObjects) as any[]) {
+                if (metaObj.type === 'IfcProject' && metaObj.metaModel?.id === modelId) {
+                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                    matchedName = metaObj.name;
+                    console.debug("Strategy 6b (metaObjects search) matched:", modelId, "->", matchedName);
+                  }
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            console.debug("Strategy 6 failed for model:", modelId, e);
           }
         }
         
