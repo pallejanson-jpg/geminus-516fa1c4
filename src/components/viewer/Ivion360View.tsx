@@ -552,11 +552,11 @@ export default function Ivion360View({
         <div 
           ref={sdkContainerRef} 
           className="w-full h-full"
-          style={{ display: renderMode === 'sdk' ? 'block' : 'none' }}
+          style={{ display: sdkStatus === 'failed' ? 'none' : 'block' }}
         />
         
-        {/* Iframe fallback - shown when SDK is not available */}
-        {renderMode === 'iframe' && (
+        {/* Iframe fallback - shown only when SDK definitively fails */}
+        {sdkStatus === 'failed' && (
           <iframe
             ref={iframeRef}
             src={ivionUrl}

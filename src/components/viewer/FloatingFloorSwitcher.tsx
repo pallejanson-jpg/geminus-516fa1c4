@@ -561,7 +561,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     <div 
       style={{ left: position.x, top: position.y }}
       className={cn(
-        'fixed z-20 flex flex-col items-center gap-1 p-1.5 sm:p-2 rounded-lg',
+        'fixed z-20 flex flex-col items-center gap-0.5 p-1 rounded-lg',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
         'pointer-events-auto transition-shadow',
         isDragging && 'cursor-grabbing shadow-xl',
@@ -570,17 +570,17 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     >
       {/* Drag handle */}
       <div 
-        className="flex items-center justify-center w-full py-0.5 cursor-grab active:cursor-grabbing"
+        className="flex items-center justify-center w-full cursor-grab active:cursor-grabbing"
         onMouseDown={handleDragStart}
       >
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+        <GripVertical className="h-3 w-3 text-muted-foreground" />
       </div>
 
       {/* Floors icon indicator */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 text-muted-foreground">
-            <Layers className="h-4 w-4 sm:h-5 sm:w-5" />
+          <div className="flex items-center justify-center h-6 w-6 text-muted-foreground">
+            <Layers className="h-4 w-4" />
           </div>
         </TooltipTrigger>
         <TooltipContent side="left">
@@ -603,7 +603,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  'h-8 w-8 sm:h-9 sm:w-9 p-0 text-xs sm:text-sm font-medium rounded-full',
+                  'h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm font-medium rounded-full',
                   'transition-all duration-150',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
@@ -644,7 +644,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               className={cn(
-                'h-8 w-8 sm:h-9 sm:w-9 p-0 text-xs sm:text-sm font-medium rounded-full',
+                'h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm font-medium rounded-full',
                 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
                 'flex items-center justify-center',
               )}
