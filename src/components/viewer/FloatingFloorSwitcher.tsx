@@ -29,7 +29,7 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 // Constants for responsive design
-const MAX_VISIBLE_PILLS_DESKTOP = 5;
+const MAX_VISIBLE_PILLS_DESKTOP = 10;
 const MAX_VISIBLE_PILLS_MOBILE = 4;
 
 /**
@@ -514,7 +514,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   return (
     <div 
       className={cn(
-        'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-px p-1 rounded-lg h-auto',
+        'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-0.5 p-0.5 rounded-lg h-auto w-auto',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
         'pointer-events-auto',
         className
