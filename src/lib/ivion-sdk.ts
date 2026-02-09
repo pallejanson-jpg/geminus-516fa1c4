@@ -132,7 +132,7 @@ function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
     // Check if already loaded from a previous attempt
     const win = window as any;
     const existing: GetApiFn | undefined =
-      win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
+      win.IvApi?.getApi ?? win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
     if (existing) {
       resolve(existing);
       return;
@@ -150,7 +150,7 @@ function loadGetApiViaScript(scriptUrl: string): Promise<GetApiFn> {
     script.onload = () => {
       cleanup();
       const fn: GetApiFn | undefined =
-        win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
+        win.IvApi?.getApi ?? win.IV?.getApi ?? win.ivion?.getApi ?? win.getApi;
       if (fn) {
         resolve(fn);
       } else {
@@ -196,16 +196,12 @@ export async function loadIvionSdk(
 
   let getApi: GetApiFn | null = null;
 
-  // ── Attempt 1: npm package ────────────────────────────────────────
+  // ── Attempt 1: local SDK bundle (/lib/ivion/api.js) ────────────────
   try {
-    const moduleName = '@navvis/ivion';
-    const ivionModule = await import(/* @vite-ignore */ moduleName);
-    getApi = ivionModule.getApi || ivionModule.default?.getApi || null;
-    if (getApi) {
-      console.log('[Ivion SDK] Loaded via @navvis/ivion npm package');
-    }
-  } catch {
-    console.log('[Ivion SDK] npm package not installed, trying script-tag…');
+    getApi = await loadGetApiViaScript('/lib/ivion/api.js');
+    console.log('[Ivion SDK] Loaded via local /lib/ivion/api.js');
+  } catch (e) {
+    console.log('[Ivion SDK] Local SDK not available:', (e as Error).message);
   }
 
   // ── Attempt 2: script tag from IVION instance ─────────────────────
