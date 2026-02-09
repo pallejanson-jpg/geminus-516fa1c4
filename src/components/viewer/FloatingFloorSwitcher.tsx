@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
-import { ChevronDown, Layers, GripVertical } from 'lucide-react';
+import { ChevronDown, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -568,19 +568,14 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         className
       )}
     >
-      {/* Drag handle */}
-      <div 
-        className="flex items-center justify-center w-full cursor-grab active:cursor-grabbing"
-        onMouseDown={handleDragStart}
-      >
-        <GripVertical className="h-3 w-3 text-muted-foreground" />
-      </div>
-
-      {/* Floors icon indicator */}
+      {/* Drag handle with tooltip */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center justify-center h-6 w-6 text-muted-foreground">
-            <Layers className="h-4 w-4" />
+          <div 
+            className="flex items-center justify-center w-full h-3 cursor-grab active:cursor-grabbing"
+            onMouseDown={handleDragStart}
+          >
+            <GripVertical className="h-2.5 w-2.5 text-muted-foreground" />
           </div>
         </TooltipTrigger>
         <TooltipContent side="left">
@@ -603,7 +598,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  'h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm font-medium rounded-full',
+                  'h-6 w-6 sm:h-7 sm:w-7 p-0 text-[10px] sm:text-xs font-medium rounded-full',
                   'transition-all duration-150',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
@@ -644,7 +639,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               className={cn(
-                'h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm font-medium rounded-full',
+                'h-6 w-6 sm:h-7 sm:w-7 p-0 text-[10px] sm:text-xs font-medium rounded-full',
                 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
                 'flex items-center justify-center',
               )}
@@ -723,7 +718,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               onClick={handlePillDoubleClick}
-              className="h-7 w-full px-1 text-[10px] text-muted-foreground hover:text-foreground"
+              className="h-5 w-full px-1 text-[10px] text-muted-foreground hover:text-foreground"
             >
               Alla
             </Button>
