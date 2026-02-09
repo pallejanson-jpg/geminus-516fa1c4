@@ -23,7 +23,7 @@ async function getApsAccessToken(): Promise<string> {
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      scope: "data:read account:read",
+      scope: "data:read data:write data:create account:read",
     }),
   });
 
@@ -1456,6 +1456,271 @@ serve(async (req: Request) => {
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
+      }
+
+      // ---- TRANSLATE MODEL (Model Derivative API) ----
+      case "translate-model": {
+        const { versionUrn } = body;
+        if (!versionUrn) {
+          return new Response(
+            JSON.stringify({ success: false, error: "versionUrn is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+
+        // Base64-encode the URN (URL-safe base64)
+        const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+        // Check if translation already exists
+        const { data: existing } = await supabase
+          .from("acc_model_translations")
+          .select("translation_status, derivative_urn")
+          .eq("version_urn", versionUrn)
+          .maybeSingle();
+
+        if (existing?.translation_status === "success" && existing?.derivative_urn) {
+          return new Response(
+            JSON.stringify({ success: true, status: "success", message: "Modellen är redan översatt.", alreadyDone: true }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Trigger translation job
+        const jobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "x-ads-force": "true",
+          },
+          body: JSON.stringify({
+            input: { urn: urnBase64 },
+            output: {
+              formats: [{ type: "svf2", views: ["3d"] }],
+            },
+          }),
+        });
+
+        if (!jobRes.ok) {
+          const errorText = await jobRes.text();
+          console.error(`Model Derivative job failed (${jobRes.status}): ${errorText}`);
+          return new Response(
+            JSON.stringify({ success: false, error: `Translation job failed (${jobRes.status}): ${errorText}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const jobData = await jobRes.json();
+        console.log("Translation job started:", JSON.stringify(jobData).substring(0, 500));
+
+        // Upsert status
+        await supabase.from("acc_model_translations").upsert({
+          version_urn: versionUrn,
+          building_fm_guid: body.buildingFmGuid || null,
+          folder_id: body.folderId || null,
+          file_name: body.fileName || null,
+          translation_status: "pending",
+          output_format: "svf2",
+          started_at: new Date().toISOString(),
+        }, { onConflict: "version_urn" });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: jobData.result || "pending",
+            urn: urnBase64,
+            message: "Översättningsjobb startat. Kontrollera status med check-translation.",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- CHECK TRANSLATION STATUS ----
+      case "check-translation": {
+        const { versionUrn } = body;
+        if (!versionUrn) {
+          return new Response(
+            JSON.stringify({ success: false, error: "versionUrn is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+        const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+        const manifestRes = await fetch(
+          `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
+          { headers: { "Authorization": `Bearer ${token}` } },
+        );
+
+        if (!manifestRes.ok) {
+          const errorText = await manifestRes.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Manifest check failed (${manifestRes.status}): ${errorText}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const manifest = await manifestRes.json();
+        const overallStatus = manifest.status; // "pending", "inprogress", "success", "failed"
+        const progress = manifest.progress || "0%";
+
+        // Find SVF2 derivatives
+        const derivatives: any[] = [];
+        function findDerivatives(node: any) {
+          if (node.type === "resource" && node.role) {
+            derivatives.push({ urn: node.urn, role: node.role, mime: node.mime, type: node.type });
+          }
+          if (node.children) {
+            for (const child of node.children) findDerivatives(child);
+          }
+          if (node.derivatives) {
+            for (const d of node.derivatives) findDerivatives(d);
+          }
+        }
+        findDerivatives(manifest);
+
+        // Update DB status
+        const updateData: any = { translation_status: overallStatus };
+        if (overallStatus === "success") {
+          updateData.completed_at = new Date().toISOString();
+          // Find the main geometry derivative URN
+          const geomDeriv = derivatives.find(d => d.role === "graphics" && d.mime?.includes("svf"));
+          if (geomDeriv) updateData.derivative_urn = geomDeriv.urn;
+        } else if (overallStatus === "failed") {
+          updateData.error_message = manifest.messages?.map((m: any) => m.message).join("; ") || "Translation failed";
+        }
+
+        await supabase.from("acc_model_translations").update(updateData).eq("version_urn", versionUrn);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: overallStatus,
+            progress,
+            derivativeCount: derivatives.length,
+            derivatives: derivatives.slice(0, 20),
+            hasSvf2: manifest.derivatives?.some((d: any) => d.outputType === "svf2") || false,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- DOWNLOAD DERIVATIVE (streams geometry to storage) ----
+      case "download-derivative": {
+        const { versionUrn, derivativeUrn: specifiedDerivUrn } = body;
+        if (!versionUrn) {
+          return new Response(
+            JSON.stringify({ success: false, error: "versionUrn is required" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const { token } = await getAccToken(auth.userId, supabase);
+        const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+        // If no specific derivative URN, fetch manifest to find it
+        let derivUrn = specifiedDerivUrn;
+        if (!derivUrn) {
+          const manifestRes = await fetch(
+            `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
+            { headers: { "Authorization": `Bearer ${token}` } },
+          );
+          if (!manifestRes.ok) {
+            return new Response(
+              JSON.stringify({ success: false, error: "Failed to fetch manifest" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          const manifest = await manifestRes.json();
+          if (manifest.status !== "success") {
+            return new Response(
+              JSON.stringify({ success: false, error: `Translation not complete (status: ${manifest.status})` }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+
+          // Find OBJ or glTF derivative if available, otherwise SVF2 bubble URN
+          const allDerivs: any[] = [];
+          function collectDerivs(node: any) {
+            if (node.urn) allDerivs.push(node);
+            if (node.children) node.children.forEach(collectDerivs);
+            if (node.derivatives) node.derivatives.forEach(collectDerivs);
+          }
+          collectDerivs(manifest);
+
+          // Prefer OBJ, then glTF
+          const objDeriv = allDerivs.find(d => d.mime === "application/octet-stream" && d.role === "graphics");
+          derivUrn = objDeriv?.urn || allDerivs.find(d => d.role === "graphics")?.urn;
+        }
+
+        if (!derivUrn) {
+          return new Response(
+            JSON.stringify({ success: false, error: "No downloadable derivative found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Download the derivative file
+        const encodedDerivUrn = encodeURIComponent(derivUrn);
+        const downloadUrl = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedDerivUrn}`;
+
+        console.log(`Downloading derivative: ${downloadUrl.substring(0, 120)}...`);
+
+        const downloadRes = await fetch(downloadUrl, {
+          headers: { "Authorization": `Bearer ${token}` },
+        });
+
+        if (!downloadRes.ok) {
+          const errorText = await downloadRes.text();
+          return new Response(
+            JSON.stringify({ success: false, error: `Derivative download failed (${downloadRes.status}): ${errorText.substring(0, 200)}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Read the derivative as ArrayBuffer and upload to storage
+        const derivData = await downloadRes.arrayBuffer();
+        const fileSize = derivData.byteLength;
+        console.log(`Downloaded derivative: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+
+        // Generate a storage path
+        const buildingFmGuid = body.buildingFmGuid || "acc-derivatives";
+        const fileName = body.fileName?.replace(/\.[^.]+$/, '') || "model";
+        const storagePath = `${buildingFmGuid}/acc-deriv-${fileName}.bin`;
+
+        // Upload to xkt-models storage bucket
+        const blob = new Blob([derivData], { type: "application/octet-stream" });
+        const { error: uploadError } = await supabase.storage
+          .from("xkt-models")
+          .upload(storagePath, blob, { contentType: "application/octet-stream", upsert: true });
+
+        if (uploadError) {
+          console.error("Derivative upload failed:", uploadError);
+          return new Response(
+            JSON.stringify({ success: false, error: `Storage upload failed: ${uploadError.message}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        // Generate signed URL
+        const { data: urlData } = await supabase.storage
+          .from("xkt-models")
+          .createSignedUrl(storagePath, 3600);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            storagePath,
+            downloadUrl: urlData?.signedUrl || null,
+            fileSize,
+            derivativeUrn: derivUrn,
+            message: `Derivative nedladdad (${(fileSize / 1024 / 1024).toFixed(2)} MB) och uppladdad till lagring.`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
 
       // ---- LIST MODEL SETS (Model Coordination API - alternative to DM API) ----

@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      acc_model_translations: {
+        Row: {
+          building_fm_guid: string | null
+          completed_at: string | null
+          created_at: string
+          derivative_urn: string | null
+          error_message: string | null
+          file_name: string | null
+          folder_id: string | null
+          id: string
+          output_format: string | null
+          started_at: string | null
+          translation_status: string
+          updated_at: string
+          version_urn: string
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          derivative_urn?: string | null
+          error_message?: string | null
+          file_name?: string | null
+          folder_id?: string | null
+          id?: string
+          output_format?: string | null
+          started_at?: string | null
+          translation_status?: string
+          updated_at?: string
+          version_urn: string
+        }
+        Update: {
+          building_fm_guid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          derivative_urn?: string | null
+          error_message?: string | null
+          file_name?: string | null
+          folder_id?: string | null
+          id?: string
+          output_format?: string | null
+          started_at?: string | null
+          translation_status?: string
+          updated_at?: string
+          version_urn?: string
+        }
+        Relationships: []
+      }
       acc_oauth_tokens: {
         Row: {
           access_token: string
