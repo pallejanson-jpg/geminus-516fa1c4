@@ -519,7 +519,22 @@ async function upsertAccAssets(
 }
 // ============ BIM SYNC HELPERS ============
 
-function isBimFile(filename: string): boolean {
+function isBimFile(filename: string, extensionType?: string): boolean {
+  // Check Cloud Model types (Revit Cloud Worksharing)
+  if (extensionType) {
+    const cloudModelTypes = [
+      'items:autodesk.bim360:C4RModel',
+      'items:autodesk.bim360:File',
+      'items:autodesk.core:File',
+    ];
+    if (cloudModelTypes.includes(extensionType)) {
+      // For Cloud Models, check if filename hints at BIM
+      const ext = filename.split('.').pop()?.toLowerCase() || '';
+      if (['rvt', 'ifc', 'nwc', 'dwg', 'nwd'].includes(ext)) return true;
+      // C4RModel is always a Revit cloud model
+      if (extensionType === 'items:autodesk.bim360:C4RModel') return true;
+    }
+  }
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   return ['rvt', 'ifc', 'nwc', 'dwg', 'nwd'].includes(ext);
 }
@@ -1136,6 +1151,113 @@ serve(async (req: Request) => {
         const fullProjectId = `b.${cleanProjectId}`;
         const regionHeaders = getRegionHeader(region);
 
+        // Helper: fetch all pages of a folder's contents
+        async function fetchAllFolderContents(folderId: string): Promise<{ items: any[]; folders: any[]; included: any[] }> {
+          const allItems: any[] = [];
+          const allFolders: any[] = [];
+          const allIncluded: any[] = [];
+          let url: string | null = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/folders/${folderId}/contents`;
+
+          while (url) {
+            const res = await fetch(url, {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json",
+                ...regionHeaders,
+              },
+            });
+
+            if (!res.ok) {
+              const errorText = await res.text();
+              console.error(`Folder contents failed for ${folderId} (${res.status}): ${errorText}`);
+              break;
+            }
+
+            const data = await res.json();
+            const pageData = data.data || [];
+            const pageIncluded = data.included || [];
+
+            for (const item of pageData) {
+              if (item.type === "folders") {
+                allFolders.push(item);
+              } else {
+                allItems.push(item);
+              }
+            }
+            allIncluded.push(...pageIncluded);
+
+            // Follow pagination
+            url = data.links?.next?.href || data.links?.next || null;
+          }
+
+          return { items: allItems, folders: allFolders, included: allIncluded };
+        }
+
+        // Helper: map an item to our format
+        function mapItem(item: any, included: any[]): any {
+          const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
+          const extensionType = item.attributes?.extension?.type || "";
+          const versionUrn = item.relationships?.tip?.data?.id || null;
+          const derivativeUrn = versionUrn
+            ? (included.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
+            : null;
+          const isBim = isBimFile(fileName, extensionType);
+          return {
+            id: item.id,
+            name: fileName,
+            type: item.attributes?.fileType || extensionType || "unknown",
+            extensionType,
+            size: item.attributes?.storageSize || null,
+            createTime: item.attributes?.createTime || null,
+            versionUrn: isBim ? versionUrn : null,
+            derivativeUrn: isBim ? derivativeUrn : null,
+            isBim,
+          };
+        }
+
+        // Helper: recursively fetch folder tree (max depth)
+        async function fetchFolderTree(folderId: string, folderName: string, depth: number, maxDepth: number): Promise<any> {
+          const { items, folders: subFolders, included } = await fetchAllFolderContents(folderId);
+
+          const mappedItems = items.map(item => mapItem(item, included));
+          const children: any[] = [];
+
+          if (depth < maxDepth) {
+            for (const sf of subFolders) {
+              const sfName = sf.attributes?.name || sf.id;
+              try {
+                const child = await fetchFolderTree(sf.id, sfName, depth + 1, maxDepth);
+                children.push(child);
+              } catch (err) {
+                console.error(`Error fetching sub-folder "${sfName}":`, err);
+                children.push({ id: sf.id, name: sfName, items: [], children: [], error: true });
+              }
+            }
+          } else if (subFolders.length > 0) {
+            // At max depth, just list sub-folders without traversing
+            for (const sf of subFolders) {
+              children.push({
+                id: sf.id,
+                name: sf.attributes?.name || sf.id,
+                items: [],
+                children: [],
+                truncated: true,
+              });
+            }
+          }
+
+          // Count total items including nested
+          const totalItemCount = mappedItems.length + children.reduce((sum: number, c: any) => sum + (c.totalItemCount || c.items?.length || 0), 0);
+
+          return {
+            id: folderId,
+            name: folderName,
+            items: mappedItems,
+            children,
+            totalItemCount,
+          };
+        }
+
         // Step 1: Get top folders
         const topFoldersUrl = `https://developer.api.autodesk.com/project/v1/hubs/${hubId}/projects/${fullProjectId}/topFolders`;
         console.log(`Fetching top folders: ${topFoldersUrl}`);
@@ -1163,7 +1285,7 @@ serve(async (req: Request) => {
         const projectFilesFolder = topFolders.find((f: any) => {
           const name = f.attributes?.name?.toLowerCase() || "";
           return name.includes("project file") || name.includes("projektfiler") || name === "project files";
-        }) || topFolders[0]; // Fallback to first folder
+        }) || topFolders[0];
 
         if (!projectFilesFolder) {
           return new Response(
@@ -1176,102 +1298,26 @@ serve(async (req: Request) => {
         const rootFolderName = projectFilesFolder.attributes?.name || "Root";
         console.log(`Using root folder: "${rootFolderName}" (${rootFolderId})`);
 
-        // Step 3: List contents of root folder (sub-folders = buildings)
-        const contentsUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/folders/${rootFolderId}/contents`;
-        const contentsRes = await fetch(contentsUrl, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/json",
-            ...regionHeaders,
-          },
-        });
+        // Step 3: Fetch root contents with pagination
+        const { items: rootItems, folders: rootSubFolders, included: rootIncluded } = await fetchAllFolderContents(rootFolderId);
 
-        if (!contentsRes.ok) {
-          const errorText = await contentsRes.text();
-          return new Response(
-            JSON.stringify({ success: false, error: `Folder contents API failed (${contentsRes.status}): ${errorText}` }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
+        console.log(`Found ${rootSubFolders.length} sub-folders, ${rootItems.length} loose items (with pagination)`);
 
-        const contentsData = await contentsRes.json();
-        const allItems = contentsData.data || [];
-        const topIncluded = contentsData.included || [];
-
-        // Separate folders (buildings) and items (loose files)
-        const subFolders = allItems.filter((item: any) => item.type === "folders");
-        const looseItems = allItems.filter((item: any) => item.type === "items");
-
-        console.log(`Found ${subFolders.length} sub-folders, ${looseItems.length} loose items`);
-
-        // Step 4: For each sub-folder, fetch its contents (BIM files)
+        // Step 4: Recursively fetch each sub-folder tree (max depth 3)
         const folders: any[] = [];
-        for (const folder of subFolders) {
-          const folderId = folder.id;
-          const folderName = folder.attributes?.name || folderId;
-
+        for (const folder of rootSubFolders) {
+          const folderName = folder.attributes?.name || folder.id;
           try {
-            const subUrl = `https://developer.api.autodesk.com/data/v1/projects/${fullProjectId}/folders/${folderId}/contents`;
-            const subRes = await fetch(subUrl, {
-              headers: {
-                "Authorization": `Bearer ${token}`,
-                "Accept": "application/json",
-                ...regionHeaders,
-              },
-            });
-
-            let items: any[] = [];
-            if (subRes.ok) {
-              const subData = await subRes.json();
-              const subIncluded = subData.included || [];
-              items = (subData.data || [])
-                .filter((item: any) => item.type === "items")
-                .map((item: any) => {
-                  const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
-                  const versionUrn = item.relationships?.tip?.data?.id || null;
-                  const derivativeUrn = versionUrn
-                    ? (subIncluded.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
-                    : null;
-                  return {
-                    id: item.id,
-                    name: fileName,
-                    type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
-                    size: item.attributes?.storageSize || null,
-                    createTime: item.attributes?.createTime || null,
-                    versionUrn: isBimFile(fileName) ? versionUrn : null,
-                    derivativeUrn: isBimFile(fileName) ? derivativeUrn : null,
-                  };
-                });
-            }
-
-            folders.push({
-              id: folderId,
-              name: folderName,
-              items,
-            });
+            const tree = await fetchFolderTree(folder.id, folderName, 1, 3);
+            folders.push(tree);
           } catch (err) {
-            console.error(`Error fetching contents of folder "${folderName}":`, err);
-            folders.push({ id: folderId, name: folderName, items: [], error: true });
+            console.error(`Error fetching folder tree "${folderName}":`, err);
+            folders.push({ id: folder.id, name: folderName, items: [], children: [], error: true });
           }
         }
 
-        // Include any top-level items not in subfolders
-        const topLevelItems = looseItems.map((item: any) => {
-          const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
-          const versionUrn = item.relationships?.tip?.data?.id || null;
-          const derivativeUrn = versionUrn
-            ? (topIncluded.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
-            : null;
-          return {
-            id: item.id,
-            name: fileName,
-            type: item.attributes?.fileType || item.attributes?.extension?.type || "unknown",
-            size: item.attributes?.storageSize || null,
-            createTime: item.attributes?.createTime || null,
-            versionUrn: isBimFile(fileName) ? versionUrn : null,
-            derivativeUrn: isBimFile(fileName) ? derivativeUrn : null,
-          };
-        });
+        // Top-level items
+        const topLevelItems = rootItems.map(item => mapItem(item, rootIncluded));
 
         return new Response(
           JSON.stringify({
