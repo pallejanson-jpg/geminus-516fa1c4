@@ -95,10 +95,11 @@ const AccFolderNode: React.FC<{
     toggleFolder: (id: string) => void;
     syncingBimFolderId: string | null;
     bimSyncProgress: string | null;
-    handleSyncBimData: (folder: any) => void;
+    handleSyncBimData: (folder: any, selectedFiles?: any[]) => void;
     formatFileSize: (bytes: number | null) => string;
-}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize }) => {
-    const hasBimFiles = (folder.items || []).some((item: any) => item.versionUrn || item.isBim);
+    selectedBimFiles: Set<string>;
+    toggleBimFile: (itemId: string) => void;
+}> = ({ folder, depth, expandedFolders, toggleFolder, syncingBimFolderId, bimSyncProgress, handleSyncBimData, formatFileSize, selectedBimFiles, toggleBimFile }) => {
     const hasChildren = (folder.children || []).length > 0;
     const isSyncingThisFolder = syncingBimFolderId === folder.id;
     const isExpanded = expandedFolders.has(folder.id);
@@ -115,6 +116,10 @@ const AccFolderNode: React.FC<{
 
     const allBimItems = collectAllBimItems(folder);
     const hasAnyBimFiles = allBimItems.length > 0;
+    
+    // Count selected files in this folder
+    const selectedInFolder = allBimItems.filter((i: any) => selectedBimFiles.has(i.id));
+    const selectedCount = selectedInFolder.length;
 
     return (
         <div className="rounded border bg-background" style={{ marginLeft: depth > 0 ? `${depth * 16}px` : undefined }}>
@@ -140,7 +145,11 @@ const AccFolderNode: React.FC<{
                 </button>
                 {hasAnyBimFiles && (
                     <Button
-                        onClick={(e) => { e.stopPropagation(); handleSyncBimData({ ...folder, items: allBimItems }); }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            const filesToSync = selectedCount > 0 ? selectedInFolder : allBimItems;
+                            handleSyncBimData({ ...folder, items: filesToSync }, filesToSync);
+                        }}
                         disabled={!!syncingBimFolderId}
                         size="sm"
                         variant="ghost"
@@ -151,7 +160,11 @@ const AccFolderNode: React.FC<{
                         ) : (
                             <DatabaseIcon className="h-3 w-3" />
                         )}
-                        {isSyncingThisFolder ? (bimSyncProgress || 'Synkar...') : 'Synka BIM'}
+                        {isSyncingThisFolder
+                            ? (bimSyncProgress || 'Synkar...')
+                            : selectedCount > 0
+                                ? `Synka ${selectedCount} fil${selectedCount > 1 ? 'er' : ''}`
+                                : 'Synka BIM'}
                     </Button>
                 )}
             </div>
@@ -161,17 +174,30 @@ const AccFolderNode: React.FC<{
                     {/* Files in this folder */}
                     {folder.items && folder.items.length > 0 && (
                         <div className="px-2.5 pl-8 space-y-0.5">
-                            {folder.items.map((item: any) => (
-                                <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
-                                    <File className="h-3 w-3 text-muted-foreground shrink-0" />
-                                    <span className="truncate">{item.name}</span>
-                                    {(item.versionUrn || item.isBim) && (
-                                        <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
-                                    )}
-                                    <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
-                                    {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
-                                </div>
-                            ))}
+                            {folder.items.map((item: any) => {
+                                const isBim = item.versionUrn || item.isBim;
+                                const isSelected = selectedBimFiles.has(item.id);
+                                return (
+                                    <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
+                                        {isBim && (
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleBimFile(item.id)}
+                                                className="h-3.5 w-3.5 rounded border-primary accent-primary shrink-0"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        )}
+                                        <File className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        <span className="truncate">{item.name}</span>
+                                        {isBim && (
+                                            <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
+                                        )}
+                                        <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
+                                        {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
 
@@ -189,6 +215,8 @@ const AccFolderNode: React.FC<{
                                     bimSyncProgress={bimSyncProgress}
                                     handleSyncBimData={handleSyncBimData}
                                     formatFileSize={formatFileSize}
+                                    selectedBimFiles={selectedBimFiles}
+                                    toggleBimFile={toggleBimFile}
                                 />
                             ))}
                         </div>
@@ -299,6 +327,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // BIM sync state
     const [syncingBimFolderId, setSyncingBimFolderId] = useState<string | null>(null);
     const [bimSyncProgress, setBimSyncProgress] = useState<string | null>(null);
+    const [selectedBimFiles, setSelectedBimFiles] = useState<Set<string>>(new Set());
     
     // Autodesk 3-legged OAuth state
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
@@ -568,61 +597,89 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         });
     };
 
-    // BIM sync handler
-    const handleSyncBimData = async (folder: any) => {
+    const toggleBimFile = (itemId: string) => {
+        setSelectedBimFiles(prev => {
+            const next = new Set(prev);
+            if (next.has(itemId)) next.delete(itemId);
+            else next.add(itemId);
+            return next;
+        });
+    };
+
+    // BIM sync handler - sequential per-file processing
+    const handleSyncBimData = async (folder: any, selectedFiles?: any[]) => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
             toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
             return;
         }
 
-        const bimItems = (folder.items || []).filter((item: any) => item.versionUrn);
+        const bimItems = (selectedFiles || folder.items || []).filter((item: any) => item.versionUrn);
         if (bimItems.length === 0) {
             toast({ variant: 'destructive', title: 'Inga BIM-filer', description: 'Denna mapp innehåller inga BIM-filer med versionUrn.' });
             return;
         }
 
         setSyncingBimFolderId(folder.id);
-        setBimSyncProgress('Indexerar modeller...');
+        
+        let totalLevels = 0;
+        let totalRooms = 0;
+        let failures: string[] = [];
 
-        try {
-            const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: {
-                    action: 'sync-bim-data',
-                    projectId: effectiveProjectId,
-                    region: accRegion,
-                    folderName: folder.name,
-                    folderId: folder.id,
-                    items: folder.items,
+        // Process files one at a time to avoid memory limits
+        for (let i = 0; i < bimItems.length; i++) {
+            const item = bimItems[i];
+            setBimSyncProgress(`Fil ${i + 1}/${bimItems.length}: ${item.name}`);
+
+            try {
+                const { data, error } = await supabase.functions.invoke('acc-sync', {
+                    body: {
+                        action: 'sync-bim-data',
+                        projectId: effectiveProjectId,
+                        region: accRegion,
+                        folderName: folder.name,
+                        folderId: folder.id,
+                        singleItem: item,
+                    }
+                });
+
+                if (error) throw error;
+
+                if (data?.success) {
+                    totalLevels += data.levels || 0;
+                    totalRooms += data.rooms || 0;
+                } else if (data?.state === 'PROCESSING') {
+                    toast({
+                        title: 'Indexering pågår',
+                        description: `${item.name}: Modellen indexeras. Prova igen om en stund.`,
+                    });
+                } else {
+                    failures.push(`${item.name}: ${data?.error || 'Okänt fel'}`);
                 }
-            });
-
-            if (error) throw error;
-
-            if (data?.success) {
-                toast({
-                    title: 'BIM-synk klar',
-                    description: data.message,
-                });
-                handleCheckAccStatus();
-            } else if (data?.state === 'PROCESSING') {
-                toast({
-                    title: 'Indexering pågår',
-                    description: data.message || 'Modellerna indexeras. Prova igen om en stund.',
-                });
-            } else {
-                toast({
-                    variant: 'destructive',
-                    title: 'BIM-synk misslyckades',
-                    description: data?.error || data?.message || 'Okänt fel',
-                });
+            } catch (err: any) {
+                failures.push(`${item.name}: ${err.message}`);
             }
-        } catch (err: any) {
-            toast({ variant: 'destructive', title: 'Fel', description: err.message });
-        } finally {
-            setSyncingBimFolderId(null);
-            setBimSyncProgress(null);
         }
+
+        // Summary
+        if (totalLevels > 0 || totalRooms > 0) {
+            toast({
+                title: 'BIM-synk klar',
+                description: `${totalLevels} våningsplan, ${totalRooms} rum från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
+            });
+            handleCheckAccStatus();
+        }
+        
+        if (failures.length > 0) {
+            toast({
+                variant: 'destructive',
+                title: `${failures.length} fil(er) misslyckades`,
+                description: failures[0],
+            });
+        }
+
+        setSyncingBimFolderId(null);
+        setBimSyncProgress(null);
     };
 
     const formatFileSize = (bytes: number | null) => {
@@ -2263,6 +2320,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                     bimSyncProgress={bimSyncProgress}
                                                                     handleSyncBimData={handleSyncBimData}
                                                                     formatFileSize={formatFileSize}
+                                                                    selectedBimFiles={selectedBimFiles}
+                                                                    toggleBimFile={toggleBimFile}
                                                                 />
                                                             ))}
 
