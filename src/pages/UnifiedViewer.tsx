@@ -324,10 +324,10 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Center: Mode switcher */}
         <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
-          <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
+          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
-          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
+          <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
 
           {sdkStatus === 'loading' && viewMode !== '3d' && (
             <span className="text-xs text-blue-300 flex items-center gap-1 px-2">
@@ -421,9 +421,6 @@ const UnifiedViewerContent: React.FC<{
         {/* ── Split: 360° panel on the right half ── */}
         {isSplitMode && (
           <div className="absolute top-0 right-0 w-1/2 h-full z-5" style={{ zIndex: 5 }}>
-            <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-              360° View
-            </div>
             <Ivion360View
               url={buildingData.ivionUrl || undefined}
               syncEnabled={false}
@@ -435,12 +432,6 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
 
-        {/* Split mode: 3D label */}
-        {isSplitMode && (
-          <div className="absolute top-2 left-2 z-20 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-            3D Model
-          </div>
-        )}
 
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
