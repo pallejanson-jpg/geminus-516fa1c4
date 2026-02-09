@@ -1234,13 +1234,19 @@ serve(async (req: Request) => {
 
       // ---- LIST PROJECTS ----
       case "list-projects": {
-        const accountId = Deno.env.get("ACC_ACCOUNT_ID");
+        // Region-specific Account IDs
+        const regionUpper = (region || 'US').toUpperCase();
+        const accountId = regionUpper === 'EMEA'
+          ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
+          : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID"));
+        
         if (!accountId) {
           return new Response(
-            JSON.stringify({ success: false, error: "ACC_ACCOUNT_ID not configured" }),
+            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID${regionUpper === 'EMEA' ? '_EMEA' : '_US'} not configured (fallback ACC_ACCOUNT_ID also missing)` }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
+        console.log(`[list-projects] Using Account ID for region ${regionUpper}: ${accountId.substring(0, 8)}...`);
 
         const { token } = await getAccToken(auth.userId, supabase);
         let projects: any[] = [];
@@ -1483,13 +1489,19 @@ serve(async (req: Request) => {
         }
 
         const { token } = await getAccToken(auth.userId, supabase);
-        const accountId = Deno.env.get("ACC_ACCOUNT_ID");
+        // Region-specific Account IDs
+        const regionUpper = (region || 'US').toUpperCase();
+        const accountId = regionUpper === 'EMEA'
+          ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
+          : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID"));
+        
         if (!accountId) {
           return new Response(
-            JSON.stringify({ success: false, error: "ACC_ACCOUNT_ID not configured" }),
+            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID${regionUpper === 'EMEA' ? '_EMEA' : '_US'} not configured` }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
+        console.log(`[list-folders] Using Account ID for region ${regionUpper}: ${accountId.substring(0, 8)}...`);
 
         const cleanAccountId = accountId.replace(/^b\./, "");
         const hubId = `b.${cleanAccountId}`;
@@ -1814,7 +1826,18 @@ serve(async (req: Request) => {
           );
         }
 
-        // Trigger translation job
+        // Trigger translation job - request OBJ for XKT conversion + SVF2 for viewer
+        const translationBody = {
+          input: { urn: urnBase64 },
+          output: {
+            formats: [
+              { type: "svf2", views: ["3d"] },
+              { type: "obj" },
+            ],
+          },
+        };
+        console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
+
         const jobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
           method: "POST",
           headers: {
@@ -1822,12 +1845,7 @@ serve(async (req: Request) => {
             "Content-Type": "application/json",
             "x-ads-force": "true",
           },
-          body: JSON.stringify({
-            input: { urn: urnBase64 },
-            output: {
-              formats: [{ type: "svf2", views: ["3d"] }],
-            },
-          }),
+          body: JSON.stringify(translationBody),
         });
 
         if (!jobRes.ok) {
@@ -1849,7 +1867,7 @@ serve(async (req: Request) => {
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
           translation_status: "pending",
-          output_format: "svf2",
+          output_format: "svf2,obj",
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
@@ -1972,15 +1990,26 @@ serve(async (req: Request) => {
           // Find OBJ or glTF derivative if available, otherwise SVF2 bubble URN
           const allDerivs: any[] = [];
           function collectDerivs(node: any) {
-            if (node.urn) allDerivs.push(node);
+            if (node.urn) allDerivs.push({ urn: node.urn, role: node.role, mime: node.mime, outputType: node.outputType, name: node.name });
             if (node.children) node.children.forEach(collectDerivs);
             if (node.derivatives) node.derivatives.forEach(collectDerivs);
           }
           collectDerivs(manifest);
 
-          // Prefer OBJ, then glTF
-          const objDeriv = allDerivs.find(d => d.mime === "application/octet-stream" && d.role === "graphics");
-          derivUrn = objDeriv?.urn || allDerivs.find(d => d.role === "graphics")?.urn;
+          // Log all derivatives for debugging
+          console.log(`[download-derivative] Available derivatives (${allDerivs.length}):`, JSON.stringify(allDerivs.map(d => ({ role: d.role, mime: d.mime, outputType: d.outputType, name: d.name, urn: d.urn?.substring(0, 60) }))));
+
+          // Prefer OBJ derivative, then glTF, then any graphics
+          const objDeriv = allDerivs.find(d => 
+            (d.outputType === 'obj' || d.mime === 'application/octet-stream') && d.role === 'graphics'
+          );
+          const gltfDeriv = allDerivs.find(d => 
+            d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
+          );
+          derivUrn = objDeriv?.urn || gltfDeriv?.urn || allDerivs.find(d => d.role === "graphics")?.urn;
+          
+          const selectedFormat = objDeriv ? 'obj' : gltfDeriv ? 'gltf' : 'svf2';
+          console.log(`[download-derivative] Selected format: ${selectedFormat}, URN: ${derivUrn?.substring(0, 60)}`);
         }
 
         if (!derivUrn) {
