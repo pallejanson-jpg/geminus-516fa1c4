@@ -177,7 +177,7 @@ export default function Ivion360View({
         }
         
         console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
-        const api = await loadIvionSdk(baseUrl, 10000, loginToken || undefined, ivionSiteId || undefined);
+        const api = await loadIvionSdk(baseUrl, 30000, loginToken || undefined, ivionSiteId || undefined);
         
         if (cancelled) return;
         
