@@ -62,25 +62,11 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       floorsRef.current = floors;
     }, [floors]);
 
-    // Load saved selection from localStorage
+    // Always start with all floors visible - skip localStorage restoration
+    // so every viewer session begins fresh with all floors ON
     useEffect(() => {
       if (!buildingFmGuid || localStorageLoaded) return;
-      
-      const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
-      const saved = localStorage.getItem(storageKey);
-      
-      if (saved) {
-        try {
-          const savedIds = JSON.parse(saved) as string[];
-          if (Array.isArray(savedIds) && savedIds.length > 0) {
-            console.debug("Restoring saved floor selection:", savedIds);
-            setVisibleFloorIds(new Set(savedIds));
-            visibleFloorIdsRef.current = new Set(savedIds);
-          }
-        } catch (e) {
-          console.debug("Failed to parse saved floor selection:", e);
-        }
-      }
+      // Don't restore from localStorage - always default to all floors
       setLocalStorageLoaded(true);
     }, [buildingFmGuid, localStorageLoaded]);
 
