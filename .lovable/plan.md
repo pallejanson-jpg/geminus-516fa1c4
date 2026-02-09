@@ -1,96 +1,122 @@
 
-# ACC BIM Sync: Chunked Processing, File Selection, Data Visibility & 3D Geometry
+# ACC 3D Geometry: Model Derivative API Translation and XKT Conversion
 
-## Problems Identified
+## Overview
 
-### Problem 1: Memory Limit on Large BIM Folders
-The `acc-sync` edge function processes ALL BIM files in a folder in one request. For folders with 3+ large RVT files (like Jonkoping Science Tower), the Model Properties API response data exceeds the edge function's memory limit.
+Enable 3D viewing of ACC-sourced BIM models in Geminus by using Autodesk's Model Derivative API to translate RVT files, then converting the output to XKT format for the existing xeokit viewer.
 
-### Problem 2: No Per-File Selection
-Currently "Synka BIM" syncs all BIM files in a folder at once. Users need to select which individual files to sync.
+## Architecture
 
-### Problem 3: Sync Reports Success But Data Not Visible
-The Stadshuset Nykoping sync DID write data to the database (1 building, 7 levels, 456 rooms). Two issues prevent visibility:
-- **Room names are GUIDs** (e.g., "Room cc6a4d6a-7a4f-4ece-afb2-b928348196d7-0039a7bb") because the Model Properties API returns `externalId` as the name when the actual room name/number is stored in a different property key
-- **Level names are GUIDs** (e.g., "Level 443b7e69-0982-4ee8-91ef-73827a50caec-002ac9fa") - same issue
-- The building DOES appear in the Navigator tree but with ugly GUID-named children
+The pipeline has 3 stages:
 
-### Problem 4: No 3D Geometry (XKT)
-The BIM sync only extracts hierarchy metadata (levels/rooms) via Model Properties API. It does not download geometry for 3D viewing. Options for getting 3D viewable data:
+```text
+RVT file (in ACC)
+    |
+    v
+[1] Model Derivative API: POST translation job (RVT -> SVF2)
+    |  (runs in edge function, async - takes 1-10 min)
+    v
+[2] Download SVF2 derivative manifest + geometry files
+    |  (edge function fetches derivative files)
+    v
+[3] Convert to XKT and store in storage bucket
+    |  (client-side JS using @xeokit/xeokit-convert)
+    v
+XKT file in xkt-models storage bucket
+    -> loads in existing AssetPlusViewer via xeokit XKTLoaderPlugin
+```
 
-**Option A: Autodesk Model Derivative API -> SVF2 -> xeokit-convert -> XKT**
-- Use Model Derivative API to translate the RVT file to SVF2 format
-- Download the SVF2 derivative files
-- Use `@xeokit/xeokit-convert` (Node.js) to convert SVF2/glTF to XKT
-- Store XKT in storage bucket
-- This is the approach described in the project's existing strategy docs
+## Technical Details
 
-**Option B: Autodesk Viewer SDK (embedded)**
-- Embed the Autodesk Viewer directly instead of converting
-- Requires loading the Autodesk Viewer JS SDK
-- Simpler but breaks the "unified xeokit experience" goal
+### Stage 1: Trigger Translation (Edge Function)
 
-**Recommendation:** Option A aligns with the existing strategy (`memory: integrations/autodesk-construction-cloud/3d-viewer-strategy`), but the SVF2-to-XKT conversion requires a Node.js runtime (not available in Deno edge functions). This would need an external conversion service or a scheduled job. This is a significant effort and should be planned separately.
+**File: `supabase/functions/acc-sync/index.ts`** -- new action `translate-model`
 
----
+- Accept a `versionUrn` (already available from the folder browser) and optional `derivativeUrn`
+- Call Model Derivative API `POST /modelderivative/v2/designdata/job` with:
+  - `input.urn`: base64-encoded version URN
+  - `output.formats`: `[{ "type": "svf2", "views": ["3d"] }]`
+- Return job status immediately (translation is async, takes minutes)
 
-## Plan
+**New action `check-translation`**:
+- Call `GET /modelderivative/v2/designdata/{urn}/manifest` to check progress
+- Return status: `pending`, `inprogress`, `success`, `failed`
+- When `success`: return the list of derivative files (geometry URNs)
 
-### Phase 1: Fix Data Quality (Room/Level Names)
+### Stage 2: Download Derivative (Edge Function)
 
-**File: `supabase/functions/acc-sync/index.ts`** - `extractBimHierarchy` function
+**New action `download-derivative`**:
+- Use the manifest to identify the SVF2/OBJ derivative URN
+- Call `GET /modelderivative/v2/designdata/{urn}/manifest` to get the derivative bubble
+- For OBJ format (simpler): download the OBJ file directly via derivative download endpoint
+- Upload the downloaded geometry file to Supabase Storage temporarily
 
-The current code uses `p153cb174` (Name property) which returns the Revit internal name (often just "Room" or empty). For rooms, the actual room name and number are in different property keys. Fix:
+**Important**: To avoid memory limits, download derivatives in chunks or use streaming. For very large models, consider OBJ output (single file) instead of SVF2 (multiple files).
 
-- After fetching `fieldsMap`, look for additional keys: "Number" (`p20d8441e` or similar), "Room Name", "Room Number"
-- For rooms: use `Number + " " + Name` pattern (e.g., "101 Korridor") instead of `externalId`
-- For levels: the Name key usually works, but fall back to looking for "Elevation" to construct a meaningful name
-- If no human-readable name is found, use `"Room " + objectId` or `"Level " + objectId` instead of the long GUID
+### Stage 3: Client-Side XKT Conversion
 
-### Phase 2: Per-File Selection in Folder Browser
+**New dependency**: `@xeokit/xeokit-convert` (browser-compatible build)
 
-**File: `src/components/settings/ApiSettingsModal.tsx`** - `AccFolderNode` component
+- The npm package provides `parseGLTFIntoXKTModel` and `parseOBJIntoXKTModel` functions that work in the browser
+- After the derivative is available as a download URL, the client:
+  1. Fetches the geometry file (OBJ or glTF)
+  2. Parses it into an `XKTModel` using the appropriate parser
+  3. Calls `writeXKTModelToArrayBuffer()` to produce the XKT binary
+  4. Stores the XKT via the existing `xktCacheService.saveModelFromViewer()` pipeline
 
-- Add checkboxes next to each BIM file in the folder tree
-- Track selected files in state: `selectedBimFiles: Map<folderId, Set<itemId>>`
-- Change "Synka BIM" button to only send selected files (or all if none selected)
-- Show count of selected files on the button
+### OAuth Scope Update
 
-### Phase 3: Chunked BIM Sync (One File at a Time)
+**File: `supabase/functions/acc-auth/index.ts`**:
+- Update scope from `"data:read account:read"` to `"data:read data:write data:create account:read"` to allow triggering Model Derivative translation jobs
 
-**File: `supabase/functions/acc-sync/index.ts`** - `sync-bim-data` action
+**File: `supabase/functions/acc-sync/index.ts`**:
+- Update 2-legged token scope similarly
 
-- Accept an optional `singleFile` flag or process one `versionUrn` at a time
-- When multiple files are provided, use `EdgeRuntime.waitUntil()` to process in background
-- Return immediately with a job status that the client can poll
+### UI: Translation Trigger in Folder Browser
 
-**File: `src/components/settings/ApiSettingsModal.tsx`** - `handleSyncBimData`
+**File: `src/components/settings/ApiSettingsModal.tsx`**:
+- Add a "Konvertera 3D" button next to BIM files in the folder tree (alongside the existing "Synka BIM" button)
+- Show translation progress with polling (pending -> in progress -> complete)
+- When translation completes, trigger client-side XKT conversion automatically
+- Show "3D-modell tillganglig" badge on successfully converted files
 
-- When syncing a folder with multiple files, send them one at a time sequentially from the client
-- Show per-file progress (e.g., "Synkar fil 2/3: 12015A_2023.rvt")
-- If one file fails (memory limit), continue with the next and report partial results
+### Status Tracking
 
-### Phase 4: 3D Geometry Investigation (Separate Effort)
+**New database column or table**: Track which ACC models have been translated/converted:
+- Add fields to `xkt_models` or create a lightweight `acc_model_translations` table:
+  - `version_urn`, `translation_status`, `derivative_urn`, `started_at`, `completed_at`
+- This prevents re-translating models that are already converted
 
-This requires:
-1. Model Derivative API translation (RVT -> SVF2) - can be triggered from edge function
-2. SVF2 download and XKT conversion - needs Node.js runtime
-3. Storage of resulting XKT files
+## Alternative Approach: OBJ Instead of SVF2
 
-This is too large for this change and should be a separate task. For now, add a note/status in the UI indicating "3D-modell ej tillganglig" for ACC-sourced buildings.
+SVF2 is a complex multi-file format. OBJ is simpler (single geometry file + MTL material file). The Model Derivative API supports RVT -> OBJ translation. Using OBJ:
+- Pros: Single file download, simpler conversion, less memory
+- Cons: No material/texture fidelity, no metadata tree in geometry
 
----
+**Recommendation**: Start with OBJ for simplicity. Upgrade to SVF2/glTF later if material fidelity is needed.
 
-## Technical Changes
+## Implementation Order
+
+1. Update OAuth scopes (both 2-legged and 3-legged)
+2. Add `translate-model` and `check-translation` actions to `acc-sync`
+3. Add `download-derivative` action to `acc-sync`
+4. Install `@xeokit/xeokit-convert` and build client-side conversion utility
+5. Add "Konvertera 3D" UI button with progress polling
+6. Wire up the full pipeline: translate -> download -> convert -> store -> view
+
+## Files to Create/Modify
 
 | File | Change |
 |---|---|
-| `supabase/functions/acc-sync/index.ts` | Fix room/level naming in `extractBimHierarchy`; refactor `sync-bim-data` to process one file at a time |
-| `src/components/settings/ApiSettingsModal.tsx` | Add per-file checkboxes in `AccFolderNode`; sequential per-file sync in `handleSyncBimData` with progress |
+| `supabase/functions/acc-auth/index.ts` | Update OAuth scope to include `data:write data:create` |
+| `supabase/functions/acc-sync/index.ts` | Add `translate-model`, `check-translation`, `download-derivative` actions |
+| `src/components/settings/ApiSettingsModal.tsx` | Add "Konvertera 3D" button, translation progress UI |
+| `src/services/acc-xkt-converter.ts` | New: client-side OBJ/glTF -> XKT conversion using `@xeokit/xeokit-convert` |
+| `package.json` | Add `@xeokit/xeokit-convert` dependency |
 
-## Summary of Approach
+## Risks and Mitigations
 
-1. **Fix naming** so synced data is actually usable (rooms show "101 Korridor" not GUIDs)
-2. **Add file selection** so users choose which RVT/IFC files to sync
-3. **Client-side sequential sync** (one file per edge function call) to avoid memory limits
-4. **Defer 3D geometry** to a separate task since it requires Node.js conversion infrastructure
+- **Large derivatives may exceed edge function memory**: Download in streaming chunks, or use OBJ format which produces smaller single files
+- **Translation time**: RVT -> SVF2/OBJ can take 1-10+ minutes. UI must show async progress with polling
+- **OAuth scope change**: Users with existing 3-legged auth will need to re-authorize to get the new scopes
+- **xeokit-convert browser compatibility**: The npm package is primarily Node.js-focused. Need to verify browser build works. Fallback: use a Web Worker for conversion
