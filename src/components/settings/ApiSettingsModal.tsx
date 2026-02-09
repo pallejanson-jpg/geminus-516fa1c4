@@ -702,6 +702,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 description: `${totalLevels} våningsplan, ${totalRooms} rum från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
             });
             handleCheckAccStatus();
+        } else if (failures.length === 0) {
+            // All files processed but no levels/rooms found
+            toast({
+                variant: 'destructive',
+                title: 'Inga rum/våningar hittades',
+                description: 'BIM-modellerna kunde indexeras men innehöll inga Revit Levels eller Rooms.',
+            });
         }
         
         if (failures.length > 0) {

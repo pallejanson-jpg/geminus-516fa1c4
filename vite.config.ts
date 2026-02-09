@@ -14,6 +14,7 @@ function shimNodeModules(): Plugin {
 
   return {
     name: 'shim-node-modules-for-xeokit',
+    enforce: 'pre' as const,
     resolveId(id) {
       if (NODE_MODULES.has(id)) {
         return { id: `${SHIM_ID}:${id}`, external: false };
