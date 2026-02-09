@@ -3,20 +3,13 @@
  * 
  * Modes:
  *   3D:    Full-screen AssetPlusViewer only
- *   split: 3D + 360° side by side (ResizablePanelGroup)
+ *   split: 3D + 360° side by side
  *   vt:    3D overlay on 360° panorama (Virtual Twin)
  *   360:   Full-screen 360° panorama only
  * 
- * All modes share:
- *   - Building data loading (useBuildingViewerData)
- *   - SDK lifecycle (useIvionSdk)
- *   - Toolbar with mode switcher
- *   - Fullscreen toggle
- *   - Alignment panel (VT + Split)
- * 
- * Routes:
- *   /virtual-twin?building=X  → initialMode='vt'
- *   /split-viewer?building=X  → initialMode='split'
+ * CRITICAL: Only ONE AssetPlusViewer instance is ever mounted.
+ * Mode switches control CSS (display, width, z-index, pointer-events)
+ * so that xeokit keeps loaded XKT models in memory.
  */
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
@@ -29,7 +22,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
@@ -65,12 +57,10 @@ const UnifiedViewerContent: React.FC<{
   // ─── View mode ─────────────────────────────────────────────────────
   const hasIvion = !!buildingData?.ivionSiteId;
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    // If no Ivion site ID, force 3D mode
     if (!hasIvion && initialMode !== '3d') return '3d';
     return initialMode;
   });
 
-  // Update viewMode when buildingData loads and Ivion availability changes
   useEffect(() => {
     if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d') {
       setViewMode('3d');
@@ -79,9 +69,6 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── SDK (shared, one instance) ────────────────────────────────────
   const sdkContainerRef = useRef<HTMLDivElement>(null);
-
-  // SDK is managed here for VT and 360 modes only.
-  // Split mode delegates SDK management to Ivion360View internally.
   const sdkNeeded = hasIvion && (viewMode === 'vt' || viewMode === '360');
 
   const { sdkStatus, ivApiRef, retry: retrySDK } = useIvionSdk({
@@ -92,7 +79,6 @@ const UnifiedViewerContent: React.FC<{
     enabled: !!buildingData && sdkNeeded,
   });
 
-  // When SDK fails, fall back to 3D
   useEffect(() => {
     if (sdkStatus === 'failed' && viewMode !== '3d' && viewMode !== 'split') {
       setViewMode('3d');
@@ -107,7 +93,6 @@ const UnifiedViewerContent: React.FC<{
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
 
-  // Initialize transform from building data
   useEffect(() => {
     if (buildingData?.transform) {
       setTransform(buildingData.transform);
@@ -161,7 +146,6 @@ const UnifiedViewerContent: React.FC<{
     updateFrom3D, updateFromIvion, setBuildingContext,
   } = useViewerSync();
 
-  // Set building context for split sync
   useEffect(() => {
     if (buildingData) {
       setBuildingContext({
@@ -173,13 +157,11 @@ const UnifiedViewerContent: React.FC<{
     }
   }, [buildingData, setBuildingContext]);
 
-  // Split sync: 3D camera change handler
   const handle3DCameraChange = useCallback((position: LocalCoords, heading: number, pitch: number) => {
     if (!syncLocked || viewMode !== 'split') return;
     updateFrom3D(position, heading, pitch);
   }, [syncLocked, updateFrom3D, viewMode]);
 
-  // Split sync: react to Ivion-driven updates
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
   const [sync3DHeading, setSync3DHeading] = useState(0);
   const [sync3DPitch, setSync3DPitch] = useState(0);
@@ -293,6 +275,23 @@ const UnifiedViewerContent: React.FC<{
     />;
   }
 
+  // ─── Compute AssetPlusViewer container style per mode ──────────────
+  const needs3D = viewMode !== '360';
+  const is3DMode = viewMode === '3d';
+  const isVTMode = viewMode === 'vt';
+  const isSplitMode = viewMode === 'split';
+
+  const viewerContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    display: needs3D ? 'block' : 'none',
+    width: isSplitMode ? '50%' : '100%',
+    zIndex: is3DMode ? 10 : isVTMode ? 10 : 5,
+    pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
+  };
+
   // ─── Desktop Render ────────────────────────────────────────────────
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
@@ -329,14 +328,12 @@ const UnifiedViewerContent: React.FC<{
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
           <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
 
-          {/* SDK loading indicator */}
           {sdkStatus === 'loading' && viewMode !== '3d' && (
             <span className="text-xs text-blue-300 flex items-center gap-1 px-2">
               <Loader2 className="h-3 w-3 animate-spin" />
             </span>
           )}
 
-          {/* Retry button */}
           {sdkStatus === 'failed' && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -351,7 +348,6 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
-          {/* VT sync status */}
           {viewMode === 'vt' && vtSyncActive && (
             <span className="text-xs text-green-400 bg-green-900/40 px-2 py-0.5 rounded flex items-center gap-1 mr-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -359,7 +355,6 @@ const UnifiedViewerContent: React.FC<{
             </span>
           )}
 
-          {/* Ghost opacity slider (VT mode only) */}
           {viewMode === 'vt' && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -373,7 +368,6 @@ const UnifiedViewerContent: React.FC<{
             </Tooltip>
           )}
 
-          {/* Alignment toggle (VT + Split) */}
           {(viewMode === 'vt' || viewMode === 'split') && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -389,7 +383,6 @@ const UnifiedViewerContent: React.FC<{
             </Tooltip>
           )}
 
-          {/* Fullscreen */}
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 h-8 w-8" onClick={toggleFullscreen}>
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
@@ -407,78 +400,54 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* Mode-specific content */}
-        {viewMode === '3d' && (
-          <div className="absolute inset-0 z-10">
-            <AssetPlusViewer fmGuid={buildingData.fmGuid} onClose={handleGoBack} />
+        {/* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */}
+        <div style={viewerContainerStyle}>
+          <AssetPlusViewer
+            fmGuid={buildingData.fmGuid}
+            transparentBackground={isVTMode}
+            ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+            suppressOverlay={isVTMode}
+            onClose={is3DMode ? handleGoBack : undefined}
+            syncEnabled={isSplitMode ? syncLocked : false}
+            onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+            syncPosition={isSplitMode ? sync3DPosition : undefined}
+            syncHeading={isSplitMode ? sync3DHeading : undefined}
+            syncPitch={isSplitMode ? sync3DPitch : undefined}
+          />
+        </div>
+
+        {/* ── Split: 360° panel on the right half ── */}
+        {isSplitMode && (
+          <div className="absolute top-0 right-0 w-1/2 h-full z-5" style={{ zIndex: 5 }}>
+            <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
+              360° View
+            </div>
+            <Ivion360View
+              url={buildingData.ivionUrl || undefined}
+              syncEnabled={false}
+              buildingOrigin={buildingData.origin}
+              buildingFmGuid={buildingData.fmGuid}
+              ivionSiteIdProp={buildingData.ivionSiteId || undefined}
+              ivionBimTransform={transform}
+            />
           </div>
         )}
 
-        {viewMode === 'vt' && (
-          <>
-            <div
-              className="absolute inset-0 z-10"
-              style={{
-                pointerEvents: overlayInteractive ? 'auto' : 'none',
-              }}
-            >
-              <AssetPlusViewer
-                fmGuid={buildingData.fmGuid}
-                transparentBackground
-                ghostOpacity={ghostOpacity / 100}
-                suppressOverlay
-                onClose={handleGoBack}
-              />
-            </div>
-
-            {/* Crosshair overlay for alignment */}
-            {showAlignment && showCrosshair && (
-              <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
-                <div className="relative w-16 h-16">
-                  <div className="absolute top-1/2 left-0 right-0 h-px bg-red-500/60" />
-                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-red-500/60" />
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-red-500/80" />
-                </div>
-              </div>
-            )}
-          </>
+        {/* Split mode: 3D label */}
+        {isSplitMode && (
+          <div className="absolute top-2 left-2 z-20 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
+            3D Model
+          </div>
         )}
 
-        {viewMode === 'split' && (
-          <div className="absolute inset-0 z-10">
-            <ResizablePanelGroup direction="horizontal" className="h-full">
-              <ResizablePanel defaultSize={50} minSize={25}>
-                <div className="h-full relative">
-                  <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-                    3D Model
-                  </div>
-                  <AssetPlusViewer
-                    fmGuid={buildingData.fmGuid}
-                    syncEnabled={syncLocked}
-                    onCameraChange={handle3DCameraChange}
-                    syncPosition={sync3DPosition}
-                    syncHeading={sync3DHeading}
-                    syncPitch={sync3DPitch}
-                  />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={25}>
-                <div className="h-full relative">
-                  <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-                    360° View
-                  </div>
-                  <Ivion360View
-                    url={buildingData.ivionUrl || undefined}
-                    syncEnabled={false}
-                    buildingOrigin={buildingData.origin}
-                    buildingFmGuid={buildingData.fmGuid}
-                    ivionSiteIdProp={buildingData.ivionSiteId || undefined}
-                    ivionBimTransform={transform}
-                  />
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+        {/* Crosshair overlay for alignment in VT mode */}
+        {isVTMode && showAlignment && showCrosshair && (
+          <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+            <div className="relative w-16 h-16">
+              <div className="absolute top-1/2 left-0 right-0 h-px bg-red-500/60" />
+              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-red-500/60" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-red-500/80" />
+            </div>
           </div>
         )}
 
@@ -559,7 +528,6 @@ function MobileUnifiedViewer({
   hasIvion: boolean;
   onGoBack: () => void;
 }) {
-  // On mobile show a simple tab: 3D | 360
   const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
   return (
@@ -579,7 +547,7 @@ function MobileUnifiedViewer({
           )}
         </div>
 
-        <div className="w-9" /> {/* Spacer for balance */}
+        <div className="w-9" />
       </div>
 
       <div className="flex-1 min-h-0 relative">

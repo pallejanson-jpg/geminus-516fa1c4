@@ -231,8 +231,7 @@ async function doLoadIvionSdk(
     console.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
-  // Pass siteId directly in SDK config instead of manipulating window.location
-  // This avoids triggering React Router re-renders from URL changes.
+  // Also pass siteId in config (future SDK versions may support it)
   if (siteId) {
     sdkConfig.siteId = siteId;
     console.log('[Ivion SDK] Passing siteId in SDK config:', siteId);
@@ -304,6 +303,24 @@ async function doLoadIvionSdk(
   // Initialize with timeout — pass clean baseUrl (no query params)
   const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
 
+  // Temporarily inject ?site= into URL for SDK initialization (SDK reads window.location)
+  let urlModified = false;
+  let originalUrl = '';
+  if (siteId) {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('site')) {
+        originalUrl = window.location.href;
+        url.searchParams.set('site', siteId);
+        window.history.replaceState(null, '', url.toString());
+        urlModified = true;
+        console.log('[Ivion SDK] Temporarily injected ?site= for getApi()');
+      }
+    } catch (e) {
+      console.warn('[Ivion SDK] Could not inject ?site= param:', e);
+    }
+  }
+
   console.log('[Ivion SDK] Calling getApi with baseUrl:', cleanBaseUrl);
   const apiPromise = getApi(cleanBaseUrl, config);
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -313,8 +330,21 @@ async function doLoadIvionSdk(
     ),
   );
 
-  const iv = await Promise.race([apiPromise, timeoutPromise]);
-  console.log('[Ivion SDK] Initialized successfully');
+  let iv: IvionApi;
+  try {
+    iv = await Promise.race([apiPromise, timeoutPromise]);
+    console.log('[Ivion SDK] Initialized successfully');
+  } finally {
+    // Always clean up the injected ?site= param immediately
+    if (urlModified) {
+      try {
+        window.history.replaceState(null, '', originalUrl);
+        console.log('[Ivion SDK] Cleaned up ?site= from URL');
+      } catch (e) {
+        console.warn('[Ivion SDK] Failed to clean up ?site= param:', e);
+      }
+    }
+  }
 
   // ── Auto-navigate to site if siteId provided (API fallback) ──────
   if (siteId) {

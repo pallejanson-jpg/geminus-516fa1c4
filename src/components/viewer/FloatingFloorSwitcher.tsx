@@ -561,7 +561,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     <div 
       style={{ left: position.x, top: position.y }}
       className={cn(
-        'fixed z-20 flex flex-col items-center gap-0.5 p-1 rounded-lg',
+        'fixed z-20 flex flex-col items-center gap-px p-1 rounded-lg',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
         'pointer-events-auto transition-shadow',
         isDragging && 'cursor-grabbing shadow-xl',
@@ -572,10 +572,10 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
       <Tooltip>
         <TooltipTrigger asChild>
           <div 
-            className="flex items-center justify-center w-full h-3 cursor-grab active:cursor-grabbing"
+            className="flex items-center justify-center w-full h-2 cursor-grab active:cursor-grabbing"
             onMouseDown={handleDragStart}
           >
-            <GripVertical className="h-2.5 w-2.5 text-muted-foreground" />
+            <GripVertical className="h-2 w-2 text-muted-foreground" />
           </div>
         </TooltipTrigger>
         <TooltipContent side="left">
@@ -598,7 +598,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  'h-6 w-6 sm:h-7 sm:w-7 p-0 text-[10px] sm:text-xs font-medium rounded-full',
+                  'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
                   'transition-all duration-150',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
@@ -639,7 +639,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               className={cn(
-                'h-6 w-6 sm:h-7 sm:w-7 p-0 text-[10px] sm:text-xs font-medium rounded-full',
+                'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
                 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
                 'flex items-center justify-center',
               )}
@@ -709,23 +709,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         </Popover>
       )}
 
-      {/* Show all button (when in solo/partial mode) */}
-      {visibleFloorIds.size < floors.length && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handlePillDoubleClick}
-              className="h-5 w-full px-1 text-[10px] text-muted-foreground hover:text-foreground"
-            >
-              Alla
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left">Visa alla våningar</TooltipContent>
-        </Tooltip>
-      )}
+      {/* Removed "Alla" button — double-click any pill to show all floors */}
     </div>
   );
 });
