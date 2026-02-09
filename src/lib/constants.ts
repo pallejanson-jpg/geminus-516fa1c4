@@ -1,4 +1,4 @@
-import { BarChart2, Building2, Box, Zap, Archive, Radar } from 'lucide-react';
+import { BarChart2, Building2, Box, Zap, Archive, Radar, Scan } from 'lucide-react';
 
 export const IVION_DEFAULT_BASE_URL = 'https://swg.iv.navvis.com';
 
@@ -71,6 +71,7 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     iot: { label: 'IoT+', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
     radar: { label: '360+', url: 'https://swg.iv.navvis.com', icon: Radar, openMode: 'external', username: '', password: '' },
+    ai_scan: { label: 'AI Scan', url: '', icon: Scan, openMode: 'internal', username: '', password: '' },
 };
 
 export interface SidebarItem {
@@ -80,6 +81,7 @@ export interface SidebarItem {
 
 export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
     { id: 'inventory', hasDividerAfter: false },
+    { id: 'ai_scan', hasDividerAfter: false },
     { id: 'fault_report', hasDividerAfter: false },
     { id: 'insights', hasDividerAfter: true },
     { id: 'fma_plus', hasDividerAfter: false },
