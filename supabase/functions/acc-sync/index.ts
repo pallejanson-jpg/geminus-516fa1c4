@@ -687,6 +687,18 @@ async function extractBimHierarchy(
             if (lowerName === 'department' || lowerName === 'avdelning' || lowerName === 'funktionsnamn') departmentKey = key;
           }
 
+          // Resolve "type name" / "family" field for room descriptions (e.g. "TRAPPA", "KORRIDOR")
+          let typeNameKey = '';
+          for (const [key, name] of Object.entries(fieldsMap)) {
+            const lowerName = (name as string).toLowerCase().trim();
+            if (/^(family|type.?name|typ|family name)$/.test(lowerName)) {
+              typeNameKey = key;
+              break;
+            }
+          }
+          // Fallback to known key from Stadshuset Nyköping
+          if (!typeNameKey) typeNameKey = 'pdf772b6f';
+
           // Fallback to hardcoded keys if not found
           if (!categoryKey) categoryKey = 'p5eddc473';
           if (!nameKey) nameKey = 'p153cb174';
@@ -694,7 +706,7 @@ async function extractBimHierarchy(
           if (!levelKey) levelKey = 'pbadfe721';
 
           // Debug logging for field discovery
-          console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}`);
+          console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}, typeName=${typeNameKey}`);
           console.log(`[BIM Fields] Total fields in fieldsMap: ${Object.keys(fieldsMap).length}`);
           // Log all fields for debugging (first sync)
           const fieldEntries = Object.entries(fieldsMap).map(([k, v]) => `${k}=${v}`).join(', ');
@@ -739,15 +751,26 @@ async function extractBimHierarchy(
                 debugRoomLogged = true;
               }
 
+              // Resolve type/family name (e.g. "TRAPPA", "KORRIDOR")
+              const typeNameVal = typeNameKey ? (obj.props?.[typeNameKey] || '') : '';
+
               // Determine the best descriptive name for the room
-              // Priority: Room Name > Department > generic Name (if it's not just "Room")
+              // Priority: Room Name > Type/Family Name > Department > generic Name (stripped)
               let descriptiveName = '';
               if (roomNameVal && roomNameVal !== externalId) {
                 descriptiveName = roomNameVal;
+              } else if (typeNameVal && typeNameVal !== externalId && typeNameVal !== 'Room') {
+                descriptiveName = typeNameVal;
               } else if (departmentVal && departmentVal !== externalId) {
                 descriptiveName = departmentVal;
               } else if (rawName && rawName !== externalId && rawName !== 'Room' && rawName.length < 40) {
-                descriptiveName = rawName;
+                // Strip Revit ID suffix like " [3767053]" from name
+                const strippedName = rawName.replace(/\s*\[[\d]+\]\s*$/, '').trim();
+                // Also strip the number prefix if it duplicates designation
+                const finalName = number && strippedName.startsWith(number) 
+                  ? strippedName.substring(number.length).trim() 
+                  : strippedName;
+                if (finalName && finalName !== number) descriptiveName = finalName;
               }
 
               // Designation = Number (e.g. "K1-205", "08001")
