@@ -25,8 +25,8 @@ export interface TranslationStatus {
 }
 
 /**
- * Dynamically import @xeokit/xeokit-convert to avoid bundling issues
- * if Node-specific polyfills aren't available at startup.
+ * Dynamically import @xeokit/xeokit-convert.
+ * Node.js modules (node:util, fs, path) are shimmed in vite.config.ts.
  */
 async function loadXeokitConvert() {
   const mod = await import('@xeokit/xeokit-convert');
