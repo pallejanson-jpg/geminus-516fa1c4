@@ -227,8 +227,16 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Ghost opacity for VT mode ────────────────────────────────────
   useEffect(() => {
-    if (viewMode !== 'vt' || sdkStatus !== 'ready') return;
-    const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (viewMode !== 'vt' && viewMode !== 'split') return;
+    // For VT mode, require SDK ready; for split mode, always apply
+    if (viewMode === 'vt' && sdkStatus !== 'ready') return;
+    
+    // Try primary ref first, then fallback to global
+    let xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer) {
+      const win = window as any;
+      xeokitViewer = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    }
     if (!xeokitViewer?.scene) return;
     try {
       const objectIds = xeokitViewer.scene.objectIds;
@@ -309,90 +317,9 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Desktop Render ────────────────────────────────────────────────
   return (
-    <div className="h-screen w-screen relative overflow-hidden bg-black">
-      {/* ─── SDK container — always mounted, visibility controlled by mode ─── */}
-      {/* SDK container — visible for vt and 360 modes */}
-      <div
-        ref={sdkContainerRef}
-        className="absolute inset-0 z-0"
-        style={{
-          display: (viewMode === 'vt' || viewMode === '360') ? 'block' : 'none',
-        }}
-      />
-
-      {/* ─── Mode-specific content ─── */}
-      {viewMode === '3d' && (
-        <div className="absolute inset-0 z-10">
-          <AssetPlusViewer fmGuid={buildingData.fmGuid} onClose={handleGoBack} />
-        </div>
-      )}
-
-      {viewMode === 'vt' && (
-        <>
-          {/* SDK is already rendered in sdkContainerRef above (z-0) */}
-          <div
-            className="absolute inset-0 z-10"
-            style={{
-              pointerEvents: overlayInteractive ? 'auto' : 'none',
-            }}
-          >
-            <AssetPlusViewer
-              fmGuid={buildingData.fmGuid}
-              transparentBackground
-              ghostOpacity={ghostOpacity / 100}
-              suppressOverlay
-              onClose={handleGoBack}
-            />
-          </div>
-        </>
-      )}
-
-      {viewMode === '360' && (
-        <>
-          {/* SDK is already rendered in sdkContainerRef above (z-0) */}
-        </>
-      )}
-
-      {viewMode === 'split' && (
-        <div className="absolute inset-0 z-10" style={{ top: '48px' }}>
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={50} minSize={25}>
-              <div className="h-full relative">
-                <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-                  3D Model
-                </div>
-                <AssetPlusViewer
-                  fmGuid={buildingData.fmGuid}
-                  syncEnabled={syncLocked}
-                  onCameraChange={handle3DCameraChange}
-                  syncPosition={sync3DPosition}
-                  syncHeading={sync3DHeading}
-                  syncPitch={sync3DPitch}
-                />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={50} minSize={25}>
-              <div className="h-full relative">
-                <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
-                  360° View
-                </div>
-                <Ivion360View
-                  url={buildingData.ivionUrl || undefined}
-                  syncEnabled={syncLocked}
-                  buildingOrigin={buildingData.origin}
-                  buildingFmGuid={buildingData.fmGuid}
-                  ivionSiteIdProp={buildingData.ivionSiteId || undefined}
-                  ivionBimTransform={transform}
-                />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
-      )}
-
-      {/* ─── Header toolbar — above everything ─── */}
-      <div className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-2 bg-black/40 backdrop-blur-sm">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-black">
+      {/* ─── Header toolbar — in document flow, pushes content down ─── */}
+      <div className="shrink-0 flex items-center justify-between p-2 bg-black/80 backdrop-blur-sm z-40">
         {/* Left: Back + building name */}
         <div className="flex items-center gap-3">
           <Button
@@ -503,8 +430,8 @@ const UnifiedViewerContent: React.FC<{
             </span>
           )}
 
-          {/* Ghost opacity slider (VT mode) */}
-          {viewMode === 'vt' && (
+          {/* Ghost opacity slider (VT + Split mode) */}
+          {(viewMode === 'vt' || viewMode === 'split') && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 bg-white/10 rounded px-3 py-1 min-w-[160px]">
@@ -540,17 +467,93 @@ const UnifiedViewerContent: React.FC<{
         </div>
       </div>
 
-      {/* Alignment panel overlay */}
-      {showAlignment && (
-        <div className="absolute top-14 left-4 z-50">
-          <AlignmentPanel
-            transform={transform}
-            onChange={setTransform}
-            buildingFmGuid={buildingData.fmGuid}
-            onSaved={() => setShowAlignment(false)}
-          />
-        </div>
-      )}
+      {/* ─── Content area — fills remaining space ─── */}
+      <div className="flex-1 min-h-0 relative">
+        {/* SDK container — visible for vt and 360 modes */}
+        <div
+          ref={sdkContainerRef}
+          className="absolute inset-0 z-0"
+          style={{
+            display: (viewMode === 'vt' || viewMode === '360') ? 'block' : 'none',
+          }}
+        />
+
+        {/* Mode-specific content */}
+        {viewMode === '3d' && (
+          <div className="absolute inset-0 z-10">
+            <AssetPlusViewer fmGuid={buildingData.fmGuid} onClose={handleGoBack} />
+          </div>
+        )}
+
+        {viewMode === 'vt' && (
+          <>
+            <div
+              className="absolute inset-0 z-10"
+              style={{
+                pointerEvents: overlayInteractive ? 'auto' : 'none',
+              }}
+            >
+              <AssetPlusViewer
+                fmGuid={buildingData.fmGuid}
+                transparentBackground
+                ghostOpacity={ghostOpacity / 100}
+                suppressOverlay
+                onClose={handleGoBack}
+              />
+            </div>
+          </>
+        )}
+
+        {viewMode === 'split' && (
+          <div className="absolute inset-0 z-10">
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              <ResizablePanel defaultSize={50} minSize={25}>
+                <div className="h-full relative">
+                  <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
+                    3D Model
+                  </div>
+                  <AssetPlusViewer
+                    fmGuid={buildingData.fmGuid}
+                    syncEnabled={syncLocked}
+                    onCameraChange={handle3DCameraChange}
+                    syncPosition={sync3DPosition}
+                    syncHeading={sync3DHeading}
+                    syncPitch={sync3DPitch}
+                  />
+                </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={50} minSize={25}>
+                <div className="h-full relative">
+                  <div className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs font-medium text-foreground">
+                    360° View
+                  </div>
+                  <Ivion360View
+                    url={buildingData.ivionUrl || undefined}
+                    syncEnabled={syncLocked}
+                    buildingOrigin={buildingData.origin}
+                    buildingFmGuid={buildingData.fmGuid}
+                    ivionSiteIdProp={buildingData.ivionSiteId || undefined}
+                    ivionBimTransform={transform}
+                  />
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        )}
+
+        {/* Alignment panel overlay */}
+        {showAlignment && (
+          <div className="absolute top-2 left-4 z-50">
+            <AlignmentPanel
+              transform={transform}
+              onChange={setTransform}
+              buildingFmGuid={buildingData.fmGuid}
+              onSaved={() => setShowAlignment(false)}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Manual sync dialog (split mode) */}
       <Dialog open={showManualSyncDialog} onOpenChange={setShowManualSyncDialog}>
