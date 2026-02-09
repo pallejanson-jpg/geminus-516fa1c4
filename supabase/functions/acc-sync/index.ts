@@ -549,12 +549,34 @@ function parseLDJSON(text: string): any[] {
     .filter(Boolean);
 }
 
+// Categories to skip when extracting instances (non-physical)
+const SKIP_INSTANCE_CATEGORIES = new Set([
+  'Revit Level', 'Levels', 'Revit Rooms', 'Rooms',
+  'Views', 'Grids', 'Reference Planes', 'Sheets', 'Scope Boxes',
+  'Matchline', 'Detail Items', 'Model Text', 'Lines', 'Filled Region',
+  'Project Information', 'Material Assets', 'Schedules', 'Legends',
+  'Cameras', 'Curtain Panels', 'Curtain Wall Mullions',
+  'Mass', 'Rebar Shape', 'Analytical Links', 'Analytical Nodes',
+  'Analytical Spaces', 'Analytical Surfaces',
+  'Boundary Conditions', 'Internal Area Loads', 'Internal Line Loads', 'Internal Point Loads',
+]);
+
+// Room property field names to resolve (lowercase)
+const ROOM_PROPERTY_FIELDS: Record<string, string[]> = {
+  area: ['area', 'yta'],
+  perimeter: ['perimeter', 'omkrets'],
+  volume: ['volume', 'volym'],
+  department: ['department', 'avdelning', 'funktionsnamn'],
+  unboundedHeight: ['unbounded height', 'rumshöjd', 'rumshojd'],
+  comments: ['comments', 'kommentarer'],
+};
+
 async function extractBimHierarchy(
   token: string,
   projectId: string,
   versionUrns: string[],
   regionHeaders: Record<string, string>,
-): Promise<{ levels: any[]; rooms: any[]; fieldsMap: Record<string, string>; indexState: string }> {
+): Promise<{ levels: any[]; rooms: any[]; instances: any[]; fieldsMap: Record<string, string>; indexState: string }> {
   const cleanProjectId = projectId.replace(/^b\./, "");
 
   // Step 1: POST to batch-status to start/check indexing
@@ -584,6 +606,10 @@ async function extractBimHierarchy(
   if (indexes.length === 0) {
     throw new Error('No indexes returned from batch-status');
   }
+
+  // Log index states for diagnostics
+  const statesSummary = indexes.map((idx: any) => `${idx.versionUrn?.slice(-20)}:${idx.state}`).join(', ');
+  console.log(`[BIM Index] States: ${statesSummary}`);
 
   // Step 2: Poll until all indexes are FINISHED (max ~45 seconds)
   const maxPollTime = 45000;
@@ -629,13 +655,18 @@ async function extractBimHierarchy(
   const overallState = allFinished ? 'FINISHED' :
     currentIndexes.some((idx: any) => idx.state === 'PROCESSING' || idx.state === 'QUEUED') ? 'PROCESSING' : 'PARTIAL';
 
+  console.log(`[BIM Index] Finished: ${finishedIndexes.length}/${currentIndexes.length}, state: ${overallState}`);
+
   if (finishedIndexes.length === 0) {
-    return { levels: [], rooms: [], fieldsMap: {}, indexState: overallState };
+    const nonFinishedStates = currentIndexes.map((idx: any) => idx.state).join(', ');
+    console.log(`[BIM Index] No finished indexes. States: ${nonFinishedStates}`);
+    return { levels: [], rooms: [], instances: [], fieldsMap: {}, indexState: overallState };
   }
 
   // Step 3: Fetch fields and properties from finished indexes
   const allLevels: any[] = [];
   const allRooms: any[] = [];
+  const allInstances: any[] = [];
   const fieldsMap: Record<string, string> = {};
 
   for (const idx of finishedIndexes) {
@@ -671,8 +702,11 @@ async function extractBimHierarchy(
           let elevationKey = '';
           let levelKey = '';
           let numberKey = '';
-          let roomNameKey = '';  // Separate key for "Room Name" / "Rumsnamn"
+          let roomNameKey = '';
           let departmentKey = '';
+
+          // Room property keys
+          const roomPropKeys: Record<string, string> = {};
 
           // Build reverse map: lowercase field name -> key
           for (const [key, name] of Object.entries(fieldsMap)) {
@@ -682,22 +716,37 @@ async function extractBimHierarchy(
             if (lowerName === 'elevation' || lowerName === 'höjd' || lowerName === 'elev') elevationKey = key;
             if (lowerName === 'level' || lowerName === 'våning' || lowerName === 'nivå') levelKey = key;
             if (lowerName === 'number' || lowerName === 'nummer') numberKey = key;
-            // Additional room-specific name fields
             if (lowerName === 'room name' || lowerName === 'room_name' || lowerName === 'rumsnamn' || lowerName === 'room: name') roomNameKey = key;
             if (lowerName === 'department' || lowerName === 'avdelning' || lowerName === 'funktionsnamn') departmentKey = key;
+
+            // Resolve room property fields
+            for (const [propName, aliases] of Object.entries(ROOM_PROPERTY_FIELDS)) {
+              if (aliases.includes(lowerName) && !roomPropKeys[propName]) {
+                roomPropKeys[propName] = key;
+              }
+            }
           }
 
-          // Resolve "type name" / "family" field for room descriptions (e.g. "TRAPPA", "KORRIDOR")
+          // Resolve "type name" / "family" field
           let typeNameKey = '';
           for (const [key, name] of Object.entries(fieldsMap)) {
             const lowerName = (name as string).toLowerCase().trim();
-            if (/^(family|type.?name|typ|family name)$/.test(lowerName)) {
+            if (/^(family|type.?name|typ|family name|family and type)$/.test(lowerName)) {
               typeNameKey = key;
               break;
             }
           }
-          // Fallback to known key from Stadshuset Nyköping
           if (!typeNameKey) typeNameKey = 'pdf772b6f';
+
+          // Resolve "Room" field for instance-to-room linking
+          let roomRefKey = '';
+          for (const [key, name] of Object.entries(fieldsMap)) {
+            const lowerName = (name as string).toLowerCase().trim();
+            if (lowerName === 'room' || lowerName === 'rum') {
+              roomRefKey = key;
+              break;
+            }
+          }
 
           // Fallback to hardcoded keys if not found
           if (!categoryKey) categoryKey = 'p5eddc473';
@@ -705,15 +754,17 @@ async function extractBimHierarchy(
           if (!elevationKey) elevationKey = 'pdf1348b1';
           if (!levelKey) levelKey = 'pbadfe721';
 
-          // Debug logging for field discovery
-          console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}, typeName=${typeNameKey}`);
-          console.log(`[BIM Fields] Total fields in fieldsMap: ${Object.keys(fieldsMap).length}`);
-          // Log all fields for debugging (first sync)
+          // Debug logging
+          console.log(`[BIM Fields] category=${categoryKey}, name=${nameKey}, elevation=${elevationKey}, level=${levelKey}, number=${numberKey}, roomName=${roomNameKey}, department=${departmentKey}, typeName=${typeNameKey}, roomRef=${roomRefKey}`);
+          console.log(`[BIM Fields] Room prop keys: ${JSON.stringify(roomPropKeys)}`);
+          console.log(`[BIM Fields] Total fields: ${Object.keys(fieldsMap).length}`);
           const fieldEntries = Object.entries(fieldsMap).map(([k, v]) => `${k}=${v}`).join(', ');
           console.log(`[BIM Fields] All fields: ${fieldEntries.substring(0, 2000)}`);
 
           let debugLevelLogged = false;
           let debugRoomLogged = false;
+          let debugInstanceLogged = false;
+          const categoryCounts: Record<string, number> = {};
 
           for (const obj of props) {
             const category = obj.props?.[categoryKey] || '';
@@ -723,16 +774,18 @@ async function extractBimHierarchy(
             const departmentVal = departmentKey ? (obj.props?.[departmentKey] || '') : '';
             const externalId = obj.externalId || obj.svf2Id?.toString() || '';
 
-            if (category === 'Revit Level' || category === 'Levels') {
-              // Debug: log first level's full props
+            // Track category counts
+            if (category) {
+              categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+            }
+
+            if (category === 'Revit Level' || category === 'Levels' || category === 'IfcBuildingStorey') {
               if (!debugLevelLogged) {
                 console.log(`[BIM Debug] First level props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
                 debugLevelLogged = true;
               }
 
-              // For levels: prefer Name property, fall back to elevation, then objectId
               let levelName = rawName;
-              // If Name is empty, is a GUID, or looks like an element type name (e.g. "Level")
               if (!levelName || levelName === externalId || levelName.length > 40 || levelName === 'Level') {
                 const elev = obj.props?.[elevationKey];
                 levelName = elev != null ? `Level ${parseFloat(elev).toFixed(1)}m` : `Level ${obj.objectId || externalId.slice(-8)}`;
@@ -744,33 +797,43 @@ async function extractBimHierarchy(
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
               });
-            } else if (category === 'Revit Rooms' || category === 'Rooms') {
-              // Debug: log first room's full props
+            } else if (category === 'Revit Rooms' || category === 'Rooms' || category === 'IfcSpace') {
               if (!debugRoomLogged) {
                 console.log(`[BIM Debug] First room props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
                 debugRoomLogged = true;
               }
 
-              // Resolve type/family name (e.g. "TRAPPA", "KORRIDOR")
               const typeNameVal = typeNameKey ? (obj.props?.[typeNameKey] || '') : '';
 
               // Determine the best descriptive name for the room
-              // Priority: Room Name > Type/Family Name > Department > generic Name (stripped)
+              // Priority: Name field (ACC "Name") > Room Name > Type/Family Name > Department
               let descriptiveName = '';
-              if (roomNameVal && roomNameVal !== externalId) {
-                descriptiveName = roomNameVal;
-              } else if (typeNameVal && typeNameVal !== externalId && typeNameVal !== 'Room') {
-                descriptiveName = typeNameVal;
-              } else if (departmentVal && departmentVal !== externalId) {
-                descriptiveName = departmentVal;
-              } else if (rawName && rawName !== externalId && rawName !== 'Room' && rawName.length < 40) {
-                // Strip Revit ID suffix like " [3767053]" from name
+              
+              // The ACC "Name" field typically contains the Room Name (e.g. "TRAPPA")
+              // But we need to check it's not just the number or a GUID
+              const nameIsNumber = rawName && rawName === number;
+              const nameIsGuid = rawName && (rawName === externalId || rawName.length > 40);
+              const nameIsGeneric = rawName === 'Room';
+              
+              if (rawName && !nameIsNumber && !nameIsGuid && !nameIsGeneric) {
+                // Strip Revit ID suffix like " [3767053]"
                 const strippedName = rawName.replace(/\s*\[[\d]+\]\s*$/, '').trim();
-                // Also strip the number prefix if it duplicates designation
-                const finalName = number && strippedName.startsWith(number) 
-                  ? strippedName.substring(number.length).trim() 
+                // Strip number prefix if it duplicates designation
+                const finalName = number && strippedName.startsWith(number)
+                  ? strippedName.substring(number.length).trim()
                   : strippedName;
                 if (finalName && finalName !== number) descriptiveName = finalName;
+              }
+              
+              // Fallbacks if Name didn't give us a descriptive name
+              if (!descriptiveName && roomNameVal && roomNameVal !== externalId) {
+                descriptiveName = roomNameVal;
+              }
+              if (!descriptiveName && typeNameVal && typeNameVal !== externalId && typeNameVal !== 'Room') {
+                descriptiveName = typeNameVal;
+              }
+              if (!descriptiveName && departmentVal && departmentVal !== externalId) {
+                descriptiveName = departmentVal;
               }
 
               // Designation = Number (e.g. "K1-205", "08001")
@@ -788,16 +851,62 @@ async function extractBimHierarchy(
                 roomCommonName = `Room ${obj.objectId || externalId.slice(-8)}`;
               }
 
+              // Extract room properties
+              const roomProperties: Record<string, any> = {};
+              for (const [propName, propKey] of Object.entries(roomPropKeys)) {
+                const val = obj.props?.[propKey];
+                if (val !== undefined && val !== null && val !== '') {
+                  roomProperties[propName] = val;
+                }
+              }
+
               allRooms.push({
                 externalId,
-                name: designation, // name = designation (like Asset+)
+                name: descriptiveName || null, // name = descriptive name (e.g. "TRAPPA")
+                number: designation,           // number = designation (e.g. "10026")
                 commonName: roomCommonName.trim(),
                 level: obj.props?.[levelKey] || null,
+                objectId: obj.objectId,
+                versionUrn: idx.versionUrn,
+                properties: roomProperties,
+              });
+            } else if (category && !SKIP_INSTANCE_CATEGORIES.has(category)) {
+              // Instance extraction - physical elements
+              if (!debugInstanceLogged) {
+                console.log(`[BIM Debug] First instance (${category}) props: ${JSON.stringify(obj.props).substring(0, 1500)}`);
+                debugInstanceLogged = true;
+              }
+
+              const typeNameVal = typeNameKey ? (obj.props?.[typeNameKey] || '') : '';
+              const levelRef = obj.props?.[levelKey] || null;
+              const roomRef = roomRefKey ? (obj.props?.[roomRefKey] || null) : null;
+
+              // Build a descriptive name: prefer type/family, then raw name
+              let instanceName = '';
+              if (typeNameVal && typeNameVal !== externalId && typeNameVal.length < 100) {
+                instanceName = typeNameVal;
+              } else if (rawName && rawName !== externalId && rawName.length < 100) {
+                instanceName = rawName.replace(/\s*\[[\d]+\]\s*$/, '').trim();
+              }
+
+              allInstances.push({
+                externalId,
+                name: instanceName || null,
+                category,
+                level: levelRef,
+                room: roomRef,
                 objectId: obj.objectId,
                 versionUrn: idx.versionUrn,
               });
             }
           }
+
+          // Log category counts for diagnostics
+          const catEntries = Object.entries(categoryCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([cat, count]) => `${cat}: ${count}`)
+            .join(', ');
+          console.log(`[BIM Categories] ${catEntries}`);
         }
       }
     } catch (err) {
@@ -805,18 +914,15 @@ async function extractBimHierarchy(
     }
   }
 
-  console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms from ${finishedIndexes.length} models`);
+  console.log(`BIM hierarchy: ${allLevels.length} levels, ${allRooms.length} rooms, ${allInstances.length} instances from ${finishedIndexes.length} models`);
 
   // === Post-processing: fix level names using room references ===
-  // If levels have GUID-like names but rooms reference human-readable level names,
-  // use the room references to back-fill level names.
   const roomLevelRefs = new Set<string>();
   for (const room of allRooms) {
     if (room.level) roomLevelRefs.add(room.level);
   }
 
   if (roomLevelRefs.size > 0 && allLevels.length > 0) {
-    // Check if level names look like GUIDs (contain hex patterns or "Level <objectId>")
     const levelsHaveBadNames = allLevels.every(l =>
       /^Level\s+[0-9a-f]{6,}/i.test(l.name) || /^Level\s+\d+\.\d+m$/.test(l.name)
     );
@@ -824,28 +930,23 @@ async function extractBimHierarchy(
     if (levelsHaveBadNames) {
       console.log(`[BIM Fix] Levels have GUID-like names. Room level refs: ${[...roomLevelRefs].join(', ')}`);
 
-      // Sort levels by elevation (if available) or objectId
       const sortedLevels = [...allLevels].sort((a, b) => {
         const ea = a.elevation != null ? parseFloat(a.elevation) : (a.objectId || 0);
         const eb = b.elevation != null ? parseFloat(b.elevation) : (b.objectId || 0);
         return (ea as number) - (eb as number);
       });
 
-      // Sort room level refs naturally
       const sortedRefs = [...roomLevelRefs].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-      // Try to match by count (if same number of levels and refs)
       if (sortedLevels.length === sortedRefs.length) {
         for (let i = 0; i < sortedLevels.length; i++) {
           const oldName = sortedLevels[i].name;
           sortedLevels[i].name = sortedRefs[i];
-          // Update in allLevels array
           const origLevel = allLevels.find(l => l.externalId === sortedLevels[i].externalId);
           if (origLevel) origLevel.name = sortedRefs[i];
           console.log(`[BIM Fix] Level "${oldName}" -> "${sortedRefs[i]}"`);
         }
       } else {
-        // Different counts: assign refs to levels by best effort (order-based)
         console.log(`[BIM Fix] Level count (${sortedLevels.length}) != ref count (${sortedRefs.length}), assigning by order`);
         for (let i = 0; i < Math.min(sortedLevels.length, sortedRefs.length); i++) {
           const origLevel = allLevels.find(l => l.externalId === sortedLevels[i].externalId);
@@ -858,7 +959,7 @@ async function extractBimHierarchy(
     }
   }
 
-  return { levels: allLevels, rooms: allRooms, fieldsMap, indexState: overallState };
+  return { levels: allLevels, rooms: allRooms, instances: allInstances, fieldsMap, indexState: overallState };
 }
 
 async function upsertBimAssets(
@@ -867,8 +968,9 @@ async function upsertBimAssets(
   folderId: string,
   levels: any[],
   rooms: any[],
+  instances: any[],
   accProjectId: string,
-): Promise<{ building: number; levels: number; rooms: number }> {
+): Promise<{ building: number; levels: number; rooms: number; instances: number }> {
   const buildingFmGuid = `acc-bim-building-${folderId.replace(/[^a-zA-Z0-9-]/g, '')}`;
 
   // 1. Upsert building
@@ -908,11 +1010,14 @@ async function upsertBimAssets(
     synced_at: new Date().toISOString(),
   }));
 
-  // 3. Upsert rooms with level matching
+  // 3. Upsert rooms with level matching and properties
   const levelNameMap = new Map<string, string>();
   for (const level of levels) {
     levelNameMap.set(level.name, `acc-bim-level-${level.externalId}`);
   }
+
+  // Room number -> fm_guid map for instance linking
+  const roomNumberMap = new Map<string, string>();
 
   const roomAssets = rooms.map(room => {
     let levelFmGuid: string | null = null;
@@ -928,35 +1033,129 @@ async function upsertBimAssets(
       }
     }
 
+    const roomFmGuid = `acc-bim-room-${room.externalId}`;
+    if (room.number) {
+      roomNumberMap.set(room.number, roomFmGuid);
+    }
+
+    // Build attributes with room properties
+    const attributes: Record<string, any> = {
+      source: 'acc-bim',
+      acc_project_id: accProjectId,
+      acc_folder_id: folderId,
+      bim_external_id: room.externalId,
+      bim_level_ref: room.level,
+      bim_object_id: room.objectId,
+      bim_version_urn: room.versionUrn,
+    };
+
+    // Add room properties as Asset+ compatible attributes array
+    const propertyAttributes: { name: string; value: any; dataType: string }[] = [];
+    if (room.properties) {
+      for (const [propName, propValue] of Object.entries(room.properties)) {
+        const numVal = typeof propValue === 'string' ? parseFloat(propValue) : propValue;
+        propertyAttributes.push({
+          name: propName,
+          value: propValue,
+          dataType: typeof numVal === 'number' && !isNaN(numVal as number) ? 'Double' : 'String',
+        });
+      }
+    }
+    if (propertyAttributes.length > 0) {
+      attributes.bim_properties = propertyAttributes;
+    }
+
+    // Extract area for gross_area column
+    let grossArea: number | null = null;
+    if (room.properties?.area) {
+      const areaVal = typeof room.properties.area === 'string' ? parseFloat(room.properties.area) : room.properties.area;
+      if (typeof areaVal === 'number' && !isNaN(areaVal)) {
+        grossArea = Math.round(areaVal * 100) / 100; // Round to 2 decimals
+      }
+    }
+
     return {
-      fm_guid: `acc-bim-room-${room.externalId}`,
+      fm_guid: roomFmGuid,
       category: 'Space',
-      name: room.name || null, // designation (Number), like Asset+
+      name: room.name || null, // descriptive name (e.g. "TRAPPA")
       common_name: room.commonName || room.name || `Room ${room.externalId}`,
       building_fm_guid: buildingFmGuid,
       level_fm_guid: levelFmGuid,
-      attributes: {
-        source: 'acc-bim',
-        acc_project_id: accProjectId,
-        acc_folder_id: folderId,
-        bim_external_id: room.externalId,
-        bim_level_ref: room.level,
-        bim_object_id: room.objectId,
-        bim_version_urn: room.versionUrn,
-      },
+      gross_area: grossArea,
+      attributes,
       synced_at: new Date().toISOString(),
     };
   });
 
-  // Batch upsert
-  const allAssets = [...levelAssets, ...roomAssets];
-  for (let i = 0; i < allAssets.length; i += 200) {
-    const chunk = allAssets.slice(i, i + 200);
+  // Batch upsert levels + rooms
+  const structureAssets = [...levelAssets, ...roomAssets];
+  for (let i = 0; i < structureAssets.length; i += 200) {
+    const chunk = structureAssets.slice(i, i + 200);
     const { error } = await supabase.from('assets').upsert(chunk, { onConflict: 'fm_guid', ignoreDuplicates: false });
     if (error) throw error;
   }
 
-  return { building: 1, levels: levelAssets.length, rooms: roomAssets.length };
+  // 4. Upsert instances (doors, windows, walls, etc.)
+  let instanceCount = 0;
+  if (instances.length > 0) {
+    const instanceAssets = instances.map(inst => {
+      // Resolve level
+      let levelFmGuid: string | null = null;
+      if (inst.level) {
+        levelFmGuid = levelNameMap.get(inst.level) || null;
+        if (!levelFmGuid) {
+          for (const [levelName, levelGuid] of levelNameMap) {
+            if (inst.level.includes(levelName) || levelName.includes(inst.level)) {
+              levelFmGuid = levelGuid;
+              break;
+            }
+          }
+        }
+      }
+
+      // Resolve room reference
+      let inRoomFmGuid: string | null = null;
+      if (inst.room) {
+        // Room ref could be a room number or name
+        inRoomFmGuid = roomNumberMap.get(inst.room) || null;
+      }
+
+      return {
+        fm_guid: `acc-bim-instance-${inst.externalId}`,
+        category: 'Instance',
+        name: null,
+        common_name: inst.name || inst.category || `Instance ${inst.externalId}`,
+        asset_type: inst.category,
+        building_fm_guid: buildingFmGuid,
+        level_fm_guid: levelFmGuid,
+        in_room_fm_guid: inRoomFmGuid,
+        attributes: {
+          source: 'acc-bim',
+          acc_project_id: accProjectId,
+          acc_folder_id: folderId,
+          bim_external_id: inst.externalId,
+          bim_category: inst.category,
+          bim_object_id: inst.objectId,
+          bim_version_urn: inst.versionUrn,
+        },
+        synced_at: new Date().toISOString(),
+      };
+    });
+
+    // Batch upsert in chunks of 200
+    for (let i = 0; i < instanceAssets.length; i += 200) {
+      const chunk = instanceAssets.slice(i, i + 200);
+      const { error } = await supabase.from('assets').upsert(chunk, { onConflict: 'fm_guid', ignoreDuplicates: false });
+      if (error) {
+        console.error(`Instance upsert error (batch ${i / 200}):`, error);
+        throw error;
+      }
+      instanceCount += chunk.length;
+    }
+    console.log(`[BIM Instances] Upserted ${instanceCount} instances`);
+  }
+
+  return { building: 1, levels: levelAssets.length, rooms: roomAssets.length, instances: instanceCount };
 }
 
 // ============ SYNC STATE HELPERS ============
@@ -1522,7 +1721,7 @@ serve(async (req: Request) => {
 
         try {
           // Extract BIM hierarchy via Model Properties API
-          const { levels, rooms, fieldsMap, indexState } = await extractBimHierarchy(
+          const { levels, rooms, instances, fieldsMap, indexState } = await extractBimHierarchy(
             token, projectId, versionUrns, regionHeaders,
           );
 
@@ -1538,16 +1737,17 @@ serve(async (req: Request) => {
             );
           }
 
-          if (levels.length === 0 && rooms.length === 0) {
+          if (levels.length === 0 && rooms.length === 0 && instances.length === 0) {
             return new Response(
               JSON.stringify({
                 success: true,
-                message: `Indexering klar men inga våningsplan eller rum hittades i ${bimItems.length} BIM-modell(er). Modellerna kanske inte innehåller Revit Levels/Rooms.`,
+                message: `Indexering klar men inga våningsplan, rum eller instanser hittades i ${bimItems.length} BIM-modell(er).`,
                 indexState,
                 fieldsFound: Object.keys(fieldsMap).length,
                 building: 0,
                 levels: 0,
                 rooms: 0,
+                instances: 0,
                 modelsIndexed: bimItems.length,
               }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -1556,13 +1756,13 @@ serve(async (req: Request) => {
 
           // Upsert to database
           const result = await upsertBimAssets(
-            supabase, folderName, folderId, levels, rooms, projectId,
+            supabase, folderName, folderId, levels, rooms, instances, projectId,
           );
 
-          const message = `Skapade: ${result.building} byggnad, ${result.levels} våningsplan, ${result.rooms} rum från ${bimItems.length} modell(er)`;
+          const message = `Skapade: ${result.building} byggnad, ${result.levels} våningsplan, ${result.rooms} rum, ${result.instances} instanser från ${bimItems.length} modell(er)`;
 
           // Update sync state
-          await updateSyncState(supabase, "acc-bim", "completed", result.levels + result.rooms + result.building);
+          await updateSyncState(supabase, "acc-bim", "completed", result.levels + result.rooms + result.instances + result.building);
 
           return new Response(
             JSON.stringify({

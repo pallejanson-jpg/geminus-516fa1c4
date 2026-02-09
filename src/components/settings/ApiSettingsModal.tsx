@@ -658,6 +658,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         
         let totalLevels = 0;
         let totalRooms = 0;
+        let totalInstances = 0;
         let failures: string[] = [];
 
         // Process files one at a time to avoid memory limits
@@ -682,6 +683,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 if (data?.success) {
                     totalLevels += data.levels || 0;
                     totalRooms += data.rooms || 0;
+                    totalInstances += data.instances || 0;
                 } else if (data?.state === 'PROCESSING') {
                     toast({
                         title: 'Indexering pågår',
@@ -696,10 +698,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
 
         // Summary
-        if (totalLevels > 0 || totalRooms > 0) {
+        if (totalLevels > 0 || totalRooms > 0 || totalInstances > 0) {
             toast({
                 title: 'BIM-synk klar',
-                description: `${totalLevels} våningsplan, ${totalRooms} rum från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
+                description: `${totalLevels} våningsplan, ${totalRooms} rum, ${totalInstances} instanser från ${bimItems.length - failures.length}/${bimItems.length} fil(er)`,
             });
             handleCheckAccStatus();
         } else if (failures.length === 0) {
