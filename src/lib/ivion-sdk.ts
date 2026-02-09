@@ -195,15 +195,27 @@ export async function loadIvionSdk(
     console.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
-  // Append ?site=siteId to baseUrl so the SDK auto-selects the site on
-  // multi-site instances (mirrors the iframe URL pattern). Without this,
-  // getApi() blocks forever waiting for manual site selection.
-  let initUrl = baseUrl.replace(/\/$/, '');
+  // The NavVis SDK reads window.location.search for ?site= to auto-select
+  // the site on multi-site instances. Without this, getApi() blocks forever
+  // waiting for manual site selection. We inject the param into the URL
+  // using replaceState (doesn't trigger React Router re-render) and clean
+  // it up after initialization.
+  let injectedSiteParam = false;
   if (siteId) {
-    const sep = initUrl.includes('?') ? '&' : '?';
-    initUrl = `${initUrl}${sep}site=${siteId}`;
-    console.log('[Ivion SDK] Using site-qualified URL:', initUrl);
+    try {
+      const currentUrl = new URL(window.location.href);
+      if (!currentUrl.searchParams.has('site')) {
+        currentUrl.searchParams.set('site', siteId);
+        window.history.replaceState(window.history.state, '', currentUrl.toString());
+        injectedSiteParam = true;
+        console.log('[Ivion SDK] Injected ?site= into window.location for auto-selection');
+      }
+    } catch (e) {
+      console.warn('[Ivion SDK] Could not inject site param:', e);
+    }
   }
+
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
 
   let getApi: GetApiFn | null = null;
 
@@ -217,7 +229,7 @@ export async function loadIvionSdk(
 
   // ── Attempt 2: script tag from IVION instance ─────────────────────
   if (!getApi) {
-    const directUrl = `${baseUrl.replace(/\/$/, '')}/ivion.js`;
+    const directUrl = `${cleanBaseUrl}/ivion.js`;
     try {
       getApi = await loadGetApiViaScript(directUrl);
       console.log('[Ivion SDK] Loaded via direct script tag:', directUrl);
@@ -241,15 +253,24 @@ export async function loadIvionSdk(
   }
 
   if (!getApi) {
+    // Clean up injected site param before throwing
+    if (injectedSiteParam) {
+      try {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('site');
+        window.history.replaceState(window.history.state, '', cleanUrl.toString());
+      } catch (_) { /* ignore */ }
+    }
     throw new Error(
       'NavVis SDK not available. All loading methods failed (npm, direct, proxy).',
     );
   }
 
-  // Initialize with timeout — use the site-qualified URL
+  // Initialize with timeout — pass clean baseUrl (no query params)
   const config = Object.keys(sdkConfig).length > 0 ? sdkConfig : undefined;
 
-  const apiPromise = getApi(initUrl, config);
+  console.log('[Ivion SDK] Calling getApi with baseUrl:', cleanBaseUrl);
+  const apiPromise = getApi(cleanBaseUrl, config);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(
       () => reject(new Error(`Ivion SDK initialization timed out after ${timeoutMs}ms`)),
@@ -257,8 +278,21 @@ export async function loadIvionSdk(
     ),
   );
 
-  const iv = await Promise.race([apiPromise, timeoutPromise]);
-  console.log('[Ivion SDK] Initialized successfully');
+  let iv: IvionApi;
+  try {
+    iv = await Promise.race([apiPromise, timeoutPromise]);
+    console.log('[Ivion SDK] Initialized successfully');
+  } finally {
+    // Clean up injected site param from URL regardless of success/failure
+    if (injectedSiteParam) {
+      try {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('site');
+        window.history.replaceState(window.history.state, '', cleanUrl.toString());
+        console.log('[Ivion SDK] Cleaned up injected ?site= from URL');
+      } catch (_) { /* ignore */ }
+    }
+  }
 
   // ── Auto-navigate to site if siteId provided (fallback) ──────────
   if (siteId) {
