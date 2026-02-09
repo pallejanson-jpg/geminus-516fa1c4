@@ -70,7 +70,7 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── SDK (shared, one instance) ────────────────────────────────────
   const sdkContainerRef = useRef<HTMLDivElement>(null);
-  const sdkNeeded = hasIvion && (viewMode === 'vt' || viewMode === '360');
+  const sdkNeeded = hasIvion && (viewMode === 'vt' || viewMode === '360' || viewMode === 'split');
 
   const { sdkStatus, ivApiRef, retry: retrySDK } = useIvionSdk({
     baseUrl: buildingData?.ivionBaseUrl || '',
@@ -81,7 +81,7 @@ const UnifiedViewerContent: React.FC<{
   });
 
   useEffect(() => {
-    if (sdkStatus === 'failed' && viewMode !== '3d' && viewMode !== 'split') {
+    if (sdkStatus === 'failed' && viewMode !== '3d') {
       setViewMode('3d');
       toast.error('360° SDK kunde inte laddas. Visar 3D-modell.');
     }
@@ -395,9 +395,14 @@ const UnifiedViewerContent: React.FC<{
         {/* SDK container — visible for vt and 360 modes */}
         <div
           ref={sdkContainerRef}
-          className="absolute inset-0 z-0"
+          className="absolute z-0"
           style={{
-            display: (viewMode === 'vt' || viewMode === '360') ? 'block' : 'none',
+            display: sdkNeeded ? 'block' : 'none',
+            top: 0,
+            right: 0,
+            width: isSplitMode ? '50%' : '100%',
+            height: '100%',
+            zIndex: isSplitMode ? 5 : 0,
           }}
         />
 
@@ -419,18 +424,7 @@ const UnifiedViewerContent: React.FC<{
         </div>
 
         {/* ── Split: 360° panel on the right half ── */}
-        {isSplitMode && (
-          <div className="absolute top-0 right-0 w-1/2 h-full z-5" style={{ zIndex: 5 }}>
-            <Ivion360View
-              url={buildingData.ivionUrl || undefined}
-              syncEnabled={false}
-              buildingOrigin={buildingData.origin}
-              buildingFmGuid={buildingData.fmGuid}
-              ivionSiteIdProp={buildingData.ivionSiteId || undefined}
-              ivionBimTransform={transform}
-            />
-          </div>
-        )}
+        {/* Split mode: SDK container above handles the 360° panel */}
 
 
         {/* Crosshair overlay for alignment in VT mode */}

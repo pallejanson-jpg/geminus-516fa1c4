@@ -190,7 +190,7 @@ export function useRoomLabels(
     return lines.length > 0 ? lines.join('') : '<div style="font-size: 10px;">—</div>';
   }, [extractFieldValue]);
 
-  // Update all label positions with distance-based scaling
+  // Update all label positions with distance-based scaling (batched DOM writes)
   const updateLabelPositions = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer || !enabledRef.current) return;
@@ -199,29 +199,40 @@ export function useRoomLabels(
     const camera = viewer.camera;
     const cameraEye = camera?.eye || [0, 0, 0];
 
+    // Phase 1: Compute all positions (read-only)
+    const updates: { el: HTMLDivElement; transform: string; visible: boolean }[] = [];
+
     labelsRef.current.forEach(label => {
       const canvasPos = worldToCanvas(label.worldPos, viewer);
       
       if (canvasPos) {
-        label.element.style.left = `${canvasPos[0]}px`;
-        label.element.style.top = `${canvasPos[1]}px`;
-        label.element.style.display = 'block';
-        
-        // Distance-based scaling
+        let scale = 1;
         if (config.scaleWithDistance) {
           const dx = cameraEye[0] - label.worldPos[0];
           const dy = cameraEye[1] - label.worldPos[1];
           const dz = cameraEye[2] - label.worldPos[2];
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
-          // Scale factor: closer = larger, farther = smaller
-          const scale = Math.max(0.4, Math.min(1.3, 18 / Math.max(distance, 5)));
-          label.element.style.transform = `translate(-50%, -50%) scale(${scale})`;
+          scale = Math.max(0.4, Math.min(1.3, 18 / Math.max(distance, 5)));
         }
+        updates.push({
+          el: label.element,
+          transform: `translate3d(${canvasPos[0]}px, ${canvasPos[1]}px, 0) translate(-50%, -50%) scale(${scale})`,
+          visible: true,
+        });
       } else {
-        label.element.style.display = 'none';
+        updates.push({ el: label.element, transform: '', visible: false });
       }
     });
+
+    // Phase 2: Batch all DOM writes
+    for (const u of updates) {
+      if (u.visible) {
+        u.el.style.transform = u.transform;
+        if (u.el.style.display === 'none') u.el.style.display = 'block';
+      } else {
+        if (u.el.style.display !== 'none') u.el.style.display = 'none';
+      }
+    }
   }, [getXeokitViewer, worldToCanvas]);
 
   // Handle label click
@@ -333,6 +344,8 @@ export function useRoomLabels(
       
       labelEl.style.cssText = `
         position: absolute;
+        left: 0;
+        top: 0;
         background: hsl(var(--background) / 0.85);
         color: hsl(var(--foreground));
         padding: 3px 6px;
@@ -340,7 +353,7 @@ export function useRoomLabels(
         font-size: ${config.fontSize}px;
         line-height: 1.3;
         text-align: center;
-        transform: translate(-50%, -50%);
+        transform: translate3d(0, 0, 0) translate(-50%, -50%);
         white-space: nowrap;
         pointer-events: ${hasClickAction ? 'auto' : 'none'};
         cursor: ${hasClickAction ? 'pointer' : 'default'};
@@ -348,7 +361,7 @@ export function useRoomLabels(
         box-shadow: 0 1px 3px rgba(0,0,0,0.15);
         display: none;
         z-index: 5;
-        transition: transform 0.1s ease-out;
+        will-change: transform;
       `;
       
       container.appendChild(labelEl);
@@ -388,24 +401,21 @@ export function useRoomLabels(
 
     console.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
 
-    // Set up camera change listener for position updates
+    // Set up camera change listener with rAF throttling
     const scene2 = viewer.scene;
     if (scene2 && !cameraListenerRef.current) {
-      const updateFn = () => updateLabelPositions();
-      scene2.camera?.on?.('matrix', updateFn);
+      let rafId = 0;
+      const throttledUpdate = () => {
+        if (rafId) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          updateLabelPositions();
+        });
+      };
+      scene2.camera?.on?.('matrix', throttledUpdate);
       cameraListenerRef.current = () => {
-        scene2.camera?.off?.('matrix', updateFn);
-      };
-    }
-
-    // Also listen to tick for smooth updates
-    if (scene2 && !tickListenerRef.current) {
-      const tickFn = () => {
-        if (enabledRef.current) updateLabelPositions();
-      };
-      scene2.on?.('tick', tickFn);
-      tickListenerRef.current = () => {
-        scene2.off?.('tick', tickFn);
+        scene2.camera?.off?.('matrix', throttledUpdate);
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
       };
     }
 
