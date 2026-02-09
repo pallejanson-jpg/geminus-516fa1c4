@@ -1,50 +1,86 @@
 
-# Fix AI Scanning: Button Visibility, Styling, and SDK Initialization
 
-## Problem 1: Start Button Hidden Below Scroll
-The "Starta AI-skanning" button sits after three full cards (Building Selection, Template Selection, Info Card) and is not visible without scrolling. On most screens it's completely off-screen.
+# AI Scanning Improvements: Sidebar Integration, Pre-selection, and UI Polish
 
-### Fix: `ScanConfigPanel.tsx`
-- Move the start button to a **sticky bottom bar** using `sticky bottom-0 bg-background` so it's always visible regardless of scroll position
-- Add a top border and padding for visual separation
+## Changes Overview
 
-## Problem 2: White Background / Poor Dark Mode Styling
-The scan config page uses default card backgrounds that appear as plain white in light mode with no visual hierarchy.
+### 1. Add AI Scanning as a Sidebar App
 
-### Fix: `AiAssetScan.tsx`
-- Add `bg-background` to the root container to ensure theme-aware background
-- The cards already use `Card` which should adapt, but the outer page container needs the correct background class
+Add `ai_scan` as a new entry in the sidebar app system so it appears alongside the other apps.
 
-## Problem 3: "Laddar 360-visare" Hangs Forever
-Console logs show repeated `TypeError: Cannot read properties of null (reading 'offsetHeight')` from Ivion's internal `LeftPanelComponent`. This means the `<ivion>` element is either:
-- Not yet mounted in the DOM when the SDK initializes
-- Has zero dimensions (the container has `min-h-[300px]` but may not have actual height in the flex layout)
+**`src/lib/constants.ts`**:
+- Add `ai_scan` to `DEFAULT_APP_CONFIGS` with label `AI Scan`, icon `Scan`
+- Add `{ id: 'ai_scan', hasDividerAfter: false }` to `DEFAULT_SIDEBAR_ORDER` (after `inventory`)
 
-### Fix: `BrowserScanRunner.tsx`
-- Give the viewer container **explicit pixel dimensions** instead of relying on flex-grow (`min-h-[400px]` and `width: 100%`)
-- Add a `useEffect` that waits for the container to have non-zero dimensions before setting `enabled=true` on `useIvionSdk`, instead of enabling immediately
-- Ensure the `<ivion>` element is `display: block` with `width: 100%; height: 100%` (the SDK requires the element to be visible and sized before init)
-- Handle the `sdkStatus === 'failed'` state to show an error message with retry instead of being stuck on "Laddar..."
+**`src/components/layout/LeftSidebar.tsx`**:
+- Add `ai_scan` to `SIDEBAR_ITEM_META` with `Scan` icon, `text-emerald-500` color, type `'internal'`
 
-## Technical Changes
+**`src/components/layout/MainContent.tsx`**:
+- Add `case 'ai_scan'` that renders `<AiAssetScan />` (lazy loaded) inline, inside the app layout instead of navigating to `/inventory/ai-scan`
 
-### File: `src/components/ai-scan/ScanConfigPanel.tsx`
-- Wrap the start button in a `sticky bottom-0` container with `bg-background border-t pt-3 pb-1`
-- Move it from inside the scrollable `space-y-6` div to a sibling position
+**`src/components/settings/AppMenuSettings.tsx`**:
+- Add `ai_scan` entry to `SIDEBAR_ITEM_META`
 
-### File: `src/components/ai-scan/BrowserScanRunner.tsx`
-- Change viewer container from `flex-1 min-h-[300px]` to a fixed `min-h-[400px] h-[50vh]` to guarantee dimensions
-- Delay SDK initialization: use a ref check to confirm container has non-zero `offsetHeight` before enabling
-- Show "Fel: SDK kunde inte laddas" when `sdkStatus === 'failed'` instead of staying on "Laddar..."
-- Add background color `bg-muted` to viewer container for better visual appearance
+### 2. Pre-select All Templates by Default
 
-### File: `src/pages/AiAssetScan.tsx`
-- Add `bg-background` to root container to fix white background in dark mode
+**`src/components/ai-scan/ScanConfigPanel.tsx`**:
+- On initial load, set `selectedTemplates` to contain all active template `object_type` values instead of starting empty
+- Add a `useEffect` that populates `selectedTemplates` when `templates` prop changes and selection is empty
 
-## Files to Modify
+### 3. Pre-select Building When Launched from Building Context
+
+**`src/pages/AiAssetScan.tsx`** (or `ScanConfigPanel.tsx`):
+- Accept an optional `preselectedBuildingGuid` prop
+- When provided, auto-set `selectedBuilding` to that value on mount
+- The `MainContent.tsx` integration can pass the current `selectedFacility?.fm_guid` from AppContext
+
+### 4. Improve Desktop UI Layout
+
+**`src/pages/AiAssetScan.tsx`**:
+- Replace `overflow-hidden` with `overflow-auto` on the root container so the page scrolls vertically
+- Use a max-width container (`max-w-4xl mx-auto`) for desktop to prevent cards from stretching too wide
+- Remove the restrictive `h-full` + `flex-col` + `min-h-0` stacking that causes the start button to be hidden
+
+**`src/components/ai-scan/ScanConfigPanel.tsx`**:
+- Restructure the layout so on desktop (md+), building selection and template selection sit side-by-side in a 2-column grid (`grid grid-cols-1 md:grid-cols-2 gap-4`)
+- The info card and start button stay full-width below
+- Remove `h-full` / `flex-1 overflow-auto` constraints -- let the content flow naturally and page-level scroll handle overflow
+- Make the start button always visible at the bottom without needing `sticky` by ensuring the content fits better
+
+**`src/components/ai-scan/BrowserScanRunner.tsx`**:
+- Apply `bg-background` to match theme
+- Ensure the viewer container uses `flex-1` within the page so it fills available space
+
+### 5. Fix SDK Initialization Hang
+
+The "360-visaren kunde inte laddas" error occurs because the Ivion SDK fails to initialize. The current flow:
+1. Container renders with `min-h-[400px]` and `h-[50vh]`
+2. SDK polls for dimensions, enables, then starts loading
+3. SDK loads via `loadIvionSdk` which creates `<ivion>` element and calls `getApi()`
+4. `getApi()` times out or fails silently
+
+Root cause investigation: The `loadIvionSdk` function temporarily injects `?site=` into the URL, which can cause React Router to remount components. Combined with the concurrent load guard (`activeLoadPromise`), a failed first attempt can block retries.
+
+**`src/components/ai-scan/BrowserScanRunner.tsx`**:
+- Add more robust error logging: capture and display the actual error message from `useIvionSdk` failure
+- On retry, ensure `activeLoadPromise` is cleared by calling `retry()` which already handles cleanup
+- Increase the timeout slightly and add a visible countdown so users know something is happening
+- Show the actual SDK status transitions in the UI (e.g., "Laddar SDK...", "Autentiserar...", "Ansluter till site...")
+
+**`src/hooks/useIvionSdk.ts`**:
+- Add error state tracking so the actual error message propagates to consumers (currently only `sdkStatus: 'failed'` is returned with no detail)
+- Return `errorMessage` alongside `sdkStatus`
+
+## Files to Create/Modify
 
 | File | Change |
 |---|---|
-| `src/components/ai-scan/ScanConfigPanel.tsx` | Sticky bottom start button |
-| `src/components/ai-scan/BrowserScanRunner.tsx` | Fix SDK container sizing, add dimension check before init, handle failed state |
-| `src/pages/AiAssetScan.tsx` | Fix background color for dark mode |
+| `src/lib/constants.ts` | Add `ai_scan` to `DEFAULT_APP_CONFIGS` and `DEFAULT_SIDEBAR_ORDER` |
+| `src/components/layout/LeftSidebar.tsx` | Add `ai_scan` to `SIDEBAR_ITEM_META` |
+| `src/components/layout/MainContent.tsx` | Add `case 'ai_scan'` rendering `AiAssetScan` |
+| `src/components/settings/AppMenuSettings.tsx` | Add `ai_scan` to settings meta |
+| `src/pages/AiAssetScan.tsx` | Accept `preselectedBuildingGuid`, fix layout for scroll and desktop |
+| `src/components/ai-scan/ScanConfigPanel.tsx` | Pre-select all templates, 2-column desktop layout, remove sticky hack |
+| `src/components/ai-scan/BrowserScanRunner.tsx` | Better error display, theme-aware background |
+| `src/hooks/useIvionSdk.ts` | Expose `errorMessage` from SDK failures |
+
