@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      acc_assetplus_guid_map: {
+        Row: {
+          acc_fm_guid: string
+          assetplus_fm_guid: string
+          created_at: string
+          object_type: number
+          synced_at: string | null
+        }
+        Insert: {
+          acc_fm_guid: string
+          assetplus_fm_guid?: string
+          created_at?: string
+          object_type?: number
+          synced_at?: string | null
+        }
+        Update: {
+          acc_fm_guid?: string
+          assetplus_fm_guid?: string
+          created_at?: string
+          object_type?: number
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       acc_model_translations: {
         Row: {
           building_fm_guid: string | null
