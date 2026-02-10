@@ -1,24 +1,41 @@
 import React, { useRef, useState } from 'react';
-import { Camera, X, ImagePlus } from 'lucide-react';
+import { Camera, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+export interface PhotoData {
+  fileName: string;
+  mimeType: string;
+  data: string; // base64 without prefix
+}
+
 interface PhotoCaptureProps {
   photos: string[];
   onPhotosChange: (photos: string[]) => void;
+  onPhotoDataChange?: (photoData: PhotoData[]) => void;
   maxPhotos?: number;
   workOrderId: string;
 }
 
+const readFileAsBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 const PhotoCapture: React.FC<PhotoCaptureProps> = ({
   photos,
   onPhotosChange,
+  onPhotoDataChange,
   maxPhotos = 3,
   workOrderId,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [photoDataList, setPhotoDataList] = useState<PhotoData[]>([]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -30,6 +47,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
     setIsUploading(true);
     try {
       const uploadedUrls: string[] = [];
+      const newPhotoData: PhotoData[] = [];
 
       for (const file of filesToUpload) {
         if (!file.type.startsWith('image/')) {
@@ -41,6 +59,16 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
           continue;
         }
 
+        // Read base64
+        const dataUrl = await readFileAsBase64(file);
+        const base64Raw = dataUrl.split(',')[1] || '';
+        newPhotoData.push({
+          fileName: file.name,
+          mimeType: file.type,
+          data: base64Raw,
+        });
+
+        // Upload to storage
         const fileExt = file.name.split('.').pop();
         const fileName = `fault-reports/${workOrderId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
 
@@ -61,8 +89,12 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
         uploadedUrls.push(urlData.publicUrl);
       }
 
-      if (uploadedUrls.length > 0) {
-        onPhotosChange([...photos, ...uploadedUrls]);
+      if (uploadedUrls.length > 0 || newPhotoData.length > 0) {
+        const updatedPhotos = [...photos, ...uploadedUrls];
+        const updatedData = [...photoDataList, ...newPhotoData];
+        onPhotosChange(updatedPhotos);
+        setPhotoDataList(updatedData);
+        onPhotoDataChange?.(updatedData);
       }
     } catch (error) {
       console.error('Photo upload error:', error);
@@ -77,13 +109,15 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
 
   const removePhoto = (index: number) => {
     onPhotosChange(photos.filter((_, i) => i !== index));
+    const updatedData = photoDataList.filter((_, i) => i !== index);
+    setPhotoDataList(updatedData);
+    onPhotoDataChange?.(updatedData);
   };
 
   const canAddMore = photos.length < maxPhotos;
 
   return (
     <div className="space-y-3">
-      {/* Explicit "Ta Bild / Bläddra..." button */}
       {canAddMore && (
         <Button
           type="button"
@@ -101,7 +135,6 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
         </Button>
       )}
 
-      {/* Photo thumbnails */}
       {photos.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {photos.map((url, index) => (

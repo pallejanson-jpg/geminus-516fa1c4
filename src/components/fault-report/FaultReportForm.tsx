@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormField, FormItem, FormControl, FormMessage } from '@/components/ui/form';
-import PhotoCapture from './PhotoCapture';
+import PhotoCapture, { type PhotoData } from './PhotoCapture';
 import FormFieldWithHelp from './FormFieldWithHelp';
 import ClearableInput from './ClearableInput';
 import ErrorCodeCombobox, { type ErrorCode } from './ErrorCodeCombobox';
@@ -31,7 +31,7 @@ interface FaultReportFormProps {
   installationNumber?: string;
   assetName?: string;
   errorCodes?: ErrorCode[];
-  onSubmit: (data: FaultReportFormData, photos: string[]) => Promise<void>;
+  onSubmit: (data: FaultReportFormData, photos: string[], photoData: PhotoData[]) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -45,6 +45,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
   isSubmitting,
 }) => {
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoData, setPhotoData] = useState<PhotoData[]>([]);
   const workOrderId = useId().replace(/:/g, '');
 
   const form = useForm<FaultReportFormData>({
@@ -58,7 +59,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
   });
 
   const handleSubmit = (data: FaultReportFormData) => {
-    onSubmit(data, photos);
+    onSubmit(data, photos, photoData);
   };
 
   return (
@@ -67,7 +68,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
         <CardTitle className="text-lg">Anmäl fel</CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Installation info – simple text line matching er-rep.com */}
+        {/* Installation info */}
         {(installationNumber || assetName) && (
           <div className="rounded-md bg-muted/40 border border-border px-3 py-2 mb-5">
             <p className="text-sm">
@@ -106,7 +107,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Error code – combobox */}
+            {/* Error code */}
             <FormField
               control={form.control}
               name="errorCode"
@@ -128,7 +129,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Email – clearable */}
+            {/* Email */}
             <FormField
               control={form.control}
               name="email"
@@ -154,7 +155,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               )}
             />
 
-            {/* Phone – clearable */}
+            {/* Phone */}
             <FormField
               control={form.control}
               name="phone"
@@ -186,6 +187,7 @@ const FaultReportForm: React.FC<FaultReportFormProps> = ({
               <PhotoCapture
                 photos={photos}
                 onPhotosChange={setPhotos}
+                onPhotoDataChange={setPhotoData}
                 workOrderId={workOrderId}
               />
             </div>
