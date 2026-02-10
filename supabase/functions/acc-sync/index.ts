@@ -1826,13 +1826,12 @@ serve(async (req: Request) => {
           );
         }
 
-        // Trigger translation job - request OBJ for XKT conversion + SVF2 for viewer
+        // Trigger translation job - SVF2 only (OBJ is not supported for RVT files)
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
             formats: [
               { type: "svf2", views: ["3d"] },
-              { type: "obj" },
             ],
           },
         };
@@ -1867,7 +1866,7 @@ serve(async (req: Request) => {
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
           translation_status: "pending",
-          output_format: "svf2,obj",
+          output_format: "svf2",
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
@@ -1999,22 +1998,41 @@ serve(async (req: Request) => {
           // Log all derivatives for debugging
           console.log(`[download-derivative] Available derivatives (${allDerivs.length}):`, JSON.stringify(allDerivs.map(d => ({ role: d.role, mime: d.mime, outputType: d.outputType, name: d.name, urn: d.urn?.substring(0, 60) }))));
 
-          // Prefer OBJ derivative, then glTF, then any graphics
-          const objDeriv = allDerivs.find(d => 
-            (d.outputType === 'obj' || d.mime === 'application/octet-stream') && d.role === 'graphics'
-          );
+          // Look for downloadable single-file formats: glTF/GLB first, then OBJ
           const gltfDeriv = allDerivs.find(d => 
             d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
           );
-          derivUrn = objDeriv?.urn || gltfDeriv?.urn || allDerivs.find(d => d.role === "graphics")?.urn;
-          
-          const selectedFormat = objDeriv ? 'obj' : gltfDeriv ? 'gltf' : 'svf2';
+          const objDeriv = allDerivs.find(d => 
+            d.outputType === 'obj' && d.role === 'graphics'
+          );
+
+          // Check if we only have SVF2 (which is not a single downloadable file)
+          const hasSvf2Only = !gltfDeriv && !objDeriv;
+          const svf2Deriv = allDerivs.find(d => d.role === "graphics");
+
+          if (hasSvf2Only) {
+            console.log(`[download-derivative] Only SVF2 derivatives found. SVF2 is a multi-file bubble format and cannot be downloaded as a single file for client-side XKT conversion.`);
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: "RVT-filer genererar SVF2-format som inte kan konverteras till XKT i webbläsaren. " +
+                       "SVF2 är ett multi-fil format som kräver serverbaserad konvertering. " +
+                       "Hierarkidata (byggnader, våningar, rum) har synkats korrekt via BIM-synk.",
+                formatLimitation: true,
+                availableFormats: allDerivs.map(d => d.outputType || d.mime).filter(Boolean),
+              }),
+              { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+
+          derivUrn = gltfDeriv?.urn || objDeriv?.urn;
+          const selectedFormat = gltfDeriv ? 'gltf' : 'obj';
           console.log(`[download-derivative] Selected format: ${selectedFormat}, URN: ${derivUrn?.substring(0, 60)}`);
         }
 
         if (!derivUrn) {
           return new Response(
-            JSON.stringify({ success: false, error: "No downloadable derivative found" }),
+            JSON.stringify({ success: false, error: "Ingen nedladdningsbar geometri hittades." }),
             { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }

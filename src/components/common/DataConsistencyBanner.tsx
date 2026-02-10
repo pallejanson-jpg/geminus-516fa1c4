@@ -137,7 +137,9 @@ export const DataConsistencyBanner: React.FC = () => {
             <p className="mt-1">{deltaResult.message}</p>
           </div>
           
-          <div className="mt-3 flex gap-2">
+          <p className="mt-1 text-xs text-muted-foreground/70 italic">ACC-data påverkas inte.</p>
+          
+          <div className="mt-2 flex gap-2">
             <Button
               size="sm"
               onClick={syncWithCleanup}
@@ -145,7 +147,7 @@ export const DataConsistencyBanner: React.FC = () => {
               className="gap-1.5"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Synkar...' : 'Synka & rensa'}
+              {isSyncing ? 'Synkar...' : 'Synka med Asset+'}
             </Button>
             <Button
               size="sm"
