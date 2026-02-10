@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.acc-auth]
 verify_jwt = false
+
+[functions.acc-to-assetplus]
+verify_jwt = false
