@@ -1,94 +1,83 @@
 
 
-# Fix Fault Report: API Discovery, Photo Attachments
+# Fix Data Consistency + 3D Conversion from ACC
 
-## Problem 1: API returns 404
+## Problem 1: ACC-synkade byggnader raderas vid "Synka & rensa"
 
-The edge function calls `https://er-rep.com/api/v1/errorreport/register/{key}` but gets a 404. The correct API path is unknown and the site blocks scraping.
+**Grundorsak:** ACC-synkade objekt (t.ex. "Stadshuset Nyköping") sparas med `is_local = false` och `source: acc-bim` i attributes. Men orphan-rensningen i `asset-plus-sync` filtrerar bara på `is_local = false` -- den vet inte att ACC-objekt inte ska finnas i Asset+. Resultatet: allt som finns lokalt men inte i Asset+ raderas, inklusive ACC-data.
 
-### Solution: Add API path discovery to the edge function
+**Databas idag:**
+- 12 byggnader, varav 11 kommer från Asset+ och 1 ("Stadshuset Nyköping") kommer from ACC (`fm_guid` borjar med `acc-bim-`)
 
-Update the `errorreport-proxy` edge function to try multiple common API path patterns when `get-config` is called, and return the first one that succeeds. This is a one-time discovery -- once found, the working path is cached in the response.
+### Losning
 
-**Paths to try (in order):**
-1. `/api/v1/errorreport/register/{key}` (current)
-2. `/api/errorreport/register/{key}`
-3. `/api/v1/errorreport/{key}`
-4. `/api/errorreport/{key}`
-5. `/{key}` (the public URL path itself, with `Accept: application/json` header)
+Uppdatera `check-delta` och `sync-with-cleanup` samt `sync-structure` i `asset-plus-sync/index.ts` sa att de **exkluderar** objekt vars `fm_guid` borjar med `acc-bim-` (alternativt kollar `attributes->>'source' = 'acc-bim'`). Den enklaste och mest robusta metoden ar att filtrera pa `fm_guid NOT LIKE 'acc-bim-%'` eftersom alla ACC-objekt har detta prefix.
 
-The edge function will log each attempt and its status code. When one returns 200, that path is used. The working path pattern is returned in the response so we can hardcode it once discovered.
+**Andringar i `supabase/functions/asset-plus-sync/index.ts`:**
 
-**File: `supabase/functions/errorreport-proxy/index.ts`**
+1. **`check-delta`** (rad ~1474): Lagg till `.not('fm_guid', 'like', 'acc-bim-%')` i den lokala rakningen sa att ACC-objekt inte raknas med i diskrepansen.
 
-- Add a `discoverApiPath` helper that tries multiple URL patterns
-- Log each attempt with status code
-- For the `get-config` action, use discovery instead of a single hardcoded path
-- For the `submit` action, use the same discovered path pattern
-- Return `_discoveredPath` in the response for debugging
+2. **`sync-with-cleanup`** (rad ~1552): I `fetchAllLocalFmGuids`-anropet, eller direkt efter, filtrera bort fm_guids som borjar med `acc-bim-` fran orphan-listan.
 
-## Problem 2: Photos not included in submission
+3. **`sync-structure`** (rad ~680): Samma fix -- filtrera bort `acc-bim-*` fran orphan-listan.
 
-Currently, `PhotoCapture` uploads images to Supabase Storage and returns public URLs. When submitting to er-rep.com, the code sends `attachments: []` (empty). The external API likely expects base64-encoded image data, not Supabase URLs.
+4. **`fetchAllLocalFmGuids`**: Lagg till en valfri `excludePrefix`-parameter sa att funktionen kan exkludera ACC-prefixade GUIDs.
 
-### Solution: Convert photos to base64 on the client side
+5. **Uppdatera bannerns knapptext**: Andra "Synka & rensa" till "Synka med Asset+" for tydlighet, och visa ett informationsmeddelande om ACC-data inte paverkas.
 
-Since edge functions cannot fetch from the preview server, photo data must be converted to base64 in the browser before submission.
+---
 
-**File: `src/components/fault-report/PhotoCapture.tsx`**
+## Problem 2: 3D-konvertering fran ACC fungerar inte
 
-- In addition to uploading to storage (for local work orders), also store the base64 data of each photo in state
-- Use `FileReader.readAsDataURL` to capture base64 when the file is selected
-- Expose both `photos` (URLs for display) and `photoData` (base64 for API submission)
+Det finns **tva troliga orsaker**:
 
-Alternative (simpler): Change `PhotoCapture` to keep base64 data alongside URLs.
+### 2a: OBJ-format stods inte av Autodesk for Revit-filer
 
-**File: `src/pages/FaultReport.tsx`**
+Autodesk Model Derivative API stoder **inte** OBJ-output for Revit (.rvt) filer -- bara SVF/SVF2. OBJ stods bara for enkla formaten (DWG, STEP, etc.). Nar vi skickar `{ type: "obj" }` ignoreras det eller misslyckas tyst, och vi hamnar med enbart SVF2-derivatives som klientkonverteraren inte kan lasa.
 
-- Track `photoBase64` state alongside `photos` URLs
-- When `qrKey` is present (external API mode), include base64 data in the `attachments` array of the payload
-- Clean base64 strings (remove `data:image/...;base64,` prefix, strip whitespace)
+### 2b: SVF2-derivatives ar inte nedladdningsbara som en fil
 
-**File: `src/components/fault-report/FaultReportForm.tsx` and `MobileFaultReport.tsx`**
+SVF2 ar ett multi-fil "bubble"-format med tusentals small chunks. Nar vi valjer en SVF2-derivat-URN och forsoker ladda ner den som en enda fil, far vi antingen en JSON-manifest eller en liten chunk -- inte nagon geometry-fil.
 
-- Update `PhotoCapture` usage to pass through base64 callback
-- Update `onSubmit` signature to include photo base64 data
+### Losning: Anvand SVF2-to-XKT konvertering via servern
 
-### Payload format for attachments:
-```text
-attachments: [
-  {
-    fileName: "photo1.jpg",
-    mimeType: "image/jpeg",
-    data: "base64-string-here..."
-  }
-]
-```
+Den korrekta pipelinen for Revit-filer ar:
 
-## Problem 3: Better error handling
+1. Oversatt till SVF2 (behall nuvarande)
+2. Ladda ner **hela SVF2-bubblan** (alla filer i manifestet)
+3. Konvertera SVF2 till XKT med `@xeokit/xeokit-convert`s `parseSVF2IntoXKTModel` (kravs server-side)
 
-The current error message "Kunde inte lasa QR-koden. Forsok igen." is misleading -- it's not a QR code reading issue, it's an API error. 
+**Men** detta ar komplext och kravs mycket minne. Ett enklare alternativ:
 
-**File: `src/pages/FaultReport.tsx`**
+**Alternativ: Anvand Autodesk APS Viewer SDK for att visa modellen direkt (utan XKT-konvertering)**
 
-- Change the error message to be more specific: show the HTTP status code if available
-- Add a "Retry" button on the error screen instead of a dead end
-- If 404, show: "Kunde inte hitta installationen. Kontrollera att QR-koden ar giltig."
+Det enklaste ar att gora 3D-konverteringen till ett **informativt felmeddelande** som forklarar begransningen, och istallet prioritera att ACC-synkad hierarkidata fungerar korrekt.
 
-## Technical Summary
+### Andringar i `supabase/functions/acc-sync/index.ts`:
 
-| File | Changes |
+1. **`translate-model`**: Ta bort `{ type: "obj" }` fran output-formaten (det fungerar inte for RVT). Behall bara `{ type: "svf2", views: ["3d"] }`.
+
+2. **`download-derivative`**: Nar endas SVF2-derivatives hittas, returnera ett tydligt felmeddelande: "RVT-filer kan for narvarande inte konverteras till XKT. SVF2-format kraver serverbaserad konvertering."
+
+3. Logga tydligt vilka derivatives som finns tillgangliga sa att problemet kan felsökas.
+
+### Andringar i `src/services/acc-xkt-converter.ts`:
+
+1. Forbattra felmeddelandet i `detectFormat` nar `unknown` format upptacks -- visa exakt vilka bytes som hittades.
+
+### Andringar i `src/components/settings/ApiSettingsModal.tsx`:
+
+1. Visa ett tydligare felmeddelande nar 3D-konvertering misslyckas for RVT-filer, med forklaring att formatet inte stods annu.
+
+---
+
+## Sammanfattning
+
+| Fil | Andring |
 |---|---|
-| `supabase/functions/errorreport-proxy/index.ts` | Add API path discovery with multiple URL patterns; log each attempt |
-| `src/pages/FaultReport.tsx` | Track photo base64 data; include in attachments payload; improve error messages with retry button |
-| `src/components/fault-report/PhotoCapture.tsx` | Capture base64 data alongside URL when files are selected; expose via callback |
-| `src/components/fault-report/FaultReportForm.tsx` | Pass through photo base64 data from PhotoCapture to onSubmit |
-| `src/components/fault-report/MobileFaultReport.tsx` | Same changes as FaultReportForm for mobile layout |
-
-## Expected Result
-
-- Edge function discovers the correct API path and logs it
-- Photos are converted to base64 client-side and sent as attachments
-- Error screen shows a meaningful message and a retry button
-- Once the correct API path is found, it can be hardcoded for performance
+| `supabase/functions/asset-plus-sync/index.ts` | Exkludera ACC-objekt (`acc-bim-*`) fran orphan-rensning och delta-check |
+| `supabase/functions/acc-sync/index.ts` | Ta bort OBJ-format, forbattra derivative-logging och felmeddelanden |
+| `src/services/acc-xkt-converter.ts` | Battre felmeddelanden for okanda format |
+| `src/components/settings/ApiSettingsModal.tsx` | Tydligare UI-feedback vid 3D-konverteringsfel |
+| `src/components/common/DataConsistencyBanner.tsx` | Uppdatera knapptext for tydlighet |
 
