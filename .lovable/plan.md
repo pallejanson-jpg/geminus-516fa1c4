@@ -1,83 +1,116 @@
 
+# ACC till Asset+ synkronisering
 
-# Fix Data Consistency + 3D Conversion from ACC
+## Oversikt
 
-## Problem 1: ACC-synkade byggnader raderas vid "Synka & rensa"
+Skapa en ny edge function `acc-to-assetplus` som tar ACC-synkade objekt fran den lokala databasen och skriver dem till Asset+ via dess API. Objekten ska fa riktiga UUID-baserade FmGuid (som Asset+ kraver) och flaggan `createdInModel = true` (Finns i modell = Yes).
 
-**Grundorsak:** ACC-synkade objekt (t.ex. "Stadshuset Nyköping") sparas med `is_local = false` och `source: acc-bim` i attributes. Men orphan-rensningen i `asset-plus-sync` filtrerar bara på `is_local = false` -- den vet inte att ACC-objekt inte ska finnas i Asset+. Resultatet: allt som finns lokalt men inte i Asset+ raderas, inklusive ACC-data.
+## Utmaningar och losningar
 
-**Databas idag:**
-- 12 byggnader, varav 11 kommer från Asset+ och 1 ("Stadshuset Nyköping") kommer from ACC (`fm_guid` borjar med `acc-bim-`)
+### 1. FmGuid-format
 
-### Losning
+ACC-objekt har idag fm_guid som `acc-bim-building-urnadsk...` -- detta ar inte ett giltigt UUID som Asset+ kraver. Losningen:
 
-Uppdatera `check-delta` och `sync-with-cleanup` samt `sync-structure` i `asset-plus-sync/index.ts` sa att de **exkluderar** objekt vars `fm_guid` borjar med `acc-bim-` (alternativt kollar `attributes->>'source' = 'acc-bim'`). Den enklaste och mest robusta metoden ar att filtrera pa `fm_guid NOT LIKE 'acc-bim-%'` eftersom alla ACC-objekt har detta prefix.
+- Generera ett riktigt UUID (v4) for varje ACC-objekt vid forsta synk till Asset+
+- Spara mappningen `acc_fm_guid -> assetplus_fm_guid` i en ny tabell `acc_assetplus_guid_map`
+- Vid efterfoljande synkar, anvand befintlig mappning
 
-**Andringar i `supabase/functions/asset-plus-sync/index.ts`:**
+### 2. Asset+ hierarki-krav
 
-1. **`check-delta`** (rad ~1474): Lagg till `.not('fm_guid', 'like', 'acc-bim-%')` i den lokala rakningen sa att ACC-objekt inte raknas med i diskrepansen.
+Asset+ kraver strikt hierarki vid skapande:
+- **Complex** (Fastighet) -- maste skapas forst, inget parent
+- **Building** -- kraver ett existerande Complex som parent (`parentFmGuid`)
+- **Level** -- kraver ett existerande Building som parent
+- **Space** -- kraver ett existerande Building som parent
+- **Instance** -- kraver ett existerande Building som parent
 
-2. **`sync-with-cleanup`** (rad ~1552): I `fetchAllLocalFmGuids`-anropet, eller direkt efter, filtrera bort fm_guids som borjar med `acc-bim-` fran orphan-listan.
+Det finns inget Complex i ACC-data idag. Losning: Skapa ett default Complex (eller lat anvandaren valja ett existerande) innan byggnaden skapas.
 
-3. **`sync-structure`** (rad ~680): Samma fix -- filtrera bort `acc-bim-*` fran orphan-listan.
+### 3. Obligatoriska falt per objekttyp
 
-4. **`fetchAllLocalFmGuids`**: Lagg till en valfri `excludePrefix`-parameter sa att funktionen kan exkludera ACC-prefixade GUIDs.
+Fran sync-api.md:
+- Complex: `Designation` + `CommonName` (obligatoriska, satt till samma varde om bara ett finns)
+- Building: `Designation` + `CommonName` + `ParentFmGuid` (Complex)
+- Level: `Designation` + `CommonName` + `ParentFmGuid` (Building)
+- Space: `Designation` + `CommonName` + `ParentFmGuid` (Building)
+- Instance: Bara `ParentFmGuid` (Building), designation/commonName valfria
 
-5. **Uppdatera bannerns knapptext**: Andra "Synka & rensa" till "Synka med Asset+" for tydlighet, och visa ett informationsmeddelande om ACC-data inte paverkas.
+### 4. createdInModel-flagga
 
----
+ACC-objekt ar redan `created_in_model = true` i databasen. Dock ar `createdInModel` en read-only systemegenskap i Asset+ -- den satts automatiskt nar objekt skapas via en IFC/Revit-modell. For objekt skapade via API utan modell (som dessa) blir `createdInModel = false/null`.
 
-## Problem 2: 3D-konvertering fran ACC fungerar inte
+For att uppna "Finns i modell = Yes" i Asset+ behovs antingen:
+- a) Att objekten kopplas till en BIM-modell via `ProcessIfc` / revision-flode (komplext)
+- b) Att man uppdaterar egenskapen via `UpdateBimObjectsPropertiesData` (om den ar redigerbar)
+- c) Acceptera att `createdInModel` inte satts, men lagga till en user parameter "ACC Modell" = true for att markera ursprunget
 
-Det finns **tva troliga orsaker**:
+Rekommendation: Borja med (c) -- skapa en user parameter som marker att objektet kommer fran ACC-modell. Utred (a/b) som nastarsteg.
 
-### 2a: OBJ-format stods inte av Autodesk for Revit-filer
+## Implementation
 
-Autodesk Model Derivative API stoder **inte** OBJ-output for Revit (.rvt) filer -- bara SVF/SVF2. OBJ stods bara for enkla formaten (DWG, STEP, etc.). Nar vi skickar `{ type: "obj" }` ignoreras det eller misslyckas tyst, och vi hamnar med enbart SVF2-derivatives som klientkonverteraren inte kan lasa.
+### Steg 1: Ny databastabell `acc_assetplus_guid_map`
 
-### 2b: SVF2-derivatives ar inte nedladdningsbara som en fil
+```text
+acc_fm_guid     TEXT PRIMARY KEY   -- t.ex. "acc-bim-building-urn..."
+assetplus_fm_guid UUID NOT NULL    -- Genererat UUID for Asset+
+object_type     INTEGER            -- 0=Complex, 1=Building, 2=Level, 3=Space, 4=Instance
+synced_at       TIMESTAMPTZ
+```
 
-SVF2 ar ett multi-fil "bubble"-format med tusentals small chunks. Nar vi valjer en SVF2-derivat-URN och forsoker ladda ner den som en enda fil, far vi antingen en JSON-manifest eller en liten chunk -- inte nagon geometry-fil.
+### Steg 2: Ny edge function `acc-to-assetplus`
 
-### Losning: Anvand SVF2-to-XKT konvertering via servern
+Flode:
+1. Hamta alla ACC-objekt fran `assets`-tabellen (where `attributes->>'source' = 'acc-bim'`)
+2. For varje byggnad:
+   a. Kontrollera om den redan har en Asset+ mappning (i `acc_assetplus_guid_map`)
+   b. Om inte: Generera UUID, skapa Complex + Building via `AddObjectList`
+   c. Skapa Levels via `AddObjectList` (parent = Building FmGuid)
+   d. Skapa Spaces via `AddObjectList` (parent = Building FmGuid)
+   e. Skapa Instances via `AddObjectList` (parent = Building FmGuid, batch om 50)
+   f. Satt relationships via `UpsertRelationships` (koppla Space till Level, Instance till Space)
+   g. Uppdatera properties via `UpdateBimObjectsPropertiesData` (commonName, designation, etc.)
+3. Spara alla mappningar i `acc_assetplus_guid_map`
+4. Uppdatera lokala `assets`-rader med de nya Asset+ FmGuid (lagga till i attributes)
 
-Den korrekta pipelinen for Revit-filer ar:
+### Steg 3: UI-knapp i ApiSettingsModal
 
-1. Oversatt till SVF2 (behall nuvarande)
-2. Ladda ner **hela SVF2-bubblan** (alla filer i manifestet)
-3. Konvertera SVF2 till XKT med `@xeokit/xeokit-convert`s `parseSVF2IntoXKTModel` (kravs server-side)
+Lagg till en "Synka till Asset+" knapp i ACC-sektionen av installningarna. Knappen:
+- Visar hur manga ACC-objekt som annu inte synkats till Asset+
+- Kor synken sekventiellt (en byggnad i taget) med progress-indikator
+- Visar resultat (antal skapade / misslyckade)
 
-**Men** detta ar komplext och kravs mycket minne. Ett enklare alternativ:
+### Steg 4: Uppdatera `acc-sync` for att satta `created_in_model`
 
-**Alternativ: Anvand Autodesk APS Viewer SDK for att visa modellen direkt (utan XKT-konvertering)**
+Forsalra att alla ACC-objekt som synkas fran BIM-modeller far `created_in_model = true` i den lokala databasen (detta ar redan implementerat).
 
-Det enklaste ar att gora 3D-konverteringen till ett **informativt felmeddelande** som forklarar begransningen, och istallet prioritera att ACC-synkad hierarkidata fungerar korrekt.
+## Ordning for skapande i Asset+
 
-### Andringar i `supabase/functions/acc-sync/index.ts`:
+```text
+1. Complex (om det inte redan finns)
+   |
+   +-- 2. Building (ParentFmGuid = Complex)
+       |
+       +-- 3. Level (ParentFmGuid = Building)
+       |
+       +-- 4. Space (ParentFmGuid = Building)
+       |
+       +-- 5. Instance (ParentFmGuid = Building)
 
-1. **`translate-model`**: Ta bort `{ type: "obj" }` fran output-formaten (det fungerar inte for RVT). Behall bara `{ type: "svf2", views: ["3d"] }`.
+6. UpsertRelationships: Space -> Level, Instance -> Space
+7. UpdateBimObjectsPropertiesData: commonName, designation, area, etc.
+```
 
-2. **`download-derivative`**: Nar endas SVF2-derivatives hittas, returnera ett tydligt felmeddelande: "RVT-filer kan for narvarande inte konverteras till XKT. SVF2-format kraver serverbaserad konvertering."
-
-3. Logga tydligt vilka derivatives som finns tillgangliga sa att problemet kan felsökas.
-
-### Andringar i `src/services/acc-xkt-converter.ts`:
-
-1. Forbattra felmeddelandet i `detectFormat` nar `unknown` format upptacks -- visa exakt vilka bytes som hittades.
-
-### Andringar i `src/components/settings/ApiSettingsModal.tsx`:
-
-1. Visa ett tydligare felmeddelande nar 3D-konvertering misslyckas for RVT-filer, med forklaring att formatet inte stods annu.
-
----
-
-## Sammanfattning
+## Filer att skapa/andra
 
 | Fil | Andring |
 |---|---|
-| `supabase/functions/asset-plus-sync/index.ts` | Exkludera ACC-objekt (`acc-bim-*`) fran orphan-rensning och delta-check |
-| `supabase/functions/acc-sync/index.ts` | Ta bort OBJ-format, forbattra derivative-logging och felmeddelanden |
-| `src/services/acc-xkt-converter.ts` | Battre felmeddelanden for okanda format |
-| `src/components/settings/ApiSettingsModal.tsx` | Tydligare UI-feedback vid 3D-konverteringsfel |
-| `src/components/common/DataConsistencyBanner.tsx` | Uppdatera knapptext for tydlighet |
+| `supabase/migrations/xxx_acc_assetplus_guid_map.sql` | Ny tabell for GUID-mappning |
+| `supabase/functions/acc-to-assetplus/index.ts` | Ny edge function for synk ACC -> Asset+ |
+| `src/components/settings/ApiSettingsModal.tsx` | UI-knapp "Synka till Asset+" med progress |
 
+## Framtida arbete (utanfor scope)
+
+- Utred om `createdInModel` kan sattas via API eller om det kraver en modell-koppling
+- XKT-hantering: Asset+ behover XKT-filer (RestoreRevisionAndXktData endpoint finns) -- detta ar ett separat arbete
+- Tvavags-synk: Hantera uppdateringar fran Asset+ tillbaka till ACC-data
+- Parameterkonfiguration: Hamta `GetAllParameters` fran Asset+ for att mappa ratt user parameters
