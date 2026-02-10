@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geminus — Digital Twin Platform</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#fff;user-select:none}
+  #container{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .slide-frame{width:1920px;height:1080px;position:absolute;left:50%;top:50%;transform-origin:center center}
+  .slide{width:100%;height:100%;display:none;overflow:hidden;animation:fadeIn .35s ease-out}
+  .slide.active{display:flex}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  /* Progress */
+  #progress{position:fixed;bottom:16px;left:24px;right:24px;height:4px;background:rgba(255,255,255,.15);border-radius:4px;z-index:50}
+  #progress-bar{height:100%;background:#22d3ee;border-radius:4px;transition:width .3s}
+  #counter{position:fixed;top:16px;right:16px;font-size:14px;color:rgba(255,255,255,.4);font-family:monospace;z-index:50}
+
+  /* Nav */
+  .nav-btn{position:fixed;top:50%;transform:translateY(-50%);z-index:50;background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:48px;line-height:1;padding:8px}
+  .nav-btn:hover{color:rgba(255,255,255,.7)}
+  #prev{left:12px}
+  #next{right:12px}
+
+  /* Typography helpers */
+  h1{font-size:120px;font-weight:700;line-height:1}
+  h2{font-size:72px;font-weight:700;margin-bottom:24px}
+  h3{font-size:28px;font-weight:600;margin-bottom:8px}
+  .sub{font-size:28px;color:rgba(255,255,255,.55);margin-bottom:48px}
+  .body{font-size:22px;color:rgba(255,255,255,.65);line-height:1.6}
+  .small{font-size:20px;color:rgba(255,255,255,.5)}
+  .italic{font-style:italic;color:rgba(255,255,255,.35)}
+
+  /* Color accents */
+  .tc{color:#22d3ee}.ti{color:#818cf8}.te{color:#34d399}.tp{color:#c084fc}.to{color:#fb923c}.tr{color:#f87171}
+
+  /* Cards */
+  .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:32px}
+  .icon-circle{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0}
+
+  /* Grids */
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:40px}
+  .g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px}
+  .center{display:flex;align-items:center;justify-content:center}
+  .col{display:flex;flex-direction:column}
+  .gap6{gap:24px}
+  .px32{padding:0 128px}
+  .py20{padding-top:80px;padding-bottom:80px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:12px;flex-shrink:0}
+  .bullet{display:flex;align-items:center;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div id="container">
+  <div class="slide-frame" id="frame">
+
+    <!-- Slide 1: Title -->
+    <div class="slide col center" style="background:linear-gradient(135deg,rgba(0,0,0,.85),rgba(0,0,0,.5)),url('') center/cover;background-color:#0f172a">
+      <div style="text-align:center;padding:0 96px">
+        <h1>Geminus</h1>
+        <p style="font-size:42px;color:#67e8f9;margin:24px 0">Your Digital Twin Platform</p>
+        <p class="body" style="max-width:900px;margin:0 auto">A unified platform for managing, visualizing and understanding buildings — with 3D, 360°, AI and IoT.</p>
+      </div>
+    </div>
+
+    <!-- Slide 2: Problem -->
+    <div class="slide col" style="justify-content:center;background:linear-gradient(135deg,#0f172a,#1e293b);padding:80px 128px">
+      <h2 class="tr">The Problem</h2>
+      <div class="g2" style="margin-top:32px">
+        <div style="display:flex;gap:24px;align-items:flex-start">
+          <div class="icon-circle" style="background:rgba(248,113,113,.15)">🗄️</div>
+          <div><h3>Fragmented data</h3><p class="body">BIM, operations, IoT, documents — all in separate systems with no connection.</p></div>
+        </div>
+        <div style="display:flex;gap:24px;align-items:flex-start">
+          <div class="icon-circle" style="background:rgba(248,113,113,.15)">⚠️</div>
+          <div><h3>Lack of overview</h3><p class="body">No unified picture of building condition and assets.</p></div>
+        </div>
+        <div style="display:flex;gap:24px;align-items:flex-start">
+          <div class="icon-circle" style="background:rgba(248,113,113,.15)">📄</div>
+          <div><h3>Manual inventory</h3><p class="body">Time-consuming, error-prone and rarely kept up to date.</p></div>
+        </div>
+        <div style="display:flex;gap:24px;align-items:flex-start">
+          <div class="icon-circle" style="background:rgba(248,113,113,.15)">🌐</div>
+          <div><h3>Poor accessibility</h3><p class="body">Information requires specialized tools and experts to access.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 3: Solution -->
+    <div class="slide col" style="justify-content:center;background:linear-gradient(135deg,#0f172a,#083344);padding:80px 128px">
+      <h2 class="tc">The Solution</h2>
+      <p class="sub">Geminus unifies all building data into a digital twin — accessible for everyone, everywhere.</p>
+      <div class="g4">
+        <div class="card col center" style="text-align:center;gap:20px"><div class="icon-circle tc" style="background:rgba(34,211,238,.15);font-size:36px">🧊</div><h3>3D BIM</h3><p class="small">xeokit-based viewer with IFC models</p></div>
+        <div class="card col center" style="text-align:center;gap:20px"><div class="icon-circle tc" style="background:rgba(34,211,238,.15);font-size:36px">📸</div><h3>360° Panorama</h3><p class="small">NavVis Ivion integration with room navigation</p></div>
+        <div class="card col center" style="text-align:center;gap:20px"><div class="icon-circle tc" style="background:rgba(34,211,238,.15);font-size:36px">🧠</div><h3>AI Assistants</h3><p class="small">Ask Gunnar about data, Ilean about documents</p></div>
+        <div class="card col center" style="text-align:center;gap:20px"><div class="icon-circle tc" style="background:rgba(34,211,238,.15);font-size:36px">⚡</div><h3>IoT & Sensors</h3><p class="small">Real-time data from Senslinc sensors</p></div>
+      </div>
+    </div>
+
+    <!-- Slide 4: Viewer -->
+    <div class="slide" style="background:linear-gradient(135deg,#0f172a,#1e1b4b);padding:64px 128px;align-items:center">
+      <div style="flex:1;padding-right:48px" class="col" style2="justify-content:center">
+        <h2 class="ti" style="font-size:64px">3D + 360° Viewer</h2>
+        <p class="sub" style="font-size:24px">Explore buildings in 3D models and 360° panoramas — side by side or as a Virtual Twin.</p>
+        <div class="col gap6">
+          <div style="display:flex;gap:16px"><span class="ti" style="font-size:24px">🧊</span><div><h3 style="font-size:22px">BIM Models</h3><p class="small">xeokit WebGL rendering, IFC→XKT conversion, object selection</p></div></div>
+          <div style="display:flex;gap:16px"><span class="ti" style="font-size:24px">👁️</span><div><h3 style="font-size:22px">360° Integration</h3><p class="small">NavVis Ivion SDK, camera sync 3D↔360°, POI markers</p></div></div>
+          <div style="display:flex;gap:16px"><span class="ti" style="font-size:24px">🏢</span><div><h3 style="font-size:22px">View Modes</h3><p class="small">Split View, Virtual Twin, room visualization, x-ray mode</p></div></div>
+        </div>
+      </div>
+      <div style="width:640px;flex-shrink:0;display:flex;align-items:center">
+        <div class="card" style="width:100%;height:360px;display:flex;align-items:center;justify-content:center;font-size:64px">🖥️</div>
+      </div>
+    </div>
+
+    <!-- Slide 5: AI Detection -->
+    <div class="slide" style="background:linear-gradient(135deg,#0f172a,#064e3b);padding:64px 128px;align-items:center">
+      <div style="flex:1;padding-right:48px">
+        <h2 class="te" style="font-size:64px">AI Asset Detection</h2>
+        <p class="sub" style="font-size:24px">Automated inventory from 360° panoramas — powered by Google Gemini.</p>
+        <div class="col gap6">
+          <div style="display:flex;gap:16px;align-items:flex-start"><div class="icon-circle" style="background:rgba(52,211,153,.2);width:40px;height:40px;font-size:20px;font-weight:700" class2="te">1</div><div><h3 style="font-size:22px">Configure</h3><p class="small">Select building, templates, and image source.</p></div></div>
+          <div style="display:flex;gap:16px;align-items:flex-start"><div class="icon-circle" style="background:rgba(52,211,153,.2);width:40px;height:40px;font-size:20px;font-weight:700">2</div><div><h3 style="font-size:22px">Scan</h3><p class="small">AI analyzes panoramas and identifies objects.</p></div></div>
+          <div style="display:flex;gap:16px;align-items:flex-start"><div class="icon-circle" style="background:rgba(52,211,153,.2);width:40px;height:40px;font-size:20px;font-weight:700">3</div><div><h3 style="font-size:22px">Review</h3><p class="small">Detections with confidence scores in a review queue.</p></div></div>
+          <div style="display:flex;gap:16px;align-items:flex-start"><div class="icon-circle" style="background:rgba(52,211,153,.2);width:40px;height:40px;font-size:20px;font-weight:700">4</div><div><h3 style="font-size:22px">Register</h3><p class="small">Auto-created as assets with POI in Ivion.</p></div></div>
+        </div>
+      </div>
+      <div style="width:640px;flex-shrink:0;display:flex;align-items:center">
+        <div class="card" style="width:100%;height:360px;display:flex;align-items:center;justify-content:center;font-size:64px">🔍</div>
+      </div>
+    </div>
+
+    <!-- Slide 6: AI Assistants -->
+    <div class="slide" style="background:linear-gradient(135deg,#0f172a,#3b0764);padding:64px 128px;align-items:center">
+      <div style="flex:1;padding-right:48px">
+        <h2 class="tp" style="font-size:64px">AI Assistants</h2>
+        <p class="sub" style="font-size:24px">Ask about the building in natural language — or use voice commands.</p>
+        <div class="col" style="gap:32px">
+          <div><h3 style="color:#fbbf24;font-size:28px">💬 Gunnar</h3><p class="body">Data assistant — assets, rooms, areas, work orders.</p><p class="italic">"How many fire extinguishers on floor 3?"</p></div>
+          <div><h3 style="color:#fb7185;font-size:28px">📄 Ilean</h3><p class="body">Document assistant — drawings, manuals, instructions.</p><p class="italic">"Show the ventilation diagram for fan room B2."</p></div>
+          <div><h3 style="font-size:28px" class="tc">🎤 Voice Control</h3><p class="body">Web Speech API for hands-free navigation and queries.</p></div>
+        </div>
+      </div>
+      <div style="width:360px;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        <div class="card" style="width:100%;height:500px;display:flex;align-items:center;justify-content:center;font-size:64px">🤖</div>
+      </div>
+    </div>
+
+    <!-- Slide 7: Mobile & QR -->
+    <div class="slide" style="background:linear-gradient(135deg,#0f172a,#431407);padding:64px 128px;align-items:center">
+      <div style="flex:1;padding-right:48px">
+        <h2 class="to" style="font-size:64px">Mobile & QR</h2>
+        <p class="sub" style="font-size:24px">Fully responsive — with specialized flows for field workers.</p>
+        <div class="col" style="gap:32px">
+          <div><h3 class="to">📱 QR Fault Reporting</h3><p class="body">Scan QR on an asset → report directly on mobile. Photo, describe, submit.</p></div>
+          <div><h3 class="to">🗂️ Mobile Inventory</h3><p class="body">Step-by-step wizard with GPS, category selection and quick registration.</p></div>
+          <div><h3 class="to">👁️ Mobile Viewers</h3><p class="body">Full-screen 3D and 360° viewers with touch gestures.</p></div>
+        </div>
+      </div>
+      <div style="width:280px;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        <div class="card" style="width:100%;height:500px;display:flex;align-items:center;justify-content:center;font-size:64px;border-radius:32px">📱</div>
+      </div>
+    </div>
+
+    <!-- Slide 8: Tech -->
+    <div class="slide col" style="justify-content:center;background:linear-gradient(135deg,#0f172a,#1e293b);padding:80px 128px">
+      <h2 class="tc">Technology & Architecture</h2>
+      <p class="sub">Built with modern web technologies and cloud services — no server needed.</p>
+      <div class="g2">
+        <div class="card">
+          <h3 class="tc" style="margin-bottom:24px">Frontend</h3>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">React 18 + TypeScript</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Vite — fast development & HMR</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Tailwind CSS + shadcn/ui</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">xeokit SDK — WebGL BIM rendering</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">NavVis Ivion SDK — 360° panorama</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Mapbox GL — map with clusters</span></div>
+        </div>
+        <div class="card">
+          <h3 class="tc" style="margin-bottom:24px">Backend & Integrations</h3>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Lovable Cloud — database, auth, storage</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Edge Functions — Deno serverless</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Asset+ FM API — asset & facility data</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">NavVis Ivion API — POI & panorama</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Senslinc API — IoT sensor data</span></div>
+          <div class="bullet"><span class="dot" style="background:#22d3ee"></span><span class="body">Google Gemini — AI vision & chat</span></div>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:40px;color:rgba(255,255,255,.35);font-size:22px">⚡ Fully serverless — built and hosted on Lovable</p>
+    </div>
+
+  </div>
+</div>
+
+<div id="progress"><div id="progress-bar"></div></div>
+<div id="counter"></div>
+<button class="nav-btn" id="prev">‹</button>
+<button class="nav-btn" id="next">›</button>
+
+<script>
+const slides=document.querySelectorAll('.slide');
+const total=slides.length;
+let cur=0;
+function show(i){
+  cur=Math.max(0,Math.min(i,total-1));
+  slides.forEach((s,idx)=>{s.classList.toggle('active',idx===cur);if(idx===cur){s.style.animation='none';s.offsetHeight;s.style.animation=''}});
+  document.getElementById('progress-bar').style.width=((cur+1)/total*100)+'%';
+  document.getElementById('counter').textContent=(cur+1)+' / '+total;
+}
+show(0);
+document.getElementById('prev').onclick=()=>show(cur-1);
+document.getElementById('next').onclick=()=>show(cur+1);
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();show(cur+1)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();show(cur-1)}
+  else if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}
+});
+// Scale
+function resize(){
+  const sx=window.innerWidth/1920,sy=window.innerHeight/1080,s=Math.min(sx,sy);
+  const f=document.getElementById('frame');
+  f.style.marginLeft='-960px';f.style.marginTop='-540px';f.style.transform='scale('+s+')';
+}
+window.addEventListener('resize',resize);resize();
+// Click nav
+document.getElementById('container').addEventListener('click',e=>{
+  if(e.target.closest('.nav-btn'))return;
+  e.clientX/window.innerWidth>.5?show(cur+1):show(cur-1);
+});
+</script>
+</body>
+</html>
