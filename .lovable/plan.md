@@ -1,96 +1,94 @@
 
 
-# Fix API Settings Responsiveness, ACC Region Logic, and 3D Conversion
+# Fix Fault Report: API Discovery, Photo Attachments
 
-## Issue 1: API Settings Responsiveness
+## Problem 1: API returns 404
 
-The dialog uses `sm:max-w-2xl` with 7 tabs crammed into a `grid-cols-7`, causing text to be cut off on narrow screens. Buttons in the ACC section also overflow horizontally.
+The edge function calls `https://er-rep.com/api/v1/errorreport/register/{key}` but gets a 404. The correct API path is unknown and the site blocks scraping.
 
-### Changes
+### Solution: Add API path discovery to the edge function
 
-**File: `src/components/settings/ApiSettingsModal.tsx`**
+Update the `errorreport-proxy` edge function to try multiple common API path patterns when `get-config` is called, and return the first one that succeeds. This is a one-time discovery -- once found, the working path is cached in the response.
 
-- Widen the dialog: change `sm:max-w-2xl` to `sm:max-w-3xl` to give more breathing room
-- Change the TabsList from `grid-cols-7` to a horizontally scrollable `flex` layout so tabs don't compress on small screens
-- Add `overflow-x-auto` and `whitespace-nowrap` to the TabsList container
-- In the ACC section, wrap the action buttons (`flex-wrap`) and ensure they stack vertically on mobile using `flex-col sm:flex-row`
-- Make the folder browser `max-h` slightly larger on desktop and add horizontal scroll for long file names
-- Ensure the AccFolderNode items don't overflow by adding `overflow-hidden` and `min-w-0` to text containers
+**Paths to try (in order):**
+1. `/api/v1/errorreport/register/{key}` (current)
+2. `/api/errorreport/register/{key}`
+3. `/api/v1/errorreport/{key}`
+4. `/api/errorreport/{key}`
+5. `/{key}` (the public URL path itself, with `Accept: application/json` header)
 
----
+The edge function will log each attempt and its status code. When one returns 200, that path is used. The working path pattern is returned in the response so we can hardcode it once discovered.
 
-## Issue 2: ACC Region Not Controlling Folder Fetches
+**File: `supabase/functions/errorreport-proxy/index.ts`**
 
-The root cause: `list-folders` uses `ACC_ACCOUNT_ID` to construct the hub ID (`b.{accountId}`), and this is a single value. The Autodesk Data Management API scopes folders to a specific hub. If the hub belongs to an EMEA account, changing the region header to US won't make it return US folders -- the hub itself determines which data center and which projects are visible.
+- Add a `discoverApiPath` helper that tries multiple URL patterns
+- Log each attempt with status code
+- For the `get-config` action, use discovery instead of a single hardcoded path
+- For the `submit` action, use the same discovered path pattern
+- Return `_discoveredPath` in the response for debugging
 
-**The fix needs to support separate US and EMEA account IDs**, or alternatively let the user specify an Account ID alongside the region switch.
+## Problem 2: Photos not included in submission
 
-### Changes
+Currently, `PhotoCapture` uploads images to Supabase Storage and returns public URLs. When submitting to er-rep.com, the code sends `attachments: []` (empty). The external API likely expects base64-encoded image data, not Supabase URLs.
 
-**File: `supabase/functions/acc-sync/index.ts`**
+### Solution: Convert photos to base64 on the client side
 
-- In `list-projects` and `list-folders` actions: check for `ACC_ACCOUNT_ID_US` and `ACC_ACCOUNT_ID_EMEA` environment variables alongside the existing `ACC_ACCOUNT_ID`
-- When `region === 'US'`, prefer `ACC_ACCOUNT_ID_US`, fall back to `ACC_ACCOUNT_ID`
-- When `region === 'EMEA'`, prefer `ACC_ACCOUNT_ID_EMEA`, fall back to `ACC_ACCOUNT_ID`
-- Log which account ID and region is being used for each request
-- In `list-folders` and `list-projects`, also save the used region to the cache so it persists
+Since edge functions cannot fetch from the preview server, photo data must be converted to base64 in the browser before submission.
 
-**File: `src/components/settings/ApiSettingsModal.tsx`**
+**File: `src/components/fault-report/PhotoCapture.tsx`**
 
-- Add a clear label next to the region switch showing which Account ID (abbreviated) is being used for the selected region
-- When region changes, automatically clear the folder cache (`setAccFolders(null)`) so stale EU/US data isn't shown
-- After switching region, if folders were previously loaded, show a hint to re-fetch
+- In addition to uploading to storage (for local work orders), also store the base64 data of each photo in state
+- Use `FileReader.readAsDataURL` to capture base64 when the file is selected
+- Expose both `photos` (URLs for display) and `photoData` (base64 for API submission)
 
----
+Alternative (simpler): Change `PhotoCapture` to keep base64 data alongside URLs.
 
-## Issue 3: 3D Conversion Error (Red Box)
+**File: `src/pages/FaultReport.tsx`**
 
-The pipeline requests SVF2 format from the Model Derivative API (line 1828: `{ type: "svf2", views: ["3d"] }`), but the client-side converter uses `parseGLTFIntoXKTModel` which expects GLB/glTF data. SVF2 is Autodesk's proprietary format and cannot be parsed as glTF -- this causes the red error box.
+- Track `photoBase64` state alongside `photos` URLs
+- When `qrKey` is present (external API mode), include base64 data in the `attachments` array of the payload
+- Clean base64 strings (remove `data:image/...;base64,` prefix, strip whitespace)
 
-### Solution: Request OBJ format instead of SVF2
+**File: `src/components/fault-report/FaultReportForm.tsx` and `MobileFaultReport.tsx`**
 
-The Autodesk Model Derivative API supports OBJ output, and `@xeokit/xeokit-convert` can parse OBJ via `parseGLTFIntoXKTModel` if provided as binary. However, the cleanest approach is:
+- Update `PhotoCapture` usage to pass through base64 callback
+- Update `onSubmit` signature to include photo base64 data
 
-1. Keep SVF2 for the Autodesk Viewer (if ever needed)
-2. Additionally request OBJ output format for XKT conversion
-3. In `download-derivative`, prefer OBJ derivatives over SVF2
-4. In the client-side converter, detect the file format (OBJ vs GLB) and use the appropriate parser
+### Payload format for attachments:
+```text
+attachments: [
+  {
+    fileName: "photo1.jpg",
+    mimeType: "image/jpeg",
+    data: "base64-string-here..."
+  }
+]
+```
 
-### Changes
+## Problem 3: Better error handling
 
-**File: `supabase/functions/acc-sync/index.ts`** -- `translate-model` action
+The current error message "Kunde inte lasa QR-koden. Forsok igen." is misleading -- it's not a QR code reading issue, it's an API error. 
 
-- Change output formats to include OBJ: `formats: [{ type: "svf2", views: ["3d"] }, { type: "obj" }]`
-- Update `output_format` in the DB record to `"svf2,obj"`
-- Log the translation request body for debugging
+**File: `src/pages/FaultReport.tsx`**
 
-**File: `supabase/functions/acc-sync/index.ts`** -- `download-derivative` action
+- Change the error message to be more specific: show the HTTP status code if available
+- Add a "Retry" button on the error screen instead of a dead end
+- If 404, show: "Kunde inte hitta installationen. Kontrollera att QR-koden ar giltig."
 
-- In the derivative selection logic, prefer OBJ derivatives (mime `application/octet-stream` with `.obj` extension or `obj` output type)
-- Log the available derivative formats so we can debug what Autodesk actually provides
-- Add format metadata to the response so the client knows what it downloaded
-
-**File: `src/services/acc-xkt-converter.ts`**
-
-- In `convertGlbToXkt`, add file format detection:
-  - Check first 4 bytes for GLB magic (`glTF` = `0x46546C67`)
-  - Check first bytes for OBJ signature (`#` or `v `)
-  - If SVF2 (neither GLB nor OBJ), throw a clear error: "SVF2-format stods inte for klientkonvertering. Kontakta support."
-- Add an `parseOBJIntoXKTModel` path if `@xeokit/xeokit-convert` supports it (check available exports)
-- Improve error messages to show what format was detected vs expected
-
----
-
-## Files to Modify
+## Technical Summary
 
 | File | Changes |
 |---|---|
-| `src/components/settings/ApiSettingsModal.tsx` | Widen dialog, scrollable tabs, responsive button layout, clear folders on region change |
-| `supabase/functions/acc-sync/index.ts` | Region-specific Account IDs, OBJ output format in translate-model, derivative format logging |
-| `src/services/acc-xkt-converter.ts` | File format detection, OBJ parser support, better error messages |
+| `supabase/functions/errorreport-proxy/index.ts` | Add API path discovery with multiple URL patterns; log each attempt |
+| `src/pages/FaultReport.tsx` | Track photo base64 data; include in attachments payload; improve error messages with retry button |
+| `src/components/fault-report/PhotoCapture.tsx` | Capture base64 data alongside URL when files are selected; expose via callback |
+| `src/components/fault-report/FaultReportForm.tsx` | Pass through photo base64 data from PhotoCapture to onSubmit |
+| `src/components/fault-report/MobileFaultReport.tsx` | Same changes as FaultReportForm for mobile layout |
 
-## Expected Results
+## Expected Result
 
-- Settings modal is usable on narrow screens without overflow
-- Switching US/EMEA fetches folders from the correct hub
-- 3D conversion either succeeds (with OBJ format) or shows a clear diagnostic error instead of a generic red box
+- Edge function discovers the correct API path and logs it
+- Photos are converted to base64 client-side and sent as attachments
+- Error screen shows a meaningful message and a retry button
+- Once the correct API path is found, it can be hardcoded for performance
+
