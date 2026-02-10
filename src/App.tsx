@@ -30,6 +30,8 @@ const Mobile360Viewer = lazy(() => import("@/pages/Mobile360Viewer"));
 const FaultReport = lazy(() => import("@/pages/FaultReport"));
 // Autodesk OAuth callback page (public, no auth required)
 const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
+// Jury presentation slide deck
+const Presentation = lazy(() => import("@/pages/Presentation"));
 
 const queryClient = new QueryClient();
 
@@ -180,6 +182,16 @@ const App = () => {
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
                 <AutodeskCallback />
+              </Suspense>
+            } 
+          />
+          
+          {/* Jury presentation - public, no auth */}
+          <Route 
+            path="/presentation" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
+                <Presentation />
               </Suspense>
             } 
           />
