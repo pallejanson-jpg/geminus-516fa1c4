@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Form, FormField, FormItem, FormControl, FormMessage } from '@/components/ui/form';
-import PhotoCapture from './PhotoCapture';
+import PhotoCapture, { type PhotoData } from './PhotoCapture';
 import FormFieldWithHelp from './FormFieldWithHelp';
 import ClearableInput from './ClearableInput';
 import ErrorCodeCombobox, { type ErrorCode } from './ErrorCodeCombobox';
@@ -29,7 +29,7 @@ interface MobileFaultReportProps {
   installationNumber?: string;
   assetName?: string;
   errorCodes?: ErrorCode[];
-  onSubmit: (data: FaultReportFormData, photos: string[]) => Promise<void>;
+  onSubmit: (data: FaultReportFormData, photos: string[], photoData: PhotoData[]) => Promise<void>;
   isSubmitting: boolean;
   onBack?: () => void;
 }
@@ -45,6 +45,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
   onBack,
 }) => {
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoData, setPhotoData] = useState<PhotoData[]>([]);
   const workOrderId = useId().replace(/:/g, '');
 
   const form = useForm<FaultReportFormData>({
@@ -58,7 +59,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
   });
 
   const handleSubmit = (data: FaultReportFormData) => {
-    onSubmit(data, photos);
+    onSubmit(data, photos, photoData);
   };
 
   return (
@@ -82,7 +83,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="flex-1 overflow-y-auto px-4 pb-4">
-            {/* Installation info – simple text line */}
+            {/* Installation info */}
             {(installationNumber || assetName) && (
               <div className="rounded-md bg-muted/40 border border-border px-3 py-2 mt-4">
                 <p className="text-sm">
@@ -120,7 +121,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 )}
               />
 
-              {/* Error code – combobox */}
+              {/* Error code */}
               <FormField
                 control={form.control}
                 name="errorCode"
@@ -142,7 +143,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 )}
               />
 
-              {/* Email – clearable */}
+              {/* Email */}
               <FormField
                 control={form.control}
                 name="email"
@@ -168,7 +169,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 )}
               />
 
-              {/* Phone – clearable */}
+              {/* Phone */}
               <FormField
                 control={form.control}
                 name="phone"
@@ -200,6 +201,7 @@ const MobileFaultReport: React.FC<MobileFaultReportProps> = ({
                 <PhotoCapture
                   photos={photos}
                   onPhotosChange={setPhotos}
+                  onPhotoDataChange={setPhotoData}
                   workOrderId={workOrderId}
                 />
               </div>
