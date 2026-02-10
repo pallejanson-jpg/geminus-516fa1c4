@@ -367,6 +367,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [accAuthStatus, setAccAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
     const [isAccLoggingIn, setIsAccLoggingIn] = useState(false);
     const [isAccLoggingOut, setIsAccLoggingOut] = useState(false);
+    
+    // ACC -> Asset+ sync state
+    const [accToApStatus, setAccToApStatus] = useState<any>(null);
+    const [isCheckingAccToAp, setIsCheckingAccToAp] = useState(false);
+    const [isSyncingAccToAp, setIsSyncingAccToAp] = useState(false);
+    const [accToApResult, setAccToApResult] = useState<any>(null);
 
     // Check Autodesk 3-legged auth status on mount
     useEffect(() => {
@@ -579,7 +585,53 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // Auto-load saved ACC settings on mount
+    // ACC -> Asset+ sync handlers
+    const handleCheckAccToAssetPlus = async () => {
+        setIsCheckingAccToAp(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-to-assetplus', {
+                body: { action: 'check-status' }
+            });
+            if (error) throw error;
+            setAccToApStatus(data);
+        } catch (err: any) {
+            console.error('Failed to check ACC->Asset+ status:', err);
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsCheckingAccToAp(false);
+        }
+    };
+
+    const handleSyncAccToAssetPlus = async () => {
+        setIsSyncingAccToAp(true);
+        setAccToApResult(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-to-assetplus', {
+                body: { action: 'sync' }
+            });
+            if (error) throw error;
+            setAccToApResult(data);
+            if (data?.success) {
+                toast({ 
+                    title: 'Synk till Asset+ klar', 
+                    description: `${data.summary?.buildingsSynced || 0} byggnader synkade` 
+                });
+            } else {
+                toast({ 
+                    variant: 'destructive', 
+                    title: 'Synk delvis misslyckad', 
+                    description: `${data?.summary?.totalErrors || 0} fel uppstod` 
+                });
+            }
+            // Refresh status
+            handleCheckAccToAssetPlus();
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Synk misslyckades', description: err.message });
+        } finally {
+            setIsSyncingAccToAp(false);
+        }
+    };
+
     useEffect(() => {
         if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
             setHasLoadedAccSettings(true);
@@ -2471,6 +2523,102 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         )}
                                                     </div>
                                                 )}
+
+                                                {/* ACC -> Asset+ Sync Section */}
+                                                <div className="rounded-lg border p-3 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <Label className="text-sm font-medium flex items-center gap-1.5">
+                                                            <Box className="h-4 w-4 text-primary" />
+                                                            Synka till Asset+
+                                                        </Label>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={handleCheckAccToAssetPlus}
+                                                            disabled={isCheckingAccToAp}
+                                                            className="h-7 text-xs gap-1"
+                                                        >
+                                                            {isCheckingAccToAp ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                            Status
+                                                        </Button>
+                                                    </div>
+
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Skapa ACC-synkade objekt i Asset+ med genererade UUID:n. Byggnader, plan, rum och installationer skapas hierarkiskt.
+                                                    </p>
+
+                                                    {accToApStatus && (
+                                                        <div className="space-y-1.5 text-sm">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">ACC-objekt totalt:</span>
+                                                                <span className="font-medium">{accToApStatus.totalAccObjects}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Synkade till Asset+:</span>
+                                                                <span className="font-medium">{accToApStatus.syncedToAssetPlus}</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Ej synkade:</span>
+                                                                <Badge variant={accToApStatus.unsyncedCount > 0 ? "destructive" : "secondary"} className="text-xs">
+                                                                    {accToApStatus.unsyncedCount}
+                                                                </Badge>
+                                                            </div>
+                                                            {accToApStatus.buildings?.length > 0 && (
+                                                                <div className="mt-2 space-y-1">
+                                                                    <p className="text-xs font-medium text-muted-foreground">Byggnader:</p>
+                                                                    {accToApStatus.buildings.map((b: any) => (
+                                                                        <div key={b.accFmGuid} className="flex items-center justify-between text-xs py-0.5">
+                                                                            <span className="truncate">{b.name}</span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <span className="text-muted-foreground">{b.childCount} obj</span>
+                                                                                {b.synced ? (
+                                                                                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                                                ) : (
+                                                                                    <Circle className="h-3 w-3 text-muted-foreground" />
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    <Button
+                                                        onClick={handleSyncAccToAssetPlus}
+                                                        disabled={isSyncingAccToAp}
+                                                        size="sm"
+                                                        className="w-full gap-1.5"
+                                                    >
+                                                        {isSyncingAccToAp ? (
+                                                            <>
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                Synkar till Asset+...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Box className="h-3.5 w-3.5" />
+                                                                Synka ACC → Asset+
+                                                            </>
+                                                        )}
+                                                    </Button>
+
+                                                    {accToApResult && (
+                                                        <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'}`}>
+                                                            <p className="font-medium">{accToApResult.success ? 'Synk lyckades' : 'Synk med varningar'}</p>
+                                                            {accToApResult.summary && (
+                                                                <div className="space-y-0.5">
+                                                                    <p>Byggnader: {accToApResult.summary.created?.buildings || 0} skapade</p>
+                                                                    <p>Plan: {accToApResult.summary.created?.levels || 0} | Rum: {accToApResult.summary.created?.spaces || 0} | Instanser: {accToApResult.summary.created?.instances || 0}</p>
+                                                                    <p>Relationer: {accToApResult.summary.totalRelationships || 0} | Egenskaper: {accToApResult.summary.totalPropertiesUpdated || 0}</p>
+                                                                    {accToApResult.summary.totalErrors > 0 && (
+                                                                        <p className="text-red-600 dark:text-red-400">Fel: {accToApResult.summary.totalErrors}</p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </AccordionContent>
                                     </AccordionItem>
