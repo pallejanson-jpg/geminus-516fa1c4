@@ -1,65 +1,85 @@
 
 
-# Presentation Upgrade: English, Screenshots, Transitions & Export
+# Gunnar 2.0 -- Intelligent Property Assistant
 
-## 1. Translate all slides to English
+## Problem Today
 
-All Swedish text in the 8 slides will be replaced with English equivalents. Examples:
-- "Problemet" -> "The Problem"
-- "Losningen" -> "The Solution"
-- "Teknik & Arkitektur" -> "Technology & Architecture"
-- All descriptions, bullet points, and quotes translated
+Gunnar has three major limitations:
 
-## 2. Add slide transitions
+1. **Limited data access** -- Can only query the `assets` table via a custom SQL parser. Misses `work_orders`, `bcf_issues`, `building_settings`, and cross-table queries.
+2. **No real memory** -- Each response is isolated; the AI cannot build on previous questions intelligently.
+3. **Static follow-ups** -- The AI must manually write JSON blocks for suggested next steps, which rarely works well.
 
-Add a CSS fade+slide transition between slides:
-- Wrap the slide content in a keyed container with Tailwind animation classes
-- Use `key={current}` to trigger re-mount on slide change
-- Apply `animate-fade-in` (already defined in the project's Tailwind config) for a smooth 300ms fade+translateY entrance on each slide change
+## Solution: AI Tool Calling
 
-## 3. Add screenshots
+Replace the custom SQL parser with tool calling -- let the AI model decide which data it needs by invoking predefined functions.
 
-Take screenshots of key app views using the browser tool and save them as assets. Embed them in relevant slides:
-- **Viewer slide**: Screenshot of the 3D/Split viewer
-- **AI Detection slide**: Screenshot of the AI scan review queue
-- **Mobile slide**: Screenshot of the mobile fault report form
-- **AI Assistants slide**: Screenshot of Gunnar chat
+```text
+User -> GunnarChat (frontend) -> gunnar-chat edge function -> Lovable AI Gateway
+                                       |
+                                       v
+                                 Tool calls:
+                                 - query_assets(filters, limit)
+                                 - query_work_orders(filters)
+                                 - query_issues(filters)
+                                 - get_building_summary(fm_guid)
+                                 - search_assets(search_term)
+```
 
-These will be captured from the running preview and placed in `src/assets/` as PNG files, then imported into the slide components.
+**Flow:**
+1. User types a question
+2. AI receives full conversation history + context (active building, view, etc.)
+3. AI decides which tools to call
+4. Edge function executes the tools against the database
+5. Results are sent back to the AI, which formulates a natural response with smart follow-up suggestions
 
-## 4. Generate a downloadable HTML presentation
+## What This Enables
 
-Since we cannot create native `.pptx` files without a heavy library, we will create a **standalone HTML file** in `public/geminus-presentation.html` that:
-- Contains all 8 slides as self-contained HTML/CSS (no React dependency)
-- Can be opened in any browser offline
-- Can be printed to PDF from the browser
-- Includes the same styling, transitions, and keyboard navigation
-- Embeds screenshots as base64 data URIs
+- **Understands all questions** -- AI interprets natural language and picks the right data sources
+- **Cross-table queries** -- "Are there open issues in this building?" works out of the box
+- **Smart follow-ups** -- AI suggests next steps based on the conversation, not hardcoded
+- **Deeper data** -- Access to work orders, issues, building settings, not just assets
 
-This gives the user a portable file they can share, present offline, or convert to PDF.
+## Technical Changes
 
-## Files to create/modify
+### 1. Edge function: `supabase/functions/gunnar-chat/index.ts` (rewrite)
+
+- Define 5 tools the AI can invoke:
+  - `query_assets` -- Filter assets by category, building, level, room, asset_type. Returns count or list.
+  - `query_work_orders` -- Filter work orders by status, building, priority.
+  - `query_issues` -- Filter BCF issues by status, building.
+  - `get_building_summary` -- Get overview for a building: floors, rooms, assets, area, open issues.
+  - `search_assets` -- Free-text search in common_name/name/asset_type.
+
+- First AI call sent with `tools` and `tool_choice: "auto"`
+- If AI returns tool calls: execute them against the database, collect results, make a second streaming call with results
+- If AI responds directly (no tool call needed): stream the response directly
+
+- Updated system prompt: shorter, focused on tool usage, instructs AI to always suggest 2-3 follow-up questions as plain text
+
+### 2. Frontend: `src/components/chat/GunnarChat.tsx` (update)
+
+- **Markdown rendering** -- Switch from `<pre>` to `react-markdown` for formatted responses with headings, lists, bold
+- **Improved follow-ups** -- Parse follow-up questions from the AI response (numbered list at end) and display as clickable buttons
+- **Auto-send follow-ups** -- When user clicks a follow-up, send it directly instead of just filling the input field
+- **Remove SQL/JSON parsing** -- `parseResponse` and `extractSqlQuery` no longer needed on frontend
+
+### 3. New dependency: `react-markdown`
+
+Added for rendering AI responses with formatting.
+
+## Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/Presentation.tsx` | Translate all text to English, add fade transition via keyed wrapper, embed screenshot images |
-| `public/geminus-presentation.html` | New standalone HTML slide deck (portable, no dependencies) |
-| `src/assets/screenshot-*.png` | Screenshots captured from the app (3-4 images) |
+| `supabase/functions/gunnar-chat/index.ts` | Rewrite: replace SQL parsing with tool calling (5 tools) |
+| `src/components/chat/GunnarChat.tsx` | Update: markdown rendering, better follow-ups, remove JSON parsing |
+| `package.json` | Add `react-markdown` |
 
-## Technical details
+## What Does NOT Change
 
-**Transitions in Presentation.tsx:**
-```tsx
-<div key={current} className="w-full h-full animate-fade-in">
-  <SlideComponent />
-</div>
-```
-The `key` prop forces React to unmount/remount, triggering the fade-in animation on each slide change.
-
-**Standalone HTML file:**
-- Single file, ~200 lines of HTML/CSS/JS
-- Same 1920x1080 scaled canvas approach
-- Arrow key navigation, fullscreen support
-- All styles inline (no external dependencies)
-- Screenshots embedded as base64 or referenced from relative paths
+- Streaming logic (SSE) -- already works well
+- Action system (selectInTree, flyTo, etc.) -- kept but triggered via tool calls instead
+- GunnarContext interface -- same context sent from frontend
+- Authentication -- same auth flow
 
