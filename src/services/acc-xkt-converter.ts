@@ -69,12 +69,19 @@ export async function convertGlbToXkt(
   logger(`Detected input format: ${format} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
   if (format === 'unknown') {
-    // Check if it's SVF2 (proprietary Autodesk format)
     const header = new Uint8Array(glbData, 0, Math.min(64, glbData.byteLength));
-    const headerHex = Array.from(header.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    const headerHex = Array.from(header.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+    // Try to detect if it's a JSON manifest (SVF2 bubble metadata)
+    const firstBytes = new TextDecoder().decode(header.slice(0, 20));
+    const looksLikeJson = firstBytes.trimStart().startsWith('{') || firstBytes.trimStart().startsWith('[');
+    
     throw new Error(
-      `Okänt filformat (header: ${headerHex}). SVF2-format stöds inte för klientkonvertering. ` +
-      `Kontrollera att Autodesk Model Derivative har genererat OBJ- eller glTF-format.`
+      looksLikeJson
+        ? `Filen verkar vara en SVF2-manifest (JSON), inte en geometrifil. ` +
+          `RVT-filer genererar SVF2-format som kräver serverbaserad konvertering och kan inte konverteras i webbläsaren.`
+        : `Okänt filformat (header: ${headerHex}). ` +
+          `RVT-filer genererar SVF2-format som inte stöds för klientkonvertering. ` +
+          `Hierarkidata (byggnader, våningar, rum) synkas via BIM-synk istället.`
     );
   }
 
