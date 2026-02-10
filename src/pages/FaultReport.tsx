@@ -209,8 +209,7 @@ const FaultReport: React.FC = () => {
 
   if (isMobile) {
     return (
-      <div className="h-screen bg-background">
-        <MobileFaultReport
+      <MobileFaultReport
           buildingName={buildingName}
           spaceName={spaceName}
           installationNumber={installationNumber}
@@ -220,7 +219,7 @@ const FaultReport: React.FC = () => {
           isSubmitting={isSubmitting}
           onBack={() => window.history.back()}
         />
-      </div>
+
     );
   }
 
