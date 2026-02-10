@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Button } from '@/components/ui/button';
 import FaultReportForm from '@/components/fault-report/FaultReportForm';
 import MobileFaultReport from '@/components/fault-report/MobileFaultReport';
 import FaultReportSuccess from '@/components/fault-report/FaultReportSuccess';
 import type { FaultReportFormData } from '@/components/fault-report/FaultReportForm';
+import type { PhotoData } from '@/components/fault-report/PhotoCapture';
 import type { ErrorCode } from '@/components/fault-report/ErrorCodeCombobox';
 
 interface ApiConfig {
@@ -30,63 +32,72 @@ const FaultReport: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
-  // Fetch config from er-rep.com via edge function
-  useEffect(() => {
+  const fetchConfig = useCallback(async () => {
     if (!qrKey) return;
+    setIsLoadingConfig(true);
+    setConfigError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('errorreport-proxy', {
+        body: { action: 'get-config', qrKey },
+      });
 
-    const fetchConfig = async () => {
-      setIsLoadingConfig(true);
-      setConfigError(null);
-      try {
-        const { data, error } = await supabase.functions.invoke('errorreport-proxy', {
-          body: { action: 'get-config', qrKey },
-        });
+      if (error) throw error;
 
-        if (error) throw error;
-
-        console.log('[FaultReport] API config response:', data);
-
-        // Parse the config response flexibly
-        const errorCodes: ErrorCode[] = [];
-        if (data?.errorCodes && Array.isArray(data.errorCodes)) {
-          for (const ec of data.errorCodes) {
-            errorCodes.push({
-              guid: ec.guid ?? 0,
-              id: ec.id ?? '',
-              title: ec.title ?? ec.id ?? '',
-              description: ec.description ?? '',
-              context: ec.context ?? null,
-            });
-          }
-        }
-
-        setApiConfig({
-          installationNumber: data?.articleNumber || data?.installationNumber || data?.installation_number || undefined,
-          assetName: data?.articleName || data?.assetName || data?.asset_name || data?.name || undefined,
-          buildingName: data?.buildingName || data?.building_name || undefined,
-          spaceName: data?.spaceName || data?.space_name || undefined,
-          errorCodes,
-          rawConfig: data,
-        });
-      } catch (err: any) {
-        console.error('Config fetch error:', err);
-        setConfigError('Kunde inte läsa QR-koden. Försök igen.');
-      } finally {
-        setIsLoadingConfig(false);
+      // Check if the edge function returned a 404-like error
+      if (data?.error) {
+        console.error('[FaultReport] API error:', data.error);
+        setConfigError('Kunde inte hitta installationen. Kontrollera att QR-koden är giltig.');
+        return;
       }
-    };
 
-    fetchConfig();
+      console.log('[FaultReport] API config response:', data);
+
+      const errorCodes: ErrorCode[] = [];
+      if (data?.errorCodes && Array.isArray(data.errorCodes)) {
+        for (const ec of data.errorCodes) {
+          errorCodes.push({
+            guid: ec.guid ?? 0,
+            id: ec.id ?? '',
+            title: ec.title ?? ec.id ?? '',
+            description: ec.description ?? '',
+            context: ec.context ?? null,
+          });
+        }
+      }
+
+      setApiConfig({
+        installationNumber: data?.articleNumber || data?.installationNumber || data?.installation_number || undefined,
+        assetName: data?.articleName || data?.assetName || data?.asset_name || data?.name || undefined,
+        buildingName: data?.buildingName || data?.building_name || undefined,
+        spaceName: data?.spaceName || data?.space_name || undefined,
+        errorCodes,
+        rawConfig: data,
+      });
+    } catch (err: any) {
+      console.error('Config fetch error:', err);
+      setConfigError('Kunde inte ansluta till servern. Försök igen.');
+    } finally {
+      setIsLoadingConfig(false);
+    }
   }, [qrKey]);
 
-  const handleSubmit = async (data: FaultReportFormData, photos: string[]) => {
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  const handleSubmit = async (data: FaultReportFormData, photos: string[], photoData: PhotoData[]) => {
     setIsSubmitting(true);
     try {
       if (qrKey) {
-        // Submit to er-rep.com via edge function
+        const attachments = photoData.map((pd) => ({
+          fileName: pd.fileName,
+          mimeType: pd.mimeType,
+          data: pd.data,
+        }));
+
         const payload = {
           errorDescription: data.description,
-          attachments: [],
+          attachments,
           contactEmail: data.email || '',
           contactPhone: data.phone || '',
           errorCode: data.errorCode || null,
@@ -100,12 +111,10 @@ const FaultReport: React.FC = () => {
 
         console.log('[FaultReport] Submit response:', responseData);
 
-        // Use API reference number or fall back to local ID
         const refId = responseData?.referenceNumber || responseData?.id || responseData?.externalId || `FR-${Date.now()}`;
         setSubmittedId(String(refId));
         toast.success('Felanmälan skickad!');
       } else {
-        // No QR key – fall back to local work_orders insert
         const externalId = `FR-${Date.now()}`;
         const workOrder = {
           title: `Felanmälan: ${data.description.slice(0, 50)}`,
@@ -151,20 +160,24 @@ const FaultReport: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Läser QR-kod...</p>
+          <p className="text-sm text-muted-foreground">Hämtar konfiguration...</p>
         </div>
       </div>
     );
   }
 
-  // Config error
+  // Config error with retry
   if (configError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background p-4">
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
           <AlertTriangle className="h-10 w-10 text-destructive" />
           <h2 className="text-lg font-semibold">Något gick fel</h2>
           <p className="text-sm text-muted-foreground">{configError}</p>
+          <Button onClick={fetchConfig} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Försök igen
+          </Button>
         </div>
       </div>
     );
@@ -194,7 +207,6 @@ const FaultReport: React.FC = () => {
   const spaceName = apiConfig?.spaceName;
   const errorCodes = apiConfig?.errorCodes;
 
-  // Mobile layout
   if (isMobile) {
     return (
       <div className="h-screen bg-background">
@@ -212,7 +224,6 @@ const FaultReport: React.FC = () => {
     );
   }
 
-  // Desktop layout
   return (
     <div className="min-h-screen bg-background flex items-start justify-center pt-12 pb-12 px-4">
       <FaultReportForm
