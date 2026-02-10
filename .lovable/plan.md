@@ -1,41 +1,42 @@
 
+# In-App Presentation for Jury
 
-# Modern mobil layout for Felanmalan
+## Overview
+Build a `/presentation` route with a fullscreen slide deck showcasing Geminus. Uses the 1920x1080 scaled-slide pattern, keyboard navigation (arrow keys), and a clean, professional design with the existing hero image and brand colors.
 
-## Vad vi gor
+## Slides (7-8 slides)
 
-Bygger om `MobileFaultReport.tsx` till en modern, fullskarms mobil-layout med bakgrundsbild (samma `chicago-skyline-hero.jpg` som anvands pa startsidan). Formularet far ett modernt utseende med glasmorfism-effekt (frostat glas-kort), rundade inputfalt, och en sticky submit-knapp langst ner.
+1. **Title Slide** -- "Geminus - Your Digital Twin Platform" with hero background image, tagline
+2. **The Problem** -- Buildings generate massive data but it's fragmented across systems
+3. **The Solution** -- Geminus as a unified platform: 3D BIM, 360 panoramas, IoT, AI
+4. **3D + 360 Viewer** -- Split/Virtual Twin modes, xeokit BIM models, NavVis Ivion integration
+5. **AI Asset Detection** -- Automated scanning of 360 panoramas with Gemini, review queue, auto-registration
+6. **AI Assistants** -- Gunnar (data), Ilean (documents), voice commands
+7. **Mobile & QR** -- Fault reporting via QR code, mobile inventory, responsive design
+8. **Tech Stack & Architecture** -- React, Lovable Cloud, Edge Functions, integrations diagram
 
-## Design
+## Files to Create/Modify
 
-- **Bakgrund**: Fullskarms bakgrundsbild (`chicago-skyline-hero.jpg`) med mork overlay-gradient for lasbarhet
-- **Header**: Transparent header med vit text och tillbaka-knapp, overlappar bakgrunden
-- **Installationsinfo**: Kompakt badge/chip langst upp i kortet
-- **Formularkort**: Frostat glas-effekt (`bg-white/90 backdrop-blur-xl`) med rundade horn, scrollbart
-- **Inputfalt**: Rundade (`rounded-xl`), latt bakgrund, stora touch-targets
-- **Submit-knapp**: Fast langst ner (sticky), gradient-fargad, med safe-area-inset for iOS
-- **Fotoknapp**: Stor, rund ikon-knapp for kamera
-
-## Filer att andra
-
-| Fil | Andring |
+| File | Change |
 |---|---|
-| `src/components/fault-report/MobileFaultReport.tsx` | Fullstandig omdesign av layouten med bakgrundsbild, glasmorfism-kort, modern typografi och sticky submit |
-| `src/pages/FaultReport.tsx` | Ta bort yttre `bg-background`-wrapper pa mobil (lat MobileFaultReport styra hela skermen) |
+| `src/pages/Presentation.tsx` | New -- Full presentation component with all slides, keyboard nav, fullscreen support |
+| `src/App.tsx` | Add lazy route `/presentation` (public, no auth) |
 
-## Tekniska detaljer
+## Technical Details
 
-**MobileFaultReport.tsx:**
-- Importera `chicagoHero` fran `@/assets/chicago-skyline-hero.jpg`
-- Yttre container: `min-h-[100dvh]` med bakgrundsbild via inline style (`backgroundImage`, `backgroundSize: cover`, `backgroundPosition: center`)
-- Gradient overlay: `bg-gradient-to-b from-black/40 via-black/20 to-black/60`
-- Header: Absolut positionerad ovanpa bilden med vit text, ArrowLeft-knapp i vitt
-- Formular-kort: `bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl rounded-t-3xl` som overlappar bilden
-- Inputfalt: Okar storlek med `h-12 rounded-xl` for touch-vanlig interaktion
-- Textarea: `rounded-xl` med lite storre padding
-- Submit-knapp: `sticky bottom-0` med `pb-[env(safe-area-inset-bottom)]` for iOS
-- Fotogalleri: Storre previews med rundade horn
+**Presentation.tsx:**
+- Fixed 1920x1080 slide canvas scaled via `transform: scale()` to fit viewport
+- State: `currentSlide` index, arrow key + click navigation
+- Each slide is a function returning JSX, stored in an array
+- Fullscreen toggle via Fullscreen API
+- Progress bar at bottom showing current position
+- Uses existing `chicago-skyline-hero.jpg` for backgrounds
+- Clean typography with Tailwind, no external dependencies needed
+- Slide counter overlay (e.g. "3/8")
+- Escape key exits fullscreen, F key toggles it
 
-**FaultReport.tsx:**
-- Mobil-wrappern andras fran `<div className="h-screen bg-background">` till bara `<MobileFaultReport ... />` (komponenten hanterar sin egen bakgrund)
+**App.tsx:**
+- Add `const Presentation = lazy(() => import("@/pages/Presentation"));`
+- Add public route (no ProtectedRoute wrapper) at `/presentation`
 
+No new dependencies required. All built with existing React + Tailwind.
