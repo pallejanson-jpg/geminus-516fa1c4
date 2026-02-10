@@ -762,7 +762,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (result.status === 'complete') {
             toast({ title: '3D-konvertering klar', description: `${item.name} har konverterats och laddats upp.` });
         } else if (result.status === 'failed') {
-            toast({ variant: 'destructive', title: 'Konvertering misslyckades', description: result.error || 'Okänt fel' });
+            // Check if it's a format limitation (SVF2 only)
+            const isFormatLimitation = result.error?.includes('SVF2') || result.error?.includes('serverbaserad');
+            toast({ 
+                variant: 'destructive', 
+                title: isFormatLimitation ? 'Formatbegränsning' : 'Konvertering misslyckades', 
+                description: isFormatLimitation 
+                    ? `RVT-filer (${item.name}) kan inte konverteras till 3D i webbläsaren. Hierarkidata synkas via BIM-synk.`
+                    : (result.error || 'Okänt fel'),
+            });
         }
     };
 

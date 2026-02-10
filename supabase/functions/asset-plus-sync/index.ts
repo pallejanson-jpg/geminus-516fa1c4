@@ -504,11 +504,20 @@ async function markStaleRunningAsInterrupted(supabase: any) {
   }
 }
 
+// Prefixes for non-Asset+ data sources that should be excluded from orphan cleanup
+const NON_ASSETPLUS_PREFIXES = ['acc-bim-', 'acc-'];
+
+function isNonAssetPlusGuid(fmGuid: string): boolean {
+  return NON_ASSETPLUS_PREFIXES.some(prefix => fmGuid.startsWith(prefix));
+}
+
 // Fetch all fm_guids from local DB, paginating past the 1000-row default limit
+// excludeNonAssetPlus: when true, filters out fm_guids with non-Asset+ prefixes (e.g. acc-bim-*)
 async function fetchAllLocalFmGuids(
   supabase: any,
   categories: string[],
-  isLocal: boolean = false
+  isLocal: boolean = false,
+  excludeNonAssetPlus: boolean = false
 ): Promise<string[]> {
   const allGuids: string[] = [];
   const PAGE = 1000;
@@ -532,6 +541,10 @@ async function fetchAllLocalFmGuids(
     } else {
       done = true;
     }
+  }
+
+  if (excludeNonAssetPlus) {
+    return allGuids.filter(guid => !isNonAssetPlusGuid(guid));
   }
   return allGuids;
 }
@@ -675,10 +688,11 @@ serve(async (req) => {
       }
 
       // --- Orphan cleanup: remove local non-is_local objects not found in Asset+ ---
+      // Exclude ACC-synced objects (acc-bim-*, acc-*) from orphan detection
       console.log(`Total remote fmGuids: ${remoteFmGuids.size}. Checking for orphans...`);
       
-      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false);
-      console.log(`Local non-is_local structure count: ${localFmGuids.length}`);
+      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
+      console.log(`Local non-is_local structure count (excl. ACC): ${localFmGuids.length}`);
       
       const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
       
@@ -1470,12 +1484,10 @@ serve(async (req) => {
       // Get remote structure counts and sample fmGuids
       const remoteStructureCount = await getRemoteCountByTypes(accessToken, [1, 2, 3]);
       
-      // Get local structure counts - EXCLUDE is_local objects (locally created, not from Asset+)
-      const { count: localStructureCount } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true })
-        .in('category', ['Building', 'Building Storey', 'Space'])
-        .eq('is_local', false);
+      // Get local structure counts - EXCLUDE is_local objects AND ACC-synced objects
+      // ACC objects have fm_guid starting with 'acc-bim-' or 'acc-' and should not be compared to Asset+
+      const allLocalGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
+      const localStructureCount = allLocalGuids.length;
       
       // For detailed comparison, fetch a sample of fmGuids from both sides
       // This is a lightweight check - full comparison would require fetching all GUIDs
@@ -1549,8 +1561,9 @@ serve(async (req) => {
       console.log(`Total remote fmGuids: ${remoteFmGuids.size}`);
       
       // Step 2: Find local orphans (only check synced objects, not local-only)
-      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false);
-      console.log(`Local non-is_local structure count: ${localFmGuids.length}`);
+      // Exclude ACC-synced objects from orphan detection
+      const localFmGuids = await fetchAllLocalFmGuids(supabase, ['Building', 'Building Storey', 'Space'], false, true);
+      console.log(`Local non-is_local structure count (excl. ACC): ${localFmGuids.length}`);
       
       const orphanFmGuids = localFmGuids.filter(guid => !remoteFmGuids.has(guid));
       
