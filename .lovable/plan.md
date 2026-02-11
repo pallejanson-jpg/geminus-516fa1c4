@@ -1,56 +1,72 @@
 
 
-# Plan: Skippa IFC och optimera 3D-pipelinen
+# Fix: Rumsetiketter visas för alla våningar på mobil
 
-## Bakgrund
+## Problem
 
-Nuvarande pipeline begär redan SVF+OBJ från Autodesk (inte IFC), men vid nedladdning prioriteras IFC om den finns. Dessutom kräver IFC-konvertering i webbläsaren `web-ifc` WASM-laddning vilket är tungt. Genom att helt skippa IFC och istället prioritera OBJ/glTF sparas tid i varje steg.
+När ett enskilt våningsplan väljs på mobil visas rumsetiketter för ALLA rum i hela byggnaden, inte bara för den valda våningen. Skärmbilden visar hundratals överlappande etiketter från alla 10 våningar.
 
-## Ändringar
+## Grundorsak
 
-### 1. Backend: Ändra derivat-prioritet (`supabase/functions/acc-sync/index.ts`)
+`handleMobileFloorToggle` i `AssetPlusViewer.tsx` (rad 2258-2289) togglar bara synligheten av 3D-geometri men **dispatchar aldrig `FLOOR_SELECTION_CHANGED_EVENT`**. Det eventet är det som triggar `updateFloorFilter` i `useRoomLabels`-hooken (rad 514-517), som filtrerar vilka rumsetiketter som visas.
 
-I `download-derivative`-sektionen (rad ~2093-2123):
+Desktop-versionen (`FloatingFloorSwitcher`) dispatchar detta event korrekt, men den mobila kodvägen saknar det helt.
 
-**Nuvarande ordning:** IFC -> glTF -> OBJ
+## Lösning
 
-**Ny ordning:** glTF -> OBJ (skippa IFC helt)
+Lägg till dispatch av `FLOOR_SELECTION_CHANGED_EVENT` i `handleMobileFloorToggle` efter att synligheten ändrats. Detta synkroniserar rumsetiketter, ceiling clipping och andra lyssnare.
 
-- Ta bort sökningen efter IFC-derivat
-- Ändra `derivUrn = ifcDeriv?.urn || gltfDeriv?.urn || objDeriv?.urn` till `derivUrn = gltfDeriv?.urn || objDeriv?.urn`
-- Uppdatera loggningen som visar valt format
+## Tekniska ändringar
 
-### 2. Frontend: Ta bort IFC-konvertering (`src/services/acc-xkt-converter.ts`)
+### Fil: `src/components/viewer/AssetPlusViewer.tsx`
 
-- I `loadXeokitConvert()` (rad 37): ta bort import av `parseIFCIntoXKTModel`
-- I `convertGlbToXkt()` (rad 100-114): ta bort hela IFC-grenen som laddar `web-ifc` WASM
-- I `detectFormat()`: behåll IFC-detektering men kasta ett tydligt fel om IFC påträffas ("IFC-format stöds inte, använd OBJ/glTF")
-- Detta gör att webbläsaren aldrig behöver ladda den tunga `web-ifc`-modulen
+**Rad 2258-2289 -- `handleMobileFloorToggle`:**
 
-### 3. Serverkonvertering: Skippa IFC-export (`supabase/functions/acc-svf-to-gltf/index.ts`)
-
-Redan korrekt -- begär OBJ, inte IFC. Ingen ändring behövs här.
-
-### 4. (Framtida möjlighet) OBJLoaderPlugin i viewern
-
-XEO-utvecklaren nämner att xeokit kan ladda OBJ direkt via `OBJLoaderPlugin`. Detta skulle kunna vara en alternativ väg: ladda OBJ direkt i viewern utan XKT-konvertering. Det sparar konverteringssteget men tappar XKT-cachning. Kan läggas till som fallback senare.
-
-## Sammanfattning
+Efter den befintliga `setMobileFloors`-uppdateringen (rad 2283-2285), lägg till:
 
 ```text
-supabase/functions/acc-sync/index.ts:
-  - Rad 2093-2123: Ta bort IFC-prioritering, ordning blir glTF -> OBJ
-
-src/services/acc-xkt-converter.ts:
-  - Rad 37: Ta bort parseIFCIntoXKTModel-import
-  - Rad 100-114: Ta bort IFC-konvertering med web-ifc WASM
-  - Behåll OBJ- och GLB-konvertering
+1. Beräkna nya synliga våningar från uppdaterat state
+2. Samla fmGuids för synliga våningar
+3. Dispatcha FLOOR_SELECTION_CHANGED_EVENT med:
+   - visibleFloorFmGuids: lista av synliga våningars fmGuid
+   - isAllFloorsVisible: true om alla är synliga
+   - floorId: den valda våningens id (för solo-läge)
+   - bounds: beräknad om solo-läge (för ceiling clipping)
 ```
+
+Konkret ändring (pseudokod):
+
+```text
+handleMobileFloorToggle(floorId, visible):
+  ... befintlig toggleHierarchy-logik ...
+  ... befintlig setMobileFloors ...
+
+  // NY KOD:
+  const newFloors = mobileFloors.map(f =>
+    f.id === floorId ? {...f, visible} : f
+  );
+  const visibleFloors = newFloors.filter(f => f.visible);
+  const isAllVisible = visibleFloors.length === newFloors.length;
+  const isSolo = visibleFloors.length === 1;
+
+  const visibleFmGuids = visibleFloors.map(f => f.fmGuid);
+
+  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+    detail: {
+      floorId: isSolo ? visibleFloors[0].id : null,
+      visibleFloorFmGuids: visibleFmGuids,
+      visibleMetaFloorIds: visibleFloors.map(f => f.id),
+      isAllFloorsVisible: isAllVisible,
+    }
+  }));
+```
+
+Detta gör att den befintliga lyssnaren `handleFloorSelectionChange` (rad 494-532) automatiskt anropar `updateFloorFilter` med rätt vånings-GUIDs, som i sin tur filtrerar rumsettiketter till bara de valda våningarna.
 
 ## Effekt
 
-- Snabbare nedladdning (OBJ/glTF istället för IFC)
-- Snabbare klientkonvertering (ingen web-ifc WASM-laddning)
-- Mindre minnesanvändning i webbläsaren
-- Samma visuella resultat i 3D-viewern
+- Rumsetiketter filtreras korrekt till valda våningar på mobil
+- Ceiling clipping synkroniseras med mobila val
+- Ingen ändring av desktop-beteende
+- En ändring i en fil, ca 15 nya rader
 
