@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
+import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 
@@ -115,11 +116,16 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
 
   const streamChat = useCallback(
     async (userMessages: Message[], currentContext?: GunnarContext) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("You must be logged in to use Gunnar.");
+      }
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ messages: userMessages, context: currentContext }),
       });
