@@ -1,74 +1,98 @@
 
+# Forbattrad godkannandeprocess for AI-detektioner
 
-# Fix: AI-detektion hittar objekt men sparar inga
+## Oversikt
 
-## Rotorsak
+Nar ett AI-detekterat objekt godkanns ska det:
+1. Oppna samma egenskapsdialog som vid manuell inventering (forifylld)
+2. Automatiskt skapa en POI i Ivion med samma FM GUID
+3. Kontrollera om objektet redan finns (deduplicering via FM GUID pa POI)
 
-Tva problem identifierade fran nätverksdata:
+## Detaljerad design
 
-1. **Skärmklipp skickas som viewport-bild men prompten säger "360 equirectangular panorama"** -- AI:n ser en vanlig perspektivbild men instrueras att leta i en panoramabild. Detta sänker konfidensen.
+### 1. Forifylld egenskapsdialog vid godkannande
 
-2. **Konfidenströskeln 0.3 filtrerar bort alla detektioner** -- AI:n returnerar detektioner (1-2 per bild) men alla har konfidens under 0.3 och kastas bort. Granskningskön förblir tom.
+Istallet for att direkt anropa `approve-detection` i edge-funktionen nar anvandaren klickar "Godkann", oppnas en dialog med InventoryForm-liknande falt forifyllda fran detektionsmallen och AI-data:
+
+| Falt | Kalla |
+|------|-------|
+| Namn | `detection_templates.name` + AI-extraherade props (brand, model, size) |
+| Objekttyp / Kategori | `detection_templates.default_category` |
+| Beskrivning | `detection_templates.description` + AI-beskrivning |
+| Symbol | `detection_templates.default_symbol_id` |
+| Byggnad | `pending_detections.building_fm_guid` (redan kand) |
+| Vaning | Matchning av `ivion_dataset_name` mot assets med category=IfcBuildingStorey |
+| Skarmklipp | `pending_detections.thumbnail_url` visas som bild |
+| Koordinater | `pending_detections.coordinate_x/y/z` (skrivskyddade) |
+
+**Vaningsmatching**: Ivion-dataset-namn (t.ex. "Plan 2", "V2") matchas mot varje IfcBuildingStorey i byggnaden via namnlikheter. Om `ivion_dataset_name` innehaller samma text som ett vaningsplan-namn eller om det kan kopplas via FM GUID sa forifylls vaningen.
+
+### 2. POI-skapande vid godkannande
+
+Nar anvandaren bekraftar godkannande i dialogen:
+
+1. Generera 128-bit FM GUID (`crypto.randomUUID()` -- redan implementerat)
+2. Skapa asset i databasen med forifyllda + eventuellt redigerade varden
+3. Anropa `ivion-poi` edge-funktionen med `action: 'sync-asset'` for att skapa POI
+4. POI:ns `customData` innehaller `fm_guid` -- detta ar nyckeln for deduplicering
+5. Uppdatera `pending_detections` med `created_asset_fm_guid` och `created_ivion_poi_id`
+
+### 3. Deduplicering vid nasta skanning
+
+Fore lagring av en ny detektion kontrolleras:
+
+1. Hamta alla existerande POI:er for byggnaden (via Ivion API eller cachade i `assets`-tabellen)
+2. For varje ny detektion: berakna 3D-avstand till befintliga assets med koordinater
+3. Om en asset finns inom en troskeldistans (t.ex. 2 meter) och tillhor samma building -- markera som "redan inventerad" och hoppa over
+
+Alternativ (enklare och mer palitlig):
+- Vid analyze-screenshot: kolla om det redan finns en asset med samma `building_fm_guid` och koordinater inom 2m radie
+- Om ja, skippa detektionen (lagg inte i pending_detections)
+
+## Tekniska andringar
+
+### Fil 1: `src/components/ai-scan/DetectionReviewQueue.tsx`
+
+- Lagg till en ny `ApprovalDialog`-komponent som visas istallet for direkt godkannande
+- Dialogen innehaller:
+  - Skarmklipp (thumbnail) langst upp
+  - Falt: Namn, Kategori, Beskrivning, Symbol (dropdown med annotation_symbols)
+  - Byggnad (forifylld, ej andringsbar)
+  - Vaning (dropdown med IfcBuildingStorey fran byggnaden, forifylld om matchning)
+  - Rum (dropdown, valfritt)
+  - Koordinater (visas skrivskyddade)
+- "Godkann"-knappen skickar alla varden till edge-funktionen
+
+### Fil 2: `supabase/functions/ai-asset-detection/index.ts`
+
+Uppdatera `approveDetection`-funktionen:
+- Ta emot ytterligare parametrar: `name`, `category`, `symbolId`, `description`, `levelFmGuid`, `roomFmGuid`
+- Anvand dessa istallet for att hardkoda fran template
+- Efter asset-skapande: anropa Ivion POI-skapande direkt (kopiera logik fran ivion-poi/syncAssetToPoi)
+- Lagra `ivion_poi_id` pa bade asset och pending_detection
+
+Uppdatera `analyze-screenshot`:
+- Fore sparning av detektion: kolla om en asset redan finns i `assets`-tabellen med samma `building_fm_guid` och koordinater inom 2m
+- Om match hittas: skippa detektionen och logga "Already inventoried"
+
+### Fil 3: `supabase/functions/ai-asset-detection/index.ts` (vaningsmatching)
+
+Lagg till hjalp-funktion `matchFloorByDatasetName`:
+- Hamta alla IfcBuildingStorey-assets for byggnaden
+- Jamfor `ivion_dataset_name` med varje vanings `name` och `common_name`
+- Returnera matchande `fm_guid` eller null
+
+### Sammanfattning av andringar
 
 ```text
-Nätverksbevis:
-  {"detections":0, "totalInImage":1}  -- 1 objekt hittat, 0 sparade
-  {"detections":0, "totalInImage":2}  -- 2 objekt hittade, 0 sparade
+Filer som andras:
+  1. src/components/ai-scan/DetectionReviewQueue.tsx
+     - Ny ApprovalDialog med forifyllda falt
+     - Laddar annotation_symbols, vaningsplan, rum
+     - Skickar utokade parametrar vid godkannande
 
-Kod (rad 2074):
-  if (det.confidence < 0.3) continue;  // <-- filtrerar bort allt
+  2. supabase/functions/ai-asset-detection/index.ts
+     - approveDetection: tar emot formdata, skapar POI automatiskt
+     - analyze-screenshot: deduplicering mot befintliga assets (2m radie)
+     - Ny hjalp: matchFloorByDatasetName
 ```
-
-## Atgärder
-
-### 1. Uppdatera system-prompten (edge function)
-
-Ändra fran "360 equirectangular panorama" till "indoor photograph / viewport capture" sa att AI:n vet vad den tittar pa. Detta bor höja konfidensen markant.
-
-**Fil:** `supabase/functions/ai-asset-detection/index.ts` (rad 752-775)
-
-Fran:
-```
-You are an expert at detecting safety equipment in 360° equirectangular panorama images.
-```
-Till:
-```
-You are an expert at detecting objects and equipment in indoor photographs.
-The images are viewport captures from a 360° indoor scanning system, showing a regular perspective view (not equirectangular).
-```
-
-### 2. Sänk konfidenströskeln
-
-Ändra fran 0.3 till 0.1 -- detektioner med lag konfidens hamnar i granskningskön för manuell bedömning istället för att kastas.
-
-**Fil:** `supabase/functions/ai-asset-detection/index.ts` (rad 2074)
-
-Fran:
-```typescript
-if (det.confidence < 0.3) continue;
-```
-Till:
-```typescript
-if (det.confidence < 0.1) continue;
-```
-
-### 3. Lägg till diagnostik-loggning
-
-Logga varje detektions object_type och confidence sa vi kan se exakt vad AI:n returnerar och varför det filtreras. Detta hjälper vid framtida felsökning.
-
-**Fil:** `supabase/functions/ai-asset-detection/index.ts` (i analyze-screenshot, rad ~2073)
-
-```typescript
-console.log(`[analyze-screenshot] AI returned ${detections.length} raw detections:`);
-for (const det of detections) {
-  console.log(`  - ${det.object_type}: confidence=${det.confidence}, desc=${det.description?.slice(0, 80)}`);
-}
-```
-
-### Sammanfattning
-
-Tre ändringar i en fil (`supabase/functions/ai-asset-detection/index.ts`):
-- Korrigera system-prompten (viewport, inte panorama)
-- Sänk confidence-tröskeln (0.3 till 0.1)
-- Lägg till loggning av raa AI-resultat
-
