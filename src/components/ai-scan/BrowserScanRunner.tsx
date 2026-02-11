@@ -383,7 +383,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         // Navigate to image
         if (img) {
           try {
-            await (api as any).moveToImageId(img.id, undefined, undefined);
+            await (api as any).legacyApi.moveToImageId(img.id, undefined, undefined);
             console.log(`[BrowserScan] ✅ Navigated to image ${img.id}`);
             consecutiveNavFailures = 0;
             await sleep(2000); // Wait for panorama to render
