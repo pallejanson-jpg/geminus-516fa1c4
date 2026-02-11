@@ -60,10 +60,8 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       return false;
     };
 
-    // Check immediately
     if (checkDimensions()) return;
 
-    // Poll until ready
     const interval = setInterval(() => {
       if (checkDimensions()) clearInterval(interval);
     }, 200);
@@ -84,7 +82,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     if (sdkStatus === 'ready' && scanState === 'initializing') {
       startScan();
     }
-    // Handle SDK failure
     if (sdkStatus === 'failed' && scanState === 'initializing') {
       setErrorMessage(sdkErrorMessage || '360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
       setScanState('error');
@@ -99,26 +96,57 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
   };
 
+  /**
+   * Capture screenshot using Ivion SDK's synchronous getScreenshot().
+   * Returns ScreenshotDataInterface { data: string (data-URI), width, height }.
+   */
   const captureScreenshot = async (): Promise<string | null> => {
     const api = ivApiRef.current;
     if (!api) return null;
 
     try {
-      const mainView = api.getMainView?.();
-      if (mainView && typeof (mainView as any).getScreenshot === 'function') {
-        const dataUri = await (mainView as any).getScreenshot();
+      const mainView = (api as any).mainView ?? api.getMainView?.();
+      if (mainView && typeof mainView.getScreenshot === 'function') {
+        // SDK returns ScreenshotDataInterface synchronously (not a Promise)
+        const screenshotResult = mainView.getScreenshot('image/jpeg', 0.85);
+
+        // Handle both object (correct) and string (unlikely) return types
+        let dataUri: string | null = null;
+        if (screenshotResult && typeof screenshotResult === 'object' && screenshotResult.data) {
+          dataUri = screenshotResult.data;
+          console.log(`[BrowserScan] Screenshot captured: ${screenshotResult.width}x${screenshotResult.height}`);
+        } else if (typeof screenshotResult === 'string') {
+          dataUri = screenshotResult;
+          console.log('[BrowserScan] Screenshot captured (string fallback)');
+        }
+
         if (dataUri && typeof dataUri === 'string') {
           const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
-          return base64;
+          if (base64 && base64.length > 100) {
+            console.log(`[BrowserScan] Screenshot base64 length: ${base64.length}`);
+            return base64;
+          }
+          console.warn('[BrowserScan] Screenshot data too small, likely empty');
         }
+      } else {
+        console.warn('[BrowserScan] mainView.getScreenshot not available');
       }
 
+      // Fallback: try canvas element
       const ivionEl = containerRef.current?.querySelector('ivion');
       if (ivionEl) {
         const canvas = ivionEl.querySelector('canvas');
         if (canvas) {
-          const dataUri = canvas.toDataURL('image/jpeg', 0.85);
-          return dataUri.split(',')[1];
+          try {
+            const dataUri = canvas.toDataURL('image/jpeg', 0.85);
+            const base64 = dataUri.split(',')[1];
+            if (base64 && base64.length > 100) {
+              console.log(`[BrowserScan] Canvas fallback screenshot, base64 length: ${base64.length}`);
+              return base64;
+            }
+          } catch (canvasErr) {
+            console.warn('[BrowserScan] Canvas toDataURL failed (WebGL security):', canvasErr);
+          }
         }
       }
     } catch (e) {
@@ -132,10 +160,10 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     if (!api) return { x: 0, y: 0, z: 0 };
 
     try {
-      const mainView = api.getMainView?.();
+      const mainView = (api as any).mainView ?? api.getMainView?.();
       const image = mainView?.getImage?.();
       if (image?.location) {
-        return image.location;
+        return { x: image.location.x, y: image.location.y, z: image.location.z };
       }
     } catch (e) {
       console.warn('[BrowserScan] Could not get image position:', e);
@@ -143,17 +171,21 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     return { x: 0, y: 0, z: 0 };
   };
 
+  /**
+   * Rotate camera by lonDeg degrees. SDK requires both lon and lat in ViewOrientationInterface.
+   */
   const rotateView = async (lonDeg: number) => {
     const api = ivApiRef.current;
     if (!api) return;
 
     try {
-      const mainView = api.getMainView?.();
+      const mainView = (api as any).mainView ?? api.getMainView?.();
       if (mainView?.updateOrientation) {
         const currentDir = mainView.currViewingDir;
-        mainView.updateOrientation({
-          lon: (currentDir?.lon || 0) + (lonDeg * Math.PI / 180),
-        });
+        const newLon = (currentDir?.lon || 0) + (lonDeg * Math.PI / 180);
+        const currentLat = currentDir?.lat || 0;
+        mainView.updateOrientation({ lon: newLon, lat: currentLat });
+        console.log(`[BrowserScan] Rotated to lon=${(newLon * 180 / Math.PI).toFixed(1)}°, lat=${(currentLat * 180 / Math.PI).toFixed(1)}°`);
       }
     } catch (e) {
       console.warn('[BrowserScan] Rotation failed:', e);
@@ -182,6 +214,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         console.error('[BrowserScan] Analysis error:', error);
         return 0;
       }
+      console.log(`[BrowserScan] AI analysis returned ${data?.detections || 0} detections`);
       return data?.detections || 0;
     } catch (e) {
       console.error('[BrowserScan] Analysis request failed:', e);
@@ -189,45 +222,84 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
   };
 
+  /**
+   * Get image list using Ivion SDK's image.repository.findAll().
+   * The SDK exposes api.image (ImageApiInterface) with repository.findAll() -> Promise<ImageInterface[]>.
+   */
   const getImageList = async (): Promise<Array<{ id: number; datasetName?: string }>> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
-        body: { action: 'test-image-access', siteId: ivionSiteId },
-      });
+    const api = ivApiRef.current as any;
+    if (!api) {
+      console.error('[BrowserScan] No API reference for image list');
+      return [];
+    }
 
-      if (error || !data?.datasets) {
-        console.warn('[BrowserScan] Could not get datasets:', error);
-        return [];
+    try {
+      // Primary method: use SDK's image repository
+      const imageApi = api.image;
+      if (imageApi?.repository?.findAll) {
+        console.log('[BrowserScan] Fetching images via api.image.repository.findAll()...');
+        const images = await imageApi.repository.findAll(true); // forceFetch=true
+        if (Array.isArray(images) && images.length > 0) {
+          console.log(`[BrowserScan] ✅ Got ${images.length} images from SDK repository`);
+          const imageList = images.map((img: any) => ({
+            id: img.id,
+            datasetName: img.siteModelEntity?.name || undefined,
+          }));
+          return imageList;
+        }
+        console.warn('[BrowserScan] findAll() returned empty array');
+      } else {
+        console.warn('[BrowserScan] api.image.repository.findAll not available');
       }
 
-      const allImages: Array<{ id: number; datasetName?: string }> = [];
-
-      for (const dsName of data.datasets) {
-        const api = ivApiRef.current as any;
-        if (api?.image?.repository?.findAll) {
-          try {
-            const images = await api.image.repository.findAll();
+      // Fallback: use dataset repository to get datasets, then filter images
+      const datasetApi = api.dataset;
+      if (datasetApi?.repository?.findAll) {
+        console.log('[BrowserScan] Trying dataset-based fallback...');
+        const datasets = await datasetApi.repository.findAll(true);
+        if (Array.isArray(datasets) && datasets.length > 0) {
+          console.log(`[BrowserScan] Found ${datasets.length} datasets, re-trying image findAll...`);
+          // After datasets are loaded, images might be available
+          if (imageApi?.repository?.findAll) {
+            const images = await imageApi.repository.findAll(true);
             if (Array.isArray(images) && images.length > 0) {
-              for (const img of images) {
-                allImages.push({ id: img.id, datasetName: dsName });
-              }
-              console.log(`[BrowserScan] Got ${images.length} images from SDK`);
-              return allImages;
+              console.log(`[BrowserScan] ✅ Got ${images.length} images after dataset load`);
+              return images.map((img: any) => ({
+                id: img.id,
+                datasetName: img.siteModelEntity?.name || undefined,
+              }));
             }
-          } catch (e) {
-            console.warn('[BrowserScan] SDK image list failed, using fallback');
           }
         }
       }
 
-      if (allImages.length === 0) {
-        console.log('[BrowserScan] Using fallback: sequential navigation');
-        for (let i = 0; i < 200; i++) {
-          allImages.push({ id: i });
+      // Last resort: scan from current position using getClosestImageInDir
+      console.log('[BrowserScan] Fallback: exploring from current position...');
+      const mainView = api.mainView ?? api.getMainView?.();
+      const currentImage = mainView?.getImage?.();
+      if (currentImage && imageApi?.service?.getClosestImageInDir) {
+        const explored = new Set<number>();
+        const imageList: Array<{ id: number; datasetName?: string }> = [];
+        let nextImage = currentImage;
+        const viewDir = mainView.currViewingDir || { lon: 0, lat: 0 };
+
+        for (let step = 0; step < 200 && nextImage; step++) {
+          if (explored.has(nextImage.id)) break;
+          explored.add(nextImage.id);
+          imageList.push({ id: nextImage.id });
+
+          try {
+            nextImage = await imageApi.service.getClosestImageInDir(nextImage, viewDir, 1, 3);
+          } catch {
+            break;
+          }
         }
+        console.log(`[BrowserScan] Explored ${imageList.length} images via getClosestImageInDir`);
+        if (imageList.length > 0) return imageList;
       }
 
-      return allImages;
+      console.warn('[BrowserScan] Could not get any images');
+      return [];
     } catch (e) {
       console.error('[BrowserScan] Image list error:', e);
       return [];
@@ -243,6 +315,8 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
 
     setScanState('scanning');
+    console.log('[BrowserScan] === Starting scan ===');
+    console.log(`[BrowserScan] Job: ${scanJobId}, Site: ${ivionSiteId}, Templates: ${templates.length}`);
 
     try {
       const images = await getImageList();
@@ -255,6 +329,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         setTotalImages(1);
       } else {
         setTotalImages(images.length);
+        console.log(`[BrowserScan] Will scan ${images.length} images with ${ROTATIONS_PER_POSITION} rotations each`);
       }
 
       await supabase.from('scan_jobs').update({
@@ -264,6 +339,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       }).eq('id', scanJobId);
 
       let totalDetections = 0;
+      let screenshotFailures = 0;
 
       for (let i = 0; i < Math.max(images.length, 1); i++) {
         if (cancelledRef.current) break;
@@ -272,13 +348,17 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
         const img = images[i];
         setCurrentImageInfo(`Bild ${i + 1} / ${images.length || 1}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
+        console.log(`[BrowserScan] --- Image ${i + 1}/${images.length || 1}, id=${img?.id ?? 'current'} ---`);
 
+        // Navigate to image using SDK
         if (img) {
           try {
-            await api.moveToImageId(img.id);
-            await sleep(2000);
+            // moveToImageId requires (imageId, viewDir, fov) - pass undefined to keep current
+            await (api as any).moveToImageId(img.id, undefined, undefined);
+            console.log(`[BrowserScan] Navigated to image ${img.id}`);
+            await sleep(2000); // Wait for panorama to render
           } catch (e) {
-            console.warn(`[BrowserScan] Could not navigate to image ${img.id}, skipping`);
+            console.warn(`[BrowserScan] Could not navigate to image ${img.id}, skipping:`, e);
             setProcessedImages(i + 1);
             continue;
           }
@@ -292,6 +372,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           const screenshot = await captureScreenshot();
           if (screenshot) {
             const position = getImagePosition();
+            console.log(`[BrowserScan] Analyzing rotation ${rot + 1}/${ROTATIONS_PER_POSITION}, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
             const detCount = await analyzeScreenshot(
               screenshot,
               img?.id ?? null,
@@ -300,6 +381,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             );
             totalDetections += detCount;
             setDetectionsFound(totalDetections);
+          } else {
+            screenshotFailures++;
+            console.warn(`[BrowserScan] Screenshot failed (rotation ${rot + 1}, total failures: ${screenshotFailures})`);
           }
 
           if (rot < ROTATIONS_PER_POSITION - 1) {
@@ -309,10 +393,23 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
 
         setProcessedImages(i + 1);
+
+        // Update scan job progress in DB
+        await supabase.from('scan_jobs').update({
+          processed_images: i + 1,
+          current_image_index: i,
+          detections_found: totalDetections,
+        }).eq('id', scanJobId);
+      }
+
+      if (screenshotFailures > 0) {
+        console.warn(`[BrowserScan] Total screenshot failures: ${screenshotFailures}`);
       }
 
       if (!cancelledRef.current) {
         setScanState('completing');
+        console.log(`[BrowserScan] === Scan complete: ${totalDetections} detections in ${processedImages} images ===`);
+
         await supabase.functions.invoke('ai-asset-detection', {
           body: { action: 'complete-browser-scan', scanJobId },
         });
@@ -429,7 +526,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         </div>
       </div>
 
-      {/* Ivion SDK viewer container — explicit dimensions for SDK init */}
+      {/* Ivion SDK viewer container */}
       <div
         ref={containerRef}
         className="rounded-lg overflow-hidden border bg-muted"
