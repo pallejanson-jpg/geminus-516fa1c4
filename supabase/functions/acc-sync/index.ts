@@ -2090,10 +2090,7 @@ serve(async (req: Request) => {
           // Log all derivatives for debugging
           console.log(`[download-derivative] Available derivatives (${allDerivs.length}):`, JSON.stringify(allDerivs.map(d => ({ role: d.role, mime: d.mime, outputType: d.outputType, name: d.name, urn: d.urn?.substring(0, 60) }))));
 
-          // Look for downloadable single-file formats: IFC first, then glTF/GLB, then OBJ
-          const ifcDeriv = allDerivs.find(d => 
-            d.outputType === 'ifc' || (d.name && d.name.endsWith('.ifc'))
-          );
+          // Look for downloadable single-file formats: glTF/GLB first, then OBJ (IFC skipped for performance)
           const gltfDeriv = allDerivs.find(d => 
             d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
           );
@@ -2102,7 +2099,7 @@ serve(async (req: Request) => {
           );
 
           // Check if we only have SVF2 (which is not a single downloadable file)
-          const hasSvf2Only = !ifcDeriv && !gltfDeriv && !objDeriv;
+          const hasSvf2Only = !gltfDeriv && !objDeriv;
 
           if (hasSvf2Only) {
             console.log(`[download-derivative] Only SVF2 derivatives found. No single-file format available.`);
@@ -2110,7 +2107,7 @@ serve(async (req: Request) => {
               JSON.stringify({ 
                 success: false, 
                 error: "Ingen nedladdningsbar geometri hittades (SVF2 multi-fil). " +
-                       "Försök starta en ny översättning med IFC-format.",
+                       "Försök starta en ny översättning med OBJ/glTF-format.",
                 formatLimitation: true,
                 availableFormats: allDerivs.map(d => d.outputType || d.mime).filter(Boolean),
               }),
@@ -2118,8 +2115,8 @@ serve(async (req: Request) => {
             );
           }
 
-          derivUrn = ifcDeriv?.urn || gltfDeriv?.urn || objDeriv?.urn;
-          const selectedFormat = ifcDeriv ? 'ifc' : gltfDeriv ? 'gltf' : 'obj';
+          derivUrn = gltfDeriv?.urn || objDeriv?.urn;
+          const selectedFormat = gltfDeriv ? 'gltf' : 'obj';
           console.log(`[download-derivative] Selected format: ${selectedFormat}, URN: ${derivUrn?.substring(0, 60)}`);
         }
 
