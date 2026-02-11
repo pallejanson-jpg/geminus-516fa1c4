@@ -23,6 +23,8 @@ type ScanState = 'initializing' | 'scanning' | 'paused' | 'completing' | 'done' 
 const ROTATIONS_PER_POSITION = 6;
 const ROTATION_DELAY_MS = 1500;
 const CAPTURE_DELAY_MS = 500;
+const MAX_IMAGES_PER_SCAN = 200;
+const MAX_CONSECUTIVE_NAV_FAILURES = 10;
 
 const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   scanJobId,
@@ -37,6 +39,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(false);
   const cancelledRef = useRef(false);
+  const isScanningRef = useRef(false);
 
   const [scanState, setScanState] = useState<ScanState>('initializing');
   const [totalImages, setTotalImages] = useState(0);
@@ -77,16 +80,16 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     enabled: sdkEnabled,
   });
 
-  // Start scanning when SDK is ready
+  // Start scanning when SDK is ready — only depend on sdkStatus, guard with isScanningRef
   useEffect(() => {
-    if (sdkStatus === 'ready' && scanState === 'initializing') {
+    if (sdkStatus === 'ready' && !isScanningRef.current) {
       startScan();
     }
-    if (sdkStatus === 'failed' && scanState === 'initializing') {
+    if (sdkStatus === 'failed' && !isScanningRef.current) {
       setErrorMessage(sdkErrorMessage || '360°-visaren kunde inte laddas. Kontrollera Ivion-anslutningen.');
       setScanState('error');
     }
-  }, [sdkStatus, scanState]);
+  }, [sdkStatus]);
 
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -224,7 +227,6 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
   /**
    * Get image list using Ivion SDK's image.repository.findAll().
-   * The SDK exposes api.image (ImageApiInterface) with repository.findAll() -> Promise<ImageInterface[]>.
    */
   const getImageList = async (): Promise<Array<{ id: number; datasetName?: string }>> => {
     const api = ivApiRef.current as any;
@@ -234,32 +236,29 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     }
 
     try {
-      // Primary method: use SDK's image repository
       const imageApi = api.image;
       if (imageApi?.repository?.findAll) {
         console.log('[BrowserScan] Fetching images via api.image.repository.findAll()...');
-        const images = await imageApi.repository.findAll(true); // forceFetch=true
+        const images = await imageApi.repository.findAll(true);
         if (Array.isArray(images) && images.length > 0) {
           console.log(`[BrowserScan] ✅ Got ${images.length} images from SDK repository`);
-          const imageList = images.map((img: any) => ({
+          return images.map((img: any) => ({
             id: img.id,
             datasetName: img.siteModelEntity?.name || undefined,
           }));
-          return imageList;
         }
         console.warn('[BrowserScan] findAll() returned empty array');
       } else {
         console.warn('[BrowserScan] api.image.repository.findAll not available');
       }
 
-      // Fallback: use dataset repository to get datasets, then filter images
+      // Fallback: dataset repository
       const datasetApi = api.dataset;
       if (datasetApi?.repository?.findAll) {
         console.log('[BrowserScan] Trying dataset-based fallback...');
         const datasets = await datasetApi.repository.findAll(true);
         if (Array.isArray(datasets) && datasets.length > 0) {
           console.log(`[BrowserScan] Found ${datasets.length} datasets, re-trying image findAll...`);
-          // After datasets are loaded, images might be available
           if (imageApi?.repository?.findAll) {
             const images = await imageApi.repository.findAll(true);
             if (Array.isArray(images) && images.length > 0) {
@@ -273,7 +272,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
       }
 
-      // Last resort: scan from current position using getClosestImageInDir
+      // Last resort: explore from current position
       console.log('[BrowserScan] Fallback: exploring from current position...');
       const mainView = api.mainView ?? api.getMainView?.();
       const currentImage = mainView?.getImage?.();
@@ -307,63 +306,112 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   };
 
   const startScan = async () => {
+    // Guard against multiple invocations
+    if (isScanningRef.current) {
+      console.warn('[BrowserScan] startScan() called but already scanning, ignoring');
+      return;
+    }
+    isScanningRef.current = true;
+    cancelledRef.current = false; // Explicit reset
+
     const api = ivApiRef.current;
     if (!api) {
       setErrorMessage('SDK ej redo');
       setScanState('error');
+      isScanningRef.current = false;
       return;
     }
 
     setScanState('scanning');
-    console.log('[BrowserScan] === Starting scan ===');
+    const t0 = Date.now();
+    console.log(`[BrowserScan] === Starting scan at ${new Date().toISOString()} ===`);
     console.log(`[BrowserScan] Job: ${scanJobId}, Site: ${ivionSiteId}, Templates: ${templates.length}`);
+    console.log(`[BrowserScan] cancelledRef.current = ${cancelledRef.current}`);
 
     try {
-      const images = await getImageList();
-      
-      if (images.length === 0) {
+      const allImages = await getImageList();
+      console.log(`[BrowserScan] Image list fetched: ${allImages.length} images (took ${Date.now() - t0}ms)`);
+      console.log(`[BrowserScan] cancelledRef.current after getImageList = ${cancelledRef.current}`);
+
+      if (allImages.length === 0) {
         toast({
           title: 'Kunde inte lista bilder',
           description: 'Skannar den aktuella positionen istället.',
         });
-        setTotalImages(1);
-      } else {
-        setTotalImages(images.length);
-        console.log(`[BrowserScan] Will scan ${images.length} images with ${ROTATIONS_PER_POSITION} rotations each`);
       }
 
+      // Sample images if list is too large
+      let images = allImages;
+      if (allImages.length > MAX_IMAGES_PER_SCAN) {
+        const step = Math.max(1, Math.floor(allImages.length / MAX_IMAGES_PER_SCAN));
+        images = allImages.filter((_, i) => i % step === 0).slice(0, MAX_IMAGES_PER_SCAN);
+        console.log(`[BrowserScan] Sampled ${images.length} images from ${allImages.length} (every ${step}th image)`);
+      }
+
+      const scanCount = Math.max(images.length, 1);
+      setTotalImages(scanCount);
+      console.log(`[BrowserScan] Will scan ${scanCount} images with ${ROTATIONS_PER_POSITION} rotations each`);
+
       await supabase.from('scan_jobs').update({
-        total_images: images.length || 1,
+        total_images: scanCount,
         status: 'running',
         started_at: new Date().toISOString(),
       }).eq('id', scanJobId);
 
       let totalDetections = 0;
       let screenshotFailures = 0;
+      let consecutiveNavFailures = 0;
+      let processed = 0;
 
-      for (let i = 0; i < Math.max(images.length, 1); i++) {
-        if (cancelledRef.current) break;
+      console.log(`[BrowserScan] === Entering scan loop, cancelledRef=${cancelledRef.current} ===`);
+
+      for (let i = 0; i < scanCount; i++) {
+        if (cancelledRef.current) {
+          console.log(`[BrowserScan] Cancelled at image ${i}`);
+          break;
+        }
         await waitForPause();
-        if (cancelledRef.current) break;
+        if (cancelledRef.current) {
+          console.log(`[BrowserScan] Cancelled after pause at image ${i}`);
+          break;
+        }
 
         const img = images[i];
-        setCurrentImageInfo(`Bild ${i + 1} / ${images.length || 1}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
-        console.log(`[BrowserScan] --- Image ${i + 1}/${images.length || 1}, id=${img?.id ?? 'current'} ---`);
+        setCurrentImageInfo(`Bild ${i + 1} / ${scanCount}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
+        console.log(`[BrowserScan] --- Image ${i + 1}/${scanCount}, id=${img?.id ?? 'current'} (${new Date().toISOString()}) ---`);
 
-        // Navigate to image using SDK
+        // Navigate to image
         if (img) {
           try {
-            // moveToImageId requires (imageId, viewDir, fov) - pass undefined to keep current
             await (api as any).moveToImageId(img.id, undefined, undefined);
-            console.log(`[BrowserScan] Navigated to image ${img.id}`);
+            console.log(`[BrowserScan] ✅ Navigated to image ${img.id}`);
+            consecutiveNavFailures = 0;
             await sleep(2000); // Wait for panorama to render
           } catch (e) {
-            console.warn(`[BrowserScan] Could not navigate to image ${img.id}, skipping:`, e);
-            setProcessedImages(i + 1);
+            consecutiveNavFailures++;
+            console.warn(`[BrowserScan] ❌ Navigation failed for image ${img.id} (consecutive failures: ${consecutiveNavFailures}):`, e);
+            
+            if (consecutiveNavFailures > MAX_CONSECUTIVE_NAV_FAILURES) {
+              console.error(`[BrowserScan] Too many consecutive navigation failures (${consecutiveNavFailures}), aborting scan`);
+              setErrorMessage(`Navigering misslyckades ${consecutiveNavFailures} gånger i rad. Kontrollera att site-ID är korrekt.`);
+              setScanState('error');
+              await supabase.from('scan_jobs').update({
+                status: 'error',
+                error_message: `${consecutiveNavFailures} consecutive navigation failures`,
+                processed_images: processed,
+                detections_found: totalDetections,
+              }).eq('id', scanJobId);
+              isScanningRef.current = false;
+              return;
+            }
+
+            processed++;
+            setProcessedImages(processed);
             continue;
           }
         }
 
+        // Capture and analyze rotations
         for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
           if (cancelledRef.current) break;
 
@@ -392,11 +440,12 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           }
         }
 
-        setProcessedImages(i + 1);
+        processed++;
+        setProcessedImages(processed);
 
-        // Update scan job progress in DB
+        // Update progress in DB
         await supabase.from('scan_jobs').update({
-          processed_images: i + 1,
+          processed_images: processed,
           current_image_index: i,
           detections_found: totalDetections,
         }).eq('id', scanJobId);
@@ -406,29 +455,46 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         console.warn(`[BrowserScan] Total screenshot failures: ${screenshotFailures}`);
       }
 
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      console.log(`[BrowserScan] === Loop finished: processed=${processed}, detections=${totalDetections}, elapsed=${elapsed}s, cancelled=${cancelledRef.current} ===`);
+
       if (!cancelledRef.current) {
-        setScanState('completing');
-        console.log(`[BrowserScan] === Scan complete: ${totalDetections} detections in ${processedImages} images ===`);
+        // Validate that we actually processed images
+        if (processed === 0) {
+          console.error('[BrowserScan] No images were processed — marking as error');
+          setErrorMessage('Inga bilder kunde bearbetas. Kontrollera Ivion-anslutningen.');
+          setScanState('error');
+          await supabase.from('scan_jobs').update({
+            status: 'error',
+            error_message: 'No images processed',
+            processed_images: 0,
+          }).eq('id', scanJobId);
+        } else {
+          setScanState('completing');
+          console.log(`[BrowserScan] === Scan complete: ${totalDetections} detections in ${processed} images ===`);
 
-        await supabase.functions.invoke('ai-asset-detection', {
-          body: { action: 'complete-browser-scan', scanJobId },
-        });
+          await supabase.functions.invoke('ai-asset-detection', {
+            body: { action: 'complete-browser-scan', scanJobId },
+          });
 
-        setScanState('done');
-        toast({
-          title: 'Skanning klar!',
-          description: `Hittade ${totalDetections} potentiella objekt i ${processedImages} bilder.`,
-        });
+          setScanState('done');
+          toast({
+            title: 'Skanning klar!',
+            description: `Hittade ${totalDetections} potentiella objekt i ${processed} bilder.`,
+          });
 
-        const { data: finalJob } = await supabase.functions.invoke('ai-asset-detection', {
-          body: { action: 'get-scan-status', scanJobId },
-        });
-        onCompleted(finalJob || { id: scanJobId, status: 'completed', detections_found: totalDetections });
+          const { data: finalJob } = await supabase.functions.invoke('ai-asset-detection', {
+            body: { action: 'get-scan-status', scanJobId },
+          });
+          onCompleted(finalJob || { id: scanJobId, status: 'completed', detections_found: totalDetections });
+        }
       }
     } catch (e: any) {
       console.error('[BrowserScan] Scan error:', e);
       setErrorMessage(e.message || 'Okänt fel');
       setScanState('error');
+    } finally {
+      isScanningRef.current = false;
     }
   };
 
@@ -496,6 +562,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           <Eye className="h-4 w-4" />
           <AlertDescription>
             Skanningen körs i webbläsaren — håll fliken öppen. 360°-visaren navigerar automatiskt genom panoramabilderna.
+            {totalImages > 0 && totalImages < (processedImages || Infinity) && ` (samplade ${totalImages} av totalt antal bilder)`}
           </AlertDescription>
         </Alert>
 
@@ -518,7 +585,13 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             </>
           )}
           {scanState === 'error' && (
-            <Button variant="outline" size="sm" onClick={() => { setSdkEnabled(false); retry(); setScanState('initializing'); setErrorMessage(''); }}>
+            <Button variant="outline" size="sm" onClick={() => { 
+              isScanningRef.current = false;
+              setSdkEnabled(false); 
+              retry(); 
+              setScanState('initializing'); 
+              setErrorMessage(''); 
+            }}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Försök igen
             </Button>
