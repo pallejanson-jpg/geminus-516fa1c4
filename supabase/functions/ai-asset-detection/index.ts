@@ -749,7 +749,8 @@ async function analyzeImageWithAI(
       messages: [
         {
           role: "system",
-          content: `You are an expert at detecting safety equipment in 360° equirectangular panorama images.
+          content: `You are an expert at detecting objects and equipment in indoor photographs.
+The images are viewport captures from a 360° indoor scanning system, showing a regular perspective view (not equirectangular).
 You have excellent OCR capabilities and can read text on labels, stickers, and equipment.
 
 For each object you find, return JSON with:
@@ -2070,8 +2071,10 @@ serve(async (req) => {
         
         // Store detections
         let savedCount = 0;
+        console.log(`[analyze-screenshot] AI returned ${detections.length} raw detections:`);
         for (const det of detections) {
-          if (det.confidence < 0.3) continue;
+          console.log(`  - ${det.object_type}: confidence=${det.confidence}, desc=${det.description?.slice(0, 80)}`);
+          if (det.confidence < 0.1) continue;
           
           const bbox = {
             ymin: det.bounding_box[0],
