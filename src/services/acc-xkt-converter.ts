@@ -34,7 +34,6 @@ async function loadXeokitConvert() {
     XKTModel: mod.XKTModel,
     writeXKTModelToArrayBuffer: mod.writeXKTModelToArrayBuffer,
     parseGLTFIntoXKTModel: mod.parseGLTFIntoXKTModel,
-    parseIFCIntoXKTModel: mod.parseIFCIntoXKTModel,
   };
 }
 
@@ -92,26 +91,13 @@ export async function convertGlbToXkt(
   }
 
   logger('Loading xeokit-convert...');
-  const { XKTModel, writeXKTModelToArrayBuffer, parseGLTFIntoXKTModel, parseIFCIntoXKTModel } = await loadXeokitConvert();
+  const { XKTModel, writeXKTModelToArrayBuffer, parseGLTFIntoXKTModel } = await loadXeokitConvert();
 
   logger('Creating XKTModel...');
   const xktModel = new XKTModel();
 
   if (format === 'ifc') {
-    logger('Loading web-ifc WASM...');
-    const WebIFC = await import('web-ifc');
-    // web-ifc locates its WASM file using wasmPath + 'web-ifc.wasm'
-    // Empty string means it will look relative to the page origin
-    const wasmPath = '';
-    logger('Parsing IFC into XKTModel...');
-    await parseIFCIntoXKTModel({
-      WebIFC,
-      data: glbData,
-      xktModel,
-      autoNormals: true,
-      wasmPath,
-      log: logger,
-    });
+    throw new Error('IFC-format stöds inte för klientkonvertering. Använd OBJ/glTF-format istället.');
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
