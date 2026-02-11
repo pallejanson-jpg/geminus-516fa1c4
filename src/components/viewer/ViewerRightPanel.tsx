@@ -58,6 +58,10 @@ interface ViewerRightPanelProps {
   showTreeView?: boolean;
   onAddAsset?: () => void;
   initialFloorFmGuid?: string;
+  /** Controlled annotation visibility from parent */
+  showAnnotations?: boolean;
+  /** Callback when annotations toggle changes */
+  onShowAnnotationsChange?: (show: boolean) => void;
 }
 
 /**
@@ -82,6 +86,8 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   showTreeView = false,
   onAddAsset,
   initialFloorFmGuid,
+  showAnnotations: externalShowAnnotations,
+  onShowAnnotationsChange,
 }) => {
   const { allData } = useContext(AppContext);
   const { user } = useAuth();
@@ -93,7 +99,9 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   // Use controlled state if provided, otherwise local state
   const [localShowSpaces, setLocalShowSpaces] = useState(false);
   const showSpaces = externalShowSpaces !== undefined ? externalShowSpaces : localShowSpaces;
-  const [showAnnotations, setShowAnnotations] = useState(false);
+  // Use controlled annotation state if provided, otherwise local state
+  const [localShowAnnotations, setLocalShowAnnotations] = useState(false);
+  const showAnnotations = externalShowAnnotations !== undefined ? externalShowAnnotations : localShowAnnotations;
   const [toolSettings, setToolSettings] = useState<ToolConfig[]>(getVisualizationToolSettings());
 
   // Saved view dialog state
@@ -286,11 +294,15 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   const handleToggleAnnotations = useCallback(() => {
     const newValue = !showAnnotations;
-    setShowAnnotations(newValue);
+    if (onShowAnnotationsChange) {
+      onShowAnnotationsChange(newValue);
+    } else {
+      setLocalShowAnnotations(newValue);
+    }
     try {
       viewerRef.current?.assetViewer?.onToggleAnnotation?.(newValue);
     } catch (e) { /* ignore */ }
-  }, [viewerRef, showAnnotations]);
+  }, [viewerRef, showAnnotations, onShowAnnotationsChange]);
 
   const handleVisibleFloorsChange = useCallback((floorIds: string[]) => {
     onVisibleFloorsChange?.(floorIds);
