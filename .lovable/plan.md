@@ -1,34 +1,87 @@
 
-# Fix: Gunnar Chat 401 Authentication Error
 
-## Root Cause
+# Fix: BIM Sync from ACC Error
 
-Every Gunnar question fails with **401 Unauthorized** because of two issues working together:
+## Problem
 
-1. **Frontend sends the wrong token** -- `GunnarChat.tsx` line 122 sends the anon key (`VITE_SUPABASE_PUBLISHABLE_KEY`) as the Authorization header instead of the logged-in user's session token. The anon key has no `sub` claim, so authentication always fails.
+When clicking "Synka BIM" in the ACC settings, an error message appears. Based on code analysis:
 
-2. **Missing config.toml entry** -- The `gunnar-chat` function is not listed in `supabase/config.toml` with `verify_jwt = false`. This means Supabase's gateway rejects the request before the function code even runs (since the anon key is not a valid user JWT).
+- No `sync-bim-data` edge function logs exist, suggesting the error may occur client-side before the API call, OR the edge function crashes before logging the action.
+- The most likely causes are:
 
-## Fix
+1. **Missing `versionUrn`**: Cloud Models (C4RModel) may not expose `relationships.tip.data.id`, causing all items to have `versionUrn: null`. The client-side filter `filter((item: any) => item.versionUrn)` then removes all items and shows "Inga BIM-filer".
 
-### 1. `supabase/config.toml` -- Add gunnar-chat entry
+2. **Edge function timeout**: The `extractBimHierarchy` function polls Autodesk's indexing API for up to 45 seconds. Combined with auth, field parsing, and database upserts, this can exceed the edge function's execution limit.
 
-Add `verify_jwt = false` so the edge runtime does not block requests before the function handles auth internally via `verifyAuth()`.
+3. **Missing error details**: When the edge function returns `{ success: false }`, the error message shown to the user may be generic or unhelpful.
 
-### 2. `src/components/chat/GunnarChat.tsx` -- Use the user's session token
+## Solution
 
-Replace the static anon key with the actual user session token from the Supabase client:
+### 1. Fix `versionUrn` extraction for Cloud Models
 
-```text
-Before:  Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}
-After:   Authorization: Bearer <session.access_token from supabase.auth.getSession()>
-```
+In `supabase/functions/acc-sync/index.ts`, the `mapItem` function extracts `versionUrn` only from `item.relationships.tip.data.id`. For Cloud Models, try alternative paths:
+- Check `included` array for version data matching the item's `id`
+- Use `item.relationships.versions.links.related.href` to find the latest version
+- Fall back to item's own `id` if it starts with `urn:adsk.wipprod:dm.lineage:`
 
-Import the supabase client and fetch the session before making the API call. If no session exists, show a toast error instead of making the request.
+### 2. Add detailed client-side error logging
+
+In `src/components/settings/ApiSettingsModal.tsx`:
+- Log the full error response body in the console when sync fails
+- Show the actual server error message in the toast (not just `err.message`)
+- Log the items being sent (count, whether they have versionUrn) before calling the edge function
+
+### 3. Add edge function timeout protection
+
+In `supabase/functions/acc-sync/index.ts` sync-bim-data action:
+- Reduce the polling timeout from 45s to 30s to leave room for processing
+- Add a try/catch around the initial `getAccToken` call with a descriptive error
+- Log the action name immediately after parsing the body (before auth token retrieval)
+
+### 4. Improve error messages
+
+- When `bimItems.length === 0`, include file names and whether they had `versionUrn` in the error message
+- When the edge function returns a non-success response, display the actual error text from the server
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/config.toml` | Add `[functions.gunnar-chat]` with `verify_jwt = false` |
-| `src/components/chat/GunnarChat.tsx` | Import supabase client, get session token, use it in Authorization header |
+| `supabase/functions/acc-sync/index.ts` | Fix versionUrn extraction in `mapItem`, reduce poll timeout, add early action logging |
+| `src/components/settings/ApiSettingsModal.tsx` | Better error messages, console logging for debugging |
+
+## Technical Details
+
+The `mapItem` function change (line ~1558):
+
+```text
+Before:
+  const versionUrn = item.relationships?.tip?.data?.id || null;
+
+After:
+  let versionUrn = item.relationships?.tip?.data?.id || null;
+  // For Cloud Models, try finding version in included array
+  if (!versionUrn && included.length > 0) {
+    const relatedVersion = included.find(v =>
+      v.type === 'versions' && v.relationships?.item?.data?.id === item.id
+    );
+    if (relatedVersion) versionUrn = relatedVersion.id;
+  }
+```
+
+The client-side error improvement (line ~703):
+
+```text
+Before:
+  toast({ variant: 'destructive', title: 'Inga BIM-filer',
+    description: 'Denna mapp innehaller inga BIM-filer med versionUrn.' });
+
+After:
+  const allItems = selectedFiles || folder.items || [];
+  const bimWithoutUrn = allItems.filter(i => i.isBim && !i.versionUrn);
+  toast({ variant: 'destructive', title: 'Inga BIM-filer',
+    description: bimWithoutUrn.length > 0
+      ? 'Hittade ${bimWithoutUrn.length} BIM-fil(er) men utan version-URN. Filerna kan vara Cloud Models som kräver direkt API-åtkomst.'
+      : 'Denna mapp innehaller inga BIM-filer.' });
+```
+
