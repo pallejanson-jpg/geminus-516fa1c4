@@ -1846,18 +1846,21 @@ serve(async (req: Request) => {
           );
         }
 
-        // Trigger translation job - SVF (v1) for server-side GLB conversion support
-        // SVF v1 is preferred because it can be parsed by server-side tools.
-        // We also request OBJ as a secondary format (works for IFC, ignored for RVT).
+        // For RVT files: request IFC export (single downloadable file)
+        // For other formats: keep SVF+OBJ pipeline
+        const isRvt = (body.fileName || '').toLowerCase().endsWith('.rvt');
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
-            formats: [
-              { type: "svf", views: ["3d"] },
-              { type: "obj" },
-            ],
+            formats: isRvt
+              ? [{ type: "ifc" }]
+              : [
+                  { type: "svf", views: ["3d"] },
+                  { type: "obj" },
+                ],
           },
         };
+        console.log(`[translate-model] isRvt=${isRvt}, requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
         console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
 
         const jobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
@@ -2021,7 +2024,10 @@ serve(async (req: Request) => {
           // Log all derivatives for debugging
           console.log(`[download-derivative] Available derivatives (${allDerivs.length}):`, JSON.stringify(allDerivs.map(d => ({ role: d.role, mime: d.mime, outputType: d.outputType, name: d.name, urn: d.urn?.substring(0, 60) }))));
 
-          // Look for downloadable single-file formats: glTF/GLB first, then OBJ
+          // Look for downloadable single-file formats: IFC first, then glTF/GLB, then OBJ
+          const ifcDeriv = allDerivs.find(d => 
+            d.outputType === 'ifc' || (d.name && d.name.endsWith('.ifc'))
+          );
           const gltfDeriv = allDerivs.find(d => 
             d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
           );
@@ -2030,17 +2036,15 @@ serve(async (req: Request) => {
           );
 
           // Check if we only have SVF2 (which is not a single downloadable file)
-          const hasSvf2Only = !gltfDeriv && !objDeriv;
-          const svf2Deriv = allDerivs.find(d => d.role === "graphics");
+          const hasSvf2Only = !ifcDeriv && !gltfDeriv && !objDeriv;
 
           if (hasSvf2Only) {
-            console.log(`[download-derivative] Only SVF2 derivatives found. SVF2 is a multi-file bubble format and cannot be downloaded as a single file for client-side XKT conversion.`);
+            console.log(`[download-derivative] Only SVF2 derivatives found. No single-file format available.`);
             return new Response(
               JSON.stringify({ 
                 success: false, 
-                error: "RVT-filer genererar SVF2-format som inte kan konverteras till XKT i webbläsaren. " +
-                       "SVF2 är ett multi-fil format som kräver serverbaserad konvertering. " +
-                       "Hierarkidata (byggnader, våningar, rum) har synkats korrekt via BIM-synk.",
+                error: "Ingen nedladdningsbar geometri hittades (SVF2 multi-fil). " +
+                       "Försök starta en ny översättning med IFC-format.",
                 formatLimitation: true,
                 availableFormats: allDerivs.map(d => d.outputType || d.mime).filter(Boolean),
               }),
@@ -2048,8 +2052,8 @@ serve(async (req: Request) => {
             );
           }
 
-          derivUrn = gltfDeriv?.urn || objDeriv?.urn;
-          const selectedFormat = gltfDeriv ? 'gltf' : 'obj';
+          derivUrn = ifcDeriv?.urn || gltfDeriv?.urn || objDeriv?.urn;
+          const selectedFormat = ifcDeriv ? 'ifc' : gltfDeriv ? 'gltf' : 'obj';
           console.log(`[download-derivative] Selected format: ${selectedFormat}, URN: ${derivUrn?.substring(0, 60)}`);
         }
 
