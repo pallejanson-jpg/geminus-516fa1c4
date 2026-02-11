@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.acc-to-assetplus]
 verify_jwt = false
+
+[functions.gunnar-chat]
+verify_jwt = false
