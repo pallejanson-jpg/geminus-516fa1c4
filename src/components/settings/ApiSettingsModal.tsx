@@ -700,11 +700,21 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             return;
         }
 
-        const bimItems = (selectedFiles || folder.items || []).filter((item: any) => item.versionUrn);
+        const allItems = selectedFiles || folder.items || [];
+        const bimItems = allItems.filter((item: any) => item.versionUrn);
         if (bimItems.length === 0) {
-            toast({ variant: 'destructive', title: 'Inga BIM-filer', description: 'Denna mapp innehåller inga BIM-filer med versionUrn.' });
+            const bimWithoutUrn = allItems.filter((i: any) => i.isBim && !i.versionUrn);
+            console.warn('[BIM Sync] No items with versionUrn. All items:', allItems.length, 'BIM without URN:', bimWithoutUrn.length, bimWithoutUrn.map((i: any) => i.name));
+            toast({ 
+                variant: 'destructive', 
+                title: 'Inga BIM-filer', 
+                description: bimWithoutUrn.length > 0
+                    ? `Hittade ${bimWithoutUrn.length} BIM-fil(er) men utan version-URN. Filerna kan vara Cloud Models som kräver direkt API-åtkomst.`
+                    : 'Denna mapp innehåller inga BIM-filer.'
+            });
             return;
         }
+        console.log(`[BIM Sync] Starting sync: ${bimItems.length} files with versionUrn`, bimItems.map((i: any) => ({ name: i.name, urn: i.versionUrn?.slice(-30) })));
 
         setSyncingBimFolderId(folder.id);
         
@@ -745,7 +755,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     failures.push(`${item.name}: ${data?.error || 'Okänt fel'}`);
                 }
             } catch (err: any) {
-                failures.push(`${item.name}: ${err.message}`);
+                console.error(`[BIM Sync] Error syncing ${item.name}:`, err);
+                const errMsg = err?.context?.body ? JSON.stringify(err.context.body) : err.message;
+                failures.push(`${item.name}: ${errMsg}`);
             }
         }
 
