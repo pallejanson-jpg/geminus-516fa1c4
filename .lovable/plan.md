@@ -1,111 +1,91 @@
 
 
-# RVT till 3D: Pipeline via IFC-export
+# AI-skanning: Analys och atgardsplan
 
-## Bakgrund
+## Problem
 
-RVT-filer genererar SVF2 (multi-fil) som varken kan laddas ner som en fil eller parsas av forge-convert-utils (stod stangd av juridiska skal). Nuvarande pipeline misslyckas darfor alltid for RVT.
+Webblasar-baserad AI-skanning startar men visar ingen progress och hittar inga objekt. Tre huvudproblem har identifierats:
 
-## Losning: RVT -> IFC -> XKT
+## Rotorsaksanalys
 
-Autodesk Model Derivative API stoder export av RVT till IFC-format (en enda nedladdningsbar fil). xeokit-convert har `parseIFCIntoXKTModel` som kan parsa IFC direkt till XKT med hjalp av web-ifc (WASM).
+### 1. Bildlistan ar tom -- skanningen navigerar aldrig
+`BrowserScanRunner.getImageList()` (rad 192-235) forsoker:
+- Anropa edge-funktionen `test-image-access` for att fa datasets (detta ar backend-baserat och returnerar dataset-namn, inte bild-IDn for SDK:n)
+- Sedan forsoka `api.image.repository.findAll()` -- men detta anvander fel API-stig. SDK:ns `image`-objekt ar `api.image` inte `api.image.repository`
+
+Aven om det lyckas finns ett fallback med `for (let i = 0; i < 200; i++)` som genererar sekventiella IDn -- men `api.moveToImageId(i)` med godtyckliga nummer misslyckas sannolikt tyst.
+
+**Konsekvens:** Skanningen far en tom eller felaktig bildlista, navigerar inte till nagon bild, och tar skarmbilder av startpositionen.
+
+### 2. Screenshot-metoden ar felaktig
+`captureScreenshot()` (rad 102-128) forsoker:
+- `mainView.getScreenshot()` -- men anropar det som async med `await`. Enligt Ivion API:t returnerar `getScreenshot()` ett `ScreenshotDataInterface`-objekt (inte en Promise). Objektet har `data` (data-URI), `width`, `height`.
+- Koden forvantar sig en ren strang (`dataUri`), men SDK:n returnerar ett objekt.
+- Fallback: soker `canvas`-element, men panorama-canvasen ar ofta WebGL-skyddad mot `toDataURL`.
+
+**Konsekvens:** Inga skarmbilder fangas = ingenting att analysera.
+
+### 3. Rotation fungerar sannolikt inte
+`rotateView()` (rad 146-161) anvander `mainView.updateOrientation()` men skickar bara `lon` utan `lat`. Enligt API-typen kraver `updateOrientation` ett `ViewOrientationInterface` med bade `lon` och `lat`.
+
+## Atgardsplan
+
+### Steg 1: Fixa bildnavigering med korrekta SDK-anrop
+Ersatt `getImageList()` med korrekt anvandning av Ivion SDK:
 
 ```text
-Nuvarande (misslyckas):
-  RVT --> SVF2 (multi-fil) --> ??? --> XKT
+Nuvarande (trasigt):
+  api.image.repository.findAll() -- fel API-stig
 
-Ny pipeline:
-  RVT --> IFC (en fil, via Autodesk API) --> XKT (via xeokit-convert i webblasaren)
+Nytt (korrekt):
+  const imageApi = (api as any).image;
+  const images = await imageApi.repository.findAll();
+  -- returnerar ImageInterface[] med id, location, etc.
 ```
 
-## Andringar
+Om `findAll()` misslyckas, anvand `imageApi.service.getClosestImage()` for att iterativt hitta nasta bild.
 
-### 1. Edge function: `supabase/functions/acc-sync/index.ts`
-
-**translate-model** (rad 1852-1860): Andra output-formaten fran SVF+OBJ till IFC (med SVF som fallback for icke-RVT-filer):
+### Steg 2: Fixa screenshot-infangning
+Korrigera `captureScreenshot()` for att hantera SDK:ns returtyp:
 
 ```text
-// For RVT-filer: begara IFC-export
-const isRvt = (body.fileName || '').toLowerCase().endsWith('.rvt');
-const translationBody = {
-  input: { urn: urnBase64 },
-  output: {
-    formats: isRvt
-      ? [{ type: "ifc" }]                    // RVT -> IFC (en fil)
-      : [{ type: "svf", views: ["3d"] }, { type: "obj" }]  // Andra format: behallt
-  },
-};
+Nuvarande (trasigt):
+  const dataUri = await mainView.getScreenshot();  // Returnerar objekt, inte strang
+
+Nytt (korrekt):
+  const screenshotData = mainView.getScreenshot('image/jpeg', 0.85);
+  const base64 = screenshotData.data.split(',')[1];
 ```
 
-**download-derivative** (rad 2012-2053): Lagg till sokning efter IFC-derivat utover glTF/OBJ:
+### Steg 3: Fixa kamerarotation
+Uppdatera `rotateView()` for att skicka komplett `ViewOrientationInterface`:
 
 ```text
-// Leta efter IFC-derivat (nedladdningsbar som en fil)
-const ifcDeriv = allDerivs.find(d =>
-  d.outputType === 'ifc' || d.mime === 'application/octet-stream' && d.role === 'ifc'
-);
-```
-
-Nar IFC-derivat hittas, ladda ner det och spara i Storage precis som GLB gors idag.
-
-### 2. Klient: `src/services/acc-xkt-converter.ts`
-
-**convertGlbToXkt** (rad 62-133): Utoka formatstodet med IFC-detektering och parsning:
-
-```text
-// Lagg till IFC-detektering
-function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
-  // ... befintlig kod ...
-  // IFC: textfil som borjar med "ISO-10303-21" eller "FILE_DESCRIPTION"
-  if (text.startsWith('ISO-10303-21') || text.includes('FILE_DESCRIPTION')) {
-    return 'ifc';
-  }
-  return 'unknown';
-}
-```
-
-For IFC-parsning, anvand `parseIFCIntoXKTModel` fran xeokit-convert:
-
-```text
-if (format === 'ifc') {
-  logger('Parsing IFC into XKTModel...');
-  const { parseIFCIntoXKTModel } = await loadXeokitConvert();
-  const ifcData = new TextDecoder().decode(glbData);
-  await parseIFCIntoXKTModel({
-    data: ifcData,
-    xktModel,
-    log: logger,
+Nytt:
+  mainView.updateOrientation({
+    lon: (currentDir.lon || 0) + deltaDeg * Math.PI / 180,
+    lat: currentDir.lat || 0,
   });
-}
 ```
 
-### 3. Beroende: web-ifc (WASM)
+### Steg 4: Forbattra progress-feedback
+- Lagg till detaljerade konsolloggar for varje steg (bildlista, navigation, screenshot-storlek, AI-svar)
+- Visa aktuellt bildnummer och detekteringsantal tydligt i UI:t
+- Visa felmeddelande om screenshot misslyckas
 
-`parseIFCIntoXKTModel` kraver `web-ifc` som WASM-beroende. Detta maste installeras:
+### Steg 5: Hantera `moveToImageId` korrekt
+Anvand riktig bild-ID fran `findAll()` istallet for sekventiella nummer. Lagg till felhantering for navigeringsfel.
 
-```text
-npm install web-ifc
-```
+## Tekniska detaljer
 
-web-ifc ar en WASM-baserad IFC-parser som fungerar i webblasaren. Den anvands internt av xeokit-convert for att parsa IFC STEP-filer.
+### Filer som andras:
+1. **`src/components/ai-scan/BrowserScanRunner.tsx`** -- Huvudsakliga fixar i `getImageList()`, `captureScreenshot()`, `rotateView()`, och `getImagePosition()`
+2. **Ingen andring i edge-funktionen** -- `analyze-screenshot`-actionen fungerar redan korrekt
 
-**Alternativ om web-ifc inte fungerar i webblasaren**: konvertera IFC till XKT pa servern (en enkel Node.js-instans eller en Deno edge function med WASM-stod). Men web-ifc ar designad for webblasaren, sa det bor fungera.
-
-## Risker och fallbacks
-
-| Risk | Hantering |
-|---|---|
-| web-ifc WASM laddas inte i webblasaren | Testa forst. Om det inte fungerar, flytta IFC-parsningen till en edge function |
-| IFC-exporten fran Autodesk ar ofullstandig | RVT -> IFC stods officiellt (IFC2x3/IFC4). Geometri och hierarki foljder med |
-| Stora modeller gor webblasaren langsam | Visa progressindikator. For mycket stora modeller kan serverkonvertering behovas |
-| Andra filformat (IFC, DWG) paverkas | Andaringen ar villkorlig -- bara RVT-filer far IFC-pipeline, ovriga behalller SVF+OBJ |
-
-## Sammanfattning
-
-| Fil | Andring |
-|---|---|
-| `supabase/functions/acc-sync/index.ts` | Begara IFC-format for RVT-filer. Hitta och ladda ner IFC-derivat. |
-| `src/services/acc-xkt-converter.ts` | Detektera IFC-format. Parsa med `parseIFCIntoXKTModel`. |
-| `package.json` | Lagg till `web-ifc` som beroende (kravs av parseIFCIntoXKTModel). |
-| `vite.config.ts` | Eventuellt: konfigurera WASM-laddning for web-ifc. |
+### Viktiga SDK API-metoder (fran api.d.ts):
+- `api.image.repository.findAll()` -> `Promise<ImageInterface[]>` -- listar alla bilder
+- `api.moveToImageId(id)` -> `Promise<void>` -- navigerar till en bild
+- `mainView.getScreenshot(mimeType?, quality?)` -> `ScreenshotDataInterface` -- tar skarm-dump (synkron)
+- `mainView.getImage()` -> `ImageInterface` -- aktuell bild med `location: Vector3`
+- `mainView.updateOrientation({lon, lat})` -- andrar kamerariktning
 
