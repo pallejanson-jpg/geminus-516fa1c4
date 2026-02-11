@@ -108,32 +108,40 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     if (!api) return null;
 
     try {
-      const mainView = (api as any).mainView ?? api.getMainView?.();
-      if (mainView && typeof mainView.getScreenshot === 'function') {
-        // SDK returns ScreenshotDataInterface synchronously (not a Promise)
-        const screenshotResult = mainView.getScreenshot('image/jpeg', 0.85);
+      // Try multiple paths to find mainView with getScreenshot:
+      // 1. api.view.mainView (ViewApiInterface)
+      // 2. api.getMainView() (IvionApiInterface)
+      // 3. api.mainView (direct, legacy)
+      const candidates = [
+        (api as any).view?.mainView,
+        typeof api.getMainView === 'function' ? api.getMainView() : null,
+        (api as any).mainView,
+      ];
 
-        // Handle both object (correct) and string (unlikely) return types
-        let dataUri: string | null = null;
-        if (screenshotResult && typeof screenshotResult === 'object' && screenshotResult.data) {
-          dataUri = screenshotResult.data;
-          console.log(`[BrowserScan] Screenshot captured: ${screenshotResult.width}x${screenshotResult.height}`);
-        } else if (typeof screenshotResult === 'string') {
-          dataUri = screenshotResult;
-          console.log('[BrowserScan] Screenshot captured (string fallback)');
-        }
+      for (const mainView of candidates) {
+        if (mainView && typeof mainView.getScreenshot === 'function') {
+          const screenshotResult = mainView.getScreenshot('image/jpeg', 0.85);
 
-        if (dataUri && typeof dataUri === 'string') {
-          const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
-          if (base64 && base64.length > 100) {
-            console.log(`[BrowserScan] Screenshot base64 length: ${base64.length}`);
-            return base64;
+          let dataUri: string | null = null;
+          if (screenshotResult && typeof screenshotResult === 'object' && screenshotResult.data) {
+            dataUri = screenshotResult.data;
+            console.log(`[BrowserScan] Screenshot captured: ${screenshotResult.width}x${screenshotResult.height}`);
+          } else if (typeof screenshotResult === 'string') {
+            dataUri = screenshotResult;
+            console.log('[BrowserScan] Screenshot captured (string fallback)');
           }
-          console.warn('[BrowserScan] Screenshot data too small, likely empty');
+
+          if (dataUri && typeof dataUri === 'string') {
+            const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
+            if (base64 && base64.length > 100) {
+              return base64;
+            }
+            console.warn('[BrowserScan] Screenshot data too small, likely empty');
+          }
         }
-      } else {
-        console.warn('[BrowserScan] mainView.getScreenshot not available');
       }
+
+      console.warn('[BrowserScan] getScreenshot not found on any view path');
 
       // Fallback: try canvas element
       const ivionEl = containerRef.current?.querySelector('ivion');
@@ -158,12 +166,15 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     return null;
   };
 
-  const getImagePosition = (): { x: number; y: number; z: number } => {
-    const api = ivApiRef.current;
-    if (!api) return { x: 0, y: 0, z: 0 };
+  const getMainView = () => {
+    const api = ivApiRef.current as any;
+    if (!api) return null;
+    return api.view?.mainView ?? (typeof api.getMainView === 'function' ? api.getMainView() : null) ?? api.mainView ?? null;
+  };
 
+  const getImagePosition = (): { x: number; y: number; z: number } => {
     try {
-      const mainView = (api as any).mainView ?? api.getMainView?.();
+      const mainView = getMainView();
       const image = mainView?.getImage?.();
       if (image?.location) {
         return { x: image.location.x, y: image.location.y, z: image.location.z };
@@ -178,17 +189,14 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
    * Rotate camera by lonDeg degrees. SDK requires both lon and lat in ViewOrientationInterface.
    */
   const rotateView = async (lonDeg: number) => {
-    const api = ivApiRef.current;
-    if (!api) return;
-
     try {
-      const mainView = (api as any).mainView ?? api.getMainView?.();
+      const mainView = getMainView();
       if (mainView?.updateOrientation) {
         const currentDir = mainView.currViewingDir;
         const newLon = (currentDir?.lon || 0) + (lonDeg * Math.PI / 180);
         const currentLat = currentDir?.lat || 0;
         mainView.updateOrientation({ lon: newLon, lat: currentLat });
-        console.log(`[BrowserScan] Rotated to lon=${(newLon * 180 / Math.PI).toFixed(1)}°, lat=${(currentLat * 180 / Math.PI).toFixed(1)}°`);
+        console.log(`[BrowserScan] Rotated to lon=${(newLon * 180 / Math.PI).toFixed(1)}°`);
       }
     } catch (e) {
       console.warn('[BrowserScan] Rotation failed:', e);
