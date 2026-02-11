@@ -205,7 +205,7 @@ const AccFolderNode: React.FC<{
                                                 return (
                                                     <Badge variant="outline" className="text-[9px] shrink-0 px-1 py-0 gap-0.5">
                                                         <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                                        {ts.progress || ts.status}
+                                                        {ts.status === 'server-converting' ? 'Server...' : (ts.progress || ts.status)}
                                                     </Badge>
                                                 );
                                             }
@@ -826,14 +826,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (result.status === 'complete') {
             toast({ title: '3D-konvertering klar', description: `${item.name} har konverterats och laddats upp.` });
         } else if (result.status === 'failed') {
-            // Check if it's a format limitation (SVF2 only)
-            const isFormatLimitation = result.error?.includes('SVF2') || result.error?.includes('serverbaserad');
+            const isFormatLimitation = result.error?.includes('SVF2') || result.error?.includes('serverbaserad') || result.error?.includes('formatLimitation');
             toast({ 
                 variant: 'destructive', 
                 title: isFormatLimitation ? 'Formatbegränsning' : 'Konvertering misslyckades', 
-                description: isFormatLimitation 
-                    ? `RVT-filer (${item.name}) kan inte konverteras till 3D i webbläsaren. Hierarkidata synkas via BIM-synk.`
-                    : (result.error || 'Okänt fel'),
+                description: result.error || 'Okänt fel',
             });
         }
     };

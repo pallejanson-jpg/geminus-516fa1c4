@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { xktCacheService } from './xkt-cache-service';
 
 export interface TranslationStatus {
-  status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' | 'downloading' | 'converting' | 'complete';
+  status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' | 'downloading' | 'converting' | 'complete' | 'server-converting';
   progress?: string;
   message?: string;
   error?: string;
@@ -338,6 +338,69 @@ export class AccXktConverter {
     }
   }
 
+  /**
+   * Try server-side SVF-to-GLB conversion via the acc-svf-to-gltf edge function.
+   * Falls back when client-side conversion fails (e.g. SVF2/SVF formats).
+   */
+  async tryServerConversion(
+    versionUrn: string,
+    options: { buildingFmGuid?: string; fileName?: string },
+    onStatusChange: (status: TranslationStatus) => void
+  ): Promise<TranslationStatus> {
+    try {
+      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern (kan ta några minuter)...' });
+
+      const { data, error } = await supabase.functions.invoke('acc-svf-to-gltf', {
+        body: {
+          versionUrn,
+          buildingFmGuid: options.buildingFmGuid,
+          fileName: options.fileName,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data.downloadUrl && options.buildingFmGuid) {
+        // Server gave us a GLB - now convert to XKT client-side
+        onStatusChange({ status: 'converting', message: 'Konverterar GLB till XKT...' });
+        const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
+        const convertResult = await this.convertAndStore(
+          data.downloadUrl,
+          options.buildingFmGuid,
+          safeModelId,
+          options.fileName,
+          (msg) => onStatusChange({ status: 'converting', message: msg })
+        );
+
+        if (convertResult.success) {
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad via server och sparad!' };
+          onStatusChange(finalStatus);
+          return finalStatus;
+        }
+        const failStatus: TranslationStatus = { status: 'failed', error: convertResult.error || 'XKT-konvertering misslyckades' };
+        onStatusChange(failStatus);
+        return failStatus;
+      }
+
+      if (data?.formatLimitation) {
+        const failStatus: TranslationStatus = {
+          status: 'failed',
+          error: data.error || 'Formatet stöds inte för 3D-konvertering.',
+        };
+        onStatusChange(failStatus);
+        return failStatus;
+      }
+
+      const failStatus: TranslationStatus = { status: 'failed', error: data?.error || 'Serverkonvertering misslyckades' };
+      onStatusChange(failStatus);
+      return failStatus;
+    } catch (e: any) {
+      const failStatus: TranslationStatus = { status: 'failed', error: `Serverkonvertering: ${e.message}` };
+      onStatusChange(failStatus);
+      return failStatus;
+    }
+  }
+
   stopAllPolling() {
     for (const [, interval] of this.pollingIntervals) {
       clearInterval(interval);
@@ -368,46 +431,40 @@ export class AccXktConverter {
     }
 
     const doDownloadAndConvert = async (): Promise<TranslationStatus> => {
-      // Download derivative
+      // First try: direct download (works for IFC/OBJ derivatives)
       onStatusChange({ status: 'downloading', message: 'Laddar ner geometri...' });
       const dlResult = await this.downloadDerivative(versionUrn, options);
 
-      if (dlResult.status !== 'complete' || !dlResult.downloadUrl) {
+      if (dlResult.status === 'complete' && dlResult.downloadUrl) {
+        // Direct download worked (IFC with OBJ, or glTF available)
+        if (options.buildingFmGuid) {
+          onStatusChange({ status: 'converting', message: 'Konverterar till XKT...' });
+          const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
+          const convertResult = await this.convertAndStore(
+            dlResult.downloadUrl,
+            options.buildingFmGuid,
+            safeModelId,
+            options.fileName,
+            (msg) => onStatusChange({ status: 'converting', message: msg })
+          );
+
+          if (convertResult.success) {
+            const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!' };
+            onStatusChange(finalStatus);
+            return finalStatus;
+          } else {
+            // If client-side conversion failed (e.g. SVF2 manifest), try server-side
+            onStatusChange({ status: 'server-converting', message: 'Klientkonvertering misslyckades, testar serverkonvertering...' });
+            return this.tryServerConversion(versionUrn, options, onStatusChange);
+          }
+        }
         onStatusChange(dlResult);
         return dlResult;
       }
 
-      // Convert to XKT in browser
-      if (options.buildingFmGuid) {
-        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...' });
-        const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const convertResult = await this.convertAndStore(
-          dlResult.downloadUrl,
-          options.buildingFmGuid,
-          safeModelId,
-          options.fileName,
-          (msg) => onStatusChange({ status: 'converting', message: msg })
-        );
-
-        if (convertResult.success) {
-          const finalStatus: TranslationStatus = {
-            status: 'complete',
-            message: '3D-modell konverterad och sparad!',
-          };
-          onStatusChange(finalStatus);
-          return finalStatus;
-        } else {
-          const failStatus: TranslationStatus = {
-            status: 'failed',
-            error: convertResult.error || 'XKT-konvertering misslyckades',
-          };
-          onStatusChange(failStatus);
-          return failStatus;
-        }
-      }
-
-      onStatusChange(dlResult);
-      return dlResult;
+      // Direct download failed (likely SVF2/SVF only) - try server-side conversion
+      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
+      return this.tryServerConversion(versionUrn, options, onStatusChange);
     };
 
     if (startResult.status === 'success') {
