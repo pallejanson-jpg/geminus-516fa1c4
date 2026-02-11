@@ -2012,11 +2012,18 @@ serve(async (req: Request) => {
         const { token } = await getAccToken(auth.userId, supabase);
         const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+        // Detect EMEA region from URN
+        const decodedUrnDl = (() => { try { return atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/')); } catch { return ''; } })();
+        const isEmeaDl = decodedUrnDl.includes('wipemea');
+        const mdBaseDl = isEmeaDl
+          ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata"
+          : "https://developer.api.autodesk.com/modelderivative/v2/designdata";
+
         // If no specific derivative URN, fetch manifest to find it
         let derivUrn = specifiedDerivUrn;
         if (!derivUrn) {
           const manifestRes = await fetch(
-            `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
+            `${mdBaseDl}/${urnBase64}/manifest`,
             { headers: { "Authorization": `Bearer ${token}` } },
           );
           if (!manifestRes.ok) {
@@ -2087,7 +2094,7 @@ serve(async (req: Request) => {
 
         // Download the derivative file
         const encodedDerivUrn = encodeURIComponent(derivUrn);
-        const downloadUrl = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedDerivUrn}`;
+        const downloadUrl = `${mdBaseDl}/${urnBase64}/manifest/${encodedDerivUrn}`;
 
         console.log(`Downloading derivative: ${downloadUrl.substring(0, 120)}...`);
 

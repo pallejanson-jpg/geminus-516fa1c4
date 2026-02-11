@@ -232,6 +232,7 @@ async function extractSvfGeometry(
   urnBase64: string,
   resources: SvfResource[],
   log: (msg: string) => void,
+  mdBase: string = "https://developer.api.autodesk.com/modelderivative/v2/designdata",
 ): Promise<{ positions: Float32Array; indices: Uint32Array } | null> {
   // Find geometry resources - look for pack files (role=graphics or Autodesk.CloudPlatform.PackFile)
   const packResources = resources.filter(r =>
@@ -268,7 +269,7 @@ async function extractSvfGeometry(
   log(`Downloading SVF viewable: ${svfViewable.urn?.substring(0, 80)}...`);
   
   const encodedUrn = encodeURIComponent(svfViewable.urn);
-  const downloadUrl = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedUrn}`;
+  const downloadUrl = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
   
   const res = await fetch(downloadUrl, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -309,6 +310,7 @@ async function tryDownloadObjDerivative(
   urnBase64: string,
   resources: SvfResource[],
   log: (msg: string) => void,
+  mdBase: string = "https://developer.api.autodesk.com/modelderivative/v2/designdata",
 ): Promise<Uint8Array | null> {
   // Look for OBJ derivatives
   const objResource = resources.find(r =>
@@ -322,7 +324,7 @@ async function tryDownloadObjDerivative(
   }
 
   const encodedUrn = encodeURIComponent(objResource.urn);
-  const url = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedUrn}`;
+  const url = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
   
   const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
   if (!res.ok) return null;
@@ -359,6 +361,13 @@ serve(async (req: Request) => {
     const token = await getAccToken(auth.userId, supabase);
     const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+    // Detect EMEA region from URN
+    const decodedUrnSvf = (() => { try { return atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/')); } catch { return ''; } })();
+    const isEmeaSvf = decodedUrnSvf.includes('wipemea');
+    const mdBase = isEmeaSvf
+      ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata"
+      : "https://developer.api.autodesk.com/modelderivative/v2/designdata";
+
     const logs: string[] = [];
     const log = (msg: string) => {
       console.log(`[svf-to-gltf] ${msg}`);
@@ -366,11 +375,12 @@ serve(async (req: Request) => {
     };
 
     log(`Starting SVF to GLB conversion for ${fileName || versionUrn.substring(0, 40)}...`);
+    log(`Region: ${isEmeaSvf ? 'EMEA' : 'US'}`);
 
     // Step 1: Get manifest
     log('Fetching manifest...');
     const manifestRes = await fetch(
-      `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
+      `${mdBase}/${urnBase64}/manifest`,
       { headers: { "Authorization": `Bearer ${token}` } },
     );
 
@@ -416,7 +426,7 @@ serve(async (req: Request) => {
     if (gltfResource) {
       log('Found existing glTF derivative, downloading...');
       const encodedUrn = encodeURIComponent(gltfResource.urn);
-      const url = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedUrn}`;
+      const url = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
       const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
       if (res.ok) {
         glbData = new Uint8Array(await res.arrayBuffer());
@@ -429,7 +439,7 @@ serve(async (req: Request) => {
       log('No single-file derivative found. Requesting OBJ translation...');
       
       // Trigger OBJ translation
-      const objJobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
+      const objJobRes = await fetch(`${mdBase}/job`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -457,7 +467,7 @@ serve(async (req: Request) => {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
 
           const checkRes = await fetch(
-            `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
+            `${mdBase}/${urnBase64}/manifest`,
             { headers: { "Authorization": `Bearer ${token}` } },
           );
 
@@ -488,7 +498,7 @@ serve(async (req: Request) => {
           if (objOutputDone && objDeriv) {
             log('OBJ derivative ready, downloading...');
             const encodedUrn = encodeURIComponent(objDeriv.urn);
-            const url = `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest/${encodedUrn}`;
+            const url = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
             const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
             if (res.ok) {
               const objData = new Uint8Array(await res.arrayBuffer());
