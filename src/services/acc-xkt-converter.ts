@@ -383,10 +383,13 @@ export class AccXktConverter {
 
       if (error && !data?.pending) throw error;
 
-      // If translation is still pending, wait and retry (up to 12 times / 2 min)
+      // If translation is still pending, wait and retry (up to 36 times / 6 min)
+      const SVR_MAX_RETRIES = 36;
+      const SVR_INTERVAL = 10000;
       if (data?.pending) {
-        for (let attempt = 1; attempt < 12; attempt++) {
-          onStatusChange({ status: 'server-converting', message: `Väntar på översättning... (försök ${attempt + 1})` });
+        for (let attempt = 1; attempt < SVR_MAX_RETRIES; attempt++) {
+          const minutesLeft = Math.max(0, Math.ceil(((SVR_MAX_RETRIES - attempt) * SVR_INTERVAL) / 60000));
+          onStatusChange({ status: 'server-converting', message: `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)` });
           await new Promise(r => setTimeout(r, 10000));
           const retry = await supabase.functions.invoke('acc-svf-to-gltf', {
             body: { versionUrn, buildingFmGuid: options.buildingFmGuid, fileName: options.fileName },
@@ -476,13 +479,18 @@ export class AccXktConverter {
 
     const doDownloadAndConvert = async (): Promise<TranslationStatus> => {
       // First try: direct download (works for IFC/OBJ derivatives)
-      // Retry up to 12 times (2 min) if translation is still pending
+      // Retry up to 36 times (6 min) if translation is still pending
+      const DL_MAX_RETRIES = 36;
+      const DL_INTERVAL = 10000;
       let dlResult: TranslationStatus = { status: 'pending' };
-      for (let attempt = 0; attempt < 12; attempt++) {
-        onStatusChange({ status: 'downloading', message: attempt > 0 ? `Väntar på översättning... (försök ${attempt + 1})` : 'Laddar ner geometri...' });
+      let dlStillPending = false;
+      for (let attempt = 0; attempt < DL_MAX_RETRIES; attempt++) {
+        const minutesLeft = Math.max(0, Math.ceil(((DL_MAX_RETRIES - attempt) * DL_INTERVAL) / 60000));
+        onStatusChange({ status: 'downloading', message: attempt > 0 ? `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)` : 'Laddar ner geometri...' });
         dlResult = await this.downloadDerivative(versionUrn, options);
         if (dlResult.status !== 'pending') break;
-        await new Promise(r => setTimeout(r, 10000)); // wait 10s between retries
+        if (attempt === DL_MAX_RETRIES - 1) dlStillPending = true;
+        await new Promise(r => setTimeout(r, DL_INTERVAL));
       }
 
       if (dlResult.status === 'complete' && dlResult.downloadUrl) {
@@ -510,6 +518,13 @@ export class AccXktConverter {
         }
         onStatusChange(dlResult);
         return dlResult;
+      }
+
+      // If download stayed pending after all retries, don't waste time in server-conversion retry
+      if (dlStillPending) {
+        const failStatus: TranslationStatus = { status: 'failed', error: 'Översättningen hos Autodesk tog för lång tid (>6 min). Försök igen om en stund.' };
+        onStatusChange(failStatus);
+        return failStatus;
       }
 
       // Direct download failed (likely SVF2/SVF only) - try server-side conversion
