@@ -98,6 +98,26 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "query_documents",
+      description: "Query documents (ritningar, handlingar, dokument) associated with a building. Can filter by file name or source system.",
+      parameters: {
+        type: "object",
+        properties: {
+          building_fm_guid: { type: "string", description: "Filter by building fm_guid" },
+          file_name: { type: "string", description: "Search in file name (partial match)" },
+          source_system: { type: "string", description: "Filter by source system (e.g. congeria)" },
+          mime_type: { type: "string", description: "Filter by MIME type (e.g. application/pdf)" },
+          count_only: { type: "boolean", description: "If true, return only the count" },
+          limit: { type: "number", description: "Max rows to return (default 20)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
@@ -199,6 +219,22 @@ async function execSearchAssets(supabase: any, args: any) {
   return data;
 }
 
+async function execQueryDocuments(supabase: any, args: any) {
+  let query = supabase.from("documents").select(
+    args.count_only ? "*" : "id, file_name, file_path, mime_type, file_size, source_system, source_url, building_fm_guid, created_at",
+    args.count_only ? { count: "exact", head: true } : undefined
+  );
+  if (args.building_fm_guid) query = query.eq("building_fm_guid", args.building_fm_guid);
+  if (args.file_name) query = query.ilike("file_name", `%${args.file_name}%`);
+  if (args.source_system) query = query.eq("source_system", args.source_system);
+  if (args.mime_type) query = query.ilike("mime_type", `%${args.mime_type}%`);
+  if (!args.count_only) query = query.order("created_at", { ascending: false }).limit(args.limit || 20);
+
+  const { data, count, error } = await query;
+  if (error) throw error;
+  return args.count_only ? { count } : data;
+}
+
 async function executeTool(supabase: any, name: string, args: any) {
   switch (name) {
     case "query_assets": return execQueryAssets(supabase, args);
@@ -206,6 +242,7 @@ async function executeTool(supabase: any, name: string, args: any) {
     case "query_issues": return execQueryIssues(supabase, args);
     case "get_building_summary": return execBuildingSummary(supabase, args);
     case "search_assets": return execSearchAssets(supabase, args);
+    case "query_documents": return execQueryDocuments(supabase, args);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
