@@ -1846,21 +1846,17 @@ serve(async (req: Request) => {
           );
         }
 
-        // For RVT files: request IFC export (single downloadable file)
-        // For other formats: keep SVF+OBJ pipeline
-        const isRvt = (body.fileName || '').toLowerCase().endsWith('.rvt');
+        // Use SVF+OBJ for all file types (IFC export requires special entitlements)
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
-            formats: isRvt
-              ? [{ type: "ifc" }]
-              : [
-                  { type: "svf", views: ["3d"] },
-                  { type: "obj" },
-                ],
+            formats: [
+              { type: "svf", views: ["3d"] },
+              { type: "obj" },
+            ],
           },
         };
-        console.log(`[translate-model] isRvt=${isRvt}, requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
+        console.log(`[translate-model] Requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
         console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
 
         const jobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
