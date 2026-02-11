@@ -456,7 +456,50 @@ export class AccXktConverter {
   }
 
   /**
-   * Full pipeline: translate -> poll -> download -> convert -> store
+   * Wait for check-translation to return "success" before proceeding.
+   * Global timeout: 25 minutes. Polls every 10 seconds.
+   */
+  private async waitForTranslation(
+    versionUrn: string,
+    onStatusChange: (status: TranslationStatus) => void
+  ): Promise<TranslationStatus> {
+    const MAX_WAIT_MS = 25 * 60 * 1000; // 25 minutes
+    const POLL_INTERVAL = 10000; // 10 seconds
+    const startTime = Date.now();
+
+    while (true) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed > MAX_WAIT_MS) {
+        return {
+          status: 'failed',
+          error: 'Översättningen tar längre tid än väntat (>25 min). Jobbet fortsätter i Autodesk – försök igen om en stund.',
+        };
+      }
+
+      const minutesLeft = Math.max(0, Math.ceil((MAX_WAIT_MS - elapsed) / 60000));
+      const result = await this.checkTranslation(versionUrn);
+
+      if (result.status === 'success') {
+        onStatusChange({ status: 'success', message: `Översättning klar! Laddar ner geometri...` });
+        return result;
+      }
+
+      if (result.status === 'failed') {
+        return result;
+      }
+
+      // Still pending/inprogress
+      onStatusChange({
+        status: 'pending',
+        message: `Väntar på översättning från Autodesk... ${result.progress || ''} (ca ${minutesLeft} min kvar)`,
+      });
+
+      await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    }
+  }
+
+  /**
+   * Full pipeline: translate -> wait for translation -> download -> convert -> store
    */
   async runFullPipeline(
     versionUrn: string,
@@ -468,7 +511,7 @@ export class AccXktConverter {
     },
     onStatusChange: (status: TranslationStatus) => void
   ): Promise<TranslationStatus> {
-    // Step 1: Start translation
+    // Step 1: Start translation (or confirm already done)
     onStatusChange({ status: 'pending', message: 'Startar översättning...' });
     const startResult = await this.startTranslation(versionUrn, options);
     
@@ -477,78 +520,70 @@ export class AccXktConverter {
       return startResult;
     }
 
-    const doDownloadAndConvert = async (): Promise<TranslationStatus> => {
-      // First try: direct download (works for IFC/OBJ derivatives)
-      // Retry up to 36 times (6 min) if translation is still pending
-      const DL_MAX_RETRIES = 36;
-      const DL_INTERVAL = 10000;
-      let dlResult: TranslationStatus = { status: 'pending' };
-      let dlStillPending = false;
-      for (let attempt = 0; attempt < DL_MAX_RETRIES; attempt++) {
-        const minutesLeft = Math.max(0, Math.ceil(((DL_MAX_RETRIES - attempt) * DL_INTERVAL) / 60000));
-        onStatusChange({ status: 'downloading', message: attempt > 0 ? `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)` : 'Laddar ner geometri...' });
-        dlResult = await this.downloadDerivative(versionUrn, options);
-        if (dlResult.status !== 'pending') break;
-        if (attempt === DL_MAX_RETRIES - 1) dlStillPending = true;
-        await new Promise(r => setTimeout(r, DL_INTERVAL));
+    // Step 2: If not alreadyDone, poll check-translation until success (up to 25 min)
+    if (startResult.status !== 'success') {
+      onStatusChange({ status: 'pending', message: 'Väntar på översättning från Autodesk...' });
+      const translationResult = await this.waitForTranslation(versionUrn, onStatusChange);
+      if (translationResult.status === 'failed') {
+        onStatusChange(translationResult);
+        return translationResult;
       }
-
-      if (dlResult.status === 'complete' && dlResult.downloadUrl) {
-        // Direct download worked (IFC with OBJ, or glTF available)
-        if (options.buildingFmGuid) {
-          onStatusChange({ status: 'converting', message: 'Konverterar till XKT...' });
-          const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
-          const convertResult = await this.convertAndStore(
-            dlResult.downloadUrl,
-            options.buildingFmGuid,
-            safeModelId,
-            options.fileName,
-            (msg) => onStatusChange({ status: 'converting', message: msg })
-          );
-
-          if (convertResult.success) {
-            const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!' };
-            onStatusChange(finalStatus);
-            return finalStatus;
-          } else {
-            // If client-side conversion failed (e.g. SVF2 manifest), try server-side
-            onStatusChange({ status: 'server-converting', message: 'Klientkonvertering misslyckades, testar serverkonvertering...' });
-            return this.tryServerConversion(versionUrn, options, onStatusChange);
-          }
-        }
-        onStatusChange(dlResult);
-        return dlResult;
-      }
-
-      // If download stayed pending after all retries, don't waste time in server-conversion retry
-      if (dlStillPending) {
-        const failStatus: TranslationStatus = { status: 'failed', error: 'Översättningen hos Autodesk tog för lång tid (>6 min). Försök igen om en stund.' };
-        onStatusChange(failStatus);
-        return failStatus;
-      }
-
-      // Direct download failed (likely SVF2/SVF only) - try server-side conversion
-      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
-      return this.tryServerConversion(versionUrn, options, onStatusChange);
-    };
-
-    if (startResult.status === 'success') {
-      return doDownloadAndConvert();
     }
 
-    // Step 2: Poll for completion, then download + convert
-    return new Promise((resolve) => {
-      this.startPolling(versionUrn, async (status) => {
-        onStatusChange(status);
+    // Step 3: Download derivative (translation is confirmed done, only a few retries needed)
+    const DL_MAX_RETRIES = 6;
+    const DL_INTERVAL = 5000;
+    let dlResult: TranslationStatus = { status: 'pending' };
 
-        if (status.status === 'success') {
-          const result = await doDownloadAndConvert();
-          resolve(result);
-        } else if (status.status === 'failed') {
-          resolve(status);
+    for (let attempt = 0; attempt < DL_MAX_RETRIES; attempt++) {
+      onStatusChange({ status: 'downloading', message: attempt > 0 ? `Laddar ner geometri (försök ${attempt + 1})...` : 'Laddar ner geometri...' });
+      dlResult = await this.downloadDerivative(versionUrn, options);
+      if (dlResult.status !== 'pending') break;
+      await new Promise(r => setTimeout(r, DL_INTERVAL));
+    }
+
+    if (dlResult.status === 'complete' && dlResult.downloadUrl) {
+      // Direct download worked
+      if (options.buildingFmGuid) {
+        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...' });
+        const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
+        const convertResult = await this.convertAndStore(
+          dlResult.downloadUrl,
+          options.buildingFmGuid,
+          safeModelId,
+          options.fileName,
+          (msg) => onStatusChange({ status: 'converting', message: msg })
+        );
+
+        if (convertResult.success) {
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!' };
+          onStatusChange(finalStatus);
+          return finalStatus;
+        } else {
+          // Client-side failed (e.g. SVF2 manifest), try server-side
+          onStatusChange({ status: 'server-converting', message: 'Klientkonvertering misslyckades, testar serverkonvertering...' });
+          return this.tryServerConversion(versionUrn, options, onStatusChange);
         }
-      }, 8000);
-    });
+      }
+      onStatusChange(dlResult);
+      return dlResult;
+    }
+
+    // Download failed or stayed pending – try server-side conversion
+    if (dlResult.status === 'pending') {
+      // Translation was "success" but download still pending? Unusual, try server
+      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
+      return this.tryServerConversion(versionUrn, options, onStatusChange);
+    }
+
+    if (dlResult.status === 'failed') {
+      // Likely SVF2/format issue – try server conversion
+      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern...' });
+      return this.tryServerConversion(versionUrn, options, onStatusChange);
+    }
+
+    onStatusChange(dlResult);
+    return dlResult;
   }
 }
 

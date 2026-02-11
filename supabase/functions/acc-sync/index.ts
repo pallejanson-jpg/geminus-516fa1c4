@@ -1835,15 +1835,29 @@ serve(async (req: Request) => {
         // Check if translation already exists
         const { data: existing } = await supabase
           .from("acc_model_translations")
-          .select("translation_status, derivative_urn")
+          .select("translation_status, derivative_urn, started_at")
           .eq("version_urn", versionUrn)
           .maybeSingle();
 
+        // A1: If already done, return alreadyDone
         if (existing?.translation_status === "success" && existing?.derivative_urn) {
           return new Response(
             JSON.stringify({ success: true, status: "success", message: "Modellen är redan översatt.", alreadyDone: true }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
+        }
+
+        // A2: If a translation is already in progress (started < 60 min ago), don't restart
+        if (existing && (existing.translation_status === "pending" || existing.translation_status === "inprogress")) {
+          const startedAt = existing.started_at ? new Date(existing.started_at).getTime() : 0;
+          const sixtyMinAgo = Date.now() - 60 * 60 * 1000;
+          if (startedAt > sixtyMinAgo) {
+            console.log(`[translate-model] Translation already in progress (status=${existing.translation_status}, started=${existing.started_at}). Skipping job restart.`);
+            return new Response(
+              JSON.stringify({ success: true, status: "pending", message: "Översättning pågår redan. Fortsätter att bevaka status..." }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
         }
 
         // Use SVF+OBJ for all file types (IFC export requires special entitlements)
@@ -1917,10 +1931,11 @@ serve(async (req: Request) => {
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
+        // A1: Always return "pending" when job is started (not "success")
         return new Response(
           JSON.stringify({
             success: true,
-            status: jobData.result || "pending",
+            status: "pending",
             urn: urnBase64,
             message: "Översättningsjobb startat. Kontrollera status med check-translation.",
           }),
@@ -1941,10 +1956,26 @@ serve(async (req: Request) => {
         const { token } = await getAccToken(auth.userId, supabase);
         const urnBase64 = btoa(versionUrn).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-        const manifestRes = await fetch(
-          `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`,
-          { headers: { "Authorization": `Bearer ${token}` } },
-        );
+        // A3: Use EU endpoint for wipemea URNs
+        const decodedUrnCheck = atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/'));
+        const isEmeaCheck = decodedUrnCheck.includes('wipemea');
+        const manifestUrl = isEmeaCheck
+          ? `https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/${urnBase64}/manifest`
+          : `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`;
+        console.log(`[check-translation] isEmea=${isEmeaCheck}, url=${manifestUrl}`);
+
+        let manifestRes = await fetch(manifestUrl, {
+          headers: { "Authorization": `Bearer ${token}` },
+        });
+
+        // A4: If 403, fallback to 2-legged app token
+        if (manifestRes.status === 403) {
+          console.log("[check-translation] 3-legged token got 403, retrying with 2-legged app token...");
+          const appToken = await getApsAccessToken();
+          manifestRes = await fetch(manifestUrl, {
+            headers: { "Authorization": `Bearer ${appToken}` },
+          });
+        }
 
         if (!manifestRes.ok) {
           const errorText = await manifestRes.text();
