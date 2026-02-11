@@ -34,21 +34,27 @@ async function loadXeokitConvert() {
     XKTModel: mod.XKTModel,
     writeXKTModelToArrayBuffer: mod.writeXKTModelToArrayBuffer,
     parseGLTFIntoXKTModel: mod.parseGLTFIntoXKTModel,
+    parseIFCIntoXKTModel: mod.parseIFCIntoXKTModel,
   };
 }
 
 /**
  * Detect the format of binary data by inspecting magic bytes.
  */
-function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'unknown' {
+function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
   const view = new DataView(data);
   // GLB magic: 0x46546C67 ("glTF" in little-endian)
   if (data.byteLength >= 4 && view.getUint32(0, true) === 0x46546C67) {
     return 'glb';
   }
-  // OBJ: text file starting with '#' or 'v ' or 'mtllib'
-  const first = new Uint8Array(data, 0, Math.min(256, data.byteLength));
+  // Check text-based formats
+  const first = new Uint8Array(data, 0, Math.min(512, data.byteLength));
   const text = new TextDecoder().decode(first).trim();
+  // IFC: STEP file starting with "ISO-10303-21" 
+  if (text.startsWith('ISO-10303-21') || text.includes('FILE_DESCRIPTION')) {
+    return 'ifc';
+  }
+  // OBJ: text file starting with '#' or 'v ' or 'mtllib'
   if (text.startsWith('#') || text.startsWith('v ') || text.startsWith('mtllib')) {
     return 'obj';
   }
@@ -86,15 +92,28 @@ export async function convertGlbToXkt(
   }
 
   logger('Loading xeokit-convert...');
-  const { XKTModel, writeXKTModelToArrayBuffer, parseGLTFIntoXKTModel } = await loadXeokitConvert();
+  const { XKTModel, writeXKTModelToArrayBuffer, parseGLTFIntoXKTModel, parseIFCIntoXKTModel } = await loadXeokitConvert();
 
   logger('Creating XKTModel...');
   const xktModel = new XKTModel();
 
-  if (format === 'obj') {
+  if (format === 'ifc') {
+    logger('Loading web-ifc WASM...');
+    const WebIFC = await import('web-ifc');
+    // web-ifc locates its WASM file using wasmPath + 'web-ifc.wasm'
+    // Empty string means it will look relative to the page origin
+    const wasmPath = '';
+    logger('Parsing IFC into XKTModel...');
+    await parseIFCIntoXKTModel({
+      WebIFC,
+      data: glbData,
+      xktModel,
+      autoNormals: true,
+      wasmPath,
+      log: logger,
+    });
+  } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
-    // xeokit-convert's parseGLTFIntoXKTModel can handle OBJ too when passed as text
-    // But for proper OBJ support, we try the dedicated parser if available
     const mod = await import('@xeokit/xeokit-convert');
     if (typeof (mod as any).parseOBJIntoXKTModel === 'function') {
       const objText = new TextDecoder().decode(glbData);
@@ -104,7 +123,6 @@ export async function convertGlbToXkt(
         log: logger,
       });
     } else {
-      // Fallback: try parseGLTFIntoXKTModel with the raw data
       logger('No dedicated OBJ parser found, trying glTF parser...');
       await parseGLTFIntoXKTModel({
         data: glbData,
