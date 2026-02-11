@@ -1,91 +1,121 @@
 
+# AI-skanning: Felsokningsanalys och atgardsplan
 
-# AI-skanning: Analys och atgardsplan
+## Sammanfattning av problemet
 
-## Problem
+Skanningen startar och hittar bildlistan (5310 bilder), men bearbetar 0 bilder och markeras som "completed" omedelbart (~4 sekunder). Detta innebar att scan-loopen aldrig kor en enda iteration.
 
-Webblasar-baserad AI-skanning startar men visar ingen progress och hittar inga objekt. Tre huvudproblem har identifierats:
+## Rotorsaksanalys (fran databasbevis)
 
-## Rotorsaksanalys
+```text
+scan_jobs (senaste):
+  total_images: 5310   -- bildlistan HITTADES korrekt
+  processed_images: 0  -- NOLL bilder bearbetades  
+  status: completed    -- markerad som klar direkt
+  duration: ~4 sekunder
+```
 
-### 1. Bildlistan ar tom -- skanningen navigerar aldrig
-`BrowserScanRunner.getImageList()` (rad 192-235) forsoker:
-- Anropa edge-funktionen `test-image-access` for att fa datasets (detta ar backend-baserat och returnerar dataset-namn, inte bild-IDn for SDK:n)
-- Sedan forsoka `api.image.repository.findAll()` -- men detta anvander fel API-stig. SDK:ns `image`-objekt ar `api.image` inte `api.image.repository`
+### Problem 1: cancelledRef ar sannolikt true fore loopen borjar
 
-Aven om det lyckas finns ett fallback med `for (let i = 0; i < 200; i++)` som genererar sekventiella IDn -- men `api.moveToImageId(i)` med godtyckliga nummer misslyckas sannolikt tyst.
+`startScan()` ar en langa async-funktion som anropas fran en `useEffect` utan guard. Under `getImageList()` (som tar flera sekunder med 5310 bilder) kan React-livscykeln orsaka att `cancelledRef.current` satts till `true`, t.ex. om foralder-komponenten re-renderar och browserScanConfig andras. Nar loopen sedan borjar pa rad 345 hoppar den direkt till avslutningen pa rad 409, dar `if (!cancelledRef.current)` forhindrar att `complete-browser-scan` anropas... MEN databasen visar `completed`, sa nagonting annat satter den statusen.
 
-**Konsekvens:** Skanningen far en tom eller felaktig bildlista, navigerar inte till nagon bild, och tar skarmbilder av startpositionen.
+### Problem 2: Avsaknad av isScanRunning-guard
 
-### 2. Screenshot-metoden ar felaktig
-`captureScreenshot()` (rad 102-128) forsoker:
-- `mainView.getScreenshot()` -- men anropar det som async med `await`. Enligt Ivion API:t returnerar `getScreenshot()` ett `ScreenshotDataInterface`-objekt (inte en Promise). Objektet har `data` (data-URI), `width`, `height`.
-- Koden forvantar sig en ren strang (`dataUri`), men SDK:n returnerar ett objekt.
-- Fallback: soker `canvas`-element, men panorama-canvasen ar ofta WebGL-skyddad mot `toDataURL`.
+`startScan()` kan anropas flera ganger om `sdkStatus` flippar mellan tillstand (t.ex. vid retry). Varje anrop skapar en ny async-exekvering som delar samma `cancelledRef`, vilket kan leda till race conditions.
 
-**Konsekvens:** Inga skarmbilder fangas = ingenting att analysera.
+### Problem 3: moveToImageId kan misslyckas for alla bilder
 
-### 3. Rotation fungerar sannolikt inte
-`rotateView()` (rad 146-161) anvander `mainView.updateOrientation()` men skickar bara `lon` utan `lat`. Enligt API-typen kraver `updateOrientation` ett `ViewOrientationInterface` med bade `lon` och `lat`.
+Om `findAll()` returnerar bilder med ID:n som inte ar giltiga for den aktiva siten (t.ex. fran en annan site), misslyckas `moveToImageId` for varje bild. Koden gor `continue` vid misslyckande (rad 362), men skriver INTE till databasen fore `continue`, sa `processed_images` forblir 0.
+
+### Problem 4: Scanningskomplettering anropas aven vid 0 bearbetade bilder
+
+Nar loopen ar klar (eller aldrig kordes) markeras jobbet som klart oavsett om nagra bilder faktiskt bearbetades.
 
 ## Atgardsplan
 
-### Steg 1: Fixa bildnavigering med korrekta SDK-anrop
-Ersatt `getImageList()` med korrekt anvandning av Ivion SDK:
+### Steg 1: Lagg till isScanRunning-guard och batt cancelledRef-hantering
 
-```text
-Nuvarande (trasigt):
-  api.image.repository.findAll() -- fel API-stig
-
-Nytt (korrekt):
-  const imageApi = (api as any).image;
-  const images = await imageApi.repository.findAll();
-  -- returnerar ImageInterface[] med id, location, etc.
-```
-
-Om `findAll()` misslyckas, anvand `imageApi.service.getClosestImage()` for att iterativt hitta nasta bild.
-
-### Steg 2: Fixa screenshot-infangning
-Korrigera `captureScreenshot()` for att hantera SDK:ns returtyp:
-
-```text
-Nuvarande (trasigt):
-  const dataUri = await mainView.getScreenshot();  // Returnerar objekt, inte strang
-
-Nytt (korrekt):
-  const screenshotData = mainView.getScreenshot('image/jpeg', 0.85);
-  const base64 = screenshotData.data.split(',')[1];
-```
-
-### Steg 3: Fixa kamerarotation
-Uppdatera `rotateView()` for att skicka komplett `ViewOrientationInterface`:
+Forhindra att `startScan()` anropas flera ganger och sakerstall att `cancelledRef` bara satts vid explicit avbrytning:
 
 ```text
 Nytt:
-  mainView.updateOrientation({
-    lon: (currentDir.lon || 0) + deltaDeg * Math.PI / 180,
-    lat: currentDir.lat || 0,
-  });
+  const isScanningRef = useRef(false);
+  
+  const startScan = async () => {
+    if (isScanningRef.current) return;  // Forhindra dubbla anrop
+    isScanningRef.current = true;
+    cancelledRef.current = false;       // Explicit aterställning
+    ...
+  };
 ```
 
-### Steg 4: Forbattra progress-feedback
-- Lagg till detaljerade konsolloggar for varje steg (bildlista, navigation, screenshot-storlek, AI-svar)
-- Visa aktuellt bildnummer och detekteringsantal tydligt i UI:t
-- Visa felmeddelande om screenshot misslyckas
+### Steg 2: Fixa useEffect-anropet med korrekt depency och cleanup
 
-### Steg 5: Hantera `moveToImageId` korrekt
-Anvand riktig bild-ID fran `findAll()` istallet for sekventiella nummer. Lagg till felhantering for navigeringsfel.
+Det nuvarande useEffect pa rad 81-89 saknar beroendedeklaration for `startScan` och har ingen cleanup. Atgard:
+
+```text
+Nytt:
+  useEffect(() => {
+    if (sdkStatus === 'ready' && scanState === 'initializing') {
+      startScan();
+    }
+    // Ingen cleanup -- cancelledRef hanteras via handleCancel
+  }, [sdkStatus]);  // Ta bort scanState fran deps for att undvika re-trigger
+```
+
+### Steg 3: Lagg till robustare felhantering i scan-loopen
+
+```text
+Nytt:
+  - Vid moveToImageId-misslyckande: logga tydligt OCH rakna misslyckanden
+  - Om >10 navigeringar misslyckas i rad: avbryt med felmeddelande
+  - Vid screenshot-misslyckande: logga storlek och orsak
+  - Skriv processed_images till DB aven vid navigeringsfel
+```
+
+### Steg 4: Begrinsa antalet bilder per skanning
+
+5310 bilder med 6 rotationer = 31 860 skarmbilder. Det tar timmar. Lagg till en max-grans och sampling:
+
+```text
+Nytt:
+  - Max 200 bilder per skanning (kan okas i installningar)
+  - Jamn sampling over hela bildlistan (var N:e bild)
+  - Visa uppskattat tid i UI:t
+```
+
+### Steg 5: Validera att skanningen faktiskt bearbetat bilder innan markering som klar
+
+```text
+Nytt:
+  if (!cancelledRef.current && processedImages > 0) {
+    // complete-browser-scan
+  } else if (!cancelledRef.current && processedImages === 0) {
+    setScanState('error');
+    setErrorMessage('Inga bilder kunde bearbetas');
+  }
+```
+
+### Steg 6: Forbattra konsolloggning for felsökning
+
+Lagg till tydliga loggar med timestamps vid varje kritiskt steg:
+- "cancelledRef.current value at loop start"
+- "moveToImageId result for each image" 
+- "screenshot result (null/size)"
+- "Total consecutive navigation failures"
 
 ## Tekniska detaljer
 
 ### Filer som andras:
-1. **`src/components/ai-scan/BrowserScanRunner.tsx`** -- Huvudsakliga fixar i `getImageList()`, `captureScreenshot()`, `rotateView()`, och `getImagePosition()`
-2. **Ingen andring i edge-funktionen** -- `analyze-screenshot`-actionen fungerar redan korrekt
+1. **`src/components/ai-scan/BrowserScanRunner.tsx`** -- Alla fixar ovan
+2. **`src/components/ai-scan/ScanConfigPanel.tsx`** -- Lagg till maxImages-parameter och tidsuppskattning
 
-### Viktiga SDK API-metoder (fran api.d.ts):
-- `api.image.repository.findAll()` -> `Promise<ImageInterface[]>` -- listar alla bilder
-- `api.moveToImageId(id)` -> `Promise<void>` -- navigerar till en bild
-- `mainView.getScreenshot(mimeType?, quality?)` -> `ScreenshotDataInterface` -- tar skarm-dump (synkron)
-- `mainView.getImage()` -> `ImageInterface` -- aktuell bild med `location: Vector3`
-- `mainView.updateOrientation({lon, lat})` -- andrar kamerariktning
+### Karnfix (BrowserScanRunner.tsx):
 
+De viktigaste andringarna:
+- `isScanningRef` guard mot dubbla anrop
+- `cancelledRef.current = false` vid start
+- Begransat till 200 bilder med sampling
+- Rakna navigeringsfel och avbryt vid for manga
+- Kontrollera att minst 1 bild bearbetats innan "completed"
+- Utforlig konsolloggning vid varje steg
