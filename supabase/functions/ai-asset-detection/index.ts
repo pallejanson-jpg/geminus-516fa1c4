@@ -1477,10 +1477,48 @@ async function getScanStatus(scanJobId: string): Promise<any> {
   return job;
 }
 
-// Approve a detection - create asset and POI with smart naming from extracted properties
+// Match floor by Ivion dataset name against IfcBuildingStorey assets
+async function matchFloorByDatasetName(
+  buildingFmGuid: string,
+  datasetName: string | null
+): Promise<string | null> {
+  if (!datasetName) return null;
+  
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { data: floors } = await supabase
+    .from('assets')
+    .select('fm_guid, name, common_name')
+    .eq('building_fm_guid', buildingFmGuid)
+    .eq('category', 'IfcBuildingStorey');
+  
+  if (!floors || floors.length === 0) return null;
+  
+  const dsLower = datasetName.toLowerCase();
+  
+  for (const floor of floors) {
+    const fName = (floor.name || '').toLowerCase();
+    const fCommon = (floor.common_name || '').toLowerCase();
+    if (fName === dsLower || fCommon === dsLower
+      || (fName && dsLower.includes(fName)) || (fName && fName.includes(dsLower))
+      || (fCommon && dsLower.includes(fCommon)) || (fCommon && fCommon.includes(dsLower))) {
+      console.log(`[matchFloor] Matched dataset "${datasetName}" -> floor "${floor.name}" (${floor.fm_guid})`);
+      return floor.fm_guid;
+    }
+  }
+  
+  return null;
+}
+
+// Approve a detection - create asset and POI with form data
 async function approveDetection(params: {
   detectionId: string;
   userId: string;
+  name?: string;
+  category?: string;
+  description?: string;
+  symbolId?: string | null;
+  levelFmGuid?: string | null;
+  roomFmGuid?: string | null;
 }): Promise<{ success: boolean; assetFmGuid?: string; poiId?: number; message?: string }> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
@@ -1499,36 +1537,32 @@ async function approveDetection(params: {
     return { success: false, message: `Detection already ${detection.status}` };
   }
   
-  // Generate FMGUID for new asset
+  // Generate 128-bit FM GUID
   const assetFmGuid = crypto.randomUUID();
   
-  // Extract properties for smart naming
+  // Use form data if provided, otherwise fall back to extracted properties
   const props = (detection.extracted_properties as ExtractedProperties) || {};
   const baseName = detection.detection_templates?.name || detection.object_type;
   
-  // Generate descriptive name: "Gloria PD6GA 6kg" or fallback to template name
-  const assetName = [props.brand, props.model, props.size]
-    .filter(Boolean)
-    .join(' ') || baseName;
+  const assetName = params.name || [props.brand, props.model, props.size].filter(Boolean).join(' ') || baseName;
+  const assetCategory = params.category || detection.detection_templates?.default_category || detection.object_type;
+  const commonName = [props.type, props.size].filter(Boolean).join(' ') || baseName;
   
-  // Generate common_name: "Pulver ABC 6kg" or fallback
-  const commonName = [props.type, props.size]
-    .filter(Boolean)
-    .join(' ') || baseName;
+  // Auto-match floor if not provided
+  const levelFmGuid = params.levelFmGuid || await matchFloorByDatasetName(
+    detection.building_fm_guid,
+    detection.ivion_dataset_name
+  );
   
-  // Build attributes with all extracted properties
+  // Build attributes
   const attributes: Record<string, any> = {
     ai_detected: true,
     ai_confidence: detection.confidence,
     ai_description: detection.ai_description,
   };
   
-  // Add auto-captured photo from detection thumbnail
-  if (detection.thumbnail_url) {
-    attributes.imageUrl = detection.thumbnail_url;
-  }
-  
-  // Add extracted properties to attributes
+  if (params.description) attributes.description = params.description;
+  if (detection.thumbnail_url) attributes.imageUrl = detection.thumbnail_url;
   if (props.brand) attributes.brand = props.brand;
   if (props.model) attributes.model = props.model;
   if (props.size) attributes.size = props.size;
@@ -1538,7 +1572,9 @@ async function approveDetection(params: {
   if (props.condition) attributes.condition = props.condition;
   if (props.text_visible) attributes.text_visible = props.text_visible;
   
-  // Create asset with smart naming and extracted properties
+  // Create asset
+  const symbolId = params.symbolId || detection.detection_templates?.default_symbol_id || null;
+  
   const { error: assetError } = await supabase
     .from('assets')
     .insert({
@@ -1546,12 +1582,14 @@ async function approveDetection(params: {
       name: assetName,
       common_name: commonName,
       category: 'Instance',
-      asset_type: detection.detection_templates?.default_category || detection.object_type,
+      asset_type: assetCategory,
       building_fm_guid: detection.building_fm_guid,
+      level_fm_guid: levelFmGuid,
+      in_room_fm_guid: params.roomFmGuid || null,
       coordinate_x: detection.coordinate_x,
       coordinate_y: detection.coordinate_y,
       coordinate_z: detection.coordinate_z,
-      symbol_id: detection.detection_templates?.default_symbol_id,
+      symbol_id: symbolId,
       ivion_site_id: detection.ivion_site_id,
       ivion_image_id: detection.ivion_image_id,
       is_local: true,
@@ -1564,6 +1602,109 @@ async function approveDetection(params: {
     return { success: false, message: `Failed to create asset: ${assetError.message}` };
   }
   
+  // Auto-create POI in Ivion
+  let poiId: number | undefined;
+  try {
+    // Get building settings for Ivion site ID
+    const { data: buildingSettings } = await supabase
+      .from('building_settings')
+      .select('ivion_site_id')
+      .eq('fm_guid', detection.building_fm_guid)
+      .maybeSingle();
+    
+    if (buildingSettings?.ivion_site_id) {
+      const siteId = buildingSettings.ivion_site_id;
+      const token = await getIvionToken();
+      const poiTypeId = 1; // Default POI type
+      
+      // Try to get a proper default POI type
+      try {
+        const typesResp = await fetch(`${IVION_API_URL}/api/site/${siteId}/poi_types`, {
+          headers: { 'x-authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        });
+        if (typesResp.ok) {
+          const types = await typesResp.json();
+          if (types.length > 0) {
+            const generic = types.find((t: any) =>
+              t.name?.toLowerCase().includes('generic') ||
+              t.name?.toLowerCase().includes('default') ||
+              t.name?.toLowerCase().includes('standard')
+            );
+            // Use generic or first type
+            const selectedType = generic || types[0];
+            if (selectedType?.id) {
+              // poiTypeId is const so we use it directly in the POI data below
+            }
+          }
+        }
+      } catch { /* use default */ }
+      
+      const poiData = {
+        titles: { sv: assetName },
+        descriptions: { sv: params.description || detection.ai_description || '' },
+        scsLocation: {
+          type: 'Point',
+          coordinates: [
+            detection.coordinate_x || 0,
+            detection.coordinate_y || 0,
+            detection.coordinate_z || 0,
+          ],
+        },
+        scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
+        poiTypeId,
+        security: { groupRead: 0, groupWrite: 0 },
+        visibilityCheck: false,
+        importance: 1,
+        customData: JSON.stringify({
+          fm_guid: assetFmGuid,
+          asset_type: assetCategory,
+          source: 'geminus-ai-detection',
+        }),
+      };
+      
+      // If we have an image ID, set pointOfView
+      if (detection.ivion_image_id) {
+        (poiData as any).pointOfView = {
+          imageId: detection.ivion_image_id,
+          location: { x: detection.coordinate_x || 0, y: detection.coordinate_y || 0, z: detection.coordinate_z || 0 },
+          orientation: { x: 0, y: 0, z: 0, w: 1 },
+          fov: 90,
+        };
+      }
+      
+      const createResp = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois`, {
+        method: 'POST',
+        headers: {
+          'x-authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([poiData]),
+      });
+      
+      if (createResp.ok) {
+        const createdPoi = await createResp.json();
+        const poiResult = Array.isArray(createdPoi) ? createdPoi[0] : createdPoi;
+        poiId = poiResult?.id;
+        
+        if (poiId) {
+          // Update asset with POI ID
+          await supabase.from('assets').update({
+            ivion_poi_id: poiId,
+            ivion_synced_at: new Date().toISOString(),
+          }).eq('fm_guid', assetFmGuid);
+          
+          console.log(`[approveDetection] Created POI #${poiId} for asset ${assetFmGuid}`);
+        }
+      } else {
+        const errText = await createResp.text();
+        console.error(`[approveDetection] POI creation failed: ${createResp.status} - ${errText.slice(0, 200)}`);
+      }
+    }
+  } catch (poiError: any) {
+    console.error('[approveDetection] POI creation error (non-blocking):', poiError.message);
+    // Non-blocking - asset is still created successfully
+  }
+  
   // Update detection as approved
   await supabase
     .from('pending_detections')
@@ -1572,10 +1713,11 @@ async function approveDetection(params: {
       reviewed_by: params.userId,
       reviewed_at: new Date().toISOString(),
       created_asset_fm_guid: assetFmGuid,
+      created_ivion_poi_id: poiId || null,
     })
     .eq('id', params.detectionId);
   
-  return { success: true, assetFmGuid };
+  return { success: true, assetFmGuid, poiId };
 }
 
 // Reject a detection
@@ -1966,7 +2108,16 @@ serve(async (req) => {
       case 'approve-detection':
         if (!userId) throw new Error('Authentication required');
         if (!params.detectionId) throw new Error('detectionId required');
-        result = await approveDetection({ detectionId: params.detectionId, userId });
+        result = await approveDetection({
+          detectionId: params.detectionId,
+          userId,
+          name: params.name,
+          category: params.category,
+          description: params.description,
+          symbolId: params.symbolId,
+          levelFmGuid: params.levelFmGuid,
+          roomFmGuid: params.roomFmGuid,
+        });
         break;
 
       case 'reject-detection':
@@ -2069,8 +2220,31 @@ serve(async (req) => {
         // Calculate 3D coordinates from image position if available
         const cameraPos = params.imagePosition || { x: 0, y: 0, z: 0 };
         
+        // Load existing assets for deduplication (within this building, with coordinates)
+        const { data: existingAssets } = await supabase
+          .from('assets')
+          .select('fm_guid, coordinate_x, coordinate_y, coordinate_z')
+          .eq('building_fm_guid', scanJob.building_fm_guid)
+          .not('coordinate_x', 'is', null);
+        
+        const DEDUP_DISTANCE_M = 2.0; // 2 meter threshold
+        
+        function isAlreadyInventoried(coords: { x: number; y: number; z: number }): boolean {
+          if (!existingAssets || existingAssets.length === 0) return false;
+          for (const asset of existingAssets) {
+            if (asset.coordinate_x == null || asset.coordinate_y == null || asset.coordinate_z == null) continue;
+            const dx = coords.x - asset.coordinate_x;
+            const dy = coords.y - asset.coordinate_y;
+            const dz = coords.z - asset.coordinate_z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (dist < DEDUP_DISTANCE_M) return true;
+          }
+          return false;
+        }
+        
         // Store detections
         let savedCount = 0;
+        let skippedDedup = 0;
         console.log(`[analyze-screenshot] AI returned ${detections.length} raw detections:`);
         for (const det of detections) {
           console.log(`  - ${det.object_type}: confidence=${det.confidence}, desc=${det.description?.slice(0, 80)}`);
@@ -2084,6 +2258,13 @@ serve(async (req) => {
           };
           
           const worldCoords = imageToWorldCoords(bbox, cameraPos);
+          
+          // Deduplication: skip if an asset already exists within 2m
+          if (isAlreadyInventoried(worldCoords)) {
+            console.log(`  [dedup] Skipping ${det.object_type} at (${worldCoords.x.toFixed(1)},${worldCoords.y.toFixed(1)},${worldCoords.z.toFixed(1)}) - already inventoried`);
+            skippedDedup++;
+            continue;
+          }
           
           const matchingTemplate = tpls.find(t => t.object_type === det.object_type);
           
@@ -2120,6 +2301,10 @@ serve(async (req) => {
             });
           
           if (!insertErr) savedCount++;
+        }
+        
+        if (skippedDedup > 0) {
+          console.log(`[analyze-screenshot] Dedup: skipped ${skippedDedup} already-inventoried objects`);
         }
         
         // Update scan job progress

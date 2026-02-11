@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -31,11 +34,37 @@ interface PendingDetection {
   status: string;
   building_fm_guid: string;
   ivion_image_id: number | null;
+  ivion_dataset_name: string | null;
+  coordinate_x: number | null;
+  coordinate_y: number | null;
+  coordinate_z: number | null;
   created_at: string;
   detection_templates: {
     name: string;
     description: string | null;
+    default_category: string | null;
+    default_symbol_id: string | null;
   } | null;
+}
+
+interface AnnotationSymbol {
+  id: string;
+  name: string;
+  category: string;
+  color: string;
+  icon_url: string | null;
+}
+
+interface FloorAsset {
+  fm_guid: string;
+  name: string | null;
+  common_name: string | null;
+}
+
+interface RoomAsset {
+  fm_guid: string;
+  name: string | null;
+  common_name: string | null;
 }
 
 interface ScanJob {
@@ -52,6 +81,331 @@ interface DetectionReviewQueueProps {
   onDetectionProcessed: () => void;
 }
 
+// ---------- ApprovalDialog ----------
+interface ApprovalFormData {
+  name: string;
+  category: string;
+  description: string;
+  symbolId: string | null;
+  levelFmGuid: string | null;
+  roomFmGuid: string | null;
+}
+
+const ApprovalDialog: React.FC<{
+  detection: PendingDetection;
+  open: boolean;
+  onClose: () => void;
+  onApproved: () => void;
+}> = ({ detection, open, onClose, onApproved }) => {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
+  const [floors, setFloors] = useState<FloorAsset[]>([]);
+  const [rooms, setRooms] = useState<RoomAsset[]>([]);
+
+  // Build pre-filled form data from template + extracted props
+  const props = detection.extracted_properties || {};
+  const templateName = detection.detection_templates?.name || detection.object_type;
+  const defaultName = [props.brand, props.model, props.size].filter(Boolean).join(' ') || templateName;
+  const defaultCategory = detection.detection_templates?.default_category || detection.object_type;
+  const defaultDescription = [detection.detection_templates?.description, detection.ai_description]
+    .filter(Boolean).join(' — ');
+
+  const [form, setForm] = useState<ApprovalFormData>({
+    name: defaultName,
+    category: defaultCategory,
+    description: defaultDescription,
+    symbolId: detection.detection_templates?.default_symbol_id || null,
+    levelFmGuid: null,
+    roomFmGuid: null,
+  });
+
+  // Reset form when detection changes
+  useEffect(() => {
+    setForm({
+      name: defaultName,
+      category: defaultCategory,
+      description: defaultDescription,
+      symbolId: detection.detection_templates?.default_symbol_id || null,
+      levelFmGuid: null,
+      roomFmGuid: null,
+    });
+  }, [detection.id]);
+
+  // Load symbols, floors, rooms
+  useEffect(() => {
+    if (!open) return;
+
+    // Load annotation symbols
+    supabase.from('annotation_symbols').select('id, name, category, color, icon_url')
+      .order('name')
+      .then(({ data }) => setSymbols(data || []));
+
+    // Load floors (IfcBuildingStorey) for this building
+    supabase.from('assets')
+      .select('fm_guid, name, common_name')
+      .eq('building_fm_guid', detection.building_fm_guid)
+      .eq('category', 'IfcBuildingStorey')
+      .order('name')
+      .then(({ data }) => {
+        const floorData = data || [];
+        setFloors(floorData);
+
+        // Auto-match floor by ivion_dataset_name
+        if (detection.ivion_dataset_name && floorData.length > 0) {
+          const dsName = detection.ivion_dataset_name.toLowerCase();
+          const matched = floorData.find(f => {
+            const fName = (f.name || '').toLowerCase();
+            const fCommon = (f.common_name || '').toLowerCase();
+            return fName === dsName || fCommon === dsName
+              || dsName.includes(fName) || fName.includes(dsName)
+              || dsName.includes(fCommon) || fCommon.includes(dsName);
+          });
+          if (matched) {
+            setForm(prev => ({ ...prev, levelFmGuid: matched.fm_guid }));
+          }
+        }
+      });
+  }, [open, detection.building_fm_guid, detection.ivion_dataset_name]);
+
+  // Load rooms when floor changes
+  useEffect(() => {
+    if (!form.levelFmGuid) {
+      setRooms([]);
+      return;
+    }
+    supabase.from('assets')
+      .select('fm_guid, name, common_name')
+      .eq('building_fm_guid', detection.building_fm_guid)
+      .eq('level_fm_guid', form.levelFmGuid)
+      .eq('category', 'IfcSpace')
+      .order('name')
+      .then(({ data }) => setRooms(data || []));
+  }, [form.levelFmGuid, detection.building_fm_guid]);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
+        body: {
+          action: 'approve-detection',
+          detectionId: detection.id,
+          name: form.name,
+          category: form.category,
+          description: form.description,
+          symbolId: form.symbolId,
+          levelFmGuid: form.levelFmGuid,
+          roomFmGuid: form.roomFmGuid,
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.message);
+
+      toast({
+        title: 'Godkänd',
+        description: data.poiId
+          ? `Tillgång skapad med POI #${data.poiId}`
+          : 'Tillgång skapad från detektion',
+      });
+      onClose();
+      onApproved();
+    } catch (error: any) {
+      toast({ title: 'Fel vid godkännande', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Get building name for display
+  const [buildingName, setBuildingName] = useState<string>('');
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('assets')
+      .select('name, common_name')
+      .eq('fm_guid', detection.building_fm_guid)
+      .maybeSingle()
+      .then(({ data }) => setBuildingName(data?.name || data?.common_name || detection.building_fm_guid));
+  }, [open, detection.building_fm_guid]);
+
+  return (
+    <Dialog open={open} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Godkänn detektion</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Thumbnail */}
+          {detection.thumbnail_url && (
+            <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+              <img
+                src={detection.thumbnail_url}
+                alt={detection.object_type}
+                className="w-full h-full object-contain"
+              />
+            </div>
+          )}
+
+          {/* Confidence badge */}
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">
+              Konfidens: {Math.round(detection.confidence * 100)}%
+            </Badge>
+            {props.brand && <Badge variant="outline">{props.brand}</Badge>}
+            {props.model && <Badge variant="outline">{props.model}</Badge>}
+          </div>
+
+          {/* Name */}
+          <div className="space-y-1">
+            <Label>Namn</Label>
+            <Input
+              value={form.name}
+              onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1">
+            <Label>Objekttyp / Kategori</Label>
+            <Input
+              value={form.category}
+              onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1">
+            <Label>Beskrivning</Label>
+            <Textarea
+              value={form.description}
+              onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
+              rows={3}
+            />
+          </div>
+
+          {/* Symbol */}
+          <div className="space-y-1">
+            <Label>Symbol</Label>
+            <Select
+              value={form.symbolId || 'none'}
+              onValueChange={val => setForm(prev => ({ ...prev, symbolId: val === 'none' ? null : val }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Välj symbol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ingen symbol</SelectItem>
+                {symbols.map(s => (
+                  <SelectItem key={s.id} value={s.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: s.color }} />
+                      {s.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Building (read-only) */}
+          <div className="space-y-1">
+            <Label>Byggnad</Label>
+            <Input value={buildingName} readOnly className="bg-muted" />
+          </div>
+
+          {/* Floor */}
+          <div className="space-y-1">
+            <Label>Våning</Label>
+            <Select
+              value={form.levelFmGuid || 'none'}
+              onValueChange={val => setForm(prev => ({ ...prev, levelFmGuid: val === 'none' ? null : val, roomFmGuid: null }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Välj våning" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ingen våning</SelectItem>
+                {floors.map(f => (
+                  <SelectItem key={f.fm_guid} value={f.fm_guid}>
+                    {f.name || f.common_name || f.fm_guid}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {detection.ivion_dataset_name && (
+              <p className="text-xs text-muted-foreground">
+                Ivion-dataset: {detection.ivion_dataset_name}
+              </p>
+            )}
+          </div>
+
+          {/* Room */}
+          {form.levelFmGuid && (
+            <div className="space-y-1">
+              <Label>Rum</Label>
+              <Select
+                value={form.roomFmGuid || 'none'}
+                onValueChange={val => setForm(prev => ({ ...prev, roomFmGuid: val === 'none' ? null : val }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Välj rum" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Inget rum</SelectItem>
+                  {rooms.map(r => (
+                    <SelectItem key={r.fm_guid} value={r.fm_guid}>
+                      {r.name || r.common_name || r.fm_guid}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Coordinates (read-only) */}
+          {(detection.coordinate_x != null) && (
+            <div className="space-y-1">
+              <Label>Koordinater (3D)</Label>
+              <div className="text-xs font-mono bg-muted p-2 rounded">
+                X: {detection.coordinate_x?.toFixed(2)} &nbsp;
+                Y: {detection.coordinate_y?.toFixed(2)} &nbsp;
+                Z: {detection.coordinate_z?.toFixed(2)}
+              </div>
+            </div>
+          )}
+
+          {/* Extracted props summary */}
+          {props && Object.keys(props).length > 0 && (
+            <div className="border rounded-lg p-3 bg-muted/30">
+              <p className="text-xs font-medium mb-1">Extraherade egenskaper</p>
+              <div className="flex flex-wrap gap-1">
+                {props.type && <Badge variant="outline" className="text-xs">{props.type}</Badge>}
+                {props.color && <Badge variant="outline" className="text-xs">{props.color}</Badge>}
+                {props.mounting && <Badge variant="outline" className="text-xs">{props.mounting}</Badge>}
+                {props.condition && <Badge variant="outline" className="text-xs">{props.condition}</Badge>}
+                {props.size && <Badge variant="secondary" className="text-xs">{props.size}</Badge>}
+              </div>
+              {props.text_visible && (
+                <p className="mt-2 text-xs font-mono bg-background p-1 rounded">{props.text_visible}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Avbryt</Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !form.name}>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Godkänn & skapa
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ---------- Main component ----------
 const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   scanJobs,
   onDetectionProcessed,
@@ -65,6 +419,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [detailDialog, setDetailDialog] = useState<PendingDetection | null>(null);
+  const [approvalDetection, setApprovalDetection] = useState<PendingDetection | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Load detections
@@ -128,35 +483,9 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
     setSelectedIds(new Set());
   };
 
-  // Approve single detection
-  const approveDetection = async (id: string) => {
-    setIsProcessing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-asset-detection', {
-        body: { action: 'approve-detection', detectionId: id }
-      });
-
-      if (error) throw error;
-      
-      if (data.success) {
-        toast({
-          title: 'Godkänd',
-          description: 'Tillgång skapad från detektion',
-        });
-        loadDetections();
-        onDetectionProcessed();
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error: any) {
-      toast({
-        title: 'Fel vid godkännande',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+  // Open approval dialog for a single detection
+  const openApprovalDialog = (detection: PendingDetection) => {
+    setApprovalDetection(detection);
   };
 
   // Reject single detection
@@ -433,7 +762,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                       <Button
                         size="sm"
                         className="flex-1"
-                        onClick={() => approveDetection(detection.id)}
+                        onClick={() => openApprovalDialog(detection)}
                         disabled={isProcessing}
                       >
                         <CheckCircle2 className="h-3 w-3" />
@@ -463,7 +792,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
         </div>
       )}
 
-      {/* Detail Dialog */}
+      {/* Detail Dialog (read-only view) */}
       <Dialog open={!!detailDialog} onOpenChange={() => setDetailDialog(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -586,7 +915,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                 </Button>
                 <Button
                   onClick={() => {
-                    approveDetection(detailDialog.id);
+                    openApprovalDialog(detailDialog);
                     setDetailDialog(null);
                   }}
                   disabled={isProcessing}
@@ -599,6 +928,19 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Approval Dialog (pre-filled property form) */}
+      {approvalDetection && (
+        <ApprovalDialog
+          detection={approvalDetection}
+          open={!!approvalDetection}
+          onClose={() => setApprovalDetection(null)}
+          onApproved={() => {
+            loadDetections();
+            onDetectionProcessed();
+          }}
+        />
+      )}
     </div>
   );
 };
