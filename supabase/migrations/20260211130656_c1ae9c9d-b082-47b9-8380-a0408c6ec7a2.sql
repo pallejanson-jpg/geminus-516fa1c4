@@ -1,0 +1,2 @@
+ALTER TABLE scan_jobs DROP CONSTRAINT scan_jobs_status_check;
+ALTER TABLE scan_jobs ADD CONSTRAINT scan_jobs_status_check CHECK (status IN ('queued', 'running', 'paused', 'completed', 'failed', 'cancelled'));
