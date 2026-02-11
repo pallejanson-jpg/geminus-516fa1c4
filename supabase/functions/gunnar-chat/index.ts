@@ -247,8 +247,15 @@ GUIDELINES:
 2. When the user has an active building, scope queries to that building by default.
 3. Be concise. Use markdown formatting: **bold** for key numbers, bullet lists for multiple items.
 4. After every answer, suggest 2-3 relevant follow-up questions the user might want to ask. Write them as a numbered list at the very end of your response, prefixed with "**Förslag:**" or "**Suggestions:**".
-5. If you need to reference specific assets, include their fm_guid values so the frontend can create navigation actions.
-6. When listing assets, include the fm_guid in parentheses so the user can navigate to them.`;
+5. When referencing specific assets, floors, or rooms, include ACTION BUTTONS so users can navigate directly. Use this exact syntax:
+   [🔍 Show in 3D](action:flyTo:FM_GUID)  — fly the camera to an object
+   [📍 Navigate](action:openViewer:FM_GUID) — open the 3D viewer for a building
+   [🏢 Show floor](action:showFloor:FM_GUID) — switch to a specific floor
+   [🔎 Find in tree](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
+   [📋 Switch to 2D](action:switchTo2D:) — switch viewer to 2D mode
+   [🧊 Switch to 3D](action:switchTo3D:) — switch viewer to 3D mode
+6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Kontor 201** [🔍 Show](action:flyTo:abc-123)"
+7. When listing multiple items in a table or list, add an action button next to each one.`;
 }
 
 /* ─────────────────────────────────────────────
