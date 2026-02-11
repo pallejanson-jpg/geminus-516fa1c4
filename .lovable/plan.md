@@ -1,85 +1,34 @@
 
+# Fix: Gunnar Chat 401 Authentication Error
 
-# Gunnar 2.0 -- Intelligent Property Assistant
+## Root Cause
 
-## Problem Today
+Every Gunnar question fails with **401 Unauthorized** because of two issues working together:
 
-Gunnar has three major limitations:
+1. **Frontend sends the wrong token** -- `GunnarChat.tsx` line 122 sends the anon key (`VITE_SUPABASE_PUBLISHABLE_KEY`) as the Authorization header instead of the logged-in user's session token. The anon key has no `sub` claim, so authentication always fails.
 
-1. **Limited data access** -- Can only query the `assets` table via a custom SQL parser. Misses `work_orders`, `bcf_issues`, `building_settings`, and cross-table queries.
-2. **No real memory** -- Each response is isolated; the AI cannot build on previous questions intelligently.
-3. **Static follow-ups** -- The AI must manually write JSON blocks for suggested next steps, which rarely works well.
+2. **Missing config.toml entry** -- The `gunnar-chat` function is not listed in `supabase/config.toml` with `verify_jwt = false`. This means Supabase's gateway rejects the request before the function code even runs (since the anon key is not a valid user JWT).
 
-## Solution: AI Tool Calling
+## Fix
 
-Replace the custom SQL parser with tool calling -- let the AI model decide which data it needs by invoking predefined functions.
+### 1. `supabase/config.toml` -- Add gunnar-chat entry
+
+Add `verify_jwt = false` so the edge runtime does not block requests before the function handles auth internally via `verifyAuth()`.
+
+### 2. `src/components/chat/GunnarChat.tsx` -- Use the user's session token
+
+Replace the static anon key with the actual user session token from the Supabase client:
 
 ```text
-User -> GunnarChat (frontend) -> gunnar-chat edge function -> Lovable AI Gateway
-                                       |
-                                       v
-                                 Tool calls:
-                                 - query_assets(filters, limit)
-                                 - query_work_orders(filters)
-                                 - query_issues(filters)
-                                 - get_building_summary(fm_guid)
-                                 - search_assets(search_term)
+Before:  Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}
+After:   Authorization: Bearer <session.access_token from supabase.auth.getSession()>
 ```
 
-**Flow:**
-1. User types a question
-2. AI receives full conversation history + context (active building, view, etc.)
-3. AI decides which tools to call
-4. Edge function executes the tools against the database
-5. Results are sent back to the AI, which formulates a natural response with smart follow-up suggestions
-
-## What This Enables
-
-- **Understands all questions** -- AI interprets natural language and picks the right data sources
-- **Cross-table queries** -- "Are there open issues in this building?" works out of the box
-- **Smart follow-ups** -- AI suggests next steps based on the conversation, not hardcoded
-- **Deeper data** -- Access to work orders, issues, building settings, not just assets
-
-## Technical Changes
-
-### 1. Edge function: `supabase/functions/gunnar-chat/index.ts` (rewrite)
-
-- Define 5 tools the AI can invoke:
-  - `query_assets` -- Filter assets by category, building, level, room, asset_type. Returns count or list.
-  - `query_work_orders` -- Filter work orders by status, building, priority.
-  - `query_issues` -- Filter BCF issues by status, building.
-  - `get_building_summary` -- Get overview for a building: floors, rooms, assets, area, open issues.
-  - `search_assets` -- Free-text search in common_name/name/asset_type.
-
-- First AI call sent with `tools` and `tool_choice: "auto"`
-- If AI returns tool calls: execute them against the database, collect results, make a second streaming call with results
-- If AI responds directly (no tool call needed): stream the response directly
-
-- Updated system prompt: shorter, focused on tool usage, instructs AI to always suggest 2-3 follow-up questions as plain text
-
-### 2. Frontend: `src/components/chat/GunnarChat.tsx` (update)
-
-- **Markdown rendering** -- Switch from `<pre>` to `react-markdown` for formatted responses with headings, lists, bold
-- **Improved follow-ups** -- Parse follow-up questions from the AI response (numbered list at end) and display as clickable buttons
-- **Auto-send follow-ups** -- When user clicks a follow-up, send it directly instead of just filling the input field
-- **Remove SQL/JSON parsing** -- `parseResponse` and `extractSqlQuery` no longer needed on frontend
-
-### 3. New dependency: `react-markdown`
-
-Added for rendering AI responses with formatting.
+Import the supabase client and fetch the session before making the API call. If no session exists, show a toast error instead of making the request.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/gunnar-chat/index.ts` | Rewrite: replace SQL parsing with tool calling (5 tools) |
-| `src/components/chat/GunnarChat.tsx` | Update: markdown rendering, better follow-ups, remove JSON parsing |
-| `package.json` | Add `react-markdown` |
-
-## What Does NOT Change
-
-- Streaming logic (SSE) -- already works well
-- Action system (selectInTree, flyTo, etc.) -- kept but triggered via tool calls instead
-- GunnarContext interface -- same context sent from frontend
-- Authentication -- same auth flow
-
+| `supabase/config.toml` | Add `[functions.gunnar-chat]` with `verify_jwt = false` |
+| `src/components/chat/GunnarChat.tsx` | Import supabase client, get session token, use it in Authorization header |
