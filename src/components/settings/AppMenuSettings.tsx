@@ -191,7 +191,7 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-md max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Anpassa appmeny</DialogTitle>
         </DialogHeader>
@@ -200,7 +200,7 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
           Dra för att ändra ordning. Aktivera avdelare för att skapa visuella grupper.
         </p>
 
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ maxHeight: 'calc(100dvh - 14rem)' }}>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
