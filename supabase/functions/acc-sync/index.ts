@@ -611,8 +611,8 @@ async function extractBimHierarchy(
   const statesSummary = indexes.map((idx: any) => `${idx.versionUrn?.slice(-20)}:${idx.state}`).join(', ');
   console.log(`[BIM Index] States: ${statesSummary}`);
 
-  // Step 2: Poll until all indexes are FINISHED (max ~45 seconds)
-  const maxPollTime = 45000;
+  // Step 2: Poll until all indexes are FINISHED (max ~30 seconds to leave room for processing)
+  const maxPollTime = 30000;
   const pollInterval = 3000;
   const startTime = Date.now();
 
@@ -1555,7 +1555,27 @@ serve(async (req: Request) => {
         function mapItem(item: any, included: any[]): any {
           const fileName = item.attributes?.displayName || item.attributes?.name || item.id;
           const extensionType = item.attributes?.extension?.type || "";
-          const versionUrn = item.relationships?.tip?.data?.id || null;
+          
+          // Try primary path first (tip relationship)
+          let versionUrn = item.relationships?.tip?.data?.id || null;
+          
+          // Fallback for Cloud Models: find version in included array
+          if (!versionUrn && included && included.length > 0) {
+            const relatedVersion = included.find((v: any) =>
+              v.type === 'versions' && v.relationships?.item?.data?.id === item.id
+            );
+            if (relatedVersion) {
+              versionUrn = relatedVersion.id;
+              console.log(`[mapItem] Found versionUrn via included array for "${fileName}": ${versionUrn?.slice(-30)}`);
+            }
+          }
+          
+          // Fallback: use item's own ID if it looks like a version URN
+          if (!versionUrn && item.id && item.id.includes('urn:adsk.wipprod:dm.lineage:')) {
+            versionUrn = item.id;
+            console.log(`[mapItem] Using item lineage ID as versionUrn for "${fileName}": ${versionUrn?.slice(-30)}`);
+          }
+          
           const derivativeUrn = versionUrn
             ? (included.find((v: any) => v.id === versionUrn)?.relationships?.derivatives?.data?.id || null)
             : null;
