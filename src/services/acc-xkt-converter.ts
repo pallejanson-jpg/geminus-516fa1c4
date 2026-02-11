@@ -260,6 +260,11 @@ export class AccXktConverter {
         };
       }
 
+      // Translation still in progress — return pending so caller can retry
+      if (data?.pending) {
+        return { status: 'pending', message: `Översättning pågår (${data.translationStatus || 'pending'})...` };
+      }
+
       return { status: 'failed', error: data?.error || 'Download failed' };
     } catch (e: any) {
       return { status: 'failed', error: e.message };
@@ -376,7 +381,28 @@ export class AccXktConverter {
         },
       });
 
-      if (error) throw error;
+      if (error && !data?.pending) throw error;
+
+      // If translation is still pending, wait and retry (up to 12 times / 2 min)
+      if (data?.pending) {
+        for (let attempt = 1; attempt < 12; attempt++) {
+          onStatusChange({ status: 'server-converting', message: `Väntar på översättning... (försök ${attempt + 1})` });
+          await new Promise(r => setTimeout(r, 10000));
+          const retry = await supabase.functions.invoke('acc-svf-to-gltf', {
+            body: { versionUrn, buildingFmGuid: options.buildingFmGuid, fileName: options.fileName },
+          });
+          if (retry.data?.success || !retry.data?.pending) {
+            // Re-assign and continue to normal handling below
+            Object.assign(data, retry.data);
+            break;
+          }
+        }
+        if (data?.pending) {
+          const failStatus: TranslationStatus = { status: 'failed', error: 'Översättningen tog för lång tid. Försök igen om en stund.' };
+          onStatusChange(failStatus);
+          return failStatus;
+        }
+      }
 
       if (data?.success && data.downloadUrl && options.buildingFmGuid) {
         // Server gave us a GLB - now convert to XKT client-side
@@ -450,8 +476,14 @@ export class AccXktConverter {
 
     const doDownloadAndConvert = async (): Promise<TranslationStatus> => {
       // First try: direct download (works for IFC/OBJ derivatives)
-      onStatusChange({ status: 'downloading', message: 'Laddar ner geometri...' });
-      const dlResult = await this.downloadDerivative(versionUrn, options);
+      // Retry up to 12 times (2 min) if translation is still pending
+      let dlResult: TranslationStatus = { status: 'pending' };
+      for (let attempt = 0; attempt < 12; attempt++) {
+        onStatusChange({ status: 'downloading', message: attempt > 0 ? `Väntar på översättning... (försök ${attempt + 1})` : 'Laddar ner geometri...' });
+        dlResult = await this.downloadDerivative(versionUrn, options);
+        if (dlResult.status !== 'pending') break;
+        await new Promise(r => setTimeout(r, 10000)); // wait 10s between retries
+      }
 
       if (dlResult.status === 'complete' && dlResult.downloadUrl) {
         // Direct download worked (IFC with OBJ, or glTF available)
