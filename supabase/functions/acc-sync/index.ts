@@ -1846,12 +1846,15 @@ serve(async (req: Request) => {
           );
         }
 
-        // Trigger translation job - SVF2 only (OBJ is not supported for RVT files)
+        // Trigger translation job - SVF (v1) for server-side GLB conversion support
+        // SVF v1 is preferred because it can be parsed by server-side tools.
+        // We also request OBJ as a secondary format (works for IFC, ignored for RVT).
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
             formats: [
-              { type: "svf2", views: ["3d"] },
+              { type: "svf", views: ["3d"] },
+              { type: "obj" },
             ],
           },
         };
@@ -1886,7 +1889,7 @@ serve(async (req: Request) => {
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
           translation_status: "pending",
-          output_format: "svf2",
+          output_format: "svf",
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
