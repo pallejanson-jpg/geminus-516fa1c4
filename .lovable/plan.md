@@ -1,87 +1,90 @@
 
+# Serverbaserad SVF-till-glTF-konvertering for RVT-filer
 
-# Fix: BIM Sync from ACC Error
+## Problemet
 
-## Problem
+RVT-filer kan bara oversattas till SVF/SVF2 av Autodesk -- inte till OBJ eller glTF direkt. SVF2 ar ett multi-fil-format som inte kan laddas ner som en enda fil, sa den befintliga klientkonverteringen (GLB/OBJ till XKT) fungerar inte.
 
-When clicking "Synka BIM" in the ACC settings, an error message appears. Based on code analysis:
+## Losningsforslag: SVF (v1) + serverbaserad glTF-konvertering
 
-- No `sync-bim-data` edge function logs exist, suggesting the error may occur client-side before the API call, OR the edge function crashes before logging the action.
-- The most likely causes are:
+Hela pipelinen:
 
-1. **Missing `versionUrn`**: Cloud Models (C4RModel) may not expose `relationships.tip.data.id`, causing all items to have `versionUrn: null`. The client-side filter `filter((item: any) => item.versionUrn)` then removes all items and shows "Inga BIM-filer".
+```text
+RVT-fil
+  |
+  v
+[Autodesk Model Derivative API]  -- begar SVF (v1) istallet for SVF2
+  |
+  v
+SVF (v1) -- multi-fil, men streambar via API
+  |
+  v
+[Ny edge function: acc-svf-to-gltf]  -- anvander forge-convert-utils
+  |                                      laser SVF direkt fran Autodesk API
+  |                                      konverterar till GLB i minnet
+  |                                      sparar GLB i Supabase Storage
+  v
+GLB-fil i Storage
+  |
+  v
+[Befintlig klientkod: acc-xkt-converter.ts]  -- laddar ner GLB
+  |                                             konverterar till XKT i webblasaren
+  v
+XKT-modell i xkt-models bucket -- redo for visning i viewern
+```
 
-2. **Edge function timeout**: The `extractBimHierarchy` function polls Autodesk's indexing API for up to 45 seconds. Combined with auth, field parsing, and database upserts, this can exceed the edge function's execution limit.
+## Steg-for-steg
 
-3. **Missing error details**: When the edge function returns `{ success: false }`, the error message shown to the user may be generic or unhelpful.
+### 1. Andra oversattningsformat fran SVF2 till SVF (v1)
 
-## Solution
+I `supabase/functions/acc-sync/index.ts`, action `translate-model`:
+- Byt `{ type: "svf2" }` till `{ type: "svf" }`
+- SVF (v1) stodjer samma filtyper som SVF2 men har den fordelen att `forge-convert-utils` kan lasa det direkt fran Autodesks API via URN
 
-### 1. Fix `versionUrn` extraction for Cloud Models
+### 2. Skapa ny edge function: `acc-svf-to-gltf`
 
-In `supabase/functions/acc-sync/index.ts`, the `mapItem` function extracts `versionUrn` only from `item.relationships.tip.data.id`. For Cloud Models, try alternative paths:
-- Check `included` array for version data matching the item's `id`
-- Use `item.relationships.versions.links.related.href` to find the latest version
-- Fall back to item's own `id` if it starts with `urn:adsk.wipprod:dm.lineage:`
+En dedicerad edge function som:
+1. Tar emot `versionUrn` och `derivativeUrn`
+2. Anvander APS-token for att lasa SVF-data fran Autodesk via `forge-convert-utils`
+3. Konverterar SVF till GLB (binary glTF) i minnet
+4. Sparar GLB i Supabase Storage (`xkt-models` bucket, temporart)
+5. Returnerar en signed URL till GLB-filen
 
-### 2. Add detailed client-side error logging
+Biblioteket `forge-convert-utils` importeras via `esm.sh` i Deno-miljon.
 
-In `src/components/settings/ApiSettingsModal.tsx`:
-- Log the full error response body in the console when sync fails
-- Show the actual server error message in the toast (not just `err.message`)
-- Log the items being sent (count, whether they have versionUrn) before calling the edge function
+### 3. Uppdatera download-derivative-logiken
 
-### 3. Add edge function timeout protection
+Istallet for att forsoka ladda ner en enstaka fil fran SVF2 (som inte fungerar):
+1. Nar SVF-oversattning ar klar, anropa den nya `acc-svf-to-gltf` edge function
+2. Edge function streamar SVF fran Autodesk, konverterar till GLB, sparar i Storage
+3. Returnerar signed URL till GLB
+4. Klienten anvander befintlig `convertAndStore()` i `acc-xkt-converter.ts` for att konvertera GLB till XKT
 
-In `supabase/functions/acc-sync/index.ts` sync-bim-data action:
-- Reduce the polling timeout from 45s to 30s to leave room for processing
-- Add a try/catch around the initial `getAccToken` call with a descriptive error
-- Log the action name immediately after parsing the body (before auth token retrieval)
+### 4. Uppdatera klientens pipeline
 
-### 4. Improve error messages
+I `acc-xkt-converter.ts`, metoden `runFullPipeline`:
+- Lagg till ett nytt steg mellan "translation klar" och "download": anropa `acc-svf-to-gltf` for att konvertera SVF till GLB pa servern
+- Resten av pipelinen (ladda ner GLB, konvertera till XKT, spara) fungerar redan
 
-- When `bimItems.length === 0`, include file names and whether they had `versionUrn` in the error message
-- When the edge function returns a non-success response, display the actual error text from the server
+### 5. Uppdatera UI
 
-## Files Changed
+I `ApiSettingsModal.tsx`:
+- Ta bort begransningsmeddelandet for RVT-filer
+- Visa progress for det nya steget: "Konverterar geometri pa servern..."
 
-| File | Change |
+## Filer som andras
+
+| Fil | Andring |
 |---|---|
-| `supabase/functions/acc-sync/index.ts` | Fix versionUrn extraction in `mapItem`, reduce poll timeout, add early action logging |
-| `src/components/settings/ApiSettingsModal.tsx` | Better error messages, console logging for debugging |
+| `supabase/functions/acc-sync/index.ts` | Byt SVF2 till SVF i translate-model. Uppdatera download-derivative att anropa nya funktionen. |
+| `supabase/functions/acc-svf-to-gltf/index.ts` | **Ny fil.** Edge function som laser SVF fran Autodesk och konverterar till GLB via forge-convert-utils. |
+| `supabase/config.toml` | Lagg till `[functions.acc-svf-to-gltf]` med `verify_jwt = false`. |
+| `src/services/acc-xkt-converter.ts` | Lagg till SVF-till-GLB-steget i `runFullPipeline`. |
+| `src/components/settings/ApiSettingsModal.tsx` | Ta bort RVT-formatbegransning, visa konverteringsprogress. |
 
-## Technical Details
+## Begransningar och risker
 
-The `mapItem` function change (line ~1558):
-
-```text
-Before:
-  const versionUrn = item.relationships?.tip?.data?.id || null;
-
-After:
-  let versionUrn = item.relationships?.tip?.data?.id || null;
-  // For Cloud Models, try finding version in included array
-  if (!versionUrn && included.length > 0) {
-    const relatedVersion = included.find(v =>
-      v.type === 'versions' && v.relationships?.item?.data?.id === item.id
-    );
-    if (relatedVersion) versionUrn = relatedVersion.id;
-  }
-```
-
-The client-side error improvement (line ~703):
-
-```text
-Before:
-  toast({ variant: 'destructive', title: 'Inga BIM-filer',
-    description: 'Denna mapp innehaller inga BIM-filer med versionUrn.' });
-
-After:
-  const allItems = selectedFiles || folder.items || [];
-  const bimWithoutUrn = allItems.filter(i => i.isBim && !i.versionUrn);
-  toast({ variant: 'destructive', title: 'Inga BIM-filer',
-    description: bimWithoutUrn.length > 0
-      ? 'Hittade ${bimWithoutUrn.length} BIM-fil(er) men utan version-URN. Filerna kan vara Cloud Models som kräver direkt API-åtkomst.'
-      : 'Denna mapp innehaller inga BIM-filer.' });
-```
-
+- **Minnesgransen i edge functions**: Stora RVT-modeller kan generera stora SVF-filer. Om modellen ar for stor for edge function-miljon (minne/tid) misslyckas konverteringen. Vi bygger in tydliga felmeddelanden for detta.
+- **forge-convert-utils i Deno**: Biblioteket ar byggt for Node.js. Det kan behova anpassningar for att fungera i Deno via esm.sh. Om det inte fungerar ar alternativet att anvanda en extern konverteringstjanst eller Docker-baserad worker.
+- **SVF vs SVF2 for BIM-hierarki**: BIM-hierarki-synk (rum, vaningsplan) anvander Model Properties API som ar oberoende av oversattningsformatet, sa att byta till SVF paverkar inte den funktionaliteten.
+- **Dubbel oversattning**: Om en modell redan ar oversatt till SVF2 maste den oversattas pa nytt till SVF. Befintliga SVF2-oversattningar cache-invalideras inte automatiskt.
