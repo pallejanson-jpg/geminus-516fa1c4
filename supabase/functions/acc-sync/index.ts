@@ -2034,9 +2034,16 @@ serve(async (req: Request) => {
           }
           const manifest = await manifestRes.json();
           if (manifest.status !== "success") {
+            // Return 202 (Accepted) for pending/inprogress so the client can retry
+            const isPending = manifest.status === "pending" || manifest.status === "inprogress";
             return new Response(
-              JSON.stringify({ success: false, error: `Translation not complete (status: ${manifest.status})` }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              JSON.stringify({ 
+                success: false, 
+                pending: isPending,
+                translationStatus: manifest.status,
+                error: `Translation not complete (status: ${manifest.status})` 
+              }),
+              { status: isPending ? 202 : 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
             );
           }
 
