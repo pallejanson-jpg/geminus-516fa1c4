@@ -54,4 +54,9 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Ensure WASM files from web-ifc are served correctly
+  optimizeDeps: {
+    exclude: ['web-ifc'],
+  },
+  assetsInclude: ['**/*.wasm'],
 }));
