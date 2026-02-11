@@ -1,98 +1,64 @@
 
-# Forbattrad godkannandeprocess for AI-detektioner
 
-## Oversikt
+# Fix: Ivion SDK timeout pga utgangen cachad token (Akerselva)
 
-Nar ett AI-detekterat objekt godkanns ska det:
-1. Oppna samma egenskapsdialog som vid manuell inventering (forifylld)
-2. Automatiskt skapa en POI i Ivion med samma FM GUID
-3. Kontrollera om objektet redan finns (deduplicering via FM GUID pa POI)
+## Problem
 
-## Detaljerad design
+Akerselva-byggnaden har en cachad Ivion-token i `building_settings` som gar ut efter ca 15 minuter. Nar anvandaren oppnar Ivion-vyn efter att token gatt ut:
 
-### 1. Forifylld egenskapsdialog vid godkannande
+1. `useIvionSdk` anropar `get-login-token` i edge-funktionen
+2. Edge-funktionen kontrollerar `building_settings` -- ser att token gatt ut
+3. Den forsoker refresha, men om refresh ocksa misslyckas faller den tillbaka till username/password-login
+4. **Problemet**: Loggen visar "Using cached access token from database (still valid)" -- dvs `isTokenExpired` returnerar `false` trots att token har gatt ut. 60-sekunders buffert racker inte nar tokenen ar flera minuter gammal.
 
-Istallet for att direkt anropa `approve-detection` i edge-funktionen nar anvandaren klickar "Godkann", oppnas en dialog med InventoryForm-liknande falt forifyllda fran detektionsmallen och AI-data:
+Dessutom: om SDK:n far en token som gar ut under sessionen, fortsatter SSE-anropen med 403 var 5:e sekund utan att frontend markar det forran timeout pa 45 sekunder.
 
-| Falt | Kalla |
-|------|-------|
-| Namn | `detection_templates.name` + AI-extraherade props (brand, model, size) |
-| Objekttyp / Kategori | `detection_templates.default_category` |
-| Beskrivning | `detection_templates.description` + AI-beskrivning |
-| Symbol | `detection_templates.default_symbol_id` |
-| Byggnad | `pending_detections.building_fm_guid` (redan kand) |
-| Vaning | Matchning av `ivion_dataset_name` mot assets med category=IfcBuildingStorey |
-| Skarmklipp | `pending_detections.thumbnail_url` visas som bild |
-| Koordinater | `pending_detections.coordinate_x/y/z` (skrivskyddade) |
+**Bevis fran databasen:**
+- Akerselva: `ivion_token_expires_at = 2026-02-11 15:31:35` (utgick fore 15:38-sessionen)
+- Centralstationen: `ivion_token_expires_at = 2026-02-11 16:06:54` (fortfarande giltig)
 
-**Vaningsmatching**: Ivion-dataset-namn (t.ex. "Plan 2", "V2") matchas mot varje IfcBuildingStorey i byggnaden via namnlikheter. Om `ivion_dataset_name` innehaller samma text som ett vaningsplan-namn eller om det kan kopplas via FM GUID sa forifylls vaningen.
+## Atgarder
 
-### 2. POI-skapande vid godkannande
+### 1. Fixa token-validering i edge-funktionen
 
-Nar anvandaren bekraftar godkannande i dialogen:
-
-1. Generera 128-bit FM GUID (`crypto.randomUUID()` -- redan implementerat)
-2. Skapa asset i databasen med forifyllda + eventuellt redigerade varden
-3. Anropa `ivion-poi` edge-funktionen med `action: 'sync-asset'` for att skapa POI
-4. POI:ns `customData` innehaller `fm_guid` -- detta ar nyckeln for deduplicering
-5. Uppdatera `pending_detections` med `created_asset_fm_guid` och `created_ivion_poi_id`
-
-### 3. Deduplicering vid nasta skanning
-
-Fore lagring av en ny detektion kontrolleras:
-
-1. Hamta alla existerande POI:er for byggnaden (via Ivion API eller cachade i `assets`-tabellen)
-2. For varje ny detektion: berakna 3D-avstand till befintliga assets med koordinater
-3. Om en asset finns inom en troskeldistans (t.ex. 2 meter) och tillhor samma building -- markera som "redan inventerad" och hoppa over
-
-Alternativ (enklare och mer palitlig):
-- Vid analyze-screenshot: kolla om det redan finns en asset med samma `building_fm_guid` och koordinater inom 2m radie
-- Om ja, skippa detektionen (lagg inte i pending_detections)
-
-## Tekniska andringar
-
-### Fil 1: `src/components/ai-scan/DetectionReviewQueue.tsx`
-
-- Lagg till en ny `ApprovalDialog`-komponent som visas istallet for direkt godkannande
-- Dialogen innehaller:
-  - Skarmklipp (thumbnail) langst upp
-  - Falt: Namn, Kategori, Beskrivning, Symbol (dropdown med annotation_symbols)
-  - Byggnad (forifylld, ej andringsbar)
-  - Vaning (dropdown med IfcBuildingStorey fran byggnaden, forifylld om matchning)
-  - Rum (dropdown, valfritt)
-  - Koordinater (visas skrivskyddade)
-- "Godkann"-knappen skickar alla varden till edge-funktionen
-
-### Fil 2: `supabase/functions/ai-asset-detection/index.ts`
-
-Uppdatera `approveDetection`-funktionen:
-- Ta emot ytterligare parametrar: `name`, `category`, `symbolId`, `description`, `levelFmGuid`, `roomFmGuid`
-- Anvand dessa istallet for att hardkoda fran template
-- Efter asset-skapande: anropa Ivion POI-skapande direkt (kopiera logik fran ivion-poi/syncAssetToPoi)
-- Lagra `ivion_poi_id` pa bade asset och pending_detection
-
-Uppdatera `analyze-screenshot`:
-- Fore sparning av detektion: kolla om en asset redan finns i `assets`-tabellen med samma `building_fm_guid` och koordinater inom 2m
-- Om match hittas: skippa detektionen och logga "Already inventoried"
-
-### Fil 3: `supabase/functions/ai-asset-detection/index.ts` (vaningsmatching)
-
-Lagg till hjalp-funktion `matchFloorByDatasetName`:
-- Hamta alla IfcBuildingStorey-assets for byggnaden
-- Jamfor `ivion_dataset_name` med varje vanings `name` och `common_name`
-- Returnera matchande `fm_guid` eller null
-
-### Sammanfattning av andringar
+I `supabase/functions/_shared/ivion-auth.ts`, oka bufferten fran 60 sekunder till 5 minuter. Detta saker att en token som snart gar ut aldrig returneras som "giltig":
 
 ```text
-Filer som andras:
-  1. src/components/ai-scan/DetectionReviewQueue.tsx
-     - Ny ApprovalDialog med forifyllda falt
-     - Laddar annotation_symbols, vaningsplan, rum
-     - Skickar utokade parametrar vid godkannande
+Fil: supabase/functions/_shared/ivion-auth.ts (rad 39)
 
-  2. supabase/functions/ai-asset-detection/index.ts
-     - approveDetection: tar emot formdata, skapar POI automatiskt
-     - analyze-screenshot: deduplicering mot befintliga assets (2m radie)
-     - Ny hjalp: matchFloorByDatasetName
+Fran: const isExpired = now.getTime() >= (expiresAt.getTime() - 60000);
+Till:  const isExpired = now.getTime() >= (expiresAt.getTime() - 300000);
 ```
+
+### 2. Tvinga proaktiv token-refresh i get-login-token
+
+I `supabase/functions/ivion-poi/index.ts`, nar `get-login-token` anropas, kontrollera explicit att den returnerade token har minst 5 minuters livstid kvar. Om inte, tvinga en refresh:
+
+```text
+Fil: supabase/functions/ivion-poi/index.ts (rad 731-763, get-login-token case)
+
+Lagg till efter att token hamtats:
+- Parsa token-expiry
+- Om under 5 minuter kvar: anropa refreshAccessToken direkt
+- Om refresh misslyckas: loginWithCredentials
+- Spara nya tokens till building_settings
+```
+
+### 3. Forbattra frontend token-refresh-timing
+
+I `src/hooks/useIvionSdk.ts`, minska refresh-intervallet fran 10 minuter till 8 minuter, och lagg till felhantering som triggar retry vid 403-fel:
+
+```text
+Fil: src/hooks/useIvionSdk.ts (rad 113)
+
+Fran: const interval = setInterval(refreshToken, 10 * 60 * 1000);
+Till:  const interval = setInterval(refreshToken, 8 * 60 * 1000);
+```
+
+## Sammanfattning
+
+Tre andringar i tre filer:
+1. `supabase/functions/_shared/ivion-auth.ts` -- Oka token-buffert till 5 min
+2. `supabase/functions/ivion-poi/index.ts` -- Tvinga refresh vid kort livstid i get-login-token
+3. `src/hooks/useIvionSdk.ts` -- Tightare refresh-intervall (8 min)
+
