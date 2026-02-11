@@ -24,7 +24,7 @@ function getIvionConfig() {
 }
 
 // Parse JWT expiry
-function parseTokenExpiry(token: string): { expiresAt: Date | null; isExpired: boolean } {
+export function parseTokenExpiry(token: string): { expiresAt: Date | null; isExpired: boolean } {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return { expiresAt: null, isExpired: true };
@@ -35,8 +35,8 @@ function parseTokenExpiry(token: string): { expiresAt: Date | null; isExpired: b
     
     const expiresAt = new Date(exp * 1000);
     const now = new Date();
-    // Add 60 second buffer
-    const isExpired = now.getTime() >= (expiresAt.getTime() - 60000);
+    // Add 5 minute buffer to avoid serving tokens that expire mid-session
+    const isExpired = now.getTime() >= (expiresAt.getTime() - 300000);
     
     return { expiresAt, isExpired };
   } catch {
