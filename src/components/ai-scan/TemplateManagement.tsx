@@ -422,7 +422,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
 
       {/* Edit/Create Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto text-foreground">
           <DialogHeader>
             <DialogTitle>
               {editingTemplate ? 'Redigera mall' : 'Ny detektionsmall'}
@@ -437,7 +437,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Namn *</Label>
+                <Label htmlFor="name" className="text-foreground">Namn *</Label>
                 <Input
                   id="name"
                   value={formData.name}
@@ -446,7 +446,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="object_type">Objekttyp *</Label>
+                <Label htmlFor="object_type" className="text-foreground">Objekttyp *</Label>
                 <Input
                   id="object_type"
                   value={formData.object_type}
@@ -457,7 +457,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Beskrivning</Label>
+              <Label htmlFor="description" className="text-foreground">Beskrivning</Label>
               <Input
                 id="description"
                 value={formData.description}
@@ -468,7 +468,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="default_category">Standardkategori</Label>
+                <Label htmlFor="default_category" className="text-foreground">Standardkategori</Label>
                 <Input
                   id="default_category"
                   value={formData.default_category}
@@ -477,7 +477,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="default_symbol_id">Symbol</Label>
+                <Label htmlFor="default_symbol_id" className="text-foreground">Symbol</Label>
                 <Select
                   value={formData.default_symbol_id}
                   onValueChange={value => setFormData({ ...formData, default_symbol_id: value === '_none' ? '' : value })}
@@ -514,7 +514,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ai_prompt">AI-prompt *</Label>
+              <Label htmlFor="ai_prompt" className="text-foreground">AI-prompt *</Label>
               <Textarea
                 id="ai_prompt"
                 value={formData.ai_prompt}
@@ -542,7 +542,7 @@ const TemplateManagement: React.FC<TemplateManagementProps> = ({ onTemplatesChan
                 checked={formData.is_active}
                 onCheckedChange={checked => setFormData({ ...formData, is_active: checked })}
               />
-              <Label htmlFor="is_active">Aktiv (inkluderas i skanningar)</Label>
+              <Label htmlFor="is_active" className="text-foreground">Aktiv (inkluderas i skanningar)</Label>
             </div>
           </div>
 
