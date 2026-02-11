@@ -210,8 +210,10 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     }, [getXeokitViewer, floorNamesMap]);
 
     // Load floors once and set visible based on localStorage or default to all
+    // IMPORTANT: Wait for localStorage to be loaded first to prevent race condition
+    // where visibleFloorIdsRef is still empty and all floors get selected
     useEffect(() => {
-      if (isInitialized) return;
+      if (isInitialized || !localStorageLoaded) return;
 
       const checkFloors = () => {
         const newFloors = extractFloors();
@@ -264,7 +266,7 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       }, 500);
 
       return () => clearInterval(interval);
-    }, [extractFloors, isInitialized]);
+    }, [extractFloors, isInitialized, localStorageLoaded]);
 
     // Re-extract floors when floor names map is updated (after DB fetch)
     // IMPORTANT: Preserve existing selection when updating floor list
