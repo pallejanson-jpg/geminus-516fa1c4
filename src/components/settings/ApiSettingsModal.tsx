@@ -125,24 +125,24 @@ const AccFolderNode: React.FC<{
     const selectedCount = selectedInFolder.length;
 
     return (
-        <div className="rounded border bg-background" style={{ marginLeft: depth > 0 ? `${depth * 16}px` : undefined }}>
-            <div className="flex items-center">
+        <div className="rounded border bg-background" style={{ marginLeft: depth > 0 ? `${Math.min(depth * 12, 36)}px` : undefined }}>
+            <div className="flex flex-col sm:flex-row sm:items-center">
                 <button
                     onClick={() => toggleFolder(folder.id)}
-                    className="flex items-center gap-2 flex-1 min-w-0 px-2.5 py-1.5 text-left hover:bg-muted/50 rounded-l text-sm"
+                    className="flex items-center gap-1.5 flex-1 min-w-0 px-2 py-1.5 text-left hover:bg-muted/50 rounded-l text-xs sm:text-sm"
                 >
                     {(hasChildren || (folder.items || []).length > 0) ? (
                         isExpanded ? (
-                            <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <ChevronDownIcon className="h-3 w-3 text-muted-foreground shrink-0" />
                         ) : (
-                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
                         )
                     ) : (
-                        <span className="w-3.5 shrink-0" />
+                        <span className="w-3 shrink-0" />
                     )}
-                    <FolderOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    <FolderOpen className="h-3 w-3 text-amber-500 shrink-0" />
                     <span className="font-medium truncate">{folder.name}</span>
-                    <Badge variant="outline" className="ml-auto text-[10px] shrink-0">
+                    <Badge variant="outline" className="ml-auto text-[9px] shrink-0">
                         {totalCount} {totalCount === 1 ? 'fil' : 'filer'}
                     </Badge>
                 </button>
@@ -156,7 +156,7 @@ const AccFolderNode: React.FC<{
                         disabled={!!syncingBimFolderId}
                         size="sm"
                         variant="ghost"
-                        className="gap-1 h-7 text-xs shrink-0 mr-1"
+                        className="gap-1 h-7 text-[10px] sm:text-xs shrink-0 mx-1 self-start sm:self-auto"
                     >
                         {isSyncingThisFolder ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -166,7 +166,7 @@ const AccFolderNode: React.FC<{
                         {isSyncingThisFolder
                             ? (bimSyncProgress || 'Synkar...')
                             : selectedCount > 0
-                                ? `Synka ${selectedCount} fil${selectedCount > 1 ? 'er' : ''}`
+                                ? `Synka ${selectedCount}`
                                 : 'Synka BIM'}
                     </Button>
                 )}
@@ -176,34 +176,34 @@ const AccFolderNode: React.FC<{
                 <div className="pb-2">
                     {/* Files in this folder */}
                     {folder.items && folder.items.length > 0 && (
-                        <div className="px-2.5 pl-8 space-y-0.5">
+                        <div className="px-1 sm:px-2.5 pl-4 sm:pl-8 space-y-0.5">
                             {folder.items.map((item: any) => {
                                 const isBim = item.versionUrn || item.isBim;
                                 const isSelected = selectedBimFiles.has(item.id);
                                 return (
-                                    <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/50">
+                                    <div key={item.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs py-1 px-1 sm:px-1.5 rounded hover:bg-muted/50">
                                         {isBim && (
                                             <input
                                                 type="checkbox"
                                                 checked={isSelected}
                                                 onChange={() => toggleBimFile(item.id)}
-                                                className="h-3.5 w-3.5 rounded border-primary accent-primary shrink-0"
+                                                className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded border-primary accent-primary shrink-0"
                                                 onClick={(e) => e.stopPropagation()}
                                             />
                                         )}
                                         <File className="h-3 w-3 text-muted-foreground shrink-0" />
-                                        <span className="truncate">{item.name}</span>
+                                        <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
                                         {isBim && (
-                                            <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">BIM</Badge>
+                                            <Badge variant="secondary" className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0">BIM</Badge>
                                         )}
                                         {isBim && item.versionUrn && (() => {
                                             const ts = translationStatuses[item.versionUrn];
                                             if (ts?.status === 'complete' || ts?.status === 'success') {
-                                                return <Badge className="text-[9px] shrink-0 px-1 py-0 bg-green-600">3D ✓</Badge>;
+                                                return <Badge className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0 bg-green-600">3D ✓</Badge>;
                                             }
                                             if (ts && ts.status !== 'idle' && ts.status !== 'failed') {
                                                 return (
-                                                    <Badge variant="outline" className="text-[9px] shrink-0 px-1 py-0 gap-0.5">
+                                                    <Badge variant="outline" className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0 gap-0.5">
                                                         <Loader2 className="h-2.5 w-2.5 animate-spin" />
                                                         {ts.status === 'server-converting' ? 'Server...' : (ts.progress || ts.status)}
                                                     </Badge>
@@ -214,16 +214,16 @@ const AccFolderNode: React.FC<{
                                                     onClick={(e) => { e.stopPropagation(); onTranslate3D(item, folder); }}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-5 px-1.5 text-[9px] gap-0.5"
+                                                    className="h-5 px-1 text-[8px] sm:text-[9px] gap-0.5"
                                                     disabled={ts?.status === 'pending' || ts?.status === 'inprogress'}
                                                 >
                                                     <Cuboid className="h-2.5 w-2.5" />
-                                                    {ts?.status === 'failed' ? 'Försök igen' : 'Konvertera 3D'}
+                                                    {ts?.status === 'failed' ? 'Igen' : '3D'}
                                                 </Button>
                                             );
                                         })()}
-                                        <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
-                                        {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                        <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[9px] sm:text-[10px]">{item.type}</span>
+                                        {item.size && <span className="text-muted-foreground shrink-0 text-[9px] sm:text-[10px]">{formatFileSize(item.size)}</span>}
                                     </div>
                                 );
                             })}
@@ -1795,34 +1795,34 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                 </DialogHeader>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex-1 flex flex-col min-h-0">
-                    <TabsList className="flex w-full overflow-x-auto flex-shrink-0 gap-0.5">
-                        <TabsTrigger value="apps" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                    <TabsList className="flex w-full overflow-x-auto flex-shrink-0 gap-0.5 h-auto flex-wrap sm:flex-nowrap">
+                        <TabsTrigger value="apps" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Apps</span>
+                            Apps
                         </TabsTrigger>
-                        <TabsTrigger value="apis" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="apis" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Settings2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">API's</span>
+                            API
                         </TabsTrigger>
-                        <TabsTrigger value="sync" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="sync" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Database className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Sync</span>
+                            Sync
                         </TabsTrigger>
-                        <TabsTrigger value="symbols" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="symbols" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Symboler</span>
+                            Symboler
                         </TabsTrigger>
-                        <TabsTrigger value="viewer" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="viewer" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <View className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Viewer</span>
+                            Viewer
                         </TabsTrigger>
-                        <TabsTrigger value="voice" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="voice" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Röst</span>
+                            Röst
                         </TabsTrigger>
-                        <TabsTrigger value="gunnar" className="gap-1 px-2 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="gunnar" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden sm:inline">Gunnar</span>
+                            Gunnar
                         </TabsTrigger>
                     </TabsList>
 
