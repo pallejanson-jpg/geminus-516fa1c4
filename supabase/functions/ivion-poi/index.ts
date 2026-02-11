@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getIvionToken, testIvionConnection, getIvionConfigStatus, isTokenExpired } from "../_shared/ivion-auth.ts";
+import { getIvionToken, testIvionConnection, getIvionConfigStatus, isTokenExpired, parseTokenExpiry } from "../_shared/ivion-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -732,9 +732,9 @@ serve(async (req) => {
         // Return a valid Ivion JWT for frontend SDK loginToken authentication
         // This reuses the existing token management (cached, refreshed, or new login)
         try {
-          const token = await getIvionToken(params.buildingFmGuid || null);
+          let token = await getIvionToken(params.buildingFmGuid || null);
           
-          // Parse token expiry to tell frontend when to refresh
+          // Parse token expiry -- if less than 5 min remaining, force a fresh login
           let expiresInMs = 10 * 60 * 1000; // Default 10 min
           try {
             const parts = token.split('.');
@@ -742,7 +742,35 @@ serve(async (req) => {
               const payload = JSON.parse(atob(parts[1]));
               if (payload.exp) {
                 const expiresAt = payload.exp * 1000;
-                expiresInMs = Math.max(0, expiresAt - Date.now() - 60000); // 60s buffer
+                expiresInMs = Math.max(0, expiresAt - Date.now() - 60000);
+                
+                // If token has less than 5 min left, force refresh/re-login
+                const remainingMs = expiresAt - Date.now();
+                if (remainingMs < 300000) {
+                  console.log(`[get-login-token] Token has only ${Math.round(remainingMs / 1000)}s left, forcing refresh`);
+                  // Force a fresh token by clearing the cached one and re-authenticating
+                  token = await getIvionToken(null); // bypass cache
+                  // Save fresh token to building_settings
+                  if (params.buildingFmGuid) {
+                    const { expiresAt: newExp } = parseTokenExpiry(token);
+                    const supabaseAdmin = createClient(
+                      Deno.env.get('SUPABASE_URL')!,
+                      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+                    );
+                    await supabaseAdmin.from('building_settings').update({
+                      ivion_access_token: token,
+                      ivion_token_expires_at: newExp?.toISOString() || null,
+                    }).eq('fm_guid', params.buildingFmGuid);
+                  }
+                  // Recalculate expiry
+                  const p2 = token.split('.');
+                  if (p2.length === 3) {
+                    const pl2 = JSON.parse(atob(p2[1]));
+                    if (pl2.exp) {
+                      expiresInMs = Math.max(0, pl2.exp * 1000 - Date.now() - 60000);
+                    }
+                  }
+                }
               }
             }
           } catch {
