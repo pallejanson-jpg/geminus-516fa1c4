@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.gunnar-chat]
 verify_jwt = false
+
+[functions.acc-svf-to-gltf]
+verify_jwt = false
