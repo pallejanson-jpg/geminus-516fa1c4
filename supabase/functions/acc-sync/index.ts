@@ -1866,7 +1866,7 @@ serve(async (req: Request) => {
           ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/job"
           : "https://developer.api.autodesk.com/modelderivative/v2/designdata/job";
         console.log(`[translate-model] isEmea=${isEmea}, endpoint=${mdEndpoint}`);
-        const jobRes = await fetch(mdEndpoint, {
+        let jobRes = await fetch(mdEndpoint, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -1876,11 +1876,29 @@ serve(async (req: Request) => {
           body: JSON.stringify(translationBody),
         });
 
+        // If 3-legged token fails with 403, retry with 2-legged (app) token
+        if (jobRes.status === 403) {
+          console.log("[translate-model] 3-legged token got 403, retrying with 2-legged app token...");
+          const appToken = await getApsAccessToken();
+          jobRes = await fetch(mdEndpoint, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${appToken}`,
+              "Content-Type": "application/json",
+              "x-ads-force": "true",
+            },
+            body: JSON.stringify(translationBody),
+          });
+        }
+
         if (!jobRes.ok) {
           const errorText = await jobRes.text();
           console.error(`Model Derivative job failed (${jobRes.status}): ${errorText}`);
+          const hint = jobRes.status === 403
+            ? ". Kontrollera att Model Derivative API är aktiverat i Autodesk Developer Portal för din APS-app, och logga ut/in från Autodesk i inställningarna."
+            : "";
           return new Response(
-            JSON.stringify({ success: false, error: `Translation job failed (${jobRes.status}): ${errorText}` }),
+            JSON.stringify({ success: false, error: `Translation job failed (${jobRes.status}): ${errorText}${hint}` }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
