@@ -186,7 +186,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showAnnotations, setShowAnnotations] = useState(true);
+  const [showAnnotations, setShowAnnotations] = useState(false);
   
   // Mobile floors state for visibility control
   const [mobileFloors, setMobileFloors] = useState<MobileFloorInfo[]>([]);
@@ -531,10 +531,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     };
   }, [updateFloorFilter, showSpaces, filterSpacesToVisibleFloors]);
 
-  // Handler for annotations toggle from mobile overlay
+  // Handler for annotations toggle from mobile overlay and ViewerRightPanel
   const handleAnnotationsChange = useCallback((show: boolean) => {
     setShowAnnotations(show);
-    // Trigger annotation visibility update in viewer
+    // Update local annotation markers (DOM-based icons for inventoried assets, alarms, etc.)
+    const plugin = localAnnotationsPluginRef.current;
+    if (plugin?.annotations) {
+      Object.values(plugin.annotations).forEach((ann: any) => {
+        ann.markerShown = show;
+        if (ann.markerElement) {
+          ann.markerElement.style.display = show ? 'flex' : 'none';
+        }
+      });
+    }
+    // Trigger Asset+ built-in annotation visibility update
     try {
       const viewer = viewerInstanceRef.current?.assetViewer;
       if (viewer && typeof viewer.onToggleAnnotation === 'function') {
@@ -544,6 +554,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.debug('Could not toggle annotations:', e);
     }
   }, []);
+
+  // Sync local annotation marker visibility when showAnnotations state changes
+  useEffect(() => {
+    const plugin = localAnnotationsPluginRef.current;
+    if (!plugin?.annotations) return;
+    Object.values(plugin.annotations).forEach((ann: any) => {
+      ann.markerShown = showAnnotations;
+      if (ann.markerElement) {
+        ann.markerElement.style.display = showAnnotations ? 'flex' : 'none';
+      }
+    });
+  }, [showAnnotations]);
 
   // Handler for individual model visibility toggle from mobile overlay
   const handleModelToggle = useCallback((modelId: string, visible: boolean) => {
@@ -3154,6 +3176,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   showTreeView={showTreePanel}
                   onAddAsset={handleOpenInventorySheet}
                   initialFloorFmGuid={initialFmGuidToFocus}
+                  showAnnotations={showAnnotations}
+                  onShowAnnotationsChange={handleAnnotationsChange}
                 />
               </div>
             </>
