@@ -39,7 +39,7 @@ const MobileBuildingSelector: React.FC<MobileBuildingSelectorProps> = ({ onSelec
       <div 
         className="flex items-center gap-3 px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm"
         style={{ 
-          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)',
+          paddingTop: 'calc(max(env(safe-area-inset-top, 0px), 20px) + 8px)',
           paddingLeft: 'calc(env(safe-area-inset-left, 0px) + 1rem)'
         }}
       >
