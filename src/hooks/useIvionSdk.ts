@@ -150,7 +150,7 @@ export function useIvionSdk({
       }
     };
 
-    const interval = setInterval(refreshToken, 10 * 60 * 1000);
+    const interval = setInterval(refreshToken, 8 * 60 * 1000);
     return () => clearInterval(interval);
   }, [sdkStatus, fetchLoginToken]);
 
