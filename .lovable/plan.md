@@ -1,56 +1,74 @@
 
 
-# Presentation: Bakgrundsbild pa alla slides + Riktiga skarmklipp
+# Fix: AI-detektion hittar objekt men sparar inga
 
-## Oversikt
+## Rotorsak
 
-Tva andringar i presentationen:
+Tva problem identifierade fran nätverksdata:
 
-1. **Bakgrundsbild (chicago-skyline-hero.jpg) pa ALLA slides** -- inte bara titelsliden
-2. **Ersatt mockup-bilder med riktiga skarmklipp fran Geminus-appen**
+1. **Skärmklipp skickas som viewport-bild men prompten säger "360 equirectangular panorama"** -- AI:n ser en vanlig perspektivbild men instrueras att leta i en panoramabild. Detta sänker konfidensen.
 
-## Detalj 1: Bakgrundsbild pa alla slides
-
-Varje slide-komponent (ProblemSlide, SolutionSlide, ViewerSlide, etc.) har idag en egen `bg-gradient-to-br from-slate-900 to-...` bakgrund. Dessa ersatts med:
-
-- Bakgrundsbild: `chicago-skyline-hero.jpg` (samma som titelsliden)
-- Dark overlay ovanpa for lasbarhet (justerat per slide for att behalla fargtemat)
-- Gradient-overlayen behalles men laggs ovanpa bilden
+2. **Konfidenströskeln 0.3 filtrerar bort alla detektioner** -- AI:n returnerar detektioner (1-2 per bild) men alla har konfidens under 0.3 och kastas bort. Granskningskön förblir tom.
 
 ```text
-Varje slide far denna struktur:
-  <div className="relative w-full h-full overflow-hidden">
-    <img src={heroImage} className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-[farg]/85 to-[farg]/70" />
-    <div className="relative z-10 ..."> [befintligt innehall] </div>
-  </div>
+Nätverksbevis:
+  {"detections":0, "totalInImage":1}  -- 1 objekt hittat, 0 sparade
+  {"detections":0, "totalInImage":2}  -- 2 objekt hittade, 0 sparade
+
+Kod (rad 2074):
+  if (det.confidence < 0.3) continue;  // <-- filtrerar bort allt
 ```
 
-Fargschema per slide:
-- **Problem**: `from-slate-900/85 to-slate-800/70`
-- **Solution**: `from-slate-900/85 to-cyan-950/70`
-- **Viewer**: `from-slate-900/85 to-indigo-950/70`
-- **AI Detection**: `from-slate-900/85 to-emerald-950/70`
-- **AI Assistants**: `from-slate-900/85 to-purple-950/70`
-- **Mobile**: `from-slate-900/85 to-orange-950/70`
-- **Tech**: `from-slate-900/85 to-slate-800/70`
+## Atgärder
 
-## Detalj 2: Riktiga skarmklipp fran Geminus
+### 1. Uppdatera system-prompten (edge function)
 
-De nuvarande bilderna i `src/assets/` ar mockups. Jag tar skarmklipp fran den faktiska Geminus-appen och sparar dem som nya filer:
+Ändra fran "360 equirectangular panorama" till "indoor photograph / viewport capture" sa att AI:n vet vad den tittar pa. Detta bor höja konfidensen markant.
 
-| Slide | Nuvarande mockup | Nytt skarmklipp |
-|-------|------------------|-----------------|
-| ViewerSlide | `screenshot-viewer.png` | Skarmklipp fran 3D Viewer-vyn |
-| AiDetectionSlide | `screenshot-ai-scan.png` | Skarmklipp fran AI Scan-sidan |
-| AiAssistantsSlide | `screenshot-gunnar.png` | Skarmklipp fran Gunnar-chatten |
-| MobileSlide | `screenshot-mobile.png` | Skarmklipp fran mobilvy (390px) |
+**Fil:** `supabase/functions/ai-asset-detection/index.ts` (rad 752-775)
 
-Skarmklippen tas fran preview-miljon med riktigt UI och ersatter de befintliga filerna.
+Fran:
+```
+You are an expert at detecting safety equipment in 360° equirectangular panorama images.
+```
+Till:
+```
+You are an expert at detecting objects and equipment in indoor photographs.
+The images are viewport captures from a 360° indoor scanning system, showing a regular perspective view (not equirectangular).
+```
 
-## Fil som andras
+### 2. Sänk konfidenströskeln
 
-**`src/pages/Presentation.tsx`** -- Alla 7 slide-komponenter (exkl. TitleSlide som redan har bakgrundsbilden) wrappas med bakgrundsbild + overlay-struktur.
+Ändra fran 0.3 till 0.1 -- detektioner med lag konfidens hamnar i granskningskön för manuell bedömning istället för att kastas.
 
-Skarmklipp-filerna overskrives pa plats (samma filnamn, nytt innehall).
+**Fil:** `supabase/functions/ai-asset-detection/index.ts` (rad 2074)
+
+Fran:
+```typescript
+if (det.confidence < 0.3) continue;
+```
+Till:
+```typescript
+if (det.confidence < 0.1) continue;
+```
+
+### 3. Lägg till diagnostik-loggning
+
+Logga varje detektions object_type och confidence sa vi kan se exakt vad AI:n returnerar och varför det filtreras. Detta hjälper vid framtida felsökning.
+
+**Fil:** `supabase/functions/ai-asset-detection/index.ts` (i analyze-screenshot, rad ~2073)
+
+```typescript
+console.log(`[analyze-screenshot] AI returned ${detections.length} raw detections:`);
+for (const det of detections) {
+  console.log(`  - ${det.object_type}: confidence=${det.confidence}, desc=${det.description?.slice(0, 80)}`);
+}
+```
+
+### Sammanfattning
+
+Tre ändringar i en fil (`supabase/functions/ai-asset-detection/index.ts`):
+- Korrigera system-prompten (viewport, inte panorama)
+- Sänk confidence-tröskeln (0.3 till 0.1)
+- Lägg till loggning av raa AI-resultat
 
