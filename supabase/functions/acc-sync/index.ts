@@ -1859,7 +1859,14 @@ serve(async (req: Request) => {
         console.log(`[translate-model] Requesting formats: ${JSON.stringify(translationBody.output.formats)}`);
         console.log(`[translate-model] Request body: ${JSON.stringify(translationBody)}`);
 
-        const jobRes = await fetch("https://developer.api.autodesk.com/modelderivative/v2/designdata/job", {
+        // EMEA URNs (wipemea) require the EU-specific endpoint
+        const decodedUrn = atob(urnBase64.replace(/-/g, '+').replace(/_/g, '/'));
+        const isEmea = decodedUrn.includes('wipemea');
+        const mdEndpoint = isEmea
+          ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/job"
+          : "https://developer.api.autodesk.com/modelderivative/v2/designdata/job";
+        console.log(`[translate-model] isEmea=${isEmea}, endpoint=${mdEndpoint}`);
+        const jobRes = await fetch(mdEndpoint, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
