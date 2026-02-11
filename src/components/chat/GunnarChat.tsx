@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,6 +9,7 @@ import { useApp } from "@/context/AppContext";
 import { toast } from "sonner";
 import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 
 type Message = {
   role: "user" | "assistant";
@@ -266,6 +267,55 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     }
   }, [setAiSelectedFmGuids, setActiveApp, onClose, setViewer3dFmGuid]);
 
+  /** Parse action:type:payload links and dispatch the appropriate action */
+  const handleActionLink = useCallback((href: string) => {
+    const match = href.match(/^action:(\w+):(.*)$/);
+    if (!match) return;
+    const [, actionType, payload] = match;
+    switch (actionType) {
+      case "flyTo":
+        executeAction({ action: "flyTo", fmGuid: payload });
+        break;
+      case "openViewer":
+        executeAction({ action: "openViewer", fmGuid: payload });
+        break;
+      case "showFloor":
+        executeAction({ action: "showFloor", floorFmGuid: payload });
+        break;
+      case "selectInTree":
+        executeAction({ action: "selectInTree", fmGuids: payload.split(",").filter(Boolean) });
+        break;
+      case "switchTo2D":
+        executeAction({ action: "switchTo2D" });
+        break;
+      case "switchTo3D":
+        executeAction({ action: "switchTo3D" });
+        break;
+    }
+  }, [executeAction]);
+
+  /** Custom renderers for react-markdown to intercept action links */
+  const markdownComponents: Components = useMemo(() => ({
+    a: ({ href, children }) => {
+      if (href?.startsWith("action:")) {
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="inline-flex items-center gap-1 h-6 px-2 py-0 text-xs align-baseline mx-0.5"
+            onClick={(e) => {
+              e.preventDefault();
+              handleActionLink(href);
+            }}
+          >
+            {children}
+          </Button>
+        );
+      }
+      return <a href={href} target="_blank" rel="noopener noreferrer" className="underline text-primary">{children}</a>;
+    },
+  }), [handleActionLink]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
@@ -305,7 +355,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               )}>
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
