@@ -1,64 +1,50 @@
 
 
-# Fix: Ivion SDK timeout pga utgangen cachad token (Akerselva)
+# Fix: Utoka retry-tiden for Autodesk-oversattning
 
 ## Problem
 
-Akerselva-byggnaden har en cachad Ivion-token i `building_settings` som gar ut efter ca 15 minuter. Nar anvandaren oppnar Ivion-vyn efter att token gatt ut:
+Autodesk Model Derivative-oversattningen av stora Revit-filer (som 12011A_2023.rvt) tar 5-15 minuter. Koden ger upp efter 2 minuter per fas (12 forsok x 10 sekunder), totalt max 4 minuter. Resultatet ar meddelandet "Forsok igen".
 
-1. `useIvionSdk` anropar `get-login-token` i edge-funktionen
-2. Edge-funktionen kontrollerar `building_settings` -- ser att token gatt ut
-3. Den forsoker refresha, men om refresh ocksa misslyckas faller den tillbaka till username/password-login
-4. **Problemet**: Loggen visar "Using cached access token from database (still valid)" -- dvs `isTokenExpired` returnerar `false` trots att token har gatt ut. 60-sekunders buffert racker inte nar tokenen ar flera minuter gammal.
-
-Dessutom: om SDK:n far en token som gar ut under sessionen, fortsatter SSE-anropen med 403 var 5:e sekund utan att frontend markar det forran timeout pa 45 sekunder.
-
-**Bevis fran databasen:**
-- Akerselva: `ivion_token_expires_at = 2026-02-11 15:31:35` (utgick fore 15:38-sessionen)
-- Centralstationen: `ivion_token_expires_at = 2026-02-11 16:06:54` (fortfarande giltig)
+Loggarna visar att oversattningen fortfarande ar "pending" nar klienten ger upp:
+- acc-svf-to-gltf anropas var 10:e sekund i 2 minuter, alltid "Fetching manifest... pending"
+- acc-sync (download-derivative) samma monster
 
 ## Atgarder
 
-### 1. Fixa token-validering i edge-funktionen
+### 1. Oka retry-granser i `src/services/acc-xkt-converter.ts`
 
-I `supabase/functions/_shared/ivion-auth.ts`, oka bufferten fran 60 sekunder till 5 minuter. Detta saker att en token som snart gar ut aldrig returneras som "giltig":
+Tre platser behover andras:
 
-```text
-Fil: supabase/functions/_shared/ivion-auth.ts (rad 39)
+**a) `doDownloadAndConvert` (rad 481)**
+- Fran: 12 forsok (2 min)
+- Till: 36 forsok (6 min)
 
-Fran: const isExpired = now.getTime() >= (expiresAt.getTime() - 60000);
-Till:  const isExpired = now.getTime() >= (expiresAt.getTime() - 300000);
+**b) `tryServerConversion` (rad 388)**
+- Fran: 12 forsok (2 min)
+- Till: 36 forsok (6 min)
+
+Totalt ger detta upp till 12 minuter vantetid, vilket tacker de flesta oversattningar.
+
+**c) Forbattra statusmeddelanden**
+Visa uppskattad tid kvar istallet for bara forsoksnummer, t.ex.:
+```
+"Vantar pa oversattning fran Autodesk... (ca X min kvar)"
 ```
 
-### 2. Tvinga proaktiv token-refresh i get-login-token
+### 2. Undvik dubbelpolling
 
-I `supabase/functions/ivion-poi/index.ts`, nar `get-login-token` anropas, kontrollera explicit att den returnerade token har minst 5 minuters livstid kvar. Om inte, tvinga en refresh:
+Just nu pollar bade `doDownloadAndConvert` OCH `tryServerConversion` mot samma Autodesk-jobb i serie. Om download-fasen redan vantat 6 minuter och oversattningen fortfarande ar pending, sa ar det meningslost att tryServerConversion vantar ytterligare 6 minuter.
 
-```text
-Fil: supabase/functions/ivion-poi/index.ts (rad 731-763, get-login-token case)
+Losning: om `doDownloadAndConvert` returnerar pending efter alla retries, propagera detta direkt som slutstatus istallet for att falla igenom till `tryServerConversion`.
 
-Lagg till efter att token hamtats:
-- Parsa token-expiry
-- Om under 5 minuter kvar: anropa refreshAccessToken direkt
-- Om refresh misslyckas: loginWithCredentials
-- Spara nya tokens till building_settings
-```
-
-### 3. Forbattra frontend token-refresh-timing
-
-I `src/hooks/useIvionSdk.ts`, minska refresh-intervallet fran 10 minuter till 8 minuter, och lagg till felhantering som triggar retry vid 403-fel:
+### Sammanfattning
 
 ```text
-Fil: src/hooks/useIvionSdk.ts (rad 113)
-
-Fran: const interval = setInterval(refreshToken, 10 * 60 * 1000);
-Till:  const interval = setInterval(refreshToken, 8 * 60 * 1000);
+Fil: src/services/acc-xkt-converter.ts
+  - rad 481: 12 -> 36 retries i doDownloadAndConvert
+  - rad 388: 12 -> 36 retries i tryServerConversion  
+  - rad ~520: Om download-pending efter alla retries, returnera failed direkt (skippa server-conversion retry)
+  - Battre statusmeddelanden med tidsuppskattning
 ```
-
-## Sammanfattning
-
-Tre andringar i tre filer:
-1. `supabase/functions/_shared/ivion-auth.ts` -- Oka token-buffert till 5 min
-2. `supabase/functions/ivion-poi/index.ts` -- Tvinga refresh vid kort livstid i get-login-token
-3. `src/hooks/useIvionSdk.ts` -- Tightare refresh-intervall (8 min)
 
