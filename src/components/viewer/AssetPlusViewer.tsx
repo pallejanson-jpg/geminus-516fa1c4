@@ -2280,9 +2280,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       toggleHierarchy(floorId, visible);
 
       // Update state
-      setMobileFloors(prev => prev.map(f => 
-        f.id === floorId ? { ...f, visible } : f
-      ));
+      setMobileFloors(prev => {
+        const newFloors = prev.map(f => 
+          f.id === floorId ? { ...f, visible } : f
+        );
+
+        // Dispatch floor selection event to sync room labels, ceiling clipping etc.
+        const visibleFloors = newFloors.filter(f => f.visible);
+        const isAllVisible = visibleFloors.length === newFloors.length;
+        const isSolo = visibleFloors.length === 1;
+
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: {
+            floorId: isSolo ? visibleFloors[0].id : null,
+            visibleFloorFmGuids: visibleFloors.map(f => f.fmGuid),
+            visibleMetaFloorIds: visibleFloors.map(f => f.id),
+            isAllFloorsVisible: isAllVisible,
+          }
+        }));
+
+        return newFloors;
+      });
     } catch (e) {
       console.debug('Error toggling floor visibility:', e);
     }
