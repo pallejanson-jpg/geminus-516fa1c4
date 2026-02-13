@@ -1,43 +1,37 @@
 
 
-## Fix FM Access Authentication Headers
+## Fix FM Access: Rätt API-URL och client_secret-stöd
 
-### Problem
-FM Access (Tessel HDC API) kräver `X-Authorization` som auth-header, inte standard `Authorization`. Vår edge function skickar fel header, vilket orsakar 401-felet på `/api/systeminfo/json`.
+### Orsak till problemet
+FM Access API-URL:en är satt till `https://landlord.bim.cloud`, men den korrekta instansen är `https://swg-demo.bim.cloud`. Keycloak-realmen `swg_demo` genererar tokens som bara accepteras av `swg-demo.bim.cloud`-instansen -- det är därför vi får "Didn't find publicKey for specified kid".
 
-### Dokumentationens krav
-Enligt Tessels officiella dokumentation:
-- Token-anrop till Keycloak använder standard OAuth2 (detta fungerar redan)
-- API-anrop till HDC-systemet kräver **`X-Authorization: Bearer <token>`**
-- API-anrop kräver också **`X-Hdc-Version-Id: <versionId>`**
-- Version-ID hämtas från `GET /api/systeminfo/json` och finns i svaret som `defaultVersion.versionId`
+### Steg
 
-### Ändringar i `supabase/functions/fm-access-query/index.ts`
+**1. Uppdatera FM_ACCESS_API_URL**
+Ändra secreten `FM_ACCESS_API_URL` från `https://landlord.bim.cloud` till `https://swg-demo.bim.cloud`.
 
-1. **`getVersionId` funktion** -- Byt `Authorization` till `X-Authorization` i headern vid anrop till `/api/systeminfo/json`. Extrahera version-ID från `data.defaultVersion.versionId` (inte `data.versionId`).
+**2. Lägg till stöd för client_secret i edge function**
+Enligt Tessels dokumentation kan klienten vara av typen "Confidential" och kräva en `client_secret` i token-anropet. Vi lägger till:
+- Ny secret: `FM_ACCESS_CLIENT_SECRET` (om en secret behövs)
+- Uppdatera `getToken()` i `supabase/functions/fm-access-query/index.ts` så att `client_secret` skickas med i token-requesten om den finns konfigurerad
 
-2. **`fmAccessFetch` funktion** -- Byt `Authorization` till `X-Authorization` i headern för alla API-anrop.
-
-3. **Testa anslutningen** -- Kör `test-connection` igen för att verifiera att vi nu får tillbaka systeminfo och versionId korrekt.
+**3. Testa anslutningen**
+Kör `test-connection` för att verifiera att:
+- Token hämtas korrekt
+- `/api/systeminfo/json` returnerar version-ID
+- Hela flödet fungerar
 
 ### Teknisk detalj
 
 ```text
-Nuvarande (felaktigt):
-  headers: { 'Authorization': 'Bearer <token>' }
+Ändring i getToken():
+  Nuvarande body:
+    grant_type=password&client_id=...&username=...&password=...
+  
+  Ny body (om client_secret finns):
+    grant_type=password&client_id=...&client_secret=...&username=...&password=...
 
-Nytt (korrekt enligt Tessel-dokumentation):
-  headers: { 'X-Authorization': 'Bearer <token>' }
-
-Version-ID extraction:
-  Nuvarande: data.versionId || data.id || data.version || data.systemVersion
-  Nytt:      data.defaultVersion?.versionId || data.defaultVersion?.defaultVersionId
+Secret-ändring:
+  FM_ACCESS_API_URL: https://landlord.bim.cloud  -->  https://swg-demo.bim.cloud
 ```
-
-### Steg
-1. Uppdatera `getVersionId` -- byt auth-header och version-ID-extrahering
-2. Uppdatera `fmAccessFetch` -- byt auth-header
-3. Deploya edge function
-4. Testa med `test-connection` action
-5. Spara dokumentationen i `docs/api/fm-access/` för framtida referens
 
