@@ -587,7 +587,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     const items: { id: string; label: string; icon: React.ReactNode; onClick: () => void; active?: boolean }[] = [];
     
     const overflowTools = toolSettings.filter(t => t.visible && t.inOverflow);
-    console.log('[ViewerToolbar] Building overflow menu, tools:', overflowTools.map(t => t.id));
+    console.debug('[ViewerToolbar] Building overflow menu, tools:', overflowTools.map(t => t.id));
     
     overflowTools.forEach(tool => {
       switch (tool.id) {
