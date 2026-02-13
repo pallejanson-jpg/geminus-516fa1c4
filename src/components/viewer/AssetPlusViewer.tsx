@@ -2301,17 +2301,32 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       toggleHierarchy(floorId, visible);
 
-      // Update state
+      // Update state and hide IfcCovering in solo mode
       setMobileFloors(prev => {
         const newFloors = prev.map(f => 
           f.id === floorId ? { ...f, visible } : f
         );
 
-        // Dispatch floor selection event to sync room labels, ceiling clipping etc.
+        // Hide IfcCovering objects in solo mode (matches desktop FloorVisibilitySelector)
         const visibleFloors = newFloors.filter(f => f.visible);
         const isAllVisible = visibleFloors.length === newFloors.length;
         const isSolo = visibleFloors.length === 1;
 
+        if (isSolo) {
+          const metaObjects = metaScene.metaObjects || {};
+          const coveringIds: string[] = [];
+          Object.values(metaObjects).forEach((metaObj: any) => {
+            if (metaObj.type?.toLowerCase() === 'ifccovering') {
+              coveringIds.push(metaObj.id);
+            }
+          });
+          if (coveringIds.length > 0) {
+            scene.setObjectsVisible(coveringIds, false);
+            console.debug(`[MobileFloor] Hidden ${coveringIds.length} IfcCovering objects in solo mode`);
+          }
+        }
+
+        // Dispatch floor selection event to sync room labels, ceiling clipping etc.
         window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
           detail: {
             floorId: isSolo ? visibleFloors[0].id : null,
