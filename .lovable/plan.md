@@ -1,46 +1,33 @@
 
 
-## Använd HDC Object API för att hämta byggnadsdata via GUID
+## Add "2D FMA" Quick Action button for floors
 
-### Bakgrund
-Tessel HDC API har ingen dedikerad "buildings"-endpoint, men erbjuder ett generellt Object API som kan hämta alla objekt (inklusive byggnader) via deras GUID.
+### What it does
+Adds a new "2D FMA" button in the Portfolio Quick Actions panel, visible only when a **floor (Building Storey)** is selected. Clicking it opens the FM Access 2D drawing viewer for that specific floor.
 
-### Steg
+### Changes
 
-**1. Lägg till `get-object-by-guid` action i edge function**
-Ny action som anropar `GET /api/object/byguid/json/{guid}` for att hämta objektdata (inklusive byggnader) via GUID.
+**1. `src/components/portfolio/QuickActions.tsx`**
+- Add a new "2D FMA" button after the existing storey-level "2D" button (around line 90)
+- Visible only when `isStorey` is true
+- On click, navigates to `/split-viewer?building={buildingFmGuid}&mode=2d&floor={facility.fmGuid}`
+- Uses the `Square` icon with a distinct color and label "2D FMA"
 
-**2. Lägg till `get-classes` action**
-Anropar `GET /api/config/classes/json` for att lista alla objektklasser i systemet (t.ex. "Byggnad", "Våning", "Rum"). Detta hjälper oss förstå vilka classId:n som finns.
+**2. `src/components/viewer/FmAccess2DPanel.tsx`**
+- Update to accept and use a `floorFmGuid` query parameter so the edge function can resolve the correct drawing for the selected floor via `get-perspective-tree`
 
-**3. Lägg till `search-objects` action**
-Anropar `GET /api/search/quick?query={term}` for att söka efter objekt i HDC. Kan användas for att hitta byggnader by namn.
+**3. `src/pages/SplitViewer.tsx` (or UnifiedViewer)**
+- Read the `floor` query parameter and pass it through to `FmAccess2DPanel` as `floorId` so the correct floor drawing is loaded
 
-**4. Uppdatera `get-buildings` action**
-Istället for att returnera systeminfo, använd `get-classes` for att hitta byggnadsklassens ID, och sedan sök/lista byggnader via perspective/object API.
+### Technical details
 
-**5. Testa med våra databas-GUID:s**
-Anropa `get-object-by-guid` med GUID:arna från vår building_settings-tabell for att verifiera mappningen.
-
-### Teknisk detalj
-
+The "2D FMA" button will:
 ```text
-Nya actions i fm-access-query edge function:
-
-case 'get-object-by-guid':
-  GET /api/object/byguid/json/{guid}
-  -> Returnerar objektdata med properties, classId, namn etc.
-
-case 'get-classes':
-  GET /api/config/classes/json
-  -> Returnerar lista av alla klasser (Byggnad, Våning, Rum etc.)
-
-case 'search-objects':
-  GET /api/search/quick?query={term}
-  -> Söker efter objekt by namn
-
-case 'get-perspective-tree':
-  GET /api/perspective/subtree/json/{perspId}/{classId}/{objectId}
-  -> Hämtar trädstruktur under ett objekt
+navigate(`/split-viewer?building=${buildingFmGuid}&mode=2d&floor=${facility.fmGuid}`)
 ```
 
+Where `buildingFmGuid` is derived from `(facility as any).buildingFmGuid || facility.fmGuid` (same pattern as the 3D button).
+
+The FmAccess2DPanel already accepts a `floorId` prop and passes it to the edge function. The edge function's `get-viewer-url` action can use the floor GUID to resolve the correct drawing via the perspective tree (perspectiveId 8).
+
+No new navigation routes are needed -- it reuses the existing `/split-viewer` route with `mode=2d`.
