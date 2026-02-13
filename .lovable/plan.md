@@ -1,66 +1,62 @@
 
 
-## Fix FM Access 2D Drawing Resolution for Floors
+## Auto-resolve FM Access Building GUID via API Search
 
 ### Problem
-The "2D FMA" button navigates correctly but no drawing loads because:
-- Asset+ GUIDs (used for buildings and floors) are not recognized by FM Access
-- FM Access uses its own GUID namespace
-- No mapping exists between the two systems
+Currently, the FM Access building GUID must be manually entered in settings. The user wants the system to automatically look it up using the building name via the FM Access API.
 
 ### Solution
+Update the `get-viewer-url` action in the edge function to automatically search for the FM Access building when no `fmAccessBuildingGuid` is configured. It will:
 
-#### 1. Database: Add FM Access building GUID mapping
+1. Use the FM Access `search/quick` API with the building name
+2. Find the best match from the results
+3. Use that GUID to fetch the perspective tree and resolve the drawing
+4. Optionally cache the resolved GUID back into `building_settings` for future speed
 
-Add `fm_access_building_guid` column to `building_settings` to store the FM Access GUID for each building.
+### Changes
+
+**1. Edge Function: `supabase/functions/fm-access-query/index.ts`**
+
+In the `get-viewer-url` action, add a new step before the perspective tree lookup:
 
 ```text
-ALTER TABLE building_settings ADD COLUMN fm_access_building_guid TEXT;
+if (!fmAccessBuildingGuid && buildingName) {
+  1. Call /api/search/quick?query={buildingName}
+  2. Filter results for building-like objects (classId 104 or similar)
+  3. Use the best match's GUID as fmAccessBuildingGuid
+  4. Optionally: save it to building_settings via Supabase client
+}
 ```
 
-For the Akerselva Atrium building, this would store `755950d9-f235-4d64-a38d-b7fc15a0cad9` (the GUID FM Access recognizes).
+**2. Client: `src/components/viewer/FmAccess2DPanel.tsx`**
+- Add `buildingName` prop
+- Pass it to the edge function request body
 
-#### 2. Client: Pass floor name and FM Access building GUID
+**3. Client: `src/pages/UnifiedViewer.tsx`**
+- Pass `buildingData.name` to `FmAccess2DPanel` as `buildingName`
 
-**`src/components/viewer/FmAccess2DPanel.tsx`**
-- Add optional `floorName` prop
-- Pass `floorName` to the edge function in the request body
-
-**`src/pages/UnifiedViewer.tsx`**
-- Read the `floorName` query parameter from the URL
-- Pass it to `FmAccess2DPanel`
-- Also look up `fm_access_building_guid` from `building_settings` and pass it to the panel
-
-**`src/components/portfolio/QuickActions.tsx`**
-- Include `floorName` in the navigation URL: `/split-viewer?building={buildingGuid}&mode=2d&floor={facility.fmGuid}&floorName={encodeURIComponent(facility.commonName)}`
-
-#### 3. Edge Function: Use FM Access building GUID and match by name
-
-**`supabase/functions/fm-access-query/index.ts`** (`get-viewer-url` action)
-- Accept new params: `fmAccessBuildingGuid` and `floorName`
-- Use `fmAccessBuildingGuid` (or fall back to `buildingId`) to fetch the building's perspective tree
-- Find the floor node (classId 105) whose `objectName` matches `floorName`
-- Get the first drawing (classId 106) under that floor
-- Build the viewer URL with the drawing's `objectId`
-
-#### 4. Settings UI: Allow configuring FM Access building GUID
-
-**`src/components/settings/GeoreferencingSettings.tsx`** (or a dedicated FM Access settings section)
-- Add an input field for "FM Access Building GUID"
-- Save to `building_settings.fm_access_building_guid`
+**4. Client: `src/components/portfolio/QuickActions.tsx`**
+- Add `buildingName` to the navigation URL as a query parameter
 
 ### Technical Details
 
-The perspective tree for FM Access building GUID `755950d9-f235-4d64-a38d-b7fc15a0cad9` returns:
-- Floor nodes (classId 105) like "Plan 1-5 Fasad", etc.
-- Drawing nodes (classId 106) like "A00-0001", "A00-0002" under each floor
+The search flow in the edge function will be:
 
-The floor name matching will be fuzzy (case-insensitive, trim whitespace) since Asset+ floor names (e.g., "01 Etasje") may not exactly match FM Access floor names. If no match is found, fall back to the first floor with drawings.
+```text
+get-viewer-url called with buildingName="Akerselva Atrium"
+  -> No fmAccessBuildingGuid configured
+  -> Call /api/search/quick?query=Akerselva Atrium
+  -> Find matching object with GUID 755950d9-...
+  -> Use that GUID for perspective tree lookup
+  -> Cache GUID in building_settings for next time
+  -> Continue with normal floor matching logic
+```
+
+The Supabase service role key is available in the edge function environment, so it can write the resolved GUID back to `building_settings.fm_access_building_guid` for caching.
 
 ### Files Changed
-- Migration: Add `fm_access_building_guid` column to `building_settings`
-- `src/components/portfolio/QuickActions.tsx` - add `floorName` to URL
-- `src/pages/UnifiedViewer.tsx` - read `floorName`, look up FM Access building GUID
-- `src/components/viewer/FmAccess2DPanel.tsx` - accept and pass `floorName` and `fmAccessBuildingGuid`
-- `supabase/functions/fm-access-query/index.ts` - use FM Access building GUID and match floor by name
-- Settings component - add FM Access building GUID input
+- `supabase/functions/fm-access-query/index.ts` -- add auto-search logic in `get-viewer-url`
+- `src/components/viewer/FmAccess2DPanel.tsx` -- add `buildingName` prop
+- `src/pages/UnifiedViewer.tsx` -- pass building name
+- `src/components/portfolio/QuickActions.tsx` -- add building name to URL
+
