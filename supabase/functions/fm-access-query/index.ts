@@ -288,6 +288,46 @@ serve(async (req) => {
         );
       }
 
+      case 'get-viewer-url': {
+        const { buildingId, floorId } = params;
+        try {
+          const token = await getToken(config);
+          const versionId = await getVersionId(config, token);
+          
+          // Build viewer URL with authentication parameters
+          // NOTE: Exact URL structure may need adjustment after testing against FM Access API
+          const viewerUrl = `${config.apiUrl}/viewer/2d?floorId=${encodeURIComponent(floorId || '')}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
+          
+          return new Response(
+            JSON.stringify({ success: true, url: viewerUrl, token, versionId }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get-floors': {
+        const { buildingFmGuid } = params;
+        if (!buildingFmGuid) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'buildingFmGuid is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const response = await fmAccessFetch(config, `/api/floors?buildingId=${encodeURIComponent(buildingFmGuid)}`);
+        const data = await response.json();
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, data }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),

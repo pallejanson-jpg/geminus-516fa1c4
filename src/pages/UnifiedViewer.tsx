@@ -17,8 +17,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
-  Loader2,
+  Loader2, Square,
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import FmAccess2DPanel from '@/components/viewer/FmAccess2DPanel';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,7 +36,7 @@ import { VIEWER_TOOL_CHANGED_EVENT, type ViewerToolChangedDetail } from '@/lib/v
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
-export type ViewMode = '3d' | 'split' | 'vt' | '360';
+export type ViewMode = '3d' | 'split' | 'vt' | '360' | '2d';
 
 interface UnifiedViewerProps {
   initialMode?: ViewMode;
@@ -61,8 +63,21 @@ const UnifiedViewerContent: React.FC<{
   const effectiveInitialMode = modeParam || initialMode;
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
 
+  // ─── FM Access availability ────────────────────────────────────────
+  const [hasFmAccess, setHasFmAccess] = useState(false);
   useEffect(() => {
-    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d') {
+    if (!buildingData?.fmGuid) return;
+    supabase
+      .from('building_external_links')
+      .select('id')
+      .eq('building_fm_guid', buildingData.fmGuid)
+      .eq('system_name', 'fm_access')
+      .limit(1)
+      .then(({ data }) => setHasFmAccess((data?.length ?? 0) > 0));
+  }, [buildingData?.fmGuid]);
+
+  useEffect(() => {
+    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d') {
       setViewMode('3d');
     }
   }, [buildingData, viewMode]);
@@ -255,12 +270,14 @@ const UnifiedViewerContent: React.FC<{
       sync3DHeading={sync3DHeading}
       sync3DPitch={sync3DPitch}
       hasIvion={hasIvion}
+      hasFmAccess={hasFmAccess}
       onGoBack={handleGoBack}
     />;
   }
 
   // ─── Compute AssetPlusViewer container style per mode ──────────────
-  const needs3D = viewMode !== '360';
+  const is2DMode = viewMode === '2d';
+  const needs3D = viewMode !== '360' && viewMode !== '2d';
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
   const isSplitMode = viewMode === 'split';
@@ -299,7 +316,8 @@ const UnifiedViewerContent: React.FC<{
               <p className="text-[10px] text-white/60">
                 {viewMode === 'vt' ? 'Virtual Twin' :
                  viewMode === 'split' ? 'Split View' :
-                 viewMode === '360' ? '360° Panorama' : '3D Viewer'}
+                 viewMode === '360' ? '360° Panorama' :
+                 viewMode === '2d' ? '2D Ritning' : '3D Viewer'}
               </p>
             </div>
           </div>
@@ -311,6 +329,9 @@ const UnifiedViewerContent: React.FC<{
           <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
           <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
+          {hasFmAccess && (
+            <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
+          )}
 
           {sdkStatus === 'loading' && viewMode !== '3d' && (
             <span className="text-xs text-blue-300 flex items-center gap-1 px-2">
@@ -409,6 +430,13 @@ const UnifiedViewerContent: React.FC<{
         {/* ── Split: 360° panel on the right half ── */}
         {/* Split mode: SDK container above handles the 360° panel */}
 
+        {/* 2D mode: FM Access panel */}
+        {is2DMode && hasFmAccess && buildingData && (
+          <div className="absolute inset-0 z-10">
+            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} />
+          </div>
+        )}
+
 
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
@@ -473,6 +501,7 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
          mode === '3d' ? 'Enbart 3D BIM-modell' :
          mode === 'split' ? '3D + 360° sida vid sida' :
          mode === 'vt' ? 'Virtual Twin — 3D overlay på 360°' :
+         mode === '2d' ? 'FM Access 2D-ritning' :
          'Enbart 360° panorama'}
       </TooltipContent>
     </Tooltip>
@@ -484,7 +513,7 @@ function MobileUnifiedViewer({
   buildingData, viewMode, setViewMode, sdkStatus, ivApiRef,
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
-  hasIvion, onGoBack,
+  hasIvion, hasFmAccess, onGoBack,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -498,9 +527,10 @@ function MobileUnifiedViewer({
   sync3DHeading: number;
   sync3DPitch: number;
   hasIvion: boolean;
+  hasFmAccess: boolean;
   onGoBack: () => void;
 }) {
-  const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
+  const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -516,6 +546,9 @@ function MobileUnifiedViewer({
           <Button size="sm" variant={activePanel === '3d' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('3d')}>3D</Button>
           {hasIvion && (
             <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('360')}>360°</Button>
+          )}
+          {hasFmAccess && (
+            <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('2d')}>2D</Button>
           )}
         </div>
 
@@ -534,6 +567,13 @@ function MobileUnifiedViewer({
             syncPitch={sync3DPitch}
           />
         </div>
+
+        {/* 2D panel — FM Access */}
+        {hasFmAccess && (
+          <div style={{ display: activePanel === '2d' ? 'block' : 'none', position: 'absolute', inset: 0, height: '100%' }}>
+            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} />
+          </div>
+        )}
 
         {/* 360 SDK container — always mounted if hasIvion, uses shared useIvionSdk from parent */}
         {hasIvion && (
