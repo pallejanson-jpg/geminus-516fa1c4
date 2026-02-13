@@ -153,6 +153,25 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               </Tooltip>
             )}
 
+            {/* 2D Ritning - Building only, navigates to UnifiedViewer with mode=2d */}
+            {isBuilding && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`)}
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                  >
+                    <Square size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+                    <span className="text-[10px] sm:text-xs">2D Ritning</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Visa FM Access 2D-ritning</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
             {/* Virtual Twin - Building only */}
             {isBuilding && (
               <Tooltip>
