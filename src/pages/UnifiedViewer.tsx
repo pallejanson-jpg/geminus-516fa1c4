@@ -523,7 +523,8 @@ function MobileUnifiedViewer({
       </div>
 
       <div className="flex-1 min-h-0 relative">
-        {activePanel === '3d' ? (
+        {/* 3D viewer — always mounted, hidden when 360 active */}
+        <div style={{ display: activePanel === '3d' ? 'block' : 'none', height: '100%' }}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
             syncEnabled={false}
@@ -532,14 +533,18 @@ function MobileUnifiedViewer({
             syncHeading={sync3DHeading}
             syncPitch={sync3DPitch}
           />
-        ) : (
-          <Ivion360View
-            url={buildingData.ivionUrl || undefined}
-            syncEnabled={false}
-            buildingOrigin={buildingData.origin}
-            buildingFmGuid={buildingData.fmGuid}
-            ivionSiteIdProp={buildingData.ivionSiteId || undefined}
-            ivionBimTransform={transform}
+        </div>
+
+        {/* 360 SDK container — always mounted if hasIvion, uses shared useIvionSdk from parent */}
+        {hasIvion && (
+          <div
+            ref={sdkContainerRef}
+            style={{
+              display: activePanel === '360' ? 'block' : 'none',
+              position: 'absolute',
+              inset: 0,
+              height: '100%',
+            }}
           />
         )}
       </div>
