@@ -1,33 +1,66 @@
 
 
-## Add "2D FMA" Quick Action button for floors
+## Fix FM Access 2D Drawing Resolution for Floors
 
-### What it does
-Adds a new "2D FMA" button in the Portfolio Quick Actions panel, visible only when a **floor (Building Storey)** is selected. Clicking it opens the FM Access 2D drawing viewer for that specific floor.
+### Problem
+The "2D FMA" button navigates correctly but no drawing loads because:
+- Asset+ GUIDs (used for buildings and floors) are not recognized by FM Access
+- FM Access uses its own GUID namespace
+- No mapping exists between the two systems
 
-### Changes
+### Solution
 
-**1. `src/components/portfolio/QuickActions.tsx`**
-- Add a new "2D FMA" button after the existing storey-level "2D" button (around line 90)
-- Visible only when `isStorey` is true
-- On click, navigates to `/split-viewer?building={buildingFmGuid}&mode=2d&floor={facility.fmGuid}`
-- Uses the `Square` icon with a distinct color and label "2D FMA"
+#### 1. Database: Add FM Access building GUID mapping
 
-**2. `src/components/viewer/FmAccess2DPanel.tsx`**
-- Update to accept and use a `floorFmGuid` query parameter so the edge function can resolve the correct drawing for the selected floor via `get-perspective-tree`
+Add `fm_access_building_guid` column to `building_settings` to store the FM Access GUID for each building.
 
-**3. `src/pages/SplitViewer.tsx` (or UnifiedViewer)**
-- Read the `floor` query parameter and pass it through to `FmAccess2DPanel` as `floorId` so the correct floor drawing is loaded
-
-### Technical details
-
-The "2D FMA" button will:
 ```text
-navigate(`/split-viewer?building=${buildingFmGuid}&mode=2d&floor=${facility.fmGuid}`)
+ALTER TABLE building_settings ADD COLUMN fm_access_building_guid TEXT;
 ```
 
-Where `buildingFmGuid` is derived from `(facility as any).buildingFmGuid || facility.fmGuid` (same pattern as the 3D button).
+For the Akerselva Atrium building, this would store `755950d9-f235-4d64-a38d-b7fc15a0cad9` (the GUID FM Access recognizes).
 
-The FmAccess2DPanel already accepts a `floorId` prop and passes it to the edge function. The edge function's `get-viewer-url` action can use the floor GUID to resolve the correct drawing via the perspective tree (perspectiveId 8).
+#### 2. Client: Pass floor name and FM Access building GUID
 
-No new navigation routes are needed -- it reuses the existing `/split-viewer` route with `mode=2d`.
+**`src/components/viewer/FmAccess2DPanel.tsx`**
+- Add optional `floorName` prop
+- Pass `floorName` to the edge function in the request body
+
+**`src/pages/UnifiedViewer.tsx`**
+- Read the `floorName` query parameter from the URL
+- Pass it to `FmAccess2DPanel`
+- Also look up `fm_access_building_guid` from `building_settings` and pass it to the panel
+
+**`src/components/portfolio/QuickActions.tsx`**
+- Include `floorName` in the navigation URL: `/split-viewer?building={buildingGuid}&mode=2d&floor={facility.fmGuid}&floorName={encodeURIComponent(facility.commonName)}`
+
+#### 3. Edge Function: Use FM Access building GUID and match by name
+
+**`supabase/functions/fm-access-query/index.ts`** (`get-viewer-url` action)
+- Accept new params: `fmAccessBuildingGuid` and `floorName`
+- Use `fmAccessBuildingGuid` (or fall back to `buildingId`) to fetch the building's perspective tree
+- Find the floor node (classId 105) whose `objectName` matches `floorName`
+- Get the first drawing (classId 106) under that floor
+- Build the viewer URL with the drawing's `objectId`
+
+#### 4. Settings UI: Allow configuring FM Access building GUID
+
+**`src/components/settings/GeoreferencingSettings.tsx`** (or a dedicated FM Access settings section)
+- Add an input field for "FM Access Building GUID"
+- Save to `building_settings.fm_access_building_guid`
+
+### Technical Details
+
+The perspective tree for FM Access building GUID `755950d9-f235-4d64-a38d-b7fc15a0cad9` returns:
+- Floor nodes (classId 105) like "Plan 1-5 Fasad", etc.
+- Drawing nodes (classId 106) like "A00-0001", "A00-0002" under each floor
+
+The floor name matching will be fuzzy (case-insensitive, trim whitespace) since Asset+ floor names (e.g., "01 Etasje") may not exactly match FM Access floor names. If no match is found, fall back to the first floor with drawings.
+
+### Files Changed
+- Migration: Add `fm_access_building_guid` column to `building_settings`
+- `src/components/portfolio/QuickActions.tsx` - add `floorName` to URL
+- `src/pages/UnifiedViewer.tsx` - read `floorName`, look up FM Access building GUID
+- `src/components/viewer/FmAccess2DPanel.tsx` - accept and pass `floorName` and `fmAccessBuildingGuid`
+- `supabase/functions/fm-access-query/index.ts` - use FM Access building GUID and match floor by name
+- Settings component - add FM Access building GUID input
