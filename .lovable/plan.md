@@ -1,37 +1,31 @@
 
 
-## Fix FM Access: Rätt API-URL och client_secret-stöd
+## Lägg till get-buildings action i FM Access edge function
 
-### Orsak till problemet
-FM Access API-URL:en är satt till `https://landlord.bim.cloud`, men den korrekta instansen är `https://swg-demo.bim.cloud`. Keycloak-realmen `swg_demo` genererar tokens som bara accepteras av `swg-demo.bim.cloud`-instansen -- det är därför vi får "Didn't find publicKey for specified kid".
+### Problem
+Vi vet inte vilka byggnads-ID:n som finns i FM Access (`swg-demo.bim.cloud`). Vi har GUID:s i vår databas men vet inte om de matchar FM Access-instansen. HDC API:et bör ha en endpoint for att lista byggnader.
 
 ### Steg
 
-**1. Uppdatera FM_ACCESS_API_URL**
-Ändra secreten `FM_ACCESS_API_URL` från `https://landlord.bim.cloud` till `https://swg-demo.bim.cloud`.
+**1. Lägg till `get-buildings` action i `supabase/functions/fm-access-query/index.ts`**
+Ny case i switch-satsen som anropar `/api/buildings` (HDC:s standard-endpoint for byggnader). Returnerar listan av byggnader med deras GUID:s, namn och annan metadata.
 
-**2. Lägg till stöd för client_secret i edge function**
-Enligt Tessels dokumentation kan klienten vara av typen "Confidential" och kräva en `client_secret` i token-anropet. Vi lägger till:
-- Ny secret: `FM_ACCESS_CLIENT_SECRET` (om en secret behövs)
-- Uppdatera `getToken()` i `supabase/functions/fm-access-query/index.ts` så att `client_secret` skickas med i token-requesten om den finns konfigurerad
+**2. Testa endpointen**
+Anropa `get-buildings` for att se vilka byggnader som finns i FM Access-instansen och jämföra med våra lokala GUID:s.
 
-**3. Testa anslutningen**
-Kör `test-connection` för att verifiera att:
-- Token hämtas korrekt
-- `/api/systeminfo/json` returnerar version-ID
-- Hela flödet fungerar
+**3. Om /api/buildings inte fungerar, testa alternativa endpoints**
+HDC-plattformen kan ha andra endpoints som `/api/objects?category=Building` eller `/api/archive/buildings`. Vi testar tills vi hittar rätt.
 
 ### Teknisk detalj
 
 ```text
-Ändring i getToken():
-  Nuvarande body:
-    grant_type=password&client_id=...&username=...&password=...
-  
-  Ny body (om client_secret finns):
-    grant_type=password&client_id=...&client_secret=...&username=...&password=...
+Ny case i switch-satsen:
 
-Secret-ändring:
-  FM_ACCESS_API_URL: https://landlord.bim.cloud  -->  https://swg-demo.bim.cloud
+case 'get-buildings': {
+  const response = await fmAccessFetch(config, '/api/buildings');
+  // parse response safely
+  // return list of buildings with GUIDs
+}
 ```
 
+Detta ger oss en lista av byggnader i FM Access som vi kan mappa mot våra lokala byggnads-GUID:s.
