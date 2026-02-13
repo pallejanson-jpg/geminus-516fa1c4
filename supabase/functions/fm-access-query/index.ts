@@ -8,6 +8,7 @@ const corsHeaders = {
 interface FmAccessConfig {
   tokenUrl: string;
   clientId: string;
+  clientSecret?: string;
   apiUrl: string;
   username?: string;
   password?: string;
@@ -35,12 +36,22 @@ async function getToken(config: FmAccessConfig): Promise<string> {
   console.log('FM Access: Fetching new token from', config.tokenUrl);
 
   // Build token request body
-  let body = `grant_type=client_credentials&client_id=${encodeURIComponent(config.clientId)}`;
+  const params = new URLSearchParams();
+  params.set('client_id', config.clientId);
   
-  // If username/password provided, use password grant instead
-  if (config.username && config.password) {
-    body = `grant_type=password&client_id=${encodeURIComponent(config.clientId)}&username=${encodeURIComponent(config.username)}&password=${encodeURIComponent(config.password)}`;
+  if (config.clientSecret) {
+    params.set('client_secret', config.clientSecret);
   }
+
+  if (config.username && config.password) {
+    params.set('grant_type', 'password');
+    params.set('username', config.username);
+    params.set('password', config.password);
+  } else {
+    params.set('grant_type', 'client_credentials');
+  }
+
+  const body = params.toString();
 
   const response = await fetch(config.tokenUrl, {
     method: 'POST',
@@ -150,6 +161,7 @@ serve(async (req) => {
     const config: FmAccessConfig = {
       tokenUrl: Deno.env.get('FM_ACCESS_TOKEN_URL') || 'https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token',
       clientId: Deno.env.get('FM_ACCESS_CLIENT_ID') || 'HDCAgent Basic',
+      clientSecret: Deno.env.get('FM_ACCESS_CLIENT_SECRET'),
       apiUrl: (Deno.env.get('FM_ACCESS_API_URL') || '').replace(/\/+$/, ''),
       username: Deno.env.get('FM_ACCESS_USERNAME'),
       password: Deno.env.get('FM_ACCESS_PASSWORD'),
