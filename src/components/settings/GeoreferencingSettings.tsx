@@ -17,6 +17,7 @@ interface GeoSettings {
     latitude: number | null;
     longitude: number | null;
     rotation: number | null;
+    fmAccessBuildingGuid: string | null;
 }
 
 const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({ 
@@ -31,10 +32,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
         latitude: null,
         longitude: null,
         rotation: null,
+        fmAccessBuildingGuid: null,
     });
     const [latInput, setLatInput] = useState('');
     const [lngInput, setLngInput] = useState('');
     const [rotationValue, setRotationValue] = useState(0);
+    const [fmAccessGuidInput, setFmAccessGuidInput] = useState('');
 
     // Fetch current settings
     useEffect(() => {
@@ -45,7 +48,7 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
             try {
                 const { data, error } = await supabase
                     .from('building_settings')
-                    .select('latitude, longitude, rotation')
+                    .select('latitude, longitude, rotation, fm_access_building_guid')
                     .eq('fm_guid', buildingFmGuid)
                     .maybeSingle();
 
@@ -56,10 +59,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                         latitude: data.latitude,
                         longitude: data.longitude,
                         rotation: data.rotation ?? 0,
+                        fmAccessBuildingGuid: (data as any).fm_access_building_guid ?? null,
                     });
                     setLatInput(data.latitude?.toString() || '');
                     setLngInput(data.longitude?.toString() || '');
                     setRotationValue(data.rotation ?? 0);
+                    setFmAccessGuidInput((data as any).fm_access_building_guid || '');
                 }
             } catch (error) {
                 console.error('Failed to fetch georeferencing settings:', error);
@@ -103,11 +108,12 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                     latitude: lat,
                     longitude: lng,
                     rotation: rotationValue,
-                }, { onConflict: 'fm_guid' });
+                    fm_access_building_guid: fmAccessGuidInput.trim() || null,
+                } as any, { onConflict: 'fm_guid' });
 
             if (error) throw error;
 
-            setSettings({ latitude: lat, longitude: lng, rotation: rotationValue });
+            setSettings({ latitude: lat, longitude: lng, rotation: rotationValue, fmAccessBuildingGuid: fmAccessGuidInput.trim() || null });
             
             // Dispatch event to notify other components
             window.dispatchEvent(new Event('building-settings-changed'));
@@ -196,7 +202,24 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                                 <span className="text-xs font-mono text-muted-foreground">
                                     {rotationValue}°
                                 </span>
-                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="fmAccessGuid" className="text-xs">
+                                FM Access Building GUID
+                            </Label>
+                            <Input
+                                id="fmAccessGuid"
+                                type="text"
+                                placeholder="755950d9-f235-4d64-a38d-..."
+                                value={fmAccessGuidInput}
+                                onChange={(e) => setFmAccessGuidInput(e.target.value)}
+                                className="h-9 font-mono text-xs"
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                                GUID för byggnaden i FM Access (krävs för 2D-ritningar)
+                            </p>
+                        </div>
                             <Slider
                                 value={[rotationValue]}
                                 onValueChange={(values) => setRotationValue(values[0])}

@@ -10,12 +10,16 @@ import { supabase } from '@/integrations/supabase/client';
 interface FmAccess2DPanelProps {
   buildingFmGuid: string;
   floorId?: string;
+  floorName?: string;
+  fmAccessBuildingGuid?: string;
   className?: string;
 }
 
 const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   buildingFmGuid,
   floorId,
+  floorName,
+  fmAccessBuildingGuid,
   className = '',
 }) => {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -35,6 +39,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
             action: 'get-viewer-url',
             buildingId: buildingFmGuid,
             floorId: floorId || '',
+            floorName: floorName || '',
+            fmAccessBuildingGuid: fmAccessBuildingGuid || '',
           },
         });
 
@@ -62,7 +68,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
     fetchViewerUrl();
     return () => { cancelled = true; };
-  }, [buildingFmGuid, floorId]);
+  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid]);
 
   if (loading) {
     return (
