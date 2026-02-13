@@ -65,7 +65,7 @@ const UnifiedViewerContent: React.FC<{
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
 
   // ─── FM Access availability ────────────────────────────────────────
-  const [hasFmAccess, setHasFmAccess] = useState(false);
+  const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
   useEffect(() => {
     if (!buildingData?.fmGuid) return;
     supabase
@@ -432,7 +432,7 @@ const UnifiedViewerContent: React.FC<{
         {/* Split mode: SDK container above handles the 360° panel */}
 
         {/* 2D mode: FM Access panel */}
-        {is2DMode && hasFmAccess && buildingData && (
+        {is2DMode && (hasFmAccess || floorFmGuid) && buildingData && (
           <div className="absolute inset-0 z-10">
             <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} floorId={floorFmGuid || undefined} />
           </div>
