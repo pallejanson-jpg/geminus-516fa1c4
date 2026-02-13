@@ -1,154 +1,155 @@
 
+# Plan: FM Access 2D-ritningsintegration
 
-# Plan: Tree-isolering och strategi för desktop/mobil-paritet
+## Oversikt
 
-## Problemanalys
+Integrera FM Access 2D-viewer som en inbaddad iframe i UnifiedViewer (nytt lage "2D") och skapa en separat dashboard-sida for FM Access-data.
 
-Systemet har **tre separata kodvägar** för våningssynlighet:
+## Del 1: Ny "2D"-mode i UnifiedViewer
 
-1. **FloorVisibilitySelector** (desktop sidebar) — har solo-mode, IfcCovering-döljning, ceiling clipping, event dispatch
-2. **handleMobileFloorToggle** i AssetPlusViewer — delvis kopierad logik, fixas successivt
-3. **ViewerTreePanel.handleVisibilityChange** — enkel toggle, ingen solo-mode, ingen IfcCovering-döljning
+### Utoka ViewMode-typen
 
-Detta innebar att varje ny feature/fix maste implementeras pa tre stallen. Treet saknar helt den isoleringslogik som anvandaren forvantar sig.
+I `src/pages/UnifiedViewer.tsx` (rad 37):
+```typescript
+// Fran:
+export type ViewMode = '3d' | 'split' | 'vt' | '360';
+// Till:
+export type ViewMode = '3d' | 'split' | 'vt' | '360' | '2d';
+```
 
-## Del 1: Fixa Tree-checkboxarnas beteende
+### Utoka edge function med `get-viewer-url`
 
-### Nuvarande beteende (ViewerTreePanel rad 462-524)
-- Checkbox togglar synlighet for noden och alla barn
-- Ingen "solo mode" — kryssar du i en vaning visas den *utover* allt annat
-- IfcCovering doljs aldrig
-- Event dispatchar korrekt till FloorSelectionChanged men utan att faktiskt isolera
-
-### Nytt beteende
-
-**Vaningsval (IfcBuildingStorey):**
-- Kryssar du i EN vaning -> solo mode: dolj alla andra vaningar, dolj IfcCovering
-- Kryssar du i ytterligare vaningar -> de laggs till (multi-select)
-- Avkryssar du alla -> visa allt (aterstaell)
-
-**Rumsval (IfcSpace):**
-- Kryssar du i ett eller flera rum -> bara de rummen (och deras foraldravanings geometri) visas
-- Avkryssar du alla rum -> aterstall till vaningsvisning
-
-### Andringar i `ViewerTreePanel.tsx`
-
-I `handleVisibilityChange` (rad 462-524):
+I `supabase/functions/fm-access-query/index.ts`, lagg till en ny action `get-viewer-url` som:
+1. Hamtar token + versionId (befintlig logik)
+2. Returnerar en viewer-URL med autentiseringsparametrar for den begarda byggnaden/vaningen
 
 ```typescript
-const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
-  const xeokitViewer = getXeokitViewer();
-  const scene = xeokitViewer?.scene;
-  const metaScene = xeokitViewer?.metaScene;
-  if (!scene || !metaScene) return;
-
-  const nodeType = node.type?.toLowerCase() || '';
-
-  // --- STOREY ISOLATION ---
-  if (nodeType === 'ifcbuildingstorey') {
-    if (visible) {
-      // Hide ALL objects first
-      if (scene.objectIds) {
-        scene.setObjectsVisible(scene.objectIds, false);
-      }
-      
-      // Show only checked storey(s): this node + any already-visible storeys
-      const setVisibilityRecursive = (n, vis) => { ... };
-      setVisibilityRecursive(node, true);
-      
-      // Also re-show any other storeys that are still checked
-      // (read from current tree state)
-      
-      // Hide IfcCovering in solo mode
-      const visibleStoreys = /* count visible storeys */;
-      if (visibleStoreys === 1) {
-        const coveringIds = [];
-        Object.values(metaScene.metaObjects).forEach((mo) => {
-          if (mo.type?.toLowerCase() === 'ifccovering') coveringIds.push(mo.id);
-        });
-        scene.setObjectsVisible(coveringIds, false);
-      }
-    } else {
-      // Unchecking — hide this storey
-      setVisibilityRecursive(node, false);
-      
-      // If nothing visible, show all
-      const anyVisible = /* check */;
-      if (!anyVisible) {
-        scene.setObjectsVisible(scene.objectIds, true);
-      }
-    }
-    
-    // Dispatch FLOOR_SELECTION_CHANGED_EVENT (existing code)
-    ...
-  }
+case 'get-viewer-url': {
+  const { buildingId, floorId } = params;
+  const token = await getToken(config);
+  const versionId = await getVersionId(config, token);
   
-  // --- SPACE ISOLATION ---
-  else if (nodeType === 'ifcspace') {
-    if (visible) {
-      // Hide all objects in the scene
-      scene.setObjectsVisible(scene.objectIds, false);
-      
-      // Show only the selected space(s)
-      setVisibilityRecursive(node, true);
-      
-      // Also re-show any other already-checked spaces
-    } else {
-      setVisibilityRecursive(node, false);
-      // If no spaces checked, restore floor visibility
-    }
-  }
+  // Bygg viewer-URL med token-parameter
+  const viewerUrl = `${config.apiUrl}/viewer/2d?floorId=${floorId}&token=${token}&versionId=${versionId}`;
   
-  // --- OTHER TYPES (walls, doors etc) — keep additive toggle ---
-  else {
-    setVisibilityRecursive(node, visible);
-  }
-
-  refreshVisibilityState();
-}, [getXeokitViewer, refreshVisibilityState]);
+  return new Response(
+    JSON.stringify({ success: true, url: viewerUrl, token, versionId }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
 ```
+
+Obs: Den exakta URL-strukturen beror pa FM Access API-dokumentationen. Vi bygger grundstrukturen och justerar parametrarna nar vi testar mot API:t.
+
+### Lagg till ny action `get-floors` i edge function
+
+For att hamta vaningsplan fran FM Access via byggnadens FMGUID:
+
+```typescript
+case 'get-floors': {
+  const { buildingFmGuid } = params;
+  const response = await fmAccessFetch(config, `/api/floors?buildingId=${encodeURIComponent(buildingFmGuid)}`);
+  const data = await response.json();
+  return new Response(
+    JSON.stringify({ success: response.ok, data }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+```
+
+### Ny komponent: FmAccess2DPanel
+
+Skapa `src/components/viewer/FmAccess2DPanel.tsx`:
+- Tar `buildingFmGuid` som prop
+- Anropar edge function `fm-access-query` med action `get-viewer-url`
+- Renderar en fullstorleks iframe med viewer-URL:en
+- Visar laddningsindikator medan URL hamtas
+- Visar felmeddelande om FM Access inte ar konfigurerat
+
+### Integrera i UnifiedViewer
+
+**Desktop-toolbar (rad 308-313):** Lagg till en "2D"-knapp i mode-switchern:
+```typescript
+<ModeButton mode="2d" current={viewMode} disabled={!hasFmAccess} onClick={setViewMode}
+  icon={<Square className="h-3.5 w-3.5" />} label="2D" />
+```
+
+`hasFmAccess` bestams av om byggnaden har FM Access-konfiguration (kontrolleras via ett anrop vid mount eller via `building_external_links`-tabellen).
+
+**Desktop-layout:** Lagg till 2D-panelen som ett nytt lager (display-styrt):
+```typescript
+{hasFmAccess && viewMode === '2d' && (
+  <div style={{ position: 'absolute', inset: 0 }}>
+    <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} />
+  </div>
+)}
+```
+
+**Mobil-layout:** Lagg till en "2D"-knapp i MobileUnifiedViewers toggle och rendera FmAccess2DPanel med display-styling.
+
+### QuickActions: Lagg till 2D-knapp
+
+I `QuickActions.tsx`, lagg till en "2D Ritning"-knapp som navigerar till `/split-viewer?building=...&mode=2d`.
 
 ---
 
-## Del 2: Strategi for desktop/mobil-paritet
+## Del 2: FM Access Dashboard-sida
 
-### Grundorsak
-Desktop och mobil har **separata UI-komponenter** som var och en implementerar sin egen synlighetslogik. Nasta gang en fix gors pa ena sidan missar den andra.
+### Ny route och sida
 
-### Rekommenderad strategi: Delad "visibility engine"
+Skapa `src/pages/FmAccessDashboard.tsx`:
+- Visar en oversikt over FM Access-data for en vald byggnad
+- Sektioner:
+  - **Ritningar** — lista fran `get-drawings` action (redan implementerad i edge function)
+  - **Dokument** — lista fran `get-documents` action (redan implementerad)
+  - Klickbara rader som oppnar ritning/dokument-detaljer
+- Anvander befintliga edge function-actions
 
-Skapa en delad hook/utility som kapslar in ALL synlighetslogik:
+### Lagg till route i App.tsx
 
+```typescript
+<Route path="/fm-access" element={<ProtectedRoute><FmAccessDashboard /></ProtectedRoute>} />
 ```
-useFloorVisibility(viewerRef, buildingFmGuid)
-  -> floors, visibleFloorIds
-  -> toggleFloor(id, visible)    // hanterar solo, IfcCovering, event dispatch
-  -> toggleAllFloors(visible)
-  -> isolateSpaces(spaceIds[])
-  -> resetVisibility()
-```
 
-Bade `FloorVisibilitySelector`, `handleMobileFloorToggle`, och `ViewerTreePanel` anropar denna hook istallet for att ha egen logik.
+### Navigation
 
-**Detta ar ett storre refaktoreringsarbete** som bor goras stegvis. Som forsta steg fixar vi Tree-beteendet enligt Del 1, och noterar att den delade hooken ar nasta logiska forbattring.
+Lagg till i sidebar/meny sa att man kan na FM Access-dashboarden fran appens huvudnavigation.
 
 ---
 
-## Sammanfattning av filandringar (Del 1)
+## Sammanfattning av filandringar
 
 ```
-src/components/viewer/ViewerTreePanel.tsx
-  - handleVisibilityChange: Ersatt additivt toggle med isoleringslogik
-    - IfcBuildingStorey: solo mode vid enstaka val, dolj IfcCovering
-    - IfcSpace: isolera valda rum, dolj ovrig geometri
-    - Ovriga typer: behal additivt beteende
-    - Anvand scene.setObjectsVisible() for batch-prestanda
+Andrade filer:
+  supabase/functions/fm-access-query/index.ts
+    - Ny action: get-viewer-url (returnerar iframe-URL med token)
+    - Ny action: get-floors (hamta vaningsplan via FMGUID)
+
+  src/pages/UnifiedViewer.tsx
+    - ViewMode: lagg till '2d'
+    - ModeButton for 2D i toolbar
+    - Rendera FmAccess2DPanel nar mode === '2d'
+    - MobileUnifiedViewer: 2D-knapp + panel
+
+  src/components/portfolio/QuickActions.tsx
+    - Ny "2D Ritning"-knapp som navigerar till /split-viewer?mode=2d
+
+Nya filer:
+  src/components/viewer/FmAccess2DPanel.tsx
+    - Iframe-embed av FM Access 2D-viewer
+    - Hamtar autentiserad URL via edge function
+
+  src/pages/FmAccessDashboard.tsx
+    - Separat sida for FM Access ritningar och dokument
+
+  src/App.tsx
+    - Ny route /fm-access
 ```
 
-## Forvantat resultat
+## Risker och osakerheter
 
-- Kryssar du i EN vaning i tree -> bara den vaningen visas (solo mode)
-- Kryssar du i tva rum -> bara de tva rummen visas
-- Avkryssar du allt -> aterstaeller hela vyn
-- IfcCovering doljs automatiskt i solo-mode
-- Beteendet ar identiskt oavsett om tree oppnas pa desktop eller mobil (samma komponent)
+- **Viewer-URL-format:** Den exakta URL-strukturen for FM Access embed ar okand — vi bygger grundstrukturen och justerar efter test mot API:t.
+- **Iframe-autentisering:** Om FM Access-viewern kraver cookies/session istallet for token i URL, behover vi en alternativ autentiseringsstrategi (t.ex. proxy via edge function).
+- **CORS:** Iframe-embed brukar inte ha CORS-problem (till skillnad fran fetch), men vissa servrar blockerar iframe via `X-Frame-Options`.
+
+Forsta steget ar att bygga grundstrukturen, testa `get-viewer-url` mot FM Access API:t, och justera darefter.
