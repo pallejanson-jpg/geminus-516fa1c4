@@ -53,6 +53,7 @@ const UnifiedViewerContent: React.FC<{
   const isMobile = useIsMobile();
   const buildingFmGuid = searchParams.get('building');
   const entityFmGuid = searchParams.get('entity');
+  const floorFmGuid = searchParams.get('floor');
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -433,7 +434,7 @@ const UnifiedViewerContent: React.FC<{
         {/* 2D mode: FM Access panel */}
         {is2DMode && hasFmAccess && buildingData && (
           <div className="absolute inset-0 z-10">
-            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} />
+            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} floorId={floorFmGuid || undefined} />
           </div>
         )}
 
