@@ -10,6 +10,7 @@ import {
   Box,
   BarChart3,
   HelpCircle,
+  Square,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -32,6 +33,7 @@ const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Fastigheter", url: "/properties", icon: Building2 },
   { title: "3D-visning", url: "/viewer", icon: Box },
+  { title: "FM Access", url: "/fm-access", icon: Square },
   { title: "Dokument", url: "/documents", icon: FileText },
   { title: "Kartor", url: "/maps", icon: Map },
 ];
