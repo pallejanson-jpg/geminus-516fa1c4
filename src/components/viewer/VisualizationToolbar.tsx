@@ -96,7 +96,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   } = props;
 
   const { allData } = useContext(AppContext);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   // BCF viewpoint hook
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef });
@@ -595,24 +595,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     }
   }, [handleGoToIssueViewpoint]);
 
-  // Check if user is admin (simplified - you might want to use your role system)
-  const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    const checkAdmin = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      setIsAdmin(!!data);
-    };
-    checkAdmin();
-  }, [user]);
+  // isAdmin now provided by useAuth() above
 
   // Tool visibility check
   const isToolVisible = useCallback((toolId: string) => {

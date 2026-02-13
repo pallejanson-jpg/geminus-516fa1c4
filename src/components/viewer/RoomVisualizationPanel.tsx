@@ -451,13 +451,15 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     let cancelled = false;
     const applyWithRetry = (attempt: number) => {
       if (cancelled) return;
+      // Early exit: if cache and rooms are both empty and we've already tried once, stop polling
+      if (entityIdCache.size === 0 && rooms.length === 0 && attempt > 0) return;
       if (entityIdCache.size > 0 && rooms.length > 0) {
         setColorizedCount(0);
         applyVisualization();
       } else if (attempt < 5) {
         setTimeout(() => applyWithRetry(attempt + 1), 400);
       } else {
-        console.warn('Room visualization: gave up after 5 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
+        console.debug('Room visualization: gave up after 5 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
       }
     };
 

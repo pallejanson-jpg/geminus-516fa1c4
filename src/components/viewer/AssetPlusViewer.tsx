@@ -27,6 +27,7 @@ import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHA
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
 import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
+import { useModelNames } from '@/hooks/useModelNames';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
 import {
   calculateHeadingFromCamera,
@@ -289,6 +290,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Get the building fmGuid for cache organization
   const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
 
+  // Shared model names hook (used by extractModels for mobile + ModelVisibilitySelector)
+  const { modelNamesMap } = useModelNames(buildingFmGuid);
+
   // On-demand XKT sync: ensure models are cached for this building with visual feedback
   useEffect(() => {
     if (!buildingFmGuid) return;
@@ -322,108 +326,104 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Track if all floors are visible (to avoid showing all spaces when filter is empty but not "all")
   const isAllFloorsVisibleRef = useRef(true);
 
-  // Filter spaces to only show rooms on visible floors
-  const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean, isAllVisible?: boolean) => {
+  // Cache: IfcSpace entity IDs grouped by parent storey fmGuid (built once when model loads)
+  const spacesByFloorCacheRef = useRef<Map<string, string[]>>(new Map());
+  const allSpaceIdsRef = useRef<string[]>([]);
+
+  // Build the spacesByFloor cache once when model is loaded
+  useEffect(() => {
+    if (modelLoadState !== 'loaded') return;
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
-      console.debug('filterSpacesToVisibleFloors: No viewer available');
-      return;
-    }
+    if (!xeokitViewer?.metaScene?.metaObjects) return;
 
     const metaObjects = xeokitViewer.metaScene.metaObjects;
-    const scene = xeokitViewer.scene;
-    const visibleGuidsLower = new Set(visibleFloorGuids.map((g: string) => g.toLowerCase()));
-    
-    // Use isAllVisible parameter if provided, otherwise check ref
-    const effectiveIsAllVisible = isAllVisible ?? isAllFloorsVisibleRef.current;
-    
-    console.log(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors: ${visibleFloorGuids.length}, isAllVisible: ${effectiveIsAllVisible}`);
-    
-    // If showSpaces is OFF, hide ALL IfcSpace entities
-    if (!forceShow) {
-      let hiddenCount = 0;
-      Object.values(metaObjects).forEach((metaObj: any) => {
-        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-        const entity = scene.objects?.[metaObj.id];
-        if (entity && entity.visible) {
-          entity.visible = false;
-          hiddenCount++;
-        }
-      });
-      console.log(`Spaces hidden: ${hiddenCount} (showSpaces is OFF)`);
-      return;
-    }
-    
-    // CRITICAL FIX: Only show all spaces if explicitly marked as "all floors visible"
-    // Do NOT show all spaces just because the filter list is empty
-    if (effectiveIsAllVisible) {
-      let shownCount = 0;
-      Object.values(metaObjects).forEach((metaObj: any) => {
-        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-        const entity = scene.objects?.[metaObj.id];
-        if (entity && !entity.visible) {
-          entity.visible = true;
-          shownCount++;
-        }
-      });
-      console.log(`All spaces shown: ${shownCount} (all floors visible)`);
-      return;
-    }
-    
-    // If we have no floor filter AND it's not "all visible", hide all spaces (safe default)
-    if (visibleFloorGuids.length === 0) {
-      let hiddenCount = 0;
-      Object.values(metaObjects).forEach((metaObj: any) => {
-        if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-        const entity = scene.objects?.[metaObj.id];
-        if (entity && entity.visible) {
-          entity.visible = false;
-          hiddenCount++;
-        }
-      });
-      console.log(`Spaces hidden: ${hiddenCount} (empty filter, not all-visible)`);
-      return;
-    }
+    const cache = new Map<string, string[]>();
+    const allIds: string[] = [];
 
-    // Filter: show only spaces on visible floors
-    let shownCount = 0;
-    let hiddenCount = 0;
-    
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcspace') return;
-      
-      // Find parent storey by walking up the hierarchy
-      let parentStorey: any = null;
+      allIds.push(metaObj.id);
+
       let current = metaObj;
       while (current?.parent) {
         current = current.parent;
         if (current?.type?.toLowerCase() === 'ifcbuildingstorey') {
-          parentStorey = current;
+          const storeyGuid = (current.originalSystemId || current.id || '').toLowerCase();
+          if (!cache.has(storeyGuid)) cache.set(storeyGuid, []);
+          cache.get(storeyGuid)!.push(metaObj.id);
           break;
         }
       }
-      
-      if (!parentStorey) {
-        // No parent storey found - hide it
-        const entity = scene.objects?.[metaObj.id];
-        if (entity) entity.visible = false;
-        return;
-      }
-      
-      const storeyFmGuid = (parentStorey.originalSystemId || parentStorey.id || '').toLowerCase();
-      const isVisible = visibleGuidsLower.has(storeyFmGuid);
-      
-      const entity = scene.objects?.[metaObj.id];
-      if (entity) {
-        entity.visible = isVisible;
-        if (isVisible) shownCount++;
-        else hiddenCount++;
-      }
+    });
+
+    spacesByFloorCacheRef.current = cache;
+    allSpaceIdsRef.current = allIds;
+    console.debug(`[spacesByFloor] Cache built: ${cache.size} floors, ${allIds.length} spaces`);
+  }, [modelLoadState]);
+
+  // Core space-filtering logic (uses cache, no metaObjects iteration)
+  const filterSpacesToVisibleFloorsCore = useCallback((visibleFloorGuids: string[], forceShow: boolean, isAllVisible?: boolean) => {
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) {
+      console.debug('filterSpacesToVisibleFloors: No viewer available');
+      return;
+    }
+
+    const scene = xeokitViewer.scene;
+    const effectiveIsAllVisible = isAllVisible ?? isAllFloorsVisibleRef.current;
+    
+    console.debug(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors: ${visibleFloorGuids.length}, isAllVisible: ${effectiveIsAllVisible}`);
+    
+    const allSpaceIds = allSpaceIdsRef.current;
+    
+    // If showSpaces is OFF, hide ALL IfcSpace entities
+    if (!forceShow) {
+      allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && e.visible) e.visible = false; });
+      console.debug(`Spaces hidden: ${allSpaceIds.length} (showSpaces is OFF)`);
+      return;
+    }
+    
+    // All floors visible → show all spaces
+    if (effectiveIsAllVisible) {
+      allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && !e.visible) e.visible = true; });
+      console.debug(`All spaces shown (all floors visible)`);
+      return;
+    }
+    
+    // No floor filter and not all-visible → hide all
+    if (visibleFloorGuids.length === 0) {
+      allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && e.visible) e.visible = false; });
+      console.debug(`Spaces hidden (empty filter, not all-visible)`);
+      return;
+    }
+
+    // Filter: show only spaces on visible floors using cache
+    const visibleGuidsLower = new Set(visibleFloorGuids.map((g: string) => g.toLowerCase()));
+    const visibleSpaceIds = new Set<string>();
+
+    for (const guid of visibleGuidsLower) {
+      const ids = spacesByFloorCacheRef.current.get(guid);
+      if (ids) ids.forEach(id => visibleSpaceIds.add(id));
+    }
+
+    allSpaceIds.forEach(id => {
+      const e = scene.objects?.[id];
+      if (e) e.visible = visibleSpaceIds.has(id);
     });
     
-    console.log(`Spaces filtered - shown: ${shownCount}, hidden: ${hiddenCount}`);
+    console.debug(`Spaces filtered - shown: ${visibleSpaceIds.size}, hidden: ${allSpaceIds.length - visibleSpaceIds.size}`);
   }, []);
+
+  // Debounced version to avoid 6+ calls per floor toggle
+  const filterDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filterSpacesToVisibleFloors = useCallback((visibleFloorGuids: string[], forceShow: boolean, isAllVisible?: boolean) => {
+    if (filterDebounceTimerRef.current) clearTimeout(filterDebounceTimerRef.current);
+    filterDebounceTimerRef.current = setTimeout(() => {
+      filterSpacesToVisibleFloorsCore(visibleFloorGuids, forceShow, isAllVisible);
+    }, 100);
+  }, [filterSpacesToVisibleFloorsCore]);
 
   // Centralized handler for showSpaces changes
   const handleShowSpacesChange = useCallback((show: boolean) => {
@@ -2113,11 +2113,33 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xeokitViewer?.scene?.models) return;
       
-      const models = Object.entries(xeokitViewer.scene.models).map(([id, model]: [string, any]) => ({
-        id,
-        name: model.id || id,
-        visible: model.visible !== false
-      }));
+      const models = Object.entries(xeokitViewer.scene.models).map(([id, model]: [string, any]) => {
+        // Try to resolve a friendly name from modelNamesMap (same source as ModelVisibilitySelector)
+        const rawName = model.id || id;
+        const fileNameWithoutExt = rawName.replace(/\.xkt$/i, '');
+        const friendlyName =
+          modelNamesMap.get(rawName) ||
+          modelNamesMap.get(rawName.toLowerCase()) ||
+          modelNamesMap.get(fileNameWithoutExt) ||
+          modelNamesMap.get(fileNameWithoutExt.toLowerCase()) ||
+          // Strategy: IfcProject root from metaScene
+          (() => {
+            try {
+              const metaModel = xeokitViewer.metaScene?.metaModels?.[id];
+              const root = metaModel?.rootMetaObject;
+              if (root?.type === 'IfcProject' && root.name && !root.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                return root.name;
+              }
+            } catch { /* ignore */ }
+            return null;
+          })() ||
+          id;
+        return {
+          id,
+          name: friendlyName,
+          visible: model.visible !== false
+        };
+      });
       
       setAvailableModels(models);
     };
@@ -2125,7 +2147,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // Small delay to ensure models are fully loaded
     const timer = setTimeout(extractModels, 500);
     return () => clearTimeout(timer);
-  }, [modelLoadState, initStep]);
+  }, [modelLoadState, initStep, modelNamesMap]);
 
   // Listen for Gunnar commands
   useEffect(() => {
