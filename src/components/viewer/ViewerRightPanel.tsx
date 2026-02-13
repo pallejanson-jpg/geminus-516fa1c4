@@ -90,7 +90,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   onShowAnnotationsChange,
 }) => {
   const { allData } = useContext(AppContext);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   // BCF viewpoint hook
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef });
@@ -159,71 +159,6 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   }, [isPinned, onOpenChange]);
 
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Reload settings when they change
-  useEffect(() => {
-    const handleSettingsChange = () => setToolSettings(getVisualizationToolSettings());
-    window.addEventListener('storage', handleSettingsChange);
-    window.addEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-    return () => {
-      window.removeEventListener('storage', handleSettingsChange);
-      window.removeEventListener(TOOLBAR_SETTINGS_CHANGED_EVENT, handleSettingsChange);
-    };
-  }, []);
-
-  // Listen for view mode changes
-  useEffect(() => {
-    const handleViewModeChange = (e: CustomEvent) => {
-      const mode = e.detail?.mode;
-      setIs2DMode(mode === '2d');
-      if (mode === '2d') setIsSoloFloor(false);
-    };
-    window.addEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
-    return () => window.removeEventListener(VIEW_MODE_CHANGED_EVENT, handleViewModeChange as EventListener);
-  }, []);
-
-  // Listen for floor selection changes to detect solo floor mode
-  useEffect(() => {
-    const handleFloorChange = (e: CustomEvent) => {
-      const { isAllFloorsVisible, visibleMetaFloorIds } = e.detail || {};
-      const solo = !isAllFloorsVisible && visibleMetaFloorIds && visibleMetaFloorIds.length === 1;
-      setIsSoloFloor(solo);
-    };
-    window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
-    return () => window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
-  }, []);
-
-  // Listen for force show spaces from RoomVisualizationPanel
-  useEffect(() => {
-    const handleForceShowSpaces = (e: CustomEvent) => {
-      if (e.detail?.show && !showSpaces) {
-        if (onShowSpacesChange) {
-          onShowSpacesChange(true);
-        } else {
-          setLocalShowSpaces(true);
-        }
-        try {
-          const assetViewer = viewerRef.current?.assetViewer;
-          assetViewer?.onShowSpacesChanged?.(true);
-        } catch (err) {
-          console.debug("Force show spaces failed:", err);
-        }
-      }
-    };
-    window.addEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
-    return () => window.removeEventListener(FORCE_SHOW_SPACES_EVENT, handleForceShowSpaces as EventListener);
-  }, [showSpaces, viewerRef, onShowSpacesChange]);
-
-  // Check admin role
-  useEffect(() => {
-    const checkAdmin = async () => {
-      if (!user) { setIsAdmin(false); return; }
-      const { data } = await supabase.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'admin').maybeSingle();
-      setIsAdmin(!!data);
-    };
-    checkAdmin();
-  }, [user]);
 
   // Tool visibility check
   const isToolVisible = useCallback((toolId: string) => {
