@@ -441,6 +441,29 @@ serve(async (req) => {
         );
       }
 
+      case 'proxy': {
+        const { path: apiPath, method: apiMethod, body: apiBody } = params;
+        if (!apiPath) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'path is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const response = await fmAccessFetch(config, apiPath, {
+          method: apiMethod || 'GET',
+          ...(apiBody ? { body: JSON.stringify(apiBody) } : {}),
+        });
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, status: response.status, data }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
