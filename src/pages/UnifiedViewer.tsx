@@ -57,9 +57,11 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── View mode ─────────────────────────────────────────────────────
   const hasIvion = !!buildingData?.ivionSiteId;
+  const modeParam = searchParams.get('mode') as ViewMode | null;
+  const effectiveInitialMode = modeParam || initialMode;
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (!hasIvion && initialMode !== '3d') return '3d';
-    return initialMode;
+    if (!hasIvion && effectiveInitialMode !== '3d') return '3d';
+    return effectiveInitialMode;
   });
 
   useEffect(() => {
@@ -210,7 +212,7 @@ const UnifiedViewerContent: React.FC<{
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  const handleGoBack = useCallback(() => navigate(-1), [navigate]);
+  const handleGoBack = useCallback(() => navigate('/'), [navigate]);
 
   const handleRetrySDK = useCallback(() => {
     retrySDK();

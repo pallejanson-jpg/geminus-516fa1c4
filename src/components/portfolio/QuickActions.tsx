@@ -89,13 +89,17 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               </Tooltip>
             )}
 
-            {/* 3D - Building or Storey */}
+            {/* 3D - Building or Storey - navigates to UnifiedViewer with mode=3d */}
             {(isBuilding || isStorey || isSpace) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => onToggle3D(facility)} 
+                    onClick={() => {
+                      const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+                      const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
+                      navigate(`/split-viewer?building=${buildingGuid}&mode=3d${entityParam}`);
+                    }} 
                     className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
                   >
                     <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
@@ -108,62 +112,62 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               </Tooltip>
             )}
 
-            {/* 360+ - Building or Storey, disabled if no ivionSiteId */}
+            {/* 360° - Building or Storey - navigates to UnifiedViewer with mode=360 */}
             {(isBuilding || isStorey) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => ivionSiteId ? onOpen360(ivionSiteId) : undefined} 
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!ivionSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={!ivionSiteId}
+                    onClick={() => {
+                      const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+                      navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
+                    }} 
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
                   >
-                    <View size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-destructive' : 'text-muted-foreground'}`} />
-                    <span className={`text-[10px] sm:text-xs ${!ivionSiteId ? 'text-muted-foreground' : ''}`}>360+</span>
+                    <View size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
+                    <span className="text-[10px] sm:text-xs">360°</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{ivionSiteId ? "Öppna 360°-panorama" : ivionDisabledTooltip}</p>
+                  <p>Öppna 360°-panorama</p>
                 </TooltipContent>
               </Tooltip>
             )}
 
-            {/* 3D+360° Split View - Building only, disabled if no ivionSiteId */}
-            {isBuilding && onOpenSplitView && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => ivionSiteId ? onOpenSplitView(facility) : undefined} 
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!ivionSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={!ivionSiteId}
-                  >
-                    <SplitSquareHorizontal size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-accent' : 'text-muted-foreground'}`} />
-                    <span className={`text-[10px] sm:text-xs ${!ivionSiteId ? 'text-muted-foreground' : ''}`}>3D+360°</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{ivionSiteId ? "Synkroniserad 3D och 360°-vy" : ivionDisabledTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* Virtual Twin - Building only, disabled if no ivionSiteId */}
+            {/* Split View - Building only */}
             {isBuilding && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => ivionSiteId ? navigate(`/virtual-twin?building=${facility.fmGuid}`) : undefined} 
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!ivionSiteId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={!ivionSiteId}
+                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`)}
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
                   >
-                    <Layers size={12} className={`sm:w-3.5 sm:h-3.5 ${ivionSiteId ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <span className={`text-[10px] sm:text-xs ${!ivionSiteId ? 'text-muted-foreground' : ''}`}>Virtual Twin</span>
+                    <SplitSquareHorizontal size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+                    <span className="text-[10px] sm:text-xs">3D+360°</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{ivionSiteId ? "3D-modell överlagrad på 360°-panorama" : ivionDisabledTooltip}</p>
+                  <p>Synkroniserad 3D och 360°-vy</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Virtual Twin - Building only */}
+            {isBuilding && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`)}
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                  >
+                    <Layers size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
+                    <span className="text-[10px] sm:text-xs">Virtual Twin</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>3D-modell överlagrad på 360°-panorama</p>
                 </TooltipContent>
               </Tooltip>
             )}
