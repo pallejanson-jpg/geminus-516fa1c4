@@ -643,7 +643,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             onAddAsset={handleAddAsset}
             onInventory={handleInventory}
             onOpenSplitView={(f) => {
-              navigate(`/split-viewer?building=${f.fmGuid}`);
+              navigate(`/split-viewer?building=${f.fmGuid}&mode=split`);
             }}
             onFaultReport={(f) => {
               startFaultReport({

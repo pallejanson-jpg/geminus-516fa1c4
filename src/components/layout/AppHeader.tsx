@@ -92,16 +92,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
 
     const handleMenuClick = (app: string, mode?: string) => {
-        // On mobile, redirect immersive apps to fullscreen routes
-        if (isMobile && app === 'assetplus_viewer') {
-            navigate('/viewer');
+        // 3D Viewer now uses UnifiedViewer route for all devices
+        if (app === 'assetplus_viewer') {
+            navigate('/split-viewer?mode=3d');
             return;
         }
         setSelectedFacility(null);
-        // When navigating to 3D viewer via header, always show building selector
-        if (app === 'assetplus_viewer') {
-            setViewer3dFmGuid(null);
-        }
         setActiveApp(app);
         if (mode) {
             setViewMode(mode);

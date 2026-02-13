@@ -22,7 +22,7 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
   const handleSplitViewClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (facility.fmGuid) {
-      navigate(`/split-viewer?building=${facility.fmGuid}`);
+      navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`);
     }
   };
   
