@@ -405,15 +405,15 @@ serve(async (req) => {
       }
 
       case 'get-perspective-tree': {
-        const { perspectiveId, classId, objectId } = params;
-        if (!perspectiveId || !classId || !objectId) {
+        const { guid, perspectiveId = '8' } = params;
+        if (!guid) {
           return new Response(
-            JSON.stringify({ success: false, error: 'perspectiveId, classId, and objectId are required' }),
+            JSON.stringify({ success: false, error: 'guid is required (perspectiveId defaults to 8)' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        const response = await fmAccessFetch(config, `/api/perspective/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(classId)}/${encodeURIComponent(objectId)}`);
+        const response = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(guid)}`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
