@@ -1,31 +1,46 @@
 
 
-## Lägg till get-buildings action i FM Access edge function
+## Använd HDC Object API för att hämta byggnadsdata via GUID
 
-### Problem
-Vi vet inte vilka byggnads-ID:n som finns i FM Access (`swg-demo.bim.cloud`). Vi har GUID:s i vår databas men vet inte om de matchar FM Access-instansen. HDC API:et bör ha en endpoint for att lista byggnader.
+### Bakgrund
+Tessel HDC API har ingen dedikerad "buildings"-endpoint, men erbjuder ett generellt Object API som kan hämta alla objekt (inklusive byggnader) via deras GUID.
 
 ### Steg
 
-**1. Lägg till `get-buildings` action i `supabase/functions/fm-access-query/index.ts`**
-Ny case i switch-satsen som anropar `/api/buildings` (HDC:s standard-endpoint for byggnader). Returnerar listan av byggnader med deras GUID:s, namn och annan metadata.
+**1. Lägg till `get-object-by-guid` action i edge function**
+Ny action som anropar `GET /api/object/byguid/json/{guid}` for att hämta objektdata (inklusive byggnader) via GUID.
 
-**2. Testa endpointen**
-Anropa `get-buildings` for att se vilka byggnader som finns i FM Access-instansen och jämföra med våra lokala GUID:s.
+**2. Lägg till `get-classes` action**
+Anropar `GET /api/config/classes/json` for att lista alla objektklasser i systemet (t.ex. "Byggnad", "Våning", "Rum"). Detta hjälper oss förstå vilka classId:n som finns.
 
-**3. Om /api/buildings inte fungerar, testa alternativa endpoints**
-HDC-plattformen kan ha andra endpoints som `/api/objects?category=Building` eller `/api/archive/buildings`. Vi testar tills vi hittar rätt.
+**3. Lägg till `search-objects` action**
+Anropar `GET /api/search/quick?query={term}` for att söka efter objekt i HDC. Kan användas for att hitta byggnader by namn.
+
+**4. Uppdatera `get-buildings` action**
+Istället for att returnera systeminfo, använd `get-classes` for att hitta byggnadsklassens ID, och sedan sök/lista byggnader via perspective/object API.
+
+**5. Testa med våra databas-GUID:s**
+Anropa `get-object-by-guid` med GUID:arna från vår building_settings-tabell for att verifiera mappningen.
 
 ### Teknisk detalj
 
 ```text
-Ny case i switch-satsen:
+Nya actions i fm-access-query edge function:
 
-case 'get-buildings': {
-  const response = await fmAccessFetch(config, '/api/buildings');
-  // parse response safely
-  // return list of buildings with GUIDs
-}
+case 'get-object-by-guid':
+  GET /api/object/byguid/json/{guid}
+  -> Returnerar objektdata med properties, classId, namn etc.
+
+case 'get-classes':
+  GET /api/config/classes/json
+  -> Returnerar lista av alla klasser (Byggnad, Våning, Rum etc.)
+
+case 'search-objects':
+  GET /api/search/quick?query={term}
+  -> Söker efter objekt by namn
+
+case 'get-perspective-tree':
+  GET /api/perspective/subtree/json/{perspId}/{classId}/{objectId}
+  -> Hämtar trädstruktur under ett objekt
 ```
 
-Detta ger oss en lista av byggnader i FM Access som vi kan mappa mot våra lokala byggnads-GUID:s.
