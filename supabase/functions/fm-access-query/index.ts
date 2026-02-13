@@ -315,13 +315,57 @@ serve(async (req) => {
         try {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
-          
-          // Build viewer URL with authentication parameters
-          // NOTE: Exact URL structure may need adjustment after testing against FM Access API
-          const viewerUrl = `${config.apiUrl}/viewer/2d?floorId=${encodeURIComponent(floorId || '')}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
-          
+
+          // Resolve the drawing object for this floor via perspective tree (perspectiveId 8)
+          // We look for a child with classId 106 (Drawing) under the floor node.
+          let drawingObjectId: string | null = null;
+          const lookupGuid = floorId || buildingId;
+
+          if (lookupGuid) {
+            console.log('FM Access get-viewer-url: Looking up perspective tree for guid', lookupGuid);
+            const treeResp = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/8/${encodeURIComponent(lookupGuid)}`);
+            if (treeResp.ok) {
+              const treeData = await treeResp.json();
+              console.log('FM Access get-viewer-url: perspective tree response length', JSON.stringify(treeData).length);
+
+              // Recursively search for a node with classId 106
+              function findDrawingNode(nodes: any[]): any | null {
+                for (const node of nodes) {
+                  if (node.classId === 106 || node.ClassId === 106) return node;
+                  const children = node.children || node.Children || [];
+                  if (children.length > 0) {
+                    const found = findDrawingNode(children);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              }
+
+              const treeNodes = Array.isArray(treeData) ? treeData : (treeData.children || treeData.Children || [treeData]);
+              const drawingNode = findDrawingNode(treeNodes);
+              if (drawingNode) {
+                drawingObjectId = drawingNode.objectId || drawingNode.ObjectId || drawingNode.id || drawingNode.Id || null;
+                console.log('FM Access get-viewer-url: Found drawing node, objectId:', drawingObjectId, 'classId:', drawingNode.classId || drawingNode.ClassId);
+              } else {
+                console.log('FM Access get-viewer-url: No classId 106 node found in perspective tree');
+              }
+            } else {
+              const errText = await treeResp.text();
+              console.log('FM Access get-viewer-url: perspective tree error', treeResp.status, errText.substring(0, 200));
+            }
+          }
+
+          // Build viewer URL — if we found a drawing objectId, use it
+          let viewerUrl: string;
+          if (drawingObjectId) {
+            viewerUrl = `${config.apiUrl}/viewer/2d?objectId=${encodeURIComponent(drawingObjectId)}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
+          } else {
+            // Fallback: pass floorId directly
+            viewerUrl = `${config.apiUrl}/viewer/2d?floorId=${encodeURIComponent(floorId || '')}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
+          }
+
           return new Response(
-            JSON.stringify({ success: true, url: viewerUrl, token, versionId }),
+            JSON.stringify({ success: true, url: viewerUrl, token, versionId, drawingObjectId }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         } catch (error: any) {
