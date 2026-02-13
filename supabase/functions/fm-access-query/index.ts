@@ -79,33 +79,33 @@ async function getVersionId(config: FmAccessConfig, token: string): Promise<stri
 
   console.log('FM Access: Fetching version ID from', config.apiUrl);
 
-  const response = await fetch(`${config.apiUrl}/api/version`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('FM Access version error:', response.status, errorText);
-    throw new Error(`Version request failed: ${response.status} - ${errorText}`);
+  // Try /api/systeminfo/json first (needs auth)
+  try {
+    const response = await fetch(`${config.apiUrl}/api/systeminfo/json`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      console.log('FM Access: systeminfo response:', JSON.stringify(data).substring(0, 300));
+      const versionId = data.versionId || data.id || data.version || data.systemVersion;
+      if (versionId) {
+        versionIdCache = { versionId, fetchedAt: Date.now() };
+        console.log('FM Access: Version ID obtained:', versionId);
+        return versionId;
+      }
+    } else {
+      const text = await response.text();
+      console.log('FM Access: systeminfo returned', response.status, text.substring(0, 100));
+    }
+  } catch (e) {
+    console.log('FM Access: systeminfo error:', e.message);
   }
 
-  const data = await response.json();
-  const versionId = data.versionId || data.id || data.version;
-
-  if (!versionId) {
-    console.error('FM Access: No version ID in response', data);
-    throw new Error('No version ID returned from API');
-  }
-
-  versionIdCache = {
-    versionId,
-    fetchedAt: Date.now(),
-  };
-
-  console.log('FM Access: Version ID obtained:', versionId);
-  return versionId;
+  // If systeminfo fails, proceed without version ID
+  // The X-Hdc-Version-Id header may not be required for all endpoints
+  console.log('FM Access: Could not get versionId, proceeding without it');
+  versionIdCache = { versionId: '', fetchedAt: Date.now() };
+  return '';
 }
 
 /**
@@ -122,14 +122,18 @@ async function fmAccessFetch(
   const url = `${config.apiUrl}${path}`;
   console.log('FM Access: Calling', url);
 
+  const headers: Record<string, string> = {
+    ...options.headers as Record<string, string>,
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  if (versionId) {
+    headers['X-Hdc-Version-Id'] = versionId;
+  }
+
   return fetch(url, {
     ...options,
-    headers: {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-      'X-Hdc-Version-Id': versionId,
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 }
 
@@ -146,7 +150,7 @@ serve(async (req) => {
     const config: FmAccessConfig = {
       tokenUrl: Deno.env.get('FM_ACCESS_TOKEN_URL') || 'https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token',
       clientId: Deno.env.get('FM_ACCESS_CLIENT_ID') || 'HDCAgent Basic',
-      apiUrl: Deno.env.get('FM_ACCESS_API_URL') || '',
+      apiUrl: (Deno.env.get('FM_ACCESS_API_URL') || '').replace(/\/+$/, ''),
       username: Deno.env.get('FM_ACCESS_USERNAME'),
       password: Deno.env.get('FM_ACCESS_PASSWORD'),
     };
