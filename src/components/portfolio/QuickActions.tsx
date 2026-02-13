@@ -89,6 +89,28 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               </Tooltip>
             )}
 
+            {/* 2D FMA - Only for Storey */}
+            {isStorey && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => {
+                      const buildingGuid = (facility as any).buildingFmGuid || facility.fmGuid;
+                      navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}`);
+                    }} 
+                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                  >
+                    <Square size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
+                    <span className="text-[10px] sm:text-xs">2D FMA</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Visa FM Access 2D-ritning för våning</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
             {/* 3D - Building or Storey - navigates to UnifiedViewer with mode=3d */}
             {(isBuilding || isStorey || isSpace) && (
               <Tooltip>
