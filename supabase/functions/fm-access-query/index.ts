@@ -82,12 +82,12 @@ async function getVersionId(config: FmAccessConfig, token: string): Promise<stri
   // Try /api/systeminfo/json first (needs auth)
   try {
     const response = await fetch(`${config.apiUrl}/api/systeminfo/json`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'X-Authorization': `Bearer ${token}` },
     });
     if (response.ok) {
       const data = await response.json();
-      console.log('FM Access: systeminfo response:', JSON.stringify(data).substring(0, 300));
-      const versionId = data.versionId || data.id || data.version || data.systemVersion;
+      console.log('FM Access: systeminfo response:', JSON.stringify(data).substring(0, 500));
+      const versionId = data.defaultVersion?.versionId || data.defaultVersion?.defaultVersionId || data.versionId;
       if (versionId) {
         versionIdCache = { versionId, fetchedAt: Date.now() };
         console.log('FM Access: Version ID obtained:', versionId);
@@ -124,7 +124,7 @@ async function fmAccessFetch(
 
   const headers: Record<string, string> = {
     ...options.headers as Record<string, string>,
-    'Authorization': `Bearer ${token}`,
+    'X-Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
   if (versionId) {
