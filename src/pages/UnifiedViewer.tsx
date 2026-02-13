@@ -59,10 +59,7 @@ const UnifiedViewerContent: React.FC<{
   const hasIvion = !!buildingData?.ivionSiteId;
   const modeParam = searchParams.get('mode') as ViewMode | null;
   const effectiveInitialMode = modeParam || initialMode;
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (!hasIvion && effectiveInitialMode !== '3d') return '3d';
-    return effectiveInitialMode;
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
 
   useEffect(() => {
     if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d') {
