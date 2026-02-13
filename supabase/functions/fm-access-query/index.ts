@@ -234,10 +234,12 @@ serve(async (req) => {
         }
 
         const response = await fmAccessFetch(config, `/api/drawings?buildingId=${encodeURIComponent(buildingId)}`);
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
         
         return new Response(
-          JSON.stringify({ success: response.ok, data }),
+          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -252,10 +254,12 @@ serve(async (req) => {
         }
 
         const response = await fmAccessFetch(config, `/api/documents?buildingId=${encodeURIComponent(buildingId)}`);
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
         
         return new Response(
-          JSON.stringify({ success: response.ok, data }),
+          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -270,10 +274,12 @@ serve(async (req) => {
         }
 
         const response = await fmAccessFetch(config, `/api/documents/${encodeURIComponent(documentId)}`);
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
         
         return new Response(
-          JSON.stringify({ success: response.ok, data }),
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -336,10 +342,12 @@ serve(async (req) => {
         }
 
         const response = await fmAccessFetch(config, `/api/floors?buildingId=${encodeURIComponent(buildingFmGuid)}`);
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
         
         return new Response(
-          JSON.stringify({ success: response.ok, data }),
+          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
