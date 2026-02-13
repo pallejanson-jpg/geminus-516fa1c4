@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { useModelNames } from '@/hooks/useModelNames';
 
 export interface ModelInfo {
   id: string;
@@ -35,10 +35,10 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     const [visibleModelIds, setVisibleModelIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
-    const [modelNamesMap, setModelNamesMap] = useState<Map<string, string>>(new Map());
-    const [isLoadingNames, setIsLoadingNames] = useState(false);
     const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
-    const [dbModels, setDbModels] = useState<{id: string; name: string; fileName: string}[]>([]);
+
+    // Use shared hook for model name resolution
+    const { modelNamesMap, isLoading: isLoadingNames } = useModelNames(buildingFmGuid);
     
     // Stable refs to preserve selection across re-renders
     const visibleModelIdsRef = React.useRef<Set<string>>(new Set());
@@ -83,154 +83,21 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleModelIds)));
     }, [visibleModelIds, buildingFmGuid, isInitialized]);
 
-  // Helper to extract model ID from xktFileUrl
-  const extractModelIdFromUrl = (xktFileUrl: string): string => {
-    const fileName = xktFileUrl.split('/').pop() || '';
-    return fileName.replace('.xkt', '');
-  };
-
-  // Fetch model names and list from database - all models for this building
-  useEffect(() => {
-    if (!buildingFmGuid) return;
-
-    const fetchModelNames = async () => {
-      setIsLoadingNames(true);
-      try {
-        // First, try to get model names from local database (xkt_models table)
-        const { data: dbModelData, error: dbError } = await supabase
-          .from('xkt_models')
-          .select('model_id, model_name, file_name')
-          .eq('building_fm_guid', buildingFmGuid);
-
-        if (!dbError && dbModelData && dbModelData.length > 0) {
-          console.debug("Using model names from database:", dbModelData);
-          const nameMap = new Map<string, string>();
-          
-          // Store DB models list for combining with scene models
-          setDbModels(dbModelData.map(m => ({
-            id: m.model_id || m.file_name || '',
-            name: m.model_name || m.file_name || m.model_id || '',
-            fileName: m.file_name || ''
-          })));
-          
-          dbModelData.forEach((m) => {
-            // Primary: Map file_name -> model_name (most reliable for XEOkit matching)
-            if (m.file_name && m.model_name) {
-              nameMap.set(m.file_name, m.model_name);
-              nameMap.set(m.file_name.toLowerCase(), m.model_name);
-              
-              // Also without extension
-              const fileId = m.file_name.replace(/\.xkt$/i, '');
-              nameMap.set(fileId, m.model_name);
-              nameMap.set(fileId.toLowerCase(), m.model_name);
-            }
-            // Secondary: Map model_id -> model_name
-            if (m.model_id && m.model_name) {
-              nameMap.set(m.model_id, m.model_name);
-              nameMap.set(m.model_id.toLowerCase(), m.model_name);
-            }
-          });
-          
-          setModelNamesMap(nameMap);
-          setIsLoadingNames(false);
-          return;
-        } else {
-          // Clear dbModels if nothing found
-          setDbModels([]);
-        }
-
-        // Fall back to Asset+ API if database has no data
-        console.debug("No models in database, falling back to Asset+ API");
-        const [tokenResult, configResult] = await Promise.all([
-          supabase.functions.invoke('asset-plus-query', { body: { action: 'getToken' } }),
-          supabase.functions.invoke('asset-plus-query', { body: { action: 'getConfig' } })
-        ]);
-
-        const accessToken = tokenResult.data?.accessToken;
-        const apiUrl = configResult.data?.apiUrl;
-        const apiKey = configResult.data?.apiKey;
-
-        if (!accessToken || !apiUrl) {
-          setIsLoadingNames(false);
-          return;
-        }
-
-        // Build base URL for 3D API
-        const baseUrl = apiUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-        const response = await fetch(
-          `${baseUrl}/api/threed/GetModels?fmGuid=${buildingFmGuid}&apiKey=${apiKey}`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-
-        if (response.ok) {
-          const apiModels = await response.json();
-          const nameMap = new Map<string, string>();
-          console.debug("Asset+ GetModels response:", apiModels);
-
-          // Populate dbModels from API so all models appear in the list
-          setDbModels(apiModels.map((m: any) => ({
-            id: m.id || '',
-            name: m.name || '',
-            fileName: m.xktFileUrl
-              ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
-              : (m.id || '')
-          })));
-          
-          apiModels.forEach((m: any) => {
-            // Primary: map model.id to name
-            if (m.id && m.name) {
-              nameMap.set(m.id, m.name);
-              nameMap.set(m.id.toLowerCase(), m.name);
-            }
-            // Secondary: extract filename from xktFileUrl and map to name
-            if (m.xktFileUrl && m.name) {
-              const fileId = extractModelIdFromUrl(m.xktFileUrl);
-              nameMap.set(fileId, m.name);
-              nameMap.set(fileId.toLowerCase(), m.name);
-              nameMap.set(fileId + '.xkt', m.name);
-              nameMap.set(fileId.toLowerCase() + '.xkt', m.name);
-            }
-          });
-          
-          console.debug("Model names map:", Object.fromEntries(nameMap));
-          setModelNamesMap(nameMap);
-          
-          // Persist API model names to xkt_models table for future loads
-          try {
-            for (const m of apiModels) {
-              if (!m.name) continue;
-              const fileName = m.xktFileUrl
-                ? extractModelIdFromUrl(m.xktFileUrl) + '.xkt'
-                : (m.id || '');
-              if (!fileName) continue;
-              
-              await supabase.from('xkt_models').upsert({
-                building_fm_guid: buildingFmGuid,
-                model_id: m.id || fileName,
-                model_name: m.name,
-                file_name: fileName,
-                storage_path: m.xktFileUrl || '',
-                source_url: m.xktFileUrl || null,
-              }, { onConflict: 'model_id' }).then(({ error }) => {
-                if (error) console.debug("Failed to cache model name:", m.name, error.message);
-              });
-            }
-            console.debug("Model names persisted to database");
-          } catch (persistErr) {
-            console.debug("Failed to persist model names:", persistErr);
-          }
-        } else {
-          console.debug("Asset+ GetModels failed:", response.status);
-        }
-      } catch (e) {
-        console.debug("Failed to fetch model names:", e);
-      } finally {
-        setIsLoadingNames(false);
+    // Derive dbModels from the shared modelNamesMap
+    const dbModels = useMemo(() => {
+      if (modelNamesMap.size === 0) return [];
+      // Deduplicate: collect unique names (skip lowercase duplicates)
+      const seen = new Set<string>();
+      const result: { id: string; name: string; fileName: string }[] = [];
+      for (const [key, name] of modelNamesMap.entries()) {
+        if (key !== key.toLowerCase()) continue; // skip non-lowercase entries to avoid dupes
+        if (seen.has(name)) continue;
+        seen.add(name);
+        const fileName = key.endsWith('.xkt') ? key : key + '.xkt';
+        result.push({ id: key, name, fileName });
       }
-    };
-
-    fetchModelNames();
-  }, [buildingFmGuid]);
+      return result;
+    }, [modelNamesMap]);
 
     // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
