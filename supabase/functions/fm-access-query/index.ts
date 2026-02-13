@@ -352,10 +352,80 @@ serve(async (req) => {
         );
       }
 
+      case 'get-object-by-guid': {
+        const { guid } = params;
+        if (!guid) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'guid is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const response = await fmAccessFetch(config, `/api/object/byguid/json/${encodeURIComponent(guid)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get-classes': {
+        const response = await fmAccessFetch(config, '/api/config/classes/json');
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'search-objects': {
+        const { query } = params;
+        if (!query) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'query is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const response = await fmAccessFetch(config, `/api/search/quick?query=${encodeURIComponent(query)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get-perspective-tree': {
+        const { perspectiveId, classId, objectId } = params;
+        if (!perspectiveId || !classId || !objectId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'perspectiveId, classId, and objectId are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const response = await fmAccessFetch(config, `/api/perspective/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(classId)}/${encodeURIComponent(objectId)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+        
+        return new Response(
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'get-buildings': {
-        // HDC FM does not expose a REST endpoint for listing buildings.
-        // The only working endpoint is /api/systeminfo/json.
-        // Return system info so caller can verify connection.
+        // Use systeminfo as fallback - HDC FM lacks a dedicated buildings list endpoint
         const response = await fmAccessFetch(config, '/api/systeminfo/json');
         const text = await response.text();
         let data;
@@ -365,7 +435,7 @@ serve(async (req) => {
           JSON.stringify({ 
             success: response.ok, 
             data,
-            note: 'HDC FM API does not expose a buildings list endpoint. Building GUIDs must be obtained from the HDC web application or configured manually.',
+            note: 'Use get-classes + get-perspective-tree or search-objects to find buildings.',
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
