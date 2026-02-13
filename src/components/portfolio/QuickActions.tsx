@@ -97,8 +97,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                     variant="ghost" 
                     onClick={() => {
                       const buildingGuid = (facility as any).buildingFmGuid || facility.fmGuid;
-                      navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}`);
-                    }} 
+                      const floorName = facility.commonName || facility.name || '';
+                      navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}&floorName=${encodeURIComponent(floorName)}`);
+                    }}
                     className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
                   >
                     <Square size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
