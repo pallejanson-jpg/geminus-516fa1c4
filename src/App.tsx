@@ -32,6 +32,8 @@ const FaultReport = lazy(() => import("@/pages/FaultReport"));
 const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 // Jury presentation slide deck
 const Presentation = lazy(() => import("@/pages/Presentation"));
+// FM Access dashboard
+const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
 
 const queryClient = new QueryClient();
 
@@ -192,6 +194,18 @@ const App = () => {
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
                 <Presentation />
+              </Suspense>
+            } 
+          />
+          
+          {/* FM Access Dashboard */}
+          <Route 
+            path="/fm-access" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <ProtectedRoute>
+                  <FmAccessDashboard />
+                </ProtectedRoute>
               </Suspense>
             } 
           />
