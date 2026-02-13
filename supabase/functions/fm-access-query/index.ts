@@ -352,6 +352,25 @@ serve(async (req) => {
         );
       }
 
+      case 'get-buildings': {
+        // HDC FM does not expose a REST endpoint for listing buildings.
+        // The only working endpoint is /api/systeminfo/json.
+        // Return system info so caller can verify connection.
+        const response = await fmAccessFetch(config, '/api/systeminfo/json');
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
+        
+        return new Response(
+          JSON.stringify({ 
+            success: response.ok, 
+            data,
+            note: 'HDC FM API does not expose a buildings list endpoint. Building GUIDs must be obtained from the HDC web application or configured manually.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
