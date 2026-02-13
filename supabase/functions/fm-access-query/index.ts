@@ -311,43 +311,107 @@ serve(async (req) => {
       }
 
       case 'get-viewer-url': {
-        const { buildingId, floorId } = params;
+        const { buildingId, floorId, floorName, fmAccessBuildingGuid } = params;
         try {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
 
-          // Resolve the drawing object for this floor via perspective tree (perspectiveId 8)
-          // We look for a child with classId 106 (Drawing) under the floor node.
+          // Use FM Access building GUID if provided, otherwise fall back to buildingId
+          const lookupGuid = fmAccessBuildingGuid || floorId || buildingId;
           let drawingObjectId: string | null = null;
-          const lookupGuid = floorId || buildingId;
 
           if (lookupGuid) {
-            console.log('FM Access get-viewer-url: Looking up perspective tree for guid', lookupGuid);
-            const treeResp = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/8/${encodeURIComponent(lookupGuid)}`);
+            // If we have an fmAccessBuildingGuid, fetch the building's perspective tree
+            // and match the floor by name to find the correct drawing
+            const treeGuid = fmAccessBuildingGuid || lookupGuid;
+            console.log('FM Access get-viewer-url: Looking up perspective tree for guid', treeGuid, 'floorName:', floorName || '(none)');
+            
+            const treeResp = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/8/${encodeURIComponent(treeGuid)}`);
             if (treeResp.ok) {
               const treeData = await treeResp.json();
               console.log('FM Access get-viewer-url: perspective tree response length', JSON.stringify(treeData).length);
 
-              // Recursively search for a node with classId 106
-              function findDrawingNode(nodes: any[]): any | null {
+              const treeNodes = Array.isArray(treeData) ? treeData : (treeData.children || treeData.Children || [treeData]);
+
+              // Helper: recursively find nodes by classId
+              function findNodesByClassId(nodes: any[], classId: number): any[] {
+                const results: any[] = [];
                 for (const node of nodes) {
-                  if (node.classId === 106 || node.ClassId === 106) return node;
+                  if ((node.classId || node.ClassId) === classId) results.push(node);
                   const children = node.children || node.Children || [];
-                  if (children.length > 0) {
-                    const found = findDrawingNode(children);
-                    if (found) return found;
-                  }
+                  if (children.length > 0) results.push(...findNodesByClassId(children, classId));
+                }
+                return results;
+              }
+
+              // Helper: find first drawing (classId 106) under a node
+              function findDrawingUnder(node: any): any | null {
+                const children = node.children || node.Children || [];
+                for (const child of children) {
+                  if ((child.classId || child.ClassId) === 106) return child;
+                }
+                // Recurse deeper
+                for (const child of children) {
+                  const found = findDrawingUnder(child);
+                  if (found) return found;
                 }
                 return null;
               }
 
-              const treeNodes = Array.isArray(treeData) ? treeData : (treeData.children || treeData.Children || [treeData]);
-              const drawingNode = findDrawingNode(treeNodes);
-              if (drawingNode) {
-                drawingObjectId = drawingNode.objectId || drawingNode.ObjectId || drawingNode.id || drawingNode.Id || null;
-                console.log('FM Access get-viewer-url: Found drawing node, objectId:', drawingObjectId, 'classId:', drawingNode.classId || drawingNode.ClassId);
-              } else {
-                console.log('FM Access get-viewer-url: No classId 106 node found in perspective tree');
+              if (floorName && fmAccessBuildingGuid) {
+                // Strategy: find floor nodes (classId 105) and fuzzy-match by name
+                const floorNodes = findNodesByClassId(treeNodes, 105);
+                console.log('FM Access get-viewer-url: Found', floorNodes.length, 'floor nodes (classId 105)');
+                
+                const normalizedFloorName = floorName.toLowerCase().trim();
+                
+                // Try exact match first, then substring match
+                let matchedFloor = floorNodes.find(n => {
+                  const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+                  return name === normalizedFloorName;
+                });
+
+                if (!matchedFloor) {
+                  matchedFloor = floorNodes.find(n => {
+                    const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+                    return name.includes(normalizedFloorName) || normalizedFloorName.includes(name);
+                  });
+                }
+
+                if (matchedFloor) {
+                  console.log('FM Access get-viewer-url: Matched floor:', matchedFloor.objectName || matchedFloor.ObjectName);
+                  const drawing = findDrawingUnder(matchedFloor);
+                  if (drawing) {
+                    drawingObjectId = drawing.objectId || drawing.ObjectId || drawing.id || drawing.Id || null;
+                    console.log('FM Access get-viewer-url: Found drawing under matched floor, objectId:', drawingObjectId);
+                  } else {
+                    console.log('FM Access get-viewer-url: No drawing found under matched floor, trying first available');
+                  }
+                } else {
+                  console.log('FM Access get-viewer-url: No floor name match found for "' + floorName + '", trying first drawing');
+                }
+              }
+
+              // Fallback: find any drawing node in the tree
+              if (!drawingObjectId) {
+                function findFirstDrawing(nodes: any[]): any | null {
+                  for (const node of nodes) {
+                    if ((node.classId || node.ClassId) === 106) return node;
+                    const children = node.children || node.Children || [];
+                    if (children.length > 0) {
+                      const found = findFirstDrawing(children);
+                      if (found) return found;
+                    }
+                  }
+                  return null;
+                }
+                const drawingNode = findFirstDrawing(treeNodes);
+                if (drawingNode) {
+                  drawingObjectId = drawingNode.objectId || drawingNode.ObjectId || drawingNode.id || drawingNode.Id || null;
+                  console.log('FM Access get-viewer-url: Using fallback drawing, objectId:', drawingObjectId);
+                } else {
+                  console.log('FM Access get-viewer-url: No classId 106 node found in perspective tree');
+                }
               }
             } else {
               const errText = await treeResp.text();
@@ -355,12 +419,11 @@ serve(async (req) => {
             }
           }
 
-          // Build viewer URL — if we found a drawing objectId, use it
+          // Build viewer URL
           let viewerUrl: string;
           if (drawingObjectId) {
             viewerUrl = `${config.apiUrl}/viewer/2d?objectId=${encodeURIComponent(drawingObjectId)}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
           } else {
-            // Fallback: pass floorId directly
             viewerUrl = `${config.apiUrl}/viewer/2d?floorId=${encodeURIComponent(floorId || '')}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
           }
 

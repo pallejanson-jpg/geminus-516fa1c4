@@ -489,6 +489,7 @@ export type Database = {
       building_settings: {
         Row: {
           created_at: string
+          fm_access_building_guid: string | null
           fm_guid: string
           hero_image_url: string | null
           id: string
@@ -511,6 +512,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          fm_access_building_guid?: string | null
           fm_guid: string
           hero_image_url?: string | null
           id?: string
@@ -533,6 +535,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          fm_access_building_guid?: string | null
           fm_guid?: string
           hero_image_url?: string | null
           id?: string
