@@ -1,106 +1,98 @@
 
+# Plan: Fixa mobil våningsvisning + 360 SDK-laddning
 
-# Plan: Tre ändringar — ModelVisibilitySelector refaktorering, Tillbakaknapp, och Enhetlig viewer-start
+## Problem 1: IfcCovering-objekt doljs inte pa mobil
 
-## 1. Refaktorera ModelVisibilitySelector
+**Orsak:** Nar en enskild vaning valjs pa mobil (`handleMobileFloorToggle` i AssetPlusViewer.tsx, rad 2280-2329) togglas synligheten via `toggleHierarchy`, men IfcCovering-objekt (undertak) doljs INTE. Desktop-versionen (`FloorVisibilitySelector.tsx`, rad 374-385) har en extra loop som explicit döljer alla IfcCovering-objekt i solo-lage. Denna logik saknas helt pa mobil.
 
-`ModelVisibilitySelector.tsx` har 140 rader intern logik (rad 92-233) som hämtar modellnamn från databasen och Asset+ API. Exakt samma logik finns redan i den delade hooken `useModelNames.ts`. Refaktoreringen tar bort den duplicerade koden.
+**Losning:** Lagg till IfcCovering-dolj-logik i `handleMobileFloorToggle` efter `toggleHierarchy`-anropet.
 
-**Ändringar i `ModelVisibilitySelector.tsx`:**
-- Ta bort den interna `fetchModelNames`-effekten (rad 92-233)
-- Ta bort `isLoadingNames` och `modelNamesMap` state
-- Importera `useModelNames` från `@/hooks/useModelNames`
-- Använda hookens `modelNamesMap` och `isLoading` istället
-- `dbModels`-state behålls men populeras från hookens data istället
+**Fil:** `src/components/viewer/AssetPlusViewer.tsx`
+
+I `handleMobileFloorToggle` (rad 2302-2303), efter `toggleHierarchy(floorId, visible)`, lagg till:
+
+```typescript
+// After toggleHierarchy — hide IfcCovering in solo mode
+// (matches desktop FloorVisibilitySelector behavior)
+const updatedFloors = mobileFloors.map(f =>
+  f.id === floorId ? { ...f, visible } : f
+);
+const visibleCount = updatedFloors.filter(f => f.visible).length;
+const isSoloMode = visibleCount === 1;
+
+if (isSoloMode) {
+  const metaObjects = metaScene.metaObjects || {};
+  Object.values(metaObjects).forEach((metaObj: any) => {
+    if (metaObj.type?.toLowerCase() === 'ifccovering') {
+      const entity = scene.objects?.[metaObj.id];
+      if (entity) {
+        entity.visible = false;
+      }
+    }
+  });
+}
+```
+
+Dessutom maste desktop-logiken ocksa anvanda batch-metoden (`scene.setObjectsVisible`) for battre prestanda pa mobil. Nuvarande implementation itererar objekt ett och ett, vilket ar langsammare.
 
 ---
 
-## 2. Fixa Tillbakaknappen i Split Screen / Virtual Twin
+## Problem 2: 360 SDK laddar inte pa mobil
 
-**Problem:** `handleGoBack` använder `navigate(-1)` (webbläsarens historik-back). Om man gjort navigeringar inuti viewern (t.ex. klickat runt i 360-panelen) så backar den inom viewern istället för att ta dig tillbaka till appen.
+**Orsak:** Pa mobil renderar `MobileUnifiedViewer` (UnifiedViewer.tsx rad 536) `Ivion360View` direkt. Ivion360View har sin EGNA SDK-laddningslogik (rad 146-207) som:
+1. Skapar en `<ivion>`-element vid mount (rad 132-144)
+2. Laddar SDK:n i en separat useEffect (rad 147-207)
 
-**Lösning:** Ersätt `navigate(-1)` med `navigate('/')` som alltid tar användaren tillbaka till appens huvudvy (portfolio).
+Problemet ar att `activePanel` vaxlar mellan `'3d'` och `'360'`, och React UNMOUNTAR 3D-viewern och MOUNTAR 360-viewern (rad 526-544). Varje gang 360 mountas kors SDK-laddningen pa nytt, men `activeLoadPromise`-guarden i `ivion-sdk.ts` (rad 196-206) kan blocka om en tidigare instans fortfarande ar igangsa. Dessutom kan `<ivion>`-elementet fa noll-dimensioner om containern inte ar redo.
 
-**Ändring i `UnifiedViewer.tsx`:**
+**Losning:** Anvand den delade `useIvionSdk`-hooken fran `UnifiedViewerContent` (som redan ar aktiv pa desktop) aven for mobil. Skicka `ivApiRef` och `sdkContainerRef` till `MobileUnifiedViewer` och rendera SDK-containern och Ivion360View SAMTIDIGT (med display-styling) istallet for att montera/avmontera.
+
+**Andringar i `src/pages/UnifiedViewer.tsx`:**
+
+### MobileUnifiedViewer-layout (rad 525-547):
+Istallet for att villkorligt rendera antingen AssetPlusViewer eller Ivion360View, rendera bada men visa/dolj med display:
+
+```typescript
+<div className="flex-1 min-h-0 relative">
+  {/* 3D viewer — always mounted, hidden when 360 active */}
+  <div style={{ display: activePanel === '3d' ? 'block' : 'none', height: '100%' }}>
+    <AssetPlusViewer ... />
+  </div>
+
+  {/* 360 SDK container — always mounted if hasIvion */}
+  {hasIvion && (
+    <div
+      ref={sdkContainerRef}
+      style={{
+        display: activePanel === '360' ? 'block' : 'none',
+        position: 'absolute', inset: 0, height: '100%',
+      }}
+    />
+  )}
+</div>
 ```
-// Nuvarande:
-const handleGoBack = useCallback(() => navigate(-1), [navigate]);
 
-// Nytt:
-const handleGoBack = useCallback(() => navigate('/'), [navigate]);
-```
+Detta innebar att:
+- SDK-containern alltid ar monterad (inte avmonterad/atermontera vid varje toggle)
+- `useIvionSdk`-hooken i foraldern hanterar laddning, precis som pa desktop
+- Ivion360View anvands INTE pa mobil langre — SDK:n renderar direkt i containern
 
 ---
 
-## 3. Enhetlig viewer-start med gemensam toggle
-
-**Nuvarande situation:**
-- **3D-knappen** öppnar viewern *inuti* appen (`setActiveApp('assetplus_viewer')`) — ingen route-ändring, renderas i AppLayout
-- **Split/VT-knapparna** navigerar till *separata routes* (`/split-viewer`, `/virtual-twin`) — UnifiedViewer med mode-toggle
-- **360-knappen** öppnar en helt separat in-app-vy (radar)
-
-Dessa tre olika startmetoder gör att användaren inte kan toggla fritt mellan alla lägen.
-
-**Ny design:**
-- **"3D"-knappen** i QuickActions navigerar till `/split-viewer?building=...` (som redan har UnifiedViewer med alla modes) men med `&mode=3d` som query-param så att 3D blir förvalt
-- **"360"-knappen** navigerar till `/split-viewer?building=...&mode=360` så att 360 blir förvalt
-- **Split/VT** fortsätter som idag men via samma route
-
-Alla lägen delar sedan samma toggle: **3D | Split | VT | 360**
-
-**Ändringar:**
-
-### `UnifiedViewer.tsx`
-- Läs `mode` query-param som `initialMode` om ingen prop skickats:
-  ```
-  const modeParam = searchParams.get('mode') as ViewMode | null;
-  const effectiveInitialMode = initialMode !== 'vt' ? initialMode : (modeParam || '3d');
-  ```
-
-### `QuickActions.tsx`
-- **3D-knapp:** Ändra `onToggle3D(facility)` till `navigate('/split-viewer?building=...&mode=3d')`
-- **360-knapp:** Ändra `onOpen360(ivionSiteId)` till `navigate('/split-viewer?building=...&mode=360')`
-- **Split-knapp:** Behåll som den är (redan korrekt)
-- **VT-knapp:** Ändra till `navigate('/split-viewer?building=...&mode=vt')`
-- Ta bort separata knappar som kräver Ivion; alla lägen är tillgängliga via toggle och disablas automatiskt i UnifiedViewer om Ivion saknas
-
-### `FacilityCard.tsx` och `FacilityLandingPage.tsx`
-- Uppdatera `navigate('/split-viewer?building=...')` till att inkludera `&mode=split` för tydlighet
-
-### `AppHeader.tsx`
-- Ändra 3D-menyknappen: istället för `setActiveApp('assetplus_viewer')`, navigera till `/split-viewer?mode=3d` (utan building — UnifiedViewer visar byggväljare om building saknas)
-
-### `SplitViewer.tsx` och `VirtualTwin.tsx`
-- Dessa wrapper-sidor kan behållas för bakåtkompatibilitet men deras routes (`/split-viewer`, `/virtual-twin`) används med `mode`-param nu
-
----
-
-## Sammanfattning av filändringar
+## Sammanfattning av filandringar
 
 ```
-Ändrade filer:
-  src/components/viewer/ModelVisibilitySelector.tsx
-    - Ersätt intern fetchModelNames med useModelNames-hook (~140 rader borttagna)
+src/components/viewer/AssetPlusViewer.tsx:
+  - handleMobileFloorToggle: Lagg till IfcCovering-dolj-logik i solo-lage
+    (efter rad 2302, ca 15 rader ny kod)
 
-  src/pages/UnifiedViewer.tsx
-    - handleGoBack: navigate('/') istället för navigate(-1)
-    - Läs mode-query-param för initialMode
-
-  src/components/portfolio/QuickActions.tsx
-    - 3D/360/VT-knappar navigerar till /split-viewer?building=...&mode=X
-
-  src/components/portfolio/FacilityCard.tsx
-    - Lägg till &mode=split i URL
-
-  src/components/portfolio/FacilityLandingPage.tsx
-    - Lägg till &mode=split i URL
-
-  src/components/layout/AppHeader.tsx
-    - 3D-menyknappen navigerar till /split-viewer?mode=3d
+src/pages/UnifiedViewer.tsx:
+  - MobileUnifiedViewer: Byt fran mount/unmount till display-styling
+  - Skicka sdkContainerRef till MobileUnifiedViewer
+  - Rendera SDK-container och 3D-viewer parallellt
 ```
 
-## Förväntade resultat
+## Forvantat resultat
 
-- **ModelVisibilitySelector** delar namnlogik med mobil via samma hook — ett ställe att underhålla
-- **Tillbakaknappen** tar alltid tillbaka till appen, oavsett vad man gjort i viewern
-- **Alla viewer-lägen** startar via samma UnifiedViewer med gemensam toggle (3D/Split/VT/360) och rätt förvalt läge
+- **Mobil vaningsval:** IfcCovering-objekt (undertak) doljs nar en enskild vaning isoleras, precis som pa desktop
+- **360 SDK:** Laddar korrekt pa mobil eftersom containern alltid ar monterad och SDK:n inte behover laddas om vid varje toggle
