@@ -1,34 +1,17 @@
 
-# Plan: FM Access 2D-ritningsintegration
 
-**Status: ✅ Implementerad**
+## Update FM Access API URL and Test Connection
 
-## Vad som implementerats
+### What we'll do
+1. Update the `FM_ACCESS_API_URL` secret from the current placeholder value (`"xx"`) to the correct URL: `https://landlord.bim.cloud`
+2. Test the connection by calling the `test-connection` action on the edge function
+3. Verify that token retrieval and version ID fetching work correctly
 
-### Edge function (fm-access-query)
-- Ny action `get-viewer-url`: Hämtar OAuth-token + versionId, bygger autentiserad viewer-URL
-- Ny action `get-floors`: Hämtar våningsplan via byggnadens FMGUID
+### Why
+The FM Access integration is fully configured except for the API base URL, which is currently set to a placeholder. Once updated, the `/fm-access` dashboard and the 2D viewer mode should work end-to-end.
 
-### FmAccess2DPanel (src/components/viewer/FmAccess2DPanel.tsx)
-- Iframe-embed av FM Access 2D-viewer
-- Hämtar autentiserad URL via edge function
-- Laddningsindikator + felhantering
+### Technical details
+- Use the `add_secret` tool to update `FM_ACCESS_API_URL` to `https://landlord.bim.cloud`
+- Call the `fm-access-query` edge function with `{"action": "test-connection"}` to verify
+- No code changes are needed -- the edge function already uses this secret correctly
 
-### UnifiedViewer (src/pages/UnifiedViewer.tsx)
-- ViewMode utökad med `'2d'`
-- 2D-knapp i toolbar (desktop + mobil) — visas om `building_external_links` har `system_name='fm_access'`
-- FmAccess2DPanel renderas i 2D-läge
-
-### FmAccessDashboard (src/pages/FmAccessDashboard.tsx)
-- Separat sida med ritningar och dokument från FM Access
-- Route: `/fm-access?building=<fmGuid>`
-
-### Navigation
-- FM Access tillagd i AppSidebar
-- Route `/fm-access` registrerad i App.tsx
-- "2D Ritning"-knapp i QuickActions
-
-## Kvarvarande osäkerheter
-- Viewer-URL-format behöver verifieras mot FM Access API
-- Iframe-autentisering kan kräva cookie/session istället för token i URL
-- X-Frame-Options kan blockera iframe-embed
