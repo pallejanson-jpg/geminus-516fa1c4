@@ -1,0 +1,1 @@
+ALTER TABLE public.building_settings ADD COLUMN fm_access_building_guid text;

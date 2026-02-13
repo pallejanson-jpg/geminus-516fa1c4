@@ -54,6 +54,7 @@ const UnifiedViewerContent: React.FC<{
   const buildingFmGuid = searchParams.get('building');
   const entityFmGuid = searchParams.get('entity');
   const floorFmGuid = searchParams.get('floor');
+  const floorName = searchParams.get('floorName') || '';
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -434,7 +435,12 @@ const UnifiedViewerContent: React.FC<{
         {/* 2D mode: FM Access panel */}
         {is2DMode && (hasFmAccess || floorFmGuid) && buildingData && (
           <div className="absolute inset-0 z-10">
-            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} floorId={floorFmGuid || undefined} />
+            <FmAccess2DPanel
+              buildingFmGuid={buildingData.fmGuid}
+              floorId={floorFmGuid || undefined}
+              floorName={floorName || undefined}
+              fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
+            />
           </div>
         )}
 
@@ -572,8 +578,11 @@ function MobileUnifiedViewer({
         {/* 2D panel — FM Access */}
         {hasFmAccess && (
           <div style={{ display: activePanel === '2d' ? 'block' : 'none', position: 'absolute', inset: 0, height: '100%' }}>
-            <FmAccess2DPanel buildingFmGuid={buildingData.fmGuid} />
-          </div>
+              <FmAccess2DPanel
+                buildingFmGuid={buildingData.fmGuid}
+                fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
+              />
+            </div>
         )}
 
         {/* 360 SDK container — always mounted if hasIvion, uses shared useIvionSdk from parent */}
