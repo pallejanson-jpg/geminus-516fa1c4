@@ -1,65 +1,50 @@
 
 
-## Vertical Color Scale Legend Bar with Interactive Selection
+## Fix Mobile Visualization Menu and Legend Bar
 
-### Overview
-Add a vertical color scale bar (inspired by the weather map temperature bar in the reference image) that appears on the left side of the 3D viewer when room visualization is active. Each value label on the bar is clickable -- clicking selects/highlights all rooms in the model that have that value.
+### Problem Summary
+Three issues on mobile:
+1. **Right-side visualization menu hard to close** -- "double graphics" and no way to tap outside to dismiss
+2. **Legend bar is horizontal instead of vertical** -- it's rendered inside the Sheet/panel, constrained by parent width
+3. **Legend bar disappears when menu closes** -- it only exists as a child of `RoomVisualizationPanel`, so closing the Sheet hides it
 
-### Design
+### Solution
 
-The bar will be a tall, narrow vertical gradient strip with value labels at each color stop. It mimics the style of the floating floor switcher (semi-transparent, dark background, positioned along the left edge of the viewer). It will be visible only when a visualization type is active (temperature, CO2, humidity, occupancy, area).
+#### 1. Make the right panel closeable by tapping outside (mobile only)
+- Change `ViewerRightPanel`'s `Sheet` from `modal={false}` to `modal={true}` on mobile devices only
+- This adds a backdrop overlay that, when tapped, closes the panel automatically
+- On desktop, keep `modal={false}` so the 3D viewer remains interactive while the panel is open
 
-```text
- +--------+
- | 30  °C |  <- red
- |        |
- | 26     |
- |        |  <- gradient
- | 22     |
- |        |
- | 20     |  <- green
- |        |
- | 18     |
- |        |  <- blue
- | 16     |
- +--------+
-```
+#### 2. Move the legend bar OUT of RoomVisualizationPanel
+- The legend bar is currently rendered as a child of `RoomVisualizationPanel`, which sits inside the Sheet
+- Move it to `AssetPlusViewer.tsx` as a sibling of the floor carousel and other floating overlays
+- It will read the visualization state from localStorage (already persisted) and listen for visualization change events
+- Position it on the **left side of the viewer**, vertically centered -- same area where the floor pills are
 
-Each labeled row is clickable. Clicking "20" (green) selects all rooms with temperature around 20 degrees in the 3D model.
-
-### Changes
-
-**1. New component: `src/components/viewer/VisualizationLegendBar.tsx`**
-
-- Renders a vertical bar with the gradient from the active visualization config
-- Displays value labels at each color stop position
-- Clickable labels: on click, finds all rooms whose value falls within the range of that stop and selects them in the 3D viewer (using `scene.setObjectsSelected`)
-- Positioned fixed on the left side of the viewer, vertically centered
-- Semi-transparent frosted glass style matching existing panels
-- Shows the unit label at the top (e.g., "°C", "ppm", "%", "m2")
-- Props: `viewerRef`, `visualizationType`, `rooms` (room data with sensor values), `useMockData`, `onRoomSelect` callback
-
-**2. Modify: `src/components/viewer/RoomVisualizationPanel.tsx`**
-
-- Export the current `rooms`, `visualizationType`, `useMockData` state so the legend bar can access them
-- Alternatively, render the `VisualizationLegendBar` directly inside this component (simpler approach)
-- Add a custom event (`VISUALIZATION_LEGEND_SELECT`) that the legend bar dispatches when a value is clicked
-- On receiving the event, iterate rooms, find those matching the clicked value range, and call `scene.setObjectsSelected(ids, true)` on their entity IDs
-
-**3. Selection logic (inside VisualizationLegendBar or RoomVisualizationPanel)**
-
-When a color stop value is clicked:
-1. Determine the value range: halfway between the previous stop and next stop
-2. Filter rooms whose sensor value falls within that range
-3. Deselect all previously selected objects: `scene.setObjectsSelected(scene.selectedObjectIds, false)`
-4. Select matching room entities: for each matching room, get entity IDs from cache and call `scene.setObjectsSelected(ids, true)`
-5. Optionally flash/highlight to give visual feedback
+#### 3. Keep the legend bar visible independently
+- Create a lightweight wrapper that reads `visualizationType` and `useMockData` from localStorage
+- Listen for a new custom event (`VISUALIZATION_STATE_CHANGED`) dispatched by `RoomVisualizationPanel` whenever the type or mock toggle changes
+- Render `VisualizationLegendBar` in the main viewer overlay layer, independent of the Sheet open/close state
+- The legend bar already has correct vertical layout code (`flex-col`, fixed `height`), it just needs to be outside the Sheet's width constraint
 
 ### Technical Details
 
-- The vertical gradient uses CSS `linear-gradient(to top, ...)` (bottom = min, top = max) matching the weather bar orientation
-- Color stops are taken directly from `VISUALIZATION_CONFIGS` in `visualization-utils.ts`
-- Room value lookup reuses existing `extractSensorValue` / `generateMockSensorData` functions
-- Entity ID resolution reuses the existing `entityIdCache` and `getItemIdsByFmGuid` from RoomVisualizationPanel
-- The bar is rendered as a sibling to the IoTHoverLabel, inside RoomVisualizationPanel, so it has access to all needed state
-- On mobile, the bar is slightly smaller and positioned to avoid overlap with floor pills
+**File changes:**
+
+1. **`src/components/viewer/RoomVisualizationPanel.tsx`**
+   - Remove the `VisualizationLegendBar` rendering from both embedded and floating modes
+   - Dispatch a `VISUALIZATION_STATE_CHANGED` custom event when `visualizationType` or `useMockData` changes, carrying the current rooms, type, and mock flag
+
+2. **`src/components/viewer/AssetPlusViewer.tsx`**
+   - Import `VisualizationLegendBar`
+   - Add state listeners for `VISUALIZATION_STATE_CHANGED` to track active visualization type, rooms, and mock flag
+   - Render the legend bar in the floating overlay area (alongside floor carousel), positioned left, vertically centered
+   - The legend bar will be visible whenever a visualization type is active, regardless of whether the right panel is open
+
+3. **`src/components/viewer/ViewerRightPanel.tsx`**
+   - On mobile: set `modal={true}` on the Sheet so tapping the backdrop area closes it
+   - On desktop: keep `modal={false}` for uninterrupted 3D interaction
+
+4. **`src/components/viewer/VisualizationLegendBar.tsx`**
+   - No layout changes needed -- the vertical layout already works, it was just being constrained by its Sheet parent
+
