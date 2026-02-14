@@ -1,55 +1,55 @@
 
 
-## Plan: Improved FmAccess2DPanel Fallback + Fix Nameless Storeys
+## Fix: 2D FMA Blank Screen + 360 UI Cleanup
 
-### Part 1: Better Fallback View in FmAccess2DPanel
+### Problem 1: 2D FMA Shows Nothing
 
-**File: `src/components/viewer/FmAccess2DPanel.tsx`**
+The edge function returns a valid URL (`https://swg-demo.bim.cloud/viewer/2d?objectId=11482&token=...`), confirmed by direct API call. The problem is in the iframe element in `FmAccess2DPanel.tsx` (line 162-169):
 
-Update the error state to display contextual information about which building and floor could not be loaded:
+```
+sandbox="allow-scripts allow-same-origin allow-popups"
+referrerPolicy="no-referrer"
+```
 
-- Show building name and floor name in the error view (e.g. "Kunde inte ladda ritning for Småviken, Plan 01")
-- Add a "Byt våning" (Change floor) button that dispatches a custom event or calls an `onChangeFloor` callback prop
-- Add a new optional `onChangeFloor` prop to the interface
-- If no `floorName` was provided, show "Ingen våning vald" (No floor selected) with the change-floor button prominently
+- `sandbox` is too restrictive: FM Access 2D viewer likely needs `allow-forms` (internal form elements) and `allow-modals` (alert/confirm dialogs).
+- `referrerPolicy="no-referrer"` may cause the FM Access server to reject the request or fail to set cookies.
 
-**File: `src/pages/UnifiedViewer.tsx`**
+**Fix (FmAccess2DPanel.tsx):**
+- Remove the `sandbox` attribute entirely (the token is already embedded in the URL, so the iframe content is authenticated).
+- Remove `referrerPolicy="no-referrer"` to allow normal referrer behavior.
 
-- Pass an `onChangeFloor` callback to `FmAccess2DPanel` in both desktop and mobile render paths. This callback switches the view mode back to 3D (where the floor switcher is available).
+### Problem 2: 360 UI Elements Too Large
 
-### Part 2: Fix Nameless Storeys Display
+The Ivion SDK renders its own UI (sidebar menu, floor selector, controls) inside the `<ivion>` element. These can be resized with CSS injected into the SDK container.
 
-The root cause is that Asset+ returns storeys where both `commonName` and `designation` are null. This is source data and cannot be changed in the sync. However, we can improve how these are displayed.
+**Fix (Ivion360View.tsx):**
+- After SDK reports `ready`, inject a `<style>` element into the `<ivion>` shadow DOM or container that scales down the SDK's UI controls (e.g., sidebar width, button sizes).
+- Use CSS to target known Ivion UI classes/elements and reduce their size with `transform: scale(0.8)` or direct size overrides.
 
-**File: `src/context/AppContext.tsx`** (in `buildNavigatorTree`)
+### Problem 3: Login Screen Visible During 360 Loading
 
-When building storey nodes, if both `commonName` and `name` are null, try to derive a name from the rooms underneath by looking at room designation patterns (e.g. rooms "01.2.095", "01.2.082B" share prefix "01.2" which could indicate a floor identifier). If no pattern can be derived, use "Våning (okänt namn)" instead of "(unnamed)".
+When the SDK initializes with a `loginToken`, it briefly shows its own login page before auto-authentication completes. This looks unprofessional.
 
-Alternatively, simpler approach: check if a storey has `attributes.designation` or `attributes.levelNumber` that could be used. From the database query, the attributes for the null-name storeys show `levelNumber: null` and `designation: null`, so we need the pattern-based approach or a simple fallback.
-
-**Simpler approach chosen**: Since these storeys genuinely have no name in the source system, we'll use the `parentCommonName` from attributes (which is "A-modell") combined with an index to generate a display name like "A-modell (våning 1)", or simply show "Namnlös våning" with the count of rooms underneath as context.
-
-**File: `src/components/navigator/TreeNode.tsx`**
-
-No change needed here - the label fallback `(unnamed)` is fine as a last resort but will be avoided by the AppContext fix.
+**Fix (Ivion360View.tsx + UnifiedViewer.tsx):**
+- Hide the `<ivion>` element (via `visibility: hidden` or `opacity: 0`) until `sdkStatus === 'ready'`.
+- Show our own loading spinner overlay during this time (already partially implemented at line 519-534 of Ivion360View.tsx, but the underlying `<ivion>` element is still visible behind the semi-transparent overlay).
+- Change the loading overlay from `bg-background/80` (semi-transparent) to `bg-background` (fully opaque) to completely cover the SDK's login screen.
+- In `UnifiedViewer.tsx`, apply the same logic to the SDK container div — set `opacity: 0` until `sdkStatus === 'ready'`.
 
 ### Technical Details
 
-**FmAccess2DPanel.tsx changes:**
-- Add `onChangeFloor?: () => void` to `FmAccess2DPanelProps`
-- In the error render block, add contextual text: building name, floor name
-- Add "Byt våning" button that calls `onChangeFloor`
-- Add a "no floor selected" state when `floorId` and `floorName` are both empty
+**File: `src/components/viewer/FmAccess2DPanel.tsx`**
+- Line 162-169: Remove `sandbox` and `referrerPolicy` from the `<iframe>` element.
 
-**AppContext.tsx changes (buildNavigatorTree):**
-- After building the storey map (around line 410-414), iterate storeys that have no `commonName` and no `name`
-- Attempt to use `attributes.parentCommonName` + a numeric suffix as the display name
-- Fallback to "Namnlos vaning" with child count hint
+**File: `src/components/viewer/Ivion360View.tsx`**
+- Line 520: Change loading overlay background from `bg-background/80` to `bg-background` (fully opaque, hides login screen).
+- Line 551-555: Add `opacity: 0` / `transition` to SDK container div when `sdkStatus !== 'ready'`, so the login flash is invisible.
+- Add a `useEffect` after SDK ready that injects CSS to shrink Ivion UI elements (sidebar, buttons, floor switcher) using `transform: scale(0.85)` or equivalent size reductions.
 
-**UnifiedViewer.tsx changes:**
-- In both desktop and mobile `FmAccess2DPanel` instances, pass `onChangeFloor` callback that sets `viewMode` back to `'3d'`
+**File: `src/pages/UnifiedViewer.tsx`**
+- Line 408-419: Add `opacity: 0` style to the SDK container div when `sdkStatus !== 'ready'`, with a smooth transition to `opacity: 1` when ready.
 
 ### Files Changed
-- `src/components/viewer/FmAccess2DPanel.tsx` -- enhanced error/fallback UI
-- `src/pages/UnifiedViewer.tsx` -- pass onChangeFloor callback
-- `src/context/AppContext.tsx` -- derive names for nameless storeys
+- `src/components/viewer/FmAccess2DPanel.tsx` — remove sandbox/referrerPolicy
+- `src/components/viewer/Ivion360View.tsx` — opaque loader, hide SDK during init, shrink UI
+- `src/pages/UnifiedViewer.tsx` — hide SDK container during loading
