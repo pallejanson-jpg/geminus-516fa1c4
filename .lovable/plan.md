@@ -1,55 +1,39 @@
 
 
-## Fix: 2D FMA Blank Screen + 360 UI Cleanup
+## Make 3D Tree Panel Clearer and Larger
 
-### Problem 1: 2D FMA Shows Nothing
+The tree panel in the 3D viewer (`ViewerTreePanel.tsx`) currently uses very compact sizing that makes it hard to interact with, especially checkboxes and expand arrows. This plan increases element sizes throughout the `TreeNodeComponent`.
 
-The edge function returns a valid URL (`https://swg-demo.bim.cloud/viewer/2d?objectId=11482&token=...`), confirmed by direct API call. The problem is in the iframe element in `FmAccess2DPanel.tsx` (line 162-169):
+### Changes in `src/components/viewer/ViewerTreePanel.tsx`
 
-```
-sandbox="allow-scripts allow-same-origin allow-popups"
-referrerPolicy="no-referrer"
-```
+**1. Row padding and text size (line 183)**
+- Change `py-0.5 sm:py-1 px-0.5 sm:px-1` to `py-1 sm:py-1.5 px-1 sm:px-1.5`
+- Change `text-xs sm:text-sm` to `text-sm`
+- Increase indent multiplier from `level * 10` to `level * 14`
 
-- `sandbox` is too restrictive: FM Access 2D viewer likely needs `allow-forms` (internal form elements) and `allow-modals` (alert/confirm dialogs).
-- `referrerPolicy="no-referrer"` may cause the FM Access server to reject the request or fail to set cookies.
+**2. Checkbox size (lines 196-199)**
+- Change `h-3.5 w-3.5 sm:h-4 sm:w-4` to `h-4 w-4 sm:h-5 sm:w-5`
 
-**Fix (FmAccess2DPanel.tsx):**
-- Remove the `sandbox` attribute entirely (the token is already embedded in the URL, so the iframe content is authenticated).
-- Remove `referrerPolicy="no-referrer"` to allow normal referrer behavior.
+**3. Expand/collapse chevron (lines 210-223)**
+- Change button padding from `p-0.5` to `p-1`
+- Change chevron icon from `h-2.5 w-2.5 sm:h-3 sm:w-3` to `h-3.5 w-3.5 sm:h-4 sm:w-4`
+- Increase spacer width from `w-3 sm:w-4` to `w-5 sm:w-6`
 
-### Problem 2: 360 UI Elements Too Large
+**4. Type icon size (line 102-119)**
+- Change all `getTypeIcon` icons from `h-3.5 w-3.5` to `h-4 w-4`
 
-The Ivion SDK renders its own UI (sidebar menu, floor selector, controls) inside the `<ivion>` element. These can be resized with CSS injected into the SDK container.
+**5. Node name text (line 234)**
+- Change from `text-[11px] sm:text-sm` to `text-sm`
 
-**Fix (Ivion360View.tsx):**
-- After SDK reports `ready`, inject a `<style>` element into the `<ivion>` shadow DOM or container that scales down the SDK's UI controls (e.g., sidebar width, button sizes).
-- Use CSS to target known Ivion UI classes/elements and reduce their size with `transform: scale(0.8)` or direct size overrides.
+**6. Badges (lines 241-249)**
+- Change type badge from `text-[9px] sm:text-[10px] h-3.5 sm:h-4` to `text-[10px] sm:text-xs h-4 sm:h-5`
+- Same for descendant count badge
 
-### Problem 3: Login Screen Visible During 360 Loading
+### Summary of Visual Impact
+- Row height increases from ~24px to ~32px
+- Checkboxes grow from 14/16px to 16/20px -- much easier to tap/click
+- Chevron arrows grow from 10/12px to 14/16px -- clearly visible
+- Text becomes consistently `text-sm` (14px) instead of 11px on mobile
+- Indentation spacing widens for clearer hierarchy
 
-When the SDK initializes with a `loginToken`, it briefly shows its own login page before auto-authentication completes. This looks unprofessional.
-
-**Fix (Ivion360View.tsx + UnifiedViewer.tsx):**
-- Hide the `<ivion>` element (via `visibility: hidden` or `opacity: 0`) until `sdkStatus === 'ready'`.
-- Show our own loading spinner overlay during this time (already partially implemented at line 519-534 of Ivion360View.tsx, but the underlying `<ivion>` element is still visible behind the semi-transparent overlay).
-- Change the loading overlay from `bg-background/80` (semi-transparent) to `bg-background` (fully opaque) to completely cover the SDK's login screen.
-- In `UnifiedViewer.tsx`, apply the same logic to the SDK container div — set `opacity: 0` until `sdkStatus === 'ready'`.
-
-### Technical Details
-
-**File: `src/components/viewer/FmAccess2DPanel.tsx`**
-- Line 162-169: Remove `sandbox` and `referrerPolicy` from the `<iframe>` element.
-
-**File: `src/components/viewer/Ivion360View.tsx`**
-- Line 520: Change loading overlay background from `bg-background/80` to `bg-background` (fully opaque, hides login screen).
-- Line 551-555: Add `opacity: 0` / `transition` to SDK container div when `sdkStatus !== 'ready'`, so the login flash is invisible.
-- Add a `useEffect` after SDK ready that injects CSS to shrink Ivion UI elements (sidebar, buttons, floor switcher) using `transform: scale(0.85)` or equivalent size reductions.
-
-**File: `src/pages/UnifiedViewer.tsx`**
-- Line 408-419: Add `opacity: 0` style to the SDK container div when `sdkStatus !== 'ready'`, with a smooth transition to `opacity: 1` when ready.
-
-### Files Changed
-- `src/components/viewer/FmAccess2DPanel.tsx` — remove sandbox/referrerPolicy
-- `src/components/viewer/Ivion360View.tsx` — opaque loader, hide SDK during init, shrink UI
-- `src/pages/UnifiedViewer.tsx` — hide SDK container during loading
+No other files need to change -- all modifications are within `ViewerTreePanel.tsx`.
