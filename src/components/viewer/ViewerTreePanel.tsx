@@ -102,21 +102,21 @@ const getDisplayName = (metaObject: any, siblingIndex?: number): string => {
 const getTypeIcon = (type: string) => {
   const typeLower = type?.toLowerCase() || '';
   if (typeLower.includes('site') || typeLower.includes('project')) {
-    return <Building2 className="h-3.5 w-3.5 text-emerald-500" />;
+    return <Building2 className="h-4 w-4 text-emerald-500" />;
   }
   if (typeLower.includes('building') && !typeLower.includes('storey')) {
-    return <Building2 className="h-3.5 w-3.5 text-blue-500" />;
+    return <Building2 className="h-4 w-4 text-blue-500" />;
   }
   if (typeLower.includes('storey') || typeLower.includes('floor')) {
-    return <Layers className="h-3.5 w-3.5 text-amber-500" />;
+    return <Layers className="h-4 w-4 text-amber-500" />;
   }
   if (typeLower.includes('space') || typeLower.includes('room')) {
-    return <DoorOpen className="h-3.5 w-3.5 text-green-500" />;
+    return <DoorOpen className="h-4 w-4 text-green-500" />;
   }
   if (typeLower.includes('wall') || typeLower.includes('slab') || typeLower.includes('roof')) {
-    return <Box className="h-3.5 w-3.5 text-gray-500" />;
+    return <Box className="h-4 w-4 text-gray-500" />;
   }
-  return <Package className="h-3.5 w-3.5 text-purple-500" />;
+  return <Package className="h-4 w-4 text-purple-500" />;
 };
 
 // Get short type label
@@ -180,12 +180,12 @@ const TreeNodeComponent = React.memo<{
     <div>
       <div
         className={cn(
-          "flex items-center gap-0.5 sm:gap-1 py-0.5 sm:py-1 px-0.5 sm:px-1 rounded cursor-pointer text-xs sm:text-sm transition-colors",
+          "flex items-center gap-1 py-1 sm:py-1.5 px-1 sm:px-1.5 rounded cursor-pointer text-sm transition-colors",
           "hover:bg-accent/50 active:bg-accent/60",
           isSelected && "bg-accent text-accent-foreground",
           searchQuery && matchesSearch && "bg-yellow-500/20"
         )}
-        style={{ paddingLeft: `${level * 10 + 2}px` }}
+        style={{ paddingLeft: `${level * 14 + 2}px` }}
         onClick={() => onSelect(node)}
         onMouseEnter={() => onHover(node.id)}
         onMouseLeave={() => onHover(null)}
@@ -195,7 +195,7 @@ const TreeNodeComponent = React.memo<{
           <Checkbox
             checked={node.visible && !node.indeterminate}
             className={cn(
-              "h-3.5 w-3.5 sm:h-4 sm:w-4 mr-0.5",
+              "h-4 w-4 sm:h-5 sm:w-5 mr-0.5",
               node.indeterminate && "data-[state=checked]:bg-muted data-[state=checked]:text-muted-foreground"
             )}
             onClick={(e) => e.stopPropagation()}
@@ -214,16 +214,16 @@ const TreeNodeComponent = React.memo<{
               onToggle(node.id);
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="p-0.5 hover:bg-muted rounded shrink-0"
+            className="p-1 hover:bg-muted rounded shrink-0"
           >
             {isExpanded ? (
-              <ChevronDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+              <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             ) : (
-              <ChevronRight className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             )}
           </button>
         ) : (
-          <span className="w-3 sm:w-4" />
+          <span className="w-5 sm:w-6" />
         )}
         
         {/* Type icon */}
@@ -231,20 +231,20 @@ const TreeNodeComponent = React.memo<{
         
         {/* Name */}
         <span className={cn(
-          "truncate flex-1 min-w-0 text-[11px] sm:text-sm",
+          "truncate flex-1 min-w-0 text-sm",
           !node.visible && "text-muted-foreground line-through"
         )}>
           {node.name}
         </span>
         
         {/* Type badge - hidden on mobile */}
-        <Badge variant="outline" className="hidden sm:inline-flex text-[9px] sm:text-[10px] px-1 py-0 h-3.5 sm:h-4 shrink-0">
+        <Badge variant="outline" className="hidden sm:inline-flex text-[10px] sm:text-xs px-1 py-0 h-4 sm:h-5 shrink-0">
           {getTypeLabel(node.type)}
         </Badge>
 
         {/* Descendant count for expandable nodes */}
         {hasChildren && descendantCount > 0 && (
-          <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0 h-3.5 sm:h-4 shrink-0">
+          <Badge variant="secondary" className="text-[10px] sm:text-xs px-0.5 sm:px-1 py-0 h-4 sm:h-5 shrink-0">
             {descendantCount}
           </Badge>
         )}
