@@ -12,6 +12,7 @@ interface FmAccess2DPanelProps {
   floorId?: string;
   floorName?: string;
   fmAccessBuildingGuid?: string;
+  buildingName?: string;
   className?: string;
 }
 
@@ -20,6 +21,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   floorId,
   floorName,
   fmAccessBuildingGuid,
+  buildingName,
   className = '',
 }) => {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -41,6 +43,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
             floorId: floorId || '',
             floorName: floorName || '',
             fmAccessBuildingGuid: fmAccessBuildingGuid || '',
+            buildingName: buildingName || '',
           },
         });
 
@@ -68,7 +71,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
     fetchViewerUrl();
     return () => { cancelled = true; };
-  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid]);
+  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName]);
 
   if (loading) {
     return (
