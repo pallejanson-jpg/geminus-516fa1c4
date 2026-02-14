@@ -126,7 +126,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
                             {/* 3D Viewer quick link */}
                             <div className="grid grid-cols-4 gap-3 text-center">
                                 <AppButton
-                                    onClick={() => { navigate('/viewer'); setIsMobileMenuOpen(false); }}
+                                    onClick={() => { navigate('/split-viewer?mode=3d'); setIsMobileMenuOpen(false); }}
                                     variant="ghost"
                                     className={`flex-col !h-auto !w-auto !p-2 ${t.textSec}`}
                                 >
