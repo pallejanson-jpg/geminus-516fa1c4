@@ -24,6 +24,16 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Auto-recover from stale module chunk failures (Safari/iPhone cache issue)
+      window.addEventListener('error', function(e) {
+        if (e.message && e.message.includes('Importing a module script failed') && !sessionStorage.getItem('_mr')) {
+          sessionStorage.setItem('_mr', '1');
+          window.location.reload();
+        }
+      });
+      window.addEventListener('load', function() { sessionStorage.removeItem('_mr'); });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Asset+ 3D Viewer Library -->
     <script src="/lib/assetplus/assetplusviewer.umd.min.js"></script>
