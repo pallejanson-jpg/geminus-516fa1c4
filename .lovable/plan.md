@@ -1,85 +1,52 @@
 
 
-## Skapa arende i FMA+ (intern vy med flytande arendeknapp)
+## Visa alla appar i mobilmenyn
 
-### Oversikt
-Nar anvandaren klickar pa FMA+ i sidomenyn oppnas FM Access-webbklienten som en **intern iframe-vy** (inte i ny flik). Ovanpa iframen visas en flytande "Skapa arende"-knapp (FAB). Nar den klickas oppnas den beprövade `CreateIssueDialog` med metadata om vilken sida/objekt anvandaren tittade pa. Arendet sparas i `bcf_issues`.
+### Problem
+Mobilmenyn (`MobileNav`) har en **hårdkodad** lista med bara 8 knappar och tar bara 1 app från `DEFAULT_APP_CONFIGS`. Sidomenyn (`LeftSidebar`) visar alla 9 appar dynamiskt via `sidebarOrder`. Appar som Felanmälan, Insights, FMA+, Asset+, IoT+, OA+ och 360+ saknas helt i mobilmenyn.
 
-Samma logik lags aven till i `FmAccess2DPanel` sa att det ar forberett nar 2D-vyn fungerar.
+### Losning
+Skriv om `MobileNav` sa att den anvander samma dynamiska `sidebarOrder` och `SIDEBAR_ITEM_META` som `LeftSidebar`. Alla appar visas i ett scrollbart grid med avdelare pa samma stallen som i sidomenyn.
 
 ### Andringar
 
-**1. Ny komponent: `src/components/viewer/FmAccessIssueOverlay.tsx`**
+**`src/components/layout/MobileNav.tsx`**
+- Ta bort alla hardkodade knappar (Home, Portfolio, Navigator, Map, 3D Viewer, Inventering, AI Skanning, etc.)
+- Importera `getSidebarOrder` fran `AppMenuSettings` och `SIDEBAR_ITEM_META` (eller definiera en lokal kopia)
+- Rendera dynamiskt:
+  1. **Rad 1 (alltid synlig):** Home, Portfolio, Navigator, Map -- dessa ar "core navigation" som inte ar appar i sidomenyn
+  2. **Rad 2:** 3D Viewer-knapp (navigerar till `/viewer`)
+  3. **Avdelare**
+  4. **Alla appar fran `sidebarOrder`:** renderas i ett `grid-cols-4` grid med samma ikoner, farger och etiketter som sidomenyn. Avdelare renderas dar `hasDividerAfter === true`
+- Gor panelen scrollbar (`overflow-y-auto`, `max-h-[70dvh]`) sa att alla appar syns aven pa sma skarmar
+- Behall samma glasmorfism-stil, slide-up-animation och tap-outside-to-close
 
-En delad overlay-komponent som renderas ovanpa vilken FM Access-iframe som helst (bade FMA+-dashboarden och 2D-panelen). Den innehaller:
-- En flytande knapp (FAB) med `MessageSquarePlus`-ikon och texten "Skapa arende"
-- Positionerad langst ned till hoger, ovanfor safe-area pa mobil
-- Glasmorfism-stil (semi-transparent, backdrop-blur) som matchar ovriga floating panels
-- Pa klick: oppnar `CreateIssueDialog`
-- Metadata som skickas med arendet:
-  - `building_fm_guid` (fran props)
-  - `building_name` (fran props)
-  - `viewpoint_json`: `{ source: 'fm_access', floorId, floorName }` (2D-specifikt, eller `{ source: 'fma_plus', url }` for FMA+)
-  - Ingen screenshot (CORS blockerar iframe-innehall) -- arendet skapas utan bild men med full kontext
+### Resultat
+- Alla 9 appar + core navigation syns i mobilmenyn
+- Ordningen foljer `sidebarOrder` (samma som desktop-sidomenyn)
+- Avdelare visas pa samma stallen
+- Scrollbart om innehallet ar for langt for skarmen
 
-Props:
-```typescript
-interface FmAccessIssueOverlayProps {
-  buildingFmGuid: string;
-  buildingName?: string;
-  source: 'fma_plus' | '2d_fm_access';
-  contextMetadata?: Record<string, any>; // floorId, floorName, url, etc.
-}
-```
+### Tekniska detaljer
 
-**2. Ny intern vy: `src/components/viewer/FmaInternalView.tsx`**
-
-En fullskarms intern vy som renderas nar `activeApp === 'fma_plus'` och `openMode !== 'external'`. Den:
-- Embeddar FM Access webbklient i en iframe (URL fran `appConfigs.fma_plus.url`)
-- Rendererar `FmAccessIssueOverlay` ovanpa iframen
-- Visar en laddningsindikator medans iframen laddar
-- Pa mobil: fullskarm utan header (laggs till i `IMMERSIVE_APPS`-listan i AppLayout)
-- Pa desktop: fyller hela main content-omradet
-
-**3. Uppdatera `src/components/layout/MainContent.tsx`**
-
-Lagg till ett `case 'fma_plus'` i renderContent-switchsatsen:
-- Rendera `FmaInternalView` med URL och byggnadsdata fran `appConfigs`
-- Lazy-ladda komponenten for prestanda
-
-**4. Uppdatera `src/components/layout/LeftSidebar.tsx`**
-
-Andringen ar minimal -- nar `openMode === 'internal'` (eller saknas) sa anropas `setActiveApp('fma_plus')` som redan fungerar. Logiken finns redan pa plats. Standardvardet for `openMode` i `DEFAULT_APP_CONFIGS` andras fran `'external'` till `'internal'` sa att FMA+ oppnas internt som standard.
-
-**5. Uppdatera `src/lib/constants.ts`**
-
-Andra `fma_plus.openMode` fran `'external'` till `'internal'` i `DEFAULT_APP_CONFIGS`.
-
-**6. Uppdatera `src/components/viewer/FmAccess2DPanel.tsx`**
-
-Lagg till `FmAccessIssueOverlay` ovanpa iframen nar `phase === 'ready'`. Den visas langst ned till hoger med kontext om aktuell vaning och byggnad. Forberett for nar 2D-vyn fungerar.
-
-### Flode
+Strukturen i den nya MobileNav:
 
 ```text
-Anvandare klickar FMA+ i sidomenyn
-  -> MainContent renderar FmaInternalView
-     -> iframe laddar FM Access URL
-     -> FmAccessIssueOverlay visas ovanpa (FAB-knapp)
-        -> Klick pa FAB -> CreateIssueDialog oppnas
-           -> Anvandare fyller i titel/beskrivning/typ/prioritet
-           -> Spara -> insert i bcf_issues med source-metadata
-           -> Arendet syns i arendelistan i 3D-viewern
++----------------------------------+
+|                        [X]       |
++----------------------------------+
+| Home  | Portfolio | Nav  | Map   |   <- Core navigation (alltid)
++----------------------------------+
+| 3D Viewer                        |   <- Snabblank
++------ avdelare ------------------+
+| Inventering | AI Scan | Felanm.  | Insights |   <- Fran sidebarOrder
++------ avdelare (om hasDividerAfter) --------+
+| FMA+  | Asset+ | IoT+ | OA+     |
+| 360+  |        |       |        |
++----------------------------------+
 ```
 
-### Mobil-anpassning
-- FAB-knappen har storre touch-target pa mobil (`h-12 w-12` vs `h-10 w-10`)
-- Positionerad med `env(safe-area-inset-bottom)` for att undvika systemfaltet
-- `CreateIssueDialog` anvander redan responsiv layout med `max-w-[calc(100vw-40px)]`
-- FMA+ laggs till i `IMMERSIVE_APPS` i AppLayout for att gomma header/sidebars pa mobil
+- Importera `getSidebarOrder`, `SIDEBAR_ITEM_META`-mappningen, och lyssna pa `SIDEBAR_SETTINGS_CHANGED_EVENT` for live-uppdateringar
+- Anvand `handleItemClick` fran LeftSidebar for att hantera bade `internal` och `config` (external/internal openMode) appar korrekt
+- Max-hojd `max-h-[70dvh]` med `overflow-y-auto` for scrollning pa sma skarmar
 
-### Befintlig infrastruktur som ateranvands
-- `CreateIssueDialog` -- bepropad, dragbar, responsiv
-- `bcf_issues`-tabellen -- sparar arendet med `viewpoint_json` for kontext
-- `issue-screenshots`-bucket -- anvands om screenshot lyckas (osannolikt med CORS)
-- `useAuth()` -- for `reported_by`
