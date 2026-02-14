@@ -227,7 +227,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
-                // Deep merge per app: new defaults (e.g. openMode) apply, user overrides preserved
+                // Deep merge per app: new defaults apply, user overrides preserved
                 const merged: Record<string, any> = {};
                 for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
                     merged[key] = { ...DEFAULT_APP_CONFIGS[key], ...(parsed[key] || {}) };
@@ -235,6 +235,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 for (const key of Object.keys(parsed)) {
                     if (!merged[key]) merged[key] = parsed[key];
                 }
+
+                // One-time migration: reset openMode for apps whose default changed to 'internal'
+                const migrationKey = 'appConfigs_migration_v1';
+                if (typeof window !== 'undefined' && !window.localStorage.getItem(migrationKey)) {
+                    for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
+                        if (DEFAULT_APP_CONFIGS[key].openMode === 'internal') {
+                            merged[key].openMode = 'internal';
+                        }
+                    }
+                    window.localStorage.setItem(migrationKey, '1');
+                    window.localStorage.setItem('appConfigs', JSON.stringify(merged));
+                }
+
                 return merged;
             } catch (e) {
                 return DEFAULT_APP_CONFIGS;
