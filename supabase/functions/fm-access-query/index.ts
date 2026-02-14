@@ -28,14 +28,12 @@ let versionIdCache: { versionId: string; fetchedAt: number } | null = null;
  * Get FM Access token using client_credentials grant
  */
 async function getToken(config: FmAccessConfig): Promise<string> {
-  // Check cache
   if (tokenCache && Date.now() < tokenCache.expiresAt) {
     return tokenCache.token;
   }
 
   console.log('FM Access: Fetching new token from', config.tokenUrl);
 
-  // Build token request body
   const params = new URLSearchParams();
   params.set('client_id', config.clientId);
   
@@ -69,7 +67,6 @@ async function getToken(config: FmAccessConfig): Promise<string> {
 
   const data = await response.json() as TokenResponse;
   
-  // Cache token (with 60 second buffer before expiry)
   tokenCache = {
     token: data.access_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
@@ -83,14 +80,12 @@ async function getToken(config: FmAccessConfig): Promise<string> {
  * Get FM Access system version ID (required header for most API calls)
  */
 async function getVersionId(config: FmAccessConfig, token: string): Promise<string> {
-  // Check cache (refresh every 5 minutes)
   if (versionIdCache && Date.now() - versionIdCache.fetchedAt < 5 * 60 * 1000) {
     return versionIdCache.versionId;
   }
 
   console.log('FM Access: Fetching version ID from', config.apiUrl);
 
-  // Try /api/systeminfo/json first (needs auth)
   try {
     const response = await fetch(`${config.apiUrl}/api/systeminfo/json`, {
       headers: { 'X-Authorization': `Bearer ${token}` },
@@ -100,9 +95,9 @@ async function getVersionId(config: FmAccessConfig, token: string): Promise<stri
       console.log('FM Access: systeminfo response:', JSON.stringify(data).substring(0, 500));
       const versionId = data.defaultVersion?.versionId || data.defaultVersion?.defaultVersionId || data.versionId;
       if (versionId) {
-        versionIdCache = { versionId, fetchedAt: Date.now() };
+        versionIdCache = { versionId: String(versionId), fetchedAt: Date.now() };
         console.log('FM Access: Version ID obtained:', versionId);
-        return versionId;
+        return String(versionId);
       }
     } else {
       const text = await response.text();
@@ -112,15 +107,14 @@ async function getVersionId(config: FmAccessConfig, token: string): Promise<stri
     console.log('FM Access: systeminfo error:', e.message);
   }
 
-  // If systeminfo fails, proceed without version ID
-  // The X-Hdc-Version-Id header may not be required for all endpoints
   console.log('FM Access: Could not get versionId, proceeding without it');
   versionIdCache = { versionId: '', fetchedAt: Date.now() };
   return '';
 }
 
 /**
- * Make an authenticated FM Access API call
+ * Make an authenticated FM Access API call.
+ * FIX: Only set Content-Type: application/json for non-GET requests.
  */
 async function fmAccessFetch(
   config: FmAccessConfig,
@@ -131,13 +125,17 @@ async function fmAccessFetch(
   const versionId = await getVersionId(config, token);
 
   const url = `${config.apiUrl}${path}`;
-  console.log('FM Access: Calling', url);
+  const method = (options.method || 'GET').toUpperCase();
+  console.log('FM Access: Calling', method, url);
 
   const headers: Record<string, string> = {
     ...options.headers as Record<string, string>,
     'X-Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
   };
+  // Only set Content-Type for requests that have a body
+  if (method !== 'GET' && method !== 'HEAD') {
+    headers['Content-Type'] = 'application/json';
+  }
   if (versionId) {
     headers['X-Hdc-Version-Id'] = versionId;
   }
@@ -148,8 +146,179 @@ async function fmAccessFetch(
   });
 }
 
+// ── Shared helpers for building/floor resolution ────────────────────
+
+function findNodesByClassId(nodes: any[], classId: number): any[] {
+  const results: any[] = [];
+  for (const node of nodes) {
+    if ((node.classId || node.ClassId) === classId) results.push(node);
+    const children = node.children || node.Children || [];
+    if (children.length > 0) results.push(...findNodesByClassId(children, classId));
+  }
+  return results;
+}
+
+function findDrawingUnder(node: any): any | null {
+  const children = node.children || node.Children || [];
+  for (const child of children) {
+    if ((child.classId || child.ClassId) === 106) return child;
+  }
+  for (const child of children) {
+    const found = findDrawingUnder(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findFirstDrawing(nodes: any[]): any | null {
+  for (const node of nodes) {
+    if ((node.classId || node.ClassId) === 106) return node;
+    const children = node.children || node.Children || [];
+    if (children.length > 0) {
+      const found = findFirstDrawing(children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve FM Access building GUID from perspective root if not provided.
+ * Returns the resolved GUID or null.
+ */
+async function resolveBuildingGuid(
+  config: FmAccessConfig,
+  buildingName: string,
+  buildingId?: string,
+  providedGuid?: string
+): Promise<string | null> {
+  if (providedGuid) return providedGuid;
+  if (!buildingName) return null;
+
+  console.log('FM Access: Looking up building by name:', buildingName);
+  try {
+    const rootResp = await fmAccessFetch(config, '/api/perspective/root/json/8');
+    if (!rootResp.ok) {
+      console.log('FM Access: Perspective root returned', rootResp.status);
+      return null;
+    }
+    const rootData = await rootResp.json();
+    const rootNodes = Array.isArray(rootData) ? rootData : (rootData.children || rootData.Children || [rootData]);
+
+    const normalizedName = buildingName.toLowerCase().trim();
+    let match = rootNodes.find((n: any) => {
+      const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+      return name === normalizedName;
+    });
+    if (!match) {
+      match = rootNodes.find((n: any) => {
+        const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+        return name.includes(normalizedName) || normalizedName.includes(name);
+      });
+    }
+    if (!match) {
+      const names = rootNodes.map((n: any) => n.objectName || n.ObjectName || n.name || '(unnamed)');
+      console.log('FM Access: No match for "' + buildingName + '", available:', JSON.stringify(names));
+      return null;
+    }
+
+    const guid = match.systemGuid || match.objectGuid || match.ObjectGuid || match.guid || match.Guid;
+    console.log('FM Access: Matched building:', match.objectName || match.ObjectName, '-> GUID:', guid);
+
+    // Cache resolved GUID in building_settings
+    if (buildingId && guid) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+        if (supabaseUrl && serviceRoleKey) {
+          await fetch(`${supabaseUrl}/rest/v1/building_settings?fm_guid=eq.${encodeURIComponent(buildingId)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({ fm_access_building_guid: guid }),
+          });
+        }
+      } catch (e) {
+        console.log('FM Access: Failed to cache GUID:', e.message);
+      }
+    }
+
+    return guid;
+  } catch (e) {
+    console.log('FM Access: Building lookup failed:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Resolve the drawing objectId for a given building GUID and optional floor name.
+ */
+async function resolveDrawingObjectId(
+  config: FmAccessConfig,
+  buildingGuid: string,
+  floorName?: string,
+  floorId?: string,
+  buildingId?: string
+): Promise<string | null> {
+  const lookupGuid = buildingGuid || floorId || buildingId;
+  if (!lookupGuid) return null;
+
+  console.log('FM Access: Looking up drawing for guid', lookupGuid, 'floorName:', floorName || '(none)');
+
+  const treeResp = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/8/${encodeURIComponent(lookupGuid)}`);
+  if (!treeResp.ok) {
+    const errText = await treeResp.text();
+    console.log('FM Access: perspective tree error', treeResp.status, errText.substring(0, 200));
+    return null;
+  }
+
+  const treeData = await treeResp.json();
+  const treeNodes = Array.isArray(treeData) ? treeData : (treeData.children || treeData.Children || [treeData]);
+
+  // Try floor name match first
+  if (floorName && buildingGuid) {
+    const floorNodes = findNodesByClassId(treeNodes, 105);
+    console.log('FM Access: Found', floorNodes.length, 'floor nodes (classId 105)');
+    const normalizedFloorName = floorName.toLowerCase().trim();
+
+    let matchedFloor = floorNodes.find(n => {
+      const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+      return name === normalizedFloorName;
+    });
+    if (!matchedFloor) {
+      matchedFloor = floorNodes.find(n => {
+        const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+        return name.includes(normalizedFloorName) || normalizedFloorName.includes(name);
+      });
+    }
+    if (matchedFloor) {
+      console.log('FM Access: Matched floor:', matchedFloor.objectName || matchedFloor.ObjectName);
+      const drawing = findDrawingUnder(matchedFloor);
+      if (drawing) {
+        const id = drawing.objectId || drawing.ObjectId || drawing.id || drawing.Id || null;
+        console.log('FM Access: Found drawing under floor, objectId:', id);
+        return id ? String(id) : null;
+      }
+    }
+  }
+
+  // Fallback: first drawing in tree
+  const drawingNode = findFirstDrawing(treeNodes);
+  if (drawingNode) {
+    const id = drawingNode.objectId || drawingNode.ObjectId || drawingNode.id || drawingNode.Id || null;
+    console.log('FM Access: Using fallback drawing, objectId:', id);
+    return id ? String(id) : null;
+  }
+
+  console.log('FM Access: No drawing found in perspective tree');
+  return null;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -157,7 +326,6 @@ serve(async (req) => {
   try {
     const { action, ...params } = await req.json();
 
-    // Get config from secrets
     const config: FmAccessConfig = {
       tokenUrl: Deno.env.get('FM_ACCESS_TOKEN_URL') || 'https://auth.bim.cloud/auth/realms/swg_demo/protocol/openid-connect/token',
       clientId: Deno.env.get('FM_ACCESS_CLIENT_ID') || 'HDCAgent Basic',
@@ -169,11 +337,7 @@ serve(async (req) => {
 
     if (!config.apiUrl) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'FM_ACCESS_API_URL is not configured',
-          message: 'Please configure FM Access API URL in Lovable Cloud secrets'
-        }),
+        JSON.stringify({ success: false, error: 'FM_ACCESS_API_URL is not configured' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -183,21 +347,13 @@ serve(async (req) => {
         try {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
-          
           return new Response(
-            JSON.stringify({ 
-              success: true, 
-              message: `Connected successfully. Version ID: ${versionId}`,
-              versionId,
-            }),
+            JSON.stringify({ success: true, message: `Connected. Version ID: ${versionId}`, versionId }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         } catch (error: any) {
           return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: error.message,
-            }),
+            JSON.stringify({ success: false, error: error.message }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -207,12 +363,50 @@ serve(async (req) => {
         try {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
-          
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({ success: true, token, versionId }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // ── NEW: get-embed-config — returns everything needed for iframe embedding ──
+      case 'get-embed-config': {
+        const { buildingId, floorName, fmAccessBuildingGuid, buildingName } = params;
+        try {
+          const token = await getToken(config);
+          const versionId = await getVersionId(config, token);
+
+          // Resolve building GUID
+          const resolvedGuid = await resolveBuildingGuid(config, buildingName, buildingId, fmAccessBuildingGuid);
+
+          // Resolve drawing objectId
+          let drawingObjectId: string | null = null;
+          if (resolvedGuid || buildingId) {
+            drawingObjectId = await resolveDrawingObjectId(
+              config,
+              resolvedGuid || '',
+              floorName,
+              undefined,
+              buildingId
+            );
+          }
+
+          const embedUrl = `${config.apiUrl}/client/?awaitConfig=true`;
+
+          return new Response(
+            JSON.stringify({
               success: true,
+              embedUrl,
+              apiUrl: config.apiUrl,
               token,
               versionId,
+              drawingObjectId,
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -224,92 +418,6 @@ serve(async (req) => {
         }
       }
 
-      case 'get-drawings': {
-        const { buildingId } = params;
-        if (!buildingId) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'buildingId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const response = await fmAccessFetch(config, `/api/drawings?buildingId=${encodeURIComponent(buildingId)}`);
-        const text = await response.text();
-        let data;
-        try { data = JSON.parse(text); } catch { data = null; }
-        
-        return new Response(
-          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'get-documents': {
-        const { buildingId } = params;
-        if (!buildingId) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'buildingId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const response = await fmAccessFetch(config, `/api/documents?buildingId=${encodeURIComponent(buildingId)}`);
-        const text = await response.text();
-        let data;
-        try { data = JSON.parse(text); } catch { data = null; }
-        
-        return new Response(
-          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'get-document': {
-        const { documentId } = params;
-        if (!documentId) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'documentId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const response = await fmAccessFetch(config, `/api/documents/${encodeURIComponent(documentId)}`);
-        const text = await response.text();
-        let data;
-        try { data = JSON.parse(text); } catch { data = null; }
-        
-        return new Response(
-          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'get-drawing-pdf': {
-        const { drawingId } = params;
-        if (!drawingId) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'drawingId is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Return the URL to fetch the PDF directly
-        const token = await getToken(config);
-        const versionId = await getVersionId(config, token);
-        
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            url: `${config.apiUrl}/api/drawings/${encodeURIComponent(drawingId)}/pdf`,
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'X-Hdc-Version-Id': versionId,
-            }
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       case 'get-viewer-url': {
         const { buildingId, floorId, floorName, buildingName } = params;
         let { fmAccessBuildingGuid } = params;
@@ -317,171 +425,20 @@ serve(async (req) => {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
 
-          // ── Auto-resolve FM Access building GUID via perspective root ──
-          if (!fmAccessBuildingGuid && buildingName) {
-            console.log('FM Access get-viewer-url: No fmAccessBuildingGuid, looking up building by name:', buildingName);
-            try {
-              // Fetch perspective 8 root to get all top-level buildings
-              const rootResp = await fmAccessFetch(config, '/api/perspective/root/json/8');
-              if (rootResp.ok) {
-                const rootData = await rootResp.json();
-                const rootNodes = Array.isArray(rootData) ? rootData : (rootData.children || rootData.Children || [rootData]);
-                console.log('FM Access get-viewer-url: Perspective root has', rootNodes.length, 'top-level nodes');
+          // Resolve building GUID
+          const resolvedGuid = await resolveBuildingGuid(config, buildingName, buildingId, fmAccessBuildingGuid);
+          fmAccessBuildingGuid = resolvedGuid || fmAccessBuildingGuid;
 
-                // Fuzzy match building name against top-level nodes (typically classId 104)
-                const normalizedName = buildingName.toLowerCase().trim();
-                let match = rootNodes.find((n: any) => {
-                  const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
-                  return name === normalizedName;
-                });
-                if (!match) {
-                  match = rootNodes.find((n: any) => {
-                    const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
-                    return name.includes(normalizedName) || normalizedName.includes(name);
-                  });
-                }
-                if (match) {
-                  fmAccessBuildingGuid = match.systemGuid || match.objectGuid || match.ObjectGuid || match.guid || match.Guid;
-                  console.log('FM Access get-viewer-url: Matched building node:', match.objectName || match.ObjectName, '-> GUID:', fmAccessBuildingGuid);
+          // Resolve drawing objectId
+          const drawingObjectId = await resolveDrawingObjectId(
+            config,
+            fmAccessBuildingGuid || '',
+            floorName,
+            floorId,
+            buildingId
+          );
 
-                  // Cache resolved GUID in building_settings
-                  if (buildingId && fmAccessBuildingGuid) {
-                    try {
-                      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-                      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-                      if (supabaseUrl && serviceRoleKey) {
-                        const updateResp = await fetch(`${supabaseUrl}/rest/v1/building_settings?fm_guid=eq.${encodeURIComponent(buildingId)}`, {
-                          method: 'PATCH',
-                          headers: {
-                            'apikey': serviceRoleKey,
-                            'Authorization': `Bearer ${serviceRoleKey}`,
-                            'Content-Type': 'application/json',
-                            'Prefer': 'return=minimal',
-                          },
-                          body: JSON.stringify({ fm_access_building_guid: fmAccessBuildingGuid }),
-                        });
-                        console.log('FM Access get-viewer-url: Cached GUID in building_settings, status:', updateResp.status);
-                      }
-                    } catch (cacheErr: any) {
-                      console.log('FM Access get-viewer-url: Failed to cache GUID:', cacheErr.message);
-                    }
-                  }
-                } else {
-                  console.log('FM Access get-viewer-url: No matching building found in perspective root for "' + buildingName + '"');
-                  // Log available names for debugging
-                  const names = rootNodes.map((n: any) => n.objectName || n.ObjectName || n.name || '(unnamed)');
-                  console.log('FM Access get-viewer-url: Available buildings:', JSON.stringify(names));
-                }
-              } else {
-                console.log('FM Access get-viewer-url: Perspective root returned', rootResp.status);
-              }
-            } catch (searchErr: any) {
-              console.log('FM Access get-viewer-url: Building lookup failed:', searchErr.message);
-            }
-          }
-
-          // Use FM Access building GUID if available, otherwise fall back to buildingId
-          const lookupGuid = fmAccessBuildingGuid || floorId || buildingId;
-          let drawingObjectId: string | null = null;
-
-          if (lookupGuid) {
-            const treeGuid = fmAccessBuildingGuid || lookupGuid;
-            console.log('FM Access get-viewer-url: Looking up perspective tree for guid', treeGuid, 'floorName:', floorName || '(none)');
-            
-            const treeResp = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/8/${encodeURIComponent(treeGuid)}`);
-            if (treeResp.ok) {
-              const treeData = await treeResp.json();
-              console.log('FM Access get-viewer-url: perspective tree response length', JSON.stringify(treeData).length);
-
-              const treeNodes = Array.isArray(treeData) ? treeData : (treeData.children || treeData.Children || [treeData]);
-
-              // Helper: recursively find nodes by classId
-              function findNodesByClassId(nodes: any[], classId: number): any[] {
-                const results: any[] = [];
-                for (const node of nodes) {
-                  if ((node.classId || node.ClassId) === classId) results.push(node);
-                  const children = node.children || node.Children || [];
-                  if (children.length > 0) results.push(...findNodesByClassId(children, classId));
-                }
-                return results;
-              }
-
-              // Helper: find first drawing (classId 106) under a node
-              function findDrawingUnder(node: any): any | null {
-                const children = node.children || node.Children || [];
-                for (const child of children) {
-                  if ((child.classId || child.ClassId) === 106) return child;
-                }
-                // Recurse deeper
-                for (const child of children) {
-                  const found = findDrawingUnder(child);
-                  if (found) return found;
-                }
-                return null;
-              }
-
-              if (floorName && fmAccessBuildingGuid) {
-                // Strategy: find floor nodes (classId 105) and fuzzy-match by name
-                const floorNodes = findNodesByClassId(treeNodes, 105);
-                console.log('FM Access get-viewer-url: Found', floorNodes.length, 'floor nodes (classId 105)');
-                
-                const normalizedFloorName = floorName.toLowerCase().trim();
-                
-                // Try exact match first, then substring match
-                let matchedFloor = floorNodes.find(n => {
-                  const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
-                  return name === normalizedFloorName;
-                });
-
-                if (!matchedFloor) {
-                  matchedFloor = floorNodes.find(n => {
-                    const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
-                    return name.includes(normalizedFloorName) || normalizedFloorName.includes(name);
-                  });
-                }
-
-                if (matchedFloor) {
-                  console.log('FM Access get-viewer-url: Matched floor:', matchedFloor.objectName || matchedFloor.ObjectName);
-                  const drawing = findDrawingUnder(matchedFloor);
-                  if (drawing) {
-                    drawingObjectId = drawing.objectId || drawing.ObjectId || drawing.id || drawing.Id || null;
-                    console.log('FM Access get-viewer-url: Found drawing under matched floor, objectId:', drawingObjectId);
-                  } else {
-                    console.log('FM Access get-viewer-url: No drawing found under matched floor, trying first available');
-                  }
-                } else {
-                  console.log('FM Access get-viewer-url: No floor name match found for "' + floorName + '", trying first drawing');
-                }
-              }
-
-              // Fallback: find any drawing node in the tree
-              if (!drawingObjectId) {
-                function findFirstDrawing(nodes: any[]): any | null {
-                  for (const node of nodes) {
-                    if ((node.classId || node.ClassId) === 106) return node;
-                    const children = node.children || node.Children || [];
-                    if (children.length > 0) {
-                      const found = findFirstDrawing(children);
-                      if (found) return found;
-                    }
-                  }
-                  return null;
-                }
-                const drawingNode = findFirstDrawing(treeNodes);
-                if (drawingNode) {
-                  drawingObjectId = drawingNode.objectId || drawingNode.ObjectId || drawingNode.id || drawingNode.Id || null;
-                  console.log('FM Access get-viewer-url: Using fallback drawing, objectId:', drawingObjectId);
-                } else {
-                  console.log('FM Access get-viewer-url: No classId 106 node found in perspective tree');
-                }
-              }
-            } else {
-              const errText = await treeResp.text();
-              console.log('FM Access get-viewer-url: perspective tree error', treeResp.status, errText.substring(0, 200));
-            }
-          }
-
-          // Build viewer URL
+          // Build viewer URL (kept for backward compat, but frontend should use get-embed-config)
           let viewerUrl: string;
           if (drawingObjectId) {
             viewerUrl = `${config.apiUrl}/viewer/2d?objectId=${encodeURIComponent(drawingObjectId)}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
@@ -501,6 +458,80 @@ serve(async (req) => {
         }
       }
 
+      case 'get-drawings': {
+        const { buildingId } = params;
+        if (!buildingId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'buildingId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const response = await fmAccessFetch(config, `/api/drawings?buildingId=${encodeURIComponent(buildingId)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
+        return new Response(
+          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get-documents': {
+        const { buildingId } = params;
+        if (!buildingId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'buildingId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const response = await fmAccessFetch(config, `/api/documents?buildingId=${encodeURIComponent(buildingId)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
+        return new Response(
+          JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get-document': {
+        const { documentId } = params;
+        if (!documentId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'documentId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const response = await fmAccessFetch(config, `/api/documents/${encodeURIComponent(documentId)}`);
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
+        return new Response(
+          JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get-drawing-pdf': {
+        const { drawingId } = params;
+        if (!drawingId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'drawingId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const token = await getToken(config);
+        const versionId = await getVersionId(config, token);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            url: `${config.apiUrl}/api/drawings/${encodeURIComponent(drawingId)}/pdf`,
+            headers: { 'Authorization': `Bearer ${token}`, 'X-Hdc-Version-Id': versionId },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'get-floors': {
         const { buildingFmGuid } = params;
         if (!buildingFmGuid) {
@@ -509,12 +540,10 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
         const response = await fmAccessFetch(config, `/api/floors?buildingId=${encodeURIComponent(buildingFmGuid)}`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = null; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, data: data || [], error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -529,12 +558,10 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
         const response = await fmAccessFetch(config, `/api/object/byguid/json/${encodeURIComponent(guid)}`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -546,7 +573,6 @@ serve(async (req) => {
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -561,12 +587,10 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
         const response = await fmAccessFetch(config, `/api/search/quick?query=${encodeURIComponent(query)}`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -577,16 +601,14 @@ serve(async (req) => {
         const { guid, perspectiveId = '8' } = params;
         if (!guid) {
           return new Response(
-            JSON.stringify({ success: false, error: 'guid is required (perspectiveId defaults to 8)' }),
+            JSON.stringify({ success: false, error: 'guid is required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
         const response = await fmAccessFetch(config, `/api/perspective/byguid/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(guid)}`);
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -594,18 +616,12 @@ serve(async (req) => {
       }
 
       case 'get-buildings': {
-        // Use systeminfo as fallback - HDC FM lacks a dedicated buildings list endpoint
         const response = await fmAccessFetch(config, '/api/systeminfo/json');
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = null; }
-        
         return new Response(
-          JSON.stringify({ 
-            success: response.ok, 
-            data,
-            note: 'Use get-classes + get-perspective-tree or search-objects to find buildings.',
-          }),
+          JSON.stringify({ success: response.ok, data, note: 'Use get-perspective-tree to find buildings.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -618,7 +634,6 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
         const response = await fmAccessFetch(config, apiPath, {
           method: apiMethod || 'GET',
           ...(apiBody ? { body: JSON.stringify(apiBody) } : {}),
@@ -626,7 +641,6 @@ serve(async (req) => {
         const text = await response.text();
         let data;
         try { data = JSON.parse(text); } catch { data = text; }
-        
         return new Response(
           JSON.stringify({ success: response.ok, status: response.status, data }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

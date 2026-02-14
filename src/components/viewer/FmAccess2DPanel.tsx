@@ -1,9 +1,16 @@
 /**
- * FmAccess2DPanel — Embeds FM Access 2D viewer in an iframe.
- * Fetches an authenticated viewer URL via the fm-access-query edge function.
+ * FmAccess2DPanel — Embeds FM Access (HDC) web client in an iframe
+ * using the postMessage config protocol (awaitConfig=true).
+ *
+ * Flow:
+ * 1. Fetch embed config (token, versionId, drawingObjectId) from edge function
+ * 2. Load iframe with {apiUrl}/client/?awaitConfig=true
+ * 3. Listen for HDC_APP_READY_FOR_CONFIG postMessage
+ * 4. Respond with auth config + navigation target
+ * 5. Listen for HDC_APP_SYSTEM_READY — reveal iframe, hide loading overlay
  */
-import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Square, MapPin, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2, AlertCircle, Square, MapPin, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,6 +24,16 @@ interface FmAccess2DPanelProps {
   onChangeFloor?: () => void;
 }
 
+interface EmbedConfig {
+  embedUrl: string;
+  apiUrl: string;
+  token: string;
+  versionId: string;
+  drawingObjectId: string | null;
+}
+
+type Phase = 'idle' | 'fetching-config' | 'loading-iframe' | 'waiting-ready' | 'sending-config' | 'ready' | 'error';
+
 const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   buildingFmGuid,
   floorId,
@@ -26,32 +43,46 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   className = '',
   onChangeFloor,
 }) => {
-  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [embedConfig, setEmbedConfig] = useState<EmbedConfig | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const configSentRef = useRef(false);
 
-  // If no floor is selected at all, show a prompt instead of fetching
   const noFloorSelected = !floorId && !floorName;
 
+  // Phase labels for loading display
+  const phaseLabels: Record<Phase, string> = {
+    'idle': '',
+    'fetching-config': 'Hämtar konfiguration...',
+    'loading-iframe': 'Laddar FM Access...',
+    'waiting-ready': 'Väntar på FM Access...',
+    'sending-config': 'Konfigurerar...',
+    'ready': '',
+    'error': '',
+  };
+
+  // ── Step 1: Fetch embed config from edge function ──
   useEffect(() => {
     if (noFloorSelected) {
-      setLoading(false);
+      setPhase('idle');
       return;
     }
 
     let cancelled = false;
+    configSentRef.current = false;
 
-    async function fetchViewerUrl() {
-      setLoading(true);
+    async function fetchEmbedConfig() {
+      setPhase('fetching-config');
       setError(null);
+      setEmbedConfig(null);
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke('fm-access-query', {
           body: {
-            action: 'get-viewer-url',
+            action: 'get-embed-config',
             buildingId: buildingFmGuid,
-            floorId: floorId || '',
             floorName: floorName || '',
             fmAccessBuildingGuid: fmAccessBuildingGuid || '',
             buildingName: buildingName || '',
@@ -61,28 +92,110 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         if (cancelled) return;
 
         if (fnError) {
-          setError(fnError.message || 'Kunde inte hämta viewer-URL');
+          setError(fnError.message || 'Kunde inte hämta konfiguration');
+          setPhase('error');
           return;
         }
 
         if (!data?.success) {
           setError(data?.error || 'FM Access är inte konfigurerat');
+          setPhase('error');
           return;
         }
 
-        setViewerUrl(data.url);
+        setEmbedConfig({
+          embedUrl: data.embedUrl,
+          apiUrl: data.apiUrl,
+          token: data.token,
+          versionId: data.versionId,
+          drawingObjectId: data.drawingObjectId,
+        });
+        setPhase('loading-iframe');
       } catch (err: any) {
         if (!cancelled) {
           setError(err.message || 'Oväntat fel');
+          setPhase('error');
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     }
 
-    fetchViewerUrl();
+    fetchEmbedConfig();
     return () => { cancelled = true; };
   }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName, retryCount, noFloorSelected]);
+
+  // ── Step 2-5: Listen for postMessage events from the HDC client ──
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (!embedConfig) return;
+
+    // Validate origin
+    try {
+      const configOrigin = new URL(embedConfig.apiUrl).origin;
+      if (event.origin !== configOrigin) return;
+    } catch {
+      return;
+    }
+
+    const msgType = event.data?.type || event.data;
+
+    // HDC client is ready for config — send auth + navigation
+    if (msgType === 'HDC_APP_READY_FOR_CONFIG' && !configSentRef.current) {
+      console.log('[FmAccess2D] HDC_APP_READY_FOR_CONFIG received, sending config');
+      configSentRef.current = true;
+      setPhase('sending-config');
+
+      const configMsg: Record<string, any> = {
+        type: 'HDC_CONFIG',
+        token: embedConfig.token,
+        versionId: embedConfig.versionId ? Number(embedConfig.versionId) : undefined,
+      };
+
+      // Navigate to the drawing if we resolved one
+      if (embedConfig.drawingObjectId) {
+        configMsg.objectId = Number(embedConfig.drawingObjectId);
+      }
+
+      try {
+        const targetOrigin = new URL(embedConfig.apiUrl).origin;
+        iframeRef.current?.contentWindow?.postMessage(configMsg, targetOrigin);
+        console.log('[FmAccess2D] Config sent:', JSON.stringify(configMsg));
+      } catch (e) {
+        console.error('[FmAccess2D] postMessage failed:', e);
+      }
+
+      setPhase('waiting-ready');
+    }
+
+    // HDC client is fully loaded and ready
+    if (msgType === 'HDC_APP_SYSTEM_READY') {
+      console.log('[FmAccess2D] HDC_APP_SYSTEM_READY received');
+      setPhase('ready');
+    }
+  }, [embedConfig]);
+
+  useEffect(() => {
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
+
+  // Timeout: if we don't get HDC_APP_SYSTEM_READY within 30s, reveal iframe anyway
+  useEffect(() => {
+    if (phase !== 'waiting-ready' && phase !== 'sending-config' && phase !== 'loading-iframe') return;
+
+    const timeout = setTimeout(() => {
+      console.log('[FmAccess2D] Timeout waiting for HDC_APP_SYSTEM_READY, revealing iframe');
+      setPhase('ready');
+    }, 30000);
+
+    return () => clearTimeout(timeout);
+  }, [phase]);
+
+  // When iframe loads, update phase
+  const handleIframeLoad = useCallback(() => {
+    if (phase === 'loading-iframe') {
+      console.log('[FmAccess2D] iframe loaded, waiting for HDC_APP_READY_FOR_CONFIG');
+      setPhase('waiting-ready');
+    }
+  }, [phase]);
 
   // ─── No floor selected state ───────────────────────────────────────
   if (noFloorSelected) {
@@ -110,20 +223,8 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     );
   }
 
-  // ─── Loading state ─────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className={`flex items-center justify-center h-full bg-background ${className}`}>
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Laddar 2D-ritning...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Error state with contextual info ──────────────────────────────
-  if (error) {
+  // ─── Error state ──────────────────────────────────────────────────
+  if (phase === 'error') {
     return (
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
@@ -142,7 +243,9 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
               variant="outline"
               size="sm"
               onClick={() => setRetryCount(c => c + 1)}
+              className="gap-1.5"
             >
+              <RefreshCw className="h-3.5 w-3.5" />
               Försök igen
             </Button>
             {onChangeFloor && (
@@ -157,16 +260,38 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     );
   }
 
+  const isLoading = !(['ready', 'error', 'idle'] as Phase[]).includes(phase);
+  const showIframe = !!embedConfig;
+
   return (
     <div className={`relative h-full w-full bg-background ${className}`}>
-      <iframe
-        src={viewerUrl || ''}
-        className="w-full h-full border-0"
-        title="FM Access 2D Viewer"
-        allow="fullscreen"
-      />
-      {/* Small badge to indicate FM Access source */}
-      <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-[10px] text-muted-foreground border">
+      {/* Loading overlay — shown until HDC_APP_SYSTEM_READY or timeout */}
+      {isLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">
+              {phaseLabels[phase] || 'Laddar 2D-ritning...'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* The HDC FM client iframe */}
+      {showIframe && (
+        <iframe
+          ref={iframeRef}
+          src={embedConfig.embedUrl}
+          className="w-full h-full border-0"
+          style={{ opacity: phase === 'ready' ? 1 : 0 }}
+          title="FM Access 2D Viewer"
+          allow="fullscreen"
+          onLoad={handleIframeLoad}
+        />
+      )}
+
+      {/* Badge */}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-[10px] text-muted-foreground border z-20">
         <Square className="h-3 w-3" />
         FM Access 2D
       </div>
