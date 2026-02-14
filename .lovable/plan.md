@@ -1,46 +1,42 @@
 
 
-## Fix: HDC postMessage token field name
+## Fix: Switch from postMessage to URL-parameter authentication
 
 ### Problem
-The HDC client receives our `HDC_CONFIG` message and starts making API calls, but all calls return **401 Unauthorized**. This means the token is not being picked up correctly by the HDC client's internal HTTP layer.
+The HDC client uses an internal Keycloak adapter (`hdcAuth`) for authentication. The `postMessage` with `HDC_CONFIG` does not properly initialize this adapter, causing all internal API calls to fail with 401.
 
-### Root Cause (Most Likely)
-The postMessage payload uses `token` as the field name, but the HDC client likely expects `accessToken` (the standard OAuth2 field name). The HDC client code would look for `event.data.accessToken` internally.
+### Root Cause
+The TslLogger source code reveals the HDC client relies on `hdcAuth.getToken()` and `hdcAuth.isAuthenticated()` -- a full Keycloak adapter. Our postMessage sends a raw token string, but the client needs its Keycloak adapter initialized. This is likely only possible by passing the full Keycloak config (realm URL, clientId, etc.) which we don't control.
 
 ### Solution
-Update `FmAccess2DPanel.tsx` to send the config with `accessToken` instead of `token`, and also include the `apiUrl` field which the HDC client may need to know which backend to authenticate against.
+Switch from the `awaitConfig=true` postMessage approach to **URL-parameter authentication**, which already works in the `get-viewer-url` action. The HDC client's `/client/` endpoint accepts `token`, `versionId`, and `objectId` as URL parameters directly.
 
 ### Changes
 
 **File: `src/components/viewer/FmAccess2DPanel.tsx`**
 
-Update the postMessage config payload (around line 130):
+1. **Simplify the embed URL** to include token, versionId, and objectId as query parameters instead of using `awaitConfig=true`
+2. **Remove the postMessage handshake** (HDC_APP_READY_FOR_CONFIG / HDC_CONFIG listeners) since auth is passed via URL
+3. **Keep the HDC_APP_SYSTEM_READY listener** (or timeout) to know when to reveal the iframe
+4. Update the edge function response to build the full URL with parameters
 
-```text
-// BEFORE:
-{
-  type: 'HDC_CONFIG',
-  token: embedConfig.token,
-  versionId: ...,
-  objectId: ...
-}
-
-// AFTER - try accessToken field name:
-{
-  type: 'HDC_CONFIG',
-  accessToken: embedConfig.token,
-  token: embedConfig.token,        // keep both for compatibility
-  versionId: ...,
-  objectId: ...
-}
+The embed URL will be constructed as:
+```
+{apiUrl}/client/?token={token}&versionId={versionId}&objectId={objectId}
 ```
 
-This sends both `accessToken` and `token` so whichever field name the HDC client uses will work. No edge function changes needed -- the 401s confirm the backend token itself is valid (since it works in the edge function's own API calls).
+This matches the pattern already used successfully in the `get-viewer-url` action (line 444 of the edge function).
+
+### Technical Details
+
+- Remove the `HDC_APP_READY_FOR_CONFIG` message handler
+- Remove the `configSentRef` tracking
+- Build the iframe src URL with query parameters directly
+- Simplify the phase state machine: `fetching-config` -> `loading-iframe` -> `ready` (skip `waiting-ready` and `sending-config`)
+- Keep the timeout fallback for revealing the iframe
+- The iframe `onLoad` event can directly transition to `ready` phase
 
 ### Why this should work
-- The HDC client IS processing our config (it starts loading drawings)
-- The token works fine when the edge function uses it directly
-- The only gap is how the HDC client picks up the token from the postMessage payload
-- OAuth2 convention uses `accessToken` or `access_token` as the field name
-
+- The `get-viewer-url` action already builds this exact URL pattern and it works
+- URL parameters bypass the Keycloak adapter initialization issue entirely
+- The HDC client's `/client/` endpoint is designed to accept auth via URL params
