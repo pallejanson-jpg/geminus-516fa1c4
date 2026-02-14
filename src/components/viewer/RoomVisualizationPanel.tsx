@@ -199,7 +199,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, [isDragging, dragOffset]);
 
-  // Save settings to localStorage when they change
+  // Save settings to localStorage and dispatch state change event
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -207,7 +207,16 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         mock: useMockData
       }));
     } catch (e) { /* ignore */ }
-  }, [visualizationType, useMockData]);
+
+    // Dispatch event so the legend bar (rendered outside this component) can update
+    window.dispatchEvent(new CustomEvent('VISUALIZATION_STATE_CHANGED', {
+      detail: {
+        visualizationType,
+        useMockData,
+        rooms: rooms.map(r => ({ fmGuid: r.fmGuid, name: r.name, attributes: r.attributes })),
+      },
+    }));
+  }, [visualizationType, useMockData, rooms]);
 
   // Cache invalidation is now handled by the event listener above
 
@@ -714,12 +723,6 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             color={hoverLabel.color}
           />
         )}
-        {/* Vertical legend bar rendered via portal-like absolute positioning */}
-        <VisualizationLegendBar
-          visualizationType={visualizationType}
-          rooms={rooms}
-          useMockData={useMockData}
-        />
       </div>
     );
   }
@@ -764,12 +767,6 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
           color={hoverLabel.color}
         />
       )}
-      {/* Vertical legend bar */}
-      <VisualizationLegendBar
-        visualizationType={visualizationType}
-        rooms={rooms}
-        useMockData={useMockData}
-      />
     </div>
   );
 };

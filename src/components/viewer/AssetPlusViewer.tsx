@@ -10,6 +10,7 @@ import ViewerToolbar from './ViewerToolbar';
 import MinimapPanel from './MinimapPanel';
 import FloorCarousel, { FloorInfo } from './FloorCarousel';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
+import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 import ToolbarSettings from './ToolbarSettings';
@@ -3148,6 +3149,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   className="absolute bottom-20 left-4 z-20 pointer-events-auto"
                 />
               )}
+
+              {/* Visualization Legend Bar - independent of right panel */}
+              <VisualizationLegendBarOverlay />
               
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
