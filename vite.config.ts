@@ -55,10 +55,5 @@ export default defineConfig(({ mode }) => ({
     },
   },
   // Ensure WASM files from web-ifc are served correctly
-  optimizeDeps: {
-    exclude: ['web-ifc'],
-    // Force dep re-optimization to bust stale chunk hashes (2026-02-14)
-    force: true,
-  },
   assetsInclude: ['**/*.wasm'],
 }));
