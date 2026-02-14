@@ -226,7 +226,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         const stored = typeof window !== 'undefined' ? window.localStorage.getItem('appConfigs') : null;
         if (stored) {
             try {
-                return { ...DEFAULT_APP_CONFIGS, ...JSON.parse(stored) };
+                const parsed = JSON.parse(stored);
+                // Deep merge per app: new defaults (e.g. openMode) apply, user overrides preserved
+                const merged: Record<string, any> = {};
+                for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
+                    merged[key] = { ...DEFAULT_APP_CONFIGS[key], ...(parsed[key] || {}) };
+                }
+                for (const key of Object.keys(parsed)) {
+                    if (!merged[key]) merged[key] = parsed[key];
+                }
+                return merged;
             } catch (e) {
                 return DEFAULT_APP_CONFIGS;
             }
