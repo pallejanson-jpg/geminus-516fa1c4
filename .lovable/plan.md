@@ -1,50 +1,85 @@
 
 
-## Fix Mobile Visualization Menu and Legend Bar
+## Skapa arende i FMA+ (intern vy med flytande arendeknapp)
 
-### Problem Summary
-Three issues on mobile:
-1. **Right-side visualization menu hard to close** -- "double graphics" and no way to tap outside to dismiss
-2. **Legend bar is horizontal instead of vertical** -- it's rendered inside the Sheet/panel, constrained by parent width
-3. **Legend bar disappears when menu closes** -- it only exists as a child of `RoomVisualizationPanel`, so closing the Sheet hides it
+### Oversikt
+Nar anvandaren klickar pa FMA+ i sidomenyn oppnas FM Access-webbklienten som en **intern iframe-vy** (inte i ny flik). Ovanpa iframen visas en flytande "Skapa arende"-knapp (FAB). Nar den klickas oppnas den beprövade `CreateIssueDialog` med metadata om vilken sida/objekt anvandaren tittade pa. Arendet sparas i `bcf_issues`.
 
-### Solution
+Samma logik lags aven till i `FmAccess2DPanel` sa att det ar forberett nar 2D-vyn fungerar.
 
-#### 1. Make the right panel closeable by tapping outside (mobile only)
-- Change `ViewerRightPanel`'s `Sheet` from `modal={false}` to `modal={true}` on mobile devices only
-- This adds a backdrop overlay that, when tapped, closes the panel automatically
-- On desktop, keep `modal={false}` so the 3D viewer remains interactive while the panel is open
+### Andringar
 
-#### 2. Move the legend bar OUT of RoomVisualizationPanel
-- The legend bar is currently rendered as a child of `RoomVisualizationPanel`, which sits inside the Sheet
-- Move it to `AssetPlusViewer.tsx` as a sibling of the floor carousel and other floating overlays
-- It will read the visualization state from localStorage (already persisted) and listen for visualization change events
-- Position it on the **left side of the viewer**, vertically centered -- same area where the floor pills are
+**1. Ny komponent: `src/components/viewer/FmAccessIssueOverlay.tsx`**
 
-#### 3. Keep the legend bar visible independently
-- Create a lightweight wrapper that reads `visualizationType` and `useMockData` from localStorage
-- Listen for a new custom event (`VISUALIZATION_STATE_CHANGED`) dispatched by `RoomVisualizationPanel` whenever the type or mock toggle changes
-- Render `VisualizationLegendBar` in the main viewer overlay layer, independent of the Sheet open/close state
-- The legend bar already has correct vertical layout code (`flex-col`, fixed `height`), it just needs to be outside the Sheet's width constraint
+En delad overlay-komponent som renderas ovanpa vilken FM Access-iframe som helst (bade FMA+-dashboarden och 2D-panelen). Den innehaller:
+- En flytande knapp (FAB) med `MessageSquarePlus`-ikon och texten "Skapa arende"
+- Positionerad langst ned till hoger, ovanfor safe-area pa mobil
+- Glasmorfism-stil (semi-transparent, backdrop-blur) som matchar ovriga floating panels
+- Pa klick: oppnar `CreateIssueDialog`
+- Metadata som skickas med arendet:
+  - `building_fm_guid` (fran props)
+  - `building_name` (fran props)
+  - `viewpoint_json`: `{ source: 'fm_access', floorId, floorName }` (2D-specifikt, eller `{ source: 'fma_plus', url }` for FMA+)
+  - Ingen screenshot (CORS blockerar iframe-innehall) -- arendet skapas utan bild men med full kontext
 
-### Technical Details
+Props:
+```typescript
+interface FmAccessIssueOverlayProps {
+  buildingFmGuid: string;
+  buildingName?: string;
+  source: 'fma_plus' | '2d_fm_access';
+  contextMetadata?: Record<string, any>; // floorId, floorName, url, etc.
+}
+```
 
-**File changes:**
+**2. Ny intern vy: `src/components/viewer/FmaInternalView.tsx`**
 
-1. **`src/components/viewer/RoomVisualizationPanel.tsx`**
-   - Remove the `VisualizationLegendBar` rendering from both embedded and floating modes
-   - Dispatch a `VISUALIZATION_STATE_CHANGED` custom event when `visualizationType` or `useMockData` changes, carrying the current rooms, type, and mock flag
+En fullskarms intern vy som renderas nar `activeApp === 'fma_plus'` och `openMode !== 'external'`. Den:
+- Embeddar FM Access webbklient i en iframe (URL fran `appConfigs.fma_plus.url`)
+- Rendererar `FmAccessIssueOverlay` ovanpa iframen
+- Visar en laddningsindikator medans iframen laddar
+- Pa mobil: fullskarm utan header (laggs till i `IMMERSIVE_APPS`-listan i AppLayout)
+- Pa desktop: fyller hela main content-omradet
 
-2. **`src/components/viewer/AssetPlusViewer.tsx`**
-   - Import `VisualizationLegendBar`
-   - Add state listeners for `VISUALIZATION_STATE_CHANGED` to track active visualization type, rooms, and mock flag
-   - Render the legend bar in the floating overlay area (alongside floor carousel), positioned left, vertically centered
-   - The legend bar will be visible whenever a visualization type is active, regardless of whether the right panel is open
+**3. Uppdatera `src/components/layout/MainContent.tsx`**
 
-3. **`src/components/viewer/ViewerRightPanel.tsx`**
-   - On mobile: set `modal={true}` on the Sheet so tapping the backdrop area closes it
-   - On desktop: keep `modal={false}` for uninterrupted 3D interaction
+Lagg till ett `case 'fma_plus'` i renderContent-switchsatsen:
+- Rendera `FmaInternalView` med URL och byggnadsdata fran `appConfigs`
+- Lazy-ladda komponenten for prestanda
 
-4. **`src/components/viewer/VisualizationLegendBar.tsx`**
-   - No layout changes needed -- the vertical layout already works, it was just being constrained by its Sheet parent
+**4. Uppdatera `src/components/layout/LeftSidebar.tsx`**
 
+Andringen ar minimal -- nar `openMode === 'internal'` (eller saknas) sa anropas `setActiveApp('fma_plus')` som redan fungerar. Logiken finns redan pa plats. Standardvardet for `openMode` i `DEFAULT_APP_CONFIGS` andras fran `'external'` till `'internal'` sa att FMA+ oppnas internt som standard.
+
+**5. Uppdatera `src/lib/constants.ts`**
+
+Andra `fma_plus.openMode` fran `'external'` till `'internal'` i `DEFAULT_APP_CONFIGS`.
+
+**6. Uppdatera `src/components/viewer/FmAccess2DPanel.tsx`**
+
+Lagg till `FmAccessIssueOverlay` ovanpa iframen nar `phase === 'ready'`. Den visas langst ned till hoger med kontext om aktuell vaning och byggnad. Forberett for nar 2D-vyn fungerar.
+
+### Flode
+
+```text
+Anvandare klickar FMA+ i sidomenyn
+  -> MainContent renderar FmaInternalView
+     -> iframe laddar FM Access URL
+     -> FmAccessIssueOverlay visas ovanpa (FAB-knapp)
+        -> Klick pa FAB -> CreateIssueDialog oppnas
+           -> Anvandare fyller i titel/beskrivning/typ/prioritet
+           -> Spara -> insert i bcf_issues med source-metadata
+           -> Arendet syns i arendelistan i 3D-viewern
+```
+
+### Mobil-anpassning
+- FAB-knappen har storre touch-target pa mobil (`h-12 w-12` vs `h-10 w-10`)
+- Positionerad med `env(safe-area-inset-bottom)` for att undvika systemfaltet
+- `CreateIssueDialog` anvander redan responsiv layout med `max-w-[calc(100vw-40px)]`
+- FMA+ laggs till i `IMMERSIVE_APPS` i AppLayout for att gomma header/sidebars pa mobil
+
+### Befintlig infrastruktur som ateranvands
+- `CreateIssueDialog` -- bepropad, dragbar, responsiv
+- `bcf_issues`-tabellen -- sparar arendet med `viewpoint_json` for kontext
+- `issue-screenshots`-bucket -- anvands om screenshot lyckas (osannolikt med CORS)
+- `useAuth()` -- for `reported_by`
