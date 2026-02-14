@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { getVisualizationToolSettings, ToolConfig, TOOLBAR_SETTINGS_CHANGED_EVENT } from "./ToolbarSettings";
 import FloorVisibilitySelector from "./FloorVisibilitySelector";
 import ModelVisibilitySelector from "./ModelVisibilitySelector";
@@ -91,6 +92,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 }) => {
   const { allData } = useContext(AppContext);
   const { user, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
 
   // BCF viewpoint hook
   const { captureViewpoint, captureScreenshot, getSelectedObjectIds, restoreViewpoint } = useBcfViewpoints({ viewerRef });
@@ -398,7 +400,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
 
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+      <Sheet open={isOpen} onOpenChange={handleOpenChange} modal={isMobile}>
         <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card backdrop-blur-md">
           <SheetHeader className="p-4 pb-2 border-b">
             <SheetTitle className="flex items-center justify-between text-base">
