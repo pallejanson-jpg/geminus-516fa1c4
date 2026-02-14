@@ -3,7 +3,7 @@
  * Fetches an authenticated viewer URL via the fm-access-query edge function.
  */
 import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Square } from 'lucide-react';
+import { Loader2, AlertCircle, Square, MapPin, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -14,6 +14,7 @@ interface FmAccess2DPanelProps {
   fmAccessBuildingGuid?: string;
   buildingName?: string;
   className?: string;
+  onChangeFloor?: () => void;
 }
 
 const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
@@ -23,13 +24,22 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   fmAccessBuildingGuid,
   buildingName,
   className = '',
+  onChangeFloor,
 }) => {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
+  // If no floor is selected at all, show a prompt instead of fetching
+  const noFloorSelected = !floorId && !floorName;
+
   useEffect(() => {
+    if (noFloorSelected) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function fetchViewerUrl() {
@@ -72,8 +82,35 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
     fetchViewerUrl();
     return () => { cancelled = true; };
-  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName, retryCount]);
+  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName, retryCount, noFloorSelected]);
 
+  // ─── No floor selected state ───────────────────────────────────────
+  if (noFloorSelected) {
+    return (
+      <div className={`flex items-center justify-center h-full bg-background ${className}`}>
+        <div className="text-center max-w-sm">
+          <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm font-medium text-foreground mb-1">Ingen våning vald</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            {buildingName ? `Byggnad: ${buildingName}` : 'Välj en våning för att visa 2D-ritningen.'}
+          </p>
+          {buildingName && (
+            <p className="text-xs text-muted-foreground mb-3">
+              Välj en våning i 3D-vyn för att visa ritningen.
+            </p>
+          )}
+          {onChangeFloor && (
+            <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Välj våning i 3D
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Loading state ─────────────────────────────────────────────────
   if (loading) {
     return (
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
@@ -85,20 +122,36 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     );
   }
 
+  // ─── Error state with contextual info ──────────────────────────────
   if (error) {
     return (
       <div className={`flex items-center justify-center h-full bg-background ${className}`}>
         <div className="text-center max-w-sm">
           <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Kunde inte ladda 2D-vy</p>
+          <p className="text-sm font-medium text-foreground mb-1">Kunde inte ladda 2D-ritning</p>
+          {(buildingName || floorName) && (
+            <p className="text-xs text-muted-foreground mb-1">
+              {buildingName && floorName
+                ? `${buildingName} — ${floorName}`
+                : buildingName || floorName}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground mb-3">{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRetryCount(c => c + 1)}
-          >
-            Försök igen
-          </Button>
+          <div className="flex gap-2 justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRetryCount(c => c + 1)}
+            >
+              Försök igen
+            </Button>
+            {onChangeFloor && (
+              <Button variant="outline" size="sm" onClick={onChangeFloor} className="gap-1.5">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Byt våning
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
