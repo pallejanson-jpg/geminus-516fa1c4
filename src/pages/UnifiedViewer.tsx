@@ -407,9 +407,10 @@ const UnifiedViewerContent: React.FC<{
         {/* SDK container — visible for vt and 360 modes */}
         <div
           ref={sdkContainerRef}
-          className="absolute z-0"
+          className="absolute z-0 transition-opacity duration-300"
           style={{
             display: sdkNeeded ? 'block' : 'none',
+            opacity: sdkStatus === 'ready' ? 1 : 0,
             top: 0,
             right: 0,
             width: isSplitMode ? '50%' : '100%',
