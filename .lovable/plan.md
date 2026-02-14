@@ -1,27 +1,40 @@
 
 
-## Fix: 3D-visaren startar inte pa mobil
+## Fix: Solo-isolering fungerar inte pa mobil
+
+### Problem
+Nar du navigerar till 3D-visaren med en vald byggnad, vaning, rum eller tillgang (via URL-parametern `entity`) sa isoleras (Solo mode) ratt vaningsplan pa desktop -- men inte pa mobil.
 
 ### Orsak
-Mobilmenyn (MobileNav) navigerar till `/viewer`, som laddar den gamla `Mobile3DViewer`-komponenten. Men hela visararkitekturen har flyttats till `/split-viewer` med `UnifiedViewer`. Den gamla `Mobile3DViewer` anvander `allData` fran `AppContext` direkt -- men `allData` kanske inte ar laddad eller sa saknar den `viewer3dFmGuid`.
-
-UnifiedViewer pa `/split-viewer` hanterar redan mobil korrekt via `useIsMobile()` och har all ny funktionalitet (byggnadsvaljare, mode-switcher, etc.).
+I `UnifiedViewer.tsx` renderas en separat `MobileUnifiedViewer`-komponent for mobila enheter (rad 266). Denna komponent skickar **inte** med `initialFmGuidToFocus`-propen till `AssetPlusViewer`, trots att den finns tillganglig via URL-parametern `entity`. Pa desktop skickas den korrekt (rad 426).
 
 ### Losning
-Andra mobilnavigeringen sa att "3D Viewer"-knappen gar till `/split-viewer?mode=3d` istallet for `/viewer`.
+Skicka `entityFmGuid` som `initialFmGuidToFocus` till `AssetPlusViewer` i `MobileUnifiedViewer`, precis som pa desktop.
 
-### Andringar
+### Tekniska detaljer
 
-**`src/components/layout/MobileNav.tsx`** (rad 129)
+**`src/pages/UnifiedViewer.tsx`**
 
-Andra navigeringen fran:
+1. Lagg till `entityFmGuid` som prop till `MobileUnifiedViewer` (i interfacet och vid anrop, rad 266-283).
+2. I `MobileUnifiedViewer`-funktionen, skicka med `initialFmGuidToFocus={entityFmGuid || undefined}` till `AssetPlusViewer` (rad 578-585).
+
+Fore (mobil):
+```typescript
+<AssetPlusViewer
+  fmGuid={buildingData.fmGuid}
+  syncEnabled={false}
+  ...
+/>
 ```
-navigate('/viewer')
-```
-till:
-```
-navigate('/split-viewer?mode=3d')
+
+Efter (mobil):
+```typescript
+<AssetPlusViewer
+  fmGuid={buildingData.fmGuid}
+  initialFmGuidToFocus={entityFmGuid || undefined}
+  syncEnabled={false}
+  ...
+/>
 ```
 
-Detta sakerstaller att mobilen anvander samma UnifiedViewer-arkitektur som desktop, i linje med principen om desktop-mobil-paritet.
-
+Detta foljer principen om desktop-mobil-paritet och saker att Solo mode med takklippning aktiveras korrekt aven pa mobil.
