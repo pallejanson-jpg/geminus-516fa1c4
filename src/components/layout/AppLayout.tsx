@@ -16,7 +16,7 @@ import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/set
 import { AppContext } from '@/context/AppContext';
 
 /** Apps that should hide header/sidebars on mobile for fullscreen experience */
-const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map'];
+const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus'];
 
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
