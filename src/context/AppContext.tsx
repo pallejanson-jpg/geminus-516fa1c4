@@ -406,10 +406,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         }
 
         // Build storey map - only storeys that belong to a known building
+        // Also derive display names for nameless storeys
         const storeyMap = new Map<string, NavigatorNode>();
+        const namelessCounterByBuilding = new Map<string, number>();
         storeys.forEach((storey: any) => {
             if (buildingMap.has(storey.buildingFmGuid)) {
-                storeyMap.set(storey.fmGuid, { ...storey, children: [] });
+                let displayName = storey.commonName || storey.name;
+                if (!displayName) {
+                    // Try to derive from attributes
+                    const attrs = storey.attributes || {};
+                    const parentName = attrs.parentCommonName || '';
+                    const count = (namelessCounterByBuilding.get(storey.buildingFmGuid) || 0) + 1;
+                    namelessCounterByBuilding.set(storey.buildingFmGuid, count);
+                    displayName = parentName
+                        ? `${parentName} (våning ${count})`
+                        : `Namnlös våning ${count}`;
+                }
+                storeyMap.set(storey.fmGuid, { ...storey, commonName: displayName, children: [] });
             }
         });
 
