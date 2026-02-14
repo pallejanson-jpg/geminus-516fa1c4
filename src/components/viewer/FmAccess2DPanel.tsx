@@ -145,6 +145,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
       const configMsg: Record<string, any> = {
         type: 'HDC_CONFIG',
+        accessToken: embedConfig.token,
         token: embedConfig.token,
         versionId: embedConfig.versionId ? Number(embedConfig.versionId) : undefined,
       };
