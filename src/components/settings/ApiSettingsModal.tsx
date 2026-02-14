@@ -30,7 +30,7 @@ import ProfileSettings from './ProfileSettings';
 import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 import { SyncProgressCard } from './SyncProgressCard';
-import { accXktConverter, TranslationStatus } from '@/services/acc-xkt-converter';
+import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
     isOpen: boolean;
@@ -810,6 +810,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
         toast({ title: 'Konvertering startad', description: `Startar 3D-konvertering för ${item.name}...` });
 
+        const { accXktConverter } = await import('@/services/acc-xkt-converter');
         const result = await accXktConverter.runFullPipeline(
             item.versionUrn,
             {
@@ -837,7 +838,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Cleanup translation polling on unmount
     useEffect(() => {
-        return () => accXktConverter.stopAllPolling();
+        return () => {
+            import('@/services/acc-xkt-converter').then(m => m.accXktConverter.stopAllPolling());
+        };
     }, []);
 
     
