@@ -1,39 +1,116 @@
 
 
-## Make 3D Tree Panel Clearer and Larger
+## Fix: 2D FMA med iframe-inbäddning av HDC FM-klienten
 
-The tree panel in the 3D viewer (`ViewerTreePanel.tsx`) currently uses very compact sizing that makes it hard to interact with, especially checkboxes and expand arrows. This plan increases element sizes throughout the `TreeNodeComponent`.
+### Vad vi vet nu
 
-### Changes in `src/components/viewer/ViewerTreePanel.tsx`
+FM Access (Tessel HDC) har en fullständig webbklient på `/client/` med **inbyggt stöd for iframe-inbäddning** via ett `postMessage`-protokoll. Samma mekanism som er Windows-app använder:
 
-**1. Row padding and text size (line 183)**
-- Change `py-0.5 sm:py-1 px-0.5 sm:px-1` to `py-1 sm:py-1.5 px-1 sm:px-1.5`
-- Change `text-xs sm:text-sm` to `text-sm`
-- Increase indent multiplier from `level * 10` to `level * 14`
+1. Ladda `/client/?awaitConfig=true` -- appen väntar och visar en spinner
+2. Appen skickar `HDC_APP_READY_FOR_CONFIG` via `postMessage` till parent
+3. Parent svarar med auth-token och navigeringsinstruktioner
+4. Appen loggar in och navigerar till rätt ritning
+5. Appen skickar `HDC_APP_SYSTEM_READY` när den är klar
 
-**2. Checkbox size (lines 196-199)**
-- Change `h-3.5 w-3.5 sm:h-4 sm:w-4` to `h-4 w-4 sm:h-5 sm:w-5`
+### Lösning
 
-**3. Expand/collapse chevron (lines 210-223)**
-- Change button padding from `p-0.5` to `p-1`
-- Change chevron icon from `h-2.5 w-2.5 sm:h-3 sm:w-3` to `h-3.5 w-3.5 sm:h-4 sm:w-4`
-- Increase spacer width from `w-3 sm:w-4` to `w-5 sm:w-6`
+Istället for att konstruera en fabricerad `/viewer/2d`-URL (som inte finns), bäddar vi in den riktiga HDC FM-klienten och styr den via `postMessage`. Vi döljer oönskade UI-delar med CSS som injiceras i iframen.
 
-**4. Type icon size (line 102-119)**
-- Change all `getTypeIcon` icons from `h-3.5 w-3.5` to `h-4 w-4`
+### Del 1: Edge Function -- ny `get-embed-config` action
 
-**5. Node name text (line 234)**
-- Change from `text-[11px] sm:text-sm` to `text-sm`
+**Fil: `supabase/functions/fm-access-query/index.ts`**
 
-**6. Badges (lines 241-249)**
-- Change type badge from `text-[9px] sm:text-[10px] h-3.5 sm:h-4` to `text-[10px] sm:text-xs h-4 sm:h-5`
-- Same for descendant count badge
+Lägga till en ny action `get-embed-config` som returnerar allt frontend behöver:
 
-### Summary of Visual Impact
-- Row height increases from ~24px to ~32px
-- Checkboxes grow from 14/16px to 16/20px -- much easier to tap/click
-- Chevron arrows grow from 10/12px to 14/16px -- clearly visible
-- Text becomes consistently `text-sm` (14px) instead of 11px on mobile
-- Indentation spacing widens for clearer hierarchy
+```text
+Request:  { action: "get-embed-config", buildingId, floorName, fmAccessBuildingGuid, buildingName }
+Response: { 
+  success: true, 
+  embedUrl: "https://swg-demo.bim.cloud/client/?awaitConfig=true",
+  token: "eyJ...",
+  versionId: 397,
+  drawingObjectId: "11482"   // resolved via perspective tree
+}
+```
 
-No other files need to change -- all modifications are within `ViewerTreePanel.tsx`.
+- Återanvänder befintlig logik for building-matchning och floor-matchning (perspective tree lookup)
+- Returnerar token, versionId och drawingObjectId separat (inte som URL-parametrar)
+- Fix: `fmAccessFetch` ska inte skicka `Content-Type: application/json` för GET-anrop
+
+### Del 2: Frontend -- omskriven FmAccess2DPanel
+
+**Fil: `src/components/viewer/FmAccess2DPanel.tsx`**
+
+Helt ny approach baserad på `postMessage`-protokollet:
+
+1. **Hämta embed-config** via edge function (token + drawingObjectId)
+2. **Ladda iframe** med `{apiUrl}/client/?awaitConfig=true`
+3. **Lyssna på `message`-event** for `HDC_APP_READY_FOR_CONFIG`
+4. **Svara med config** via `postMessage`:
+   - Auth-token och versionId
+   - Navigeringsinstruktion till rätt ritning (drawingObjectId)
+5. **Lyssna på `HDC_APP_SYSTEM_READY`** -- dölj loading-overlay
+6. **Dölj oönskade UI-delar** genom att injicera CSS i iframen via `postMessage` eller genom att lägga ett overlay som döljer sidmenyer/header
+
+Flödet:
+```text
+1. FmAccess2DPanel mountas
+2. Hämtar token + drawingObjectId via edge function
+3. Sätter iframe src = "https://swg-demo.bim.cloud/client/?awaitConfig=true"
+4. Visar loading-overlay (opak, döljer iframen)
+5. Lyssnar på postMessage
+6. HDC_APP_READY_FOR_CONFIG tas emot -->
+     Skickar token, versionId, navigation via postMessage
+7. HDC_APP_SYSTEM_READY tas emot -->
+     Tar bort loading-overlay, visar iframen
+```
+
+**UI-döljning**: Eftersom iframen är cross-origin kan vi inte injicera CSS direkt. Istället:
+- Använder CSS `clip-path` eller `overflow: hidden` + negativ margin på iframe-containern for att beskära bort header/sidebar
+- Alternativt: HDC FM-klienten kan ha URL-parametrar for att styra UI (behöver testas live)
+
+### Del 3: Behåll befintliga states
+
+Alla befintliga UI-states behålls oförändrade:
+- "Ingen våning vald" -- med `onChangeFloor`-knapp
+- Loading-state -- med spinner
+- Error-state -- med retry + byt våning
+- Badge "FM Access 2D" i hörnet
+
+### Filer som ändras
+
+- `supabase/functions/fm-access-query/index.ts` -- ny `get-embed-config` action + fix GET Content-Type
+- `src/components/viewer/FmAccess2DPanel.tsx` -- omskrivning: postMessage-baserad iframe-inbäddning
+
+### Tekniska detaljer
+
+**postMessage-config format (baserat på HDC FM-källkoden):**
+```text
+// Skickas till iframen efter HDC_APP_READY_FOR_CONFIG
+iframe.contentWindow.postMessage({
+  type: "HDC_CONFIG",
+  token: "eyJ...",
+  versionId: 397,
+  objectId: 11482,       // navigera till ritningen
+  // eventuellt: hideHeader, hideNavigation etc.
+}, "https://swg-demo.bim.cloud")
+```
+
+**fmAccessFetch fix:**
+```text
+// Ta bort Content-Type: application/json för GET-requests
+const headers = { 'X-Authorization': `Bearer ${token}` };
+if (versionId) headers['X-Hdc-Version-Id'] = versionId;
+// Bara sätt Content-Type om det är POST/PUT/PATCH:
+if (method !== 'GET') headers['Content-Type'] = 'application/json';
+```
+
+**Loading-overlay strategi:**
+```text
+// Iframen laddas med opacity: 0
+// En opak loading-overlay visas ovanpå
+// När HDC_APP_SYSTEM_READY tas emot:
+//   - Dölj overlay med transition
+//   - Sätt iframe opacity: 1
+```
+
