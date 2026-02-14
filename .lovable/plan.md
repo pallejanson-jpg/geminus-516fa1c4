@@ -1,42 +1,65 @@
 
 
-## Fix: Switch from postMessage to URL-parameter authentication
+## Vertical Color Scale Legend Bar with Interactive Selection
 
-### Problem
-The HDC client uses an internal Keycloak adapter (`hdcAuth`) for authentication. The `postMessage` with `HDC_CONFIG` does not properly initialize this adapter, causing all internal API calls to fail with 401.
+### Overview
+Add a vertical color scale bar (inspired by the weather map temperature bar in the reference image) that appears on the left side of the 3D viewer when room visualization is active. Each value label on the bar is clickable -- clicking selects/highlights all rooms in the model that have that value.
 
-### Root Cause
-The TslLogger source code reveals the HDC client relies on `hdcAuth.getToken()` and `hdcAuth.isAuthenticated()` -- a full Keycloak adapter. Our postMessage sends a raw token string, but the client needs its Keycloak adapter initialized. This is likely only possible by passing the full Keycloak config (realm URL, clientId, etc.) which we don't control.
+### Design
 
-### Solution
-Switch from the `awaitConfig=true` postMessage approach to **URL-parameter authentication**, which already works in the `get-viewer-url` action. The HDC client's `/client/` endpoint accepts `token`, `versionId`, and `objectId` as URL parameters directly.
+The bar will be a tall, narrow vertical gradient strip with value labels at each color stop. It mimics the style of the floating floor switcher (semi-transparent, dark background, positioned along the left edge of the viewer). It will be visible only when a visualization type is active (temperature, CO2, humidity, occupancy, area).
+
+```text
+ +--------+
+ | 30  °C |  <- red
+ |        |
+ | 26     |
+ |        |  <- gradient
+ | 22     |
+ |        |
+ | 20     |  <- green
+ |        |
+ | 18     |
+ |        |  <- blue
+ | 16     |
+ +--------+
+```
+
+Each labeled row is clickable. Clicking "20" (green) selects all rooms with temperature around 20 degrees in the 3D model.
 
 ### Changes
 
-**File: `src/components/viewer/FmAccess2DPanel.tsx`**
+**1. New component: `src/components/viewer/VisualizationLegendBar.tsx`**
 
-1. **Simplify the embed URL** to include token, versionId, and objectId as query parameters instead of using `awaitConfig=true`
-2. **Remove the postMessage handshake** (HDC_APP_READY_FOR_CONFIG / HDC_CONFIG listeners) since auth is passed via URL
-3. **Keep the HDC_APP_SYSTEM_READY listener** (or timeout) to know when to reveal the iframe
-4. Update the edge function response to build the full URL with parameters
+- Renders a vertical bar with the gradient from the active visualization config
+- Displays value labels at each color stop position
+- Clickable labels: on click, finds all rooms whose value falls within the range of that stop and selects them in the 3D viewer (using `scene.setObjectsSelected`)
+- Positioned fixed on the left side of the viewer, vertically centered
+- Semi-transparent frosted glass style matching existing panels
+- Shows the unit label at the top (e.g., "°C", "ppm", "%", "m2")
+- Props: `viewerRef`, `visualizationType`, `rooms` (room data with sensor values), `useMockData`, `onRoomSelect` callback
 
-The embed URL will be constructed as:
-```
-{apiUrl}/client/?token={token}&versionId={versionId}&objectId={objectId}
-```
+**2. Modify: `src/components/viewer/RoomVisualizationPanel.tsx`**
 
-This matches the pattern already used successfully in the `get-viewer-url` action (line 444 of the edge function).
+- Export the current `rooms`, `visualizationType`, `useMockData` state so the legend bar can access them
+- Alternatively, render the `VisualizationLegendBar` directly inside this component (simpler approach)
+- Add a custom event (`VISUALIZATION_LEGEND_SELECT`) that the legend bar dispatches when a value is clicked
+- On receiving the event, iterate rooms, find those matching the clicked value range, and call `scene.setObjectsSelected(ids, true)` on their entity IDs
+
+**3. Selection logic (inside VisualizationLegendBar or RoomVisualizationPanel)**
+
+When a color stop value is clicked:
+1. Determine the value range: halfway between the previous stop and next stop
+2. Filter rooms whose sensor value falls within that range
+3. Deselect all previously selected objects: `scene.setObjectsSelected(scene.selectedObjectIds, false)`
+4. Select matching room entities: for each matching room, get entity IDs from cache and call `scene.setObjectsSelected(ids, true)`
+5. Optionally flash/highlight to give visual feedback
 
 ### Technical Details
 
-- Remove the `HDC_APP_READY_FOR_CONFIG` message handler
-- Remove the `configSentRef` tracking
-- Build the iframe src URL with query parameters directly
-- Simplify the phase state machine: `fetching-config` -> `loading-iframe` -> `ready` (skip `waiting-ready` and `sending-config`)
-- Keep the timeout fallback for revealing the iframe
-- The iframe `onLoad` event can directly transition to `ready` phase
-
-### Why this should work
-- The `get-viewer-url` action already builds this exact URL pattern and it works
-- URL parameters bypass the Keycloak adapter initialization issue entirely
-- The HDC client's `/client/` endpoint is designed to accept auth via URL params
+- The vertical gradient uses CSS `linear-gradient(to top, ...)` (bottom = min, top = max) matching the weather bar orientation
+- Color stops are taken directly from `VISUALIZATION_CONFIGS` in `visualization-utils.ts`
+- Room value lookup reuses existing `extractSensorValue` / `generateMockSensorData` functions
+- Entity ID resolution reuses the existing `entityIdCache` and `getItemIdsByFmGuid` from RoomVisualizationPanel
+- The bar is rendered as a sibling to the IoTHoverLabel, inside RoomVisualizationPanel, so it has access to all needed state
+- On mobile, the bar is slightly smaller and positioned to avoid overlap with floor pills
