@@ -27,6 +27,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +72,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
 
     fetchViewerUrl();
     return () => { cancelled = true; };
-  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName]);
+  }, [buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName, retryCount]);
 
   if (loading) {
     return (
@@ -94,12 +95,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              setLoading(true);
-              setError(null);
-              // Re-trigger effect
-              setViewerUrl(null);
-            }}
+            onClick={() => setRetryCount(c => c + 1)}
           >
             Försök igen
           </Button>
