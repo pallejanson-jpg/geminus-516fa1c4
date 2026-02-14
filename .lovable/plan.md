@@ -1,55 +1,66 @@
 
 
-## Fix: 2D FMA Panel Disappears After Loading
+## Fix: 2D FMA Panel on Mobile — Missing Props and Structural Issues
 
-### Problem
-When navigating from Portfolio to the 2D FMA view, the panel briefly appears then vanishes. This happens because:
+### Problem Summary
+After 50+ iterations, the core issue has been obscured by cache-related errors. Here is the definitive analysis of what's actually wrong with the 2D FMA viewer:
 
-1. `hasFmAccess` is initially `true` (URL has a floor parameter)
-2. An async database check queries `building_external_links` for `fm_access` rows
-3. No such rows exist, so `hasFmAccess` flips to `false`
-4. On mobile, both the 2D button and panel are gated by `hasFmAccess` alone, so they disappear
+### Issue 1: Mobile FmAccess2DPanel Missing Critical Props
+The mobile `FmAccess2DPanel` (line 586-593) does NOT receive `floorId` or `floorName`. Without these, the edge function cannot resolve the correct drawing and will either show an error or a wrong/empty drawing.
 
-### Solution
-Update the `hasFmAccess` determination to also consider:
-- Whether the building has `fm_access_building_guid` configured in `building_settings` (which it does -- the value is already loaded via `buildingData.fmAccessBuildingGuid`)
-- Whether the URL explicitly requests 2D mode with a floor parameter
+**Desktop (correct):**
+```text
+<FmAccess2DPanel
+  buildingFmGuid={buildingData.fmGuid}
+  floorId={floorFmGuid || undefined}        <-- present
+  floorName={floorName || undefined}         <-- present
+  fmAccessBuildingGuid={...}
+  buildingName={buildingData.name}
+/>
+```
+
+**Mobile (broken):**
+```text
+<FmAccess2DPanel
+  buildingFmGuid={buildingData.fmGuid}
+                                              <-- floorId MISSING
+                                              <-- floorName MISSING
+  fmAccessBuildingGuid={...}
+  buildingName={buildingData.name}
+/>
+```
+
+### Issue 2: `floorName` Never Passed to MobileUnifiedViewer
+The `MobileUnifiedViewer` component receives `floorFmGuid` (line 280) but `floorName` is never passed as a prop nor declared in the interface (line 529).
+
+### Issue 3: FmAccess2DPanel Retry Button is Broken
+The "Forsok igen" button (lines 94-105) sets `loading=true` and `error=null`, then sets `viewerUrl=null`. But the `useEffect` (line 31) depends on `[buildingFmGuid, floorId, floorName, fmAccessBuildingGuid, buildingName]` — none of which change, so the effect never re-fires. The panel stays stuck on "Laddar 2D-ritning..." forever.
+
+### Issue 4: `hasFmAccess` Race Condition (Previously Identified)
+The `building_external_links` table has ZERO rows with `system_name = 'fm_access'`. The only source of truth is `building_settings.fm_access_building_guid`. The current code (lines 70-83) correctly handles this by checking `fmAccessBuildingGuid` first, which is good.
 
 ### Changes
 
 **File: `src/pages/UnifiedViewer.tsx`**
 
-1. **Update `hasFmAccess` effect** (lines 70-79): Add `buildingData.fmAccessBuildingGuid` as a source of truth. If the building has an FM Access GUID configured, `hasFmAccess` should be `true` regardless of `building_external_links`.
+1. Add `floorName` to MobileUnifiedViewer props interface (around line 529):
+   - Add `floorName: string;` to the props type
 
-2. **Fix mobile panel guard** (line 580): Change from `{hasFmAccess && (` to `{(hasFmAccess || floorFmGuid) && (` to match the desktop behavior.
+2. Pass `floorName` when rendering MobileUnifiedViewer (around line 266):
+   - Add `floorName={floorName}` prop
 
-3. **Fix mobile button guard** (line 558): Change from `{hasFmAccess && (` to `{(hasFmAccess || floorFmGuid) && (` so the 2D tab stays visible.
+3. Pass `floorId` and `floorName` to mobile FmAccess2DPanel (around line 588):
+   - Add `floorId={floorFmGuid || undefined}`
+   - Add `floorName={floorName || undefined}`
 
-4. **Fix desktop mode button** (line 334): Change from `{hasFmAccess && (` to `{(hasFmAccess || floorFmGuid) && (` for consistency.
+**File: `src/components/viewer/FmAccess2DPanel.tsx`**
 
-### Technical Details
-
-The `hasFmAccess` effect will be updated to:
-
-```text
-useEffect(() => {
-  if (buildingData?.fmAccessBuildingGuid) {
-    setHasFmAccess(true);
-    return; // No need to query building_external_links
-  }
-  if (!buildingData?.fmGuid) return;
-  supabase
-    .from('building_external_links')
-    .select('id')
-    .eq('building_fm_guid', buildingData.fmGuid)
-    .eq('system_name', 'fm_access')
-    .limit(1)
-    .then(({ data }) => setHasFmAccess((data?.length ?? 0) > 0));
-}, [buildingData?.fmGuid, buildingData?.fmAccessBuildingGuid]);
-```
-
-Additionally, all three render guards (mobile button, mobile panel, desktop mode button) will use `(hasFmAccess || floorFmGuid)` as fallback to ensure the 2D view remains accessible when explicitly navigated to.
+4. Fix retry button (lines 94-105):
+   - Add a `retryCount` state variable
+   - Include it in the `useEffect` dependency array
+   - Increment it in the retry button's `onClick`
 
 ### Files Changed
-- `src/pages/UnifiedViewer.tsx` -- fix hasFmAccess logic and render guards
+- `src/pages/UnifiedViewer.tsx` — pass missing floorId/floorName to mobile
+- `src/components/viewer/FmAccess2DPanel.tsx` — fix retry mechanism
 
