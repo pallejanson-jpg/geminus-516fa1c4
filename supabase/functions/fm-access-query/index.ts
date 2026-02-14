@@ -311,18 +311,66 @@ serve(async (req) => {
       }
 
       case 'get-viewer-url': {
-        const { buildingId, floorId, floorName, fmAccessBuildingGuid } = params;
+        const { buildingId, floorId, floorName, buildingName } = params;
+        let { fmAccessBuildingGuid } = params;
         try {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
 
-          // Use FM Access building GUID if provided, otherwise fall back to buildingId
+          // ── Auto-resolve FM Access building GUID via search API ──
+          if (!fmAccessBuildingGuid && buildingName) {
+            console.log('FM Access get-viewer-url: No fmAccessBuildingGuid, searching for building name:', buildingName);
+            try {
+              const searchResp = await fmAccessFetch(config, `/api/search/quick?query=${encodeURIComponent(buildingName)}`);
+              if (searchResp.ok) {
+                const searchData = await searchResp.json();
+                const results = Array.isArray(searchData) ? searchData : (searchData.results || searchData.items || []);
+                console.log('FM Access get-viewer-url: Search returned', results.length, 'results');
+                // Find building-like object (classId 104) or first result with a GUID
+                const buildingMatch = results.find((r: any) => (r.classId || r.ClassId) === 104)
+                  || results.find((r: any) => r.objectGuid || r.ObjectGuid || r.guid || r.Guid);
+                if (buildingMatch) {
+                  fmAccessBuildingGuid = buildingMatch.objectGuid || buildingMatch.ObjectGuid || buildingMatch.guid || buildingMatch.Guid || buildingMatch.id || buildingMatch.Id;
+                  console.log('FM Access get-viewer-url: Resolved building GUID:', fmAccessBuildingGuid);
+
+                  // Cache resolved GUID in building_settings
+                  if (buildingId && fmAccessBuildingGuid) {
+                    try {
+                      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+                      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+                      if (supabaseUrl && serviceRoleKey) {
+                        const updateResp = await fetch(`${supabaseUrl}/rest/v1/building_settings?fm_guid=eq.${encodeURIComponent(buildingId)}`, {
+                          method: 'PATCH',
+                          headers: {
+                            'apikey': serviceRoleKey,
+                            'Authorization': `Bearer ${serviceRoleKey}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=minimal',
+                          },
+                          body: JSON.stringify({ fm_access_building_guid: fmAccessBuildingGuid }),
+                        });
+                        console.log('FM Access get-viewer-url: Cached GUID in building_settings, status:', updateResp.status);
+                      }
+                    } catch (cacheErr: any) {
+                      console.log('FM Access get-viewer-url: Failed to cache GUID:', cacheErr.message);
+                    }
+                  }
+                } else {
+                  console.log('FM Access get-viewer-url: No matching building found in search results');
+                }
+              } else {
+                console.log('FM Access get-viewer-url: Search API returned', searchResp.status);
+              }
+            } catch (searchErr: any) {
+              console.log('FM Access get-viewer-url: Search failed:', searchErr.message);
+            }
+          }
+
+          // Use FM Access building GUID if available, otherwise fall back to buildingId
           const lookupGuid = fmAccessBuildingGuid || floorId || buildingId;
           let drawingObjectId: string | null = null;
 
           if (lookupGuid) {
-            // If we have an fmAccessBuildingGuid, fetch the building's perspective tree
-            // and match the floor by name to find the correct drawing
             const treeGuid = fmAccessBuildingGuid || lookupGuid;
             console.log('FM Access get-viewer-url: Looking up perspective tree for guid', treeGuid, 'floorName:', floorName || '(none)');
             

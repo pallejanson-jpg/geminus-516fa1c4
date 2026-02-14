@@ -440,6 +440,7 @@ const UnifiedViewerContent: React.FC<{
               floorId={floorFmGuid || undefined}
               floorName={floorName || undefined}
               fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
+              buildingName={buildingData.name}
             />
           </div>
         )}
@@ -581,6 +582,7 @@ function MobileUnifiedViewer({
               <FmAccess2DPanel
                 buildingFmGuid={buildingData.fmGuid}
                 fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
+                buildingName={buildingData.name}
               />
             </div>
         )}
