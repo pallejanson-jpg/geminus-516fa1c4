@@ -26,11 +26,16 @@
     <div id="root"></div>
     <script>
       // Auto-recover from stale module chunk failures (Safari/iPhone cache issue)
-      window.addEventListener('error', function(e) {
-        if (e.message && e.message.includes('Importing a module script failed') && !sessionStorage.getItem('_mr')) {
+      function _mrCheck(msg) {
+        if (msg && msg.includes('Importing a module script failed') && !sessionStorage.getItem('_mr')) {
           sessionStorage.setItem('_mr', '1');
           window.location.reload();
         }
+      }
+      window.addEventListener('error', function(e) { _mrCheck(e.message); });
+      window.addEventListener('unhandledrejection', function(e) {
+        var m = e.reason && (e.reason.message || String(e.reason));
+        _mrCheck(m);
       });
       window.addEventListener('load', function() { sessionStorage.removeItem('_mr'); });
     </script>
