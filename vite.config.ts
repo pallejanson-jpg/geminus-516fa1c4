@@ -54,6 +54,10 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    // Force re-bundling to clear stale chunk references
+    force: true,
+  },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
 }));
