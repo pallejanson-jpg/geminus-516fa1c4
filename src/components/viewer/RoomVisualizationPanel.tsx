@@ -22,6 +22,7 @@ import {
 } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
 import IoTHoverLabel from './IoTHoverLabel';
+import VisualizationLegendBar, { VISUALIZATION_LEGEND_SELECT_EVENT, type LegendSelectDetail } from './VisualizationLegendBar';
 
 interface RoomVisualizationPanelProps {
   viewerRef: React.MutableRefObject<any>;
@@ -488,6 +489,47 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for legend bar selection events — select matching rooms in viewer
+  useEffect(() => {
+    const handleLegendSelect = (e: CustomEvent<LegendSelectDetail>) => {
+      const { rangeMin, rangeMax, type } = e.detail;
+      if (type !== visualizationType) return;
+
+      const viewer = viewerRef.current;
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xeokitViewer?.scene) return;
+
+      const scene = xeokitViewer.scene;
+
+      // Deselect all previously selected
+      if (scene.selectedObjectIds?.length) {
+        scene.setObjectsSelected(scene.selectedObjectIds, false);
+      }
+
+      // Find rooms in range and select their entities
+      const idsToSelect: string[] = [];
+      rooms.forEach(room => {
+        const value = useMockData
+          ? generateMockSensorData(room.fmGuid, visualizationType)
+          : extractSensorValue(room.attributes, visualizationType);
+        if (value !== null && value >= rangeMin && value <= rangeMax) {
+          const ids = getItemIdsByFmGuid(room.fmGuid);
+          idsToSelect.push(...ids);
+        }
+      });
+
+      if (idsToSelect.length > 0) {
+        scene.setObjectsSelected(idsToSelect, true);
+        console.log(`Legend select: ${idsToSelect.length} entities in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+      }
+    };
+
+    window.addEventListener(VISUALIZATION_LEGEND_SELECT_EVENT, handleLegendSelect as EventListener);
+    return () => {
+      window.removeEventListener(VISUALIZATION_LEGEND_SELECT_EVENT, handleLegendSelect as EventListener);
+    };
+  }, [viewerRef, visualizationType, rooms, useMockData, getItemIdsByFmGuid]);
+
   // Hover listener for IoT labels on rooms - displays sensor value on hover
   useEffect(() => {
     if (visualizationType === 'none') {
@@ -672,6 +714,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
             color={hoverLabel.color}
           />
         )}
+        {/* Vertical legend bar rendered via portal-like absolute positioning */}
+        <VisualizationLegendBar
+          visualizationType={visualizationType}
+          rooms={rooms}
+          useMockData={useMockData}
+        />
       </div>
     );
   }
@@ -716,6 +764,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
           color={hoverLabel.color}
         />
       )}
+      {/* Vertical legend bar */}
+      <VisualizationLegendBar
+        visualizationType={visualizationType}
+        rooms={rooms}
+        useMockData={useMockData}
+      />
     </div>
   );
 };
