@@ -317,21 +317,32 @@ serve(async (req) => {
           const token = await getToken(config);
           const versionId = await getVersionId(config, token);
 
-          // ── Auto-resolve FM Access building GUID via search API ──
+          // ── Auto-resolve FM Access building GUID via perspective root ──
           if (!fmAccessBuildingGuid && buildingName) {
-            console.log('FM Access get-viewer-url: No fmAccessBuildingGuid, searching for building name:', buildingName);
+            console.log('FM Access get-viewer-url: No fmAccessBuildingGuid, looking up building by name:', buildingName);
             try {
-              const searchResp = await fmAccessFetch(config, `/api/search/quick?query=${encodeURIComponent(buildingName)}`);
-              if (searchResp.ok) {
-                const searchData = await searchResp.json();
-                const results = Array.isArray(searchData) ? searchData : (searchData.results || searchData.items || []);
-                console.log('FM Access get-viewer-url: Search returned', results.length, 'results');
-                // Find building-like object (classId 104) or first result with a GUID
-                const buildingMatch = results.find((r: any) => (r.classId || r.ClassId) === 104)
-                  || results.find((r: any) => r.objectGuid || r.ObjectGuid || r.guid || r.Guid);
-                if (buildingMatch) {
-                  fmAccessBuildingGuid = buildingMatch.objectGuid || buildingMatch.ObjectGuid || buildingMatch.guid || buildingMatch.Guid || buildingMatch.id || buildingMatch.Id;
-                  console.log('FM Access get-viewer-url: Resolved building GUID:', fmAccessBuildingGuid);
+              // Fetch perspective 8 root to get all top-level buildings
+              const rootResp = await fmAccessFetch(config, '/api/perspective/root/json/8');
+              if (rootResp.ok) {
+                const rootData = await rootResp.json();
+                const rootNodes = Array.isArray(rootData) ? rootData : (rootData.children || rootData.Children || [rootData]);
+                console.log('FM Access get-viewer-url: Perspective root has', rootNodes.length, 'top-level nodes');
+
+                // Fuzzy match building name against top-level nodes (typically classId 104)
+                const normalizedName = buildingName.toLowerCase().trim();
+                let match = rootNodes.find((n: any) => {
+                  const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+                  return name === normalizedName;
+                });
+                if (!match) {
+                  match = rootNodes.find((n: any) => {
+                    const name = (n.objectName || n.ObjectName || n.name || '').toLowerCase().trim();
+                    return name.includes(normalizedName) || normalizedName.includes(name);
+                  });
+                }
+                if (match) {
+                  fmAccessBuildingGuid = match.systemGuid || match.objectGuid || match.ObjectGuid || match.guid || match.Guid;
+                  console.log('FM Access get-viewer-url: Matched building node:', match.objectName || match.ObjectName, '-> GUID:', fmAccessBuildingGuid);
 
                   // Cache resolved GUID in building_settings
                   if (buildingId && fmAccessBuildingGuid) {
@@ -356,13 +367,16 @@ serve(async (req) => {
                     }
                   }
                 } else {
-                  console.log('FM Access get-viewer-url: No matching building found in search results');
+                  console.log('FM Access get-viewer-url: No matching building found in perspective root for "' + buildingName + '"');
+                  // Log available names for debugging
+                  const names = rootNodes.map((n: any) => n.objectName || n.ObjectName || n.name || '(unnamed)');
+                  console.log('FM Access get-viewer-url: Available buildings:', JSON.stringify(names));
                 }
               } else {
-                console.log('FM Access get-viewer-url: Search API returned', searchResp.status);
+                console.log('FM Access get-viewer-url: Perspective root returned', rootResp.status);
               }
             } catch (searchErr: any) {
-              console.log('FM Access get-viewer-url: Search failed:', searchErr.message);
+              console.log('FM Access get-viewer-url: Building lookup failed:', searchErr.message);
             }
           }
 
