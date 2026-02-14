@@ -164,8 +164,6 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
         className="w-full h-full border-0"
         title="FM Access 2D Viewer"
         allow="fullscreen"
-        referrerPolicy="no-referrer"
-        sandbox="allow-scripts allow-same-origin allow-popups"
       />
       {/* Small badge to indicate FM Access source */}
       <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-[10px] text-muted-foreground border">

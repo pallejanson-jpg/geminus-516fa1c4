@@ -206,6 +206,32 @@ export default function Ivion360View({
     };
   }, [ivionUrl, syncEnabled, fetchLoginToken]);
 
+  // Inject CSS to shrink Ivion SDK UI elements when ready
+  useEffect(() => {
+    if (sdkStatus !== 'ready' || !sdkContainerRef.current) return;
+    const container = sdkContainerRef.current;
+    const styleId = 'ivion-ui-scale-override';
+    if (container.querySelector(`#${styleId}`)) return;
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      ivion .iv-sidebar { max-width: 220px !important; }
+      ivion .iv-sidebar-toggle { transform: scale(0.85); transform-origin: top left; }
+      ivion .iv-floor-selector { transform: scale(0.85); transform-origin: bottom left; }
+      ivion .iv-controls { transform: scale(0.85); transform-origin: bottom right; }
+      ivion .iv-minimap { transform: scale(0.8); transform-origin: bottom left; }
+      ivion .iv-toolbar { transform: scale(0.85); transform-origin: bottom center; }
+      ivion .iv-button { font-size: 12px !important; }
+    `;
+    container.appendChild(style);
+
+    return () => {
+      const el = container.querySelector(`#${styleId}`);
+      if (el) el.remove();
+    };
+  }, [sdkStatus]);
+
   // Token refresh loop — keep SDK authenticated
   useEffect(() => {
     if (sdkStatus !== 'ready' || !ivApiRef.current?.auth) return;
@@ -517,7 +543,7 @@ export default function Ivion360View({
       <div className="flex-1 relative">
         {/* Loading overlay */}
         {(isLoading || isRenewingToken || isLoadingImages || sdkStatus === 'loading') && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
@@ -550,8 +576,11 @@ export default function Ivion360View({
         {/* SDK rendering container - always present to allow SDK loading */}
         <div 
           ref={sdkContainerRef} 
-          className="w-full h-full"
-          style={{ display: sdkStatus === 'failed' ? 'none' : 'block' }}
+          className="w-full h-full transition-opacity duration-300"
+          style={{ 
+            display: sdkStatus === 'failed' ? 'none' : 'block',
+            opacity: sdkStatus === 'ready' ? 1 : 0,
+          }}
         />
         
         {/* Iframe fallback - shown only when SDK definitively fails */}
