@@ -447,10 +447,10 @@ const UnifiedViewerContent: React.FC<{
               floorName={floorName || undefined}
               fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
               buildingName={buildingData.name}
+              onChangeFloor={() => setViewMode('3d')}
             />
           </div>
         )}
-
 
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
@@ -593,6 +593,7 @@ function MobileUnifiedViewer({
                 floorName={floorName || undefined}
                 fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
                 buildingName={buildingData.name}
+                onChangeFloor={() => setViewMode('3d')}
               />
             </div>
         )}
