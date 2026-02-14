@@ -279,6 +279,7 @@ const UnifiedViewerContent: React.FC<{
       hasFmAccess={hasFmAccess}
       floorFmGuid={floorFmGuid}
       floorName={floorName}
+      entityFmGuid={entityFmGuid}
       onGoBack={handleGoBack}
     />;
   }
@@ -528,7 +529,7 @@ function MobileUnifiedViewer({
   buildingData, viewMode, setViewMode, sdkStatus, ivApiRef,
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
-  hasIvion, hasFmAccess, floorFmGuid, floorName, onGoBack,
+  hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, onGoBack,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -545,6 +546,7 @@ function MobileUnifiedViewer({
   hasFmAccess: boolean;
   floorFmGuid: string | null;
   floorName: string;
+  entityFmGuid: string | null;
   onGoBack: () => void;
 }) {
   const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
@@ -577,6 +579,7 @@ function MobileUnifiedViewer({
         <div style={{ display: activePanel === '3d' ? 'block' : 'none', height: '100%' }}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
+            initialFmGuidToFocus={entityFmGuid || undefined}
             syncEnabled={false}
             onCameraChange={handle3DCameraChange}
             syncPosition={sync3DPosition}
