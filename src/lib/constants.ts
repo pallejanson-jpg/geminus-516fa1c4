@@ -66,7 +66,7 @@ export const THEME_OPTIONS = [
 
 export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     insights: { label: 'Insights', url: '', icon: BarChart2, openMode: 'internal', username: '', password: '' },
-    fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'internal', username: '', password: '' },
+    fma_plus: { label: 'FMA+', url: 'https://swg-demo.bim.cloud/', icon: Building2, openMode: 'external', username: '', password: '' },
     asset_plus: { label: 'Asset+', url: '', icon: Box, openMode: 'internal', username: '', password: '' },
     iot: { label: 'IoT+', url: 'https://swg-demo.bim.cloud/iot', icon: Zap, openMode: 'internal', username: '', password: '', pollIntervalHours: 24 },
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },

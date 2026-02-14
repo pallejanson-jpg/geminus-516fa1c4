@@ -236,12 +236,12 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     if (!merged[key]) merged[key] = parsed[key];
                 }
 
-                // One-time migration: reset openMode for apps whose default changed to 'internal'
-                const migrationKey = 'appConfigs_migration_v1';
+                // Migration v2: force FMA+ back to external (server blocks iframe embedding)
+                const migrationKey = 'appConfigs_migration_v2';
                 if (typeof window !== 'undefined' && !window.localStorage.getItem(migrationKey)) {
                     for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
-                        if (DEFAULT_APP_CONFIGS[key].openMode === 'internal') {
-                            merged[key].openMode = 'internal';
+                        if (merged[key]) {
+                            merged[key].openMode = DEFAULT_APP_CONFIGS[key].openMode;
                         }
                     }
                     window.localStorage.setItem(migrationKey, '1');
