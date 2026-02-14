@@ -1,52 +1,51 @@
 
 
-## Visa alla appar i mobilmenyn
+## Fix: FMA+ startar inte "In App"
 
-### Problem
-Mobilmenyn (`MobileNav`) har en **hårdkodad** lista med bara 8 knappar och tar bara 1 app från `DEFAULT_APP_CONFIGS`. Sidomenyn (`LeftSidebar`) visar alla 9 appar dynamiskt via `sidebarOrder`. Appar som Felanmälan, Insights, FMA+, Asset+, IoT+, OA+ och 360+ saknas helt i mobilmenyn.
+### Orsak
+Problemet beror pa att `appConfigs` sparas i `localStorage` och laddas vid start med en **ytlig merge**:
+
+```typescript
+return { ...DEFAULT_APP_CONFIGS, ...JSON.parse(stored) };
+```
+
+Nar anvandaren tidigare anvande appen hade `fma_plus.openMode` vardet `'external'` (det gamla standardvardet). Hela det sparade `fma_plus`-objektet skriver over det nya standardvardet `'internal'`. Aven om anvandaren aldrig andrat installningen manuellt, sa ligger det gamla vardet kvar.
 
 ### Losning
-Skriv om `MobileNav` sa att den anvander samma dynamiska `sidebarOrder` och `SIDEBAR_ITEM_META` som `LeftSidebar`. Alla appar visas i ett scrollbart grid med avdelare pa samma stallen som i sidomenyn.
+Andra laddningslogiken i `AppContext.tsx` till en **djup merge per app** sa att nya standardvarden (som `openMode: 'internal'`) appliceras korrekt, men anvandarens egna anpassningar (URL, losenord etc.) bevaras.
 
 ### Andringar
 
-**`src/components/layout/MobileNav.tsx`**
-- Ta bort alla hardkodade knappar (Home, Portfolio, Navigator, Map, 3D Viewer, Inventering, AI Skanning, etc.)
-- Importera `getSidebarOrder` fran `AppMenuSettings` och `SIDEBAR_ITEM_META` (eller definiera en lokal kopia)
-- Rendera dynamiskt:
-  1. **Rad 1 (alltid synlig):** Home, Portfolio, Navigator, Map -- dessa ar "core navigation" som inte ar appar i sidomenyn
-  2. **Rad 2:** 3D Viewer-knapp (navigerar till `/viewer`)
-  3. **Avdelare**
-  4. **Alla appar fran `sidebarOrder`:** renderas i ett `grid-cols-4` grid med samma ikoner, farger och etiketter som sidomenyn. Avdelare renderas dar `hasDividerAfter === true`
-- Gor panelen scrollbar (`overflow-y-auto`, `max-h-[70dvh]`) sa att alla appar syns aven pa sma skarmar
-- Behall samma glasmorfism-stil, slide-up-animation och tap-outside-to-close
+**`src/context/AppContext.tsx`** (rad 225-235)
 
-### Resultat
-- Alla 9 appar + core navigation syns i mobilmenyn
-- Ordningen foljer `sidebarOrder` (samma som desktop-sidomenyn)
-- Avdelare visas pa samma stallen
-- Scrollbart om innehallet ar for langt for skarmen
+Ersatt den ytliga mergen med en per-app deep merge:
 
-### Tekniska detaljer
-
-Strukturen i den nya MobileNav:
-
-```text
-+----------------------------------+
-|                        [X]       |
-+----------------------------------+
-| Home  | Portfolio | Nav  | Map   |   <- Core navigation (alltid)
-+----------------------------------+
-| 3D Viewer                        |   <- Snabblank
-+------ avdelare ------------------+
-| Inventering | AI Scan | Felanm.  | Insights |   <- Fran sidebarOrder
-+------ avdelare (om hasDividerAfter) --------+
-| FMA+  | Asset+ | IoT+ | OA+     |
-| 360+  |        |       |        |
-+----------------------------------+
+```typescript
+const [appConfigs, setAppConfigs] = useState(() => {
+    const stored = typeof window !== 'undefined' 
+        ? window.localStorage.getItem('appConfigs') : null;
+    if (stored) {
+        try {
+            const parsed = JSON.parse(stored);
+            // Deep merge: for each app, merge stored values ON TOP of defaults
+            const merged: Record<string, any> = {};
+            for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {
+                merged[key] = { ...DEFAULT_APP_CONFIGS[key], ...(parsed[key] || {}) };
+            }
+            // Keep any extra keys from stored that aren't in defaults
+            for (const key of Object.keys(parsed)) {
+                if (!merged[key]) merged[key] = parsed[key];
+            }
+            return merged;
+        } catch (e) {
+            return DEFAULT_APP_CONFIGS;
+        }
+    }
+    return DEFAULT_APP_CONFIGS;
+});
 ```
 
-- Importera `getSidebarOrder`, `SIDEBAR_ITEM_META`-mappningen, och lyssna pa `SIDEBAR_SETTINGS_CHANGED_EVENT` for live-uppdateringar
-- Anvand `handleItemClick` fran LeftSidebar for att hantera bade `internal` och `config` (external/internal openMode) appar korrekt
-- Max-hojd `max-h-[70dvh]` med `overflow-y-auto` for scrollning pa sma skarmar
+Detta loser problemet utan att anvandaren behover rensa sin localStorage manuellt. Alla sparade URL:er, losenord och andra installningar bevaras -- men nya standardvarden fran `DEFAULT_APP_CONFIGS` (som `openMode: 'internal'` for FMA+) appliceras korrekt om anvandaren inte explicit har andrat dem.
 
+### Sidoeffekt
+Ingen -- anvandarens medvetet andrade installningar bevaras. Det enda som andras ar att saknade nycklar i sparade konfigurationer fylls i med standardvarden.
