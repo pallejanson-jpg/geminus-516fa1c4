@@ -11,6 +11,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, Square, MapPin, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import FmAccessIssueOverlay from './FmAccessIssueOverlay';
 
 interface FmAccess2DPanelProps {
   buildingFmGuid: string;
@@ -251,6 +252,20 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
           title="FM Access 2D Viewer"
           allow="fullscreen"
           onLoad={handleIframeLoad}
+        />
+      )}
+
+      {/* Issue overlay - ready for when 2D view works */}
+      {phase === 'ready' && buildingFmGuid && (
+        <FmAccessIssueOverlay
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingName}
+          source="2d_fm_access"
+          contextMetadata={{
+            floorId,
+            floorName,
+            drawingObjectId: embedConfig?.drawingObjectId,
+          }}
         />
       )}
 
