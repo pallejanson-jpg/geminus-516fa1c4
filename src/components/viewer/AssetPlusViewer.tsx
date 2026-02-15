@@ -270,30 +270,51 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   }, [initialVisualization, modelLoadState, initStep]);
 
   // ─── Insights color mode: apply visibility + colorization ───
+  // Keep a ref to preserve sessionStorage data across re-renders
+  const insightsColorMapCacheRef = useRef<{ mode: string; colorMap: Record<string, [number, number, number]> } | null>(null);
+
+  // Read sessionStorage eagerly when insightsColorMode is set (before guards)
   useEffect(() => {
-    if (!insightsColorMode) return;
-    if (!spacesCacheReady) return;
-    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
-
-    // Determine color map: prefer prop, fallback to sessionStorage
-    let colorMap: Record<string, [number, number, number]> = {};
-    let mode = insightsColorMode;
-
+    if (!insightsColorMode) {
+      insightsColorMapCacheRef.current = null;
+      return;
+    }
     if (insightsColorMapProp && Object.keys(insightsColorMapProp).length > 0) {
-      colorMap = insightsColorMapProp;
-    } else {
-      const raw = sessionStorage.getItem('insights_color_map');
-      if (!raw) {
-        console.warn('[AssetPlusViewer] insightsColorMode set but no color map available');
-        return;
-      }
+      insightsColorMapCacheRef.current = { mode: insightsColorMode, colorMap: insightsColorMapProp };
+      return;
+    }
+    // Only read from sessionStorage if we don't already have a cached value
+    if (insightsColorMapCacheRef.current) return;
+    const raw = sessionStorage.getItem('insights_color_map');
+    if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        colorMap = parsed.colorMap || {};
-        mode = parsed.mode || mode;
-      } catch { return; }
-      sessionStorage.removeItem('insights_color_map');
+        insightsColorMapCacheRef.current = { mode: parsed.mode || insightsColorMode, colorMap: parsed.colorMap || {} };
+        sessionStorage.removeItem('insights_color_map');
+        console.log('[AssetPlusViewer] Cached insights color map from sessionStorage:', Object.keys(insightsColorMapCacheRef.current.colorMap).length, 'entries');
+      } catch { /* ignore */ }
     }
+  }, [insightsColorMode, insightsColorMapProp]);
+
+  useEffect(() => {
+    if (!insightsColorMode) return;
+    if (!spacesCacheReady) {
+      console.log('[AssetPlusViewer] Insights waiting for spacesCacheReady...');
+      return;
+    }
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') {
+      console.log('[AssetPlusViewer] Insights waiting for model:', modelLoadState, initStep);
+      return;
+    }
+
+    // Determine color map from cache
+    const cached = insightsColorMapCacheRef.current;
+    if (!cached || Object.keys(cached.colorMap).length === 0) {
+      console.warn('[AssetPlusViewer] insightsColorMode set but no color map available (cached:', !!cached, ')');
+      return;
+    }
+    const colorMap = cached.colorMap;
+    let mode = cached.mode;
 
     // Delay to ensure handleAllModelsLoaded callbacks have fully completed
     const timer = setTimeout(() => {
@@ -416,7 +437,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [insightsColorMode, insightsColorMapProp, spacesCacheReady, modelLoadState, initStep]);
+  }, [insightsColorMode, spacesCacheReady, modelLoadState, initStep]);
 
   // Camera sync hook for Split View synchronization
   const { broadcastCamera } = useViewerCameraSync({
