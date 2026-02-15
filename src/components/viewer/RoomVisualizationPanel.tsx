@@ -529,25 +529,24 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       const allIds = scene.objectIds || [];
       if (idsToSelect.length > 0) {
-        // Ensure xray material is properly configured before use (Asset+ may override)
-        const xrayMaterial = scene?.xrayMaterial;
-        if (xrayMaterial) {
-          xrayMaterial.fill = true;
-          xrayMaterial.fillAlpha = 0.1;
-          xrayMaterial.fillColor = [0.5, 0.5, 0.5];
-          xrayMaterial.edges = true;
-          xrayMaterial.edgeAlpha = 0.2;
-          xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
-        }
-        scene.alphaDepthMask = false;
-        // X-ray everything, then un-xray matching rooms so they stand out
-        scene.setObjectsXRayed(allIds, true);
-        scene.setObjectsXRayed(idsToSelect, false);
+        // Ghost all with low opacity (no xray dependency)
+        allIds.forEach(id => {
+          const e = scene.objects?.[id];
+          if (e) e.opacity = 0.1;
+        });
+        // Restore matching rooms to full opacity
+        idsToSelect.forEach(id => {
+          const e = scene.objects?.[id];
+          if (e) e.opacity = 0.85;
+        });
         scene.setObjectsSelected(idsToSelect, true);
-        console.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+        console.log(`Legend select: ${idsToSelect.length} entities opacity-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
       } else {
-        // Toggle off: remove xray from everything
-        scene.setObjectsXRayed(allIds, false);
+        // Toggle off: restore all to normal opacity and re-apply visualization
+        allIds.forEach(id => {
+          const e = scene.objects?.[id];
+          if (e) e.opacity = 1.0;
+        });
       }
     };
 
