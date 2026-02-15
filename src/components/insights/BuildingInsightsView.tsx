@@ -38,8 +38,8 @@ const ViewerLink = () => {
         return () => clearTimeout(timer);
     }, []);
     return (
-        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/25 border border-primary/50 shadow-sm shadow-primary/25 hover:bg-primary/35 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/60 animate-pulse' : ''}`}>
-            <Eye className="h-4.5 w-4.5" />
+        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/30 border border-primary/60 shadow-lg shadow-primary/30 hover:bg-primary/40 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/70 animate-pulse' : ''}`}>
+            <Eye className="h-5 w-5" />
         </div>
     );
 };
@@ -383,7 +383,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                                     ))}
                                                 </Pie>
-                                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                 <Legend />
                                             </PieChart>
                                         </ResponsiveContainer>
