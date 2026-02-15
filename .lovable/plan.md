@@ -1,104 +1,86 @@
 
 
-## Kombinerad implementation: Insights-till-3D fixes + Desktop inline viewer
+## Fix: Insights-färger syns inte i 3D-viewern
 
-Denna plan kombinerar de tva godkanda planerna:
-1. Fix av timing/synlighet (bara rum visas, spacesCacheReady)
-2. Desktop inline 3D-panel med reaktiv farguppdatering
+### Rotorsak
 
----
+Det finns en **race condition** i `AssetPlusViewer.tsx`. Nar modellen laddar klart kor `handleAllModelsLoaded` (rad 1532-1556) som **explicit doljer alla IfcSpace-entiteter** och anropar `assetViewer.onShowSpacesChanged(false)`. Aven om insights-effekten (rad 270-419) sedan kor och satter `visible = true` pa rummen, sa kan Asset+-bibliotekets interna `onShowSpacesChanged(false)` asynkront aterstalla synligheten.
 
-### Del 1: Fix timing och synlighet i AssetPlusViewer
+Dessutom: i `handleAllModelsLoaded` doljs rummen **fore** `spacesCacheReady` satts till `true`. Sa ordningen ar:
+1. `handleAllModelsLoaded` -- doljer alla rum, anropar `onShowSpacesChanged(false)`
+2. Cache-effekten bygger cachen, satter `spacesCacheReady = true`
+3. Insights-effekten kor, visar och fargar rum
+4. Men Asset+-bibliotekets asynkrona svar pa `onShowSpacesChanged(false)` kan overskriva steg 3
+
+### Losning
 
 **Fil: `src/components/viewer/AssetPlusViewer.tsx`**
 
-**1a. Lagg till `spacesCacheReady` state**
-- Nytt state: `const [spacesCacheReady, setSpacesCacheReady] = useState(false);`
-- I cache-effekten (rad 496-525): lagg till `setSpacesCacheReady(true)` efter att cachen byggts (rad 524)
+**1. Skippa default space-hiding nar insightsColorMode ar aktivt**
 
-**1b. Uppdatera insights-effekten (rad 267-392)**
-- Byt beroende fran `modelLoadState` till `spacesCacheReady` 
-- Andring av synlighetslogik: istallet for att bara satta xrayed pa allt, gor sa har:
-  1. Satt ALLA objekt till `visible = false`
-  2. For matchande rum/objekt: satt `visible = true`, `xrayed = false`, `colorize = rgb`
-  3. Ta bort `insightsAppliedRef`-sparren sa att effekten kan koras om nar props andras (behovs for desktop inline-viewern)
+I `handleAllModelsLoaded` (rad 1532-1556), wrappa "hide spaces"-blocket i en villkorskontroll:
 
-**1c. Lagg till hantering av `room_types` och `room_type` modes**
-- Iterera genom IfcSpace-metaobjekt, matcha rumstyp mot colorMap-nycklar
-- Farglagg matchande rum
+```
+// Rad 1532-1556: Lagg till guard
+if (!insightsColorMode) {
+  // CRITICAL: Ensure spaces (rooms) are hidden by default
+  try {
+    const assetViewer = viewer?.assetViewer;
+    if (assetViewer?.onShowSpacesChanged) {
+      assetViewer.onShowSpacesChanged(false);
+    }
+    // ... hide IfcSpace entities ...
+  } catch {}
+}
+```
 
-**1d. Ny prop `insightsColorMap`**
-- `insightsColorMap?: Record<string, [number, number, number]>` -- direkt fargkarta som prop (for desktop inline-viewern, undviker sessionStorage)
-- Om denna prop finns, anvand den istallet for sessionStorage
+Detta forhindrar att Asset+-biblioteket doljer rum nar vi vet att insights-effekten ska visa dem.
 
----
+**2. Lagg till en forsenkning i insights-effekten**
 
-### Del 2: Uppdatera Room Types och Energy Distribution i BuildingInsightsView
+For att garantera att alla asynkrona modell-laddnings-callbacks har exekverat klart, lagg till en kort `setTimeout` (100ms) i insights-effekten innan farglaggningen appliceras. Detta ger modellen tid att stabiliseras:
 
-**Fil: `src/components/insights/BuildingInsightsView.tsx`**
+```
+useEffect(() => {
+  if (!insightsColorMode) return;
+  if (!spacesCacheReady) return;
+  if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
 
-**2a. Room Types pie chart (rad 411-439)**
-- Byt fran `navigateTo3D({ visualization: 'area' })` till `navigateToInsights3D` med mode `room_types`
-- Lagg till `onClick` pa varje `<Cell>` for enskild rumstyp med mode `room_type`
+  // Delay to ensure handleAllModelsLoaded has fully completed
+  const timer = setTimeout(() => {
+    // ... befintlig farglaggningslogik ...
+    // EXTRA: Anropa onShowSpacesChanged(true) EFTER farglaggning
+    try {
+      const assetViewer = viewer?.assetViewer;
+      assetViewer?.onShowSpacesChanged?.(true);
+    } catch {}
+  }, 150);
+  return () => clearTimeout(timer);
+}, [insightsColorMode, insightsColorMapProp, spacesCacheReady, modelLoadState, initStep]);
+```
 
-**2b. Energy Distribution pie chart (rad 352-377)**
-- Lagg till `<ViewerLink />` i headern
-- Klick pa hela kortet eller "Visa" navigerar med `energy_floors`-lage (alla vaningars farg)
+**3. Satt showSpaces INNAN farglaggning**
 
----
+Flytta `setShowSpaces(true)` och `onShowSpacesChanged(true)` till **fore** farglaggningen i insights-effekten, sa att Asset+-biblioteket oppnar rum-lagret innan vi satter enskilda attribut. Nuvarande kod (rad 412-417) gor det efter, men det maste ske fore.
 
-### Del 3: Desktop inline 3D-panel
+### Rekommendation om X-Ray vs visibility
 
-**Fil: `src/components/insights/BuildingInsightsView.tsx`**
+Istallet for X-Ray-lage (som gor alla objekt halvtransparenta), rekommenderar jag att helt enkelt **dolja** alla icke-rum-objekt (`visible = false`) och visa enbart rummen med `visible = true` + `colorize`. Detta ar redan koden gor (rad 306-307), men det fungerar inte pa grund av racen ovan.
 
-**3a. Ny komponent `InsightsInlineViewer`**
-- Renderas bara pa desktop (`!isMobile`)
-- Innehaller en `AssetPlusViewer` med:
-  - `suppressOverlay={true}`
-  - `insightsColorMode` och `insightsColorMap` som reaktiva props
-  - Fixerad hojd (~500px), sticky position
-- Klickbar overlay med `Maximize2`-ikon som oppnar fullskarms-3D (kallar `navigateToInsights3D`)
+Nar racen ar fixad kommer rummen synas tydligt utan vaggar/dorrar/fonster -- precis som onskat. X-Ray-attributet ar onodig dar och kan tas bort fran `scene.setObjectsXRayed(allIds, true)` (rad 308). Det racker att dolja objekten.
 
-**3b. Layout-andring**
-- Wrappa Tabs-sektionen (rad 291-486) i ett flexbox-grid:
-  ```
-  <div className="flex gap-4">
-    <div className="flex-1 min-w-0">{/* Tabs */}</div>
-    {!isMobile && <InsightsInlineViewer ... />}
-  </div>
-  ```
-
-**3c. Nytt lokalt state for desktop-synkronisering**
-- `inlineInsightsMode` och `inlineColorMap` state-variabler
-- Vid klick pa diagram (desktop): uppdatera state istallet for att navigera bort
-- Vid klick pa diagram (mobil): behall befintligt beteende (navigate)
-
-**3d. Dual-path logik i diagram-klick**
-- Alla klickhanterare kontrollerar `isMobile`:
-  - **Desktop**: `setInlineInsightsMode(mode)` + `setInlineColorMap(colorMap)`
-  - **Mobil**: `navigateToInsights3D(...)` (befintligt beteende)
-
----
-
-### Del 4: Smafix
-
-**Fil: `src/lib/visualization-utils.ts`**
-- Ingen andring behover goras -- `hslStringToRgbFloat` finns redan
-
----
-
-### Sammanfattning av filandringar
+### Sammanfattning
 
 | Fil | Andring |
 |-----|---------|
-| `AssetPlusViewer.tsx` | `spacesCacheReady` state, dol icke-rum, `room_types`/`room_type` mode, ny prop `insightsColorMap`, ta bort `insightsAppliedRef` |
-| `BuildingInsightsView.tsx` | Inline 3D-panel (desktop), dual-path klick (desktop/mobil), Room Types + Energy Distribution klickhantering |
+| `AssetPlusViewer.tsx` rad 1532-1556 | Wrappa space-hiding i `if (!insightsColorMode)` |
+| `AssetPlusViewer.tsx` rad 270-419 | Lagg till 150ms setTimeout, flytta `onShowSpacesChanged(true)` fore farglaggning, ta bort `setObjectsXRayed` |
 
-### Resultat
-- Rum fargas korrekt (timing fixad via spacesCacheReady)
-- Bara rum visas (inga vaggar/dorrar)
-- Desktop: inline 3D-panel uppdateras reaktivt vid klick pa diagram
-- Desktop: klick pa 3D-panelen oppnar fullskarms-vy
-- Mobil: befintligt navigationsbeteende behalles
-- Alla diagram (stapel + 3 pie charts) har "Visa"-knappar och klickbara segment
-
+### Forvantad ordning efter fix
+1. `handleAllModelsLoaded` -- skippar space-hiding (insightsColorMode ar satt)
+2. Cache-effekten bygger cachen, satter `spacesCacheReady = true`
+3. Insights-effekten vantar 150ms, sedan:
+   a. Anropar `onShowSpacesChanged(true)` -- oppnar rum-lagret i Asset+
+   b. Doljer ALLA objekt (`visible = false`)
+   c. Visar och fargar enbart matchande rum
+4. Resultatet: bara rum syns, fargade med diagrammets farger
