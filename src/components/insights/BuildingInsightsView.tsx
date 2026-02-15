@@ -2,6 +2,7 @@ import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useXktPreload } from '@/hooks/useXktPreload';
+import { hslStringToRgbFloat } from '@/lib/visualization-utils';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { 
@@ -18,6 +19,17 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
+
+const FLOOR_COLORS = [
+  'hsl(220, 80%, 55%)',  // Blue
+  'hsl(142, 71%, 45%)',  // Green
+  'hsl(48, 96%, 53%)',   // Yellow
+  'hsl(262, 83%, 58%)',  // Purple
+  'hsl(16, 85%, 55%)',   // Orange
+  'hsl(340, 75%, 55%)',  // Pink
+  'hsl(180, 60%, 45%)',  // Teal
+  'hsl(0, 72%, 51%)',    // Red
+];
 
 interface BuildingInsightsViewProps {
     facility: Facility;
@@ -158,7 +170,25 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         };
     }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
 
-    // Navigation helper: open 3D viewer with context
+    // Navigation helper: open 3D viewer with context + insights color map
+    const navigateToInsights3D = (opts: {
+        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category';
+        colorMap: Record<string, [number, number, number]>;
+        entity?: string;
+        assetType?: string;
+    }) => {
+        // Save color map to sessionStorage for AssetPlusViewer to read
+        sessionStorage.setItem('insights_color_map', JSON.stringify({
+            mode: opts.mode,
+            colorMap: opts.colorMap,
+        }));
+        const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d', insightsMode: opts.mode, xray: 'true' });
+        if (opts.entity) params.set('entity', opts.entity);
+        if (opts.assetType) params.set('assetType', opts.assetType);
+        navigate(`/split-viewer?${params.toString()}`);
+    };
+
+    // Legacy simple navigation (for non-colormap views)
     const navigateTo3D = (opts?: { entity?: string; visualization?: string; assetType?: string }) => {
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
         if (opts?.entity) params.set('entity', opts.entity);
@@ -174,11 +204,12 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         );
         return storeys.slice(0, 6).map((storey: any, index: number) => {
             const hash = hashString(storey.fmGuid || '');
+            const name = storey.commonName || storey.name || `Floor ${index + 1}`;
             return {
-                name: storey.commonName || storey.name || `Floor ${index + 1}`,
+                name,
                 fmGuid: storey.fmGuid,
                 kwhPerSqm: 80 + (hash % 60),
-                color: index % 2 === 0 ? 'hsl(142, 71%, 45%)' : 'hsl(48, 96%, 53%)',
+                color: FLOOR_COLORS[index % FLOOR_COLORS.length],
             };
         });
     }, [allData, facility.fmGuid]);
@@ -281,9 +312,12 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
                                         <Zap className="h-4 w-4 text-yellow-500" />
-                                        <span className="text-purple-400">Energy per Floor</span>
-                                        <MockBadge />
-                                        <span className="ml-auto"><ViewerLink /></span>
+                                        Energy per Floor
+                                        <span className="ml-auto cursor-pointer" onClick={() => {
+                                            const colorMap: Record<string, [number, number, number]> = {};
+                                            energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
+                                            navigateToInsights3D({ mode: 'energy_floors', colorMap });
+                                        }}><ViewerLink /></span>
                                     </CardTitle>
                                     <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
                                 </CardHeader>
@@ -301,7 +335,11 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                 {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                 <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                     {energyByFloor.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} onClick={() => navigateTo3D({ entity: entry.fmGuid })} />
+                                                        <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
+                                                            const colorMap: Record<string, [number, number, number]> = {};
+                                                            colorMap[entry.fmGuid] = hslStringToRgbFloat(entry.color);
+                                                            navigateToInsights3D({ mode: 'energy_floor', colorMap, entity: entry.fmGuid });
+                                                        }} />
                                                     ))}
                                                 </Bar>
                                             </BarChart>
@@ -406,14 +444,18 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 <TabsContent value="asset" className="mt-0 space-y-6">
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Asset Category Distribution - REAL */}
-                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D({ assetType: assetCategoryPie.length > 0 ? assetCategoryPie[0].name : undefined })}>
+                        <Card className="border-primary/20 hover:border-primary/50 transition-colors">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Package className="h-4 w-4 text-primary" />
                                     Asset Categories
-                                    <span className="ml-auto"><ViewerLink /></span>
+                                    <span className="ml-auto cursor-pointer" onClick={() => {
+                                        const colorMap: Record<string, [number, number, number]> = {};
+                                        assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
+                                        navigateToInsights3D({ mode: 'asset_categories', colorMap });
+                                    }}><ViewerLink /></span>
                                 </CardTitle>
-                                <CardDescription>{stats.assetCount} assets (real data) · Tryck för att visa i 3D</CardDescription>
+                                <CardDescription>{stats.assetCount} assets (real data) · Tryck på segment för 3D</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="h-64">
@@ -422,7 +464,11 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                             <PieChart>
                                                 <Pie data={assetCategoryPie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                     {assetCategoryPie.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
+                                                            const colorMap: Record<string, [number, number, number]> = {};
+                                                            colorMap[entry.name] = hslStringToRgbFloat(entry.color);
+                                                            navigateToInsights3D({ mode: 'asset_category', colorMap, assetType: entry.name });
+                                                        }} />
                                                     ))}
                                                 </Pie>
                                                 {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
