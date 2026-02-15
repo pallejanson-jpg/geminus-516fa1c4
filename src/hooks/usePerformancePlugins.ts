@@ -1,0 +1,124 @@
+/**
+ * usePerformancePlugins — Installs xeokit performance plugins after viewer init.
+ *
+ * 1. FastNavPlugin  — Lowers canvas resolution & hides edges/SAO during camera movement.
+ * 2. ViewCullPlugin — Frustum culling, hides objects outside the camera view.
+ * 3. LOD distance culling — Hides small objects when the camera is far away.
+ *
+ * All plugins are lazily loaded from the xeokit ES-module CDN so we don't add
+ * to the initial bundle.
+ */
+import { useEffect, useRef } from 'react';
+
+const XEOKIT_CDN = 'https://xeokit.github.io/xeokit-sdk/dist/xeokit-sdk.min.es.js';
+
+// Distance thresholds for LOD culling
+const LOD_FAR_DISTANCE = 50;
+const LOD_CHECK_INTERVAL_MS = 500;
+
+interface UsePerformancePluginsOptions {
+  /** The xeokit Viewer instance (viewer.scene must exist) */
+  viewerRef: React.MutableRefObject<any>;
+  /** Set to true once the model has fully loaded */
+  ready: boolean;
+  /** Mobile devices get more aggressive settings */
+  isMobile: boolean;
+}
+
+export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerformancePluginsOptions) {
+  const pluginsRef = useRef<{ fastNav?: any; viewCull?: any; lodInterval?: ReturnType<typeof setInterval> }>({});
+
+  useEffect(() => {
+    if (!ready) return;
+
+    const getXeokitViewer = () => {
+      const v = viewerRef.current;
+      return v?.$refs?.AssetViewer?.$refs?.assetView?.viewer ?? null;
+    };
+
+    let cancelled = false;
+
+    const install = async () => {
+      const xeokitViewer = getXeokitViewer();
+      if (!xeokitViewer?.scene) {
+        console.debug('[perf-plugins] No xeokit viewer available');
+        return;
+      }
+
+      try {
+        // Dynamic import from xeokit CDN
+        const sdk = await import(/* @vite-ignore */ XEOKIT_CDN);
+        if (cancelled) return;
+
+        // 1. FastNavPlugin
+        if (sdk.FastNavPlugin && !pluginsRef.current.fastNav) {
+          pluginsRef.current.fastNav = new sdk.FastNavPlugin(xeokitViewer, {
+            scaleCanvasResolution: true,
+            scaleCanvasResolutionFactor: isMobile ? 0.5 : 0.6,
+            hideEdges: true,
+            hideTransparentObjects: false, // keep spaces visible
+            hideSAO: true,
+          });
+          console.log('[perf-plugins] FastNavPlugin installed', { factor: isMobile ? 0.5 : 0.6 });
+        }
+
+        // 2. ViewCullPlugin (frustum culling)
+        if (sdk.ViewCullPlugin && !pluginsRef.current.viewCull) {
+          pluginsRef.current.viewCull = new sdk.ViewCullPlugin(xeokitViewer, {
+            maxTreeDepth: 20,
+          });
+          console.log('[perf-plugins] ViewCullPlugin installed');
+        }
+      } catch (e) {
+        console.warn('[perf-plugins] Could not load xeokit SDK plugins:', e);
+      }
+
+      // 3. LOD distance culling — hide small entities when camera is far
+      if (!pluginsRef.current.lodInterval) {
+        const scene = xeokitViewer.scene;
+        pluginsRef.current.lodInterval = setInterval(() => {
+          if (!scene?.camera || !scene.objects) return;
+          const eye = scene.camera.eye;
+          const objects = scene.objects;
+          for (const id in objects) {
+            const entity = objects[id];
+            if (!entity?.aabb) continue;
+            const aabb = entity.aabb;
+            // Size of the entity (diagonal of bounding box)
+            const dx = aabb[3] - aabb[0];
+            const dy = aabb[4] - aabb[1];
+            const dz = aabb[5] - aabb[2];
+            const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (size > 2) continue; // Only cull small objects
+
+            // Distance from camera to entity center
+            const cx = (aabb[0] + aabb[3]) / 2;
+            const cy = (aabb[1] + aabb[4]) / 2;
+            const cz = (aabb[2] + aabb[5]) / 2;
+            const dist = Math.sqrt(
+              (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
+            );
+
+            entity.culled = dist > LOD_FAR_DISTANCE;
+          }
+        }, LOD_CHECK_INTERVAL_MS);
+        console.log('[perf-plugins] LOD distance culling started');
+      }
+    };
+
+    install();
+
+    return () => {
+      cancelled = true;
+      if (pluginsRef.current.lodInterval) {
+        clearInterval(pluginsRef.current.lodInterval);
+        pluginsRef.current.lodInterval = undefined;
+      }
+      // Destroy plugins if they have a destroy method
+      pluginsRef.current.fastNav?.destroy?.();
+      pluginsRef.current.viewCull?.destroy?.();
+      pluginsRef.current.fastNav = undefined;
+      pluginsRef.current.viewCull = undefined;
+    };
+  }, [ready, isMobile, viewerRef]);
+}
