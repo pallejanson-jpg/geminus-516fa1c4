@@ -1,155 +1,125 @@
 
-## Fix: Infargning vid xray, insights-farglaggning, och legend-interaktion
 
-### Problemanalys
+## Fix: X-ray ghosting och Insights-infargning
 
-Fyra separata problem har identifierats:
+### Rotorsak
 
-**Problem 1: Manuell X-ray slaecker infaergning**
-`XrayToggle.tsx` koer `scene.setObjectsXRayed(allIds, true)` pa ALLA objekt, inklusive rum som aer faerglagda av rumsvisualisering. Xeokit renderar xray-objekt med `xrayMaterial` och ignorerar `entity.colorize` -- sa faergerna foersvinner.
+Tva problem beror pa samma grundorsak: **opacity-baserad ghosting ger inte xray-effekt, och nar xray anvands overskriver det farger**.
 
-**Problem 2: Insights-infaergning syns inte**
-Trots `ensureXrayConfig` med lag `fillAlpha` fungerar inte xray-strategin. Asset+-bibliotekets interna rendering oeverskriver troligen xray-materialet eller tillstaendet. Laesningen: byt till opacity-baserad ghosting som redan bevisligen fungerar i rumsvisualiseringen (`entity.opacity = 0.15` istallet foer `entity.xrayed = true`).
+**Rumsvisualisering**: Farger fungerar (via `entity.colorize` + `entity.opacity`), men INGEN xray-effekt pa bakgrundsobjekt -- byggnaden ser bara matt ut, inte genomskinlig som i xeokits bild.
 
-**Problem 3: Legendens vaerdelabels uppdateras inte**
-`VisualizationLegendBar` visar FASTA skalvaerden fran `VISUALIZATION_CONFIGS` (t.ex. 16, 18, 20, 22, 24, 26, 30 foer temperatur). Dessa aer faergskale-stopp, inte faktiska rumsvaerden. Labelen visar ratt sak men boer kompletteras med dynamisk min/max baserat pa riktiga sensorvaerden i de synliga rummen.
+**Manuell X-ray**: Satter `entity.xrayed = true` pa allt utom fargade rum -- men Asset+-bibliotekets interna `xrayMaterial` ar fortfarande for ogenomskinligt, sa effekten ar darlig.
 
-**Problem 4: Legend-klick ger ingen synlig effekt**
-Legend-klick anvaender xray-strategi som inte fungerar. Byt till samma opacity-strategi.
+**Insights-farglaggning**: Anvander `entity.opacity = 0.1` (ingen xray) och satter `entity.colorize = rgb`. Rummen syns men i bla (standardfarg for IfcSpace) istallet for diagramfarger -- troligen for att Asset+-viewern aterstaller `colorize` internt nar `opacity` andras, eller fargerna appliceras i fel ordning.
 
----
+### Losning: Kombinerad strategi
 
-### Laesning: Byt ALLA xray-strategier till opacity-baserad ghosting
+Anvand **riktig xray** (fran issue #175) for bakgrundsobjekt, och satt `entity.xrayed = false` pa fargade objekt sa de renderas som solida objekt FRAMFOR den genomskinliga xray-geometrin. Detta ar exakt det som xeokit-utvecklaren rekommenderar.
 
-Samma teknik som redan fungerar i `RoomVisualizationPanel.applyVisualization`:
-- `entity.opacity = 0.1` foer "ghostade" objekt (istallet foer `entity.xrayed = true`)
-- `entity.opacity = 0.85` + `entity.colorize = rgb` foer faergade rum/tillgangar
-- Inget beroende pa `xrayMaterial` som Asset+ kan oeverskriva
+Nyckelinsikt: `entity.colorize` fungerar BARA pa objekt som INTE ar xray:ade. Xray:ade objekt renderas alltid med `xrayMaterial`. Sa strategin ar:
+1. Xray:a ALLA objekt
+2. Stang av xray pa de specifika objekt som ska fargas
+3. Applicera `entity.colorize` pa de icke-xray:ade objekten
 
 ---
 
 ### Fil 1: `src/components/viewer/AssetPlusViewer.tsx`
 
-**1a. Insights-effekten (rad 316-321) -- byt xray till opacity**
+**1a. Insights-effekten (rad 337-342) -- byt opacity till riktig xray**
 
+Byt fran:
 ```
-// BEFORE:
-ensureXrayConfig(scene);
-scene.setObjectsXRayed(allIds, true);
-// ... entity.xrayed = false; entity.colorize = rgb;
-
-// AFTER:
-// Ghost all objects with low opacity (no xray dependency)
-scene.setObjectsVisible(allIds, true);
 allIds.forEach(id => {
   const e = scene.objects?.[id];
   if (e) e.opacity = 0.1;
 });
-// ... entity.colorize = rgb; entity.opacity = 0.85;
-// (ta bort entity.xrayed = false)
 ```
 
-Tillaegg: laegg till cleanup-effekt som aterstaeller opacity till 1.0 och rensar colorize naer `insightsColorMode` avaktiveras (finns redan delvis).
+Till:
+```
+// Ensure xray material is transparent (issue #175)
+ensureXrayConfig(scene);
+// Xray ALL objects first
+scene.setObjectsXRayed(allIds, true);
+```
 
-**1b. Behall `ensureXrayConfig` foer eventuell framtida anvaendning men anvaend den inte i insights-floeded laengre.**
+**1b. Fargade entiteter (rad 367-374, 393-399, 429-434) -- stang av xray FORE colorize**
+
+For varje fargad entity, lagg till `entity.xrayed = false` FORE `entity.colorize`:
+```
+entity.xrayed = false;  // <-- Lagg till denna rad
+entity.visible = true;
+entity.colorize = rgb;
+entity.opacity = 0.85;
+```
+
+**1c. Cleanup nar insightsColorMode avaktiveras**
+
+I effektens cleanup/guard, aterstaell xray pa alla objekt:
+```
+scene.setObjectsXRayed(allIds, false);
+```
 
 ---
 
 ### Fil 2: `src/components/viewer/XrayToggle.tsx`
 
-**2a. Bevara rumsvisualiserings-faerger vid xray-toggle**
+**2a. Anvand `ensureXrayConfig` inline (redan delvis pa plats)**
 
-Naer xray aktiveras: saett xray pa alla UTOM redan faerglagda rum. Lyssna pa en event eller kontrollera `entity.colorize` innan xray saetts:
+Koden ar redan korrekt -- den hoppar over fargade entiteter. Men lagg till en extra saker: aterstaell ALLA objekts xray nar toggle stangs av, och aterstaell `opacity` och `colorize` som kanske andrats:
 
-```typescript
-const handleToggleXray = useCallback((enabled: boolean) => {
-  // ... existing viewer access ...
-  const objectIds = scene.objectIds || [];
-  
-  if (enabled) {
-    // Ensure transparent xray config
-    ensureXrayConfig(scene); // inline version
-    
-    objectIds.forEach(id => {
-      const entity = scene.objects?.[id];
-      if (!entity) return;
-      // Skip entities that are already colorized (from room visualization)
-      if (entity.colorize && (entity.colorize[0] !== 1 || entity.colorize[1] !== 1 || entity.colorize[2] !== 1)) {
-        return; // Don't xray colored rooms
-      }
-      entity.xrayed = true;
-    });
-  } else {
-    scene.setObjectsXRayed(objectIds, false);
-  }
-}, [viewerRef]);
+```
+} else {
+  scene.setObjectsXRayed(objectIds, false);
+  // Restore any opacity changes from legend clicks
+  objectIds.forEach(id => {
+    const entity = scene.objects?.[id];
+    if (entity && entity.opacity < 1.0) entity.opacity = 1.0;
+  });
+}
 ```
 
 ---
 
 ### Fil 3: `src/components/viewer/RoomVisualizationPanel.tsx`
 
-**3a. Legend-klick (rad 530-551) -- byt xray till opacity**
+**3a. Legend-klick (rad 530-551) -- byt opacity till xray**
+
+Byt fran opacity-strategi till xray-strategi for legend-klick (precis som insights):
 
 ```
-// BEFORE:
+// Ensure xray config
+ensureXrayConfig(scene);  // inline
+// Xray ALL objects
 scene.setObjectsXRayed(allIds, true);
-scene.setObjectsXRayed(idsToSelect, false);
-
-// AFTER:
-// Ghost all with low opacity
-allIds.forEach(id => {
-  const e = scene.objects?.[id];
-  if (e) e.opacity = 0.1;
-});
-// Restore matching rooms to full opacity
+// Un-xray matching rooms so their colors show
 idsToSelect.forEach(id => {
   const e = scene.objects?.[id];
-  if (e) e.opacity = 0.85;
+  if (e) e.xrayed = false;
 });
-
-// Toggle off: restore all to normal
-allIds.forEach(id => {
-  const e = scene.objects?.[id];
-  if (e) e.opacity = 1.0;
-});
-// Re-apply visualization to restore colored rooms
-applyVisualization();
 ```
 
----
-
-### Fil 4: `src/components/viewer/VisualizationLegendBar.tsx`
-
-**4a. Visa dynamiska min/max-vaerden fran faktiska rumsdata**
-
-Laegg till beraeknade `actualMin` / `actualMax` fran `roomValues` och visa dem i legenden utover de fasta skalstopparna:
-
-```typescript
-const actualMin = roomValues.length > 0 
-  ? Math.min(...roomValues.map(r => r.value)).toFixed(1) 
-  : null;
-const actualMax = roomValues.length > 0 
-  ? Math.max(...roomValues.map(r => r.value)).toFixed(1) 
-  : null;
+For toggle-off:
 ```
-
-Visa dessa som kompletterande info i legendens overkant/nederkant (t.ex. "Min: 18.2 degC -- Max: 24.7 degC").
+scene.setObjectsXRayed(allIds, false);
+// Re-apply room colors
+```
 
 ---
 
 ### Sammanfattning
 
-| Fil | Aendring |
+| Fil | Andring |
 |-----|---------|
-| `AssetPlusViewer.tsx` | Byt insights xray till opacity-ghosting |
-| `XrayToggle.tsx` | Bevara faerglagda rum vid manuell xray |
-| `RoomVisualizationPanel.tsx` | Byt legend-klick xray till opacity, lagg till aterstaellning |
-| `VisualizationLegendBar.tsx` | Visa dynamisk min/max fran faktiska sensorvaerden |
+| `AssetPlusViewer.tsx` | Insights: byt `entity.opacity = 0.1` till `scene.setObjectsXRayed + ensureXrayConfig`, lagg till `entity.xrayed = false` fore colorize |
+| `XrayToggle.tsx` | Smarre: aterstaell opacity vid toggle-off |
+| `RoomVisualizationPanel.tsx` | Legend-klick: byt opacity till xray-strategi |
 
-### Foervaentat resultat
+### Varfor det fungerar
 
-1. **Rumsvisualisering + manuell xray**: faerger bevaras, xray appliceras bara pa icke-faergade objekt
-2. **Insights till 3D**: rum faergas med opacity-ghosting (byggnaden blir naestan genomskinlig, faergade rum syns tydligt)
-3. **Legend-klick**: vald kategori framhaevs med opacity, resten ghostas
-4. **Legend-vaerden**: visar bade faergskalans fasta stopp och faktiska min/max fran sensordata
+Xeokit renderar xray:ade objekt med `xrayMaterial` (transparent ghosting). Objekt som INTE ar xray:ade renderas normalt med sin `colorize`-farg. Med `alphaDepthMask = false` renderas solida objekt FRAMFOR xray-geometrin. Sa:
+
+- Bakgrunden: xray = genomskinlig gratt (fillAlpha 0.1)
+- Fargade rum: xray AV, colorize = diagramfarg, opacity 0.85 -- renderas som solida fargade ytor framfor den ghostade byggnaden
+
+Det ar exakt det resultat som visas i xeokits screenshot pa issue #175.
