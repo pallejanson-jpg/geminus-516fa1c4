@@ -1,58 +1,50 @@
 
 
-## Fix: Alla ikoner och tooltips på Insights-sidan (mobil)
+## Slå ihop till EN byggnads-insights-komponent
 
 ### Problem
-1. **Eye-ikonen syns fortfarande inte på mobil** -- trots korrekta Tailwind-klasser är `bg-primary/30` (genomskinlig lila på mörk bakgrund) för svag. Ikonen smälter in och syns inte.
-2. **Svart tooltip dyker upp på cirkeldiagram** -- vi stängde av tooltip på "Room Types" och "Energy per Floor", men **Energy Distribution** (rad 327) och **Asset Categories** (rad 421) har fortfarande aktiva tooltips som blockerar touch.
-3. **Ingen navigering från cirkeldiagram** -- Energy Distribution och Asset Categories har ingen onClick-koppling till 3D-vyn.
+Det finns två nästan identiska filer som visar insights för en byggnad:
+- `BuildingInsightsView.tsx` (438 rader, har alla fixar: "Visa"-knappar, tooltip-borttagning, 3D-navigering)
+- `EntityInsightsView.tsx` (418 rader, har inga fixar)
+
+De används från olika navigeringsvägar men gör exakt samma sak. Detta orsakar att fixar i en fil aldrig syns om användaren navigerar via den andra.
 
 ### Lösning
 
-**Fil: `src/components/insights/BuildingInsightsView.tsx`**
+1. **Behåll `BuildingInsightsView.tsx`** som den enda komponenten (den som redan har alla fixar)
+2. **Ta bort `EntityInsightsView.tsx`** helt
+3. **Uppdatera `MainContent.tsx`** så att `entity_insights`-caset använder `BuildingInsightsView` istället
 
-**1. Ersätt ViewerLink med en synlig, solid knapp**
+### Ändringar per fil
 
-Istället för en genomskinlig cirkel med en liten ikon, använd en tydlig knapp med text + ikon:
+**`src/components/layout/MainContent.tsx`**
+- Ta bort importen av `EntityInsightsView`
+- I `case 'entity_insights'`: ersätt `<EntityInsightsView>` med `<BuildingInsightsView>`
+- Uppdatera importraden till `BuildingInsightsView` (redan importerad via `InsightsView`, men behöver en direkt import)
 
-```text
-Ny design:
-  - Bakgrund: bg-primary (solid, inte genomskinlig)
-  - Text: text-primary-foreground (vit mot lila)
-  - Storlek: px-2 py-1 rounded-md text-xs font-medium
-  - Innehåll: Eye-ikon (h-3.5 w-3.5) + texten "Visa"
-  - Puls: ring-2 ring-primary/50 animate-pulse (3 sek)
-```
+**`src/components/insights/EntityInsightsView.tsx`**
+- Radera filen helt
 
-Detta ger en tydlig, läsbar knapp som inte kan missas.
+**`src/components/insights/InsightsView.tsx`**
+- Ingen ändring behövs (använder redan `BuildingInsightsView`)
 
-**2. Stäng av tooltip på mobil för ALLA diagram**
-
-Tre kvarvarande `<Tooltip>`-element som behöver wrappas i `{!isMobile && ...}`:
-- Energy Distribution (rad 327)
-- Monthly Energy Trend (rad 352)
-- Asset Categories (rad 421)
-
-**3. Lägg till navigering på fler kort**
-
-- Energy Distribution: Ingen ändring (mock-data, ingen naturlig 3D-koppling)
-- Asset Categories: Lägg till onClick som navigerar till 3D-vyn med assets
-
-### Tekniska detaljer
+### Teknisk detalj
 
 ```text
-ViewerLink-komponent (rad 34-45):
-  NUVARANDE: genomskinlig cirkel med Eye-ikon, bg-primary/30
-  NYTT:      solid knapp "Visa" med Eye-ikon, bg-primary text-primary-foreground
+MainContent.tsx (rad 12, 69-76):
 
-Tooltip-ändringar:
-  Rad 327 (Energy Distribution):  <Tooltip .../> -> {!isMobile && <Tooltip .../>}
-  Rad 352 (Monthly Trend):        <Tooltip .../> -> {!isMobile && <Tooltip .../>}
-  Rad 421 (Asset Categories):     <Tooltip .../> -> {!isMobile && <Tooltip .../>}
+  NUVARANDE:
+    import EntityInsightsView from "...EntityInsightsView";
+    case 'entity_insights':
+      return <EntityInsightsView facility={...} onBack={...} />;
+
+  NYTT:
+    import BuildingInsightsView from "...BuildingInsightsView";
+    case 'entity_insights':
+      return <BuildingInsightsView facility={...} onBack={...} />;
 ```
 
-### Sammanfattning
-- Eye-ikonen ersätts med en solid, omisskännlig "Visa"-knapp med text
-- ALLA tooltips stängs av på mobil så att touch-events fungerar direkt
-- En enda fil ändras: `BuildingInsightsView.tsx`
-
+### Resultat
+- En enda komponent for byggnads-insights oavsett navigeringsvag
+- Alla fixar (Visa-knappar, tooltip-borttagning, 3D-navigering) fungerar overallt
+- Mindre kod att underhalla
