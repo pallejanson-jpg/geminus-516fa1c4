@@ -12,7 +12,6 @@ import {
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
-import { Badge } from '@/components/ui/badge';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,9 +25,16 @@ interface BuildingInsightsViewProps {
 
 // Mockup indicator badge
 const MockBadge = () => (
-    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
+    <span className="inline-flex items-center rounded-full border px-1 py-0 text-[9px] font-semibold bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
         Demo
-    </Badge>
+    </span>
+);
+
+// Reusable viewer link icon — always visible, signals "tap to view visually"
+const ViewerLink = () => (
+    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center text-primary transition-colors shrink-0">
+        <Eye className="h-4 w-4" />
+    </div>
 );
 
 // Energy distribution (building-specific mock)
@@ -225,12 +231,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color}`} />
                                 <div className="flex items-center gap-1">
                                     {kpi.isMock && <MockBadge />}
-                                    {kpi.onView && (
-                                        <Badge variant="outline" className="text-[8px] px-1 py-0 h-4 border-primary/40 text-primary/70 gap-0.5">
-                                            <Eye className="h-2.5 w-2.5" />
-                                            3D
-                                        </Badge>
-                                    )}
+                                    {kpi.onView && <ViewerLink />}
                                 </div>
                             </div>
                             <p className={`text-lg sm:text-xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
@@ -269,6 +270,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                         <Zap className="h-4 w-4 text-yellow-500" />
                                         <span className="text-purple-400">Energy per Floor</span>
                                         <MockBadge />
+                                        <span className="ml-auto"><ViewerLink /></span>
                                     </CardTitle>
                                     <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
                                 </CardHeader>
@@ -364,10 +366,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <DoorOpen className="h-4 w-4 text-green-500" />
                                     Room Types
-                                    <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-4 border-primary/40 text-primary/70 gap-0.5 ml-auto">
-                                        <Eye className="h-2.5 w-2.5" />
-                                        Visa i 3D
-                                    </Badge>
+                                    <span className="ml-auto"><ViewerLink /></span>
                                 </CardTitle>
                                 <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Tryck för att visa i 3D</CardDescription>
                             </CardHeader>
