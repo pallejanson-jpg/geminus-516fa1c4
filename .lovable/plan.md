@@ -1,137 +1,61 @@
 
 
-## Fix: Insights-till-3D infargning + interaktiv legend + ta bort Demo-badges
+## Fix: X-ray doljer fargade rum -- felaktig xrayMaterial-konfiguration
 
-### Problem 1: Insights-farger syns aldrig i 3D
+### Rotorsak
 
-**Rotorsak:** `handleAllModelsLoaded` (rad 1481) ar en `useCallback` med dependency-array `[executeDisplayAction, transparentBackground, ghostOpacity]` (rad 1637). Den inkluderar INTE `insightsColorMode`. Det innebar att `if (!insightsColorMode)`-guarden (rad 1532) alltid laser det gamla closure-vardet `undefined`, oavsett vad propen ar. Darmed anropas alltid `onShowSpacesChanged(false)` som doljer rummen, och Asset+-bibliotekets asynkrona response overskriver insights-effektens farglaggning 150ms senare.
+Fran xeokit-utvecklarens eget GitHub-issue (#175) framgar att tva konfigurationsandringar kravs for att X-ray ska fungera bra:
 
-**Fix:** Anvand en `useRef` for att bypassa stale closure.
+1. **`alphaDepthMask: false`** pa viewern -- annars maskar xray-lagret djupet och doljer solida objekt bakom det
+2. **`fillAlpha = 0.1`** (inte 0.7) -- xray-lagret ska vara nastan helt genomskinligt
 
-### Problem 2: Legend-klick i rumsvisualisering
+Nuvarande kod har `fillAlpha = 0.7` och satter aldrig `alphaDepthMask`. Det innebar att xray-lagret ar **70% ogenomskinligt** och renderas ovanpa de fargade rummen, sa de syns inte.
 
-Idag valjer legend-klick bara rum (`setObjectsSelected`). Onskemal: klicka pa t.ex. "20 grader" ska visa ENBART de rummen fargade, medan alla andra objekt blir xray (halvtransparenta). 
+### Losning
 
-Xeokit stodjer `xrayed` + `colorize` + `visible` pa samma entity. Nyckeln ar att xray-materialet inte overskriver `colorize` -- sa man kan:
-- Satt alla objekt till `xrayed = true` (halvtransparenta)
-- For matchande rum: `xrayed = false`, `colorize = rgb`, `visible = true`
-- Resultat: fargade rum sticker ut, resten ar genomskinlig
+Tva andringar i en fil:
 
-### Problem 3: Demo-badges
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
 
-`MockBadge`-komponenten och alla anvandningar ska bort.
+**1. Uppdatera `changeXrayMaterial` (rad 1019-1026)**
 
----
+Byt till xeokit-rekommenderade varden fran issue #175:
 
-### Fil 1: `src/components/viewer/AssetPlusViewer.tsx`
-
-**1a. Lagg till ref for insightsColorMode (rad ~175)**
-
-```text
-const insightsColorModeRef = useRef(insightsColorMode);
+```typescript
+xrayMaterial.fill = true;
+xrayMaterial.fillAlpha = 0.1;       // Was 0.7 -- much more transparent
+xrayMaterial.fillColor = [0.5, 0.5, 0.5];  // Neutral gray (was 200/255)
+xrayMaterial.edges = true;
+xrayMaterial.edgeAlpha = 0.2;       // Was 0.6 -- subtler edges
+xrayMaterial.edgeColor = [0.3, 0.3, 0.3];  // Was 15/255
 ```
 
-**1b. Synka ref med prop (rad ~187)**
+**2. Satt `alphaDepthMask = false` efter viewer-init (rad ~2880)**
 
-```text
-useEffect(() => { insightsColorModeRef.current = insightsColorMode; }, [insightsColorMode]);
+Efter att viewern mountats, stang av djupmaskning sa att solida (fargade) objekt renderas framfor xray-objekt:
+
+```typescript
+// After changeXrayMaterialRef.current();
+const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+if (xeokitViewer) {
+  xeokitViewer.scene.alphaDepthMask = false;
+}
 ```
 
-**1c. Byt closure-variabel till ref i handleAllModelsLoaded (rad 1532)**
+### Ingen annan andring kravs
 
-Byt `if (!insightsColorMode)` till `if (!insightsColorModeRef.current)`.
-Ingen andring i dependency-arrayen -- refen ar stabil.
-
-**1d. Uppdatera insights-effekten: xray-logik (rad 270-417)**
-
-Istallet for att bara dolja icke-matchande objekt (`visible = false`), anvand xray-kombinationen:
-
-```text
-// Steg 1: Satt ALLA objekt till xrayed + behall visible
-scene.setObjectsXRayed(allIds, true);
-
-// Steg 2: For matchande rum/objekt:
-entity.xrayed = false;   // Stang av xray
-entity.colorize = rgb;   // Farglagg
-entity.visible = true;   // Saker synlig
-entity.opacity = 0.85;
-```
-
-Detta ger exakt den onskan effekten: fargade rum sticker ut, allt annat ar halvtransparent.
-
----
-
-### Fil 2: `src/components/viewer/RoomVisualizationPanel.tsx`
-
-**2a. Uppdatera legend-klick-hanteraren (rad 502-540)**
-
-Nar en legend-stop klickas:
-- Om klick aktiverar (inte avaktiverar): satt alla objekt till `xrayed = true`, sedan for matchande rum: `xrayed = false`
-- Om klick avaktiverar (toggle off): aterstall `xrayed = false` pa alla objekt
-
-Befintlig `setObjectsSelected` behalles ocksa for markerings-effekten, men xray gor att de icke-matchande rummen blir genomskinliga.
-
-```text
-const handleLegendSelect = (e: CustomEvent<LegendSelectDetail>) => {
-  const { rangeMin, rangeMax, type } = e.detail;
-  // ... befintlig matchning ...
-
-  const allIds = scene.objectIds || [];
-  
-  if (idsToSelect.length > 0) {
-    // Xray allt
-    scene.setObjectsXRayed(allIds, true);
-    // Ta bort xray pa matchande rum
-    scene.setObjectsXRayed(idsToSelect, false);
-    // Markera dem
-    scene.setObjectsSelected(idsToSelect, true);
-  } else {
-    // Avaktivera: ta bort xray fran allt
-    scene.setObjectsXRayed(allIds, false);
-  }
-};
-```
-
-Lagg till cleanup: nar legend-toggle staengs av, aterstall xray pa alla objekt.
-
----
-
-### Fil 3: `src/components/insights/BuildingInsightsView.tsx`
-
-**3a. Ta bort MockBadge-komponenten (rad 40-45)**
-
-**3b. Ta bort alla anvandningar av MockBadge:**
-- `isMock`-propertyn fran KPI-kort
-- `{kpi.isMock && <MockBadge />}` rendering
-- `<MockBadge />` pa Energy Distribution och Monthly Energy Trend
-- `text-purple-400`-klasser fran titlar och varden
-
----
+Insights-effekten (rad 270-419) och legend-klick (RoomVisualizationPanel rad 530-540) anvander redan korrekt `setObjectsXRayed` + `entity.xrayed = false` + `entity.colorize`. Problemet ar ENBART att xray-materialet ar for ogenomskinligt och djupmaskar fargade objekt.
 
 ### Sammanfattning
 
-| Fil | Andring |
+| Rad | Andring |
 |-----|---------|
-| `AssetPlusViewer.tsx` | Ref for `insightsColorMode` (fixar stale closure), xray-logik i insights-effekten |
-| `RoomVisualizationPanel.tsx` | Legend-klick togglar xray pa icke-matchande objekt |
-| `BuildingInsightsView.tsx` | Ta bort MockBadge + lila text-styling |
+| 1019-1026 | `fillAlpha: 0.7 -> 0.1`, `edgeAlpha: 0.6 -> 0.2`, justerade fargvarden |
+| ~2880 | Lagg till `scene.alphaDepthMask = false` efter viewer-init |
 
-### Forvantad ordning efter fix
+### Forvantat resultat
 
-1. `handleAllModelsLoaded` laser `insightsColorModeRef.current` -- ser korrekt varde
-2. Om insights ar aktivt: skippar `onShowSpacesChanged(false)`
-3. Cache byggs, `spacesCacheReady = true`
-4. Insights-effekten vantar 150ms, sedan:
-   - Aktiverar rum-lagret
-   - Satter alla objekt till xrayed
-   - Stanger av xray + fargar matchande rum
-5. Resultat: bara rum syns fargade, allt annat halvtransparent
-
-### Legend-klick (rumsvisualisering)
-
-1. Klick pa "20" i temperaturskalan
-2. Alla objekt far `xrayed = true`
-3. Rum med ~20 grader: `xrayed = false` + markerade
-4. Resultat: 20-graders-rummen sticker ut, resten ar genomskinlig
-5. Klick igen: xray aterstaells, allt ser normalt ut
+- Xray-objekt renderas som subtila, nastan genomskinliga konturer
+- Fargade rum (fran Insights eller legend-klick) syns tydligt framfor xray-bakgrunden
+- Samma beteende som i xeokits officiella BIM Viewer
 
