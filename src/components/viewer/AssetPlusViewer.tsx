@@ -1018,11 +1018,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
     if (xrayMaterial) {
       xrayMaterial.fill = true;
-      xrayMaterial.fillAlpha = 0.7;
-      xrayMaterial.fillColor = [200 / 255, 200 / 255, 200 / 255];
+      xrayMaterial.fillAlpha = 0.1;
+      xrayMaterial.fillColor = [0.5, 0.5, 0.5];
       xrayMaterial.edges = true;
-      xrayMaterial.edgeAlpha = 0.6;
-      xrayMaterial.edgeColor = [15 / 255, 15 / 255, 15 / 255];
+      xrayMaterial.edgeAlpha = 0.2;
+      xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
     }
   }, []);
 
@@ -2879,6 +2879,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       // Apply x-ray material changes
       changeXrayMaterialRef.current();
+
+      // Disable alpha depth mask so colored (solid) objects render in front of xrayed objects
+      // See: https://github.com/xeokit/xeokit-bim-viewer/issues/175
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (xeokitViewer) {
+        xeokitViewer.scene.alphaDepthMask = false;
+      }
 
       // Mark viewer ready for direct calls
       deferCallsRef.current = false;
