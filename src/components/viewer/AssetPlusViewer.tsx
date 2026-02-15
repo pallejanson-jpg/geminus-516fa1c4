@@ -313,12 +313,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log('[AssetPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
-      // Re-apply xray config right before use (Asset+ may have overridden it)
-      ensureXrayConfig(scene);
-
-      // Step 1: X-Ray ALL objects so colored rooms stand out
+      // Step 1: Ghost ALL objects with low opacity (opacity-based, no xray dependency)
       const allIds = scene.objectIds || [];
-      scene.setObjectsXRayed(allIds, true);
+      allIds.forEach(id => {
+        const e = scene.objects?.[id];
+        if (e) e.opacity = 0.1;
+      });
 
       if (mode === 'energy_floors' || mode === 'energy_floor') {
         Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
@@ -347,7 +347,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             const entity = scene.objects?.[id];
             if (entity) {
               entity.visible = true;
-              entity.xrayed = false;
               entity.colorize = rgb;
               entity.opacity = 0.85;
             }
@@ -372,10 +371,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             itemIds.forEach((id: string) => {
               const entity = scene.objects?.[id];
               if (entity) {
-                entity.visible = true;
-                entity.xrayed = false;
-                entity.colorize = rgb;
-                entity.opacity = 0.9;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.9;
               }
             });
           });
@@ -410,7 +408,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const entity = scene.objects?.[mo.id];
           if (entity) {
             entity.visible = true;
-            entity.xrayed = false;
             entity.colorize = rgb;
             entity.opacity = 0.85;
           }
