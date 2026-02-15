@@ -313,6 +313,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log('[AssetPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
+      // Re-apply xray config right before use (Asset+ may have overridden it)
+      ensureXrayConfig(scene);
+
       // Step 1: X-Ray ALL objects so colored rooms stand out
       const allIds = scene.objectIds || [];
       scene.setObjectsXRayed(allIds, true);
@@ -1008,14 +1011,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [lookAtSpaceFromAngle, lookAtInstanceFromAngle]);
 
-  // Change X-ray material (from external_viewer-2.html)
-  const changeXrayMaterial = useCallback(() => {
-    const viewer = viewerInstanceRef.current;
-    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-    const xeokitViewer = assetView?.viewer;
-    const scene = xeokitViewer?.scene;
+  // Ensure xray material is configured for transparent ghosting (xeokit issue #175)
+  const ensureXrayConfig = useCallback((scene: any) => {
     const xrayMaterial = scene?.xrayMaterial;
-
     if (xrayMaterial) {
       xrayMaterial.fill = true;
       xrayMaterial.fillAlpha = 0.1;
@@ -1024,7 +1022,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       xrayMaterial.edgeAlpha = 0.2;
       xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
     }
+    if (scene) {
+      scene.alphaDepthMask = false;
+    }
   }, []);
+
+  // Change X-ray material (from external_viewer-2.html)
+  const changeXrayMaterial = useCallback(() => {
+    const viewer = viewerInstanceRef.current;
+    const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+    const xeokitViewer = assetView?.viewer;
+    const scene = xeokitViewer?.scene;
+    ensureXrayConfig(scene);
+  }, [ensureXrayConfig]);
 
   // Do display FMGUID (from Asset+ pattern - INTERNALS section)
   const doDisplayFmGuid = useCallback((fmGuidToShow: string, displayAction?: any) => {
