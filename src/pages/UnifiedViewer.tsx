@@ -55,6 +55,7 @@ const UnifiedViewerContent: React.FC<{
   const entityFmGuid = searchParams.get('entity');
   const floorFmGuid = searchParams.get('floor');
   const floorName = searchParams.get('floorName') || '';
+  const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -280,6 +281,7 @@ const UnifiedViewerContent: React.FC<{
       floorFmGuid={floorFmGuid}
       floorName={floorName}
       entityFmGuid={entityFmGuid}
+      visualizationParam={visualizationParam}
       onGoBack={handleGoBack}
     />;
   }
@@ -425,6 +427,7 @@ const UnifiedViewerContent: React.FC<{
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
             initialFmGuidToFocus={entityFmGuid || undefined}
+            initialVisualization={visualizationParam || undefined}
             transparentBackground={isVTMode}
             ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
             suppressOverlay={isVTMode}
@@ -529,7 +532,7 @@ function MobileUnifiedViewer({
   buildingData, viewMode, setViewMode, sdkStatus, ivApiRef,
   sdkContainerRef, transform,
   handle3DCameraChange, sync3DPosition, sync3DHeading, sync3DPitch,
-  hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, onGoBack,
+  hasIvion, hasFmAccess, floorFmGuid, floorName, entityFmGuid, visualizationParam, onGoBack,
 }: {
   buildingData: NonNullable<ReturnType<typeof useBuildingViewerData>['buildingData']>;
   viewMode: ViewMode;
@@ -547,6 +550,7 @@ function MobileUnifiedViewer({
   floorFmGuid: string | null;
   floorName: string;
   entityFmGuid: string | null;
+  visualizationParam: import('@/lib/visualization-utils').VisualizationType | null;
   onGoBack: () => void;
 }) {
   const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
@@ -580,6 +584,7 @@ function MobileUnifiedViewer({
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
             initialFmGuidToFocus={entityFmGuid || undefined}
+            initialVisualization={visualizationParam || undefined}
             syncEnabled={false}
             onCameraChange={handle3DCameraChange}
             syncPosition={sync3DPosition}
