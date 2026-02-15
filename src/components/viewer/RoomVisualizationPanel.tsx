@@ -527,9 +527,16 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         }
       });
 
+      const allIds = scene.objectIds || [];
       if (idsToSelect.length > 0) {
+        // X-ray everything, then un-xray matching rooms so they stand out
+        scene.setObjectsXRayed(allIds, true);
+        scene.setObjectsXRayed(idsToSelect, false);
         scene.setObjectsSelected(idsToSelect, true);
-        console.log(`Legend select: ${idsToSelect.length} entities in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+        console.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+      } else {
+        // Toggle off: remove xray from everything
+        scene.setObjectsXRayed(allIds, false);
       }
     };
 
