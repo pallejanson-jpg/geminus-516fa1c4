@@ -529,6 +529,17 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       const allIds = scene.objectIds || [];
       if (idsToSelect.length > 0) {
+        // Ensure xray material is properly configured before use (Asset+ may override)
+        const xrayMaterial = scene?.xrayMaterial;
+        if (xrayMaterial) {
+          xrayMaterial.fill = true;
+          xrayMaterial.fillAlpha = 0.1;
+          xrayMaterial.fillColor = [0.5, 0.5, 0.5];
+          xrayMaterial.edges = true;
+          xrayMaterial.edgeAlpha = 0.2;
+          xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
+        }
+        scene.alphaDepthMask = false;
         // X-ray everything, then un-xray matching rooms so they stand out
         scene.setObjectsXRayed(allIds, true);
         scene.setObjectsXRayed(idsToSelect, false);
