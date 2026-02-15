@@ -1,19 +1,27 @@
 
-## Implementation: 3D-prestandaoptimering + Insights-koppling — KLART ✅
 
-### Del 1: Prestandaoptimering med xeokit-plugins ✅
-- `src/hooks/usePerformancePlugins.ts` — Ny hook med FastNavPlugin, ViewCullPlugin och LOD distance culling
-- Integrerad i `AssetPlusViewer.tsx` via `usePerformancePlugins()`
+## Fix: Gör 3D-kopplingen synlig på mobil
 
-### Del 2: "Visa i 3D"-knappar på BuildingInsightsView ✅
-- KPI-kort (Rooms, Assets, Area, Floors) har klickbara "Visa i 3D"-knappar med hover-effekt
-- Room Types-diagram navigerar till 3D med `visualization=area`
+### Problem
+KPI-kortens "Visa i 3D"-indikation använder hover-effekter som inte fungerar på touch-enheter. Eye-ikonen och texten är dolda på mobil. Diagrammen har ingen visuell signal om att de är klickbara.
 
-### Del 3: Interaktiv diagramkoppling ✅
-- Energy per Floor stapeldiagram: klick på stapel navigerar till 3D med den våningen isolerad
-- Room Types pie chart: klick öppnar 3D med rumsvisualisering aktiv
+### Lösning
 
-### Del 4: Ny URL-parameter `visualization` ✅
-- `UnifiedViewer.tsx` läser `visualization` från URL
-- `AssetPlusViewer.tsx` har ny prop `initialVisualization` som dispatchar `INITIAL_VISUALIZATION_REQUESTED`
-- Fungerar på både desktop och mobil
+**Fil: `src/components/insights/BuildingInsightsView.tsx`**
+
+1. **KPI-kort**: Ta bort `opacity-0 group-hover:opacity-100` från Eye-ikonen så den alltid syns. Lägg till en liten "3D"-etikett som alltid visas (även på mobil) istället för att dölja "Visa i 3D" med `hidden sm:inline`.
+
+2. **Energy per Floor-diagram**: Lägg till en synlig text-hint i `CardDescription` som fungerar på mobil, t.ex. "Tryck på stapel för att visa i 3D". Lägg till en subtil border-effekt (`border-primary/30`) på kortet för att signalera interaktivitet.
+
+3. **Room Types-diagram**: Kortet har redan `cursor-pointer` och en Eye-ikon, men ikonen behöver vara tydligare. Lägg till en liten "Visa i 3D"-badge bredvid Eye-ikonen som alltid syns.
+
+### Tekniska detaljer
+
+**KPI-kort (rad 226-231)**: Ändra Eye-ikonen från `opacity-0 group-hover:opacity-100` till alltid synlig med en subtil färg (`text-primary/60`). Ersätt den dolda "Visa i 3D"-texten med en liten Badge som visar "3D" och är synlig på alla skärmstorlekar.
+
+**Energy per Floor (rad 277)**: Uppdatera `CardDescription` till att inkludera "Tap bar to view in 3D" på mobil.
+
+**Room Types (rad 371-373)**: Gör Eye-ikonen tydligare och lägg till en "3D"-badge bredvid den.
+
+**Samtliga kort med `onView`**: Lägg till en tunn `border-primary/20`-ram som visuell signal att kortet är interaktivt.
+
