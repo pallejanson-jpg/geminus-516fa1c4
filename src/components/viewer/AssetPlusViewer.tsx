@@ -350,14 +350,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
               const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
               if (moGuid !== guidLower) return;
-              const findSpaces = (parent: any) => {
+              const findChildren = (parent: any) => {
                 if (!parent.children) return;
                 parent.children.forEach((child: any) => {
-                  if (child.type?.toLowerCase() === 'ifcspace') foundIds.push(child.id);
-                  findSpaces(child);
+                  foundIds.push(child.id);  // Collect ALL objects, not just spaces
+                  findChildren(child);
                 });
               };
-              findSpaces(mo);
+              findChildren(mo);
             });
             spaceIds = foundIds;
           }
