@@ -564,29 +564,9 @@ function MobileUnifiedViewer({
   const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background z-40 overflow-hidden">
-      <div
-        className="flex items-center justify-between px-2 py-2 border-b bg-background/95 backdrop-blur-sm shrink-0"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
-      >
-        <Button variant="ghost" size="icon" onClick={onGoBack} className="h-9 w-9">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-          <Button size="sm" variant={activePanel === '3d' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('3d')}>3D</Button>
-          {hasIvion && (
-            <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('360')}>360°</Button>
-          )}
-          {(hasFmAccess || floorFmGuid) && (
-            <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className="h-7 px-3 text-xs rounded-md" onClick={() => setViewMode('2d')}>2D</Button>
-          )}
-        </div>
-
-        <div className="w-9" />
-      </div>
-
-      <div className="flex-1 min-h-0 relative">
+    <div className="fixed inset-0 bg-black z-40 overflow-hidden">
+      {/* Canvas layer — fills entire screen, behind header */}
+      <div className="absolute inset-0">
         {/* 3D viewer — always mounted, hidden when 360 active */}
         <div style={{ display: activePanel === '3d' ? 'block' : 'none', height: '100%' }}>
           <AssetPlusViewer
@@ -617,7 +597,7 @@ function MobileUnifiedViewer({
             </div>
         )}
 
-        {/* 360 SDK container — always mounted if hasIvion, uses shared useIvionSdk from parent */}
+        {/* 360 SDK container */}
         {hasIvion && (
           <div
             ref={sdkContainerRef}
@@ -629,6 +609,28 @@ function MobileUnifiedViewer({
             }}
           />
         )}
+      </div>
+
+      {/* Floating header — overlays the canvas */}
+      <div
+        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-2 py-2 bg-gradient-to-b from-black/70 via-black/40 to-transparent"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
+      >
+        <Button variant="ghost" size="icon" onClick={onGoBack} className="h-9 w-9 text-white hover:bg-white/20">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+
+        <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+          <Button size="sm" variant={activePanel === '3d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('3d')}>3D</Button>
+          {hasIvion && (
+            <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('360')}>360°</Button>
+          )}
+          {(hasFmAccess || floorFmGuid) && (
+            <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
+          )}
+        </div>
+
+        <div className="w-9" />
       </div>
     </div>
   );
