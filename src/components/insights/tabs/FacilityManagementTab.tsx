@@ -310,13 +310,13 @@ export default function FacilityManagementTab() {
                                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                 />
                                 <YAxis />
-                                <Tooltip 
+                                {!isMobile && <Tooltip 
                                     contentStyle={{ 
                                         backgroundColor: 'hsl(var(--popover))',
                                         border: '1px solid hsl(var(--border))',
                                         borderRadius: '8px'
                                     }}
-                                />
+                                />}
                                 <Bar 
                                     dataKey="value" 
                                     name="Count"
@@ -351,7 +351,7 @@ export default function FacilityManagementTab() {
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -361,7 +361,7 @@ export default function FacilityManagementTab() {
                                             `${value} issues`,
                                             props.payload.fullName
                                         ]}
-                                    />
+                                    />}
                                     <Bar 
                                         dataKey="activeIssues" 
                                         name="Issues"
@@ -402,13 +402,13 @@ export default function FacilityManagementTab() {
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
-                                    />
+                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>

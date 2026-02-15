@@ -270,13 +270,13 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                                 <Cell key={`cell-${index}`} fill={entry.color} />
                                             ))}
                                         </Pie>
-                                        <Tooltip 
+                                        {!isMobile && <Tooltip 
                                             contentStyle={{ 
                                                 backgroundColor: 'hsl(var(--popover))',
                                                 border: '1px solid hsl(var(--border))',
                                                 borderRadius: '8px'
                                             }}
-                                        />
+                                        />}
                                         <Legend />
                                     </PieChart>
                                 </ResponsiveContainer>
@@ -310,7 +310,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -320,7 +320,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                             `${value} assets`,
                                             props.payload.fullName
                                         ]}
-                                    />
+                                    />}
                                     <Bar 
                                         dataKey="assetCount" 
                                         name="Assets"
