@@ -529,23 +529,31 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
       const allIds = scene.objectIds || [];
       if (idsToSelect.length > 0) {
-        // Ghost all with low opacity (no xray dependency)
-        allIds.forEach(id => {
-          const e = scene.objects?.[id];
-          if (e) e.opacity = 0.1;
-        });
-        // Restore matching rooms to full opacity
+        // X-ray ALL objects for transparent ghosting
+        const xrayMaterial = scene?.xrayMaterial;
+        if (xrayMaterial) {
+          xrayMaterial.fill = true;
+          xrayMaterial.fillAlpha = 0.1;
+          xrayMaterial.fillColor = [0.5, 0.5, 0.5];
+          xrayMaterial.edges = true;
+          xrayMaterial.edgeAlpha = 0.2;
+          xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
+        }
+        scene.alphaDepthMask = false;
+        scene.setObjectsXRayed(allIds, true);
+        // Un-xray matching rooms so their colors show through
         idsToSelect.forEach(id => {
           const e = scene.objects?.[id];
-          if (e) e.opacity = 0.85;
+          if (e) e.xrayed = false;
         });
         scene.setObjectsSelected(idsToSelect, true);
-        console.log(`Legend select: ${idsToSelect.length} entities opacity-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+        console.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
       } else {
-        // Toggle off: restore all to normal opacity and re-apply visualization
+        // Toggle off: remove xray from all and restore opacity
+        scene.setObjectsXRayed(allIds, false);
         allIds.forEach(id => {
           const e = scene.objects?.[id];
-          if (e) e.opacity = 1.0;
+          if (e && e.opacity < 1.0) e.opacity = 1.0;
         });
       }
     };
