@@ -1,6 +1,7 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useXktPreload } from '@/hooks/useXktPreload';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { 
@@ -78,6 +79,9 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
     const navigate = useNavigate();
+    
+    // Preload XKT models in background so 3D viewer loads fast
+    useXktPreload(facility.fmGuid);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -155,10 +159,11 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
 
     // Navigation helper: open 3D viewer with context
-    const navigateTo3D = (opts?: { entity?: string; visualization?: string }) => {
+    const navigateTo3D = (opts?: { entity?: string; visualization?: string; assetType?: string }) => {
         const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
         if (opts?.entity) params.set('entity', opts.entity);
         if (opts?.visualization) params.set('visualization', opts.visualization);
+        if (opts?.assetType) params.set('assetType', opts.assetType);
         navigate(`/split-viewer?${params.toString()}`);
     };
 
@@ -401,7 +406,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 <TabsContent value="asset" className="mt-0 space-y-6">
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Asset Category Distribution - REAL */}
-                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D()}>
+                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D({ assetType: assetCategoryPie.length > 0 ? assetCategoryPie[0].name : undefined })}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Package className="h-4 w-4 text-primary" />
