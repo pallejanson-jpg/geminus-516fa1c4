@@ -1,47 +1,76 @@
 
-## Fix: 4 UI-problem i 3D-viewern
+## Implementation: 3D-prestandaoptimering + Insights-koppling
 
-### 1. Tydligare vita textfarger i 3D-menyer
+### Del 1: Prestandaoptimering med xeokit-plugins
 
-Flera menyer i 3D-viewern (dropdown-menyer, overflow-meny, hogerpanelen) anvander `text-foreground` och `text-muted-foreground` som kan bli otydliga mot mork bakgrund. Losningen ar att lagga till explicita ljusare textfarger i de relevanta komponenterna.
+Tre xeokit-plugins installeras efter att viewern har initialiserats, i `AssetPlusViewer.tsx`:
+
+**1a. FastNavPlugin** -- Sanker canvas-upplosningen och stangar av dyra renderingseffekter (kanter, transparens) medan kameran ror sig. Atergar till full kvalitet nar interaktionen slutar.
+
+```text
+FastNavPlugin konfiguration:
+- scaleCanvasResolution: true
+- scaleCanvasResolutionFactor: 0.5 (mobil) / 0.6 (desktop)
+- hideEdges: true
+- hideTransparentObjects: false (behovs for rum)
+- hideSAO: true
+```
+
+**1b. ViewCullPlugin** -- Döljer objekt utanfor kamerans synfalt (frustum culling) for att minska GPU-belastning.
+
+```text
+ViewCullPlugin konfiguration:
+- maxTreeDepth: 20 (standard rekommendation)
+```
+
+**1c. LOD Distance Culling** -- Doljer sma objekt (t.ex. beslagsobjekt) nar kameran ar langt bort. Anvander xeokits `scene.objects` och avstandet till kameran for att toggla `culled`-egenskapen pa sma entiteter.
+
+**Implementering:**
+- Filen `src/components/viewer/AssetPlusViewer.tsx` -- Ny `useEffect` som installerar FastNavPlugin och ViewCullPlugin nar `initStep === 'ready'`. Skripten laddas fran xeokit CDN (samma som NavCubePlugin).
+- Ny fil `src/hooks/usePerformancePlugins.ts` -- Hook som kapslar in plugin-installationen och LOD-logiken, med `isMobile`-flagga for aggressivare skalning pa mobil.
+
+### Del 2: "Visa i 3D"-knappar pa BuildingInsightsView
+
+Lagg till kontextuella knappar pa KPI-kort och diagramkort som navigerar till 3D-viewern med ratt kontext.
+
+**Knappar:**
+- **Rooms KPI-kort**: Klick oppnar 3D med rumsvisualisering (yta/NTA) forvald
+- **Assets KPI-kort**: Klick oppnar 3D med fokus pa byggnaden
+- **Energy per Floor-diagram (staplarna)**: Klick pa en stapel oppnar 3D med den vaningen isolerad (Solo mode)
+- **Room Types-diagram**: Klick oppnar 3D med rumsvisualisering aktiv
+
+**Navigation:** Anvander befintliga URL-parametrar:
+```text
+/split-viewer?building={fmGuid}&mode=3d&visualization=temperature
+/split-viewer?building={fmGuid}&mode=3d&entity={floorFmGuid}
+```
+
+**Ny URL-parameter:** `visualization` -- Nar denna finns, aktiverar `AssetPlusViewer` automatiskt rumsvisualisering av angiven typ vid laddning.
 
 **Filer att andra:**
-- `src/components/viewer/VisualizationLegendBar.tsx` -- andra `text-foreground/80` till `text-white` for legend-etiketter
-- `src/components/viewer/ViewerToolbar.tsx` -- sakerstall att dropdown-menytexter ar tydliga med `text-foreground` (dessa ar redan pa `bg-card` sa de bor vara okej, men vi kontrollerar)
-- `src/components/viewer/ViewerRightPanel.tsx` -- sakerstall att alla texter i panelen har tillracklig kontrast, speciellt `text-foreground/70`-referenserna
+- `src/components/insights/BuildingInsightsView.tsx` -- Lagg till `onClick`-handlers pa KPI-kort och diagramkort som anropar `navigate()` med ratt parametrar. Importera `Eye`-ikon fran lucide for visuell indikation.
+- `src/pages/UnifiedViewer.tsx` -- Lasa ny `visualization`-parameter fran URL och skicka vidare till `AssetPlusViewer`.
+- `src/components/viewer/AssetPlusViewer.tsx` -- Ny prop `initialVisualization?: VisualizationType`. Nar satt, dispatchar `VISUALIZATION_STATE_CHANGED`-event vid laddning for att aktivera rumsvisualisering automatiskt.
 
-### 2. Legend-stapeln visas bara vid aktiv rumsvisualisering
+### Del 3: Interaktiv diagramkoppling
 
-`VisualizationLegendOverlay` lyssnar redan pa `VISUALIZATION_STATE_CHANGED` och doljer sig nar `visualizationType === 'none'`. Men den initialiserar fran `localStorage` och kan visa en stale legend vid start. Dessutom ska den uppdateras dynamiskt nar anvandaren byter typ (tex temperatur till CO2).
+Nar anvandaren klickar pa en stapel i "Energy per Floor"-diagrammet navigeras de till 3D-viewern med den vaningen isolerad. Klick pa en sektor i pajdiagrammet (t.ex. Room Types) navigerar till 3D med rumsvisualisering aktiv.
 
-**Fix:**
-- `src/components/viewer/VisualizationLegendOverlay.tsx` -- initialisera alltid med `'none'` istallet for att lasa fran localStorage. Legend-stapeln ska bara visas nar en aktiv visualisering har aktiverats under sessionen via eventet. Den uppdateras redan korrekt nar typen andras (eventet skickar ny `visualizationType`).
+**Implementering i `BuildingInsightsView.tsx`:**
+- `onClick`-handler pa `<Bar>` i BarChart: hittar vaningens `fmGuid` fran `allData` baserat pa staplans namn och navigerar med `entity`-parametern.
+- `onClick`-handler pa `<Pie>` i PieChart (Room Types): navigerar till 3D med `visualization=area`.
 
-### 3. Nedre verktygsfalt doljs bakom browserns navigationsmeny pa mobil
+### Del 4: Responsivitet (desktop + mobil)
 
-`ViewerToolbar` positionerar sig med `bottom: calc(max(env(safe-area-inset-bottom), 12px) + 16px)`. Pa manga mobila webblasare racker detta inte -- browserns egna knappar (home indicator + navigeringsfalt) kan overlappa.
+- Alla "Visa i 3D"-knappar renderas som smala ikoner pa mobil (kompakta) och med text pa desktop.
+- Prestandaplugins anvander mer aggressiva installningar pa mobil (lagre resolution scaling, aktiverat frustum culling).
+- KPI-kort-knappar far `touch-action: manipulation` for snabb respons pa mobil.
 
-**Fix:**
-- `src/components/viewer/ViewerToolbar.tsx` -- oka offset till `+ 28px` istallet for `+ 16px` for att ge mer utrymme under toolbaren pa mobil.
+### Sammanfattning av filandringar
 
-### 4. Stangknapp och pinnaknapp overlappar pa mobil i hogerpanelen
-
-`SheetContent` i `sheet.tsx` renderar en absolut-positionerad X-knapp pa `right-4 top-4`. Hogerpanelens `SheetTitle` placerar Pin-knappen i samma omrade. Pa mobil overlappar dessa.
-
-**Fix:**
-- `src/components/viewer/ViewerRightPanel.tsx` -- pa mobil, dolj den inbyggda Sheet-stangknappen (genom att lagga till en CSS-klass som doljer den) och integrera bade stang- och pin-knapparna i SheetTitle-raden med korrekt avstand. Alternativt flytta pin-knappen till vanster sida av headern pa mobil.
-
-### Tekniska detaljer
-
-**`src/components/viewer/VisualizationLegendBar.tsx`** (rad 144-152):
-- Andra `text-foreground/80` till `text-white` och `text-foreground` till `text-white` for bat kontrast mot 3D-bakgrund.
-
-**`src/components/viewer/VisualizationLegendOverlay.tsx`** (rad 16-25):
-- Andra initialstate till `visualizationType: 'none'` utan localStorage-lasning, sa att legend bara visas nar rumsvisualisering faktiskt aktiveras.
-
-**`src/components/viewer/ViewerToolbar.tsx`** (rad 757):
-- Andra `+ 16px` till `+ 28px` i mobile toolbar bottom-offset.
-
-**`src/components/viewer/ViewerRightPanel.tsx`** (rad 404):
-- Lagg till CSS-klass `[&>button:last-child]:hidden` pa SheetContent for att dolj den automatiska X-knappen
-- Lagg till en explicit stangknapp bredvid pin-knappen i SheetTitle med ratt avstand: `gap-1` och sida vid sida layout.
+| Fil | Andringar |
+|---|---|
+| `src/hooks/usePerformancePlugins.ts` | **NY** -- Hook for FastNavPlugin + ViewCullPlugin + LOD |
+| `src/components/viewer/AssetPlusViewer.tsx` | Anropa `usePerformancePlugins`, ny prop `initialVisualization` |
+| `src/components/insights/BuildingInsightsView.tsx` | "Visa i 3D"-knappar pa KPI-kort och diagram med `navigate()` |
+| `src/pages/UnifiedViewer.tsx` | Lasa `visualization`-parameter fran URL, skicka till viewer |
