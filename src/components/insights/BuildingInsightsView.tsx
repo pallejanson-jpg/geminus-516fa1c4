@@ -38,8 +38,8 @@ const ViewerLink = () => {
         return () => clearTimeout(timer);
     }, []);
     return (
-        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/30 animate-pulse' : ''}`}>
-            <Eye className="h-4 w-4" />
+        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/25 border border-primary/50 shadow-sm shadow-primary/25 hover:bg-primary/35 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/60 animate-pulse' : ''}`}>
+            <Eye className="h-4.5 w-4.5" />
         </div>
     );
 };
@@ -284,11 +284,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                 <CardContent>
                                     <div className="h-64 cursor-pointer">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={energyByFloor} layout="vertical" onClick={(state) => {
-                                                if (state?.activePayload?.[0]?.payload?.fmGuid) {
-                                                    navigateTo3D({ entity: state.activePayload[0].payload.fmGuid });
-                                                }
-                                            }}>
+                                            <BarChart data={energyByFloor} layout="vertical">
                                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                                 <XAxis type="number" className="text-xs" />
                                                 <YAxis 
@@ -296,10 +292,10 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                     width={isMobile ? 60 : 80}
                                                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                                 />
-                                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                                                <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]}>
+                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                     {energyByFloor.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        <Cell key={`cell-${index}`} fill={entry.color} onClick={() => navigateTo3D({ entity: entry.fmGuid })} />
                                                     ))}
                                                 </Bar>
                                             </BarChart>
