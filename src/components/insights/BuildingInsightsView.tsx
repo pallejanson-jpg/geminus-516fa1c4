@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState, useEffect } from 'react';
+import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useXktPreload } from '@/hooks/useXktPreload';
@@ -11,12 +11,13 @@ import {
 } from 'recharts';
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
-    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye
+    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
+import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
@@ -87,6 +88,47 @@ const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
 
+// ─── Inline 3D Viewer for desktop ───
+interface InsightsInlineViewerProps {
+    fmGuid: string;
+    insightsColorMode?: string;
+    insightsColorMap?: Record<string, [number, number, number]>;
+    onFullscreen: () => void;
+}
+
+const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, insightsColorMode, insightsColorMap, onFullscreen }) => {
+    return (
+        <div className="w-[400px] shrink-0 sticky top-2 h-[500px] rounded-lg border border-border overflow-hidden relative group">
+            {/* Read-only viewer — pointer events disabled on the viewer itself */}
+            <div className="absolute inset-0 pointer-events-none">
+                <AssetPlusViewer
+                    fmGuid={fmGuid}
+                    suppressOverlay
+                    insightsColorMode={insightsColorMode}
+                    insightsColorMap={insightsColorMap}
+                    forceXray={!!insightsColorMode}
+                />
+            </div>
+            {/* Clickable overlay for fullscreen */}
+            <div
+                className="absolute inset-0 cursor-pointer z-10 flex items-end justify-center"
+                onClick={onFullscreen}
+            >
+                <div className="mb-3 flex items-center gap-2 px-3 py-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border text-xs text-foreground shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    <span>Öppna i fullskärm</span>
+                </div>
+            </div>
+            {/* Placeholder text when no mode is active */}
+            {!insightsColorMode && (
+                <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
+                    <p className="text-xs text-muted-foreground/60 text-center px-4">Klicka på ett diagram för att visa i 3D</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export default function BuildingInsightsView({ facility, onBack }: BuildingInsightsViewProps) {
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
@@ -94,6 +136,10 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     
     // Preload XKT models in background so 3D viewer loads fast
     useXktPreload(facility.fmGuid);
+
+    // Desktop inline viewer state
+    const [inlineInsightsMode, setInlineInsightsMode] = useState<string | undefined>(undefined);
+    const [inlineColorMap, setInlineColorMap] = useState<Record<string, [number, number, number]> | undefined>(undefined);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -171,8 +217,8 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
 
     // Navigation helper: open 3D viewer with context + insights color map
-    const navigateToInsights3D = (opts: {
-        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category';
+    const navigateToInsights3D = useCallback((opts: {
+        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type';
         colorMap: Record<string, [number, number, number]>;
         entity?: string;
         assetType?: string;
@@ -186,7 +232,33 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         if (opts.entity) params.set('entity', opts.entity);
         if (opts.assetType) params.set('assetType', opts.assetType);
         navigate(`/split-viewer?${params.toString()}`);
-    };
+    }, [facility.fmGuid, navigate]);
+
+    // Dual-path handler: desktop updates inline viewer, mobile navigates
+    const handleInsightsClick = useCallback((opts: {
+        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type';
+        colorMap: Record<string, [number, number, number]>;
+        entity?: string;
+        assetType?: string;
+    }) => {
+        if (isMobile) {
+            navigateToInsights3D(opts);
+        } else {
+            // Update inline viewer reactively
+            setInlineInsightsMode(opts.mode);
+            setInlineColorMap(opts.colorMap);
+        }
+    }, [isMobile, navigateToInsights3D]);
+
+    // Fullscreen handler for inline viewer
+    const handleInlineFullscreen = useCallback(() => {
+        if (inlineInsightsMode && inlineColorMap) {
+            navigateToInsights3D({ mode: inlineInsightsMode as any, colorMap: inlineColorMap });
+        } else {
+            const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
+            navigate(`/split-viewer?${params.toString()}`);
+        }
+    }, [inlineInsightsMode, inlineColorMap, navigateToInsights3D, facility.fmGuid, navigate]);
 
     // Legacy simple navigation (for non-colormap views)
     const navigateTo3D = (opts?: { entity?: string; visualization?: string; assetType?: string }) => {
@@ -287,203 +359,237 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 ))}
             </div>
 
-            {/* Tabs: Performance, Space, Asset */}
-            <Tabs defaultValue="performance" className="w-full">
-                <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
-                    <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
-                        <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                            Performance
-                        </TabsTrigger>
-                        <TabsTrigger value="space" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                            Space
-                        </TabsTrigger>
-                        <TabsTrigger value="asset" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
-                            Asset
-                        </TabsTrigger>
-                    </TabsList>
-                </div>
+            {/* Main content: Tabs + Desktop inline 3D viewer */}
+            <div className="flex gap-4">
+                <div className="flex-1 min-w-0">
+                    {/* Tabs: Performance, Space, Asset */}
+                    <Tabs defaultValue="performance" className="w-full">
+                        <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
+                            <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
+                                <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    Performance
+                                </TabsTrigger>
+                                <TabsTrigger value="space" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    Space
+                                </TabsTrigger>
+                                <TabsTrigger value="asset" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                    Asset
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
 
-                {/* Performance Tab - mostly MOCK energy data */}
-                <TabsContent value="performance" className="mt-0 space-y-6">
-                    <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
-                        {/* Energy per Floor - MOCK */}
-                        {energyByFloor.length > 0 && (
-                        <Card className="border-primary/20 hover:border-primary/50 transition-colors">
+                        {/* Performance Tab - mostly MOCK energy data */}
+                        <TabsContent value="performance" className="mt-0 space-y-6">
+                            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+                                {/* Energy per Floor - MOCK */}
+                                {energyByFloor.length > 0 && (
+                                <Card className="border-primary/20 hover:border-primary/50 transition-colors">
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-base flex items-center gap-2">
+                                                <Zap className="h-4 w-4 text-yellow-500" />
+                                                Energy per Floor
+                                                <span className="ml-auto cursor-pointer" onClick={() => {
+                                                    const colorMap: Record<string, [number, number, number]> = {};
+                                                    energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
+                                                    handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                }}><ViewerLink /></span>
+                                            </CardTitle>
+                                            <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="h-64 cursor-pointer">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={energyByFloor} layout="vertical">
+                                                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                                                        <XAxis type="number" className="text-xs" />
+                                                        <YAxis 
+                                                            dataKey="name" type="category" 
+                                                            width={isMobile ? 60 : 80}
+                                                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
+                                                        />
+                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                        <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
+                                                            {energyByFloor.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
+                                                                    const colorMap: Record<string, [number, number, number]> = {};
+                                                                    colorMap[entry.fmGuid] = hslStringToRgbFloat(entry.color);
+                                                                    handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.fmGuid });
+                                                                }} />
+                                                            ))}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )}
+
+                                {/* Energy Distribution - MOCK */}
+                                <Card className="border-primary/20 hover:border-primary/50 transition-colors">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <ThermometerSun className="h-4 w-4 text-orange-500" />
+                                            <span className="text-purple-400">Energy Distribution</span>
+                                            <MockBadge />
+                                            <span className="ml-auto cursor-pointer" onClick={() => {
+                                                // Navigate with all floor colors (energy doesn't map to objects directly)
+                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
+                                                handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                            }}><ViewerLink /></span>
+                                        </CardTitle>
+                                        <CardDescription>Breakdown by category</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="h-64">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
+                                                        {energyDistribution.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
+                                                                // Individual segment: show all floors colored (energy categories don't map 1:1 to spaces)
+                                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
+                                                                handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                            }} />
+                                                        ))}
+                                                    </Pie>
+                                                    {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* Monthly Trend - MOCK */}
+                            <Card>
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
-                                        <Zap className="h-4 w-4 text-yellow-500" />
-                                        Energy per Floor
-                                        <span className="ml-auto cursor-pointer" onClick={() => {
-                                            const colorMap: Record<string, [number, number, number]> = {};
-                                            energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                            navigateToInsights3D({ mode: 'energy_floors', colorMap });
-                                        }}><ViewerLink /></span>
+                                        <Droplets className="h-4 w-4 text-blue-500" />
+                                        <span className="text-purple-400">Monthly Energy Trend</span>
+                                        <MockBadge />
                                     </CardTitle>
-                                    <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="h-64 cursor-pointer">
+                                    <div className="h-64">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={energyByFloor} layout="vertical">
+                                            <LineChart data={monthlyTrend}>
                                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                                                <XAxis type="number" className="text-xs" />
-                                                <YAxis 
-                                                    dataKey="name" type="category" 
-                                                    width={isMobile ? 60 : 80}
-                                                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
-                                                />
+                                                <XAxis dataKey="month" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                                                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                                 {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
-                                                    {energyByFloor.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
-                                                            const colorMap: Record<string, [number, number, number]> = {};
-                                                            colorMap[entry.fmGuid] = hslStringToRgbFloat(entry.color);
-                                                            navigateToInsights3D({ mode: 'energy_floor', colorMap, entity: entry.fmGuid });
-                                                        }} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
+                                                <Legend />
+                                                <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
+                                                <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
+                                            </LineChart>
                                         </ResponsiveContainer>
                                     </div>
                                 </CardContent>
                             </Card>
-                        )}
+                        </TabsContent>
 
-                        {/* Energy Distribution - MOCK */}
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <ThermometerSun className="h-4 w-4 text-orange-500" />
-                                    <span className="text-purple-400">Energy Distribution</span>
-                                    <MockBadge />
-                                </CardTitle>
-                                <CardDescription>Breakdown by category</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
-                                                {energyDistribution.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                            {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                            <Legend />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Monthly Trend - MOCK */}
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base flex items-center gap-2">
-                                <Droplets className="h-4 w-4 text-blue-500" />
-                                <span className="text-purple-400">Monthly Energy Trend</span>
-                                <MockBadge />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={monthlyTrend}>
-                                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                                        <XAxis dataKey="month" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                                        <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                        <Legend />
-                                        <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
-                                        <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
-                                    </LineChart>
-                                </ResponsiveContainer>
+                        {/* Space Tab - REAL room data */}
+                        <TabsContent value="space" className="mt-0 space-y-6">
+                            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+                                {/* Room Types Distribution - REAL */}
+                                <Card className="border-primary/20 hover:border-primary/50 transition-colors">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <DoorOpen className="h-4 w-4 text-green-500" />
+                                            Room Types
+                                            <span className="ml-auto cursor-pointer" onClick={() => {
+                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                spaceTypePie.forEach(s => { colorMap[s.name] = hslStringToRgbFloat(s.color); });
+                                                handleInsightsClick({ mode: 'room_types', colorMap });
+                                            }}><ViewerLink /></span>
+                                        </CardTitle>
+                                        <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Tryck för att visa i 3D</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="h-64">
+                                            {spaceTypePie.length > 0 ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <PieChart>
+                                                        <Pie data={spaceTypePie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
+                                                            {spaceTypePie.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
+                                                                    const colorMap: Record<string, [number, number, number]> = {};
+                                                                    colorMap[entry.name] = hslStringToRgbFloat(entry.color);
+                                                                    handleInsightsClick({ mode: 'room_type', colorMap });
+                                                                }} />
+                                                            ))}
+                                                        </Pie>
+                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                        <Legend />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center text-muted-foreground">No room data</div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                        </TabsContent>
 
-                {/* Space Tab - REAL room data */}
-                <TabsContent value="space" className="mt-0 space-y-6">
-                    <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
-                        {/* Room Types Distribution - REAL */}
-                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D({ visualization: 'area' })}>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <DoorOpen className="h-4 w-4 text-green-500" />
-                                    Room Types
-                                    <span className="ml-auto"><ViewerLink /></span>
-                                </CardTitle>
-                                <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Tryck för att visa i 3D</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-64">
-                                    {spaceTypePie.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie data={spaceTypePie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
-                                                    {spaceTypePie.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                                    ))}
-                                                </Pie>
-                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                <Legend />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="h-full flex items-center justify-center text-muted-foreground">No room data</div>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </TabsContent>
+                        {/* Asset Tab - REAL asset data */}
+                        <TabsContent value="asset" className="mt-0 space-y-6">
+                            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+                                {/* Asset Category Distribution - REAL */}
+                                <Card className="border-primary/20 hover:border-primary/50 transition-colors">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <Package className="h-4 w-4 text-primary" />
+                                            Asset Categories
+                                            <span className="ml-auto cursor-pointer" onClick={() => {
+                                                const colorMap: Record<string, [number, number, number]> = {};
+                                                assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
+                                                handleInsightsClick({ mode: 'asset_categories', colorMap });
+                                            }}><ViewerLink /></span>
+                                        </CardTitle>
+                                        <CardDescription>{stats.assetCount} assets (real data) · Tryck på segment för 3D</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="h-64">
+                                            {assetCategoryPie.length > 0 ? (
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <PieChart>
+                                                        <Pie data={assetCategoryPie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
+                                                            {assetCategoryPie.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
+                                                                    const colorMap: Record<string, [number, number, number]> = {};
+                                                                    colorMap[entry.name] = hslStringToRgbFloat(entry.color);
+                                                                    handleInsightsClick({ mode: 'asset_category', colorMap, assetType: entry.name });
+                                                                }} />
+                                                            ))}
+                                                        </Pie>
+                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                        <Legend />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center text-muted-foreground">No asset data</div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+                </div>
 
-                {/* Asset Tab - REAL asset data */}
-                <TabsContent value="asset" className="mt-0 space-y-6">
-                    <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
-                        {/* Asset Category Distribution - REAL */}
-                        <Card className="border-primary/20 hover:border-primary/50 transition-colors">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Package className="h-4 w-4 text-primary" />
-                                    Asset Categories
-                                    <span className="ml-auto cursor-pointer" onClick={() => {
-                                        const colorMap: Record<string, [number, number, number]> = {};
-                                        assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
-                                        navigateToInsights3D({ mode: 'asset_categories', colorMap });
-                                    }}><ViewerLink /></span>
-                                </CardTitle>
-                                <CardDescription>{stats.assetCount} assets (real data) · Tryck på segment för 3D</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-64">
-                                    {assetCategoryPie.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie data={assetCategoryPie} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 50} outerRadius={isMobile ? 65 : 80} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
-                                                    {assetCategoryPie.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                            const colorMap: Record<string, [number, number, number]> = {};
-                                                            colorMap[entry.name] = hslStringToRgbFloat(entry.color);
-                                                            navigateToInsights3D({ mode: 'asset_category', colorMap, assetType: entry.name });
-                                                        }} />
-                                                    ))}
-                                                </Pie>
-                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                <Legend />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="h-full flex items-center justify-center text-muted-foreground">No asset data</div>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </TabsContent>
-            </Tabs>
+                {/* Desktop inline 3D viewer */}
+                {!isMobile && (
+                    <InsightsInlineViewer
+                        fmGuid={facility.fmGuid}
+                        insightsColorMode={inlineInsightsMode}
+                        insightsColorMap={inlineColorMap}
+                        onFullscreen={handleInlineFullscreen}
+                    />
+                )}
+            </div>
         </div>
     );
 }
