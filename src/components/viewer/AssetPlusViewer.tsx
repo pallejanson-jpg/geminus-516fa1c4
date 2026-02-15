@@ -63,6 +63,10 @@ interface AssetPlusViewerProps {
   suppressOverlay?: boolean;
   /** When set, auto-activates room visualization of this type after model load */
   initialVisualization?: VisualizationType;
+  /** Insights color mode — triggers X-Ray + colorization from sessionStorage color map */
+  insightsColorMode?: string;
+  /** Force X-Ray mode on (used with insightsColorMode) */
+  forceXray?: boolean;
 }
 
 interface ViewerState {
@@ -116,6 +120,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   ghostOpacity,
   suppressOverlay = false,
   initialVisualization,
+  insightsColorMode,
+  forceXray,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -256,6 +262,135 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       detail: { type: initialVisualization },
     }));
   }, [initialVisualization, modelLoadState, initStep]);
+
+  // ─── Insights color mode: apply X-Ray + colorization from sessionStorage ───
+  const insightsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!insightsColorMode) return;
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+    if (insightsAppliedRef.current) return;
+    insightsAppliedRef.current = true;
+
+    const raw = sessionStorage.getItem('insights_color_map');
+    if (!raw) {
+      console.warn('[AssetPlusViewer] insightsColorMode set but no color map in sessionStorage');
+      return;
+    }
+
+    let parsed: { mode: string; colorMap: Record<string, [number, number, number]> };
+    try { parsed = JSON.parse(raw); } catch { return; }
+    sessionStorage.removeItem('insights_color_map');
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) return;
+
+    const scene = xeokitViewer.scene;
+    const metaObjects = xeokitViewer.metaScene?.metaObjects || {};
+    const colorMap = parsed.colorMap;
+
+    console.log('[AssetPlusViewer] Applying insights color mode:', parsed.mode, 'keys:', Object.keys(colorMap).length);
+
+    // Step 1: Set ALL objects to X-Ray
+    const allIds = scene.objectIds || [];
+    scene.setObjectsXRayed(allIds, true);
+    scene.setObjectsVisible(allIds, true);
+
+    if (parsed.mode === 'energy_floors' || parsed.mode === 'energy_floor') {
+      // colorMap keys are floor fmGuids
+      // Find IfcSpace entities under each storey and colorize them
+      Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
+        const guidLower = floorGuid.toLowerCase();
+        const spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
+        
+        if (spaceIds.length === 0) {
+          // Try to find by iterating metaObjects
+          Object.values(metaObjects).forEach((mo: any) => {
+            if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+            const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+            if (moGuid !== guidLower) return;
+            // Find all IfcSpace children
+            const findSpaces = (parent: any) => {
+              if (!parent.children) return;
+              parent.children.forEach((child: any) => {
+                if (child.type?.toLowerCase() === 'ifcspace') {
+                  spaceIds.push(child.id);
+                }
+                findSpaces(child);
+              });
+            };
+            findSpaces(mo);
+          });
+        }
+
+        // Un-xray and colorize the spaces
+        spaceIds.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) {
+            entity.xrayed = false;
+            entity.visible = true;
+            entity.colorize = rgb;
+            entity.opacity = 0.85;
+          }
+        });
+      });
+      
+      // Also show the storey entities themselves (IfcBuildingStorey)
+      Object.entries(colorMap).forEach(([floorGuid]) => {
+        const guidLower = floorGuid.toLowerCase();
+        Object.values(metaObjects).forEach((mo: any) => {
+          if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+          const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+          if (moGuid === guidLower) {
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+            }
+          }
+        });
+      });
+
+    } else if (parsed.mode === 'asset_categories' || parsed.mode === 'asset_category') {
+      // colorMap keys are asset type names (e.g. "FireExtinguisher")
+      // Find matching objects from allData and colorize them
+      const currentData = allDataRef.current;
+      const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
+      
+      Object.entries(colorMap).forEach(([assetType, rgb]) => {
+        const matchingAssets = currentData.filter((a: any) => {
+          if (a.buildingFmGuid !== buildingGuid) return false;
+          const type = (a.assetType || a.category || '').replace('Ifc', '');
+          return type === assetType;
+        });
+        
+        matchingAssets.forEach((asset: any) => {
+          // Look up entities by fmGuid using viewer API
+          const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+          if (!assetView) return;
+          const itemIds = assetView.getItemsByPropertyValue("fmguid", asset.fmGuid.toUpperCase()) || [];
+          itemIds.forEach((id: string) => {
+            const entity = scene.objects?.[id];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.9;
+            }
+          });
+        });
+      });
+    }
+
+    // Force showSpaces on so colorized rooms remain visible
+    setShowSpaces(true);
+    try {
+      const assetViewer = viewer?.assetViewer;
+      assetViewer?.onShowSpacesChanged?.(true);
+    } catch {}
+
+  }, [insightsColorMode, modelLoadState, initStep]);
+
   // Camera sync hook for Split View synchronization
   const { broadcastCamera } = useViewerCameraSync({
     viewerRef: viewerInstanceRef,
