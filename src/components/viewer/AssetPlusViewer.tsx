@@ -21,7 +21,9 @@ import MobileViewerOverlay, { MobileFloorInfo } from './mobile/MobileViewerOverl
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
+import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
+import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
@@ -59,6 +61,8 @@ interface AssetPlusViewerProps {
   ghostOpacity?: number;
   /** When true, suppresses MobileViewerOverlay and desktop toolbar (used when embedded in Virtual Twin) */
   suppressOverlay?: boolean;
+  /** When set, auto-activates room visualization of this type after model load */
+  initialVisualization?: VisualizationType;
 }
 
 interface ViewerState {
@@ -111,6 +115,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   transparentBackground = false,
   ghostOpacity,
   suppressOverlay = false,
+  initialVisualization,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -230,6 +235,27 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Room labels hook
   const { setLabelsEnabled: setRoomLabelsEnabled, updateViewMode: updateLabelsViewMode, updateFloorFilter } = useRoomLabels(viewerInstanceRef);
 
+  // Performance plugins (FastNav, ViewCull, LOD)
+  usePerformancePlugins({
+    viewerRef: viewerInstanceRef,
+    ready: modelLoadState === 'loaded' && initStep === 'ready',
+    isMobile: !!isMobile,
+  });
+
+  // Auto-activate room visualization when initialVisualization is set
+  const initialVisAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!initialVisualization || initialVisualization === 'none') return;
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+    if (initialVisAppliedRef.current) return;
+    initialVisAppliedRef.current = true;
+
+    // Dispatch event to activate room visualization via RoomVisualizationPanel
+    console.log('[AssetPlusViewer] Auto-activating visualization:', initialVisualization);
+    window.dispatchEvent(new CustomEvent('INITIAL_VISUALIZATION_REQUESTED', {
+      detail: { type: initialVisualization },
+    }));
+  }, [initialVisualization, modelLoadState, initStep]);
   // Camera sync hook for Split View synchronization
   const { broadcastCamera } = useViewerCameraSync({
     viewerRef: viewerInstanceRef,

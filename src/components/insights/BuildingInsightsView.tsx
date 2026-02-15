@@ -1,4 +1,5 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -8,7 +9,7 @@ import {
 } from 'recharts';
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
-    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package
+    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
@@ -62,6 +63,7 @@ const hashString = (str: string) => {
 export default function BuildingInsightsView({ facility, onBack }: BuildingInsightsViewProps) {
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
+    const navigate = useNavigate();
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -138,7 +140,15 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         };
     }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
 
-    // Floor-by-floor energy data (MOCK)
+    // Navigation helper: open 3D viewer with context
+    const navigateTo3D = (opts?: { entity?: string; visualization?: string }) => {
+        const params = new URLSearchParams({ building: facility.fmGuid, mode: '3d' });
+        if (opts?.entity) params.set('entity', opts.entity);
+        if (opts?.visualization) params.set('visualization', opts.visualization);
+        navigate(`/split-viewer?${params.toString()}`);
+    };
+
+    // Floor-by-floor energy data (MOCK) — include fmGuid for chart click navigation
     const energyByFloor = useMemo(() => {
         const storeys = allData.filter(
             (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
@@ -147,6 +157,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
             const hash = hashString(storey.fmGuid || '');
             return {
                 name: storey.commonName || storey.name || `Floor ${index + 1}`,
+                fmGuid: storey.fmGuid,
                 kwhPerSqm: 80 + (hash % 60),
                 color: index % 2 === 0 ? 'hsl(142, 71%, 45%)' : 'hsl(48, 96%, 53%)',
             };
@@ -201,23 +212,35 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
             {/* KPI Cards - REAL counts */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4 sm:mb-6">
                 {[
-                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-blue-500', isMock: false },
-                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-green-500', isMock: false },
-                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-purple-500', isMock: false },
-                    { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false },
+                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-blue-500', isMock: false, onView: () => navigateTo3D() },
+                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-green-500', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
+                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-purple-500', isMock: false, onView: () => navigateTo3D() },
+                    { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
                     { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-yellow-500', isMock: true },
                     { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary', isMock: true },
                 ].map((kpi, index) => (
-                    <Card key={index}>
+                    <Card key={index} className={kpi.onView ? 'group cursor-pointer hover:border-primary/50 transition-colors' : ''} onClick={kpi.onView}>
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-1">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color}`} />
-                                {kpi.isMock && <MockBadge />}
+                                <div className="flex items-center gap-1">
+                                    {kpi.isMock && <MockBadge />}
+                                    {kpi.onView && (
+                                        <Eye className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    )}
+                                </div>
                             </div>
                             <p className={`text-lg sm:text-xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
                                 {kpi.value}
                             </p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
+                                {kpi.onView && (
+                                    <span className="text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
+                                        Visa i 3D
+                                    </span>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 ))}
@@ -251,12 +274,16 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                         <span className="text-purple-400">Energy per Floor</span>
                                         <MockBadge />
                                     </CardTitle>
-                                    <CardDescription>kWh per m² by floor level</CardDescription>
+                                    <CardDescription>kWh per m² by floor level · Click bar to view in 3D</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="h-64">
+                                    <div className="h-64 cursor-pointer">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={energyByFloor} layout="vertical">
+                                            <BarChart data={energyByFloor} layout="vertical" onClick={(state) => {
+                                                if (state?.activePayload?.[0]?.payload?.fmGuid) {
+                                                    navigateTo3D({ entity: state.activePayload[0].payload.fmGuid });
+                                                }
+                                            }}>
                                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                                 <XAxis type="number" className="text-xs" />
                                                 <YAxis 
@@ -336,13 +363,14 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 <TabsContent value="space" className="mt-0 space-y-6">
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Room Types Distribution - REAL */}
-                        <Card>
+                        <Card className="cursor-pointer" onClick={() => navigateTo3D({ visualization: 'area' })}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <DoorOpen className="h-4 w-4 text-green-500" />
                                     Room Types
+                                    <Eye className="h-3.5 w-3.5 text-muted-foreground ml-auto" />
                                 </CardTitle>
-                                <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² (real data)</CardDescription>
+                                <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Click to view in 3D</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="h-64">
