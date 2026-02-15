@@ -401,22 +401,33 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   return (
     <>
       <Sheet open={isOpen} onOpenChange={handleOpenChange} modal={isMobile}>
-        <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card backdrop-blur-md">
+        <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card backdrop-blur-md [&>button:last-child]:hidden">
           <SheetHeader className="p-4 pb-2 border-b">
             <SheetTitle className="flex items-center justify-between text-base">
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />
                 Visning
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={togglePinned}
-                title={isPinned ? "Lossa panelen" : "Fäst panelen"}
-              >
-                {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/70" />}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={togglePinned}
+                  title={isPinned ? "Lossa panelen" : "Fäst panelen"}
+                >
+                  {isPinned ? <Pin className="h-3.5 w-3.5 text-primary" /> : <PinOff className="h-3.5 w-3.5 text-foreground/70" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => handleOpenChange(false)}
+                  title="Stäng"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </SheetTitle>
           </SheetHeader>
 

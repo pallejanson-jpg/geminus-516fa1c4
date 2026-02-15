@@ -13,15 +13,10 @@ interface VisState {
  * and renders the legend bar independently of the right panel.
  */
 const VisualizationLegendOverlay: React.FC = () => {
-  const [visState, setVisState] = useState<VisState>(() => {
-    try {
-      const saved = localStorage.getItem('roomVisualizationSettings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return { visualizationType: parsed.type || 'none', useMockData: parsed.mock ?? false, rooms: [] };
-      }
-    } catch { /* ignore */ }
-    return { visualizationType: 'none', useMockData: false, rooms: [] };
+  const [visState, setVisState] = useState<VisState>({
+    visualizationType: 'none',
+    useMockData: false,
+    rooms: [],
   });
 
   useEffect(() => {

@@ -146,8 +146,8 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                 'transition-all duration-150 cursor-pointer select-none',
                 'hover:bg-white/20',
                 isActive
-                  ? 'bg-white/30 text-foreground ring-1 ring-primary/50'
-                  : 'text-foreground/80'
+                  ? 'bg-white/30 text-white ring-1 ring-white/50'
+                  : 'text-white/90'
               )}
               title={`${stop.value} ${config.unit} — ${matchCount} rum`}
             >
@@ -162,7 +162,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
               />
               <span>{stop.value}</span>
               {idx === 0 && (
-                <span className="text-[9px] text-muted-foreground ml-0.5">{config.unit}</span>
+                <span className="text-[9px] text-white/60 ml-0.5">{config.unit}</span>
               )}
             </button>
           );
