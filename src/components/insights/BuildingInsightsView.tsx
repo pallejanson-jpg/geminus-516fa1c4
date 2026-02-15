@@ -31,11 +31,18 @@ const MockBadge = () => (
 );
 
 // Reusable viewer link icon — always visible, signals "tap to view visually"
-const ViewerLink = () => (
-    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center text-primary transition-colors shrink-0">
-        <Eye className="h-4 w-4" />
-    </div>
-);
+const ViewerLink = () => {
+    const [pulse, setPulse] = React.useState(true);
+    React.useEffect(() => {
+        const timer = setTimeout(() => setPulse(false), 3000);
+        return () => clearTimeout(timer);
+    }, []);
+    return (
+        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/15 hover:bg-primary/25 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/30 animate-pulse' : ''}`}>
+            <Eye className="h-4 w-4" />
+        </div>
+    );
+};
 
 // Energy distribution (building-specific mock)
 const energyDistribution = [
