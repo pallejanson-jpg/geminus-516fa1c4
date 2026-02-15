@@ -334,12 +334,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log('[AssetPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
-      // Step 1: Ghost ALL objects with low opacity (opacity-based, no xray dependency)
+      // Step 1: X-ray ALL objects for transparent ghosting (issue #175)
       const allIds = scene.objectIds || [];
-      allIds.forEach(id => {
-        const e = scene.objects?.[id];
-        if (e) e.opacity = 0.1;
-      });
+      ensureXrayConfig(scene);
+      scene.setObjectsXRayed(allIds, true);
 
       if (mode === 'energy_floors' || mode === 'energy_floor') {
         Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
@@ -367,6 +365,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           spaceIds.forEach(id => {
             const entity = scene.objects?.[id];
             if (entity) {
+              entity.xrayed = false;
               entity.visible = true;
               entity.colorize = rgb;
               entity.opacity = 0.85;
@@ -392,9 +391,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             itemIds.forEach((id: string) => {
               const entity = scene.objects?.[id];
               if (entity) {
-              entity.visible = true;
-              entity.colorize = rgb;
-              entity.opacity = 0.9;
+                entity.xrayed = false;
+                entity.visible = true;
+                entity.colorize = rgb;
+                entity.opacity = 0.9;
               }
             });
           });
@@ -428,6 +428,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           
           const entity = scene.objects?.[mo.id];
           if (entity) {
+            entity.xrayed = false;
             entity.visible = true;
             entity.colorize = rgb;
             entity.opacity = 0.85;
