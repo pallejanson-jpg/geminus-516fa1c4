@@ -9,7 +9,7 @@ interface XrayToggleProps {
 
 /**
  * X-ray toggle for the 3D viewer.
- * Sets all scene objects to xrayed mode, making them semi-transparent.
+ * Sets non-colorized scene objects to xrayed mode, preserving room visualization colors.
  */
 const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
   const [xrayEnabled, setXrayEnabled] = useState(false);
@@ -23,24 +23,37 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
     }
 
     const scene = xeokitViewer.scene;
+    const objectIds = scene.objectIds || [];
 
-    // Primary: batch API
-    if (typeof scene.setObjectsXRayed === 'function') {
-      const objectIds = scene.objectIds || [];
-      scene.setObjectsXRayed(objectIds, enabled);
-      console.log('[XrayToggle] setObjectsXRayed:', enabled, objectIds.length, 'objects');
-    } else {
-      // Fallback: iterate objects directly
-      const objects = scene.objects || {};
-      let count = 0;
-      for (const id of Object.keys(objects)) {
-        const entity = objects[id];
-        if (entity && entity.isObject) {
-          entity.xrayed = enabled;
-          count++;
-        }
+    if (enabled) {
+      // Configure xray material for transparent ghosting (xeokit issue #175)
+      const xrayMaterial = scene?.xrayMaterial;
+      if (xrayMaterial) {
+        xrayMaterial.fill = true;
+        xrayMaterial.fillAlpha = 0.1;
+        xrayMaterial.fillColor = [0.5, 0.5, 0.5];
+        xrayMaterial.edges = true;
+        xrayMaterial.edgeAlpha = 0.2;
+        xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
       }
-      console.log('[XrayToggle] Fallback xray on', count, 'entities');
+      scene.alphaDepthMask = false;
+
+      let count = 0;
+      objectIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (!entity) return;
+        // Skip entities that are already colorized (from room visualization)
+        const c = entity.colorize;
+        if (c && (c[0] !== 1 || c[1] !== 1 || c[2] !== 1)) {
+          return; // Don't xray colored rooms
+        }
+        entity.xrayed = true;
+        count++;
+      });
+      console.log('[XrayToggle] xray ON, skipped colorized entities:', objectIds.length - count, 'xrayed:', count);
+    } else {
+      scene.setObjectsXRayed(objectIds, false);
+      console.log('[XrayToggle] xray OFF');
     }
   }, [viewerRef]);
 
