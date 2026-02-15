@@ -67,6 +67,8 @@ interface AssetPlusViewerProps {
   insightsColorMode?: string;
   /** Force X-Ray mode on (used with insightsColorMode) */
   forceXray?: boolean;
+  /** Direct color map prop (for inline desktop viewer, avoids sessionStorage) */
+  insightsColorMap?: Record<string, [number, number, number]>;
 }
 
 interface ViewerState {
@@ -122,6 +124,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   initialVisualization,
   insightsColorMode,
   forceXray,
+  insightsColorMap: insightsColorMapProp,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -222,6 +225,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   
   // XKT sync status for visual feedback
   const [xktSyncStatus, setXktSyncStatus] = useState<'idle' | 'checking' | 'syncing' | 'done' | 'error'>('idle');
+  const [spacesCacheReady, setSpacesCacheReady] = useState(false);
   
   // Ref for local annotations plugin
   const localAnnotationsPluginRef = useRef<any>(null);
@@ -263,23 +267,31 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }));
   }, [initialVisualization, modelLoadState, initStep]);
 
-  // ─── Insights color mode: apply X-Ray + colorization from sessionStorage ───
-  const insightsAppliedRef = useRef(false);
+  // ─── Insights color mode: apply X-Ray + colorization ───
   useEffect(() => {
     if (!insightsColorMode) return;
+    if (!spacesCacheReady) return;
     if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
-    if (insightsAppliedRef.current) return;
-    insightsAppliedRef.current = true;
 
-    const raw = sessionStorage.getItem('insights_color_map');
-    if (!raw) {
-      console.warn('[AssetPlusViewer] insightsColorMode set but no color map in sessionStorage');
-      return;
+    // Determine color map: prefer prop, fallback to sessionStorage
+    let colorMap: Record<string, [number, number, number]> = {};
+    let mode = insightsColorMode;
+
+    if (insightsColorMapProp && Object.keys(insightsColorMapProp).length > 0) {
+      colorMap = insightsColorMapProp;
+    } else {
+      const raw = sessionStorage.getItem('insights_color_map');
+      if (!raw) {
+        console.warn('[AssetPlusViewer] insightsColorMode set but no color map available');
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        colorMap = parsed.colorMap || {};
+        mode = parsed.mode || mode;
+      } catch { return; }
+      sessionStorage.removeItem('insights_color_map');
     }
-
-    let parsed: { mode: string; colorMap: Record<string, [number, number, number]> };
-    try { parsed = JSON.parse(raw); } catch { return; }
-    sessionStorage.removeItem('insights_color_map');
 
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -287,73 +299,50 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
     const scene = xeokitViewer.scene;
     const metaObjects = xeokitViewer.metaScene?.metaObjects || {};
-    const colorMap = parsed.colorMap;
 
-    console.log('[AssetPlusViewer] Applying insights color mode:', parsed.mode, 'keys:', Object.keys(colorMap).length);
+    console.log('[AssetPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
-    // Step 1: Set ALL objects to X-Ray
+    // Step 1: Hide ALL objects and set xray
     const allIds = scene.objectIds || [];
+    scene.setObjectsVisible(allIds, false);
     scene.setObjectsXRayed(allIds, true);
-    scene.setObjectsVisible(allIds, true);
 
-    if (parsed.mode === 'energy_floors' || parsed.mode === 'energy_floor') {
-      // colorMap keys are floor fmGuids
-      // Find IfcSpace entities under each storey and colorize them
+    if (mode === 'energy_floors' || mode === 'energy_floor') {
       Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
         const guidLower = floorGuid.toLowerCase();
-        const spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
+        let spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
         
         if (spaceIds.length === 0) {
-          // Try to find by iterating metaObjects
+          // Fallback: find by iterating metaObjects
+          const foundIds: string[] = [];
           Object.values(metaObjects).forEach((mo: any) => {
             if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
             const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
             if (moGuid !== guidLower) return;
-            // Find all IfcSpace children
             const findSpaces = (parent: any) => {
               if (!parent.children) return;
               parent.children.forEach((child: any) => {
-                if (child.type?.toLowerCase() === 'ifcspace') {
-                  spaceIds.push(child.id);
-                }
+                if (child.type?.toLowerCase() === 'ifcspace') foundIds.push(child.id);
                 findSpaces(child);
               });
             };
             findSpaces(mo);
           });
+          spaceIds = foundIds;
         }
 
-        // Un-xray and colorize the spaces
         spaceIds.forEach(id => {
           const entity = scene.objects?.[id];
           if (entity) {
-            entity.xrayed = false;
             entity.visible = true;
+            entity.xrayed = false;
             entity.colorize = rgb;
             entity.opacity = 0.85;
           }
         });
       });
-      
-      // Also show the storey entities themselves (IfcBuildingStorey)
-      Object.entries(colorMap).forEach(([floorGuid]) => {
-        const guidLower = floorGuid.toLowerCase();
-        Object.values(metaObjects).forEach((mo: any) => {
-          if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
-          const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
-          if (moGuid === guidLower) {
-            const entity = scene.objects?.[mo.id];
-            if (entity) {
-              entity.xrayed = false;
-              entity.visible = true;
-            }
-          }
-        });
-      });
 
-    } else if (parsed.mode === 'asset_categories' || parsed.mode === 'asset_category') {
-      // colorMap keys are asset type names (e.g. "FireExtinguisher")
-      // Find matching objects from allData and colorize them
+    } else if (mode === 'asset_categories' || mode === 'asset_category') {
       const currentData = allDataRef.current;
       const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
       
@@ -365,20 +354,58 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         });
         
         matchingAssets.forEach((asset: any) => {
-          // Look up entities by fmGuid using viewer API
           const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
           if (!assetView) return;
           const itemIds = assetView.getItemsByPropertyValue("fmguid", asset.fmGuid.toUpperCase()) || [];
           itemIds.forEach((id: string) => {
             const entity = scene.objects?.[id];
             if (entity) {
-              entity.xrayed = false;
               entity.visible = true;
+              entity.xrayed = false;
               entity.colorize = rgb;
               entity.opacity = 0.9;
             }
           });
         });
+      });
+
+    } else if (mode === 'room_types' || mode === 'room_type') {
+      // Match IfcSpace entities by their room type attribute against colorMap keys
+      const currentData = allDataRef.current;
+      const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
+      
+      // Build a map of space fmGuid -> room type
+      const spaceTypeMap = new Map<string, string>();
+      currentData.forEach((a: any) => {
+        if (a.buildingFmGuid !== buildingGuid) return;
+        if (a.category !== 'Space' && a.category !== 'IfcSpace') return;
+        const attrs = a.attributes || {};
+        const type = attrs.spaceType || attrs.roomType || 'Unknown';
+        spaceTypeMap.set(a.fmGuid.toLowerCase(), type);
+      });
+
+      Object.values(metaObjects).forEach((mo: any) => {
+        if (mo.type?.toLowerCase() !== 'ifcspace') return;
+        const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+        const roomType = spaceTypeMap.get(moGuid);
+        if (!roomType) return;
+        
+        // Check if this room type has a color in the map (try exact and truncated)
+        let rgb = colorMap[roomType];
+        if (!rgb) {
+          // Try truncated version (chart truncates to 15 chars + '...')
+          const truncated = roomType.length > 15 ? roomType.substring(0, 15) + '...' : roomType;
+          rgb = colorMap[truncated];
+        }
+        if (!rgb) return;
+        
+        const entity = scene.objects?.[mo.id];
+        if (entity) {
+          entity.visible = true;
+          entity.xrayed = false;
+          entity.colorize = rgb;
+          entity.opacity = 0.85;
+        }
       });
     }
 
@@ -389,7 +416,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       assetViewer?.onShowSpacesChanged?.(true);
     } catch {}
 
-  }, [insightsColorMode, modelLoadState, initStep]);
+  }, [insightsColorMode, insightsColorMapProp, spacesCacheReady, modelLoadState, initStep]);
 
   // Camera sync hook for Split View synchronization
   const { broadcastCamera } = useViewerCameraSync({
@@ -522,6 +549,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     spacesByFloorCacheRef.current = cache;
     allSpaceIdsRef.current = allIds;
     console.debug(`[spacesByFloor] Cache built: ${cache.size} floors, ${allIds.length} spaces`);
+    setSpacesCacheReady(true);
   }, [modelLoadState]);
 
   // Core space-filtering logic (uses cache, no metaObjects iteration)
