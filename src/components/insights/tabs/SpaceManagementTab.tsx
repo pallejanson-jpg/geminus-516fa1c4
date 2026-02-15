@@ -201,7 +201,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -211,7 +211,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                             `${value}%`, 
                                             props.payload.fullName
                                         ]}
-                                    />
+                                    />}
                                     <Bar 
                                         dataKey="occupancy" 
                                         name="Occupancy"
@@ -252,7 +252,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -262,7 +262,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                             `${value} rooms (${props.payload.area.toLocaleString()} m²)`,
                                             name
                                         ]}
-                                    />
+                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
