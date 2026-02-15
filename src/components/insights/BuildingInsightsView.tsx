@@ -219,28 +219,24 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                     { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-yellow-500', isMock: true },
                     { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary', isMock: true },
                 ].map((kpi, index) => (
-                    <Card key={index} className={kpi.onView ? 'group cursor-pointer hover:border-primary/50 transition-colors' : ''} onClick={kpi.onView}>
+                    <Card key={index} className={kpi.onView ? 'group cursor-pointer border-primary/20 hover:border-primary/50 transition-colors touch-action-manipulation' : ''} onClick={kpi.onView}>
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-1">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color}`} />
                                 <div className="flex items-center gap-1">
                                     {kpi.isMock && <MockBadge />}
                                     {kpi.onView && (
-                                        <Eye className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <Badge variant="outline" className="text-[8px] px-1 py-0 h-4 border-primary/40 text-primary/70 gap-0.5">
+                                            <Eye className="h-2.5 w-2.5" />
+                                            3D
+                                        </Badge>
                                     )}
                                 </div>
                             </div>
                             <p className={`text-lg sm:text-xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
                                 {kpi.value}
                             </p>
-                            <div className="flex items-center justify-between">
-                                <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
-                                {kpi.onView && (
-                                    <span className="text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
-                                        Visa i 3D
-                                    </span>
-                                )}
-                            </div>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
                         </CardContent>
                     </Card>
                 ))}
@@ -267,14 +263,14 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Energy per Floor - MOCK */}
                         {energyByFloor.length > 0 && (
-                            <Card>
+                        <Card className="border-primary/20 hover:border-primary/50 transition-colors">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
                                         <Zap className="h-4 w-4 text-yellow-500" />
                                         <span className="text-purple-400">Energy per Floor</span>
                                         <MockBadge />
                                     </CardTitle>
-                                    <CardDescription>kWh per m² by floor level · Click bar to view in 3D</CardDescription>
+                                    <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="h-64 cursor-pointer">
@@ -363,14 +359,17 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 <TabsContent value="space" className="mt-0 space-y-6">
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Room Types Distribution - REAL */}
-                        <Card className="cursor-pointer" onClick={() => navigateTo3D({ visualization: 'area' })}>
+                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D({ visualization: 'area' })}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <DoorOpen className="h-4 w-4 text-green-500" />
                                     Room Types
-                                    <Eye className="h-3.5 w-3.5 text-muted-foreground ml-auto" />
+                                    <Badge variant="outline" className="text-[8px] px-1.5 py-0 h-4 border-primary/40 text-primary/70 gap-0.5 ml-auto">
+                                        <Eye className="h-2.5 w-2.5" />
+                                        Visa i 3D
+                                    </Badge>
                                 </CardTitle>
-                                <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Click to view in 3D</CardDescription>
+                                <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Tryck för att visa i 3D</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="h-64">
