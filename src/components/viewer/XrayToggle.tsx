@@ -53,6 +53,11 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
       console.log('[XrayToggle] xray ON, skipped colorized entities:', objectIds.length - count, 'xrayed:', count);
     } else {
       scene.setObjectsXRayed(objectIds, false);
+      // Restore any opacity changes from legend clicks
+      objectIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity && entity.opacity < 1.0) entity.opacity = 1.0;
+      });
       console.log('[XrayToggle] xray OFF');
     }
   }, [viewerRef]);
