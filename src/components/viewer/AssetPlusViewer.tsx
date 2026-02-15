@@ -173,6 +173,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const assetDataRef = useRef<any>(null);
   const allDataRef = useRef<any[]>(allData);
+  const insightsColorModeRef = useRef(insightsColorMode);
 
   // Refs for callbacks used inside initializeViewer (stabilizes its dependency array)
   const handleAllModelsLoadedRef = useRef<() => void>(() => {});
@@ -185,6 +186,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   useEffect(() => { cacheStatusRef.current = cacheStatus; }, [cacheStatus]);
   useEffect(() => { showNavCubeRef.current = showNavCube; }, [showNavCube]);
   useEffect(() => { allDataRef.current = allData; }, [allData]);
+  useEffect(() => { insightsColorModeRef.current = insightsColorMode; }, [insightsColorMode]);
 
   // Coordinate picker state
   const [isPickMode, setIsPickMode] = useState(false);
@@ -311,9 +313,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log('[AssetPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
-      // Step 1: Hide ALL objects (no xray — pure visibility)
+      // Step 1: X-Ray ALL objects so colored rooms stand out
       const allIds = scene.objectIds || [];
-      scene.setObjectsVisible(allIds, false);
+      scene.setObjectsXRayed(allIds, true);
 
       if (mode === 'energy_floors' || mode === 'energy_floor') {
         Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
@@ -1529,7 +1531,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       // CRITICAL: Ensure spaces (rooms) are hidden by default
       // Skip when insightsColorMode is active — the insights effect will handle visibility
-      if (!insightsColorMode) {
+      if (!insightsColorModeRef.current) {
         try {
           const viewer = viewerInstanceRef.current;
           const assetViewer = viewer?.assetViewer;
