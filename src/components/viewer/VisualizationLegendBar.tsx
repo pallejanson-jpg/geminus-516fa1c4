@@ -103,6 +103,14 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
     );
   };
 
+  // Compute actual min/max from real sensor data
+  const actualMin = roomValues.length > 0
+    ? Math.min(...roomValues.map(r => r.value))
+    : null;
+  const actualMax = roomValues.length > 0
+    ? Math.max(...roomValues.map(r => r.value))
+    : null;
+
   const barHeight = isMobile ? 180 : 260;
 
   return (
@@ -128,6 +136,12 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         className="relative flex flex-col justify-between py-0.5"
         style={{ height: barHeight }}
       >
+        {/* Actual max label */}
+        {actualMax !== null && (
+          <div className="text-[9px] text-white/60 font-medium px-1 -mt-1 mb-0.5">
+            Max: {actualMax.toFixed(1)} {config.unit}
+          </div>
+        )}
         {stops.map((stop, idx) => {
           const isActive = activeStop === idx;
           // Count rooms in this stop's range
@@ -161,12 +175,21 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                 }}
               />
               <span>{stop.value}</span>
+              {matchCount > 0 && (
+                <span className="text-[9px] text-white/60 ml-0.5">({matchCount})</span>
+              )}
               {idx === 0 && (
                 <span className="text-[9px] text-white/60 ml-0.5">{config.unit}</span>
               )}
             </button>
           );
         })}
+        {/* Actual min label */}
+        {actualMin !== null && (
+          <div className="text-[9px] text-white/60 font-medium px-1 mt-0.5 -mb-1">
+            Min: {actualMin.toFixed(1)} {config.unit}
+          </div>
+        )}
       </div>
     </div>
   );
