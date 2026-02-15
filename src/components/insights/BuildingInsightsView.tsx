@@ -37,12 +37,7 @@ interface BuildingInsightsViewProps {
     onBack: () => void;
 }
 
-// Mockup indicator badge
-const MockBadge = () => (
-    <span className="inline-flex items-center rounded-full border px-1 py-0 text-[9px] font-semibold bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
-        Demo
-    </span>
-);
+
 
 // Reusable viewer link icon — always visible, signals "tap to view visually"
 const ViewerLink = () => {
@@ -338,19 +333,18 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                     { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-green-500', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
                     { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-purple-500', isMock: false, onView: () => navigateTo3D() },
                     { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
-                    { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-yellow-500', isMock: true },
-                    { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary', isMock: true },
+                    { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-yellow-500' },
+                    { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary' },
                 ].map((kpi, index) => (
                     <Card key={index} className={kpi.onView ? 'group cursor-pointer border-primary/20 hover:border-primary/50 transition-colors touch-action-manipulation' : ''} onClick={kpi.onView}>
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-1">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color}`} />
                                 <div className="flex items-center gap-1">
-                                    {kpi.isMock && <MockBadge />}
                                     {kpi.onView && <ViewerLink />}
                                 </div>
                             </div>
-                            <p className={`text-lg sm:text-xl font-bold ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className="text-lg sm:text-xl font-bold text-foreground">
                                 {kpi.value}
                             </p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
@@ -429,8 +423,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-base flex items-center gap-2">
                                             <ThermometerSun className="h-4 w-4 text-orange-500" />
-                                            <span className="text-purple-400">Energy Distribution</span>
-                                            <MockBadge />
+                                            Energy Distribution
                                             <span className="ml-auto cursor-pointer" onClick={() => {
                                                 // Navigate with all floor colors (energy doesn't map to objects directly)
                                                 const colorMap: Record<string, [number, number, number]> = {};
@@ -468,8 +461,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
                                         <Droplets className="h-4 w-4 text-blue-500" />
-                                        <span className="text-purple-400">Monthly Energy Trend</span>
-                                        <MockBadge />
+                                        Monthly Energy Trend
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
