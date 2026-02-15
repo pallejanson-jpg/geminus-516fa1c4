@@ -195,7 +195,7 @@ export default function PortfolioManagementTab() {
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -205,7 +205,7 @@ export default function PortfolioManagementTab() {
                                             `${value.toFixed(1)} MSEK`,
                                             props.payload.fullName
                                         ]}
-                                    />
+                                    />}
                                     <Bar 
                                         dataKey="valueInMillions" 
                                         name="Value (MSEK)"
@@ -246,13 +246,13 @@ export default function PortfolioManagementTab() {
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
-                                    />
+                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -283,14 +283,14 @@ export default function PortfolioManagementTab() {
                                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                                     tickFormatter={(v) => `${(v / 1000000).toFixed(0)}`}
                                 />
-                                <Tooltip 
+                                {!isMobile && <Tooltip 
                                     contentStyle={{ 
                                         backgroundColor: 'hsl(var(--popover))',
                                         border: '1px solid hsl(var(--border))',
                                         borderRadius: '8px'
                                     }}
                                     formatter={(value: number) => [`${(value / 1000000).toFixed(1)} MSEK`, 'Value']}
-                                />
+                                />}
                                 <Line 
                                     type="monotone" 
                                     dataKey="value" 

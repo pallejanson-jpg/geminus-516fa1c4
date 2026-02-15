@@ -277,7 +277,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                         className="text-xs"
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
@@ -288,7 +288,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                             `${value} kWh/m²`, 
                                             props.payload.fullName
                                         ]}
-                                    />
+                                    />}
                                     <Bar 
                                         dataKey="kwhPerSqm" 
                                         name="kWh/m²"
@@ -335,13 +335,13 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
-                                    />
+                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -375,13 +375,13 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                         className="text-xs"
                                         tick={{ fill: 'hsl(var(--muted-foreground))' }}
                                     />
-                                    <Tooltip 
+                                    {!isMobile && <Tooltip 
                                         contentStyle={{ 
                                             backgroundColor: 'hsl(var(--popover))',
                                             border: '1px solid hsl(var(--border))',
                                             borderRadius: '8px'
                                         }}
-                                    />
+                                    />}
                                     <Legend />
                                     <Line 
                                         type="monotone" 
