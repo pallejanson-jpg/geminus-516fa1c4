@@ -1,61 +1,88 @@
 
 
-## Fix: X-ray doljer fargade rum -- felaktig xrayMaterial-konfiguration
+## Fix: Rum fargas inte vid xray -- xrayMaterial maste ateranvandas vid ratten tidpunkt
 
-### Rotorsak
+### Analys
 
-Fran xeokit-utvecklarens eget GitHub-issue (#175) framgar att tva konfigurationsandringar kravs for att X-ray ska fungera bra:
+Rumsvisualisering (RoomVisualizationPanel) fungerar -- den anvander `entity.colorize` + `entity.opacity` UTAN xray. Men insights-effekten och legend-klick anvander `setObjectsXRayed` + `entity.xrayed = false` + `entity.colorize`, och dar syns inga farger.
 
-1. **`alphaDepthMask: false`** pa viewern -- annars maskar xray-lagret djupet och doljer solida objekt bakom det
-2. **`fillAlpha = 0.1`** (inte 0.7) -- xray-lagret ska vara nastan helt genomskinligt
-
-Nuvarande kod har `fillAlpha = 0.7` och satter aldrig `alphaDepthMask`. Det innebar att xray-lagret ar **70% ogenomskinligt** och renderas ovanpa de fargade rummen, sa de syns inte.
+Problemet ar troligen att **Asset+-biblioteket aterstaller/overskriver xrayMaterial-installningarna** efter att `changeXrayMaterial` korts vid mount (rad 2881). Nar insights-effekten sedan aktiverar xray 150ms senare, har `fillAlpha` och `alphaDepthMask` aterats till standardvarden (ogenomskinliga), och de fargade rummen doljs.
 
 ### Losning
 
-Tva andringar i en fil:
+Applicera xrayMaterial-konfigurationen **direkt innan xray anvands** -- inte bara vid mount. Det garanterar att installningarna ar aktiva nar de behovs.
 
-**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
+---
 
-**1. Uppdatera `changeXrayMaterial` (rad 1019-1026)**
+### Fil 1: `src/components/viewer/AssetPlusViewer.tsx`
 
-Byt till xeokit-rekommenderade varden fran issue #175:
+**1a. Extrahera xray-konfiguration till en hjalp-funktion (bredvid `changeXrayMaterial`, rad ~1012)**
+
+Skapa en ny funktion `ensureXrayConfig` som bade satter xrayMaterial OCH `alphaDepthMask`:
 
 ```typescript
-xrayMaterial.fill = true;
-xrayMaterial.fillAlpha = 0.1;       // Was 0.7 -- much more transparent
-xrayMaterial.fillColor = [0.5, 0.5, 0.5];  // Neutral gray (was 200/255)
-xrayMaterial.edges = true;
-xrayMaterial.edgeAlpha = 0.2;       // Was 0.6 -- subtler edges
-xrayMaterial.edgeColor = [0.3, 0.3, 0.3];  // Was 15/255
+const ensureXrayConfig = useCallback((scene: any) => {
+  const xrayMaterial = scene?.xrayMaterial;
+  if (xrayMaterial) {
+    xrayMaterial.fill = true;
+    xrayMaterial.fillAlpha = 0.1;
+    xrayMaterial.fillColor = [0.5, 0.5, 0.5];
+    xrayMaterial.edges = true;
+    xrayMaterial.edgeAlpha = 0.2;
+    xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
+  }
+  if (scene) {
+    scene.alphaDepthMask = false;
+  }
+}, []);
 ```
 
-**2. Satt `alphaDepthMask = false` efter viewer-init (rad ~2880)**
+**1b. Anropa `ensureXrayConfig` i insights-effekten (rad ~304, inuti setTimeout)**
 
-Efter att viewern mountats, stang av djupmaskning sa att solida (fargade) objekt renderas framfor xray-objekt:
+Direkt efter att `scene` hamtats (rad 304), och INNAN `setObjectsXRayed` anropas (rad 318):
 
 ```typescript
-// After changeXrayMaterialRef.current();
-const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-if (xeokitViewer) {
-  xeokitViewer.scene.alphaDepthMask = false;
+const scene = xeokitViewer.scene;
+// Re-apply xray config right before use (Asset+ may have overridden it)
+ensureXrayConfig(scene);
+```
+
+**1c. Behall befintlig mount-konfiguration (rad 2880-2888)**
+
+`changeXrayMaterialRef.current()` och `alphaDepthMask = false` vid mount behalles som initial setup.
+
+---
+
+### Fil 2: `src/components/viewer/RoomVisualizationPanel.tsx`
+
+**2a. Lagg till `ensureXrayConfig` fore legend-klick xray (rad ~530)**
+
+Fore `scene.setObjectsXRayed(allIds, true)` pa rad 533, anropa samma xray-konfiguration:
+
+```typescript
+// Ensure xray material is properly configured before use
+const xrayMaterial = scene?.xrayMaterial;
+if (xrayMaterial) {
+  xrayMaterial.fill = true;
+  xrayMaterial.fillAlpha = 0.1;
+  xrayMaterial.fillColor = [0.5, 0.5, 0.5];
+  xrayMaterial.edges = true;
+  xrayMaterial.edgeAlpha = 0.2;
+  xrayMaterial.edgeColor = [0.3, 0.3, 0.3];
 }
+scene.alphaDepthMask = false;
 ```
 
-### Ingen annan andring kravs
-
-Insights-effekten (rad 270-419) och legend-klick (RoomVisualizationPanel rad 530-540) anvander redan korrekt `setObjectsXRayed` + `entity.xrayed = false` + `entity.colorize`. Problemet ar ENBART att xray-materialet ar for ogenomskinligt och djupmaskar fargade objekt.
+---
 
 ### Sammanfattning
 
-| Rad | Andring |
+| Fil | Andring |
 |-----|---------|
-| 1019-1026 | `fillAlpha: 0.7 -> 0.1`, `edgeAlpha: 0.6 -> 0.2`, justerade fargvarden |
-| ~2880 | Lagg till `scene.alphaDepthMask = false` efter viewer-init |
+| `AssetPlusViewer.tsx` | Ny `ensureXrayConfig`-funktion, anropas i insights-effekten fore `setObjectsXRayed` |
+| `RoomVisualizationPanel.tsx` | Samma xray-konfiguration appliceras fore legend-klickens `setObjectsXRayed` |
 
-### Forvantat resultat
+### Varfor detta loser problemet
 
-- Xray-objekt renderas som subtila, nastan genomskinliga konturer
-- Fargade rum (fran Insights eller legend-klick) syns tydligt framfor xray-bakgrunden
-- Samma beteende som i xeokits officiella BIM Viewer
+Asset+-biblioteket kan aterstalla xrayMaterial till sina standardvarden (hog opacity, `alphaDepthMask = true`) vid modell-laddning eller andra interna operationer. Genom att konfigurera om xrayMaterial **direkt innan** vi aktiverar xray, garanterar vi att de korrekta vardena fran xeokit-issue #175 anvands.
 
