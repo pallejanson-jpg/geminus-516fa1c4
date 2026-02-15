@@ -556,7 +556,7 @@ function MobileUnifiedViewer({
   const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="fixed inset-0 flex flex-col bg-background z-40 overflow-hidden">
       <div
         className="flex items-center justify-between px-2 py-2 border-b bg-background/95 backdrop-blur-sm shrink-0"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
