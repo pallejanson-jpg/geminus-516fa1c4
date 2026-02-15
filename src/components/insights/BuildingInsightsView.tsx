@@ -38,8 +38,9 @@ const ViewerLink = () => {
         return () => clearTimeout(timer);
     }, []);
     return (
-        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/30 border border-primary/60 shadow-lg shadow-primary/30 hover:bg-primary/40 flex items-center justify-center text-primary transition-colors shrink-0 ${pulse ? 'ring-2 ring-primary/70 animate-pulse' : ''}`}>
-            <Eye className="h-5 w-5" />
+        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-xs font-medium shadow-md shrink-0 ${pulse ? 'ring-2 ring-primary/50 animate-pulse' : ''}`}>
+            <Eye className="h-3.5 w-3.5" />
+            <span>Visa</span>
         </div>
     );
 };
@@ -324,7 +325,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                                            {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                             <Legend />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -349,7 +350,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                         <XAxis dataKey="month" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                         <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                         <Legend />
                                         <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
                                         <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
@@ -400,13 +401,14 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 <TabsContent value="asset" className="mt-0 space-y-6">
                     <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                         {/* Asset Category Distribution - REAL */}
-                        <Card>
+                        <Card className="cursor-pointer border-primary/20 hover:border-primary/50 transition-colors" onClick={() => navigateTo3D()}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Package className="h-4 w-4 text-primary" />
                                     Asset Categories
+                                    <span className="ml-auto"><ViewerLink /></span>
                                 </CardTitle>
-                                <CardDescription>{stats.assetCount} assets (real data)</CardDescription>
+                                <CardDescription>{stats.assetCount} assets (real data) · Tryck för att visa i 3D</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="h-64">
@@ -418,7 +420,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                                     ))}
                                                 </Pie>
-                                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                 <Legend />
                                             </PieChart>
                                         </ResponsiveContainer>
