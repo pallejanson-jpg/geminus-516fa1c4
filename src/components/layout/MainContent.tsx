@@ -9,7 +9,7 @@ import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
 import Viewer from "@/pages/Viewer";
 import InsightsView from "@/components/insights/InsightsView";
-import EntityInsightsView from "@/components/insights/EntityInsightsView";
+import BuildingInsightsView from "@/components/insights/BuildingInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
 import SenslincDashboardView from "@/components/viewer/SenslincDashboardView";
 
@@ -68,7 +68,7 @@ const MainContent: React.FC = () => {
             case 'entity_insights':
                 if (insightsFacility) {
                     return (
-                        <EntityInsightsView 
+                        <BuildingInsightsView 
                             facility={insightsFacility} 
                             onBack={() => {
                                 setInsightsFacility(null);
