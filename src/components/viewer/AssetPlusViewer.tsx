@@ -341,28 +341,33 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       if (mode === 'energy_floors' || mode === 'energy_floor') {
         Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
-          const guidLower = floorGuid.toLowerCase();
-          let spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
-          
-          if (spaceIds.length === 0) {
-            const foundIds: string[] = [];
-            Object.values(metaObjects).forEach((mo: any) => {
-              if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
-              const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
-              if (moGuid !== guidLower) return;
-              const findChildren = (parent: any) => {
-                if (!parent.children) return;
-                parent.children.forEach((child: any) => {
-                  foundIds.push(child.id);  // Collect ALL objects, not just spaces
-                  findChildren(child);
-                });
-              };
-              findChildren(mo);
-            });
-            spaceIds = foundIds;
-          }
+          const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+          if (!assetView) return;
 
-          spaceIds.forEach(id => {
+          // Step 1: Find the storey's xeokit entity ID via Asset+'s FM GUID lookup
+          const storeyItemIds = assetView.getItemsByPropertyValue("fmguid", floorGuid.toUpperCase()) || [];
+          console.log('[Insights] Floor', floorGuid, '-> storeyItemIds:', storeyItemIds.length);
+
+          // Step 2: For each storey entity, find ALL children in the metaObject tree
+          const allChildIds: string[] = [];
+          storeyItemIds.forEach((itemId: string) => {
+            const mo = metaObjects[itemId];
+            if (!mo) return;
+            const findChildren = (parent: any) => {
+              if (!parent.children) return;
+              parent.children.forEach((child: any) => {
+                allChildIds.push(child.id);
+                findChildren(child);
+              });
+            };
+            findChildren(mo);
+            allChildIds.push(itemId);
+          });
+
+          console.log('[Insights] Floor', floorGuid, '-> total children:', allChildIds.length);
+
+          // Step 3: Un-xray and colorize all children
+          allChildIds.forEach(id => {
             const entity = scene.objects?.[id];
             if (entity) {
               entity.xrayed = false;
