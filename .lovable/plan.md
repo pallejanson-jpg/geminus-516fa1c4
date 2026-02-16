@@ -1,135 +1,68 @@
 
 
-## Plan: xeokit 2D View, Section Plane Clipping & Expandable Minimap
+## Fix: Room Visualization Performance, Duplicate Toolbar Buttons, Dropdown Consistency, and Smallviken Loading Error
 
-This plan addresses three interconnected areas: fixing section plane clipping, building a xeokit-based 2D view, and making the minimap resizable up to half the screen.
+### 1. Room Visualization Performance (Hanging/Freezing)
 
----
+**Root cause:** When `applyVisualization` runs, it first synchronously resets ALL previously colorized rooms by iterating `colorizedRoomGuidsRef` and calling `colorizeSpace(fmGuid, null)` for each one. For buildings with hundreds of rooms, this means hundreds of synchronous DOM/WebGL operations happening in a tight loop before the chunked processing even begins. Additionally, the `FLOOR_VISIBILITY_APPLIED` listener re-triggers `applyVisualization()` after only 100ms, causing cascading resets.
 
-### 1. Fix Section Plane Clipping (Priority - unblocks everything else)
+**Fix:**
+- Move the "reset all previously colorized rooms" phase into the same chunked processing loop instead of running it synchronously up front
+- Increase the `FLOOR_VISIBILITY_APPLIED` debounce from 100ms to 300ms
+- Add a guard to prevent `applyVisualization` from being called if one is already in progress (use `isProcessing` state)
+- Reduce the `requestIdleCallback` timeout from 50ms to 16ms (one frame) for smoother yielding
 
-**Problem diagnosis:**
-The current `useSectionPlaneClipping` hook tries three methods to create SectionPlanes:
-1. SectionPlanesPlugin via `(window as any).xeokit?.SectionPlanesPlugin` -- this class is NOT exposed globally because AssetPlusViewer bundles xeokit internally in a UMD file
-2. Direct `SectionPlane` constructor -- same issue, not globally available
-3. Low-level `scene._sectionPlanesState` manipulation -- this is an internal API that may have changed between xeokit versions
-
-**Root cause:** The AssetPlusViewer UMD bundle embeds xeokit but does NOT export its plugin classes to the global scope. The hook can't find `SectionPlanesPlugin` or `SectionPlane` constructors.
-
-**Solution:**
-Access SectionPlanes through the xeokit viewer instance's own scene API. The xeokit `scene` object has a built-in `SectionPlane` component system accessible via `new viewer.scene.SectionPlane(...)` or through the viewer's plugin registry.
-
-**Technical changes:**
-
-- **`src/hooks/useSectionPlaneClipping.ts`**: Rewrite `createSectionPlaneOnScene` to:
-  1. First check `viewer.scene.components` for existing SectionPlanesPlugin instances
-  2. Try `new viewer.scene.SectionPlane(scene, { id, pos, dir, active: true })` -- the SectionPlane class is attached to the scene's component factory in bundled xeokit
-  3. If that fails, enumerate `viewer.scene.components` to find the SectionPlane constructor from an already-created instance's prototype
-  4. Add debug logging that reports exactly which method succeeded/failed for troubleshooting
-
-- Add a diagnostic function that logs all available scene component types to help debug what the AssetPlusViewer bundle exposes
+**File:** `src/components/viewer/RoomVisualizationPanel.tsx`
 
 ---
 
-### 2. xeokit-based 2D Floor Plan View
+### 2. Duplicate Toolbar Buttons (Aterstall vy / Anpassa vy)
 
-**Current state:** The minimap uses `StoreyViewsPlugin` but falls back to a simple canvas rendering from AABB data. The `StoreyViewsPlugin` class is likely also not globally available (same UMD bundling issue).
+**Analysis:** The navigation toolbar has both:
+- "Aterstall vy" (`resetView`, icon: `Maximize`) -- calls `assetView.viewFit(undefined, true)` (fit entire scene)
+- "Anpassa vy" (`viewFit`, icon: `Focus`) -- calls `assetView.viewFit(selectedItems, false)` when objects are selected, otherwise `assetView.viewFit(undefined, true)` (same as resetView)
 
-**Strategy:** Build the 2D view using xeokit's own camera capabilities rather than relying on `StoreyViewsPlugin`:
-- Set camera to orthographic projection
-- Position camera directly above the floor looking down
-- Apply section plane clipping (from fix above) to show only one floor slab
-- This gives a true interactive 2D plan view using the same 3D engine
+When nothing is selected (the majority of the time), both buttons do the exact same thing. The user correctly sees them as duplicates.
 
-**Technical changes:**
+**Fix:** Remove the `resetView` tool from the default configuration. Keep `viewFit` ("Anpassa vy") as it has the smarter behavior (fits to selection when available, fits all otherwise). This is a single-line change in `ToolbarSettings.tsx` -- set `resetView` to `visible: false` by default.
 
-- **`src/components/viewer/Xeokit2DPlanView.tsx`** (new file): A component that:
-  - Takes a `viewerRef` and `floorId`
-  - Switches camera to `projection: "ortho"` with eye looking straight down `[centerX, height, centerZ]`, look `[centerX, 0, centerZ]`, up `[0, 0, -1]`
-  - Applies floor-plan section plane clipping (top + bottom planes from the fixed hook)
-  - Provides pan/zoom controls (mouse drag + scroll wheel)
-  - Has a "Back to 3D" button that restores perspective camera
-  - Syncs camera position indicator with 3D view when in split mode
-
-- **Integration into UnifiedViewer**: Add this as an alternative 2D mode option alongside FM Access 2D:
-  - When building has FM Access configured: show FM Access 2D (existing)
-  - Always available: xeokit 2D plan view (new) -- add as "2D Plan" mode button
-  - Both accessible from mode switcher
+**File:** `src/components/viewer/ToolbarSettings.tsx`
 
 ---
 
-### 3. Expandable Minimap (Resizable up to ~50% viewport)
+### 3. Inconsistent Dropdown Styling in Visning Menu
 
-**Current state:** MinimapPanel toggles between 240x200 and 360x300 pixels. Fixed in top-left corner.
+**Analysis:** Three different dropdown patterns are used within the same panel:
+- **Rumsvisualisering** (visualization type): Uses `<Select>` component with `<SelectTrigger>` and `<SelectContent>` -- proper Radix dropdown
+- **Viewer-tema**: Uses `<Select>` component -- matches Rumsvisualisering
+- **Rumsetiketter**: Uses custom `<button>` elements styled inline -- completely different look (no border, no dropdown arrow, no popover)
 
-**Changes to `src/components/viewer/MinimapPanel.tsx`:**
+**Fix:** Convert the "Rumsetiketter" (Room Labels) selector from custom buttons to a `<Select>` dropdown to match the other selectors in the same panel. This gives a consistent UI with the same trigger style, border, arrow indicator, and popover behavior.
 
-- Replace fixed size toggle with a **drag-to-resize handle** (bottom-right corner)
-- Add three size presets accessible via buttons:
-  - Mini: 240x200 (current default)
-  - Medium: ~400x350
-  - Large: ~50% of viewport width and height
-- The large preset effectively creates a split-screen effect with the minimap
-- Make the panel draggable (move it around the viewport)
-- When at large size, the canvas resolution scales up accordingly for crisp rendering
-- Camera indicator on the minimap stays synced with 3D navigation
-- Clicking on the minimap at any size navigates the 3D camera (already works)
+**File:** `src/components/viewer/VisualizationToolbar.tsx` (lines 1029-1084)
 
 ---
 
-### 4. Split Screen: 3D + xeokit 2D Side by Side
+### 4. Smallviken "nextSibling" Loading Error
 
-**Future extension** (can be built incrementally after items 1-3):
+**Analysis:** The error `Cannot read properties of null (reading 'nextSibling')` occurs inside the AssetPlusViewer UMD bundle during DOM manipulation. The existing fix (`viewerContainerRef.current.innerHTML = ''` at line 2775) already addresses this for most cases, but it can still happen if:
+- The container ref becomes null between the check and the initialization
+- React strict mode causes double-mount/unmount cycles
+- The viewer's internal Vue instance tries to access DOM nodes that React has already removed
 
-Once the xeokit 2D plan view works (item 2), add a split mode:
-- Left panel: 3D perspective view
-- Right panel: 2D orthographic plan view (same xeokit instance, second camera state stored separately)
-- Camera positions synchronized: clicking in 2D moves 3D camera, and vice versa
-- This reuses the same AssetPlusViewer instance, just switching camera projection per panel
+**Fix:** Add a more defensive guard around the container clearing and initialization sequence:
+- Wrap the initialization in a `requestAnimationFrame` to ensure DOM is settled
+- Add a null-check after the container clearing
+- Catch the specific `nextSibling` error in the initialization try/catch and retry once after a short delay
 
-**Note:** This is more complex since xeokit has one camera per viewer. The approach would be:
-- Use the minimap (item 3) at large size as a "pseudo split screen" for the immediate term
-- For true split screen, either render the 2D view as a canvas overlay (using `createStoreyMap` or manual rendering) or investigate if AssetPlusViewer supports multiple camera viewports
+**File:** `src/components/viewer/AssetPlusViewer.tsx`
 
 ---
 
 ### Implementation Order
 
-1. **Fix section plane clipping** -- debug what the AssetPlusViewer UMD bundle actually exposes on `viewer.scene`, then adapt the hook
-2. **Expandable minimap** -- straightforward UI enhancement, works with current fallback rendering
-3. **xeokit 2D plan view** -- depends on working section planes for proper floor isolation
-4. **Split screen 3D+2D** -- depends on 2D plan view working
-
----
-
-### Technical Details
-
-**Diagnosing the xeokit bundle:**
-Add a temporary diagnostic that runs after viewer init:
-```typescript
-const viewer = getXeokitViewer();
-console.log('Scene components:', Object.keys(viewer.scene.components || {}));
-console.log('Scene types:', [...new Set(Object.values(viewer.scene.components || {}).map((c: any) => c.constructor?.name))]);
-console.log('Viewer plugins:', Object.keys(viewer.plugins || {}));
-console.log('SectionPlane class available:', !!viewer.scene.SectionPlane);
-```
-
-This will tell us exactly what's available and guide the clipping fix.
-
-**Camera switch for 2D plan view:**
-```typescript
-// Save 3D state
-const savedEye = [...camera.eye];
-const savedLook = [...camera.look];
-const savedProjection = camera.projection;
-
-// Switch to 2D orthographic top-down
-camera.projection = "ortho";
-camera.eye = [centerX, floorMaxY + 50, centerZ];
-camera.look = [centerX, floorMinY, centerZ];
-camera.up = [0, 0, -1];
-```
-
-**Minimap resize handle:**
-Use a mouse-down/move/up pattern on a small corner grip element. Constrain minimum size to 200x160 and maximum to `window.innerWidth * 0.5` by `window.innerHeight * 0.5`.
+1. Fix Room Visualization performance (highest user impact -- freezing)
+2. Remove duplicate toolbar button (quick fix)
+3. Standardize dropdown styling (UI consistency)
+4. Harden nextSibling error handling (edge case)
 
