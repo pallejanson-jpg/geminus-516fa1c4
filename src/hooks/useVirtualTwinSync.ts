@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { IvionApi } from '@/lib/ivion-sdk';
+import { resolveMainView } from '@/lib/ivion-sdk';
 import { ivionToBim, ivionHeadingToBim, type IvionBimTransform, IDENTITY_TRANSFORM } from '@/lib/ivion-bim-transform';
 import { calculateLookFromHeadingPitch } from '@/lib/coordinate-transform';
 
@@ -80,7 +81,7 @@ export function useVirtualTwinSync({
           return;
         }
 
-        const mainView = ivApi.getMainView();
+        const mainView = resolveMainView(ivApi);
         if (!mainView) {
           animFrameRef.current = requestAnimationFrame(poll);
           return;

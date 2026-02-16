@@ -420,6 +420,18 @@ export function createIvionElement(container: HTMLElement): HTMLElement {
 /**
  * Remove the <ivion> element and clean up.
  */
+/**
+ * Resolve the main view from any version of the NavVis SDK API object.
+ * Handles multiple API shapes across SDK versions.
+ */
+export function resolveMainView(api: any): IvionMainView | null {
+  return api?.view?.mainView
+    ?? (typeof api?.legacyApi?.getMainView === 'function' ? api.legacyApi.getMainView() : null)
+    ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null)
+    ?? api?.mainView
+    ?? null;
+}
+
 export function destroyIvionElement(container: HTMLElement, element: HTMLElement): void {
   try {
     if (container.contains(element)) {

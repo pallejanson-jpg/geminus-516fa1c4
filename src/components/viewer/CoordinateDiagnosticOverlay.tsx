@@ -9,6 +9,7 @@ import { Bug, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { IvionBimTransform, Vec3 } from '@/lib/ivion-bim-transform';
 import { bimToIvion } from '@/lib/ivion-bim-transform';
+import { resolveMainView } from '@/lib/ivion-sdk';
 
 interface CoordinateDiagnosticOverlayProps {
   transform: IvionBimTransform;
@@ -38,13 +39,10 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
       const api = ivApiRef.current;
       if (api) {
         try {
-          const mainView = typeof api.getMainView === 'function' ? api.getMainView() : null;
+          const mainView = resolveMainView(api);
           const image = mainView?.getImage?.();
           if (image?.location) {
             setIvionPos({ x: image.location.x, y: image.location.y, z: image.location.z });
-          } else if (api.camera?.position) {
-            const p = api.camera.position;
-            setIvionPos({ x: p.x ?? p[0], y: p.y ?? p[1], z: p.z ?? p[2] });
           }
         } catch { /* ignore */ }
       }
