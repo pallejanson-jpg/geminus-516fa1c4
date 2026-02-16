@@ -18,6 +18,8 @@ export interface InventoryPrefill {
 interface QuickActionsProps {
   facility: Facility;
   ivionSiteId?: string | null;
+  has3DModels?: boolean;
+  hasFmAccess?: boolean;
   onOpenMap: () => void;
   onOpenNavigator: (facility: Facility) => void;
   onShowAssets: (facility: Facility) => void;
@@ -37,6 +39,8 @@ interface QuickActionsProps {
 const QuickActions: React.FC<QuickActionsProps> = ({ 
   facility, 
   ivionSiteId,
+  has3DModels,
+  hasFmAccess,
   onOpenMap, 
   onOpenNavigator, 
   onShowAssets, 
@@ -58,6 +62,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const isSpace = facility.category === 'Space';
   const canAddAsset = isStorey || isSpace;
 
+  // Availability flags for visualization buttons
+  const has3D = has3DModels !== false; // default true (loading/unknown)
+  const has360 = !!ivionSiteId;
+  const hasSplit = has3D && has360;
+  const has2D = hasFmAccess !== false; // default true (loading/unknown)
+
+  const disabledClass = 'opacity-40 cursor-not-allowed';
   const ivionDisabledTooltip = "Konfigurera Ivion Site ID först";
 
   return (
@@ -119,18 +130,19 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                   <Button 
                     variant="ghost" 
                     onClick={() => {
+                      if (!has3D) return;
                       const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
                       const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
                       navigate(`/split-viewer?building=${buildingGuid}&mode=3d${entityParam}`);
                     }} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has3D ? disabledClass : ''}`}
                   >
                     <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
                     <span className="text-[10px] sm:text-xs">3D</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isSpace ? "Visa rum i 3D" : "Visa 3D-modell"}</p>
+                  <p>{has3D ? (isSpace ? "Visa rum i 3D" : "Visa 3D-modell") : "Ingen 3D-modell tillgänglig"}</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -142,17 +154,18 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                   <Button 
                     variant="ghost" 
                     onClick={() => {
+                      if (!has360) return;
                       const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
                       navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
                     }} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has360 ? disabledClass : ''}`}
                   >
                     <View size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
                     <span className="text-[10px] sm:text-xs">360°</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Öppna 360°-panorama</p>
+                  <p>{has360 ? "Öppna 360°-panorama" : "Ingen 360°-data tillgänglig"}</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -163,15 +176,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`)}
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                    onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`); }}
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!hasSplit ? disabledClass : ''}`}
                   >
                     <SplitSquareHorizontal size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
                     <span className="text-[10px] sm:text-xs">3D+360°</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Synkroniserad 3D och 360°-vy</p>
+                  <p>{hasSplit ? "Synkroniserad 3D och 360°-vy" : `Kräver ${!has3D ? '3D-modell' : ''}${!has3D && !has360 ? ' och ' : ''}${!has360 ? '360°-data' : ''}`}</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -182,15 +195,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`)}
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                    onClick={() => { if (has2D) navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`); }}
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has2D ? disabledClass : ''}`}
                   >
                     <Square size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
                     <span className="text-[10px] sm:text-xs">2D Ritning</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Visa FM Access 2D-ritning</p>
+                  <p>{has2D ? "Visa FM Access 2D-ritning" : "Ingen 2D-ritning tillgänglig"}</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -201,15 +214,15 @@ const QuickActions: React.FC<QuickActionsProps> = ({
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
-                    onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`)}
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
+                    onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`); }}
+                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!hasSplit ? disabledClass : ''}`}
                   >
                     <Layers size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
                     <span className="text-[10px] sm:text-xs">Virtual Twin</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>3D-modell överlagrad på 360°-panorama</p>
+                  <p>{hasSplit ? "3D-modell överlagrad på 360°-panorama" : `Kräver ${!has3D ? '3D-modell' : ''}${!has3D && !has360 ? ' och ' : ''}${!has360 ? '360°-data' : ''}`}</p>
                 </TooltipContent>
               </Tooltip>
             )}
