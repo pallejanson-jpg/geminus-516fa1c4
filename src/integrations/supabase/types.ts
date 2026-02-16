@@ -1218,6 +1218,7 @@ export type Database = {
           id: string
           model_id: string
           model_name: string | null
+          source_updated_at: string | null
           source_url: string | null
           storage_path: string
           synced_at: string
@@ -1233,6 +1234,7 @@ export type Database = {
           id?: string
           model_id: string
           model_name?: string | null
+          source_updated_at?: string | null
           source_url?: string | null
           storage_path: string
           synced_at?: string
@@ -1248,6 +1250,7 @@ export type Database = {
           id?: string
           model_id?: string
           model_name?: string | null
+          source_updated_at?: string | null
           source_url?: string | null
           storage_path?: string
           synced_at?: string

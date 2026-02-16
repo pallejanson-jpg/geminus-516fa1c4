@@ -97,7 +97,21 @@ export async function convertGlbToXkt(
   const xktModel = new XKTModel();
 
   if (format === 'ifc') {
-    throw new Error('IFC-format stöds inte för klientkonvertering. Använd OBJ/glTF-format istället.');
+    logger('Parsing IFC into XKTModel via web-ifc WASM...');
+    const mod = await import('@xeokit/xeokit-convert');
+    if (typeof (mod as any).parseIFCIntoXKTModel === 'function') {
+      await (mod as any).parseIFCIntoXKTModel({
+        data: new Uint8Array(glbData),
+        xktModel,
+        wasmPath: '/lib/xeokit/',
+        log: logger,
+      });
+    } else {
+      throw new Error(
+        'IFC-konvertering kräver parseIFCIntoXKTModel som inte finns i den installerade versionen av @xeokit/xeokit-convert. ' +
+        'Kontrollera att web-ifc WASM-filer finns i /lib/xeokit/.'
+      );
+    }
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
