@@ -2919,6 +2919,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (xeokitViewer) {
         xeokitViewer.scene.alphaDepthMask = false;
+        // Diagnose available xeokit APIs for SectionPlane clipping
+        import('@/hooks/useSectionPlaneClipping').then(mod => {
+          mod.diagnoseXeokitScene(xeokitViewer);
+        }).catch(() => {});
       }
 
       // Mark viewer ready for direct calls
