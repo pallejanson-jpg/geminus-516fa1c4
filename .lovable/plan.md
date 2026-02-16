@@ -1,60 +1,85 @@
 
 
-## Fix: Insights energi-infargning -- farga ALLA objekt pa vaningen
+## Fix: GUID-matchning mellan Insights och 3D-viewern
 
-### Problem
+### Rotorsak
 
-Koden i `AssetPlusViewer.tsx` (rad 353-356) filtrerar BARA pa `ifcspace` nar den traverserar vaningens barn:
+ColorMap-nycklarna ar **FM GUIDs** (UUID-format, t.ex. `755950d9-f235-...`) fran Asset+-databasen, men matchningen pa rad 351 jamfor mot `mo.originalSystemId || mo.id` som ar **IFC GlobalIds** (22 tecken, base64-format, t.ex. `3vB2Yv0qX7uhTQKK...`). De matchar aldrig -- darfor hittas inga objekt att farga.
 
-```typescript
-if (child.type?.toLowerCase() === 'ifcspace') foundIds.push(child.id);
-```
-
-Om vaningen inte har nagra IfcSpace-objekt i BIM-modellen, hittas inget att farga -- alltsa ingen synlig effekt.
-
-### Losning
-
-Samla ALLA objekt (alla typer) under vaningens `IfcBuildingStorey` i metaObject-tradet, inte bara `ifcspace`. Det ger vaningens vaggar, tak, dorrar, fonster etc. samma farg -- hela vaningen "lyser" i diagramfargen.
-
----
+Losningen ar att anvanda Asset+-viewerns inbyggda `getItemsByPropertyValue("fmguid", floorGuid)` -- exakt samma metod som redan fungerar for `asset_categories`-laget (rad 390).
 
 ### Fil: `src/components/viewer/AssetPlusViewer.tsx`
 
-**Rad 353-356: Ta bort IfcSpace-filtret i `findSpaces`**
+**Rad 342-374: Byt GUID-matchningen fran metaObject-traversering till `getItemsByPropertyValue`**
 
 Byt fran:
 ```typescript
-const findSpaces = (parent: any) => {
-  if (!parent.children) return;
-  parent.children.forEach((child: any) => {
-    if (child.type?.toLowerCase() === 'ifcspace') foundIds.push(child.id);
-    findSpaces(child);
-  });
-};
+Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
+  const guidLower = floorGuid.toLowerCase();
+  let spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
+  if (spaceIds.length === 0) {
+    const foundIds: string[] = [];
+    Object.values(metaObjects).forEach((mo: any) => {
+      if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+      const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+      if (moGuid !== guidLower) return;
+      // ... traverse children
+    });
+    spaceIds = foundIds;
+  }
+  // colorize spaceIds...
+});
 ```
 
 Till:
 ```typescript
-const findChildren = (parent: any) => {
-  if (!parent.children) return;
-  parent.children.forEach((child: any) => {
-    foundIds.push(child.id);  // Collect ALL objects, not just spaces
-    findChildren(child);
+Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
+  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+  if (!assetView) return;
+
+  // Step 1: Find the storey's xeokit entity ID via Asset+'s FM GUID lookup
+  const storeyItemIds = assetView.getItemsByPropertyValue("fmguid", floorGuid.toUpperCase()) || [];
+  console.log('[Insights] Floor', floorGuid, '-> storeyItemIds:', storeyItemIds.length);
+
+  // Step 2: For each storey entity, find ALL children in the metaObject tree
+  const allChildIds: string[] = [];
+  storeyItemIds.forEach((itemId: string) => {
+    const mo = metaObjects[itemId];
+    if (!mo) return;
+    const findChildren = (parent: any) => {
+      if (!parent.children) return;
+      parent.children.forEach((child: any) => {
+        allChildIds.push(child.id);
+        findChildren(child);
+      });
+    };
+    findChildren(mo);
+    // Also include the storey entity itself
+    allChildIds.push(itemId);
   });
-};
+
+  console.log('[Insights] Floor', floorGuid, '-> total children:', allChildIds.length);
+
+  // Step 3: Un-xray and colorize all children
+  allChildIds.forEach(id => {
+    const entity = scene.objects?.[id];
+    if (entity) {
+      entity.xrayed = false;
+      entity.visible = true;
+      entity.colorize = rgb;
+      entity.opacity = 0.85;
+    }
+  });
+});
 ```
-
-Ocksa byt anropet fran `findSpaces(mo)` till `findChildren(mo)`.
-
----
 
 ### Sammanfattning
 
 | Fil | Andring |
 |-----|---------|
-| `AssetPlusViewer.tsx` | Ta bort `ifcspace`-filtret i energy_floors-traverseringen sa ALLA objekt under vaningen fargas |
+| `AssetPlusViewer.tsx` | Byt fran `originalSystemId`-matchning till `getItemsByPropertyValue("fmguid", ...)` for `energy_floors`-laget |
 
-### Resultat
+### Varfor det fungerar
 
-Alla objekt (vaggar, dorrar, fonster, golv, tak) pa en vaning fargas med diagramfargen fran Insights. Hela vaningen "lyser" mot den xray:ade byggnaden.
+`getItemsByPropertyValue("fmguid", ...)` ar Asset+-viewerns egna soksystem som vet hur FM GUIDs kopplar till xeokit-entiteter. Det ar samma metod som redan fungerar for `asset_categories`-laget. Genom att forst hitta vanningens xeokit-ID och sedan traversera dess barn i metaObject-tradet, far vi tag pa alla objekt (vaggar, dorrar, fonster etc.) som tillhor vaningen.
 
