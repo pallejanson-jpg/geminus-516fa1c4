@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { useModelNames } from '@/hooks/useModelNames';
+import { MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 
 export interface ModelInfo {
   id: string;
@@ -348,7 +349,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       if (checked) {
         const model = modelsRef.current.find(m => m.id === modelId);
         if (model && !model.loaded) {
-          window.dispatchEvent(new CustomEvent('MODEL_LOAD_REQUESTED', {
+          window.dispatchEvent(new CustomEvent(MODEL_LOAD_REQUESTED_EVENT, {
             detail: { modelId }
           }));
         }

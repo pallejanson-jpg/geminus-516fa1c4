@@ -3372,6 +3372,37 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     };
   }, [state.isInitialized]);
 
+  // On-demand model loading: when a user toggles a deferred (non-A) model in ModelVisibilitySelector,
+  // add it to the whitelist and re-trigger the Asset+ model load so the interceptor allows it through.
+  useEffect(() => {
+    const handleModelLoadRequested = (e: CustomEvent<{ modelId: string }>) => {
+      const { modelId } = e.detail;
+      if (!modelId) return;
+
+      console.log(`[AssetPlusViewer] On-demand model load requested: ${modelId}`);
+
+      // Add to whitelist so the cache interceptor allows it
+      if (allowedModelIdsRef.current) {
+        allowedModelIdsRef.current.add(modelId);
+        allowedModelIdsRef.current.add(modelId.toLowerCase());
+      }
+
+      // Re-trigger model load via Asset+ viewer API
+      const viewer = viewerInstanceRef.current;
+      const resolvedGuid = buildingFmGuid;
+      if (viewer && resolvedGuid) {
+        // setAvailableModelsByFmGuid re-evaluates which models to load;
+        // now the interceptor will allow the newly-whitelisted model through
+        viewer.setAvailableModelsByFmGuid(resolvedGuid);
+      }
+    };
+
+    window.addEventListener('MODEL_LOAD_REQUESTED', handleModelLoadRequested as EventListener);
+    return () => {
+      window.removeEventListener('MODEL_LOAD_REQUESTED', handleModelLoadRequested as EventListener);
+    };
+  }, [buildingFmGuid]);
+
   // Viewer uses built-in Asset+ controls - no custom handlers needed
 
   // Show error state - only show after the delay to prevent flashing during initialization
