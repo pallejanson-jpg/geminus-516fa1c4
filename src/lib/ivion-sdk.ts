@@ -432,6 +432,20 @@ export function resolveMainView(api: any): IvionMainView | null {
     ?? null;
 }
 
+/**
+ * Resolve moveToImageId from any version of the NavVis SDK API object.
+ * Handles multiple API shapes across SDK versions.
+ */
+export async function resolveMoveTo(api: any, imageId: number, viewDir?: any, options?: any): Promise<void> {
+  if (typeof api?.legacyApi?.moveToImageId === 'function') {
+    return api.legacyApi.moveToImageId(imageId, viewDir, options);
+  }
+  if (typeof api?.moveToImageId === 'function') {
+    return api.moveToImageId(imageId, viewDir, options);
+  }
+  throw new Error('moveToImageId not found on SDK');
+}
+
 export function destroyIvionElement(container: HTMLElement, element: HTMLElement): void {
   try {
     if (container.contains(element)) {

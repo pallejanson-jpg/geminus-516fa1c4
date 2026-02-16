@@ -1,18 +1,28 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Box } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 interface XrayToggleProps {
   viewerRef: React.MutableRefObject<any>;
+  /** Initial enabled state (e.g. from Insights forceXray) */
+  initialEnabled?: boolean;
 }
+
+const BATCH_SIZE = 100;
 
 /**
  * X-ray toggle for the 3D viewer.
  * Sets non-colorized scene objects to xrayed mode, preserving room visualization colors.
+ * Uses batched requestAnimationFrame for performance on large models.
  */
-const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
-  const [xrayEnabled, setXrayEnabled] = useState(false);
+const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = false }) => {
+  const [xrayEnabled, setXrayEnabled] = useState(initialEnabled);
+
+  // Sync initial state when prop changes (e.g. Insights mode navigation)
+  useEffect(() => {
+    setXrayEnabled(initialEnabled);
+  }, [initialEnabled]);
 
   const handleToggleXray = useCallback((enabled: boolean) => {
     setXrayEnabled(enabled);
@@ -38,26 +48,45 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef }) => {
       }
       scene.alphaDepthMask = false;
 
-      let count = 0;
-      objectIds.forEach(id => {
+      // Batched processing to avoid blocking the main thread
+      const idsToXray: string[] = [];
+      objectIds.forEach((id: string) => {
         const entity = scene.objects?.[id];
         if (!entity) return;
-        // Skip entities that are already colorized (from room visualization)
         const c = entity.colorize;
-        if (c && (c[0] !== 1 || c[1] !== 1 || c[2] !== 1)) {
-          return; // Don't xray colored rooms
+        if (c && (c[0] !== 1 || c[1] !== 1 || c[2] !== 1)) return;
+        idsToXray.push(id);
+      });
+
+      let i = 0;
+      const processBatch = () => {
+        const end = Math.min(i + BATCH_SIZE, idsToXray.length);
+        for (; i < end; i++) {
+          const entity = scene.objects?.[idsToXray[i]];
+          if (entity) entity.xrayed = true;
         }
-        entity.xrayed = true;
-        count++;
-      });
-      console.log('[XrayToggle] xray ON, skipped colorized entities:', objectIds.length - count, 'xrayed:', count);
+        if (i < idsToXray.length) requestAnimationFrame(processBatch);
+      };
+      requestAnimationFrame(processBatch);
+
+      console.log('[XrayToggle] xray ON, skipped colorized:', objectIds.length - idsToXray.length, 'xraying:', idsToXray.length);
     } else {
-      scene.setObjectsXRayed(objectIds, false);
-      // Restore any opacity changes from legend clicks
-      objectIds.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity && entity.opacity < 1.0) entity.opacity = 1.0;
-      });
+      // Batched OFF processing
+      let i = 0;
+      const ids = [...objectIds];
+      const processBatchOff = () => {
+        const end = Math.min(i + BATCH_SIZE, ids.length);
+        for (; i < end; i++) {
+          const entity = scene.objects?.[ids[i]];
+          if (entity) {
+            entity.xrayed = false;
+            if (entity.opacity < 1.0) entity.opacity = 1.0;
+          }
+        }
+        if (i < ids.length) requestAnimationFrame(processBatchOff);
+      };
+      requestAnimationFrame(processBatchOff);
+
       console.log('[XrayToggle] xray OFF');
     }
   }, [viewerRef]);

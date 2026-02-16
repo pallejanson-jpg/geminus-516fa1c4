@@ -41,6 +41,8 @@ import { useBcfViewpoints } from "@/hooks/useBcfViewpoints";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
+import { MINIMAP_TOGGLE_EVENT } from "@/lib/viewer-events";
+import { Map } from "lucide-react";
 
 interface ViewerRightPanelProps {
   isOpen: boolean;
@@ -517,23 +519,34 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     </div>
                   )}
 
-                  {/* Show Spaces Toggle */}
-                  {isToolVisible('spaces') && (
-                    <div className="flex items-center justify-between py-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                          {showSpaces ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                        </div>
-                        <span className="text-sm">Visa rum</span>
+                  {/* Show Spaces Toggle - always visible */}
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        {showSpaces ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                       </div>
-                      <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
+                      <span className="text-sm">Visa rum</span>
                     </div>
-                  )}
+                    <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
+                  </div>
 
                   {/* X-ray Toggle */}
-                  {isToolVisible('xray') && (
-                    <XrayToggle viewerRef={viewerRef} />
-                  )}
+                  <XrayToggle viewerRef={viewerRef} />
+
+                  {/* Minimap Toggle */}
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Map className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Minimap</span>
+                    </div>
+                    <Switch
+                      onCheckedChange={(checked) => {
+                        window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } }));
+                      }}
+                    />
+                  </div>
 
                   {/* Annotations Toggle + Category List */}
                   {isToolVisible('annotations') && (
@@ -568,7 +581,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
               <Separator />
 
               {/* Room Visualization - Collapsible, collapsed by default */}
-              {isToolVisible('visualization') && buildingFmGuid && (
+              {buildingFmGuid && (
                 <Collapsible open={roomVizOpen} onOpenChange={setRoomVizOpen}>
                   <CollapsibleTrigger asChild>
                     <Button variant="ghost" className="w-full justify-between h-10 px-2">
@@ -600,12 +613,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 <CollapsibleTrigger asChild>
                   <button className="flex items-center justify-between w-full py-2 hover:bg-muted/50 rounded-md transition-colors px-1">
                     <div className="flex items-center gap-2">
-                       <div className="p-1.5 rounded-md bg-muted text-foreground/70">
+                       <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Settings className="h-4 w-4" />
                       </div>
                       <span className="text-sm font-medium">Viewer settings</span>
                     </div>
-                    <ChevronDown className={cn("h-4 w-4 text-foreground/70 transition-transform", viewerSettingsOpen && "rotate-180")} />
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
