@@ -43,7 +43,7 @@ export class XktCacheService {
   /**
    * Check if a model is cached - first checks database with multiple matching strategies
    */
-  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean }> {
+  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean; sourceUpdatedAt?: string }> {
     try {
       // First check the xkt_models database table with multiple matching strategies
       if (buildingFmGuid) {
@@ -91,10 +91,10 @@ export class XktCacheService {
             if (urlData?.signedUrl) {
               if (isStale) {
                 console.log('XKT cache hit but STALE (>7 days):', modelId);
-                return { cached: true, url: urlData.signedUrl, stale: true };
+                return { cached: true, url: urlData.signedUrl, stale: true, sourceUpdatedAt: match.source_updated_at || undefined };
               }
               console.log('XKT cache hit (signed URL):', modelId);
-              return { cached: true, url: urlData.signedUrl };
+              return { cached: true, url: urlData.signedUrl, sourceUpdatedAt: match.source_updated_at || undefined };
             }
           }
         }
@@ -222,7 +222,8 @@ export class XktCacheService {
     modelId: string,
     xktData: ArrayBuffer,
     buildingFmGuid: string,
-    modelName?: string
+    modelName?: string,
+    sourceLastModified?: string
   ): Promise<boolean> {
     const cacheKey = `${buildingFmGuid}/${modelId}`;
     
@@ -238,21 +239,8 @@ export class XktCacheService {
       return false;
     }
     
-    // Check if already cached in database
-    try {
-      const { count } = await supabase
-        .from('xkt_models')
-        .select('*', { count: 'exact', head: true })
-        .eq('building_fm_guid', buildingFmGuid)
-        .eq('model_id', modelId);
-      
-      if (count && count > 0) {
-        console.log('XKT save: Already in database', modelId);
-        return true;
-      }
-    } catch (e) {
-      console.warn('XKT save: Check failed', e);
-    }
+    // Note: We no longer skip if already in database — upsert handles updates
+    // This allows stale entries to be refreshed with new data
     
     savingModels.add(cacheKey);
     currentSaveCount++;
@@ -291,7 +279,7 @@ export class XktCacheService {
           storage_path: storagePath,
           file_url: null,
           synced_at: new Date().toISOString(),
-          source_updated_at: new Date().toISOString(),
+          source_updated_at: sourceLastModified || new Date().toISOString(),
         }, {
           onConflict: 'building_fm_guid,model_id',
         });
