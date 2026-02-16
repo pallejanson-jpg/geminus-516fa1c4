@@ -129,6 +129,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   
   // Ref to track ALL colorized room fmGuids to ensure proper reset across floor changes
   const colorizedRoomGuidsRef = useRef<Set<string>>(new Set());
+  
+  // Cancel ref for aborting in-progress chunk processing
+  const cancelRef = useRef(false);
+  
+  // Active legend range ref for toggle behavior
+  const activeLegendRangeRef = useRef<{min: number, max: number} | null>(null);
 
   // Draggable panel state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -390,15 +396,17 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       return;
     }
 
-    if (isProcessing) return;
-    setIsProcessing(true);
+    // Cancel any in-progress chunking
+    cancelRef.current = true;
     
     // CRITICAL: Reset ALL previously colorized rooms BEFORE applying new colors
-    // This prevents "sticky" colors from appearing on hidden floors
     colorizedRoomGuidsRef.current.forEach((fmGuid) => {
       colorizeSpace(fmGuid, null);
     });
     colorizedRoomGuidsRef.current.clear();
+
+    setIsProcessing(true);
+    cancelRef.current = false; // Reset cancel flag for new run
 
     let count = 0;
     const CHUNK_SIZE = 30;
@@ -409,10 +417,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     }
 
     const processChunk = (chunkIndex: number) => {
-      if (chunkIndex >= chunks.length) {
+      if (cancelRef.current || chunkIndex >= chunks.length) {
         setColorizedCount(count);
         setIsProcessing(false);
-        console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
+        if (!cancelRef.current) {
+          console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
+        }
         return;
       }
 
@@ -428,7 +438,6 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (value !== null) {
           const color = getVisualizationColor(value, visualizationType);
           if (color && colorizeSpace(room.fmGuid, color)) {
-            // Track this room as colorized
             colorizedRoomGuidsRef.current.add(room.fmGuid);
             count++;
           }
@@ -444,7 +453,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
 
     processChunk(0);
-  }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors, isProcessing]);
+  }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors]);
 
   // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
   useEffect(() => {
@@ -498,6 +507,18 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for FLOOR_VISIBILITY_APPLIED to re-apply colors after floor changes
+  useEffect(() => {
+    const handler = () => {
+      if (visualizationType !== 'none' && rooms.length > 0) {
+        // Re-apply colors after floor visibility has settled
+        setTimeout(() => applyVisualization(), 100);
+      }
+    };
+    window.addEventListener('FLOOR_VISIBILITY_APPLIED', handler);
+    return () => window.removeEventListener('FLOOR_VISIBILITY_APPLIED', handler);
+  }, [visualizationType, rooms.length, applyVisualization]);
+
   // Listen for legend bar selection events — select matching rooms in viewer
   useEffect(() => {
     const handleLegendSelect = (e: CustomEvent<LegendSelectDetail>) => {
@@ -509,6 +530,17 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       if (!xeokitViewer?.scene) return;
 
       const scene = xeokitViewer.scene;
+
+      // Toggle off if clicking the same range again
+      if (activeLegendRangeRef.current &&
+          rangeMin === activeLegendRangeRef.current.min && 
+          rangeMax === activeLegendRangeRef.current.max) {
+        const allIds = scene.objectIds || [];
+        scene.setObjectsXRayed(allIds, false);
+        scene.setObjectsSelected(allIds, false);
+        activeLegendRangeRef.current = null;
+        return;
+      }
 
       // Deselect all previously selected
       if (scene.selectedObjectIds?.length) {
@@ -547,14 +579,12 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
           if (e) e.xrayed = false;
         });
         scene.setObjectsSelected(idsToSelect, true);
+        activeLegendRangeRef.current = { min: rangeMin, max: rangeMax };
         console.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
       } else {
-        // Toggle off: remove xray from all and restore opacity
+        // No matches: remove xray
         scene.setObjectsXRayed(allIds, false);
-        allIds.forEach(id => {
-          const e = scene.objects?.[id];
-          if (e && e.opacity < 1.0) e.opacity = 1.0;
-        });
+        activeLegendRangeRef.current = null;
       }
     };
 
@@ -661,13 +691,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Shared content JSX
   const contentJSX = (
     <div className={cn(embedded ? "space-y-3" : "p-3 space-y-4")}>
-      {/* Header for embedded mode */}
-      {embedded && (
-        <div className="flex items-center gap-2 mb-1">
-          <Palette className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Rumsvisualisering</span>
-        </div>
-      )}
+      {/* Header removed - parent Collapsible already shows "Rumsvisualisering" */}
 
       {/* Visualization type selector */}
       <div className="space-y-2">

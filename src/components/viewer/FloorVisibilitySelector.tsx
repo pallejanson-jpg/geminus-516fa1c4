@@ -353,6 +353,12 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         }
       });
       
+      // SAFETY: Abort if no objects to show -- prevents blacking out
+      if (idsToShow.length === 0) {
+        console.warn('FloorVisibilitySelector.applyFloorVisibility: no objects found for selected floors, aborting');
+        return;
+      }
+      
       const idsToShowSet = new Set(idsToShow);
       
       // Use XEOkit batch API if available, otherwise use requestIdleCallback
@@ -383,6 +389,9 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
           }
         });
       }
+      
+      // Dispatch event so RoomVisualizationPanel can re-apply colors after visibility settles
+      window.dispatchEvent(new CustomEvent('FLOOR_VISIBILITY_APPLIED'));
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
     // Listen for external floor selection changes (from FloatingFloorSwitcher, ViewerTreePanel)
