@@ -156,7 +156,7 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
   // ── Build iframe URL with auth params ──
   const iframeSrc = embedConfig
     ? (() => {
-        const base = `${embedConfig.apiUrl}/client/`;
+        const base = `${embedConfig.apiUrl}/viewer/2d`;
         const params = new URLSearchParams();
         params.set('token', embedConfig.token);
         if (embedConfig.versionId) params.set('versionId', embedConfig.versionId);
