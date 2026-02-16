@@ -2884,6 +2884,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         },
         // selectedFmGuidsChangedCallback - Track selection for properties dialog
         (items: string[], added: string[], removed: string[]) => {
+          if (!isMountedRef.current) return; // Guard against state updates during unmount
           console.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
           setSelectedFmGuids(items || []);
         },
