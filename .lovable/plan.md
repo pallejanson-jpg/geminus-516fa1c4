@@ -1,85 +1,103 @@
 
 
-## Fix: GUID-matchning mellan Insights och 3D-viewern
+## Lagg till Senslinc IoT-verktyg i Gunnar
 
-### Rotorsak
+### Oversikt
 
-ColorMap-nycklarna ar **FM GUIDs** (UUID-format, t.ex. `755950d9-f235-...`) fran Asset+-databasen, men matchningen pa rad 351 jamfor mot `mo.originalSystemId || mo.id` som ar **IFC GlobalIds** (22 tecken, base64-format, t.ex. `3vB2Yv0qX7uhTQKK...`). De matchar aldrig -- darfor hittas inga objekt att farga.
+Gunnar far tre nya verktyg som anropar `senslinc-query` edge-funktionen internt (server-till-server via `fetch`) for att soka IoT-data -- sensorer, larm, matvarden, dashboards.
 
-Losningen ar att anvanda Asset+-viewerns inbyggda `getItemsByPropertyValue("fmguid", floorGuid)` -- exakt samma metod som redan fungerar for `asset_categories`-laget (rad 390).
+---
 
-### Fil: `src/components/viewer/AssetPlusViewer.tsx`
+### Fil: `supabase/functions/gunnar-chat/index.ts`
 
-**Rad 342-374: Byt GUID-matchningen fran metaObject-traversering till `getItemsByPropertyValue`**
+#### 1. Lagg till tre nya tool-definitioner i `tools`-arrayen
 
-Byt fran:
+| Verktyg | Beskrivning | Parametrar |
+|---------|-------------|------------|
+| `senslinc_get_equipment` | Hitta IoT-utrustning kopplad till ett FM GUID (rum/asset/byggnad). Returnerar maskininfo och dashboard-URL. | `fm_guid` (required) |
+| `senslinc_get_sites` | Lista alla Senslinc-siter (byggnader) och deras maskiner. Kan filtreras med `site_code`. | `site_code` (optional) |
+| `senslinc_search_data` | Sok tidsseriedata (temperatur, CO2, energi) fran Senslinc Elasticsearch. Kraver `workspace_key` och en `query` (Elasticsearch DSL). | `workspace_key` (required), `time_range` (optional, default "now-24h"), `property_name` (optional), `machine_code` (optional), `size` (optional, default 100) |
+
+#### 2. Lagg till tre exekveringsfunktioner
+
+Alla tre anropar `senslinc-query` edge-funktionen via intern `fetch`:
+
 ```typescript
-Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
-  const guidLower = floorGuid.toLowerCase();
-  let spaceIds = spacesByFloorCacheRef.current.get(guidLower) || [];
-  if (spaceIds.length === 0) {
-    const foundIds: string[] = [];
-    Object.values(metaObjects).forEach((mo: any) => {
-      if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
-      const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
-      if (moGuid !== guidLower) return;
-      // ... traverse children
-    });
-    spaceIds = foundIds;
-  }
-  // colorize spaceIds...
-});
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+async function callSenslincQuery(action: string, params: Record<string, unknown>) {
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/senslinc-query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  return resp.json();
+}
 ```
 
-Till:
-```typescript
-Object.entries(colorMap).forEach(([floorGuid, rgb]) => {
-  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-  if (!assetView) return;
+- **`execSenslincGetEquipment`**: Anropar `get-dashboard-url` med `fmGuid`. Returnerar maskinnamn, typ (machine/site/line), dashboard-URL, och ev. sensordata.
+- **`execSenslincGetSites`**: Anropar `get-sites` (alla siter) eller `get-site-equipment` (filterat pa `siteCode`).
+- **`execSenslincSearchData`**: Bygger en Elasticsearch-query med `range`-filter pa `@timestamp` och optional `term`-filter pa `machine_code` / `property_name`. Anropar `search-data`.
 
-  // Step 1: Find the storey's xeokit entity ID via Asset+'s FM GUID lookup
-  const storeyItemIds = assetView.getItemsByPropertyValue("fmguid", floorGuid.toUpperCase()) || [];
-  console.log('[Insights] Floor', floorGuid, '-> storeyItemIds:', storeyItemIds.length);
+#### 3. Registrera i `executeTool` switch-satsen
 
-  // Step 2: For each storey entity, find ALL children in the metaObject tree
-  const allChildIds: string[] = [];
-  storeyItemIds.forEach((itemId: string) => {
-    const mo = metaObjects[itemId];
-    if (!mo) return;
-    const findChildren = (parent: any) => {
-      if (!parent.children) return;
-      parent.children.forEach((child: any) => {
-        allChildIds.push(child.id);
-        findChildren(child);
-      });
-    };
-    findChildren(mo);
-    // Also include the storey entity itself
-    allChildIds.push(itemId);
-  });
+Lagg till tre nya case:
+```
+case "senslinc_get_equipment": return execSenslincGetEquipment(args);
+case "senslinc_get_sites": return execSenslincGetSites(args);
+case "senslinc_search_data": return execSenslincSearchData(args);
+```
 
-  console.log('[Insights] Floor', floorGuid, '-> total children:', allChildIds.length);
+#### 4. Uppdatera systemprompt
 
-  // Step 3: Un-xray and colorize all children
-  allChildIds.forEach(id => {
-    const entity = scene.objects?.[id];
-    if (entity) {
-      entity.xrayed = false;
-      entity.visible = true;
-      entity.colorize = rgb;
-      entity.opacity = 0.85;
+Lagg till ett nytt avsnitt i `buildSystemPrompt`:
+
+```
+SENSLINC (IoT / SENSOR DATA):
+You have tools to query IoT sensor data from the Senslinc system.
+- Use senslinc_get_equipment to find sensors linked to a specific room, asset, or building (via FM GUID).
+- Use senslinc_get_sites to list all monitored sites/buildings.
+- Use senslinc_search_data to query time-series measurements (temperature, CO2, humidity, energy).
+- When presenting sensor data, include the dashboard link: [📊 Senslinc Dashboard](URL)
+- The search_data tool uses Elasticsearch DSL -- build queries with time_range (e.g. "now-24h", "now-7d"), property_name, and machine_code filters.
+```
+
+---
+
+### Teknisk detalj: Elasticsearch-query som byggs av `senslinc_search_data`
+
+```json
+{
+  "size": 100,
+  "query": {
+    "bool": {
+      "must": [
+        { "range": { "@timestamp": { "gte": "now-24h", "lte": "now" } } }
+      ],
+      "filter": [
+        { "term": { "machine_code": "..." } },
+        { "term": { "property_name": "..." } }
+      ]
     }
-  });
-});
+  },
+  "sort": [{ "@timestamp": { "order": "desc" } }]
+}
 ```
+
+Gunnar kan anpassa `time_range`, `machine_code` och `property_name` baserat pa anvandardens fraga. Han kan aven kedja: forst `senslinc_get_equipment` for att hitta `machine_code`, sedan `senslinc_search_data` for att hamta matvarden.
+
+---
 
 ### Sammanfattning
 
-| Fil | Andring |
-|-----|---------|
-| `AssetPlusViewer.tsx` | Byt fran `originalSystemId`-matchning till `getItemsByPropertyValue("fmguid", ...)` for `energy_floors`-laget |
-
-### Varfor det fungerar
-
-`getItemsByPropertyValue("fmguid", ...)` ar Asset+-viewerns egna soksystem som vet hur FM GUIDs kopplar till xeokit-entiteter. Det ar samma metod som redan fungerar for `asset_categories`-laget. Genom att forst hitta vanningens xeokit-ID och sedan traversera dess barn i metaObject-tradet, far vi tag pa alla objekt (vaggar, dorrar, fonster etc.) som tillhor vaningen.
+| Andring | Fil |
+|---------|-----|
+| 3 nya tool-definitioner | `gunnar-chat/index.ts` |
+| 3 nya exec-funktioner + gemensam `callSenslincQuery` helper | `gunnar-chat/index.ts` |
+| 3 nya case i `executeTool` | `gunnar-chat/index.ts` |
+| Utokat systemprompt med Senslinc-instruktioner | `gunnar-chat/index.ts` |
 
