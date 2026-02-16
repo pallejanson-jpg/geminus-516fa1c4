@@ -30,11 +30,20 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
           .eq('building_fm_guid', buildingFmGuid);
 
         if (!dbError && dbData && dbData.length > 0) {
-          if (!cancelled) {
-            setNameEntries(buildEntries(dbData));
-            setIsLoading(false);
+          // Check if model_names are just GUIDs (not human-readable)
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}/i;
+          const allGuids = dbData.every(m => !m.model_name || UUID_RE.test(m.model_name));
+          
+          if (!allGuids) {
+            // We have real names - use them
+            if (!cancelled) {
+              setNameEntries(buildEntries(dbData));
+              setIsLoading(false);
+            }
+            return;
           }
-          return;
+          // Names are GUIDs - fall through to API to get real names
+          console.debug('Model names in DB are GUIDs, fetching from Asset+ API...');
         }
 
         // 2. Fallback: Asset+ API
@@ -74,7 +83,7 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
 
           if (!cancelled) setNameEntries(entries);
 
-          // Persist to DB for next time
+          // Persist names to DB - update existing rows or upsert new ones
           for (const m of apiModels) {
             if (!m.name) continue;
             const fileName = m.xktFileUrl
@@ -82,16 +91,26 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
               : (m.id || '');
             if (!fileName) continue;
 
-            supabase.from('xkt_models').upsert({
-              building_fm_guid: buildingFmGuid,
-              model_id: m.id || fileName,
-              model_name: m.name,
-              file_name: fileName,
-              storage_path: m.xktFileUrl || '',
-              source_url: m.xktFileUrl || null,
-            }, { onConflict: 'model_id' }).then(({ error }) => {
-              if (error) console.debug('Failed to cache model name:', m.name, error.message);
-            });
+            // First try to update existing row by model_id
+            supabase.from('xkt_models')
+              .update({ model_name: m.name })
+              .eq('building_fm_guid', buildingFmGuid)
+              .eq('model_id', m.id || fileName)
+              .then(({ error }) => {
+                if (error) {
+                  // Fallback: upsert
+                  supabase.from('xkt_models').upsert({
+                    building_fm_guid: buildingFmGuid,
+                    model_id: m.id || fileName,
+                    model_name: m.name,
+                    file_name: fileName,
+                    storage_path: m.xktFileUrl || '',
+                    source_url: m.xktFileUrl || null,
+                  }, { onConflict: 'model_id' }).then(({ error: e2 }) => {
+                    if (e2) console.debug('Failed to cache model name:', m.name, e2.message);
+                  });
+                }
+              });
           }
         }
       } catch (e) {
