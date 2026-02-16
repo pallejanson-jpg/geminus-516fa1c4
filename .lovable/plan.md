@@ -1,239 +1,136 @@
 
 
-## Fixa vningsplan-konflikter, Solo-buggar och rumsvisualisering
+## Senslinc IoT Integration Improvements
 
-### Problem och rotorsaker
+### Background
 
-**1. Flytande vaningsvaljare krockar med hogermenyns vaningsvaljare**
-Bada komponenterna (FloatingFloorSwitcher och FloorVisibilitySelector) lyssnar pa samma FLOOR_SELECTION_CHANGED_EVENT och bada applicerar `applyFloorVisibility` pa viewern. De har egna kopior av floor-state och kan hamna ur synk, sarskilt vid snabba klick.
-
-**2. Solo-knappen slacker ibland hela 3D-vyn**
-I `FloorVisibilitySelector.applyFloorVisibility` (rad 359-386) kors `scene.setObjectsVisible(scene.objectIds, false)` forst, sedan `scene.setObjectsVisible(idsToShow, true)`. Om `idsToShow` ar tomt (t.ex. for att `childrenMapCache` inte byggts klart annu, eller floors-state ar tom) sa doljs allt utan att nagon geometri aterstalls.
-
-**3. Dubbel "Rumsvisualisering"-rubrik**
-I `ViewerRightPanel` rad 577 star "Rumsvisualisering" som collapsible-header. Nar man vecklar ut den renderas `RoomVisualizationPanel` i embedded-lage, som pa rad 665-669 ocksa visar en header med "Rumsvisualisering".
-
-**4. Rum fargas inte om vid byte av visualiseringstyp**
-`applyVisualization` (rad 387-447) har en guard `if (isProcessing) return;` pa rad 393. Nar man byter fran t.ex. Temperatur till Luftfuktighet triggas `useEffect` pa rad 450, men om foregaende chunk-bearbetning inte hunnit saetta `isProcessing = false` (via requestIdleCallback) sa blockeras den nya visualiseringen helt. Dessutom anropas `resetColors` fran effekten (rad 452-454 for `none`-fallet), men for byte mellan tva aktiva typer kors istallet `applyVisualization` som gor en intern reset -- men bara om `isProcessing` ar false.
-
-**5. Legendens klick gor ingenting**
-Koden i `handleLegendSelect` (rad 503-558) anvander X-ray-strategi men problemet ar att den bara aktiveras om `type === visualizationType`, och `rooms`-arrayen kan vara tom om filtreringen inte stammer. Dessutom om `idsToSelect` ar 0 (inga matchande rum) sa togglas X-ray av (rad 552-558) utan visuell feedback. Funktionen i sig ar korrekt, men den misslyckas tyst nar rum-data inte matchar.
-
-**6. Byte av vaningsplan med aktiv visualisering slacker allt**
-Nar Solo klickas i FloorVisibilitySelector kors `applyFloorVisibility` som satter `scene.setObjectsVisible(scene.objectIds, false)` och sedan visar enbart den nya vaningens barn-objekt. RoomVisualizationPanel lyssnar pa FLOOR_SELECTION_CHANGED_EVENT och uppdaterar `eventFloorGuids`, vilket triggar ny filtrering av rum och ny `applyVisualization`. Men det finns en race condition: floor-vaxlingen doljer alla objekt (inklusive IfcSpace), och sedan forsaker applyVisualization farglagga rum som just gjorts osynliga. Visualiseringen appliceras via requestIdleCallback som kors EFTER att floor-visibility redan slagit.
+The Senslinc edge function (`senslinc-query/index.ts`) and Gunnar's AI tools are partially built but have two critical gaps blocking reliable IoT data retrieval.
 
 ---
 
-### Plan
+### Problem 1: Authentication fails under load (HTTP 429)
 
-#### Steg 1: Dolj FloatingFloorSwitcher
+The `getJwtToken` function tries two payloads (email, username) sequentially. If the Senslinc server returns **429 Too Many Requests**, the function immediately tries the next payload (which also gets 429), then throws an error. There is **no retry logic and no token caching**, so every single request triggers a fresh login -- amplifying the rate-limit problem.
 
-**Fil:** `src/components/viewer/FloatingFloorSwitcher.tsx`
+### Problem 2: Gunnar cannot discover workspace keys
 
-Andring: Satt `isVisible` default till `false` och localStorage-varde till `'false'` sa att den ar dold fran start. Behalj toggle-logiken i ViewerRightPanel (Viewer Settings > "Vaningsvaljare (pills)") sa att anvandaren kan aktivera den manuellt om de vill.
+The `senslinc_search_data` tool requires a mandatory `workspace_key` parameter, but Gunnar has no way to discover valid workspace keys. He must guess, which always fails. A `senslinc_get_indices` tool is needed.
+
+---
+
+### Changes
+
+#### File 1: `supabase/functions/senslinc-query/index.ts`
+
+**A. Add token cache (55-minute TTL)**
+
+A module-level variable stores the last successful JWT token with an expiry timestamp. Subsequent requests reuse the cached token, drastically reducing auth calls.
 
 ```typescript
-const [isVisible, setIsVisible] = useState(() => {
-  return localStorage.getItem('viewer-show-floor-pills') === 'true'; // Changed from !== 'false'
-});
+let cachedToken: { token: string; expiresAt: number } | null = null;
+const TOKEN_TTL_MS = 55 * 60 * 1000; // 55 minutes
 ```
 
-#### Steg 2: Fixa Solo-mode som ibland slacker 3D
+**B. Add exponential backoff retry for 429 in `getJwtToken`**
 
-**Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
-
-Andring i `applyFloorVisibility`: Lagg till en skerhetskontroll som forhindrar att alla objekt doljs om `idsToShow` ar tom. Om inga barn-objekt hittas, avbryt operationen istallet for att dolja allt.
+Wrap the existing two-payload loop inside an outer retry loop (max 3 retries, delays: 1s, 2s, 4s). On 429, wait and retry instead of failing immediately.
 
 ```typescript
-const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
-  const viewer = getXeokitViewer();
-  if (!viewer?.scene) return;
+async function getJwtToken(apiUrl, email, password): Promise<string> {
+  // Return cached token if valid
+  if (cachedToken && Date.now() < cachedToken.expiresAt) {
+    return cachedToken.token;
+  }
 
-  const scene = viewer.scene;
-  const childrenMap = buildChildrenMap();
-  const isSoloMode = visibleIds.size === 1;
-  
-  const idsToShow: string[] = [];
-  
-  floors.forEach(floor => {
-    if (visibleIds.has(floor.id)) {
-      floor.metaObjectIds.forEach(metaObjId => {
-        idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
-      });
+  const maxRetries = 3;
+  let delay = 1000;
+
+  for (let retry = 0; retry <= maxRetries; retry++) {
+    if (retry > 0) {
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
     }
-  });
-  
-  // SAFETY: Abort if no objects to show -- prevents blacking out
-  if (idsToShow.length === 0) {
-    console.warn('applyFloorVisibility: no objects found for selected floors, aborting');
-    return;
-  }
-  
-  // ... rest of existing logic
-}, [...]);
-```
 
-Samma fix appliceras i `FloatingFloorSwitcher.applyFloorVisibility` for konsistens (aven om den doljs -- kan ateraktiveras).
+    for (const attempt of attempts) {
+      const response = await fetch(tokenUrl, { ... });
 
-#### Steg 3: Ta bort dubbel "Rumsvisualisering"-rubrik
+      if (response.status === 429) {
+        break; // break inner loop, retry outer loop with backoff
+      }
 
-**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
-
-Ta bort den inre headern i embedded-laget (rad 665-669):
-
-```typescript
-// REMOVE this block in contentJSX:
-{embedded && (
-  <div className="flex items-center gap-2 mb-1">
-    <Palette className="h-4 w-4 text-primary" />
-    <span className="font-medium text-sm">Rumsvisualisering</span>
-  </div>
-)}
-```
-
-#### Steg 4: Fixa rumsvisualisering som inte uppdateras vid typbyte
-
-**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
-
-Rotorsak: `isProcessing`-guarden i `applyVisualization` blockerar ny applicering nar foregaende batch annu inte slutforts. 
-
-Fix:
-1. Lagg till en `cancelRef` som avbryter pagaende chunk-bearbetning nar en ny visualiseringstyp valjs.
-2. Ta bort `isProcessing`-guarden fran `applyVisualization` och anvand istallet cancel-mekanismen.
-
-```typescript
-const cancelRef = useRef(false);
-
-const applyVisualization = useCallback(() => {
-  if (visualizationType === 'none') {
-    resetColors();
-    return;
-  }
-
-  // Cancel any in-progress chunking
-  cancelRef.current = true;
-  
-  // Reset before applying new colors
-  colorizedRoomGuidsRef.current.forEach((fmGuid) => {
-    colorizeSpace(fmGuid, null);
-  });
-  colorizedRoomGuidsRef.current.clear();
-  
-  setIsProcessing(true);
-  cancelRef.current = false; // Reset cancel flag for new run
-
-  let count = 0;
-  const CHUNK_SIZE = 30;
-  const chunks: RoomData[][] = [];
-  for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
-    chunks.push(rooms.slice(i, i + CHUNK_SIZE));
-  }
-
-  const processChunk = (chunkIndex: number) => {
-    if (cancelRef.current || chunkIndex >= chunks.length) {
-      setColorizedCount(count);
-      setIsProcessing(false);
-      return;
+      if (response.ok) {
+        const data = await response.json();
+        cachedToken = { token: data.token, expiresAt: Date.now() + TOKEN_TTL_MS };
+        return data.token;
+      }
     }
-    // ... existing chunk processing ...
-  };
-
-  processChunk(0);
-}, [visualizationType, rooms, useMockData, colorizeSpace, resetColors]);
-```
-
-Och i useEffect (rad 450-482), ta bort `isProcessing` fran dependency-kontrollen och anropa `applyVisualization` direkt:
-
-```typescript
-useEffect(() => {
-  if (visualizationType === 'none') {
-    resetColors();
-    return;
   }
-  // Force show spaces
-  window.dispatchEvent(new CustomEvent(FORCE_SHOW_SPACES_EVENT, { detail: { show: true } }));
-  if (onShowSpaces) onShowSpaces(true);
-
-  // Retry until cache and rooms are ready
-  let cancelled = false;
-  const applyWithRetry = (attempt: number) => {
-    if (cancelled) return;
-    if (entityIdCache.size > 0 && rooms.length > 0) {
-      applyVisualization();
-    } else if (attempt < 5) {
-      setTimeout(() => applyWithRetry(attempt + 1), 400);
-    }
-  };
-  const timer = setTimeout(() => applyWithRetry(0), 250);
-  return () => { cancelled = true; clearTimeout(timer); };
-}, [visualizationType, useMockData, rooms.length, entityIdCache.size]);
-```
-
-#### Steg 5: Fixa legendklick sa att rum faktiskt markeras
-
-**Fil:** `src/components/viewer/RoomVisualizationPanel.tsx`
-
-Problemet ar att `handleLegendSelect` anvander x-ray-strategi men nar rummen redan ar fargkodade sa fungerar inte `setObjectsSelected` visuellt. Rummen forsvinner bakom x-ray istallet for att framhavas.
-
-Fix: Nar inga rum matchas (idsToSelect === 0), aterstaell xray. Nar rum matchas:
-1. Satt X-ray pa allt
-2. Stang av X-ray OCH applicera fargerna pa matchande rum (de ar redan farglagda fran visualiseringen)
-3. Se till att `scene.alphaDepthMask = false` satts FORE `setObjectsXRayed` (redan korrekt men kan raceas)
-
-Lagg ocksa till en tydligare toggle: andra klick pa samma legend-stopp ska aterstaella (ta bort x-ray). Lagg till en `activeLegenRange`-ref:
-
-```typescript
-const activeLegendRangeRef = useRef<{min: number, max: number} | null>(null);
-
-// In handleLegendSelect:
-if (rangeMin === activeLegendRangeRef.current?.min && 
-    rangeMax === activeLegendRangeRef.current?.max) {
-  // Toggle off
-  scene.setObjectsXRayed(allIds, false);
-  activeLegendRangeRef.current = null;
-  return;
+  throw new Error('Authentication failed after retries');
 }
-activeLegendRangeRef.current = { min: rangeMin, max: rangeMax };
 ```
 
-#### Steg 6: Fixa vaningsplansbyte med aktiv visualisering
+No other parts of `senslinc-query/index.ts` change -- all existing actions (get-sites, get-indices, search-data, etc.) remain the same.
 
-**Fil:** `src/components/viewer/FloorVisibilitySelector.tsx`
+---
 
-Problemet ar att `applyFloorVisibility` doljer IfcSpace-objekt (via `scene.setObjectsVisible(scene.objectIds, false)`), och sedan satter bara barnens synlighet. Men RoomVisualizationPanel forsaker farglagga IfcSpace-objekt som just dolts.
+#### File 2: `supabase/functions/gunnar-chat/index.ts`
 
-Fix: I `applyFloorVisibility`, efter att synlighet applicerats, dispatcha ett nytt event (`FLOOR_VISIBILITY_APPLIED`) som RoomVisualizationPanel kan lyssna pa for att veta att det ar sakert att re-applicera farger.
+**A. New tool definition: `senslinc_get_indices`**
+
+Added to the `tools` array so Gunnar can discover available Elasticsearch workspaces/indices:
 
 ```typescript
-// After visibility is applied in applyFloorVisibility:
-window.dispatchEvent(new CustomEvent('FLOOR_VISIBILITY_APPLIED'));
+{
+  type: "function",
+  function: {
+    name: "senslinc_get_indices",
+    description: "List available Senslinc Elasticsearch indices/workspaces. Use this to discover valid workspace_key values before calling senslinc_search_data.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+}
 ```
 
-I `RoomVisualizationPanel`, lagg till en lyssnare:
+**B. New execution function**
 
 ```typescript
-useEffect(() => {
-  const handler = () => {
-    if (visualizationType !== 'none' && rooms.length > 0) {
-      // Re-apply colors after floor visibility has settled
-      setTimeout(() => applyVisualization(), 100);
-    }
-  };
-  window.addEventListener('FLOOR_VISIBILITY_APPLIED', handler);
-  return () => window.removeEventListener('FLOOR_VISIBILITY_APPLIED', handler);
-}, [visualizationType, rooms.length, applyVisualization]);
+async function execSenslincGetIndices() {
+  return callSenslincQuery("get-indices", {});
+}
+```
+
+**C. New case in `executeTool` switch**
+
+```typescript
+case "senslinc_get_indices": return execSenslincGetIndices();
+```
+
+**D. Updated system prompt -- Senslinc workflow section**
+
+Replace the current Senslinc instructions with a clear recommended chain:
+
+```
+SENSLINC (IoT / SENSOR DATA):
+RECOMMENDED WORKFLOW:
+1. senslinc_get_sites -- discover monitored buildings
+2. senslinc_get_equipment(fm_guid) -- find sensors, get dashboard URL
+3. senslinc_get_indices -- discover available workspace keys (REQUIRED before search_data)
+4. senslinc_search_data(workspace_key, ...) -- query time-series data
+
+IMPORTANT:
+- ALWAYS call senslinc_get_indices first to discover valid workspace_key values
+- Use senslinc_get_equipment to find machine_code values for filtering
+- Present dashboard links as clickable Markdown links
+- Summarize readings with min/max/avg and flag anomalies
 ```
 
 ---
 
-### Sammanfattning
+### Summary
 
-| Steg | Fil | Andring |
-|------|-----|---------|
-| 1 | FloatingFloorSwitcher.tsx | Default-dolj pills |
-| 2 | FloorVisibilitySelector.tsx | Sakerhetskontroll i applyFloorVisibility |
-| 3 | RoomVisualizationPanel.tsx | Ta bort dubbel rubrik |
-| 4 | RoomVisualizationPanel.tsx | Cancel-mekanism for chunk-bearbetning |
-| 5 | RoomVisualizationPanel.tsx | Fixa legend-toggle och xray-hantering |
-| 6 | FloorVisibilitySelector.tsx + RoomVisualizationPanel.tsx | Synkronisera floor-visibility med re-colorization |
+| Change | File | Purpose |
+|--------|------|---------|
+| Token cache (55 min TTL) | senslinc-query/index.ts | Reduce auth calls |
+| Retry with backoff for 429 | senslinc-query/index.ts | Survive rate limiting |
+| `senslinc_get_indices` tool | gunnar-chat/index.ts | Workspace discovery |
+| Updated system prompt | gunnar-chat/index.ts | Guide Gunnar's IoT workflow |
 
