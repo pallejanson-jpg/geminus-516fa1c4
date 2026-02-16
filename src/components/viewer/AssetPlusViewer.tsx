@@ -2648,12 +2648,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           });
         }
         
-        // Check database cache
+        // Check database cache (skip stale entries — force fresh download)
         try {
-          const cachedUrl = await xktCacheService.interceptModelRequest(url, resolvedBuildingGuid);
-          if (cachedUrl) {
+          const cacheResult = await xktCacheService.checkCache(modelId, resolvedBuildingGuid);
+          if (cacheResult.cached && cacheResult.url && !cacheResult.stale) {
             console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
-            const cachedResponse = await original!(cachedUrl, init);
+            const cachedResponse = await original!(cacheResult.url, init);
             if (cachedResponse.ok) {
               // Clone and store in memory
               const data = await cachedResponse.clone().arrayBuffer();
@@ -2663,6 +2663,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 headers: { 'Content-Type': 'application/octet-stream' }
               });
             }
+          } else if (cacheResult.stale) {
+            console.log(`XKT cache: Stale entry for ${modelId}, fetching fresh from Asset+`);
           }
         } catch (e) {
           console.debug('XKT cache: Database check failed, fetching from source', e);
@@ -2812,25 +2814,51 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       });
     }, INIT_TIMEOUT_MS);
 
+    const initStartTime = performance.now();
     try {
       setInitStep('fetch_token');
-      // Fetch Asset+ access token via edge function
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('asset-plus-query', {
-        body: { action: 'getToken' }
-      });
-
-      if (tokenError) {
-        throw new Error('Could not fetch access token');
+      
+      // Try sessionStorage cached token first
+      const TOKEN_CACHE_KEY = 'geminus_ap_token';
+      const CONFIG_CACHE_KEY = 'geminus_ap_config';
+      let accessToken: string | null = null;
+      
+      const cachedToken = sessionStorage.getItem(TOKEN_CACHE_KEY);
+      if (cachedToken) {
+        try {
+          const { token, expiresAt } = JSON.parse(cachedToken);
+          if (Date.now() < expiresAt - 60000) { // 1 min margin
+            accessToken = token;
+            console.log('AssetPlusViewer: Using cached token (saves ~500ms)');
+          }
+        } catch { /* ignore bad cache */ }
       }
-
-      const accessToken = tokenData?.accessToken;
       
       if (!accessToken) {
-        throw new Error('Asset+ access token is missing. Check your API settings.');
+        // Fetch Asset+ access token via edge function
+        const { data: tokenData, error: tokenError } = await supabase.functions.invoke('asset-plus-query', {
+          body: { action: 'getToken' }
+        });
+
+        if (tokenError) {
+          throw new Error('Could not fetch access token');
+        }
+
+        accessToken = tokenData?.accessToken;
+        
+        if (!accessToken) {
+          throw new Error('Asset+ access token is missing. Check your API settings.');
+        }
+        
+        // Cache for 55 minutes (tokens typically last 60 min)
+        sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
+          token: accessToken,
+          expiresAt: Date.now() + 55 * 60 * 1000,
+        }));
       }
 
       accessTokenRef.current = accessToken;
-      console.log("AssetPlusViewer: Access token received");
+      console.log("AssetPlusViewer: Access token ready");
 
       setInitStep('check_script');
       // Check if assetplusviewer is available globally
@@ -2841,13 +2869,34 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
 
       setInitStep('fetch_config');
-      // Get API configuration
-      const { data: configData } = await supabase.functions.invoke('asset-plus-query', {
-        body: { action: 'getConfig' }
-      });
+      let baseUrl = '';
+      let apiKey = '';
+      
+      // Try sessionStorage cached config first
+      const cachedConfig = sessionStorage.getItem(CONFIG_CACHE_KEY);
+      if (cachedConfig) {
+        try {
+          const parsed = JSON.parse(cachedConfig);
+          baseUrl = parsed.apiUrl || '';
+          apiKey = parsed.apiKey || '';
+          console.log('AssetPlusViewer: Using cached config (saves ~500ms)');
+        } catch { /* ignore */ }
+      }
+      
+      if (!baseUrl) {
+        // Get API configuration
+        const { data: configData } = await supabase.functions.invoke('asset-plus-query', {
+          body: { action: 'getConfig' }
+        });
 
-      const baseUrl = configData?.apiUrl || '';
-      const apiKey = configData?.apiKey || '';
+        baseUrl = configData?.apiUrl || '';
+        apiKey = configData?.apiKey || '';
+        
+        // Cache config (rarely changes)
+        if (baseUrl) {
+          sessionStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ apiUrl: baseUrl, apiKey }));
+        }
+      }
 
       baseUrlRef.current = baseUrl;
 
@@ -2998,6 +3047,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
       setShowError(false);
       clearTimeout(timeoutId); // Cancel the initialization timeout on success
+
+      const initDuration = ((performance.now() - initStartTime) / 1000).toFixed(1);
+      console.log(`[AssetPlusViewer] ⏱ Initialization completed in ${initDuration}s`);
 
       setState(prev => ({
         ...prev,
