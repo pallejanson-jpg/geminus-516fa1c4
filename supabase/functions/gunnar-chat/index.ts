@@ -188,6 +188,55 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "senslinc_get_equipment",
+      description: "Find IoT equipment/sensors linked to a specific FM GUID (room, asset, or building). Returns machine info, sensor data, and a dashboard URL for the Senslinc monitoring portal.",
+      parameters: {
+        type: "object",
+        properties: {
+          fm_guid: { type: "string", description: "The FM GUID of the room, asset, or building to look up in Senslinc" },
+        },
+        required: ["fm_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "senslinc_get_sites",
+      description: "List all Senslinc-monitored sites (buildings) and optionally get all equipment for a specific site. Use to discover which buildings have IoT sensors.",
+      parameters: {
+        type: "object",
+        properties: {
+          site_code: { type: "string", description: "Optional site code to filter and get equipment for a specific site" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "senslinc_search_data",
+      description: "Search time-series sensor data (temperature, CO2, humidity, energy) from Senslinc Elasticsearch. Build queries with time range, machine code, and property name filters.",
+      parameters: {
+        type: "object",
+        properties: {
+          workspace_key: { type: "string", description: "The Elasticsearch workspace/index key to search in" },
+          time_range: { type: "string", description: "Time range for data, e.g. 'now-24h', 'now-7d', 'now-1M'. Default: 'now-24h'" },
+          property_name: { type: "string", description: "Filter by property/metric name (e.g. 'temperature', 'co2', 'humidity')" },
+          machine_code: { type: "string", description: "Filter by machine code (often the FM GUID)" },
+          size: { type: "number", description: "Max results to return (default 100)" },
+        },
+        required: ["workspace_key"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────
@@ -374,6 +423,58 @@ async function execGetFloorDetails(supabase: any, args: any) {
   };
 }
 
+/* ─────────────────────────────────────────────
+   Senslinc IoT helpers
+   ───────────────────────────────────────────── */
+
+async function callSenslincQuery(action: string, params: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const resp = await fetch(`${supabaseUrl}/functions/v1/senslinc-query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  return resp.json();
+}
+
+async function execSenslincGetEquipment(args: any) {
+  return callSenslincQuery("get-dashboard-url", { fmGuid: args.fm_guid });
+}
+
+async function execSenslincGetSites(args: any) {
+  if (args.site_code) {
+    return callSenslincQuery("get-site-equipment", { siteCode: args.site_code });
+  }
+  return callSenslincQuery("get-sites", {});
+}
+
+async function execSenslincSearchData(args: any) {
+  const timeRange = args.time_range || "now-24h";
+  const size = args.size || 100;
+
+  const must: any[] = [
+    { range: { "@timestamp": { gte: timeRange, lte: "now" } } },
+  ];
+  const filter: any[] = [];
+  if (args.machine_code) filter.push({ term: { machine_code: args.machine_code } });
+  if (args.property_name) filter.push({ term: { property_name: args.property_name } });
+
+  const query: Record<string, unknown> = {
+    size,
+    query: { bool: { must, filter } },
+    sort: [{ "@timestamp": { order: "desc" } }],
+  };
+
+  return callSenslincQuery("search-data", {
+    workspaceKey: args.workspace_key,
+    query,
+  });
+}
+
 async function executeTool(supabase: any, name: string, args: any) {
   switch (name) {
     case "query_assets": return execQueryAssets(supabase, args);
@@ -386,6 +487,9 @@ async function executeTool(supabase: any, name: string, args: any) {
     case "query_saved_views": return execQuerySavedViews(supabase, args);
     case "query_annotation_symbols": return execQueryAnnotationSymbols(supabase, args);
     case "get_floor_details": return execGetFloorDetails(supabase, args);
+    case "senslinc_get_equipment": return execSenslincGetEquipment(args);
+    case "senslinc_get_sites": return execSenslincGetSites(args);
+    case "senslinc_search_data": return execSenslincSearchData(args);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -468,7 +572,18 @@ GUIDELINES:
 6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Rum **Kontor 201** [🔍 Visa](action:flyTo:abc-123)"
 7. When listing multiple items in a table or list, add an action button next to each one.
 8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
-9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.`;
+9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
+
+SENSLINC (IoT / SENSOR DATA):
+You have tools to query IoT sensor data from the Senslinc system.
+- Use senslinc_get_equipment to find sensors linked to a specific room, asset, or building (via FM GUID). It returns a dashboard URL you should present.
+- Use senslinc_get_sites to list all monitored sites/buildings with IoT sensors.
+- Use senslinc_search_data to query time-series measurements (temperature, CO2, humidity, energy).
+  - You need a workspace_key (discover via senslinc_get_equipment or senslinc_get_sites).
+  - Filter with time_range (e.g. "now-24h", "now-7d"), property_name, and machine_code.
+  - Chain tools: first senslinc_get_equipment to find machine_code, then senslinc_search_data to get readings.
+- When presenting sensor data, include the dashboard link: [📊 Senslinc Dashboard](URL)
+- Summarize sensor data with min/max/avg when appropriate, and note any anomalies.`;
 }
 
 /* ─────────────────────────────────────────────
