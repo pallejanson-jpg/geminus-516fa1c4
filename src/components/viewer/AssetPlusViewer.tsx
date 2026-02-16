@@ -1527,6 +1527,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     try {
       console.log("allModelsLoadedCallback");
 
+      // Cancel the model load fallback timer since models loaded successfully
+      const fallbackTimer = (viewerInstanceRef.current as any)?.__modelFallbackTimer;
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        (viewerInstanceRef.current as any).__modelFallbackTimer = null;
+      }
+
       setModelLoadState('loaded');
       setInitStep('ready');
 
@@ -3087,6 +3094,25 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const initDuration = ((performance.now() - initStartTime) / 1000).toFixed(1);
       console.log(`[AssetPlusViewer] ⏱ Initialization completed in ${initDuration}s`);
 
+      // Safety fallback: if allModelsLoadedCallback never fires (e.g. model parse error),
+      // force the toolbar to become available after a timeout so the UI doesn't freeze.
+      const MODEL_LOAD_FALLBACK_MS = isMobile ? 15_000 : 20_000;
+      const modelFallbackId = setTimeout(() => {
+        if (!isMountedRef.current) return;
+        setModelLoadState(prev => {
+          if (prev !== 'loaded') {
+            console.warn('[AssetPlusViewer] Model load fallback triggered — forcing toolbar ready');
+            setInitStep('ready');
+            setXktSyncStatus('done');
+            return 'loaded';
+          }
+          return prev;
+        });
+      }, MODEL_LOAD_FALLBACK_MS);
+
+      // Store fallback timer so cleanup can cancel it
+      (viewerInstanceRef.current as any).__modelFallbackTimer = modelFallbackId;
+
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -3185,6 +3211,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         clearTimeout(showErrorTimeoutRef.current);
         showErrorTimeoutRef.current = null;
       }
+
+      // Cancel model load fallback timer
+      const fallbackTimer = (viewerInstanceRef.current as any)?.__modelFallbackTimer;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
 
       // Restore original fetch on unmount
       restoreFetch();
