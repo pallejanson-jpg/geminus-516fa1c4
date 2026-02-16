@@ -399,10 +399,16 @@ serve(async (req) => {
 
           const embedUrl = `${config.apiUrl}/client/?awaitConfig=true`;
 
+          // Build dedicated 2D viewer URL (stripped UI, only drawing + filter)
+          const viewer2dUrl = drawingObjectId
+            ? `${config.apiUrl}/viewer/2d?objectId=${encodeURIComponent(drawingObjectId)}&token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`
+            : `${config.apiUrl}/viewer/2d?token=${encodeURIComponent(token)}&versionId=${encodeURIComponent(versionId)}`;
+
           return new Response(
             JSON.stringify({
               success: true,
               embedUrl,
+              viewer2dUrl,
               apiUrl: config.apiUrl,
               token,
               versionId,
