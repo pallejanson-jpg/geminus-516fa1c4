@@ -45,6 +45,14 @@ export interface ViewerToolChangedDetail {
 /** Event dispatched when minimap toggle is requested from the right panel */
 export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
 
+/** Event dispatched when a deferred (non-A) model should be loaded on demand */
+export const MODEL_LOAD_REQUESTED_EVENT = 'MODEL_LOAD_REQUESTED';
+
+/** Type for model load request event detail */
+export interface ModelLoadRequestedDetail {
+  modelId: string;
+}
+
 /** Type for load saved view event detail */
 export interface LoadSavedViewDetail {
   viewId: string;
