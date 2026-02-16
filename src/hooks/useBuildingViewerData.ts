@@ -47,6 +47,14 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset state when buildingFmGuid changes
+  useEffect(() => {
+    if (buildingFmGuid) {
+      setError(null);
+      setIsLoading(true);
+    }
+  }, [buildingFmGuid]);
+
   useEffect(() => {
     const loadBuilding = async () => {
       if (!buildingFmGuid) {
@@ -67,6 +75,8 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         setIsLoading(false);
         return;
       }
+
+      setError(null);
 
       try {
         const { data: settings, error: settingsError } = await supabase
