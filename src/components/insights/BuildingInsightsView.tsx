@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
-    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2
+    ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
@@ -89,13 +89,15 @@ interface InsightsInlineViewerProps {
     insightsColorMode?: string;
     insightsColorMap?: Record<string, [number, number, number]>;
     onFullscreen: () => void;
+    expanded: boolean;
+    onToggleExpand: () => void;
 }
 
-const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, insightsColorMode, insightsColorMap, onFullscreen }) => {
+const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, insightsColorMode, insightsColorMap, onFullscreen, expanded, onToggleExpand }) => {
     return (
-        <div className="w-[400px] shrink-0 sticky top-2 h-[500px] rounded-lg border border-border overflow-hidden relative group">
-            {/* Read-only viewer — pointer events disabled on the viewer itself */}
-            <div className="absolute inset-0 pointer-events-none">
+        <div className={`${expanded ? 'w-[700px] h-[700px]' : 'w-[400px] h-[500px]'} shrink-0 sticky top-2 rounded-lg border border-border overflow-hidden relative group transition-all duration-300`}>
+            {/* Interactive viewer */}
+            <div className="absolute inset-0">
                 <AssetPlusViewer
                     fmGuid={fmGuid}
                     suppressOverlay
@@ -104,15 +106,26 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     forceXray={!!insightsColorMode}
                 />
             </div>
-            {/* Clickable overlay for fullscreen */}
-            <div
-                className="absolute inset-0 cursor-pointer z-10 flex items-end justify-center"
-                onClick={onFullscreen}
-            >
-                <div className="mb-3 flex items-center gap-2 px-3 py-1.5 rounded-md bg-background/80 backdrop-blur-sm border border-border text-xs text-foreground shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Toolbar buttons overlay */}
+            <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 bg-background/80 backdrop-blur-sm border border-border shadow-lg"
+                    onClick={onToggleExpand}
+                    title={expanded ? 'Förminska' : 'Förstora'}
+                >
+                    {expanded ? <Shrink className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
+                </Button>
+                <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 bg-background/80 backdrop-blur-sm border border-border shadow-lg"
+                    onClick={onFullscreen}
+                    title="Visa i fullskärm"
+                >
                     <Maximize2 className="h-3.5 w-3.5" />
-                    <span>Öppna i fullskärm</span>
-                </div>
+                </Button>
             </div>
             {/* Placeholder text when no mode is active */}
             {!insightsColorMode && (
@@ -135,6 +148,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     // Desktop inline viewer state
     const [inlineInsightsMode, setInlineInsightsMode] = useState<string | undefined>(undefined);
     const [inlineColorMap, setInlineColorMap] = useState<Record<string, [number, number, number]> | undefined>(undefined);
+    const [inlineExpanded, setInlineExpanded] = useState(false);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -579,6 +593,8 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                         insightsColorMode={inlineInsightsMode}
                         insightsColorMap={inlineColorMap}
                         onFullscreen={handleInlineFullscreen}
+                        expanded={inlineExpanded}
+                        onToggleExpand={() => setInlineExpanded(prev => !prev)}
                     />
                 )}
             </div>
