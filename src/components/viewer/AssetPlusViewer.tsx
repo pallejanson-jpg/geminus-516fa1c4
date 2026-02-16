@@ -2651,20 +2651,43 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         // Check database cache (skip stale entries — force fresh download)
         try {
           const cacheResult = await xktCacheService.checkCache(modelId, resolvedBuildingGuid);
-          if (cacheResult.cached && cacheResult.url && !cacheResult.stale) {
-            console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
-            const cachedResponse = await original!(cacheResult.url, init);
-            if (cachedResponse.ok) {
-              // Clone and store in memory
-              const data = await cachedResponse.clone().arrayBuffer();
-              storeModelInMemory(modelId, resolvedBuildingGuid, data);
-              return new Response(data, {
-                status: 200,
-                headers: { 'Content-Type': 'application/octet-stream' }
-              });
+          if (cacheResult.cached && cacheResult.url) {
+            // Age-stale check (>7 days)
+            if (cacheResult.stale) {
+              console.log(`XKT cache: Stale entry (>7d) for ${modelId}, fetching fresh from Asset+`);
+            } else {
+              // HEAD request to check if source has been updated since cache
+              let sourceNewer = false;
+              try {
+                const headResp = await original!(url, { method: 'HEAD' });
+                const sourceLastMod = headResp.headers.get('Last-Modified');
+                if (sourceLastMod && cacheResult.sourceUpdatedAt) {
+                  const sourceDate = new Date(sourceLastMod).getTime();
+                  const cachedDate = new Date(cacheResult.sourceUpdatedAt).getTime();
+                  if (sourceDate > cachedDate) {
+                    console.log(`XKT cache: Source newer than cache for ${modelId} (source: ${sourceLastMod}, cached: ${cacheResult.sourceUpdatedAt})`);
+                    sourceNewer = true;
+                  }
+                }
+              } catch {
+                console.debug(`XKT cache: HEAD check failed for ${modelId}, using cached version`);
+              }
+
+              if (!sourceNewer) {
+                console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+                const cachedResponse = await original!(cacheResult.url, init);
+                if (cachedResponse.ok) {
+                  const data = await cachedResponse.clone().arrayBuffer();
+                  storeModelInMemory(modelId, resolvedBuildingGuid, data);
+                  return new Response(data, {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/octet-stream' }
+                  });
+                }
+              } else {
+                console.log(`XKT cache: Source updated, fetching fresh for ${modelId}`);
+              }
             }
-          } else if (cacheResult.stale) {
-            console.log(`XKT cache: Stale entry for ${modelId}, fetching fresh from Asset+`);
           }
         } catch (e) {
           console.debug('XKT cache: Database check failed, fetching from source', e);
@@ -2678,6 +2701,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       if (response.ok && modelId) {
         // Clone the response so we can read it without consuming the original
         const responseClone = response.clone();
+        
+        // Extract Last-Modified header for source timestamp tracking
+        const sourceLastModified = response.headers.get('Last-Modified') || undefined;
         
         // Process in background - don't await
         (async () => {
@@ -2694,7 +2720,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 modelId,
                 data,
                 resolvedBuildingGuid,
-                modelId // Use modelId as name for now
+                modelId, // Use modelId as name for now
+                sourceLastModified
               ).then(saved => {
                 if (saved) {
                   console.log(`XKT cache: Saved ${modelId} to backend`);
