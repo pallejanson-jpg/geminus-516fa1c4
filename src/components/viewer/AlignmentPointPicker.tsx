@@ -87,8 +87,16 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
   }, [ivApiRef]);
 
   // Step 2: Listen for xeokit pick in 3D view
+  // Deactivate select tool when entering picking3D to prevent object selection
   useEffect(() => {
     if (step !== 'picking3D') return;
+
+    // Deactivate select tool so clicking doesn't highlight objects
+    const assetView = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
+    if (assetView && typeof assetView.useTool === 'function') {
+      assetView.useTool(null);
+      console.log('[AlignmentPicker] Deactivated select tool for point picking');
+    }
 
     const handlePick = (e: CustomEvent) => {
       const coords = e.detail?.worldPos || e.detail?.canvasPos;
@@ -143,6 +151,12 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       window.removeEventListener('xeokit-pick', handlePick as EventListener);
       if (inputSub !== null && xv?.scene?.input) {
         xv.scene.input.off(inputSub);
+      }
+      // Restore select tool
+      const av = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
+      if (av && typeof av.useTool === 'function') {
+        av.useTool('select');
+        console.log('[AlignmentPicker] Restored select tool');
       }
     };
   }, [step]);

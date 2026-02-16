@@ -37,7 +37,7 @@ export interface ToolConfig {
 }
 
 // Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 
 // Custom event name for same-tab settings updates
 export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
@@ -64,13 +64,11 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
 // - bimModels (BIM-modeller)
 // - floors (Våningsplan)
 // - addAsset (Registrera tillgång)
+// NOTE: xray, spaces, minimap, visualization removed - these are handled exclusively
+// by ViewerRightPanel to avoid duplication with the Navigation toolbar.
 export const VISUALIZATION_TOOLS: ToolConfig[] = [
-  { id: 'xray', label: 'X-ray läge', visible: true, inOverflow: false },
-  { id: 'spaces', label: 'Visa/dölj rum', visible: true, inOverflow: false },
   { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
-  { id: 'minimap', label: 'Minimap', visible: true, inOverflow: false },
   { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
-  { id: 'visualization', label: 'Rumsvisualisering', visible: true, inOverflow: false },
   { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
   { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
 ];
