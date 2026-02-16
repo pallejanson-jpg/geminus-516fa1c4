@@ -1,4 +1,4 @@
-import React, { useState, useContext, useMemo, useRef } from 'react';
+import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   X, MapPin, Info, BarChart, Star, Table, Layers, 
@@ -104,6 +104,30 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   // This significantly speeds up 3D viewer loading times
   const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid;
   useXktPreload(buildingGuid);
+
+  // Check if 3D models exist for this building
+  const [has3DModels, setHas3DModels] = useState<boolean | undefined>(undefined);
+  // Check if FM Access (2D drawings) exist for this building
+  const [hasFmAccess, setHasFmAccess] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    if (!buildingGuid) return;
+    
+    // Check XKT models
+    supabase
+      .from('xkt_models')
+      .select('id', { count: 'exact', head: true })
+      .eq('building_fm_guid', buildingGuid)
+      .then(({ count }) => setHas3DModels((count ?? 0) > 0));
+
+    // Check FM Access availability via building_settings
+    supabase
+      .from('building_settings')
+      .select('fm_access_building_guid')
+      .eq('fm_guid', buildingGuid)
+      .maybeSingle()
+      .then(({ data }) => setHasFmAccess(!!data?.fm_access_building_guid));
+  }, [buildingGuid]);
 
   // Get child storeys for buildings
   const childStoreys = useMemo(() => {
@@ -630,6 +654,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           <QuickActions
             facility={facility}
             ivionSiteId={settings?.ivionSiteId}
+            has3DModels={has3DModels}
+            hasFmAccess={hasFmAccess}
             onOpenMap={onOpenMap}
             onOpenNavigator={onOpenNavigator}
             onShowAssets={onShowAssets}

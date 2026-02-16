@@ -14,6 +14,10 @@ interface CacheStoreResult {
 // Track models currently being saved to prevent duplicates
 const savingModels = new Set<string>();
 
+// Track failed cache checks to avoid repeated calls for the same model
+const failedChecks = new Map<string, number>();
+const MAX_CHECK_RETRIES = 2;
+
 // Maximum concurrent saves to prevent overwhelming the backend
 const MAX_CONCURRENT_SAVES = 2;
 let currentSaveCount = 0;
@@ -44,6 +48,13 @@ export class XktCacheService {
    * Check if a model is cached - first checks database with multiple matching strategies
    */
   async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean; sourceUpdatedAt?: string }> {
+    // Check retry limit to prevent tight retry loops
+    const retryKey = `${buildingFmGuid || 'global'}/${modelId}`;
+    const attempts = failedChecks.get(retryKey) || 0;
+    if (attempts >= MAX_CHECK_RETRIES) {
+      return { cached: false };
+    }
+
     try {
       // First check the xkt_models database table with multiple matching strategies
       if (buildingFmGuid) {
@@ -120,6 +131,7 @@ export class XktCacheService {
       };
     } catch (e) {
       console.warn('XKT cache check error:', e);
+      failedChecks.set(retryKey, attempts + 1);
       return { cached: false };
     }
   }
