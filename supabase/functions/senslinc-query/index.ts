@@ -16,46 +16,76 @@ interface SenslincRequest {
   query?: Record<string, unknown>;
 }
 
+// ── Token cache (55-minute TTL) ──
+let cachedToken: { token: string; expiresAt: number } | null = null;
+const TOKEN_TTL_MS = 55 * 60 * 1000; // 55 minutes
+
 async function getJwtToken(apiUrl: string, email: string, password: string): Promise<string> {
+  // Return cached token if still valid
+  if (cachedToken && Date.now() < cachedToken.expiresAt) {
+    console.log('[Senslinc] Using cached JWT token');
+    return cachedToken.token;
+  }
+
   const tokenUrl = `${apiUrl}/api-token-auth/`;
   console.log('[Senslinc] Authenticating to:', tokenUrl);
 
-  // Senslinc deployments can differ in accepted login payload.
-  // Try `{ email, password }` first, then fallback to `{ username, password }`.
   const attempts: Array<{ label: string; body: Record<string, unknown> }> = [
     { label: 'email', body: { email, password } },
     { label: 'username', body: { username: email, password } },
   ];
 
+  const maxRetries = 3;
+  let delay = 1000;
   let lastStatus = 0;
   let lastText = '';
 
-  for (const attempt of attempts) {
-    const response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attempt.body),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      lastStatus = response.status;
-      lastText = text;
-      console.error('[Senslinc] Auth failed:', response.status, text);
-      // Try next payload if available
-      continue;
+  for (let retry = 0; retry <= maxRetries; retry++) {
+    if (retry > 0) {
+      console.log(`[Senslinc] Auth retry ${retry}/${maxRetries} after ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
     }
 
-    const data = await response.json();
-    if (!data.token) {
-      throw new Error('No token received from Senslinc');
+    let got429 = false;
+
+    for (const attempt of attempts) {
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attempt.body),
+      });
+
+      if (response.status === 429) {
+        const text = await response.text();
+        console.warn('[Senslinc] Rate limited (429) on auth attempt:', attempt.label, text);
+        got429 = true;
+        break; // break inner loop, retry with backoff
+      }
+
+      if (!response.ok) {
+        const text = await response.text();
+        lastStatus = response.status;
+        lastText = text;
+        console.error('[Senslinc] Auth failed:', response.status, text);
+        continue;
+      }
+
+      const data = await response.json();
+      if (!data.token) {
+        throw new Error('No token received from Senslinc');
+      }
+
+      console.log('[Senslinc] Authentication successful (payload:', attempt.label, ')');
+      cachedToken = { token: data.token, expiresAt: Date.now() + TOKEN_TTL_MS };
+      return data.token;
     }
 
-    console.log('[Senslinc] Authentication successful (payload:', attempt.label, ')');
-    return data.token;
+    // If we didn't get 429, no point retrying -- credentials are wrong
+    if (!got429) break;
   }
 
-  throw new Error(`Authentication failed: ${lastStatus}${lastText ? ` (${lastText})` : ''}`);
+  throw new Error(`Authentication failed after retries: ${lastStatus}${lastText ? ` (${lastText})` : ''}`);
 }
 
 async function senslincFetchWithRetry(
