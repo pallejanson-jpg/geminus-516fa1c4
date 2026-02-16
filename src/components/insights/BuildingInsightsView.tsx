@@ -145,10 +145,11 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
     // Preload XKT models in background so 3D viewer loads fast
     useXktPreload(facility.fmGuid);
 
-    // Desktop inline viewer state
+    // Desktop inline viewer state — updateKey forces re-render even when mode/colorMap look the same
     const [inlineInsightsMode, setInlineInsightsMode] = useState<string | undefined>(undefined);
     const [inlineColorMap, setInlineColorMap] = useState<Record<string, [number, number, number]> | undefined>(undefined);
     const [inlineExpanded, setInlineExpanded] = useState(false);
+    const [inlineUpdateKey, setInlineUpdateKey] = useState(0);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -185,17 +186,19 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         fetchBuildingAssets();
     }, [facility.fmGuid]);
 
+    // Filter building-specific data once (stable ref unless building changes)
+    const buildingSpaces = useMemo(() => allData.filter(
+        (a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid
+    ), [allData, facility.fmGuid]);
+
+    const buildingStoreys = useMemo(() => allData.filter(
+        (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
+    ), [allData, facility.fmGuid]);
+
     // Calculate actual stats from allData for this building (REAL for hierarchy, DB for assets)
     const stats = useMemo(() => {
-        const spaces = allData.filter(
-            (a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid
-        );
-        const storeys = allData.filter(
-            (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
-        );
-        
         let totalArea = 0;
-        spaces.forEach((space: any) => {
+        buildingSpaces.forEach((space: any) => {
             const attrs = space.attributes || {};
             const ntaKey = Object.keys(attrs).find(k => k.toLowerCase().startsWith('nta'));
             if (ntaKey && attrs[ntaKey]) {
@@ -209,21 +212,21 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
 
         // Space types (REAL from allData - hierarchy is always loaded)
         const spaceTypes: Record<string, number> = {};
-        spaces.forEach((space: any) => {
+        buildingSpaces.forEach((space: any) => {
             const attrs = space.attributes || {};
             const type = attrs.spaceType || attrs.roomType || 'Unknown';
             spaceTypes[type] = (spaceTypes[type] || 0) + 1;
         });
 
         return { 
-            floorCount: storeys.length,
-            roomCount: spaces.length, 
+            floorCount: buildingStoreys.length,
+            roomCount: buildingSpaces.length, 
             assetCount: dbAssetCount,
             totalArea: Math.round(totalArea),
             assetCategories: dbAssetCategories,
             spaceTypes,
         };
-    }, [allData, facility.fmGuid, dbAssetCount, dbAssetCategories]);
+    }, [buildingSpaces, buildingStoreys, dbAssetCount, dbAssetCategories]);
 
     // Navigation helper: open 3D viewer with context + insights color map
     const navigateToInsights3D = useCallback((opts: {
@@ -253,9 +256,10 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
         if (isMobile) {
             navigateToInsights3D(opts);
         } else {
-            // Update inline viewer reactively
+            // Update inline viewer reactively — bump key to force re-render even if mode is the same
             setInlineInsightsMode(opts.mode);
             setInlineColorMap(opts.colorMap);
+            setInlineUpdateKey(k => k + 1);
         }
     }, [isMobile, navigateToInsights3D]);
 
@@ -280,10 +284,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
 
     // Floor-by-floor energy data (MOCK) — include fmGuid for chart click navigation
     const energyByFloor = useMemo(() => {
-        const storeys = allData.filter(
-            (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
-        );
-        return storeys.slice(0, 6).map((storey: any, index: number) => {
+        return buildingStoreys.slice(0, 6).map((storey: any, index: number) => {
             const hash = hashString(storey.fmGuid || '');
             const name = storey.commonName || storey.name || `Floor ${index + 1}`;
             return {
@@ -293,11 +294,20 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 color: FLOOR_COLORS[index % FLOOR_COLORS.length],
             };
         });
-    }, [allData, facility.fmGuid]);
+    }, [buildingStoreys]);
 
     const renderPieLabel = isMobile 
         ? undefined 
-        : ({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`;
+        : ({ name, percent, x, y, midAngle }: any) => {
+            const RADIAN = Math.PI / 180;
+            const radius = 10;
+            const textAnchor = Math.cos(-midAngle * RADIAN) >= 0 ? 'start' : 'end';
+            return (
+                <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={textAnchor} dominantBaseline="central" className="text-xs">
+                    {`${name} ${(percent * 100).toFixed(0)}%`}
+                </text>
+            );
+        };
 
     // Prepare asset category pie data (REAL)
     const assetCategoryPie = useMemo(() => {
@@ -409,7 +419,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <BarChart data={energyByFloor} layout="vertical">
                                                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                                                        <XAxis type="number" className="text-xs" />
+                                                        <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                                                         <YAxis 
                                                             dataKey="name" type="category" 
                                                             width={isMobile ? 60 : 80}
@@ -454,15 +464,16 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                     <Pie data={energyDistribution} cx="50%" cy="50%" innerRadius={isMobile ? 40 : 45} outerRadius={isMobile ? 65 : 75} paddingAngle={2} dataKey="value" label={renderPieLabel} labelLine={!isMobile}>
                                                         {energyDistribution.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={entry.color} style={{ cursor: 'pointer' }} onClick={() => {
-                                                                // Individual segment: show all floors colored (energy categories don't map 1:1 to spaces)
+                                                                // Individual segment: color all floors with this category's color
                                                                 const colorMap: Record<string, [number, number, number]> = {};
-                                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = hslStringToRgbFloat(f.color); });
-                                                                handleInsightsClick({ mode: 'energy_floors', colorMap });
+                                                                const categoryColor = hslStringToRgbFloat(entry.color);
+                                                                energyByFloor.forEach(f => { colorMap[f.fmGuid] = categoryColor; });
+                                                                handleInsightsClick({ mode: 'energy_floor', colorMap, entity: entry.name });
                                                             }} />
                                                         ))}
                                                     </Pie>
                                                     {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                    <Legend />
+                                                    {!isMobile && <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />}
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -486,7 +497,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                 <XAxis dataKey="month" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                                 {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                <Legend />
+                                                <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                 <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
                                                 <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
                                             </LineChart>
@@ -528,7 +539,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                             ))}
                                                         </Pie>
                                                         {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                        <Legend />
+                                                        <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
                                             ) : (
@@ -572,7 +583,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                                                             ))}
                                                         </Pie>
                                                         {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
-                                                        <Legend />
+                                                        <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
                                             ) : (
@@ -589,6 +600,7 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
                 {/* Desktop inline 3D viewer */}
                 {!isMobile && (
                     <InsightsInlineViewer
+                        key={inlineUpdateKey}
                         fmGuid={facility.fmGuid}
                         insightsColorMode={inlineInsightsMode}
                         insightsColorMap={inlineColorMap}
