@@ -117,10 +117,16 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       const coords = e.detail?.worldPos || e.detail?.canvasPos;
       if (coords && Array.isArray(coords) && coords.length >= 3) {
         const picked: Vec3 = { x: coords[0], y: coords[1], z: coords[2] };
+        // Validate the pick hit an actual mesh (not empty space)
+        const entityId = e.detail?.entityId || e.detail?.entity?.id;
+        if (!entityId && !e.detail?.worldPos) {
+          toast.warning('Klicka på en synlig yta (vägg, golv, pelare) — inte tom rymd.');
+          return;
+        }
         setBimPoint(picked);
         setStep('done');
         toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-        console.log('[AlignmentPicker] 3D point picked:', picked);
+        console.log('[AlignmentPicker] 3D point picked:', picked, 'entity:', entityId);
       }
     };
 
@@ -136,6 +142,11 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       inputSub = xv.scene.input.on('mouseclicked', (canvasCoords: number[]) => {
         const pickResult = xv.scene.pick({ canvasPos: canvasCoords, pickSurface: true });
         if (pickResult?.worldPos) {
+          // Validate: pickResult.entity must exist (means we hit geometry)
+          if (!pickResult.entity) {
+            toast.warning('Ingen yta träffad. Klicka direkt på ett BIM-objekt.');
+            return;
+          }
           const picked: Vec3 = {
             x: pickResult.worldPos[0],
             y: pickResult.worldPos[1],
@@ -144,7 +155,9 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setBimPoint(picked);
           setStep('done');
           toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 3D point picked via xeokit:', picked);
+          console.log('[AlignmentPicker] 3D point picked via xeokit:', picked, 'entity:', pickResult.entity.id);
+        } else {
+          toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
         }
       });
     }

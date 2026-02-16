@@ -43,7 +43,7 @@ export class XktCacheService {
   /**
    * Check if a model is cached - first checks database with multiple matching strategies
    */
-  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult> {
+  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean }> {
     try {
       // First check the xkt_models database table with multiple matching strategies
       if (buildingFmGuid) {
@@ -54,7 +54,7 @@ export class XktCacheService {
         // Try matching on model_id or file_name
         const { data: dbModels } = await supabase
           .from('xkt_models')
-          .select('file_url, storage_path, file_name, model_id')
+          .select('file_url, storage_path, file_name, model_id, synced_at, source_updated_at')
           .eq('building_fm_guid', buildingFmGuid);
 
         if (dbModels && dbModels.length > 0) {
@@ -75,6 +75,12 @@ export class XktCacheService {
             );
           });
 
+          // Staleness check: if cached model is older than 7 days, mark as stale
+          const MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+          const isStale = match?.synced_at 
+            ? (Date.now() - new Date(match.synced_at).getTime() > MAX_CACHE_AGE_MS)
+            : false;
+
       if (match && match.storage_path) {
             // Always generate a fresh signed URL from storage_path
             // (file_url may contain an expired signed URL)
@@ -83,6 +89,10 @@ export class XktCacheService {
               .createSignedUrl(match.storage_path, 3600);
             
             if (urlData?.signedUrl) {
+              if (isStale) {
+                console.log('XKT cache hit but STALE (>7 days):', modelId);
+                return { cached: true, url: urlData.signedUrl, stale: true };
+              }
               console.log('XKT cache hit (signed URL):', modelId);
               return { cached: true, url: urlData.signedUrl };
             }
@@ -281,6 +291,7 @@ export class XktCacheService {
           storage_path: storagePath,
           file_url: null,
           synced_at: new Date().toISOString(),
+          source_updated_at: new Date().toISOString(),
         }, {
           onConflict: 'building_fm_guid,model_id',
         });
@@ -374,6 +385,41 @@ export class XktCacheService {
    * Triggers sync if no cached models exist.
    * Used for proactive on-demand loading when opening a building in 3D viewer.
    */
+  /**
+   * Invalidate (delete) all cached XKT models for a building.
+   * Forces a fresh load from Asset+ on next viewer open.
+   */
+  async invalidateBuildingCache(buildingFmGuid: string): Promise<boolean> {
+    try {
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('xkt_models')
+        .delete()
+        .eq('building_fm_guid', buildingFmGuid);
+      
+      if (dbError) {
+        console.warn('XKT cache invalidation DB error:', dbError);
+        return false;
+      }
+
+      // Delete from storage
+      const { data: files } = await supabase.storage
+        .from('xkt-models')
+        .list(buildingFmGuid);
+      
+      if (files && files.length > 0) {
+        const paths = files.map(f => `${buildingFmGuid}/${f.name}`);
+        await supabase.storage.from('xkt-models').remove(paths);
+      }
+
+      console.log(`XKT cache: Invalidated all models for ${buildingFmGuid}`);
+      return true;
+    } catch (e) {
+      console.warn('XKT cache invalidation error:', e);
+      return false;
+    }
+  }
+
   async ensureBuildingModels(
     buildingFmGuid: string
   ): Promise<{ cached: boolean; count: number; syncing: boolean }> {
