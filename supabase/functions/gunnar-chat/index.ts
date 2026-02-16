@@ -226,13 +226,26 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          workspace_key: { type: "string", description: "The Elasticsearch workspace/index key to search in" },
+          workspace_key: { type: "string", description: "The Elasticsearch workspace/index key to search in. Use senslinc_get_indices to discover valid values." },
           time_range: { type: "string", description: "Time range for data, e.g. 'now-24h', 'now-7d', 'now-1M'. Default: 'now-24h'" },
           property_name: { type: "string", description: "Filter by property/metric name (e.g. 'temperature', 'co2', 'humidity')" },
           machine_code: { type: "string", description: "Filter by machine code (often the FM GUID)" },
           size: { type: "number", description: "Max results to return (default 100)" },
         },
         required: ["workspace_key"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "senslinc_get_indices",
+      description: "List available Senslinc Elasticsearch indices/workspaces. Use this to discover valid workspace_key values before calling senslinc_search_data.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
         additionalProperties: false,
       },
     },
@@ -475,6 +488,10 @@ async function execSenslincSearchData(args: any) {
   });
 }
 
+async function execSenslincGetIndices() {
+  return callSenslincQuery("get-indices", {});
+}
+
 async function executeTool(supabase: any, name: string, args: any) {
   switch (name) {
     case "query_assets": return execQueryAssets(supabase, args);
@@ -490,6 +507,7 @@ async function executeTool(supabase: any, name: string, args: any) {
     case "senslinc_get_equipment": return execSenslincGetEquipment(args);
     case "senslinc_get_sites": return execSenslincGetSites(args);
     case "senslinc_search_data": return execSenslincSearchData(args);
+    case "senslinc_get_indices": return execSenslincGetIndices();
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -576,14 +594,19 @@ GUIDELINES:
 
 SENSLINC (IoT / SENSOR DATA):
 You have tools to query IoT sensor data from the Senslinc system.
-- Use senslinc_get_equipment to find sensors linked to a specific room, asset, or building (via FM GUID). It returns a dashboard URL you should present.
-- Use senslinc_get_sites to list all monitored sites/buildings with IoT sensors.
-- Use senslinc_search_data to query time-series measurements (temperature, CO2, humidity, energy).
-  - You need a workspace_key (discover via senslinc_get_equipment or senslinc_get_sites).
-  - Filter with time_range (e.g. "now-24h", "now-7d"), property_name, and machine_code.
-  - Chain tools: first senslinc_get_equipment to find machine_code, then senslinc_search_data to get readings.
-- When presenting sensor data, include the dashboard link: [📊 Senslinc Dashboard](URL)
-- Summarize sensor data with min/max/avg when appropriate, and note any anomalies.`;
+
+RECOMMENDED WORKFLOW:
+1. senslinc_get_sites -- discover monitored buildings
+2. senslinc_get_equipment(fm_guid) -- find sensors for a room/asset/building, get dashboard URL
+3. senslinc_get_indices -- discover available workspace keys (REQUIRED before search_data)
+4. senslinc_search_data(workspace_key, ...) -- query time-series data
+
+IMPORTANT:
+- ALWAYS call senslinc_get_indices first to discover valid workspace_key values before using senslinc_search_data.
+- Use senslinc_get_equipment to find machine_code values for filtering.
+- Chain: get_equipment -> get_indices -> search_data for complete IoT queries.
+- Present dashboard links as: [📊 Senslinc Dashboard](URL)
+- Summarize readings with min/max/avg and flag anomalies.`;
 }
 
 /* ─────────────────────────────────────────────
