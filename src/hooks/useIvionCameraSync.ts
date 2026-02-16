@@ -16,6 +16,7 @@ import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
+import { resolveMainView } from '@/lib/ivion-sdk';
 import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 
 export interface IvionImage {
@@ -185,7 +186,7 @@ export function useIvionCameraSync({
       if (isSyncingRef.current) return;
       
       try {
-        const mainView = ivApi.getMainView();
+        const mainView = resolveMainView(ivApi);
         if (!mainView) return;
         
         const image = mainView.getImage();
@@ -291,7 +292,7 @@ export function useIvionCameraSync({
     } else {
       // Same image - try to update just the viewing direction
       try {
-        const mainView = ivApi.getMainView();
+        const mainView = resolveMainView(ivApi);
         if (mainView?.updateOrientation) {
           mainView.updateOrientation({
             lon: (syncState.heading * Math.PI) / 180,
