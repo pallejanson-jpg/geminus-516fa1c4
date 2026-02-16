@@ -1,67 +1,193 @@
 
 
-## Fix: AlignmentPointPicker "getMainView saknas" Error
+## Plan: 3D Viewer UX Improvements -- Toolbar Cleanup, Performance, Contrast, Camera Sync & Alignment
 
-### Problem
+This plan addresses seven distinct issues reported in the 3D viewer.
 
-The error "SDK-funktionen getMainView saknas" occurs because the NavVis SDK's `getApi()` returns an `ApiInterface` object where methods are organized into sub-APIs:
+---
 
-- `api.view.mainView` -- the main panorama view (current API)
-- `api.legacyApi.getMainView()` -- legacy API path
-- `api.legacyApi.moveToImageId(...)` -- legacy navigation
+### 1. Remove Duplicate Tools from Navigation Toolbar (ToolbarSettings)
 
-But the code calls `api.getMainView()` directly on the root object, which does not exist. You are not doing anything wrong -- this is a code bug where the wrong API path is used.
+**Problem:** Several tools exist in both the Navigation toolbar (bottom) and the Visualization menu (right panel): "Visa/Dolj rum", "X-ray", "Minimap", and "Rumsvisualisering".
 
-The `BrowserScanRunner` component already has the correct multi-path lookup pattern:
-```text
-api.view?.mainView ?? api.getMainView?.() ?? api.mainView
+**Changes to `ToolbarSettings.tsx`:**
+- Remove from `VISUALIZATION_TOOLS` array:
+  - `xray` (X-ray lage)
+  - `spaces` (Visa/dolj rum)
+  - `visualization` (Rumsvisualisering)
+- Move `minimap` from `VISUALIZATION_TOOLS` to be handled exclusively by ViewerRightPanel
+- Increment `SETTINGS_VERSION` to 7 to force localStorage reset for all users
+
+**Changes to `ViewerToolbar.tsx`:**
+- Remove the `xray` case from the overflow menu builder (`getOverflowItems`), since X-ray is only in the right panel now
+
+**Result:** Navigation toolbar only has navigation/interaction tools. Visualization controls live exclusively in the right panel (ViewerRightPanel).
+
+---
+
+### 2. Add Minimap Toggle to ViewerRightPanel
+
+**Problem:** Minimap has no toggle in the Visualization menu. It exists as `showMinimap` state inside `AssetPlusViewer.tsx` but is never wired to the right panel.
+
+**Changes to `AssetPlusViewer.tsx`:**
+- Expose `showMinimap` and `setShowMinimap` via props or a custom event (like existing `ROOM_LABELS_TOGGLE_EVENT` pattern)
+- Add event: `MINIMAP_TOGGLE_EVENT` dispatched from ViewerRightPanel, listened to in AssetPlusViewer
+
+**Changes to `ViewerRightPanel.tsx`:**
+- Add a "Minimap" toggle switch in the "Visa" (Display) section
+- On toggle, dispatch `MINIMAP_TOGGLE_EVENT` with `{ visible: boolean }`
+
+**Changes to `AssetPlusViewer.tsx`:**
+- Listen for `MINIMAP_TOGGLE_EVENT` and update `showMinimap` state accordingly
+
+---
+
+### 3. Fix "Locked" Visualization Controls When Coming from Insights
+
+**Problem:** When navigating from Insights with `insightsColorMode` and `forceXray` URL parameters, the viewer pre-configures room visualization and X-ray. But the user cannot change or override these settings afterwards.
+
+**Root cause analysis:** The `insightsColorMode` prop is passed from UnifiedViewer as a static value from the URL parameter. The visualization effect runs in `AssetPlusViewer` and continuously re-applies when `spacesCacheReady` or `modelLoadState` changes, but the color map is consumed once from sessionStorage (it's deleted after reading). The issue is that the `XrayToggle` component manages its own local `xrayEnabled` state (default `false`), which doesn't reflect the `forceXray` initial state. Similarly, the room visualization panel doesn't know that a visualization is already active.
+
+**Changes to `XrayToggle.tsx`:**
+- Add optional `initialEnabled?: boolean` prop
+- Initialize `xrayEnabled` state from this prop
+- Pass `forceXray` from AssetPlusViewer through ViewerRightPanel to XrayToggle
+
+**Changes to `AssetPlusViewer.tsx`:**
+- After the insights color effect completes, clear the `insightsColorMode` state so that subsequent toggles are not blocked by the `if (!insightsColorMode) return` guard
+- Add a `forceXrayInitial` state that is set from the `forceXray` prop, passed to the right panel
+
+**Changes to `ViewerRightPanel.tsx`:**
+- Pass `initialXrayEnabled` to `XrayToggle`
+
+---
+
+### 4. Fix Text Contrast in Modals, Menus, and Overlays
+
+**Problem:** Dark-themed backgrounds with `text-muted-foreground` or `text-foreground/70` result in low-contrast text.
+
+**Files to audit and fix:**
+- `ViewerRightPanel.tsx`: Labels use `text-foreground/70` -- change to `text-foreground` or `text-white` where background is dark
+- `ToolbarSettings.tsx`: Dialog content uses theme-based `text-muted-foreground` -- ensure sufficient contrast
+- `AlignmentPanel.tsx`: Uses `text-foreground/70` on dark backgrounds -- switch to `text-white` or `text-foreground`
+- `VisualizationToolbar.tsx`: Uses `bg-card/60 backdrop-blur-md` with `text-muted-foreground` -- ensure text is visible
+
+**Approach:** Add explicit `text-white` to labels and helper text in components that render over the 3D viewer's dark background. For sheet/dialog components that use the theme's card background, ensure `text-foreground` is used consistently (not opacity-reduced variants).
+
+---
+
+### 5. Fix Camera Sync in Split Mode After Alignment Save
+
+**Problem:** After point-calibrating and saving alignment in Split mode, the cameras don't follow each other.
+
+**Root cause:** The `useViewerCameraSync` hook checks `syncLocked` before broadcasting. In Split mode, `syncLocked` starts as `false` and must be explicitly toggled by the user. The alignment save (`AlignmentPanel.handleSave`) calls `onSaved` which closes the panel but does not enable sync lock.
+
+**Also:** The `useIvionCameraSync` hook's `moveToImageId` call (line 281) uses `ivApi.moveToImageId(...)` directly, but the NavVis SDK requires `ivApi.legacyApi.moveToImageId(...)` or `ivApi.legacyApi?.moveToImage(...)`. Similar to the `resolveMainView` fix.
+
+**Changes to `useIvionCameraSync.ts`:**
+- Add a `resolveMoveTo` helper that tries multiple SDK paths:
+  ```
+  ivApi.legacyApi?.moveToImageId?.(id, viewDir)
+  ?? ivApi.moveToImageId?.(id, viewDir)
+  ```
+- Replace the direct `ivApi.moveToImageId()` call with this helper
+
+**Changes to `UnifiedViewer.tsx` (optional UX improvement):**
+- After alignment save, show a toast suggesting to enable sync lock, or auto-enable it
+
+---
+
+### 6. Fix Alignment Point-Picking Conflict with Select Tool
+
+**Problem:** When clicking in 3D to pick an alignment point, the Select Object tool is active, causing the clicked object to be selected (highlighted) instead of just registering the surface point.
+
+**Changes to `AlignmentPointPicker.tsx`:**
+- When entering `picking3D` step, temporarily switch the viewer tool to `null` (deactivate select) by dispatching `VIEWER_TOOL_CHANGED_EVENT` with `tool: null`
+- When the pick completes or the picker is closed, restore the previous tool
+
+**Alternative approach (simpler):**
+- The direct `xv.scene.input.on('mouseclicked')` handler already uses `xv.scene.pick({ pickSurface: true })` which returns the surface point. The issue is that the Asset+ viewer's built-in selection handler fires *before* our custom handler and selects the object. 
+- Add `e.stopPropagation?.()` or use `xv.scene.input.on('mousedown')` instead to capture before the selection handler
+- Or: call `assetView.useTool(null)` before entering pick mode and restore after
+
+**Changes to `AlignmentPointPicker.tsx`:**
+- On entering `picking3D`, call `window.__assetPlusViewerInstance?.assetViewer?.$refs?.assetView?.useTool(null)` to deactivate selection
+- On completion or cancel, call `useTool('select')` to restore
+
+---
+
+### 7. Rendering Performance When Toggling Display Options
+
+**Problem:** Toggling rooms, room visualization, etc. causes heavy rendering lag.
+
+**Root cause:** Each toggle dispatches an event that triggers synchronous iteration over all scene objects (e.g., `setObjectsXRayed`, `setObjectsVisible`). For large models (724 rooms), this blocks the main thread.
+
+**Changes to `XrayToggle.tsx`:**
+- Use `requestIdleCallback` (or `requestAnimationFrame` batching) when applying xray to large object sets
+- Process objects in batches of ~100 to avoid blocking the UI
+
+**Changes to `AssetPlusViewer.tsx` (insights color effect):**
+- The existing `requestIdleCallback` batching pattern is already used for room visualization. Verify it's also applied when toggling spaces on/off
+
+---
+
+### Implementation Sequence
+
+| Priority | Task | Files |
+|----------|------|-------|
+| 1 | Remove duplicates from nav toolbar + add minimap to right panel | ToolbarSettings.tsx, ViewerToolbar.tsx, ViewerRightPanel.tsx, AssetPlusViewer.tsx |
+| 2 | Fix Insights mode locking (XrayToggle initial state, clear insightsColorMode after apply) | XrayToggle.tsx, AssetPlusViewer.tsx, ViewerRightPanel.tsx |
+| 3 | Fix camera sync SDK path (moveToImageId) | useIvionCameraSync.ts, lib/ivion-sdk.ts |
+| 4 | Fix alignment pick vs select conflict | AlignmentPointPicker.tsx |
+| 5 | Text contrast fixes | ViewerRightPanel.tsx, AlignmentPanel.tsx, ToolbarSettings.tsx |
+| 6 | Performance batching for xray/spaces toggles | XrayToggle.tsx |
+
+### Technical Details
+
+**Minimap event pattern:**
+```typescript
+// In lib/viewer-events.ts
+export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
+
+// In ViewerRightPanel.tsx
+window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } }));
+
+// In AssetPlusViewer.tsx
+useEffect(() => {
+  const handler = (e: CustomEvent) => setShowMinimap(e.detail?.visible ?? false);
+  window.addEventListener(MINIMAP_TOGGLE_EVENT, handler);
+  return () => window.removeEventListener(MINIMAP_TOGGLE_EVENT, handler);
+}, []);
 ```
 
-But `AlignmentPointPicker`, `useVirtualTwinSync`, `useIvionCameraSync`, and `CoordinateDiagnosticOverlay` all use the incorrect direct path.
-
-### Solution
-
-Create a shared helper function and update all affected files to use the correct SDK API paths.
-
-### Changes
-
-**1. Add helper to `ivion-sdk.ts`**
-
-Add a utility function that resolves the main view from any version of the API object:
-
+**resolveMoveTo helper:**
 ```typescript
-export function resolveMainView(api: any): IvionMainView | null {
-  return api?.view?.mainView
-    ?? (typeof api?.legacyApi?.getMainView === 'function' ? api.legacyApi.getMainView() : null)
-    ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null)
-    ?? api?.mainView
-    ?? null;
+// In lib/ivion-sdk.ts
+export async function resolveMoveTo(api: any, imageId: number, viewDir?: any, options?: any): Promise<void> {
+  if (typeof api?.legacyApi?.moveToImageId === 'function') {
+    return api.legacyApi.moveToImageId(imageId, viewDir, options);
+  }
+  if (typeof api?.moveToImageId === 'function') {
+    return api.moveToImageId(imageId, viewDir, options);
+  }
+  throw new Error('moveToImageId not found on SDK');
 }
 ```
 
-**2. Fix `AlignmentPointPicker.tsx`**
-
-Replace the `capture360Position` function's direct `api.getMainView()` call with `resolveMainView(api)`. Remove the long fallback block that tries `api.camera?.position` etc. -- simplify to one call.
-
-**3. Fix `useVirtualTwinSync.ts`**
-
-Replace `ivApi.getMainView()` with `resolveMainView(ivApi)`.
-
-**4. Fix `useIvionCameraSync.ts`**
-
-Replace all `ivApi.getMainView()` calls with `resolveMainView(ivApi)`.
-
-**5. Fix `CoordinateDiagnosticOverlay.tsx`**
-
-Replace the inline fallback with `resolveMainView(api)`.
-
-### Files to modify
-
-| File | Change |
-|------|--------|
-| `src/lib/ivion-sdk.ts` | Add `resolveMainView()` helper |
-| `src/components/viewer/AlignmentPointPicker.tsx` | Use `resolveMainView()` instead of direct `getMainView()` |
-| `src/hooks/useVirtualTwinSync.ts` | Use `resolveMainView()` |
-| `src/hooks/useIvionCameraSync.ts` | Use `resolveMainView()` |
-| `src/components/viewer/CoordinateDiagnosticOverlay.tsx` | Use `resolveMainView()` |
+**XrayToggle batching:**
+```typescript
+const BATCH_SIZE = 100;
+const applyXrayBatched = (ids: string[], scene: any, xrayed: boolean) => {
+  let i = 0;
+  const processBatch = () => {
+    const end = Math.min(i + BATCH_SIZE, ids.length);
+    for (; i < end; i++) {
+      const entity = scene.objects?.[ids[i]];
+      if (entity) entity.xrayed = xrayed;
+    }
+    if (i < ids.length) requestAnimationFrame(processBatch);
+  };
+  requestAnimationFrame(processBatch);
+};
+```
 
