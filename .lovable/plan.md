@@ -1,193 +1,109 @@
 
+## Plan: Fix Toolbar Freeze, Disable Unavailable Quick Actions
 
-## Plan: 3D Viewer UX Improvements -- Toolbar Cleanup, Performance, Contrast, Camera Sync & Alignment
-
-This plan addresses seven distinct issues reported in the 3D viewer.
-
----
-
-### 1. Remove Duplicate Tools from Navigation Toolbar (ToolbarSettings)
-
-**Problem:** Several tools exist in both the Navigation toolbar (bottom) and the Visualization menu (right panel): "Visa/Dolj rum", "X-ray", "Minimap", and "Rumsvisualisering".
-
-**Changes to `ToolbarSettings.tsx`:**
-- Remove from `VISUALIZATION_TOOLS` array:
-  - `xray` (X-ray lage)
-  - `spaces` (Visa/dolj rum)
-  - `visualization` (Rumsvisualisering)
-- Move `minimap` from `VISUALIZATION_TOOLS` to be handled exclusively by ViewerRightPanel
-- Increment `SETTINGS_VERSION` to 7 to force localStorage reset for all users
-
-**Changes to `ViewerToolbar.tsx`:**
-- Remove the `xray` case from the overflow menu builder (`getOverflowItems`), since X-ray is only in the right panel now
-
-**Result:** Navigation toolbar only has navigation/interaction tools. Visualization controls live exclusively in the right panel (ViewerRightPanel).
+This plan addresses three issues:
+1. **3D toolbar freezes/disappears** when loading from the "3D Viewer" main menu entry
+2. **Quick Actions buttons are always active** even when no 3D models or 360 data exists for the building
+3. Minor: the console shows repeated XKT cache requests in a tight loop (related to issue 1)
 
 ---
 
-### 2. Add Minimap Toggle to ViewerRightPanel
+### Issue 1: Navigation Toolbar Not Visible / Menus Freeze
 
-**Problem:** Minimap has no toggle in the Visualization menu. It exists as `showMinimap` state inside `AssetPlusViewer.tsx` but is never wired to the right panel.
+**Root cause:** When the 3D Viewer is opened via the BuildingSelector (no `building` param in URL), the user selects a building and `navigate()` is called. However, the AssetPlusViewer component mounts and starts loading XKT models. The repeated "XKT cache hit" logs (dozens per second) suggest the XKT loader is retrying a model that fails to parse (`RangeError: Offset is outside the bounds of the DataView`). This creates a tight async loop that starves the UI thread, making the toolbar unresponsive and potentially preventing it from rendering.
 
-**Changes to `AssetPlusViewer.tsx`:**
-- Expose `showMinimap` and `setShowMinimap` via props or a custom event (like existing `ROOM_LABELS_TOGGLE_EVENT` pattern)
-- Add event: `MINIMAP_TOGGLE_EVENT` dispatched from ViewerRightPanel, listened to in AssetPlusViewer
+The toolbar itself depends on `isViewerReady` which polls the xeokit viewer via `setTimeout` at 200ms, 500ms, and 1000ms. If the viewer crashes during model parsing (the DataView error), the scene may never be fully ready, leaving `isViewerReady = false` and all toolbar buttons disabled.
 
-**Changes to `ViewerRightPanel.tsx`:**
-- Add a "Minimap" toggle switch in the "Visa" (Display) section
-- On toggle, dispatch `MINIMAP_TOGGLE_EVENT` with `{ visible: boolean }`
+**Fix:**
+- In `AssetPlusViewer.tsx`, add error handling around individual XKT model loads. If a model fails to parse (the DataView RangeError), log the error, skip that model, and continue. Do not retry infinitely.
+- In the XKT cache service, add a per-model retry limit (max 2 attempts) to prevent the infinite retry loop visible in the console logs.
+- Ensure `isViewerReady` can become `true` even if some models fail to load (the scene exists even without loaded models).
 
-**Changes to `AssetPlusViewer.tsx`:**
-- Listen for `MINIMAP_TOGGLE_EVENT` and update `showMinimap` state accordingly
-
----
-
-### 3. Fix "Locked" Visualization Controls When Coming from Insights
-
-**Problem:** When navigating from Insights with `insightsColorMode` and `forceXray` URL parameters, the viewer pre-configures room visualization and X-ray. But the user cannot change or override these settings afterwards.
-
-**Root cause analysis:** The `insightsColorMode` prop is passed from UnifiedViewer as a static value from the URL parameter. The visualization effect runs in `AssetPlusViewer` and continuously re-applies when `spacesCacheReady` or `modelLoadState` changes, but the color map is consumed once from sessionStorage (it's deleted after reading). The issue is that the `XrayToggle` component manages its own local `xrayEnabled` state (default `false`), which doesn't reflect the `forceXray` initial state. Similarly, the room visualization panel doesn't know that a visualization is already active.
-
-**Changes to `XrayToggle.tsx`:**
-- Add optional `initialEnabled?: boolean` prop
-- Initialize `xrayEnabled` state from this prop
-- Pass `forceXray` from AssetPlusViewer through ViewerRightPanel to XrayToggle
-
-**Changes to `AssetPlusViewer.tsx`:**
-- After the insights color effect completes, clear the `insightsColorMode` state so that subsequent toggles are not blocked by the `if (!insightsColorMode) return` guard
-- Add a `forceXrayInitial` state that is set from the `forceXray` prop, passed to the right panel
-
-**Changes to `ViewerRightPanel.tsx`:**
-- Pass `initialXrayEnabled` to `XrayToggle`
+**Files:**
+- `src/components/viewer/AssetPlusViewer.tsx` -- add try/catch around model load, track failed models
+- `src/services/xkt-cache-service.ts` -- add retry guard
 
 ---
 
-### 4. Fix Text Contrast in Modals, Menus, and Overlays
+### Issue 2: Quick Actions Should Be Disabled When No Data Exists
 
-**Problem:** Dark-themed backgrounds with `text-muted-foreground` or `text-foreground/70` result in low-contrast text.
+**Problem:** The Quick Actions grid (3D, 360, 3D+360, 2D Ritning, Virtual Twin) shows all buttons as active even when the building has no 3D models (XKT), no Ivion 360 site, or no FM Access drawings.
 
-**Files to audit and fix:**
-- `ViewerRightPanel.tsx`: Labels use `text-foreground/70` -- change to `text-foreground` or `text-white` where background is dark
-- `ToolbarSettings.tsx`: Dialog content uses theme-based `text-muted-foreground` -- ensure sufficient contrast
-- `AlignmentPanel.tsx`: Uses `text-foreground/70` on dark backgrounds -- switch to `text-white` or `text-foreground`
-- `VisualizationToolbar.tsx`: Uses `bg-card/60 backdrop-blur-md` with `text-muted-foreground` -- ensure text is visible
+**Current data:**
+- Buildings with XKT models: Centralstationen, Smaviken, Akerselva Atrium
+- Buildings with Ivion 360: Centralstationen (3045176558137335), Akerselva Atrium (3373717251911143)
+- Stadshuset Nykoping (ACC): no XKT models, no Ivion, no FM Access
+- Labradorgatan 18: no Ivion, no FM Access
 
-**Approach:** Add explicit `text-white` to labels and helper text in components that render over the 3D viewer's dark background. For sheet/dialog components that use the theme's card background, ensure `text-foreground` is used consistently (not opacity-reduced variants).
+**Fix in `QuickActions.tsx`:**
+- Accept new props: `has3DModels: boolean` and `hasFmAccess: boolean`
+- Disable (gray out) the 3D button when `has3DModels === false`
+- Disable the 360 button when `ivionSiteId` is null/undefined
+- Disable the 3D+360 (Split) button when either 3D or 360 is unavailable
+- Disable the Virtual Twin button when either 3D or 360 is unavailable
+- Disable the 2D Ritning button when `hasFmAccess === false`
+- Use `opacity-50 cursor-not-allowed` styling and prevent click when disabled
+- Show a tooltip explaining why it's disabled (e.g., "Ingen 3D-modell synkad")
 
----
-
-### 5. Fix Camera Sync in Split Mode After Alignment Save
-
-**Problem:** After point-calibrating and saving alignment in Split mode, the cameras don't follow each other.
-
-**Root cause:** The `useViewerCameraSync` hook checks `syncLocked` before broadcasting. In Split mode, `syncLocked` starts as `false` and must be explicitly toggled by the user. The alignment save (`AlignmentPanel.handleSave`) calls `onSaved` which closes the panel but does not enable sync lock.
-
-**Also:** The `useIvionCameraSync` hook's `moveToImageId` call (line 281) uses `ivApi.moveToImageId(...)` directly, but the NavVis SDK requires `ivApi.legacyApi.moveToImageId(...)` or `ivApi.legacyApi?.moveToImage(...)`. Similar to the `resolveMainView` fix.
-
-**Changes to `useIvionCameraSync.ts`:**
-- Add a `resolveMoveTo` helper that tries multiple SDK paths:
-  ```
-  ivApi.legacyApi?.moveToImageId?.(id, viewDir)
-  ?? ivApi.moveToImageId?.(id, viewDir)
-  ```
-- Replace the direct `ivApi.moveToImageId()` call with this helper
-
-**Changes to `UnifiedViewer.tsx` (optional UX improvement):**
-- After alignment save, show a toast suggesting to enable sync lock, or auto-enable it
-
----
-
-### 6. Fix Alignment Point-Picking Conflict with Select Tool
-
-**Problem:** When clicking in 3D to pick an alignment point, the Select Object tool is active, causing the clicked object to be selected (highlighted) instead of just registering the surface point.
-
-**Changes to `AlignmentPointPicker.tsx`:**
-- When entering `picking3D` step, temporarily switch the viewer tool to `null` (deactivate select) by dispatching `VIEWER_TOOL_CHANGED_EVENT` with `tool: null`
-- When the pick completes or the picker is closed, restore the previous tool
-
-**Alternative approach (simpler):**
-- The direct `xv.scene.input.on('mouseclicked')` handler already uses `xv.scene.pick({ pickSurface: true })` which returns the surface point. The issue is that the Asset+ viewer's built-in selection handler fires *before* our custom handler and selects the object. 
-- Add `e.stopPropagation?.()` or use `xv.scene.input.on('mousedown')` instead to capture before the selection handler
-- Or: call `assetView.useTool(null)` before entering pick mode and restore after
-
-**Changes to `AlignmentPointPicker.tsx`:**
-- On entering `picking3D`, call `window.__assetPlusViewerInstance?.assetViewer?.$refs?.assetView?.useTool(null)` to deactivate selection
-- On completion or cancel, call `useTool('select')` to restore
-
----
-
-### 7. Rendering Performance When Toggling Display Options
-
-**Problem:** Toggling rooms, room visualization, etc. causes heavy rendering lag.
-
-**Root cause:** Each toggle dispatches an event that triggers synchronous iteration over all scene objects (e.g., `setObjectsXRayed`, `setObjectsVisible`). For large models (724 rooms), this blocks the main thread.
-
-**Changes to `XrayToggle.tsx`:**
-- Use `requestIdleCallback` (or `requestAnimationFrame` batching) when applying xray to large object sets
-- Process objects in batches of ~100 to avoid blocking the UI
-
-**Changes to `AssetPlusViewer.tsx` (insights color effect):**
-- The existing `requestIdleCallback` batching pattern is already used for room visualization. Verify it's also applied when toggling spaces on/off
+**Fix in `FacilityLandingPage.tsx`:**
+- Use the existing `useXktPreload` hook or query `xkt_models` table to check if models exist for the building
+- Check `building_settings.ivion_site_id` (already available via `settings?.ivionSiteId`)
+- Check FM Access availability (query `building_external_links` or `building_settings.fm_access_building_guid`)
+- Pass `has3DModels`, `hasFmAccess` to QuickActions
 
 ---
 
 ### Implementation Sequence
 
-| Priority | Task | Files |
-|----------|------|-------|
-| 1 | Remove duplicates from nav toolbar + add minimap to right panel | ToolbarSettings.tsx, ViewerToolbar.tsx, ViewerRightPanel.tsx, AssetPlusViewer.tsx |
-| 2 | Fix Insights mode locking (XrayToggle initial state, clear insightsColorMode after apply) | XrayToggle.tsx, AssetPlusViewer.tsx, ViewerRightPanel.tsx |
-| 3 | Fix camera sync SDK path (moveToImageId) | useIvionCameraSync.ts, lib/ivion-sdk.ts |
-| 4 | Fix alignment pick vs select conflict | AlignmentPointPicker.tsx |
-| 5 | Text contrast fixes | ViewerRightPanel.tsx, AlignmentPanel.tsx, ToolbarSettings.tsx |
-| 6 | Performance batching for xray/spaces toggles | XrayToggle.tsx |
+| Step | Task | Files |
+|------|------|-------|
+| 1 | Add XKT model count check + FM Access check in FacilityLandingPage | `FacilityLandingPage.tsx` |
+| 2 | Add disabled state to Quick Action buttons | `QuickActions.tsx` |
+| 3 | Add error handling for failed XKT model loads to prevent freeze | `AssetPlusViewer.tsx` |
+| 4 | Add retry limit in XKT cache service | `xkt-cache-service.ts` |
+
+---
 
 ### Technical Details
 
-**Minimap event pattern:**
+**QuickActions disabled state:**
 ```typescript
-// In lib/viewer-events.ts
-export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
+// New props
+interface QuickActionsProps {
+  // ... existing props
+  has3DModels?: boolean;
+  hasFmAccess?: boolean;
+}
 
-// In ViewerRightPanel.tsx
-window.dispatchEvent(new CustomEvent(MINIMAP_TOGGLE_EVENT, { detail: { visible: checked } }));
-
-// In AssetPlusViewer.tsx
-useEffect(() => {
-  const handler = (e: CustomEvent) => setShowMinimap(e.detail?.visible ?? false);
-  window.addEventListener(MINIMAP_TOGGLE_EVENT, handler);
-  return () => window.removeEventListener(MINIMAP_TOGGLE_EVENT, handler);
-}, []);
+// Button disabled logic
+const has3D = has3DModels !== false; // default true for backward compat
+const has360 = !!ivionSiteId;
+const hasSplit = has3D && has360;
+const has2D = hasFmAccess !== false;
 ```
 
-**resolveMoveTo helper:**
+**FacilityLandingPage XKT check:**
 ```typescript
-// In lib/ivion-sdk.ts
-export async function resolveMoveTo(api: any, imageId: number, viewDir?: any, options?: any): Promise<void> {
-  if (typeof api?.legacyApi?.moveToImageId === 'function') {
-    return api.legacyApi.moveToImageId(imageId, viewDir, options);
-  }
-  if (typeof api?.moveToImageId === 'function') {
-    return api.moveToImageId(imageId, viewDir, options);
-  }
-  throw new Error('moveToImageId not found on SDK');
+const [has3DModels, setHas3DModels] = useState<boolean | undefined>(undefined);
+
+useEffect(() => {
+  if (!buildingGuid) return;
+  supabase
+    .from('xkt_models')
+    .select('id', { count: 'exact', head: true })
+    .eq('building_fm_guid', buildingGuid)
+    .then(({ count }) => setHas3DModels((count ?? 0) > 0));
+}, [buildingGuid]);
+```
+
+**XKT load error handling in AssetPlusViewer:**
+```typescript
+// Around the model load loop, add per-model try/catch:
+try {
+  await loadXktModel(modelUrl, modelId);
+} catch (err) {
+  console.error(`[AssetPlusViewer] Failed to load model ${modelId}:`, err);
+  failedModels.add(modelId);
+  // Continue loading remaining models
 }
 ```
-
-**XrayToggle batching:**
-```typescript
-const BATCH_SIZE = 100;
-const applyXrayBatched = (ids: string[], scene: any, xrayed: boolean) => {
-  let i = 0;
-  const processBatch = () => {
-    const end = Math.min(i + BATCH_SIZE, ids.length);
-    for (; i < end; i++) {
-      const entity = scene.objects?.[ids[i]];
-      if (entity) entity.xrayed = xrayed;
-    }
-    if (i < ids.length) requestAnimationFrame(processBatch);
-  };
-  requestAnimationFrame(processBatch);
-};
-```
-
