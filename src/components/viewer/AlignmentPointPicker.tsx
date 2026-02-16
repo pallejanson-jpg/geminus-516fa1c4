@@ -12,6 +12,7 @@ import { Crosshair, Check, X, MousePointerClick, RotateCcw, AlertCircle, Loader2
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { ivionToBim, type IvionBimTransform, type Vec3 } from '@/lib/ivion-bim-transform';
+import { resolveMainView } from '@/lib/ivion-sdk';
 
 type PickStep = 'idle' | 'picking360' | 'picking3D' | 'done';
 
@@ -54,40 +55,16 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     console.log('[AlignmentPicker] ivApiRef.current keys:', Object.keys(api).slice(0, 20));
 
     try {
-      // Guard: check if getMainView exists
-      if (typeof api.getMainView !== 'function') {
-        console.warn('[AlignmentPicker] api.getMainView is not a function. Available keys:', Object.keys(api).slice(0, 30));
-        
-        // Fallback: try api.view or api.camera or other common SDK patterns
-        let position: Vec3 | null = null;
-        
-        // Try: api.camera?.position
-        if (api.camera?.position) {
-          const p = api.camera.position;
-          position = { x: p.x ?? p[0], y: p.y ?? p[1], z: p.z ?? p[2] };
-        }
-        // Try: api.view?.getImage
-        else if (typeof api.view?.getImage === 'function') {
-          const img = api.view.getImage();
-          if (img?.location) position = { x: img.location.x, y: img.location.y, z: img.location.z };
-        }
-
-        if (position) {
-          setIvionPoint(position);
-          setStep('picking3D');
-          toast.success(`360°-position fångad: (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 360° position captured via fallback:', position);
-          return;
-        }
-
-        const msg = 'SDK-funktionen getMainView saknas. Kontrollera att 360°-vyn är inladdad.';
+      const mainView = resolveMainView(api);
+      if (!mainView) {
+        console.warn('[AlignmentPicker] Could not resolve mainView. Available keys:', Object.keys(api).slice(0, 30));
+        const msg = 'Kunde inte hitta 360°-vyn. Kontrollera att panoraman är inladdad.';
         setCaptureError(msg);
         toast.error(msg);
         return;
       }
 
-      const mainView = api.getMainView();
-      const image = mainView?.getImage();
+      const image = mainView.getImage?.();
       if (image?.location) {
         const loc = image.location;
         const pt: Vec3 = { x: loc.x, y: loc.y, z: loc.z };
