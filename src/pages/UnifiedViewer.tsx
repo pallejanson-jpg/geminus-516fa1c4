@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
+import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
@@ -248,6 +249,14 @@ const UnifiedViewerContent: React.FC<{
           <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
           <p className="text-sm text-muted-foreground">Laddar viewer...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!buildingFmGuid) {
+    return (
+      <div className="h-screen bg-background">
+        <BuildingSelector />
       </div>
     );
   }

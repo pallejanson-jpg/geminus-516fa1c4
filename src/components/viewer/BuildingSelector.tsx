@@ -1,4 +1,5 @@
 import React, { useContext, useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppContext } from '@/context/AppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,8 @@ interface SavedView {
  */
 const BuildingSelector: React.FC = () => {
   const { allData, setViewer3dFmGuid, isLoadingData } = useContext(AppContext);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('buildings');
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
@@ -129,11 +132,14 @@ const BuildingSelector: React.FC = () => {
 
   const handleSelectBuilding = (fmGuid: string) => {
     setViewer3dFmGuid(fmGuid);
+    const mode = searchParams.get('mode') || '3d';
+    navigate(`/split-viewer?building=${fmGuid}&mode=${mode}`, { replace: true });
   };
 
   const handleSelectView = (view: SavedView) => {
-    // First, set the building to trigger viewer load
     setViewer3dFmGuid(view.building_fm_guid);
+    const mode = view.view_mode || '3d';
+    navigate(`/split-viewer?building=${view.building_fm_guid}&mode=${mode}`, { replace: true });
     
     // Dispatch event with full view settings to be applied after viewer initializes
     // Use a short delay to ensure the viewer context is set up
