@@ -134,8 +134,8 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
 
       {/* Help text */}
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
-        <Info className="h-3.5 w-3.5 text-foreground/70 shrink-0 mt-0.5" />
-        <p className="text-[11px] text-foreground/70 leading-relaxed">
+        <Info className="h-3.5 w-3.5 text-white/70 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-white/70 leading-relaxed">
           Navigera i 360° till en plats med tydliga element (dörr, vägg, pelare). 
           Justera värdena tills 3D-modellen överlappar panoramabilden.
         </p>
@@ -277,7 +277,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
             onChange={(e) => onToggleCrosshair(e.target.checked)}
             className="rounded border-border"
           />
-          <span className="text-xs text-foreground/70">Visa korsmarkering</span>
+          <span className="text-xs text-white/70">Visa korsmarkering</span>
         </label>
       )}
     </div>
@@ -301,7 +301,7 @@ function CoarseSliderField({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <Label className="text-xs text-foreground/70">{label}</Label>
+        <Label className="text-xs text-white/70">{label}</Label>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost" size="icon"
@@ -329,7 +329,7 @@ function CoarseSliderField({
           >
             <Plus className="h-3 w-3" />
           </Button>
-          <span className="text-xs text-foreground/70 w-4">{unit}</span>
+          <span className="text-xs text-white/70 w-4">{unit}</span>
         </div>
       </div>
       <Slider
@@ -361,7 +361,7 @@ function FineSliderField({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <Label className="text-[11px] text-foreground/70">{label}</Label>
+        <Label className="text-[11px] text-white/70">{label}</Label>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost" size="icon"

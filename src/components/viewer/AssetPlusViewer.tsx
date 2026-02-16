@@ -690,6 +690,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     setRoomLabelsEnabled(enabled);
   }, [setRoomLabelsEnabled]);
 
+  // Listen for minimap toggle from ViewerRightPanel
+  useEffect(() => {
+    const handleMinimapToggle = (e: CustomEvent) => {
+      setShowMinimap(e.detail?.visible ?? false);
+    };
+    window.addEventListener('MINIMAP_TOGGLE', handleMinimapToggle as EventListener);
+    return () => window.removeEventListener('MINIMAP_TOGGLE', handleMinimapToggle as EventListener);
+  }, []);
+
   // Listen for view mode changes to update room label heights
   useEffect(() => {
     const handleViewModeChange = (e: CustomEvent) => {

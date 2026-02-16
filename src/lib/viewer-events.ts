@@ -42,6 +42,9 @@ export interface ViewerToolChangedDetail {
   tool: 'select' | 'measure' | 'slicer' | null;
 }
 
+/** Event dispatched when minimap toggle is requested from the right panel */
+export const MINIMAP_TOGGLE_EVENT = 'MINIMAP_TOGGLE';
+
 /** Type for load saved view event detail */
 export interface LoadSavedViewDetail {
   viewId: string;

@@ -16,7 +16,7 @@ import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
-import { resolveMainView } from '@/lib/ivion-sdk';
+import { resolveMainView, resolveMoveTo } from '@/lib/ivion-sdk';
 import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 
 export interface IvionImage {
@@ -278,7 +278,7 @@ export function useIvionCameraSync({
       
       console.log('[Ivion Sync] SDK: Moving to image', nearestImage.id, 'viewDir:', viewDir);
       
-      ivApi.moveToImageId(nearestImage.id, viewDir, undefined)
+      resolveMoveTo(ivApi, nearestImage.id, viewDir)
         .then(() => {
           setCurrentImageId(nearestImage.id);
           setLastSyncSource('3d');
