@@ -54,7 +54,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   // Visibility state (controlled from VisualizationToolbar settings)
   const [isVisible, setIsVisible] = useState(() => {
-    return localStorage.getItem('viewer-show-floor-pills') !== 'false';
+    return localStorage.getItem('viewer-show-floor-pills') === 'true';
   });
 
   // Ref to track if we're receiving an external event (to prevent dispatch loops)
@@ -376,6 +376,12 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         });
       }
     });
+    
+    // SAFETY: Abort if no objects to show -- prevents blacking out
+    if (idsToShow.length === 0) {
+      console.warn('FloatingFloorSwitcher.applyFloorVisibility: no objects found for selected floors, aborting');
+      return;
+    }
     
     const idsToShowSet = new Set(idsToShow);
     
