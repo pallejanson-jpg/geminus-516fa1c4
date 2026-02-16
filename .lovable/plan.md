@@ -1,94 +1,67 @@
 
 
-## Fix: XKT Cache Staleness for Akerselva Atrium
+## Fix: AlignmentPointPicker "getMainView saknas" Error
 
 ### Problem
 
-The cached XKT models for Akerselva Atrium (`a8fe5835`) were synced on 2026-02-13, only 3 days ago. The current staleness check uses a 7-day threshold on `synced_at`, so these models pass the freshness check and are served from cache -- even though Asset+ has newer versions.
+The error "SDK-funktionen getMainView saknas" occurs because the NavVis SDK's `getApi()` returns an `ApiInterface` object where methods are organized into sub-APIs:
 
-The root cause is two-fold:
-1. `source_updated_at` is never populated -- `saveModelFromViewer` stores `new Date().toISOString()` as `source_updated_at` (the current time), not the actual source model's last-modified date
-2. The staleness logic only checks age-based expiry (7 days), not whether the source has actually changed
+- `api.view.mainView` -- the main panorama view (current API)
+- `api.legacyApi.getMainView()` -- legacy API path
+- `api.legacyApi.moveToImageId(...)` -- legacy navigation
+
+But the code calls `api.getMainView()` directly on the root object, which does not exist. You are not doing anything wrong -- this is a code bug where the wrong API path is used.
+
+The `BrowserScanRunner` component already has the correct multi-path lookup pattern:
+```text
+api.view?.mainView ?? api.getMainView?.() ?? api.mainView
+```
+
+But `AlignmentPointPicker`, `useVirtualTwinSync`, `useIvionCameraSync`, and `CoordinateDiagnosticOverlay` all use the incorrect direct path.
 
 ### Solution
 
-**A) Capture the `Last-Modified` header from Asset+ responses during Cache-on-Load**
+Create a shared helper function and update all affected files to use the correct SDK API paths.
 
-When the fetch interceptor downloads a fresh XKT from Asset+, extract the `Last-Modified` response header and pass it to `saveModelFromViewer`. This gives us the actual source timestamp to compare against later.
+### Changes
 
-**Changes to `AssetPlusViewer.tsx` (interceptor, ~line 2683):**
-- After `response.clone()`, extract `Last-Modified` header from the response
-- Pass it as a new parameter `sourceLastModified` to `saveModelFromViewer`
+**1. Add helper to `ivion-sdk.ts`**
 
-**Changes to `xkt-cache-service.ts` (`saveModelFromViewer`):**
-- Add optional `sourceLastModified?: string` parameter
-- Store it as `source_updated_at` instead of `new Date().toISOString()`
-- If no header is available, store the current time as fallback
+Add a utility function that resolves the main view from any version of the API object:
 
-**B) Compare `source_updated_at` against fresh Asset+ metadata before serving cache**
-
-When the interceptor finds a database cache hit, do a lightweight `HEAD` request to the original Asset+ URL to get the current `Last-Modified`. If it's newer than `source_updated_at`, skip the cache.
-
-**Changes to `AssetPlusViewer.tsx` (interceptor, ~line 2652):**
-- When `checkCache` returns a hit (not stale by age), do a `HEAD` request to the original XKT URL
-- Compare the response's `Last-Modified` against the cached `source_updated_at`
-- If the source is newer, log "Source updated, fetching fresh" and skip cache
-- If HEAD fails or has no Last-Modified, fall through to the age-based check as before
-
-**C) Fix `saveModelFromViewer` duplicate check -- allow updates**
-
-Currently, `saveModelFromViewer` early-returns if `count > 0` in the database, meaning a stale-then-refreshed model never gets updated. When we fetch fresh because of staleness, we need to update the existing entry.
-
-**Changes to `xkt-cache-service.ts` (`saveModelFromViewer`, ~line 242):**
-- Remove the early `return true` when model exists in database
-- Instead, let the upsert logic (which already has `onConflict`) handle updates
-- This ensures that when a stale model is re-fetched, the new data and timestamps overwrite the old entry
-
-**D) Return `source_updated_at` from `checkCache` for comparison**
-
-**Changes to `xkt-cache-service.ts` (`checkCache`):**
-- Include `source_updated_at` in the return type so the interceptor can use it for HEAD comparison
-
----
-
-### Technical Details
-
-**Interceptor flow after fix:**
-
-```text
-XKT request intercepted
-  -> Check memory cache -> if hit, return immediately
-  -> Check database cache (checkCache)
-     -> If hit and NOT age-stale:
-        -> HEAD request to original Asset+ URL
-        -> Compare Last-Modified vs source_updated_at
-        -> If source is newer: skip cache, fetch fresh, update cache
-        -> If same or older: serve from cache
-     -> If hit and age-stale (>7 days):
-        -> Skip cache, fetch fresh, update cache
-     -> If miss:
-        -> Fetch from Asset+, save to cache
-```
-
-**HEAD request pattern:**
 ```typescript
-try {
-  const headResp = await original(url, { method: 'HEAD' });
-  const sourceLastMod = headResp.headers.get('Last-Modified');
-  if (sourceLastMod && cacheResult.sourceUpdatedAt) {
-    const sourceDate = new Date(sourceLastMod).getTime();
-    const cachedDate = new Date(cacheResult.sourceUpdatedAt).getTime();
-    if (sourceDate > cachedDate) {
-      console.log(`XKT cache: Source newer than cache for ${modelId}`);
-      // Fall through to fresh fetch below
-    }
-  }
-} catch { /* HEAD failed, use age-based check */ }
+export function resolveMainView(api: any): IvionMainView | null {
+  return api?.view?.mainView
+    ?? (typeof api?.legacyApi?.getMainView === 'function' ? api.legacyApi.getMainView() : null)
+    ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null)
+    ?? api?.mainView
+    ?? null;
+}
 ```
 
-**Files to modify:**
-- `src/components/viewer/AssetPlusViewer.tsx` -- interceptor logic
-- `src/services/xkt-cache-service.ts` -- `checkCache` return type, `saveModelFromViewer` parameters and duplicate check
+**2. Fix `AlignmentPointPicker.tsx`**
 
-**No database migration needed** -- `source_updated_at` column already exists (added in previous migration).
+Replace the `capture360Position` function's direct `api.getMainView()` call with `resolveMainView(api)`. Remove the long fallback block that tries `api.camera?.position` etc. -- simplify to one call.
+
+**3. Fix `useVirtualTwinSync.ts`**
+
+Replace `ivApi.getMainView()` with `resolveMainView(ivApi)`.
+
+**4. Fix `useIvionCameraSync.ts`**
+
+Replace all `ivApi.getMainView()` calls with `resolveMainView(ivApi)`.
+
+**5. Fix `CoordinateDiagnosticOverlay.tsx`**
+
+Replace the inline fallback with `resolveMainView(api)`.
+
+### Files to modify
+
+| File | Change |
+|------|--------|
+| `src/lib/ivion-sdk.ts` | Add `resolveMainView()` helper |
+| `src/components/viewer/AlignmentPointPicker.tsx` | Use `resolveMainView()` instead of direct `getMainView()` |
+| `src/hooks/useVirtualTwinSync.ts` | Use `resolveMainView()` |
+| `src/hooks/useIvionCameraSync.ts` | Use `resolveMainView()` |
+| `src/components/viewer/CoordinateDiagnosticOverlay.tsx` | Use `resolveMainView()` |
 
