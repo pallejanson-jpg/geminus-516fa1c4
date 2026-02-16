@@ -37,7 +37,7 @@ export interface ToolConfig {
 }
 
 // Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 
 // Custom event name for same-tab settings updates
 export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
@@ -50,7 +50,7 @@ export const NAVIGATION_TOOLS: ToolConfig[] = [
   { id: 'zoomIn', label: 'Zooma in', visible: true, inOverflow: false },
   { id: 'zoomOut', label: 'Zooma ut', visible: true, inOverflow: false },
   { id: 'viewFit', label: 'Anpassa vy', visible: true, inOverflow: false },
-  { id: 'resetView', label: 'Återställ vy', visible: true, inOverflow: false },
+  { id: 'resetView', label: 'Återställ vy', visible: false, inOverflow: false },
   { id: 'select', label: 'Välj objekt', visible: true, inOverflow: false },
   { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
   { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },

@@ -2773,6 +2773,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // CRITICAL FIX: Clear container innerHTML before initialization
     // This prevents 'nextSibling' null errors during React mount/unmount cycles
     viewerContainerRef.current.innerHTML = '';
+    
+    // Wait one frame to ensure DOM is fully settled after clearing
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    
+    // Re-check container after rAF — React may have unmounted us
+    if (!viewerContainerRef.current) {
+      console.warn('[AssetPlusViewer] Container lost after rAF, aborting init');
+      return;
+    }
 
     setModelLoadState('idle');
     setCacheStatus(null);

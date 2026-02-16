@@ -390,69 +390,100 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   }, [rooms, colorizeSpace]);
 
   // Apply visualization colors with chunking for smooth UI
+  const isProcessingRef = useRef(false);
   const applyVisualization = useCallback(() => {
     if (visualizationType === 'none') {
       resetColors();
       return;
     }
 
+    // Guard: prevent overlapping executions
+    if (isProcessingRef.current) {
+      console.debug('applyVisualization skipped – already in progress');
+      return;
+    }
+
     // Cancel any in-progress chunking
     cancelRef.current = true;
-    
-    // CRITICAL: Reset ALL previously colorized rooms BEFORE applying new colors
-    colorizedRoomGuidsRef.current.forEach((fmGuid) => {
-      colorizeSpace(fmGuid, null);
-    });
-    colorizedRoomGuidsRef.current.clear();
 
+    isProcessingRef.current = true;
     setIsProcessing(true);
     cancelRef.current = false; // Reset cancel flag for new run
 
+    // Collect previous guids to reset, then clear the set
+    const previousGuids = Array.from(colorizedRoomGuidsRef.current);
+    colorizedRoomGuidsRef.current.clear();
+
     let count = 0;
     const CHUNK_SIZE = 30;
-    const chunks: RoomData[][] = [];
-    
-    for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
-      chunks.push(rooms.slice(i, i + CHUNK_SIZE));
+
+    // Phase 1: reset previous rooms in chunks
+    const resetChunks: string[][] = [];
+    for (let i = 0; i < previousGuids.length; i += CHUNK_SIZE) {
+      resetChunks.push(previousGuids.slice(i, i + CHUNK_SIZE));
     }
 
-    const processChunk = (chunkIndex: number) => {
-      if (cancelRef.current || chunkIndex >= chunks.length) {
+    // Phase 2: apply new colors in chunks
+    const applyChunks: RoomData[][] = [];
+    for (let i = 0; i < rooms.length; i += CHUNK_SIZE) {
+      applyChunks.push(rooms.slice(i, i + CHUNK_SIZE));
+    }
+
+    let resetIndex = 0;
+    let applyIndex = 0;
+
+    const processNext = () => {
+      if (cancelRef.current) {
         setColorizedCount(count);
         setIsProcessing(false);
-        if (!cancelRef.current) {
-          console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // First finish resetting previous rooms
+      if (resetIndex < resetChunks.length) {
+        resetChunks[resetIndex].forEach((fmGuid) => colorizeSpace(fmGuid, null));
+        resetIndex++;
+        requestAnimationFrame(processNext);
+        return;
+      }
+
+      // Then apply new colors
+      if (applyIndex < applyChunks.length) {
+        applyChunks[applyIndex].forEach((room) => {
+          let value: number | null = null;
+
+          if (useMockData) {
+            value = generateMockSensorData(room.fmGuid, visualizationType);
+          } else {
+            value = extractSensorValue(room.attributes, visualizationType);
+          }
+
+          if (value !== null) {
+            const color = getVisualizationColor(value, visualizationType);
+            if (color && colorizeSpace(room.fmGuid, color)) {
+              colorizedRoomGuidsRef.current.add(room.fmGuid);
+              count++;
+            }
+          }
+        });
+        applyIndex++;
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(processNext, { timeout: 16 });
+        } else {
+          requestAnimationFrame(processNext);
         }
         return;
       }
 
-      chunks[chunkIndex].forEach((room) => {
-        let value: number | null = null;
-
-        if (useMockData) {
-          value = generateMockSensorData(room.fmGuid, visualizationType);
-        } else {
-          value = extractSensorValue(room.attributes, visualizationType);
-        }
-
-        if (value !== null) {
-          const color = getVisualizationColor(value, visualizationType);
-          if (color && colorizeSpace(room.fmGuid, color)) {
-            colorizedRoomGuidsRef.current.add(room.fmGuid);
-            count++;
-          }
-        }
-      });
-
-      // Use requestIdleCallback if available, otherwise requestAnimationFrame
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => processChunk(chunkIndex + 1), { timeout: 50 });
-      } else {
-        requestAnimationFrame(() => processChunk(chunkIndex + 1));
-      }
+      // Done
+      setColorizedCount(count);
+      setIsProcessing(false);
+      isProcessingRef.current = false;
+      console.log(`Applied ${visualizationType} visualization to ${count} rooms`);
     };
 
-    processChunk(0);
+    requestAnimationFrame(processNext);
   }, [visualizationType, rooms, useMockData, colorizeSpace, resetColors]);
 
   // Apply visualization when type or mock data changes (AUTO-APPLY with retry)
@@ -512,7 +543,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const handler = () => {
       if (visualizationType !== 'none' && rooms.length > 0) {
         // Re-apply colors after floor visibility has settled
-        setTimeout(() => applyVisualization(), 100);
+        setTimeout(() => applyVisualization(), 300);
       }
     };
     window.addEventListener('FLOOR_VISIBILITY_APPLIED', handler);
