@@ -227,6 +227,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   
   // XKT sync status for visual feedback
   const [xktSyncStatus, setXktSyncStatus] = useState<'idle' | 'checking' | 'syncing' | 'done' | 'error'>('idle');
+  
+  // Whitelist of model IDs allowed during initial load (null = allow all)
+  const allowedModelIdsRef = useRef<Set<string> | null>(null);
   const [spacesCacheReady, setSpacesCacheReady] = useState(false);
   
   // Ref for local annotations plugin
@@ -2653,6 +2656,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const modelId = xktCacheService.extractModelIdFromUrl(url);
       
       if (modelId) {
+        // Check if model is in the initial load whitelist
+        if (allowedModelIdsRef.current) {
+          const allowed = allowedModelIdsRef.current;
+          const isAllowed = allowed.has(modelId) || allowed.has(modelId.toLowerCase());
+          if (!isAllowed) {
+            console.log(`XKT filter: Skipping non-initial model ${modelId}`);
+            return new Response(null, { status: 404, statusText: 'Model deferred' });
+          }
+        }
+        
         // Check memory cache first
         const memoryData = getModelFromMemory(modelId, resolvedBuildingGuid);
         if (memoryData) {
@@ -2942,6 +2955,77 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
 
       baseUrlRef.current = baseUrl;
+
+      // Resolve model names and build A-model filter for initial loading
+      try {
+        const resolvedGuid = buildingFmGuid;
+        if (resolvedGuid) {
+          const { data: dbModels } = await supabase
+            .from('xkt_models')
+            .select('model_id, model_name, file_name')
+            .eq('building_fm_guid', resolvedGuid);
+
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}/i;
+          let nameMap = new Map<string, string>();
+
+          if (dbModels && dbModels.length > 0) {
+            const hasRealNames = dbModels.some(m => m.model_name && !UUID_RE.test(m.model_name));
+
+            if (hasRealNames) {
+              dbModels.forEach(m => { if (m.model_name) nameMap.set(m.model_id, m.model_name); });
+            } else {
+              // Fetch names from Asset+ API
+              const apiBase = baseUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+              try {
+                const resp = await fetch(
+                  `${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`,
+                  { headers: { 'Authorization': `Bearer ${accessToken}` } }
+                );
+                if (resp.ok) {
+                  const apiModels = await resp.json();
+                  apiModels.forEach((m: any) => {
+                    if (m.id && m.name) nameMap.set(m.id, m.name);
+                  });
+                  // Persist real names to DB in background
+                  for (const m of apiModels) {
+                    if (!m.name || !m.id) continue;
+                    supabase.from('xkt_models')
+                      .update({ model_name: m.name })
+                      .eq('model_id', m.id)
+                      .eq('building_fm_guid', resolvedGuid)
+                      .then(({ error: e }) => {
+                        if (e) console.debug('Name update failed:', e.message);
+                      });
+                  }
+                }
+              } catch (e) {
+                console.debug('Failed to fetch model names from API:', e);
+              }
+            }
+          }
+
+          // Build A-model filter
+          if (nameMap.size > 0) {
+            const aModelIds = new Set<string>();
+            nameMap.forEach((name, id) => {
+              if (name.toLowerCase().startsWith('a')) {
+                aModelIds.add(id);
+                aModelIds.add(id.toLowerCase());
+              }
+            });
+
+            if (aModelIds.size > 0 && aModelIds.size < nameMap.size * 2) {
+              allowedModelIdsRef.current = aModelIds;
+              console.log(`XKT filter: Initial load restricted to ${aModelIds.size / 2} A-model(s) out of ${nameMap.size}`);
+            }
+          }
+        }
+      } catch (e) {
+        console.debug('Model filter setup failed:', e);
+      }
+
+      // Save a reference to the real fetch before interceptor patches it
+      const original_fetch_ref = window.fetch;
 
       console.log("AssetPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
 

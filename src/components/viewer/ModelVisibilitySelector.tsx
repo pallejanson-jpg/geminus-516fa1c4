@@ -344,6 +344,16 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     }, [modelNamesMap, isInitialized, extractModels, applyModelVisibility]);
 
     const handleModelToggle = useCallback((modelId: string, checked: boolean) => {
+      // If toggling ON a non-loaded model, request it to be loaded
+      if (checked) {
+        const model = modelsRef.current.find(m => m.id === modelId);
+        if (model && !model.loaded) {
+          window.dispatchEvent(new CustomEvent('MODEL_LOAD_REQUESTED', {
+            detail: { modelId }
+          }));
+        }
+      }
+
       setVisibleModelIds(prev => {
         const newSet = new Set(prev);
         if (checked) {
