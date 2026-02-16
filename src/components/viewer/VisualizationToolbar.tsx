@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -1025,7 +1026,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     </div>
                   </div>
 
-                  {/* Room Labels Selector - Dropdown with config presets */}
+                  {/* Room Labels Selector - Dropdown matching other selectors */}
                   <div className="space-y-1.5 sm:space-y-2">
                     <div className="flex items-center gap-2 sm:gap-3">
                       <div className={cn(
@@ -1040,45 +1041,27 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       {loadingRoomLabelConfigs ? (
                         <div className="text-xs text-muted-foreground">Laddar...</div>
                       ) : (
-                        <div className="space-y-1">
-                          {/* Off option */}
-                          <button
-                            className={cn(
-                              "w-full text-left px-2 py-1 rounded text-xs transition-colors",
-                              !showRoomLabels 
-                                ? "bg-primary/10 text-primary font-medium" 
-                                : "hover:bg-muted/50"
+                        <Select
+                          value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
+                          onValueChange={handleRoomLabelConfigSelect}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Av" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="off">Av</SelectItem>
+                            {roomLabelConfigs.map((config) => (
+                              <SelectItem key={config.id} value={config.id}>
+                                {config.name}{config.is_default ? ' (standard)' : ''}
+                              </SelectItem>
+                            ))}
+                            {roomLabelConfigs.length === 0 && (
+                              <SelectItem value="__none" disabled>
+                                Inga konfigurationer
+                              </SelectItem>
                             )}
-                            onClick={() => handleRoomLabelConfigSelect('off')}
-                          >
-                            Av
-                          </button>
-                          
-                          {/* Config presets */}
-                          {roomLabelConfigs.map((config) => (
-                            <button
-                              key={config.id}
-                              className={cn(
-                                "w-full text-left px-2 py-1 rounded text-xs transition-colors",
-                                activeRoomLabelConfigId === config.id 
-                                  ? "bg-primary/10 text-primary font-medium" 
-                                  : "hover:bg-muted/50"
-                              )}
-                              onClick={() => handleRoomLabelConfigSelect(config.id)}
-                            >
-                              {config.name}
-                              {config.is_default && (
-                                <span className="ml-1 text-[10px] text-muted-foreground">(standard)</span>
-                              )}
-                            </button>
-                          ))}
-                          
-                          {roomLabelConfigs.length === 0 && (
-                            <div className="text-xs text-muted-foreground py-1">
-                              Inga konfigurationer. Skapa i Inställningar.
-                            </div>
-                          )}
-                        </div>
+                          </SelectContent>
+                        </Select>
                       )}
                     </div>
                   </div>
