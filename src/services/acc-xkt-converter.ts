@@ -18,6 +18,8 @@ import { xktCacheService } from './xkt-cache-service';
 export interface TranslationStatus {
   status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' | 'downloading' | 'converting' | 'complete' | 'server-converting';
   progress?: string;
+  progressPercent?: number;  // 0-100
+  step?: string;             // short step description
   message?: string;
   error?: string;
   derivativeCount?: number;
@@ -371,7 +373,7 @@ export class AccXktConverter {
     onStatusChange: (status: TranslationStatus) => void
   ): Promise<TranslationStatus> {
     try {
-      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern (kan ta några minuter)...' });
+      onStatusChange({ status: 'server-converting', message: 'Konverterar geometri på servern (kan ta några minuter)...', progressPercent: 10, step: 'Väntar på server...' });
 
       const { data, error } = await supabase.functions.invoke('acc-svf-to-gltf', {
         body: {
@@ -389,7 +391,7 @@ export class AccXktConverter {
       if (data?.pending) {
         for (let attempt = 1; attempt < SVR_MAX_RETRIES; attempt++) {
           const minutesLeft = Math.max(0, Math.ceil(((SVR_MAX_RETRIES - attempt) * SVR_INTERVAL) / 60000));
-          onStatusChange({ status: 'server-converting', message: `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)` });
+          onStatusChange({ status: 'server-converting', message: `Väntar på översättning från Autodesk... (ca ${minutesLeft} min kvar)`, progressPercent: Math.min(5 + Math.round((attempt / SVR_MAX_RETRIES) * 25), 30), step: 'Väntar på Autodesk...' });
           await new Promise(r => setTimeout(r, 10000));
           const retry = await supabase.functions.invoke('acc-svf-to-gltf', {
             body: { versionUrn, buildingFmGuid: options.buildingFmGuid, fileName: options.fileName },
@@ -409,18 +411,18 @@ export class AccXktConverter {
 
       if (data?.success && data.downloadUrl && options.buildingFmGuid) {
         // Server gave us a GLB - now convert to XKT client-side
-        onStatusChange({ status: 'converting', message: 'Konverterar GLB till XKT...' });
+        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...', progressPercent: 35, step: 'Konverterar IFC-geometri...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           data.downloadUrl,
           options.buildingFmGuid,
           safeModelId,
           options.fileName,
-          (msg) => onStatusChange({ status: 'converting', message: msg })
+          (msg) => onStatusChange({ status: 'converting', message: msg, progressPercent: 40, step: 'Konverterar IFC-geometri...' })
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad via server och sparad!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad via server och sparad!', progressPercent: 100, step: 'Klar!' };
           onStatusChange(finalStatus);
           return finalStatus;
         }
@@ -489,9 +491,12 @@ export class AccXktConverter {
       }
 
       // Still pending/inprogress
+      const elapsedPct = Math.min(5 + Math.round(((Date.now() - startTime) / MAX_WAIT_MS) * 15), 20);
       onStatusChange({
         status: 'pending',
         message: `Väntar på översättning från Autodesk... ${result.progress || ''} (ca ${minutesLeft} min kvar)`,
+        progressPercent: elapsedPct,
+        step: 'Väntar på Autodesk...',
       });
 
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
@@ -512,7 +517,7 @@ export class AccXktConverter {
     onStatusChange: (status: TranslationStatus) => void
   ): Promise<TranslationStatus> {
     // Step 1: Start translation (or confirm already done)
-    onStatusChange({ status: 'pending', message: 'Startar översättning...' });
+    onStatusChange({ status: 'pending', message: 'Startar översättning...', progressPercent: 2, step: 'Startar översättning...' });
     const startResult = await this.startTranslation(versionUrn, options);
     
     if (startResult.status === 'failed') {
@@ -522,7 +527,7 @@ export class AccXktConverter {
 
     // Step 2: If not alreadyDone, poll check-translation until success (up to 25 min)
     if (startResult.status !== 'success') {
-      onStatusChange({ status: 'pending', message: 'Väntar på översättning från Autodesk...' });
+      onStatusChange({ status: 'pending', message: 'Väntar på översättning från Autodesk...', progressPercent: 5, step: 'Väntar på Autodesk...' });
       const translationResult = await this.waitForTranslation(versionUrn, onStatusChange);
       if (translationResult.status === 'failed') {
         onStatusChange(translationResult);
@@ -536,7 +541,7 @@ export class AccXktConverter {
     let dlResult: TranslationStatus = { status: 'pending' };
 
     for (let attempt = 0; attempt < DL_MAX_RETRIES; attempt++) {
-      onStatusChange({ status: 'downloading', message: attempt > 0 ? `Laddar ner geometri (försök ${attempt + 1})...` : 'Laddar ner geometri...' });
+      onStatusChange({ status: 'downloading', message: attempt > 0 ? `Laddar ner geometri (försök ${attempt + 1})...` : 'Laddar ner geometri...', progressPercent: 22 + attempt * 2, step: 'Laddar ner IFC-fil...' });
       dlResult = await this.downloadDerivative(versionUrn, options);
       if (dlResult.status !== 'pending') break;
       await new Promise(r => setTimeout(r, DL_INTERVAL));
@@ -545,18 +550,29 @@ export class AccXktConverter {
     if (dlResult.status === 'complete' && dlResult.downloadUrl) {
       // Direct download worked
       if (options.buildingFmGuid) {
-        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...' });
+        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...', progressPercent: 35, step: 'Konverterar IFC-geometri...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           dlResult.downloadUrl,
           options.buildingFmGuid,
           safeModelId,
           options.fileName,
-          (msg) => onStatusChange({ status: 'converting', message: msg })
+          (msg) => {
+            // Estimate progress from log messages
+            let pct = 40;
+            if (msg.includes('Nedladdat')) pct = 38;
+            else if (msg.includes('Loading xeokit') || msg.includes('Detected input')) pct = 42;
+            else if (msg.includes('Parsing IFC') || msg.includes('Parsing glTF') || msg.includes('Parsing OBJ')) pct = 50;
+            else if (msg.includes('Finalizing')) pct = 78;
+            else if (msg.includes('Writing XKT')) pct = 85;
+            else if (msg.includes('Sparar XKT')) pct = 92;
+            else if (msg.includes('XKT conversion complete') || msg.includes('sparad')) pct = 98;
+            onStatusChange({ status: 'converting', message: msg, progressPercent: pct, step: pct < 78 ? 'Konverterar IFC-geometri...' : pct < 92 ? 'Bygger XKT-modell...' : 'Sparar 3D-modell...' });
+          }
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!', progressPercent: 100, step: 'Klar!' };
           onStatusChange(finalStatus);
           return finalStatus;
         } else {
