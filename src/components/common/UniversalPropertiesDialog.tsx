@@ -839,33 +839,40 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           {/* Action buttons */}
           <div className="flex items-center gap-2 justify-between">
             <div className="flex gap-1">
-              {/* Delete button - only for Instance objects */}
-              {syncStatus?.isInstance && (
+              {/* Delete button - only for Instance objects, disabled for BIM-created */}
+              {syncStatus?.isInstance && !syncStatus.hasBimCreated && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm" disabled={isDeleting}>
                       <Trash2 className="h-4 w-4 mr-1" />
-                      Delete
+                      Radera
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete {isMultiMode ? `${fmGuids.length} objects` : 'object'}?</AlertDialogTitle>
+                      <AlertDialogTitle>Radera {isMultiMode ? `${fmGuids.length} objekt` : 'objekt'}?</AlertDialogTitle>
                       <AlertDialogDescription>
                         {syncStatus.allLocal 
-                          ? 'This will permanently delete the local object(s).'
-                          : 'This will expire the object(s) in Asset+ and remove them locally. BIM-created objects are protected.'}
+                          ? 'Detta raderar objektet/objekten permanent från den lokala databasen.'
+                          : 'Objektet/objekten kommer att expieras i Asset+ och tas bort lokalt.'}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>Avbryt</AlertDialogCancel>
                       <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
                         {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                        Delete
+                        Radera
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+              )}
+              {/* Show explanation when delete is blocked due to BIM */}
+              {syncStatus?.isInstance && syncStatus.hasBimCreated && (
+                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                  <AlertCircle className="h-3 w-3" />
+                  Finns i BIM-modell — kan inte raderas
+                </Badge>
               )}
               
               {/* Push to Asset+ button - only for local objects */}
