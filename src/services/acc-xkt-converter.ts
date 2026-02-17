@@ -301,25 +301,56 @@ export class AccXktConverter {
       const glbData = await response.arrayBuffer();
       log(`Nedladdat: ${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB`);
 
-      // 2. Convert GLB -> XKT in browser
-      log('Konverterar till XKT...');
-      const xktData = await convertGlbToXkt(glbData, log);
+      // Detect format of downloaded data
+      const format = detectFormat(glbData);
+      log(`Detekterat format: ${format}`);
 
-      // 3. Store XKT via xktCacheService
-      log('Sparar XKT-modell...');
-      const saved = await xktCacheService.saveModelFromViewer(
-        modelId,
-        xktData,
-        buildingFmGuid,
-        fileName || modelId
-      );
-
-      if (saved) {
-        log('XKT-modell sparad!');
-        return { success: true };
-      } else {
-        return { success: false, error: 'Failed to save XKT to cache' };
+      // 2. Save GLB/OBJ directly to storage (skip XKT conversion)
+      // The viewer will load these directly via GLTFLoaderPlugin/OBJLoaderPlugin
+      const fileExt = format === 'obj' ? 'obj' : format === 'ifc' ? 'ifc' : 'glb';
+      const safeName = fileName || modelId;
+      const storageFileName = `${modelId}.${fileExt}`;
+      const storagePath = `${buildingFmGuid}/${storageFileName}`;
+      
+      log(`Sparar ${fileExt.toUpperCase()}-fil direkt (skippar XKT-konvertering)...`);
+      
+      const blob = new Blob([glbData], { type: 'application/octet-stream' });
+      const { error: uploadError } = await supabase.storage
+        .from('xkt-models')
+        .upload(storagePath, blob, {
+          contentType: 'application/octet-stream',
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
       }
+
+      // 3. Save metadata with format info
+      const { error: dbError } = await supabase
+        .from('xkt_models')
+        .upsert({
+          building_fm_guid: buildingFmGuid,
+          model_id: modelId,
+          model_name: safeName,
+          file_name: storageFileName,
+          file_size: glbData.byteLength,
+          storage_path: storagePath,
+          file_url: null,
+          format: fileExt,
+          synced_at: new Date().toISOString(),
+          source_updated_at: new Date().toISOString(),
+        } as any, {
+          onConflict: 'building_fm_guid,model_id',
+        });
+      
+      if (dbError) {
+        log(`DB-fel: ${dbError.message}`);
+        return { success: false, error: `DB error: ${dbError.message}` };
+      }
+
+      log(`${fileExt.toUpperCase()}-modell sparad! Viewern laddar den direkt.`);
+      return { success: true };
     } catch (e: any) {
       log(`Konverteringsfel: ${e.message}`);
       console.error('convertAndStore error:', e);
@@ -410,8 +441,8 @@ export class AccXktConverter {
       }
 
       if (data?.success && data.downloadUrl && options.buildingFmGuid) {
-        // Server gave us a GLB - now convert to XKT client-side
-        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...', progressPercent: 35, step: 'Konverterar IFC-geometri...' });
+        // Server gave us a GLB/OBJ - save directly (no XKT conversion)
+        onStatusChange({ status: 'converting', message: 'Sparar 3D-modell...', progressPercent: 35, step: 'Sparar modell...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           data.downloadUrl,
@@ -422,11 +453,11 @@ export class AccXktConverter {
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad via server och sparad!', progressPercent: 100, step: 'Klar!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell sparad!', progressPercent: 100, step: 'Klar!' };
           onStatusChange(finalStatus);
           return finalStatus;
         }
-        const failStatus: TranslationStatus = { status: 'failed', error: convertResult.error || 'XKT-konvertering misslyckades' };
+        const failStatus: TranslationStatus = { status: 'failed', error: convertResult.error || 'Modellsparning misslyckades' };
         onStatusChange(failStatus);
         return failStatus;
       }
@@ -550,7 +581,7 @@ export class AccXktConverter {
     if (dlResult.status === 'complete' && dlResult.downloadUrl) {
       // Direct download worked
       if (options.buildingFmGuid) {
-        onStatusChange({ status: 'converting', message: 'Konverterar till XKT...', progressPercent: 35, step: 'Konverterar IFC-geometri...' });
+        onStatusChange({ status: 'converting', message: 'Sparar 3D-modell...', progressPercent: 35, step: 'Sparar modell...' });
         const safeModelId = versionUrn.replace(/[^a-zA-Z0-9-_]/g, '_');
         const convertResult = await this.convertAndStore(
           dlResult.downloadUrl,
@@ -558,26 +589,22 @@ export class AccXktConverter {
           safeModelId,
           options.fileName,
           (msg) => {
-            // Estimate progress from log messages
             let pct = 40;
             if (msg.includes('Nedladdat')) pct = 38;
-            else if (msg.includes('Loading xeokit') || msg.includes('Detected input')) pct = 42;
-            else if (msg.includes('Parsing IFC') || msg.includes('Parsing glTF') || msg.includes('Parsing OBJ')) pct = 50;
-            else if (msg.includes('Finalizing')) pct = 78;
-            else if (msg.includes('Writing XKT')) pct = 85;
-            else if (msg.includes('Sparar XKT')) pct = 92;
-            else if (msg.includes('XKT conversion complete') || msg.includes('sparad')) pct = 98;
-            onStatusChange({ status: 'converting', message: msg, progressPercent: pct, step: pct < 78 ? 'Konverterar IFC-geometri...' : pct < 92 ? 'Bygger XKT-modell...' : 'Sparar 3D-modell...' });
+            else if (msg.includes('Detekterat')) pct = 42;
+            else if (msg.includes('Sparar')) pct = 70;
+            else if (msg.includes('sparad')) pct = 98;
+            onStatusChange({ status: 'converting', message: msg, progressPercent: pct, step: pct < 70 ? 'Bearbetar modell...' : 'Sparar 3D-modell...' });
           }
         );
 
         if (convertResult.success) {
-          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell konverterad och sparad!', progressPercent: 100, step: 'Klar!' };
+          const finalStatus: TranslationStatus = { status: 'complete', message: '3D-modell sparad!', progressPercent: 100, step: 'Klar!' };
           onStatusChange(finalStatus);
           return finalStatus;
         } else {
-          // Client-side failed (e.g. SVF2 manifest), try server-side
-          onStatusChange({ status: 'server-converting', message: 'Klientkonvertering misslyckades, testar serverkonvertering...' });
+          // Client-side failed, try server-side
+          onStatusChange({ status: 'server-converting', message: 'Klientlagring misslyckades, testar serverkonvertering...' });
           return this.tryServerConversion(versionUrn, options, onStatusChange);
         }
       }
