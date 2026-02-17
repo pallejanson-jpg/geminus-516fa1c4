@@ -1,7 +1,8 @@
-import React, { useCallback, useState, useContext, useMemo } from "react";
+import React, { useCallback, useState, useContext, useMemo, useEffect } from "react";
 import { Database, FileQuestion, Sparkles, Building2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import chicagoHero from "@/assets/chicago-skyline-hero.jpg";
 import GunnarChat from "@/components/chat/GunnarChat";
@@ -24,51 +25,92 @@ const ASSISTANTS: Array<{
   { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration med FM Access", icon: Sparkles, available: false },
 ];
 
+const FAV_CACHE_KEY = 'geminus-fav-buildings-cache';
+
+interface FavoriteBuilding {
+  fmGuid: string;
+  name: string;
+  commonName?: string | null;
+  category: 'Building';
+  image: string;
+  numberOfLevels: number;
+  numberOfSpaces: number;
+  area: number;
+  address?: string;
+  complexCommonName?: string;
+}
+
+function readCachedFavorites(): FavoriteBuilding[] {
+  try {
+    const raw = localStorage.getItem(FAV_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return parsed.buildings || [];
+  } catch { return []; }
+}
+
+function writeCachedFavorites(buildings: FavoriteBuilding[]) {
+  try {
+    localStorage.setItem(FAV_CACHE_KEY, JSON.stringify({ buildings, timestamp: Date.now() }));
+  } catch { /* quota exceeded etc */ }
+}
+
+// Helper to extract NTA value from attributes
+const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
+  if (!attributes) return 0;
+  for (const key of Object.keys(attributes)) {
+    if (key.toLowerCase().startsWith('nta')) {
+      const ntaObj = attributes[key];
+      if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
+        return ntaObj.value;
+      }
+    }
+  }
+  return 0;
+};
+
+function FavoriteBuildingSkeleton() {
+  return (
+    <div className="rounded-lg sm:rounded-xl border border-border bg-card/80 overflow-hidden">
+      <Skeleton className="h-20 sm:h-24 w-full" />
+      <div className="p-2 sm:p-3 flex items-center justify-between">
+        <Skeleton className="h-3 w-10" />
+        <Skeleton className="h-3 w-10" />
+        <Skeleton className="h-3 w-14" />
+      </div>
+    </div>
+  );
+}
+
 export default function HomeLanding() {
   const { toast } = useToast();
   const [gunnarOpen, setGunnarOpen] = useState(false);
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData, activeApp } = useContext(AppContext);
 
-  // Get favorites from the settings map
+  // Cached favorites from localStorage for instant display
+  const [cachedBuildings] = useState<FavoriteBuilding[]>(() => readCachedFavorites());
+
   const favorites = useMemo(() => getFavorites(), [getFavorites]);
 
-  // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
-  const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
-    if (!attributes) return 0;
-    for (const key of Object.keys(attributes)) {
-      if (key.toLowerCase().startsWith('nta')) {
-        const ntaObj = attributes[key];
-        if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
-          return ntaObj.value;
-        }
-      }
-    }
-    return 0;
-  };
+  // Determine if tree data has loaded (non-empty means loaded)
+  const treeDataReady = navigatorTreeData.length > 0;
 
-  // Get favorite buildings from navigator tree data
+  // Compute favorite buildings from live data
   const favoriteBuildings = useMemo(() => {
+    if (!treeDataReady) return [];
     return navigatorTreeData
       .filter(building => favorites.includes(building.fmGuid))
       .map((building, index) => {
-        // Get spaces for this building from allData
         const buildingSpaces = allData.filter(
           (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid
         );
-        
-        // Get storeys for this building from allData (more reliable than tree children)
         const buildingStoreys = allData.filter(
           (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
         );
-        
-        // Calculate total area by summing NTA from each space's attributes
         const totalArea = buildingSpaces.reduce((sum: number, space: any) => {
-          const nta = extractNtaFromAttributes(space.attributes);
-          return sum + nta;
+          return sum + extractNtaFromAttributes(space.attributes);
         }, 0);
-
-        // Use hero image from settings, with fallback to stock images
         const heroImage = getHeroImage(building.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
 
         return {
@@ -79,12 +121,25 @@ export default function HomeLanding() {
           image: heroImage,
           numberOfLevels: buildingStoreys.length,
           numberOfSpaces: buildingSpaces.length,
-          area: Math.round(totalArea), // Round to integer
+          area: Math.round(totalArea),
           address: building.attributes?.address || undefined,
           complexCommonName: building.complexCommonName || undefined,
         };
       });
-  }, [navigatorTreeData, favorites, allData, getHeroImage]);
+  }, [navigatorTreeData, favorites, allData, getHeroImage, treeDataReady]);
+
+  // Write to cache when live data changes
+  useEffect(() => {
+    if (favoriteBuildings.length > 0) {
+      writeCachedFavorites(favoriteBuildings);
+    }
+  }, [favoriteBuildings]);
+
+  // Decide what to display: live data > cached data
+  const displayBuildings = favoriteBuildings.length > 0 ? favoriteBuildings : cachedBuildings;
+  const isStillLoading = !treeDataReady || isLoadingSettings;
+  const showSkeleton = isStillLoading && displayBuildings.length === 0;
+  const showEmpty = !isStillLoading && displayBuildings.length === 0;
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
@@ -113,7 +168,6 @@ export default function HomeLanding() {
         style={{ backgroundImage: `url(${chicagoHero})` }}
         aria-hidden="true"
       />
-      {/* Overlay for readability (uses design tokens) */}
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
       <div className="relative z-10 min-h-full flex flex-col items-center px-3 sm:px-4 md:px-6 py-4 sm:py-6">
@@ -168,13 +222,15 @@ export default function HomeLanding() {
             <CardDescription className="text-[11px] sm:text-sm">Quick access to your most used buildings</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            {isLoadingSettings ? (
-              <div className="text-center py-3 sm:py-4 text-xs sm:text-sm text-muted-foreground">
-                Loading favorites...
-              </div>
-            ) : favoriteBuildings.length > 0 ? (
+            {showSkeleton ? (
               <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {favoriteBuildings.map((building) => (
+                <FavoriteBuildingSkeleton />
+                <FavoriteBuildingSkeleton />
+                <FavoriteBuildingSkeleton />
+              </div>
+            ) : displayBuildings.length > 0 ? (
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {displayBuildings.map((building) => (
                   <button
                     key={building.fmGuid}
                     type="button"
@@ -202,7 +258,7 @@ export default function HomeLanding() {
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : showEmpty ? (
               <div className="rounded-lg border border-dashed border-border p-3 sm:p-4">
                 <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
                   <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
@@ -212,13 +268,12 @@ export default function HomeLanding() {
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </section>
       </div>
 
-      {/* Gunnar Chat Modal - with home context */}
       <GunnarChat 
         open={gunnarOpen} 
         onClose={() => setGunnarOpen(false)} 
