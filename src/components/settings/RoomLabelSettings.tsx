@@ -31,11 +31,13 @@ const RoomLabelSettings: React.FC = () => {
     await createConfig({
       name: editForm.name,
       fields: editForm.fields || ['commonName'],
-      height_offset: editForm.height_offset || 1.2,
+      height_offset: editForm.height_offset ?? 0.05,
       font_size: editForm.font_size || 10,
       scale_with_distance: editForm.scale_with_distance ?? true,
       click_action: editForm.click_action || 'none',
       is_default: false,
+      occlusion_enabled: editForm.occlusion_enabled ?? true,
+      flat_on_floor: editForm.flat_on_floor ?? false,
     });
 
     setShowCreateDialog(false);
@@ -156,14 +158,14 @@ const RoomLabelSettings: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <Label className="text-xs">Höjd ovanför golv</Label>
-                        <span className="text-xs text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+                        <span className="text-xs text-muted-foreground">{(editForm.height_offset ?? 0.05).toFixed(2)}m</span>
                       </div>
                       <Slider
-                        value={[editForm.height_offset || 1.2]}
+                        value={[editForm.height_offset ?? 0.05]}
                         onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
-                        min={0.1}
+                        min={0}
                         max={2.5}
-                        step={0.1}
+                        step={0.05}
                       />
                     </div>
 
@@ -173,6 +175,30 @@ const RoomLabelSettings: React.FC = () => {
                       <Switch
                         checked={editForm.scale_with_distance ?? true}
                         onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
+                      />
+                    </div>
+
+                    {/* Occlusion toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-xs">Ocklusion</Label>
+                        <p className="text-[10px] text-muted-foreground">Dölj etiketter bakom väggar/tak</p>
+                      </div>
+                      <Switch
+                        checked={editForm.occlusion_enabled ?? true}
+                        onCheckedChange={(v) => setEditForm({ ...editForm, occlusion_enabled: v })}
+                      />
+                    </div>
+
+                    {/* Flat on floor toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-xs">Platt läge</Label>
+                        <p className="text-[10px] text-muted-foreground">Lägg etiketter plant på golvet</p>
+                      </div>
+                      <Switch
+                        checked={editForm.flat_on_floor ?? false}
+                        onCheckedChange={(v) => setEditForm({ ...editForm, flat_on_floor: v })}
                       />
                     </div>
 
@@ -283,14 +309,14 @@ const RoomLabelSettings: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <Label>Höjd ovanför golv</Label>
-                <span className="text-sm text-muted-foreground">{(editForm.height_offset || 1.2).toFixed(1)}m</span>
+                <span className="text-sm text-muted-foreground">{(editForm.height_offset ?? 0.05).toFixed(2)}m</span>
               </div>
               <Slider
-                value={[editForm.height_offset || 1.2]}
+                value={[editForm.height_offset ?? 0.05]}
                 onValueChange={([v]) => setEditForm({ ...editForm, height_offset: v })}
-                min={0.1}
+                min={0}
                 max={2.5}
-                step={0.1}
+                step={0.05}
               />
             </div>
 
@@ -299,6 +325,28 @@ const RoomLabelSettings: React.FC = () => {
               <Switch
                 checked={editForm.scale_with_distance ?? true}
                 onCheckedChange={(v) => setEditForm({ ...editForm, scale_with_distance: v })}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Ocklusion</Label>
+                <p className="text-xs text-muted-foreground">Dölj etiketter bakom väggar/tak</p>
+              </div>
+              <Switch
+                checked={editForm.occlusion_enabled ?? true}
+                onCheckedChange={(v) => setEditForm({ ...editForm, occlusion_enabled: v })}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Platt läge</Label>
+                <p className="text-xs text-muted-foreground">Lägg etiketter plant på golvet</p>
+              </div>
+              <Switch
+                checked={editForm.flat_on_floor ?? false}
+                onCheckedChange={(v) => setEditForm({ ...editForm, flat_on_floor: v })}
               />
             </div>
 
