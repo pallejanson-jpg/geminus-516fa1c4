@@ -1899,12 +1899,13 @@ serve(async (req: Request) => {
           }
         }
 
-        // Use SVF2-only for faster translation (no OBJ which stalls large models)
+        // Use SVF-only (no OBJ which stalls large models at 99%)
+        // SVF2 is not supported for all designs (406 error), so we use SVF
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
             formats: [
-              { type: "svf2", views: ["3d"] },
+              { type: "svf", views: ["3d"] },
             ],
           },
         };
@@ -1965,7 +1966,7 @@ serve(async (req: Request) => {
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
           translation_status: "pending",
-          output_format: "svf2",
+          output_format: "svf",
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
