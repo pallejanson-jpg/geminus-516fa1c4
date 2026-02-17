@@ -81,7 +81,10 @@ const AppLayoutInner: React.FC = () => {
                 )}
                 {!isImmersive && <SyncProgressBanner />}
                 {!isImmersive && <DataConsistencyBanner />}
-                <MainContent />
+                {/* Add bottom padding on mobile to avoid overlap with fixed BottomNavBar */}
+                <div className={`flex-1 min-h-0 ${isMobile && !isImmersive ? 'pb-14' : ''}`} style={isMobile && !isImmersive ? { paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' } : {}}>
+                    <MainContent />
+                </div>
             </div>
             
             {!isImmersive && <RightSidebar />}
