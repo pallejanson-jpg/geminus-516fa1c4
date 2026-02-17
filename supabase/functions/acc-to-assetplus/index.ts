@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
 /**
  * acc-to-assetplus: Syncs ACC-sourced objects from the local database to Asset+ API.
@@ -230,7 +230,6 @@ interface SyncResult {
 async function syncBuildingToAssetPlus(
   supabase: any,
   buildingFmGuid: string,
-  complexFmGuid: string,
   accessToken: string,
   apiKey: string
 ): Promise<SyncResult> {
@@ -285,14 +284,37 @@ async function syncBuildingToAssetPlus(
 
     console.log(`Building ${result.buildingName}: ${levels.length} levels, ${spaces.length} spaces, ${instances.length} instances`);
 
-    // Step 1: Get/create Asset+ GUIDs
+    // Step 1: Create Complex for this building (one Complex per ACC building)
+    const complexAccKey = `complex-${buildingFmGuid}`;
+    const complexFmGuid = await getOrCreateGuid(supabase, complexAccKey, ObjectType.Complex);
+    const complexName = buildingObj.common_name || buildingObj.name || "ACC-Building";
+
+    // Check if complex exists in Asset+
+    const complexExists = await checkExistsInAssetPlus(complexFmGuid, accessToken, apiKey);
+    if (!complexExists) {
+      try {
+        await addObjectList([{
+          objectType: ObjectType.Complex,
+          fmGuid: complexFmGuid,
+          designation: complexName,
+          commonName: complexName,
+        }], accessToken, apiKey);
+        result.created.complexes = 1;
+        await markSynced(supabase, complexAccKey);
+        console.log(`Created complex ${complexName} (${complexFmGuid})`);
+      } catch (err: any) {
+        result.errors.push(`Complex creation failed: ${err.message}`);
+        return result;
+      }
+    }
+
+    // Step 2: Get/create Asset+ GUID for building
     const buildingApGuid = await getOrCreateGuid(supabase, buildingFmGuid, ObjectType.Building);
 
-    // Step 2: Check if building already exists in Asset+
+    // Step 3: Check if building already exists in Asset+
     const buildingExists = await checkExistsInAssetPlus(buildingApGuid, accessToken, apiKey);
 
     if (!buildingExists) {
-      // Create building in Asset+
       const designation = buildingObj.name || buildingObj.common_name || "ACC-Building";
       const commonName = buildingObj.common_name || buildingObj.name || "ACC-Building";
 
@@ -306,10 +328,10 @@ async function syncBuildingToAssetPlus(
         }], accessToken, apiKey);
         result.created.buildings = 1;
         await markSynced(supabase, buildingFmGuid);
-        console.log(`Created building ${commonName} (${buildingApGuid})`);
+        console.log(`Created building ${commonName} (${buildingApGuid}) under complex ${complexFmGuid}`);
       } catch (err: any) {
         result.errors.push(`Building creation failed: ${err.message}`);
-        return result; // Can't proceed without building
+        return result;
       }
     }
 
@@ -600,49 +622,6 @@ async function handleSync(
 
   const accessToken = await getAccessToken();
 
-  // Determine complex to use
-  let complexFmGuid = body.complexFmGuid;
-  
-  if (!complexFmGuid) {
-    // Try to find an existing complex in Asset+
-    try {
-      const result = await assetPlusPost("PublishDataServiceGetMerged", {
-        outputType: "raw",
-        apiKey,
-        filter: ["objectType", "=", 0],
-        select: ["fmGuid", "commonName", "designation"],
-      }, accessToken);
-
-      if (result?.data?.length > 0) {
-        complexFmGuid = result.data[0].fmGuid;
-        console.log(`Using existing complex: ${result.data[0].commonName} (${complexFmGuid})`);
-      }
-    } catch (err) {
-      console.warn("Failed to fetch existing complexes:", err);
-    }
-  }
-
-  if (!complexFmGuid) {
-    // Create a default complex
-    complexFmGuid = crypto.randomUUID();
-    try {
-      await addObjectList([{
-        objectType: ObjectType.Complex,
-        fmGuid: complexFmGuid,
-        designation: "ACC Import",
-        commonName: "ACC Import",
-      }], accessToken, apiKey);
-      console.log(`Created default complex: ACC Import (${complexFmGuid})`);
-    } catch (err: any) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Failed to create Complex: ${err.message}`,
-      }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  }
-
   // Get ACC buildings to sync
   const { data: accBuildings } = await supabase
     .from("assets")
@@ -673,7 +652,6 @@ async function handleSync(
     const result = await syncBuildingToAssetPlus(
       supabase,
       building.fm_guid,
-      complexFmGuid,
       accessToken,
       apiKey
     );
@@ -700,7 +678,6 @@ async function handleSync(
       totalPropertiesUpdated: results.reduce((acc, r) => acc + r.propertiesUpdated, 0),
       totalErrors,
     },
-    complexFmGuid,
   }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -711,6 +688,12 @@ async function handleSync(
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Verify authentication
+  const auth = await verifyAuth(req);
+  if (!auth.authenticated) {
+    return unauthorizedResponse(auth.error);
   }
 
   try {
