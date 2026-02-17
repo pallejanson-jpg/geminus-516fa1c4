@@ -441,12 +441,12 @@ serve(async (req: Request) => {
       }
     }
 
-    // Strategy 2: Request a new OBJ translation if no single-file derivative exists
+    // Strategy 2: Request IFC translation (works for RVT, IFC contains BIM metadata)
     if (!glbData) {
-      log('No single-file derivative found. Requesting OBJ translation...');
+      log('No single-file derivative found. Requesting IFC translation...');
       
-      // Trigger OBJ translation
-      const objJobRes = await fetch(`${mdBase}/job`, {
+      // Trigger IFC translation
+      const ifcJobRes = await fetch(`${mdBase}/job`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -456,16 +456,16 @@ serve(async (req: Request) => {
         body: JSON.stringify({
           input: { urn: urnBase64 },
           output: {
-            formats: [{ type: "obj" }],
+            formats: [{ type: "ifc" }],
           },
         }),
       });
 
-      if (objJobRes.ok) {
-        const jobData = await objJobRes.json();
-        log(`OBJ translation job submitted: ${jobData.result || 'pending'}`);
+      if (ifcJobRes.ok) {
+        const jobData = await ifcJobRes.json();
+        log(`IFC translation job submitted: ${jobData.result || 'pending'}`);
 
-        // Poll for OBJ completion (max 5 minutes)
+        // Poll for IFC completion (max 5 minutes)
         const maxPollTime = 300000;
         const pollInterval = 10000;
         const startTime = Date.now();
@@ -481,54 +481,48 @@ serve(async (req: Request) => {
           if (!checkRes.ok) continue;
           const checkManifest = await checkRes.json();
 
-          // Check if OBJ derivative is ready
+          // Check if IFC derivative is ready
           const allDerivs: SvfResource[] = [];
           collectResources(checkManifest, allDerivs);
 
-          const objDeriv = allDerivs.find(d =>
-            d.mime === 'application/octet-stream' && d.role === 'graphics'
-          );
-
           // Check overall status
-          const objOutputDone = checkManifest.derivatives?.some((d: any) =>
-            d.outputType === 'obj' && d.status === 'success'
+          const ifcOutputDone = checkManifest.derivatives?.some((d: any) =>
+            d.outputType === 'ifc' && d.status === 'success'
           );
-          const objOutputFailed = checkManifest.derivatives?.some((d: any) =>
-            d.outputType === 'obj' && d.status === 'failed'
+          const ifcOutputFailed = checkManifest.derivatives?.some((d: any) =>
+            d.outputType === 'ifc' && d.status === 'failed'
           );
-
-          if (objOutputFailed) {
-            log('OBJ translation failed. This file type may not support OBJ export.');
+          if (ifcOutputFailed) {
+            log('IFC translation failed.');
             break;
           }
 
-          if (objOutputDone && objDeriv) {
-            log('OBJ derivative ready, downloading...');
-            const encodedUrn = encodeURIComponent(objDeriv.urn);
-            const url = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
-            const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
-            if (res.ok) {
-              const objData = new Uint8Array(await res.arrayBuffer());
-              log(`Downloaded OBJ: ${(objData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-              
-              // Convert OBJ text to simple GLB
-              const objText = new TextDecoder().decode(objData);
-              glbData = convertObjToGlb(objText, log);
+          if (ifcOutputDone) {
+            // Find the IFC derivative URN
+            const ifcDeriv = allDerivs.find(d =>
+              d.urn?.endsWith('.ifc') || d.mime === 'application/octet-stream'
+            );
+            if (ifcDeriv) {
+              log('IFC derivative ready, downloading...');
+              const encodedUrn = encodeURIComponent(ifcDeriv.urn);
+              const url = `${mdBase}/${urnBase64}/manifest/${encodedUrn}`;
+              const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+              if (res.ok) {
+                const ifcData = new Uint8Array(await res.arrayBuffer());
+                log(`Downloaded IFC: ${(ifcData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                // Store IFC directly (client will convert IFC->XKT)
+                glbData = ifcData;
+              }
             }
             break;
           }
 
           const elapsed = Math.round((Date.now() - startTime) / 1000);
-          log(`Waiting for OBJ translation... (${elapsed}s)`);
+          log(`Waiting for IFC translation... (${elapsed}s)`);
         }
       } else {
-        const errText = await objJobRes.text();
-        log(`OBJ translation request failed: ${objJobRes.status} - ${errText}`);
-        
-        // RVT files may not support OBJ - this is expected
-        if (objJobRes.status === 400 || objJobRes.status === 403) {
-          log('This file type does not support OBJ export (likely RVT).');
-        }
+        const errText = await ifcJobRes.text();
+        log(`IFC translation request failed: ${ifcJobRes.status} - ${errText}`);
       }
     }
 
@@ -547,7 +541,7 @@ serve(async (req: Request) => {
         JSON.stringify({
           success: false,
           error: "Kunde inte konvertera modellen till 3D-format. " +
-                 "RVT-filer stöder inte OBJ-export via Autodesk API, och SVF-geometri kräver specialiserad parsing. " +
+                 "Varken IFC- eller SVF-export lyckades via Autodesk API. " +
                  "Hierarkidata (byggnader, våningar, rum) synkas via BIM-synk.",
           logs,
           formatLimitation: true,
@@ -556,16 +550,22 @@ serve(async (req: Request) => {
       );
     }
 
-    // Upload GLB to storage
-    const safeName = (fileName || 'model').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '_');
-    const storagePath = `${buildingFmGuid || 'acc-derivatives'}/acc-glb-${safeName}.glb`;
-    
-    log(`Uploading GLB to storage: ${storagePath} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+    // Detect if it's IFC or GLB data
+    const firstBytes = new TextDecoder().decode(glbData.slice(0, 20));
+    const isIfc = firstBytes.startsWith('ISO-10303-21') || firstBytes.includes('FILE_DESCRIPTION');
+    const fileExt = isIfc ? 'ifc' : 'glb';
+    const mimeType = isIfc ? 'application/octet-stream' : 'model/gltf-binary';
 
-    const blob = new Blob([glbData], { type: "model/gltf-binary" });
+    // Upload to storage
+    const safeName = (fileName || 'model').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '_');
+    const storagePath = `${buildingFmGuid || 'acc-derivatives'}/acc-${fileExt}-${safeName}.${fileExt}`;
+    
+    log(`Uploading ${fileExt.toUpperCase()} to storage: ${storagePath} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+
+    const blob = new Blob([glbData], { type: mimeType });
     const { error: uploadError } = await supabase.storage
       .from("xkt-models")
-      .upload(storagePath, blob, { contentType: "model/gltf-binary", upsert: true });
+      .upload(storagePath, blob, { contentType: mimeType, upsert: true });
 
     if (uploadError) {
       return new Response(
@@ -579,7 +579,7 @@ serve(async (req: Request) => {
       .from("xkt-models")
       .createSignedUrl(storagePath, 3600);
 
-    log('GLB conversion and upload complete!');
+    log(`${fileExt.toUpperCase()} conversion and upload complete!`);
 
     return new Response(
       JSON.stringify({
@@ -587,8 +587,9 @@ serve(async (req: Request) => {
         downloadUrl: urlData?.signedUrl || null,
         storagePath,
         fileSize: glbData.byteLength,
+        format: fileExt,
         logs,
-        message: `Modell konverterad till GLB (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`,
+        message: `Modell exporterad som ${fileExt.toUpperCase()} (${(glbData.byteLength / 1024 / 1024).toFixed(2)} MB)`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
