@@ -30,6 +30,7 @@ import ProfileSettings from './ProfileSettings';
 import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 import { SyncProgressCard } from './SyncProgressCard';
+import ConversionProgressOverlay from './ConversionProgressOverlay';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
@@ -2462,6 +2463,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {/* ACC Folder Browser */}
                                                 {accFolders !== null && (
+                                                    <>
+                                                    <ConversionProgressOverlay translationStatuses={translationStatuses} />
                                                     <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <Label className="text-sm font-medium flex items-center gap-1.5">
@@ -2509,8 +2512,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             )}
                                                         </div>
                                                     </div>
+                                                    </>
                                                 )}
-
                                                 {accStatus && (
                                                     <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                                                         <div className="flex items-center justify-between text-sm">
