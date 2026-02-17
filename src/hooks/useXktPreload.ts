@@ -135,11 +135,13 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
         console.log(`XKT Preload: ${result.count} models found in database, fetching binary data...`);
 
-        // Actually fetch model data into memory for faster loading
-        const { data: models } = await supabase
+        // Actually fetch model data into memory for faster loading (XKT models only)
+        // Cast to any to avoid type issues with new 'format' column not yet in generated types
+        const { data: models } = await (supabase
           .from('xkt_models')
-          .select('model_id, file_url, storage_path, file_size')
-          .eq('building_fm_guid', buildingFmGuid);
+          .select('model_id, file_url, storage_path, file_size') as any)
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('format', 'xkt');
 
         if (models && models.length > 0) {
           // Sort models by size (smallest first for faster initial feedback)

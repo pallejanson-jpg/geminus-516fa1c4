@@ -1221,6 +1221,7 @@ export type Database = {
           file_name: string
           file_size: number | null
           file_url: string | null
+          format: string
           id: string
           model_id: string
           model_name: string | null
@@ -1237,6 +1238,7 @@ export type Database = {
           file_name: string
           file_size?: number | null
           file_url?: string | null
+          format?: string
           id?: string
           model_id: string
           model_name?: string | null
@@ -1253,6 +1255,7 @@ export type Database = {
           file_name?: string
           file_size?: number | null
           file_url?: string | null
+          format?: string
           id?: string
           model_id?: string
           model_name?: string | null

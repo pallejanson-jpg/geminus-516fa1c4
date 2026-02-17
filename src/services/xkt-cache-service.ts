@@ -47,7 +47,7 @@ export class XktCacheService {
   /**
    * Check if a model is cached - first checks database with multiple matching strategies
    */
-  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean; sourceUpdatedAt?: string }> {
+  async checkCache(modelId: string, buildingFmGuid?: string): Promise<CacheCheckResult & { stale?: boolean; sourceUpdatedAt?: string; format?: string }> {
     // Check retry limit to prevent tight retry loops
     const retryKey = `${buildingFmGuid || 'global'}/${modelId}`;
     const attempts = failedChecks.get(retryKey) || 0;
@@ -65,7 +65,7 @@ export class XktCacheService {
         // Try matching on model_id or file_name
         const { data: dbModels } = await supabase
           .from('xkt_models')
-          .select('file_url, storage_path, file_name, model_id, synced_at, source_updated_at')
+          .select('file_url, storage_path, file_name, model_id, synced_at, source_updated_at, format')
           .eq('building_fm_guid', buildingFmGuid);
 
         if (dbModels && dbModels.length > 0) {
@@ -100,12 +100,13 @@ export class XktCacheService {
               .createSignedUrl(match.storage_path, 3600);
             
             if (urlData?.signedUrl) {
+              const modelFormat = (match as any).format || 'xkt';
               if (isStale) {
                 console.log('XKT cache hit but STALE (>7 days):', modelId);
-                return { cached: true, url: urlData.signedUrl, stale: true, sourceUpdatedAt: match.source_updated_at || undefined };
+                return { cached: true, url: urlData.signedUrl, stale: true, sourceUpdatedAt: match.source_updated_at || undefined, format: modelFormat };
               }
-              console.log('XKT cache hit (signed URL):', modelId);
-              return { cached: true, url: urlData.signedUrl, sourceUpdatedAt: match.source_updated_at || undefined };
+              console.log('XKT cache hit (signed URL):', modelId, 'format:', modelFormat);
+              return { cached: true, url: urlData.signedUrl, sourceUpdatedAt: match.source_updated_at || undefined, format: modelFormat };
             }
           }
         }
