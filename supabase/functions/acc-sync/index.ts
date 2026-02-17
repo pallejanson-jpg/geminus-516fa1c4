@@ -1899,13 +1899,12 @@ serve(async (req: Request) => {
           }
         }
 
-        // Use SVF+OBJ for all file types (IFC export requires special entitlements)
+        // Use SVF2-only for faster translation (no OBJ which stalls large models)
         const translationBody = {
           input: { urn: urnBase64 },
           output: {
             formats: [
-              { type: "svf", views: ["3d"] },
-              { type: "obj" },
+              { type: "svf2", views: ["3d"] },
             ],
           },
         };
@@ -1966,7 +1965,7 @@ serve(async (req: Request) => {
           folder_id: body.folderId || null,
           file_name: body.fileName || null,
           translation_status: "pending",
-          output_format: "svf",
+          output_format: "svf2",
           started_at: new Date().toISOString(),
         }, { onConflict: "version_urn" });
 
@@ -2028,11 +2027,11 @@ serve(async (req: Request) => {
         const overallStatus = manifest.status; // "pending", "inprogress", "success", "failed"
         const progress = manifest.progress || "0%";
 
-        // Find SVF2 derivatives
+        // Find all derivatives (SVF2 + any geometry resources)
         const derivatives: any[] = [];
         function findDerivatives(node: any) {
           if (node.type === "resource" && node.role) {
-            derivatives.push({ urn: node.urn, role: node.role, mime: node.mime, type: node.type });
+            derivatives.push({ urn: node.urn, role: node.role, mime: node.mime, type: node.type, outputType: node.outputType });
           }
           if (node.children) {
             for (const child of node.children) findDerivatives(child);
@@ -2047,8 +2046,8 @@ serve(async (req: Request) => {
         const updateData: any = { translation_status: overallStatus };
         if (overallStatus === "success") {
           updateData.completed_at = new Date().toISOString();
-          // Find the main geometry derivative URN
-          const geomDeriv = derivatives.find(d => d.role === "graphics" && d.mime?.includes("svf"));
+          // Find the main geometry derivative URN (SVF2 or SVF)
+          const geomDeriv = derivatives.find(d => d.role === "graphics" && (d.mime?.includes("svf") || d.mime?.includes("autodesk")));
           if (geomDeriv) updateData.derivative_urn = geomDeriv.urn;
         } else if (overallStatus === "failed") {
           updateData.error_message = manifest.messages?.map((m: any) => m.message).join("; ") || "Translation failed";
@@ -2117,7 +2116,7 @@ serve(async (req: Request) => {
             );
           }
 
-          // Find OBJ or glTF derivative if available, otherwise SVF2 bubble URN
+          // Find OBJ or glTF derivative if available from SVF2 manifest
           const allDerivs: any[] = [];
           function collectDerivs(node: any) {
             if (node.urn) allDerivs.push({ urn: node.urn, role: node.role, mime: node.mime, outputType: node.outputType, name: node.name });
@@ -2129,7 +2128,7 @@ serve(async (req: Request) => {
           // Log all derivatives for debugging
           console.log(`[download-derivative] Available derivatives (${allDerivs.length}):`, JSON.stringify(allDerivs.map(d => ({ role: d.role, mime: d.mime, outputType: d.outputType, name: d.name, urn: d.urn?.substring(0, 60) }))));
 
-          // Look for downloadable single-file formats: glTF/GLB first, then OBJ (IFC skipped for performance)
+          // Look for downloadable single-file formats: glTF/GLB first, then OBJ
           const gltfDeriv = allDerivs.find(d => 
             d.mime === 'model/gltf-binary' || d.mime === 'model/gltf+json' || d.name?.endsWith('.glb') || d.name?.endsWith('.gltf')
           );
@@ -2137,17 +2136,20 @@ serve(async (req: Request) => {
             d.outputType === 'obj' && d.role === 'graphics'
           );
 
-          // Check if we only have SVF2 (which is not a single downloadable file)
+          // SVF2 is a multi-file streaming format, not directly downloadable as a single file
           const hasSvf2Only = !gltfDeriv && !objDeriv;
 
           if (hasSvf2Only) {
-            console.log(`[download-derivative] Only SVF2 derivatives found. No single-file format available.`);
+            console.log(`[download-derivative] Only SVF2 derivatives found. SVF2 translation succeeded but no single-file geometry available.`);
+            console.log(`[download-derivative] This is expected for SVF2-only translations. The model needs a separate OBJ/glTF translation job, or use Autodesk Viewer directly.`);
             return new Response(
               JSON.stringify({ 
                 success: false, 
-                error: "Ingen nedladdningsbar geometri hittades (SVF2 multi-fil). " +
-                       "Försök starta en ny översättning med OBJ/glTF-format.",
+                error: "SVF2-översättning klar men ingen nedladdningsbar geometri (OBJ/glTF) hittades. " +
+                       "SVF2 är ett streaming-format som inte kan laddas ner som en enstaka fil. " +
+                       "Överväg att använda Autodesk Viewer för denna modell.",
                 formatLimitation: true,
+                svf2Complete: true,
                 availableFormats: allDerivs.map(d => d.outputType || d.mime).filter(Boolean),
               }),
               { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
