@@ -32,6 +32,7 @@ import Ivion360View from '@/components/viewer/Ivion360View';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
+import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, type ViewerToolChangedDetail } from '@/lib/viewer-events';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -187,6 +188,19 @@ const UnifiedViewerContent: React.FC<{
     updateFrom3D(position, heading, pitch);
   }, [syncLocked, updateFrom3D, viewMode]);
 
+  // ─── Ivion camera sync for split mode (polls SDK position) ─────────
+  const dummyIframeRef = useRef<HTMLIFrameElement>(null);
+  const isSplitMode = viewMode === 'split';
+
+  useIvionCameraSync({
+    iframeRef: dummyIframeRef,
+    ivApiRef,
+    enabled: isSplitMode && sdkStatus === 'ready',
+    ivionSiteId: buildingData?.ivionSiteId || '',
+    buildingFmGuid: buildingData?.fmGuid,
+    buildingTransform: transform,
+  });
+
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);
   const [sync3DHeading, setSync3DHeading] = useState(0);
   const [sync3DPitch, setSync3DPitch] = useState(0);
@@ -304,7 +318,7 @@ const UnifiedViewerContent: React.FC<{
   const needs3D = viewMode !== '360' && viewMode !== '2d';
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
-  const isSplitMode = viewMode === 'split';
+  // isSplitMode already declared above for sync hook
 
   const viewerContainerStyle: React.CSSProperties = {
     position: 'absolute',
