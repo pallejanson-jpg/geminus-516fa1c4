@@ -332,10 +332,16 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     // Ivion connection modal state
     const [isIvionModalOpen, setIsIvionModalOpen] = useState(false);
     
-    // ACC (Autodesk Construction Cloud) state
-    const [accProjects, setAccProjects] = useState<any[]>([]);
-    const [selectedAccProjectId, setSelectedAccProjectId] = useState('');
-    const [manualAccProjectId, setManualAccProjectId] = useState('');
+    // ACC (Autodesk Construction Cloud) state — with sessionStorage persistence
+    const [accProjects, setAccProjects] = useState<any[]>(() => {
+        try { return JSON.parse(sessionStorage.getItem('acc_projects') || '[]'); } catch { return []; }
+    });
+    const [selectedAccProjectId, setSelectedAccProjectId] = useState(() =>
+        sessionStorage.getItem('acc_selected_project_id') || ''
+    );
+    const [manualAccProjectId, setManualAccProjectId] = useState(() =>
+        sessionStorage.getItem('acc_manual_project_id') || ''
+    );
     const [isLoadingAccProjects, setIsLoadingAccProjects] = useState(false);
     const [isTestingAcc, setIsTestingAcc] = useState(false);
     const [accConnectionStatus, setAccConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -344,14 +350,34 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isSyncingAccAssets, setIsSyncingAccAssets] = useState(false);
     const [accStatus, setAccStatus] = useState<any>(null);
     const [isCheckingAccStatus, setIsCheckingAccStatus] = useState(false);
-    const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>('US');
+    const [accRegion, setAccRegion] = useState<'US' | 'EMEA'>(() =>
+        (sessionStorage.getItem('acc_region') as 'US' | 'EMEA') || 'US'
+    );
     const [ivionConnectionStatus, setIvionConnectionStatus] = useState<'idle' | 'connected' | 'error'>('idle');
     const [accLocationsHint, setAccLocationsHint] = useState<string | null>(null);
+
+    // ACC Hubs (auto-discovered)
+    const [accHubs, setAccHubs] = useState<any[]>(() => {
+        try { return JSON.parse(sessionStorage.getItem('acc_hubs') || '[]'); } catch { return []; }
+    });
+    const [selectedHubId, setSelectedHubId] = useState(() =>
+        sessionStorage.getItem('acc_selected_hub_id') || ''
+    );
+    const [isLoadingHubs, setIsLoadingHubs] = useState(false);
     
-    // ACC folder browsing state
-    const [accFolders, setAccFolders] = useState<any[] | null>(null);
-    const [accTopLevelItems, setAccTopLevelItems] = useState<any[]>([]);
-    const [accRootFolderName, setAccRootFolderName] = useState('');
+    // ACC folder browsing state — persisted in sessionStorage
+    const [accFolders, setAccFolders] = useState<any[] | null>(() => {
+        try {
+            const stored = sessionStorage.getItem('acc_folders');
+            return stored ? JSON.parse(stored) : null;
+        } catch { return null; }
+    });
+    const [accTopLevelItems, setAccTopLevelItems] = useState<any[]>(() => {
+        try { return JSON.parse(sessionStorage.getItem('acc_top_level_items') || '[]'); } catch { return []; }
+    });
+    const [accRootFolderName, setAccRootFolderName] = useState(() =>
+        sessionStorage.getItem('acc_root_folder_name') || ''
+    );
     const [isLoadingAccFolders, setIsLoadingAccFolders] = useState(false);
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
     const [hasLoadedAccSettings, setHasLoadedAccSettings] = useState(false);
@@ -487,8 +513,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleFetchAccProjects = async () => {
         setIsLoadingAccProjects(true);
         try {
+            // Get accountId from selected hub if available
+            const selectedHub = accHubs.find(h => h.id === selectedHubId);
+            const accountId = selectedHub?.accountId;
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'list-projects', region: accRegion }
+                body: { action: 'list-projects', region: accRegion, ...(accountId ? { accountId } : {}) }
             });
             if (error) throw error;
             if (data?.success && data.projects) {
@@ -633,10 +662,31 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // Persist ACC state to sessionStorage whenever they change
+    useEffect(() => { sessionStorage.setItem('acc_projects', JSON.stringify(accProjects)); }, [accProjects]);
+    useEffect(() => { sessionStorage.setItem('acc_selected_project_id', selectedAccProjectId); }, [selectedAccProjectId]);
+    useEffect(() => { sessionStorage.setItem('acc_manual_project_id', manualAccProjectId); }, [manualAccProjectId]);
+    useEffect(() => { sessionStorage.setItem('acc_region', accRegion); }, [accRegion]);
+    useEffect(() => { sessionStorage.setItem('acc_hubs', JSON.stringify(accHubs)); }, [accHubs]);
+    useEffect(() => { sessionStorage.setItem('acc_selected_hub_id', selectedHubId); }, [selectedHubId]);
+    useEffect(() => {
+        if (accFolders !== null) sessionStorage.setItem('acc_folders', JSON.stringify(accFolders));
+    }, [accFolders]);
+    useEffect(() => { sessionStorage.setItem('acc_top_level_items', JSON.stringify(accTopLevelItems)); }, [accTopLevelItems]);
+    useEffect(() => { sessionStorage.setItem('acc_root_folder_name', accRootFolderName); }, [accRootFolderName]);
+
     useEffect(() => {
         if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
             setHasLoadedAccSettings(true);
             handleCheckAccStatus();
+            // Auto-fetch hubs if not already loaded
+            if (accHubs.length === 0) {
+                handleFetchHubs();
+            }
+            // Auto-fetch folders if project is selected but no folders cached
+            if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null) {
+                handleFetchAccFolders();
+            }
         }
     }, [isOpen, accAuthStatus, hasLoadedAccSettings]);
 
@@ -647,6 +697,32 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     }, [isOpen]);
 
+    // Fetch ACC Hubs via /project/v1/hubs (auto-discovers all accounts + regions)
+    const handleFetchHubs = async () => {
+        setIsLoadingHubs(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('acc-sync', {
+                body: { action: 'list-hubs' }
+            });
+            if (error) throw error;
+            if (data?.success && data.hubs) {
+                setAccHubs(data.hubs);
+                // If no hub selected yet, auto-select first
+                if (!selectedHubId && data.hubs.length > 0) {
+                    const firstHub = data.hubs[0];
+                    setSelectedHubId(firstHub.id);
+                    setAccRegion(firstHub.region === 'EMEA' ? 'EMEA' : 'US');
+                }
+            } else {
+                toast({ variant: 'destructive', title: 'Kunde inte hämta hubbar', description: data?.error });
+            }
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'Fel', description: err.message });
+        } finally {
+            setIsLoadingHubs(false);
+        }
+    };
+
     // Fetch ACC folders via Data Management API
     const handleFetchAccFolders = async () => {
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
@@ -656,8 +732,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
         setIsLoadingAccFolders(true);
         try {
+            const selectedHub = accHubs.find(h => h.id === selectedHubId);
+            const accountId = selectedHub?.accountId;
             const { data, error } = await supabase.functions.invoke('acc-sync', {
-                body: { action: 'list-folders', projectId: effectiveProjectId, region: accRegion }
+                body: { action: 'list-folders', projectId: effectiveProjectId, region: accRegion, ...(accountId ? { accountId } : {}) }
             });
             if (error) throw error;
             if (data?.success) {
@@ -2301,71 +2379,52 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     )}
                                                 </div>
 
+                                                {/* Hub/Account selector — auto-discovered via API */}
                                                 <div className="space-y-2">
-                                                    <Label className="text-sm font-medium">Region</Label>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <Label className="text-sm font-medium">Konto (Hub)</Label>
                                                         <Button
-                                                            variant={accRegion === 'US' ? 'default' : 'outline'}
+                                                            variant="ghost"
                                                             size="sm"
-                                                            onClick={() => {
-                                                                setAccRegion('US');
-                                                                setAccFolders(null);
-                                                                setAccTopLevelItems([]);
-                                                                setAccProjects([]);
-                                                            }}
+                                                            onClick={handleFetchHubs}
+                                                            disabled={isLoadingHubs}
+                                                            className="h-7 text-xs gap-1"
                                                         >
-                                                            US
-                                                        </Button>
-                                                        <Button
-                                                            variant={accRegion === 'EMEA' ? 'default' : 'outline'}
-                                                            size="sm"
-                                                            onClick={() => {
-                                                                setAccRegion('EMEA');
-                                                                setAccFolders(null);
-                                                                setAccTopLevelItems([]);
-                                                                setAccProjects([]);
-                                                            }}
-                                                        >
-                                                            EMEA
+                                                            {isLoadingHubs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                            {accHubs.length === 0 ? 'Hämta konton' : 'Uppdatera'}
                                                         </Button>
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground">Välj den region där ditt ACC-konto finns. Varje region använder sitt eget Account ID (ACC_ACCOUNT_ID_US / ACC_ACCOUNT_ID_EMEA).</p>
+                                                    {accHubs.length > 0 ? (
+                                                        <select
+                                                            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                                                            value={selectedHubId}
+                                                            onChange={(e) => {
+                                                                const hub = accHubs.find(h => h.id === e.target.value);
+                                                                setSelectedHubId(e.target.value);
+                                                                if (hub) {
+                                                                    setAccRegion(hub.region === 'EMEA' ? 'EMEA' : 'US');
+                                                                    setAccProjects([]);
+                                                                    setAccFolders(null);
+                                                                }
+                                                            }}
+                                                        >
+                                                            {accHubs.map((hub: any) => (
+                                                                <option key={hub.id} value={hub.id}>
+                                                                    {hub.name} ({hub.region || 'US'})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Klicka "Hämta konton" för att auto-upptäcka dina Autodesk-konton och regioner. Region sätts automatiskt.
+                                                        </p>
+                                                    )}
+                                                    {selectedHubId && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Region: <span className="font-medium">{accRegion}</span>
+                                                        </p>
+                                                    )}
                                                 </div>
-
-                                                <div className="flex gap-2 flex-col sm:flex-row sm:flex-wrap">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={handleTestAccConnection}
-                                                        disabled={isTestingAcc}
-                                                        className="w-full sm:w-auto"
-                                                    >
-                                                        {isTestingAcc ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-                                                        Testa anslutning
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={handleFetchAccProjects}
-                                                        disabled={isLoadingAccProjects}
-                                                        className="w-full sm:w-auto"
-                                                    >
-                                                        {isLoadingAccProjects ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Database className="h-3.5 w-3.5 mr-1.5" />}
-                                                        Hämta projekt
-                                                    </Button>
-                                                </div>
-
-                                                {accConnectionStatus !== 'idle' && (
-                                                    <div className={`rounded-lg border p-3 text-sm ${accConnectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
-                                                        <div className="flex items-start gap-2">
-                                                            {accConnectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
-                                                            <div>
-                                                                <p className="font-medium">{accConnectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p>
-                                                                <p className="text-xs">{accConnectionMessage}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
 
                                                 {accProjects.length > 0 && (
                                                     <div className="space-y-2">
@@ -2386,60 +2445,98 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {/* Manual project ID input */}
                                                 <div className="space-y-2">
-                                                    <Label className="text-sm font-medium text-muted-foreground">Eller ange projekt-ID manuellt</Label>
-                                                    <Input
-                                                        placeholder="Klistra in ACC projekt-ID (GUID från URL:en)"
-                                                        value={manualAccProjectId}
-                                                        onChange={(e) => setManualAccProjectId(e.target.value)}
-                                                        className="font-mono text-xs"
-                                                    />
+                                                    <Label className="text-sm font-medium text-muted-foreground">Projekt-ID</Label>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            placeholder="Klistra in ACC projekt-ID (GUID)"
+                                                            value={manualAccProjectId}
+                                                            onChange={(e) => setManualAccProjectId(e.target.value)}
+                                                            className="font-mono text-xs"
+                                                        />
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={handleFetchAccProjects}
+                                                            disabled={isLoadingAccProjects || !selectedHubId}
+                                                            className="shrink-0"
+                                                        >
+                                                            {isLoadingAccProjects ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+                                                        </Button>
+                                                    </div>
                                                     <p className="text-xs text-muted-foreground">
-                                                        Om projekthämtningen inte fungerar kan du kopiera projekt-ID:t från ACC-webbadressen och klistra in det här.
+                                                        Välj ett projekt från dropdown eller ange ID manuellt.
                                                     </p>
                                                 </div>
 
+                                                {/* Primary action: Visa mappar */}
                                                 {(selectedAccProjectId || manualAccProjectId.trim()) && (
-                                                    <div className="flex gap-2 flex-col sm:flex-row sm:flex-wrap">
-                                                        <Button
-                                                            onClick={handleSyncAccLocations}
-                                                            disabled={isSyncingAccLocations || isSyncingAccAssets}
-                                                            size="sm"
-                                                            className="gap-1 w-full sm:w-auto"
-                                                        >
-                                                            {isSyncingAccLocations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Building2 className="h-3.5 w-3.5" />}
-                                                            Synka platser
-                                                        </Button>
-                                                        <Button
-                                                            onClick={handleSyncAccAssets}
-                                                            disabled={isSyncingAccLocations || isSyncingAccAssets}
-                                                            size="sm"
-                                                            variant="secondary"
-                                                            className="gap-1 w-full sm:w-auto"
-                                                        >
-                                                            {isSyncingAccAssets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
-                                                            Synka tillgångar
-                                                        </Button>
-                                                        <Button
-                                                            onClick={handleFetchAccFolders}
-                                                            disabled={isLoadingAccFolders}
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="gap-1 w-full sm:w-auto"
-                                                        >
-                                                            {isLoadingAccFolders ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-                                                            Visa mappar
-                                                        </Button>
-                                                        <Button
-                                                            onClick={handleCheckAccStatus}
-                                                            disabled={isCheckingAccStatus}
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="gap-1 w-full sm:w-auto"
-                                                        >
-                                                            {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                                                            Status
-                                                        </Button>
-                                                    </div>
+                                                    <Button
+                                                        onClick={handleFetchAccFolders}
+                                                        disabled={isLoadingAccFolders}
+                                                        size="sm"
+                                                        className="gap-1.5 w-full"
+                                                    >
+                                                        {isLoadingAccFolders ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+                                                        {accFolders !== null ? 'Uppdatera mappar' : 'Visa mappar'}
+                                                    </Button>
+                                                )}
+
+                                                {/* Advanced / secondary actions */}
+                                                {(selectedAccProjectId || manualAccProjectId.trim()) && (
+                                                    <Accordion type="single" collapsible className="w-full">
+                                                        <AccordionItem value="advanced" className="border rounded-lg">
+                                                            <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-muted/50 text-xs text-muted-foreground">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Settings2 className="h-3.5 w-3.5" />
+                                                                    Fler åtgärder
+                                                                </div>
+                                                            </AccordionTrigger>
+                                                            <AccordionContent className="px-3 pb-3 pt-1">
+                                                                <div className="flex gap-2 flex-col sm:flex-row sm:flex-wrap">
+                                                                    <Button
+                                                                        onClick={handleSyncAccLocations}
+                                                                        disabled={isSyncingAccLocations || isSyncingAccAssets}
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="gap-1 w-full sm:w-auto"
+                                                                    >
+                                                                        {isSyncingAccLocations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Building2 className="h-3.5 w-3.5" />}
+                                                                        Synka platser
+                                                                    </Button>
+                                                                    <Button
+                                                                        onClick={handleSyncAccAssets}
+                                                                        disabled={isSyncingAccLocations || isSyncingAccAssets}
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="gap-1 w-full sm:w-auto"
+                                                                    >
+                                                                        {isSyncingAccAssets ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+                                                                        Synka tillgångar
+                                                                    </Button>
+                                                                    <Button
+                                                                        onClick={handleTestAccConnection}
+                                                                        disabled={isTestingAcc}
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="gap-1 w-full sm:w-auto"
+                                                                    >
+                                                                        {isTestingAcc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                                                                        Testa anslutning
+                                                                    </Button>
+                                                                    <Button
+                                                                        onClick={handleCheckAccStatus}
+                                                                        disabled={isCheckingAccStatus}
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        className="gap-1 w-full sm:w-auto"
+                                                                    >
+                                                                        {isCheckingAccStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                                                        Status
+                                                                    </Button>
+                                                                </div>
+                                                            </AccordionContent>
+                                                        </AccordionItem>
+                                                    </Accordion>
                                                 )}
 
                                                 {/* Hint banner when ACC has no locations */}
