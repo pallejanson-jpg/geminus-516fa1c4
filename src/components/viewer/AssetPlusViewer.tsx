@@ -13,7 +13,7 @@ import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
-import ToolbarSettings from './ToolbarSettings';
+
 import ViewerTreePanel from './ViewerTreePanel';
 import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
@@ -199,7 +199,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [showFloorCarousel, setShowFloorCarousel] = useState(false);
   const [propertiesDialogOpen, setPropertiesDialogOpen] = useState(false);
   const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
-  const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
+  
   const [showTreePanel, setShowTreePanel] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
@@ -3742,7 +3742,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               
               <ViewerToolbar 
                 viewerRef={viewerInstanceRef} 
-                onOpenSettings={() => setToolbarSettingsOpen(true)}
                 flashOnSelectEnabled={flashOnSelectEnabled}
                 onToggleFlashOnSelect={setFlashOnSelectEnabled}
                 hoverHighlightEnabled={hoverHighlightEnabled}
@@ -3868,13 +3867,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             />
           </div>
           
-          {/* Toolbar Settings Modal */}
-          <div className="pointer-events-auto">
-            <ToolbarSettings
-              isOpen={toolbarSettingsOpen}
-              onClose={() => setToolbarSettingsOpen(false)}
-            />
-          </div>
         </div>
       </div>
     </div>

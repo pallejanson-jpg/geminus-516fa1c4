@@ -1,33 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { GripVertical, Save, RotateCcw } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { toast } from 'sonner';
+/**
+ * ToolbarSettings — minimal exports only.
+ *
+ * The DnD customization dialog has been removed (over-engineered for ~8 buttons).
+ * This file now only exports the ToolConfig interface, the event constant, and
+ * the getter functions used by VisualizationToolbar.
+ */
+
+// Custom event name for same-tab settings updates (kept for compat)
+export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
 
 export interface ToolConfig {
   id: string;
@@ -36,293 +16,35 @@ export interface ToolConfig {
   inOverflow: boolean;
 }
 
-// Version number - increment when adding new tools to force localStorage update
-const SETTINGS_VERSION = 7;
-
-// Custom event name for same-tab settings updates
-export const TOOLBAR_SETTINGS_CHANGED_EVENT = 'toolbar-settings-changed';
-
-// Navigation tools - shown in the bottom toolbar (interaction & navigation only)
-// NOTE: viewMode removed - exists in VisualizationToolbar (2D/3D toggle)
+// Navigation tools list — all always visible, no overflow
 export const NAVIGATION_TOOLS: ToolConfig[] = [
-  { id: 'orbit', label: 'Orbit (rotera)', visible: true, inOverflow: false },
-  { id: 'firstPerson', label: 'Första person', visible: true, inOverflow: false },
-  { id: 'zoomIn', label: 'Zooma in', visible: true, inOverflow: false },
-  { id: 'zoomOut', label: 'Zooma ut', visible: true, inOverflow: false },
-  { id: 'viewFit', label: 'Anpassa vy', visible: true, inOverflow: false },
-  { id: 'resetView', label: 'Återställ vy', visible: false, inOverflow: false },
-  { id: 'select', label: 'Välj objekt', visible: true, inOverflow: false },
-  { id: 'measure', label: 'Mätverktyg', visible: true, inOverflow: false },
-  { id: 'slicer', label: 'Snittplan', visible: true, inOverflow: false },
-  { id: 'flashOnSelect', label: 'Flash vid markering', visible: true, inOverflow: false },
-  { id: 'hoverHighlight', label: 'Hover-highlight', visible: true, inOverflow: false },
+  { id: 'orbit',       label: 'Orbit (rotera)',    visible: true, inOverflow: false },
+  { id: 'firstPerson', label: 'Första person',     visible: true, inOverflow: false },
+  { id: 'zoomIn',      label: 'Zooma in',          visible: true, inOverflow: false },
+  { id: 'zoomOut',     label: 'Zooma ut',          visible: true, inOverflow: false },
+  { id: 'viewFit',     label: 'Anpassa vy',        visible: true, inOverflow: false },
+  { id: 'select',      label: 'Välj objekt',       visible: true, inOverflow: false },
+  { id: 'measure',     label: 'Mätverktyg',        visible: true, inOverflow: false },
+  { id: 'slicer',      label: 'Snittplan',         visible: true, inOverflow: false },
 ];
 
-// Visualization tools - shown in the right sidebar toolbar (view options & toggles)
-// NOTE: Removed duplicates that exist in VisualizationToolbar:
-// - annotations (Visa annotationer)
-// - bimModels (BIM-modeller)
-// - floors (Våningsplan)
-// - addAsset (Registrera tillgång)
-// NOTE: xray, spaces, minimap, visualization removed - these are handled exclusively
-// by ViewerRightPanel to avoid duplication with the Navigation toolbar.
+// Visualization tools — used by VisualizationToolbar
 export const VISUALIZATION_TOOLS: ToolConfig[] = [
-  { id: 'navCube', label: 'Navigationskub', visible: true, inOverflow: false },
-  { id: 'treeView', label: 'Modellträd (Navigator)', visible: true, inOverflow: false },
-  { id: 'objectInfo', label: 'Objektinfo (Asset+)', visible: true, inOverflow: false },
-  { id: 'properties', label: 'Egenskaper (Lovable)', visible: true, inOverflow: false },
+  { id: 'navCube',     label: 'Navigationskub',              visible: true, inOverflow: false },
+  { id: 'treeView',    label: 'Modellträd (Navigator)',      visible: true, inOverflow: false },
+  { id: 'objectInfo',  label: 'Objektinfo (Asset+)',         visible: true, inOverflow: false },
+  { id: 'properties',  label: 'Egenskaper (Lovable)',        visible: true, inOverflow: false },
 ];
 
-// Combined default tools for backward compatibility
-const DEFAULT_TOOLS: ToolConfig[] = [...NAVIGATION_TOOLS, ...VISUALIZATION_TOOLS];
+/** Returns navigation tool settings (all always visible). */
+export const getNavigationToolSettings = (): ToolConfig[] => NAVIGATION_TOOLS;
 
-const STORAGE_KEY = 'viewer-toolbar-settings';
-const VERSION_KEY = 'viewer-toolbar-version';
+/** Returns visualization tool settings (all always visible). */
+export const getVisualizationToolSettings = (): ToolConfig[] => VISUALIZATION_TOOLS;
 
-export const getToolbarSettings = (): ToolConfig[] => {
-  try {
-    const storedVersion = localStorage.getItem(VERSION_KEY);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    
-    // Force reset if version mismatch or no version stored
-    if (!storedVersion || parseInt(storedVersion) < SETTINGS_VERSION) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_TOOLS));
-      localStorage.setItem(VERSION_KEY, String(SETTINGS_VERSION));
-      return DEFAULT_TOOLS;
-    }
-    
-    if (stored) {
-      const parsed: ToolConfig[] = JSON.parse(stored);
-      
-      // Build a lookup of default tools for merging labels/new properties
-      const defaultMap = new Map(DEFAULT_TOOLS.map(t => [t.id, t]));
-      
-      // Start with stored tools in their saved order, merging with defaults
-      const result: ToolConfig[] = parsed
-        .filter(t => defaultMap.has(t.id)) // Remove tools no longer in defaults
-        .map(storedTool => {
-          const defaultTool = defaultMap.get(storedTool.id)!;
-          // Keep user's visible/inOverflow/order, but pick up label changes from defaults
-          return { ...defaultTool, visible: storedTool.visible, inOverflow: storedTool.inOverflow };
-        });
-      
-      // Append any NEW default tools not present in stored settings
-      const storedIds = new Set(parsed.map(t => t.id));
-      const newTools = DEFAULT_TOOLS.filter(t => !storedIds.has(t.id));
-      if (newTools.length > 0) {
-        result.push(...newTools);
-        // Persist so new tools are saved
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-      }
-      
-      return result;
-    }
-  } catch (e) {
-    console.warn('Failed to load toolbar settings:', e);
-  }
-  return DEFAULT_TOOLS;
-};
+/** No-op — kept for backwards compatibility with any callers. */
+export const saveToolbarSettings = (_tools: ToolConfig[]) => {};
 
-// Navigation tool IDs for filtering
-const NAVIGATION_TOOL_IDS = new Set(NAVIGATION_TOOLS.map(t => t.id));
+export const getToolbarSettings = (): ToolConfig[] => [...NAVIGATION_TOOLS, ...VISUALIZATION_TOOLS];
 
-// Visualization tool IDs for filtering
-const VISUALIZATION_TOOL_IDS = new Set(VISUALIZATION_TOOLS.map(t => t.id));
-
-// Get only navigation tools (preserving user's saved order)
-export const getNavigationToolSettings = (): ToolConfig[] => {
-  const allSettings = getToolbarSettings();
-  return allSettings.filter(t => NAVIGATION_TOOL_IDS.has(t.id));
-};
-
-// Get only visualization tools (preserving user's saved order)
-export const getVisualizationToolSettings = (): ToolConfig[] => {
-  const allSettings = getToolbarSettings();
-  return allSettings.filter(t => VISUALIZATION_TOOL_IDS.has(t.id));
-};
-
-export const saveToolbarSettings = (tools: ToolConfig[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tools));
-    localStorage.setItem(VERSION_KEY, String(SETTINGS_VERSION));
-    // Dispatch custom event for same-tab updates (storage event only fires for cross-tab)
-    window.dispatchEvent(new CustomEvent(TOOLBAR_SETTINGS_CHANGED_EVENT, { detail: tools }));
-  } catch (e) {
-    console.warn('Failed to save toolbar settings:', e);
-  }
-};
-
-interface SortableToolItemProps {
-  tool: ToolConfig;
-  onToggleVisible: (id: string) => void;
-  onToggleOverflow: (id: string) => void;
-}
-
-const SortableToolItem: React.FC<SortableToolItemProps> = ({ tool, onToggleVisible, onToggleOverflow }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: tool.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 p-2 bg-card border rounded-lg hover:bg-muted/50"
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-none"
-      >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </button>
-      
-      <span className="flex-1 text-sm">{tool.label}</span>
-      
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Switch
-            id={`visible-${tool.id}`}
-            checked={tool.visible}
-            onCheckedChange={() => onToggleVisible(tool.id)}
-          />
-          <Label htmlFor={`visible-${tool.id}`} className="text-xs text-muted-foreground">
-            Synlig
-          </Label>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Switch
-            id={`overflow-${tool.id}`}
-            checked={tool.inOverflow}
-            onCheckedChange={() => onToggleOverflow(tool.id)}
-            disabled={!tool.visible}
-          />
-          <Label htmlFor={`overflow-${tool.id}`} className="text-xs text-muted-foreground">
-            Övermeny
-          </Label>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface ToolbarSettingsProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSettingsChange?: (tools: ToolConfig[]) => void;
-}
-
-const ToolbarSettings: React.FC<ToolbarSettingsProps> = ({ isOpen, onClose, onSettingsChange }) => {
-  const [tools, setTools] = useState<ToolConfig[]>(getToolbarSettings());
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  useEffect(() => {
-    if (isOpen) {
-      setTools(getToolbarSettings());
-    }
-  }, [isOpen]);
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setTools((items) => {
-        const oldIndex = items.findIndex((i) => i.id === active.id);
-        const newIndex = items.findIndex((i) => i.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
-  };
-
-  const handleToggleVisible = (id: string) => {
-    setTools(prev => prev.map(t => 
-      t.id === id ? { ...t, visible: !t.visible, inOverflow: !t.visible ? t.inOverflow : false } : t
-    ));
-  };
-
-  const handleToggleOverflow = (id: string) => {
-    setTools(prev => prev.map(t => 
-      t.id === id ? { ...t, inOverflow: !t.inOverflow } : t
-    ));
-  };
-
-  const handleSave = () => {
-    saveToolbarSettings(tools);
-    onSettingsChange?.(tools);
-    toast.success('Verktygsfält-inställningar sparade');
-    onClose();
-  };
-
-  const handleReset = () => {
-    // Reset to defaults and clear version to force fresh start
-    localStorage.removeItem(VERSION_KEY);
-    localStorage.removeItem(STORAGE_KEY);
-    setTools(DEFAULT_TOOLS);
-    toast.info('Verktygsfält återställt till standard');
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Anpassa verktygsfält</DialogTitle>
-        </DialogHeader>
-
-        <p className="text-sm text-muted-foreground">
-          Dra för att ändra ordning. Välj vilka verktyg som ska vara synliga och vilka som ska ligga i övermenyn.
-        </p>
-
-        <div className="flex-1 min-h-0 overflow-y-auto pr-2" style={{ maxHeight: 'calc(90vh - 200px)' }}>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={tools.map(t => t.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2 pb-2">
-                {tools.map((tool) => (
-                  <SortableToolItem
-                    key={tool.id}
-                    tool={tool}
-                    onToggleVisible={handleToggleVisible}
-                    onToggleOverflow={handleToggleOverflow}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
-
-        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
-          <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Återställ
-          </Button>
-          <Button onClick={handleSave} className="w-full sm:w-auto">
-            <Save className="h-4 w-4 mr-2" />
-            Spara
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-export default ToolbarSettings;
+export default null;
