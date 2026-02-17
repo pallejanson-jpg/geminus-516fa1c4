@@ -23,15 +23,19 @@ export interface RoomLabelsConfigDetail {
   fontSize: number;
   scaleWithDistance: boolean;
   clickAction: 'none' | 'flyto' | 'roomcard';
+  occlusionEnabled: boolean;
+  flatOnFloor: boolean;
 }
 
 // Default config for backwards compatibility
 const DEFAULT_CONFIG: RoomLabelsConfigDetail = {
   fields: ['commonName', 'designation'],
-  heightOffset: 1.2,
+  heightOffset: 0.05,
   fontSize: 10,
   scaleWithDistance: true,
   clickAction: 'none',
+  occlusionEnabled: true,
+  flatOnFloor: false,
 };
 
 /**
@@ -190,7 +194,11 @@ export function useRoomLabels(
     return lines.length > 0 ? lines.join('') : '<div style="font-size: 10px;">—</div>';
   }, [extractFieldValue]);
 
-  // Update all label positions with distance-based scaling (batched DOM writes)
+  // Occlusion frame counter for throttling
+  const occlusionFrameRef = useRef(0);
+  const occlusionCacheRef = useRef<Map<string, boolean>>(new Map());
+
+  // Update all label positions with distance-based scaling, occlusion & flat mode (batched DOM writes)
   const updateLabelPositions = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer || !enabledRef.current) return;
@@ -198,6 +206,11 @@ export function useRoomLabels(
     const config = configRef.current;
     const camera = viewer.camera;
     const cameraEye = camera?.eye || [0, 0, 0];
+    const cameraLook = camera?.look || [0, 0, 0];
+
+    // Occlusion throttle: only run every 5 frames
+    occlusionFrameRef.current++;
+    const runOcclusion = config.occlusionEnabled && occlusionFrameRef.current % 5 === 0;
 
     // Phase 1: Compute all positions (read-only)
     const updates: { el: HTMLDivElement; transform: string; visible: boolean }[] = [];
@@ -206,6 +219,50 @@ export function useRoomLabels(
       const canvasPos = worldToCanvas(label.worldPos, viewer);
       
       if (canvasPos) {
+        // Occlusion test (throttled)
+        let occluded = false;
+        if (config.occlusionEnabled) {
+          if (runOcclusion) {
+            try {
+              const dx = label.worldPos[0] - cameraEye[0];
+              const dy = label.worldPos[1] - cameraEye[1];
+              const dz = label.worldPos[2] - cameraEye[2];
+              const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (len > 0.1) {
+                const dir = [dx / len, dy / len, dz / len];
+                const pickResult = viewer.scene.pick({
+                  origin: cameraEye,
+                  direction: dir,
+                  pickSurface: false,
+                });
+                if (pickResult?.entity && pickResult.entity.id !== label.entityId) {
+                  // Check if hit is closer than label
+                  const hitPos = pickResult.worldPos || pickResult.entity?.aabb;
+                  if (hitPos) {
+                    const hx = (hitPos[0] ?? ((hitPos[0] + hitPos[3]) / 2)) - cameraEye[0];
+                    const hy = (hitPos[1] ?? ((hitPos[1] + hitPos[4]) / 2)) - cameraEye[1];
+                    const hz = (hitPos[2] ?? ((hitPos[2] + hitPos[5]) / 2)) - cameraEye[2];
+                    const hitDist = Math.sqrt(hx * hx + hy * hy + hz * hz);
+                    if (hitDist < len * 0.95) {
+                      occluded = true;
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // pick() can fail silently
+            }
+            occlusionCacheRef.current.set(label.fmGuid, occluded);
+          } else {
+            occluded = occlusionCacheRef.current.get(label.fmGuid) || false;
+          }
+        }
+
+        if (occluded) {
+          updates.push({ el: label.element, transform: '', visible: false });
+          return;
+        }
+
         let scale = 1;
         if (config.scaleWithDistance) {
           const dx = cameraEye[0] - label.worldPos[0];
@@ -214,9 +271,21 @@ export function useRoomLabels(
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
           scale = Math.max(0.4, Math.min(1.3, 18 / Math.max(distance, 5)));
         }
+
+        // Flat on floor transform
+        let flatTransform = '';
+        if (config.flatOnFloor) {
+          const hdx = cameraEye[0] - cameraLook[0];
+          const hdz = cameraEye[2] - cameraLook[2];
+          const horizontalDist = Math.sqrt(hdx * hdx + hdz * hdz);
+          const pitch = Math.atan2(cameraEye[1] - cameraLook[1], horizontalDist);
+          const tiltDeg = 90 - (pitch * 180 / Math.PI);
+          flatTransform = ` rotateX(${tiltDeg.toFixed(1)}deg)`;
+        }
+
         updates.push({
           el: label.element,
-          transform: `translate3d(${canvasPos[0]}px, ${canvasPos[1]}px, 0) translate(-50%, -50%) scale(${scale})`,
+          transform: `translate3d(${canvasPos[0]}px, ${canvasPos[1]}px, 0) translate(-50%, -50%) scale(${scale})${flatTransform}`,
           visible: true,
         });
       } else {
@@ -346,10 +415,10 @@ export function useRoomLabels(
         position: absolute;
         left: 0;
         top: 0;
-        background: hsl(var(--background) / 0.85);
+        background: hsl(var(--background) / 0.6);
         color: hsl(var(--foreground));
-        padding: 3px 6px;
-        border-radius: 4px;
+        padding: 1px 3px;
+        border-radius: 2px;
         font-size: ${config.fontSize}px;
         line-height: 1.3;
         text-align: center;
@@ -357,11 +426,12 @@ export function useRoomLabels(
         white-space: nowrap;
         pointer-events: ${hasClickAction ? 'auto' : 'none'};
         cursor: ${hasClickAction ? 'pointer' : 'default'};
-        border: 1px solid hsl(var(--border) / 0.5);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        border: 1px solid hsl(var(--border) / 0.3);
+        box-shadow: 0 0 2px rgba(0,0,0,0.1);
         display: none;
         z-index: 5;
         will-change: transform;
+        transform-style: preserve-3d;
       `;
       
       container.appendChild(labelEl);
@@ -389,8 +459,8 @@ export function useRoomLabels(
           labelEl.style.borderColor = 'hsl(var(--primary) / 0.5)';
         });
         labelEl.addEventListener('mouseleave', () => {
-          labelEl.style.background = 'hsl(var(--background) / 0.85)';
-          labelEl.style.borderColor = 'hsl(var(--border) / 0.5)';
+          labelEl.style.background = 'hsl(var(--background) / 0.6)';
+          labelEl.style.borderColor = 'hsl(var(--border) / 0.3)';
         });
       }
 
