@@ -1,109 +1,83 @@
 
-## Plan: Fix Toolbar Freeze, Disable Unavailable Quick Actions
 
-This plan addresses three issues:
-1. **3D toolbar freezes/disappears** when loading from the "3D Viewer" main menu entry
-2. **Quick Actions buttons are always active** even when no 3D models or 360 data exists for the building
-3. Minor: the console shows repeated XKT cache requests in a tight loop (related to issue 1)
+## Plan: Progress-indikator for IFC-konvertering
 
----
+### Bakgrund
 
-### Issue 1: Navigation Toolbar Not Visible / Menus Freeze
+Idag visas konverteringsstatus som en liten Badge med texten "Server..." eller statusnamnet. Nar IFC-konverteringen kors (som kan ta 1-5 minuter for stora modeller) far anvandaren ingen detaljerad feedback om hur langt processen har kommit.
 
-**Root cause:** When the 3D Viewer is opened via the BuildingSelector (no `building` param in URL), the user selects a building and `navigate()` is called. However, the AssetPlusViewer component mounts and starts loading XKT models. The repeated "XKT cache hit" logs (dozens per second) suggest the XKT loader is retrying a model that fails to parse (`RangeError: Offset is outside the bounds of the DataView`). This creates a tight async loop that starves the UI thread, making the toolbar unresponsive and potentially preventing it from rendering.
+### Andringar
 
-The toolbar itself depends on `isViewerReady` which polls the xeokit viewer via `setTimeout` at 200ms, 500ms, and 1000ms. If the viewer crashes during model parsing (the DataView error), the scene may never be fully ready, leaving `isViewerReady = false` and all toolbar buttons disabled.
+#### 1. Utoka `TranslationStatus` med numerisk progress
 
-**Fix:**
-- In `AssetPlusViewer.tsx`, add error handling around individual XKT model loads. If a model fails to parse (the DataView RangeError), log the error, skip that model, and continue. Do not retry infinitely.
-- In the XKT cache service, add a per-model retry limit (max 2 attempts) to prevent the infinite retry loop visible in the console logs.
-- Ensure `isViewerReady` can become `true` even if some models fail to load (the scene exists even without loaded models).
+**Fil:** `src/services/acc-xkt-converter.ts`
 
-**Files:**
-- `src/components/viewer/AssetPlusViewer.tsx` -- add try/catch around model load, track failed models
-- `src/services/xkt-cache-service.ts` -- add retry guard
+Lagg till `progressPercent` (0-100) i `TranslationStatus`-interfacet. Uppdatera alla stallen dar status satts under konverteringen:
+- `runFullPipeline` steg 1-4: Satt progressPercent for varje fas (0-20 for translation, 20-40 for download, 40-95 for konvertering, 95-100 for sparning)
+- `convertGlbToXkt`: Lagg till en `onProgress`-callback som rapporterar ungefar var i konverteringsprocessen vi ar (parsing, finalize, write)
+- `tryServerConversion`: Samma procentstruktur
 
----
+#### 2. Skapa en `ConversionProgressOverlay`-komponent
 
-### Issue 2: Quick Actions Should Be Disabled When No Data Exists
+**Ny fil:** `src/components/settings/ConversionProgressOverlay.tsx`
 
-**Problem:** The Quick Actions grid (3D, 360, 3D+360, 2D Ritning, Virtual Twin) shows all buttons as active even when the building has no 3D models (XKT), no Ivion 360 site, or no FM Access drawings.
+En liten overlay/panel som visas i ApiSettingsModal under aktivt konverteringsjobb:
+- Visar en `Progress`-bar (ateranvander befintlig `src/components/ui/progress.tsx`)
+- Visar aktuellt steg i text (t.ex. "Vantar pa Autodesk...", "Laddar ner IFC...", "Konverterar IFC till XKT...")
+- Visar filnamn och forlopd tid
+- Animerad ikon nar processen gar (Loader2 spinner)
+- Dold nar inget jobb ar aktivt
 
-**Current data:**
-- Buildings with XKT models: Centralstationen, Smaviken, Akerselva Atrium
-- Buildings with Ivion 360: Centralstationen (3045176558137335), Akerselva Atrium (3373717251911143)
-- Stadshuset Nykoping (ACC): no XKT models, no Ivion, no FM Access
-- Labradorgatan 18: no Ivion, no FM Access
+#### 3. Integrera overlayen i ApiSettingsModal
 
-**Fix in `QuickActions.tsx`:**
-- Accept new props: `has3DModels: boolean` and `hasFmAccess: boolean`
-- Disable (gray out) the 3D button when `has3DModels === false`
-- Disable the 360 button when `ivionSiteId` is null/undefined
-- Disable the 3D+360 (Split) button when either 3D or 360 is unavailable
-- Disable the Virtual Twin button when either 3D or 360 is unavailable
-- Disable the 2D Ritning button when `hasFmAccess === false`
-- Use `opacity-50 cursor-not-allowed` styling and prevent click when disabled
-- Show a tooltip explaining why it's disabled (e.g., "Ingen 3D-modell synkad")
+**Fil:** `src/components/settings/ApiSettingsModal.tsx`
 
-**Fix in `FacilityLandingPage.tsx`:**
-- Use the existing `useXktPreload` hook or query `xkt_models` table to check if models exist for the building
-- Check `building_settings.ivion_site_id` (already available via `settings?.ivionSiteId`)
-- Check FM Access availability (query `building_external_links` or `building_settings.fm_access_building_guid`)
-- Pass `has3DModels`, `hasFmAccess` to QuickActions
+- Importera och rendera `ConversionProgressOverlay` ovanfor fillistningen i ACC-fliken
+- Skicka in aktuell `translationStatuses` -- overlayen visar info for det jobb som ar aktivt
+- Behall befintliga badges for individuella filer men visa den detaljerade progressen i overlayen
 
----
+### Tekniska detaljer
 
-### Implementation Sequence
-
-| Step | Task | Files |
-|------|------|-------|
-| 1 | Add XKT model count check + FM Access check in FacilityLandingPage | `FacilityLandingPage.tsx` |
-| 2 | Add disabled state to Quick Action buttons | `QuickActions.tsx` |
-| 3 | Add error handling for failed XKT model loads to prevent freeze | `AssetPlusViewer.tsx` |
-| 4 | Add retry limit in XKT cache service | `xkt-cache-service.ts` |
-
----
-
-### Technical Details
-
-**QuickActions disabled state:**
+**Uppdaterat TranslationStatus-interface:**
 ```typescript
-// New props
-interface QuickActionsProps {
-  // ... existing props
-  has3DModels?: boolean;
-  hasFmAccess?: boolean;
-}
-
-// Button disabled logic
-const has3D = has3DModels !== false; // default true for backward compat
-const has360 = !!ivionSiteId;
-const hasSplit = has3D && has360;
-const has2D = hasFmAccess !== false;
-```
-
-**FacilityLandingPage XKT check:**
-```typescript
-const [has3DModels, setHas3DModels] = useState<boolean | undefined>(undefined);
-
-useEffect(() => {
-  if (!buildingGuid) return;
-  supabase
-    .from('xkt_models')
-    .select('id', { count: 'exact', head: true })
-    .eq('building_fm_guid', buildingGuid)
-    .then(({ count }) => setHas3DModels((count ?? 0) > 0));
-}, [buildingGuid]);
-```
-
-**XKT load error handling in AssetPlusViewer:**
-```typescript
-// Around the model load loop, add per-model try/catch:
-try {
-  await loadXktModel(modelUrl, modelId);
-} catch (err) {
-  console.error(`[AssetPlusViewer] Failed to load model ${modelId}:`, err);
-  failedModels.add(modelId);
-  // Continue loading remaining models
+export interface TranslationStatus {
+  status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' 
+        | 'downloading' | 'converting' | 'complete' | 'server-converting';
+  progress?: string;
+  progressPercent?: number;  // 0-100, ny
+  step?: string;             // kort stegbeskrivning, ny
+  message?: string;
+  error?: string;
+  derivativeCount?: number;
+  downloadUrl?: string;
 }
 ```
+
+**Progress-steg i pipelinen:**
+
+| Fas | Procent | Steg-text |
+|-----|---------|-----------|
+| Starta oversattning | 0-5% | "Startar oversattning..." |
+| Vanta pa Autodesk | 5-20% | "Vantar pa Autodesk..." |
+| Ladda ner IFC | 20-35% | "Laddar ner IFC-fil..." |
+| Parsa IFC (WASM) | 35-75% | "Konverterar IFC-geometri..." |
+| Finalisera XKT | 75-90% | "Bygger XKT-modell..." |
+| Spara i cache | 90-100% | "Sparar 3D-modell..." |
+
+**ConversionProgressOverlay layout:**
+```text
++--------------------------------------------------+
+| [spinner] Konverterar: Stadshuset.rvt             |
+| [==============--------] 62%                      |
+| Konverterar IFC-geometri... (2m 15s)              |
++--------------------------------------------------+
+```
+
+### Filer som andras
+
+| Fil | Andring |
+|-----|---------|
+| `src/services/acc-xkt-converter.ts` | Lagg till `progressPercent` och `step` i TranslationStatus, satt varden i varje pipeline-steg |
+| `src/components/settings/ConversionProgressOverlay.tsx` | Ny komponent med Progress-bar och steg-info |
+| `src/components/settings/ApiSettingsModal.tsx` | Rendera ConversionProgressOverlay i ACC-fliken |
+
