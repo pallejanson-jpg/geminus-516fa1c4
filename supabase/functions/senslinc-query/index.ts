@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  // Match Supabase web client preflight headers
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
@@ -17,18 +16,75 @@ interface SenslincRequest {
 }
 
 // ── Token cache (55-minute TTL) ──
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; type: 'JWT' | 'Bearer' } | null = null;
 const TOKEN_TTL_MS = 55 * 60 * 1000; // 55 minutes
 
-async function getJwtToken(apiUrl: string, email: string, password: string): Promise<string> {
-  // Return cached token if still valid
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    console.log('[Senslinc] Using cached JWT token');
-    return cachedToken.token;
+// ── Keycloak token fetch (Variant A: client_credentials, Variant B: password grant) ──
+async function getKeycloakToken(
+  keycloakUrl: string,
+  clientId: string,
+  clientSecret: string | undefined,
+  username: string | undefined,
+  password: string | undefined,
+): Promise<{ token: string; type: 'Bearer' }> {
+  const tokenUrl = keycloakUrl.includes('/protocol/openid-connect/token')
+    ? keycloakUrl
+    : `${keycloakUrl.replace(/\/+$/, '')}/protocol/openid-connect/token`;
+
+  // Variant A: client_credentials (service account — preferred)
+  if (clientSecret) {
+    console.log('[Senslinc] Trying Keycloak client_credentials (service account)');
+    const params = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      console.log('[Senslinc] Keycloak client_credentials OK');
+      return { token: data.access_token, type: 'Bearer' };
+    }
+    const errText = await res.text();
+    console.warn('[Senslinc] client_credentials failed:', res.status, errText, '— falling back to password grant');
   }
 
+  // Variant B: password grant with AD account
+  if (username && password) {
+    console.log('[Senslinc] Trying Keycloak password grant (AD account)');
+    const params = new URLSearchParams({
+      grant_type: 'password',
+      client_id: clientId,
+      username,
+      password,
+    });
+    if (clientSecret) params.set('client_secret', clientSecret);
+
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Keycloak auth failed: ${res.status} - ${text}`);
+    }
+    const data = await res.json();
+    console.log('[Senslinc] Keycloak password grant OK');
+    return { token: data.access_token, type: 'Bearer' };
+  }
+
+  throw new Error('Keycloak: neither client_secret nor username/password configured');
+}
+
+// ── Legacy Django /api-token-auth/ with exponential backoff ──
+async function getDjangoToken(apiUrl: string, email: string, password: string): Promise<string> {
   const tokenUrl = `${apiUrl}/api-token-auth/`;
-  console.log('[Senslinc] Authenticating to:', tokenUrl);
+  console.log('[Senslinc] Authenticating via Django token auth:', tokenUrl);
 
   const attempts: Array<{ label: string; body: Record<string, unknown> }> = [
     { label: 'email', body: { email, password } },
@@ -60,7 +116,7 @@ async function getJwtToken(apiUrl: string, email: string, password: string): Pro
         const text = await response.text();
         console.warn('[Senslinc] Rate limited (429) on auth attempt:', attempt.label, text);
         got429 = true;
-        break; // break inner loop, retry with backoff
+        break;
       }
 
       if (!response.ok) {
@@ -76,40 +132,74 @@ async function getJwtToken(apiUrl: string, email: string, password: string): Pro
         throw new Error('No token received from Senslinc');
       }
 
-      console.log('[Senslinc] Authentication successful (payload:', attempt.label, ')');
-      cachedToken = { token: data.token, expiresAt: Date.now() + TOKEN_TTL_MS };
+      console.log('[Senslinc] Django token auth OK (payload:', attempt.label, ')');
       return data.token;
     }
 
-    // If we didn't get 429, no point retrying -- credentials are wrong
     if (!got429) break;
   }
 
   throw new Error(`Authentication failed after retries: ${lastStatus}${lastText ? ` (${lastText})` : ''}`);
 }
 
+// ── Unified token resolver with cache ──
+async function getTokenWithType(
+  apiUrl: string,
+  email: string,
+  password: string,
+): Promise<{ token: string; type: 'JWT' | 'Bearer' }> {
+  // Return cached token if still valid
+  if (cachedToken && Date.now() < cachedToken.expiresAt) {
+    console.log('[Senslinc] Using cached token (type:', cachedToken.type, ')');
+    return { token: cachedToken.token, type: cachedToken.type };
+  }
+
+  const keycloakUrl = Deno.env.get('SENSLINC_KEYCLOAK_URL');
+  const clientId = Deno.env.get('SENSLINC_CLIENT_ID');
+  const clientSecret = Deno.env.get('SENSLINC_CLIENT_SECRET');
+
+  if (keycloakUrl && clientId) {
+    // Keycloak flow — Variant A (client_credentials) or Variant B (password grant)
+    const result = await getKeycloakToken(keycloakUrl, clientId, clientSecret, email, password);
+    cachedToken = { ...result, expiresAt: Date.now() + TOKEN_TTL_MS };
+    return result;
+  }
+
+  // Legacy Django /api-token-auth/
+  const token = await getDjangoToken(apiUrl, email, password);
+  cachedToken = { token, type: 'JWT', expiresAt: Date.now() + TOKEN_TTL_MS };
+  return { token, type: 'JWT' };
+}
+
+// ── Legacy wrapper for backwards compatibility ──
+async function getJwtToken(apiUrl: string, email: string, password: string): Promise<string> {
+  const { token } = await getTokenWithType(apiUrl, email, password);
+  return token;
+}
+
 async function senslincFetchWithRetry(
-  apiUrl: string, 
-  endpoint: string, 
+  apiUrl: string,
+  endpoint: string,
   token: string,
+  tokenType: 'JWT' | 'Bearer' = 'JWT',
   options?: { method?: string; body?: unknown }
 ): Promise<unknown> {
   const maxRetries = 3;
   let delay = 1000;
   const url = `${apiUrl}${endpoint}`;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    console.log(`[Senslinc] Fetching: ${url} (attempt ${attempt + 1})`);
-    
+    console.log(`[Senslinc] Fetching: ${url} (attempt ${attempt + 1}, auth: ${tokenType})`);
+
     const response = await fetch(url, {
       method: options?.method || 'GET',
-      headers: { 
-        'Authorization': `JWT ${token}`,
+      headers: {
+        'Authorization': `${tokenType} ${token}`,
         'Content-Type': 'application/json',
       },
       body: options?.body ? JSON.stringify(options.body) : undefined,
     });
-    
+
     if (response.status === 429) {
       if (attempt < maxRetries) {
         console.log(`[Senslinc] Rate limited, retry ${attempt + 1}/${maxRetries} after ${delay}ms`);
@@ -119,34 +209,31 @@ async function senslincFetchWithRetry(
       }
       throw new Error('Rate limit exceeded after retries');
     }
-    
+
     if (!response.ok) {
       const text = await response.text();
       console.error('[Senslinc] Request failed:', response.status, text);
       throw new Error(`Senslinc API error: ${response.status} - ${text}`);
     }
-    
+
     return response.json();
   }
-  
+
   throw new Error('Max retries exceeded');
 }
 
-// Legacy wrapper for backwards compatibility
-async function senslincFetch(apiUrl: string, endpoint: string, token: string) {
-  return senslincFetchWithRetry(apiUrl, endpoint, token);
+// Legacy wrapper
+async function senslincFetch(apiUrl: string, endpoint: string, token: string, tokenType: 'JWT' | 'Bearer' = 'JWT') {
+  return senslincFetchWithRetry(apiUrl, endpoint, token, tokenType);
 }
 
 // Build dashboard URL from base URL and entity type
 function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
-  // Transform API URL to portal URL
-  // e.g., https://api.swg-group.productinuse.com -> https://swg-group.productinuse.com
   const portalUrl = apiUrl.replace('api.', '').replace('/api', '');
   return `${portalUrl}/dashboard/${type}/${pk}`;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -159,16 +246,15 @@ serve(async (req) => {
 
   try {
     const { action, fmGuid, siteCode, indiceId, workspaceKey, query } = await req.json() as SenslincRequest;
-    
-    // Get credentials from environment
+
     const apiUrl = Deno.env.get('SENSLINC_API_URL');
     const email = Deno.env.get('SENSLINC_EMAIL');
     const password = Deno.env.get('SENSLINC_PASSWORD');
 
     if (!apiUrl || !email || !password) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'Senslinc credentials not configured',
           message: 'Please configure SENSLINC_API_URL, SENSLINC_EMAIL, and SENSLINC_PASSWORD in Lovable Cloud secrets.'
         }),
@@ -176,11 +262,8 @@ serve(async (req) => {
       );
     }
 
-    // Clean up API URL (remove trailing slash)
     const cleanApiUrl = apiUrl.replace(/\/$/, '');
 
-    // For all authenticated actions we return 200 + { success:false } on auth failure
-    // to avoid hard crashes in the client (which tends to treat non-2xx as throw).
     const authedActions = new Set<SenslincRequest['action']>([
       'get-equipment',
       'get-site-equipment',
@@ -194,9 +277,13 @@ serve(async (req) => {
     ]);
 
     let token: string | null = null;
+    let tokenType: 'JWT' | 'Bearer' = 'JWT';
+
     if (authedActions.has(action)) {
       try {
-        token = await getJwtToken(cleanApiUrl, email, password);
+        const result = await getTokenWithType(cleanApiUrl, email, password);
+        token = result.token;
+        tokenType = result.type;
       } catch (error: any) {
         return jsonResponse({
           success: false,
@@ -209,12 +296,13 @@ serve(async (req) => {
     switch (action) {
       case 'test-connection': {
         try {
-          const token = await getJwtToken(cleanApiUrl, email, password);
-          // Try to fetch sites to verify connection works
-          const sites = await senslincFetch(cleanApiUrl, '/api/sites', token);
+          const authMode = Deno.env.get('SENSLINC_KEYCLOAK_URL') ? 'Keycloak' : 'Django token';
+          const { token: t, type } = await getTokenWithType(cleanApiUrl, email, password);
+          const sites = await senslincFetch(cleanApiUrl, '/api/sites', t, type);
           return jsonResponse({
             success: true,
-            message: `Anslutning lyckades! Hittade ${Array.isArray(sites) ? sites.length : 0} sites.`,
+            message: `Anslutning lyckades via ${authMode}! Hittade ${Array.isArray(sites) ? sites.length : 0} sites.`,
+            authMode,
           });
         } catch (error: any) {
           return jsonResponse({
@@ -226,172 +314,108 @@ serve(async (req) => {
       }
 
       case 'get-equipment': {
-        if (!fmGuid) {
-          return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
-        }
-        
-        // token is guaranteed by authedActions
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
         const authToken = token as string;
-        // Search machines by code (FM GUID)
-        const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken);
-        
+        const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
         return jsonResponse({ success: true, data: machines });
       }
 
       case 'get-site-equipment': {
-        if (!siteCode) {
-          return jsonResponse({ success: false, error: 'siteCode required' }, 400);
-        }
-        
+        if (!siteCode) return jsonResponse({ success: false, error: 'siteCode required' }, 400);
         const authToken = token as string;
-        // Get all machines for a site
-        const machines = await senslincFetch(cleanApiUrl, `/api/machines?site=${encodeURIComponent(siteCode)}`, authToken);
-        
+        const machines = await senslincFetch(cleanApiUrl, `/api/machines?site=${encodeURIComponent(siteCode)}`, authToken, tokenType);
         return jsonResponse({ success: true, data: machines });
       }
 
       case 'get-sites': {
         const authToken = token as string;
-        const sites = await senslincFetch(cleanApiUrl, '/api/sites', authToken);
-        
+        const sites = await senslincFetch(cleanApiUrl, '/api/sites', authToken, tokenType);
         return jsonResponse({ success: true, data: sites });
       }
 
       case 'get-lines': {
         const authToken = token as string;
-        const lines = await senslincFetch(cleanApiUrl, '/api/lines', authToken);
-        
+        const lines = await senslincFetch(cleanApiUrl, '/api/lines', authToken, tokenType);
         return jsonResponse({ success: true, data: lines });
       }
 
       case 'get-machines': {
         const authToken = token as string;
-        const machines = await senslincFetch(cleanApiUrl, '/api/machines', authToken);
-        
+        const machines = await senslincFetch(cleanApiUrl, '/api/machines', authToken, tokenType);
         return jsonResponse({ success: true, data: machines });
       }
 
-      // New action: Get dashboard URL for a given FM GUID
-      // Searches machines, sites, and lines to find matching entity
       case 'get-dashboard-url': {
-        if (!fmGuid) {
-          return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
-        }
-
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
         const authToken = token as string;
-        
-        // Try to find as machine first (rooms/assets)
+
         try {
-          const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken);
+          const machines = await senslincFetch(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
           if (Array.isArray(machines) && machines.length > 0) {
             const machine = machines[0];
             const dashboardUrl = machine.dashboard_url || buildDashboardUrl(cleanApiUrl, 'machine', machine.pk);
-            return jsonResponse({
-              success: true,
-              data: {
-                dashboardUrl,
-                type: 'machine',
-                name: machine.name,
-                pk: machine.pk,
-                ...machine,
-              },
-            });
+            return jsonResponse({ success: true, data: { dashboardUrl, type: 'machine', name: machine.name, pk: machine.pk, ...machine } });
           }
         } catch (err) {
           console.log('[Senslinc] No machine found for fmGuid:', fmGuid);
         }
-        
-        // Try to find as site (buildings)
+
         try {
-          const sites = await senslincFetch(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken);
+          const sites = await senslincFetch(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
           if (Array.isArray(sites) && sites.length > 0) {
             const site = sites[0];
             const dashboardUrl = site.dashboard_url || buildDashboardUrl(cleanApiUrl, 'site', site.pk);
-            return jsonResponse({
-              success: true,
-              data: {
-                dashboardUrl,
-                type: 'site',
-                name: site.name,
-                pk: site.pk,
-                ...site,
-              },
-            });
+            return jsonResponse({ success: true, data: { dashboardUrl, type: 'site', name: site.name, pk: site.pk, ...site } });
           }
         } catch (err) {
           console.log('[Senslinc] No site found for fmGuid:', fmGuid);
         }
-        
-        // Try to find as line (floors/storeys)
+
         try {
-          const lines = await senslincFetch(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, authToken);
+          const lines = await senslincFetch(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
           if (Array.isArray(lines) && lines.length > 0) {
             const line = lines[0];
             const dashboardUrl = line.dashboard_url || buildDashboardUrl(cleanApiUrl, 'line', line.pk);
-            return jsonResponse({
-              success: true,
-              data: {
-                dashboardUrl,
-                type: 'line',
-                name: line.name,
-                pk: line.pk,
-                ...line,
-              },
-            });
+            return jsonResponse({ success: true, data: { dashboardUrl, type: 'line', name: line.name, pk: line.pk, ...line } });
           }
         } catch (err) {
           console.log('[Senslinc] No line found for fmGuid:', fmGuid);
         }
-        
-      // Nothing found
-      return jsonResponse({
-        success: false,
-        error: 'No equipment found for this FM GUID',
-        message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.',
-      });
-    }
 
-    // === Elasticsearch DSL Actions ===
-    
-    case 'get-indices': {
-      const authToken = token as string;
-      const indices = await senslincFetchWithRetry(cleanApiUrl, '/api/indices', authToken);
-      return jsonResponse({ success: true, data: indices });
-    }
-
-    case 'get-properties': {
-      if (!indiceId) {
-        return jsonResponse({ success: false, error: 'indiceId required' }, 400);
+        return jsonResponse({ success: false, error: 'No equipment found for this FM GUID', message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.' });
       }
-      const authToken = token as string;
-      const properties = await senslincFetchWithRetry(
-        cleanApiUrl, 
-        `/api/properties?indice=${indiceId}`, 
-        authToken
-      );
-      return jsonResponse({ success: true, data: properties });
-    }
 
-    case 'search-data': {
-      if (!workspaceKey || !query) {
-        return jsonResponse({ success: false, error: 'workspaceKey and query required' }, 400);
+      case 'get-indices': {
+        const authToken = token as string;
+        const indices = await senslincFetchWithRetry(cleanApiUrl, '/api/indices', authToken, tokenType);
+        return jsonResponse({ success: true, data: indices });
       }
-      const authToken = token as string;
-      const results = await senslincFetchWithRetry(
-        cleanApiUrl,
-        `/api/data-workspaces/${encodeURIComponent(workspaceKey)}/_search`,
-        authToken,
-        { method: 'POST', body: query }
-      );
-      return jsonResponse({ success: true, data: results });
-    }
+
+      case 'get-properties': {
+        if (!indiceId) return jsonResponse({ success: false, error: 'indiceId required' }, 400);
+        const authToken = token as string;
+        const properties = await senslincFetchWithRetry(cleanApiUrl, `/api/properties?indice=${indiceId}`, authToken, tokenType);
+        return jsonResponse({ success: true, data: properties });
+      }
+
+      case 'search-data': {
+        if (!workspaceKey || !query) return jsonResponse({ success: false, error: 'workspaceKey and query required' }, 400);
+        const authToken = token as string;
+        const results = await senslincFetchWithRetry(
+          cleanApiUrl,
+          `/api/data-workspaces/${encodeURIComponent(workspaceKey)}/_search`,
+          authToken,
+          tokenType,
+          { method: 'POST', body: query }
+        );
+        return jsonResponse({ success: true, data: results });
+      }
 
       default:
         return jsonResponse({ success: false, error: `Unknown action: ${action}` }, 400);
     }
   } catch (error: any) {
     console.error('[Senslinc] Error:', error);
-    // Never return 500 to the client for expected failures; keep errors structured.
     return jsonResponse({ success: false, error: error.message }, 200);
   }
 });
