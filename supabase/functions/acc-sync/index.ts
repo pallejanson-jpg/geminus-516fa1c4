@@ -1273,19 +1273,21 @@ serve(async (req: Request) => {
 
       // ---- LIST PROJECTS ----
       case "list-projects": {
-        // Region-specific Account IDs
+        // Accept accountId from frontend (from list-hubs) or fall back to secrets
+        const frontendAccountId = body.accountId;
         const regionUpper = (region || 'US').toUpperCase();
-        const accountId = regionUpper === 'EMEA'
-          ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
-          : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID"));
+        const accountId = frontendAccountId ||
+          (regionUpper === 'EMEA'
+            ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
+            : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID")));
         
         if (!accountId) {
           return new Response(
-            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID${regionUpper === 'EMEA' ? '_EMEA' : '_US'} not configured (fallback ACC_ACCOUNT_ID also missing)` }),
+            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID not configured. Use list-hubs to auto-discover hubs.` }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        console.log(`[list-projects] Using Account ID for region ${regionUpper}: ${accountId.substring(0, 8)}...`);
+        console.log(`[list-projects] Using Account ID: ${accountId.substring(0, 8)}... (region: ${regionUpper}, from: ${frontendAccountId ? 'frontend' : 'secrets'})`);
 
         const { token } = await getAccToken(auth.userId, supabase);
         let projects: any[] = [];
@@ -1528,19 +1530,21 @@ serve(async (req: Request) => {
         }
 
         const { token } = await getAccToken(auth.userId, supabase);
-        // Region-specific Account IDs
-        const regionUpper = (region || 'US').toUpperCase();
-        const accountId = regionUpper === 'EMEA'
-          ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
-          : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID"));
+        // Accept accountId from frontend (from list-hubs) or fall back to secrets
+        const frontendAccountId2 = body.accountId;
+        const regionUpper2 = (region || 'US').toUpperCase();
+        const accountId = frontendAccountId2 ||
+          (regionUpper2 === 'EMEA'
+            ? (Deno.env.get("ACC_ACCOUNT_ID_EMEA") || Deno.env.get("ACC_ACCOUNT_ID"))
+            : (Deno.env.get("ACC_ACCOUNT_ID_US") || Deno.env.get("ACC_ACCOUNT_ID")));
         
         if (!accountId) {
           return new Response(
-            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID${regionUpper === 'EMEA' ? '_EMEA' : '_US'} not configured` }),
+            JSON.stringify({ success: false, error: `ACC_ACCOUNT_ID not configured. Use list-hubs to auto-discover hubs.` }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }
-        console.log(`[list-folders] Using Account ID for region ${regionUpper}: ${accountId.substring(0, 8)}...`);
+        console.log(`[list-folders] Using Account ID: ${accountId.substring(0, 8)}... (from: ${frontendAccountId2 ? 'frontend' : 'secrets'})`);
 
         const cleanAccountId = accountId.replace(/^b\./, "");
         const hubId = `b.${cleanAccountId}`;
@@ -2324,6 +2328,50 @@ serve(async (req: Request) => {
             totalModelSets: modelSetList.length,
             modelSets: results,
           }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // ---- LIST HUBS ----
+      case "list-hubs": {
+        // Fetches all hubs (accounts) the app has access to via /project/v1/hubs
+        // This replaces the need for hard-coded ACC_ACCOUNT_ID_US / ACC_ACCOUNT_ID_EMEA secrets
+        const { token } = await getAccToken(auth.userId, supabase);
+
+        const res = await fetch("https://developer.api.autodesk.com/project/v1/hubs", {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json",
+          },
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`[list-hubs] Failed (${res.status}): ${errorText}`);
+          return new Response(
+            JSON.stringify({ success: false, error: `Could not fetch hubs (${res.status}): ${errorText}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const data = await res.json();
+        const hubs = (data.data || []).map((hub: any) => {
+          // Region is embedded in the hub attributes
+          const region = hub.attributes?.region || 
+            (hub.id?.startsWith('b.') && hub.attributes?.extension?.data?.region) ||
+            (hub.attributes?.extension?.schema?.href?.includes('eu') ? 'EMEA' : 'US');
+          return {
+            id: hub.id, // e.g. "b.xxxx-yyyy"
+            name: hub.attributes?.name || hub.id,
+            region: region,
+            // Strip b. prefix for use as accountId
+            accountId: hub.id?.replace(/^b\./, '') || hub.id,
+          };
+        });
+
+        console.log(`[list-hubs] Found ${hubs.length} hubs`);
+        return new Response(
+          JSON.stringify({ success: true, hubs }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
