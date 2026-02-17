@@ -405,7 +405,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   return (
     <>
       <Sheet open={isOpen} onOpenChange={handleOpenChange} modal={isMobile}>
-        <SheetContent side="right" className="w-[320px] sm:w-[340px] p-0 bg-card backdrop-blur-md [&>button:last-child]:hidden">
+        <SheetContent side="right" className="w-[280px] sm:w-[320px] md:w-[340px] p-0 bg-card backdrop-blur-md [&>button:last-child]:hidden">
           <SheetHeader className="p-4 pb-2 border-b">
             <SheetTitle className="flex items-center justify-between text-base">
               <div className="flex items-center gap-2">
@@ -438,25 +438,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
           <ScrollArea className="h-[calc(100vh-80px)]">
             <div className="p-4 space-y-3">
 
-              {/* BIM Models - Collapsible */}
-              <Collapsible open={modelsOpen} onOpenChange={setModelsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
-                    <div className="flex items-center gap-2">
-                      <Box className="h-4 w-4" />
-                      <span className="font-medium text-sm">BIM-modeller</span>
-                    </div>
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", modelsOpen && "rotate-180")} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="pl-2 pt-2">
-                    <ModelVisibilitySelector viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} listOnly={true} />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Floors - Collapsible */}
+              {/* Floors - FIRST (highest priority) */}
               <Collapsible open={floorsOpen} onOpenChange={setFloorsOpen}>
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost" className="w-full justify-between h-10 px-2">
@@ -478,6 +460,24 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       listOnly={true}
                       initialFloorFmGuid={initialFloorFmGuid}
                     />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* BIM Models - Collapsible */}
+              <Collapsible open={modelsOpen} onOpenChange={setModelsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between h-10 px-2">
+                    <div className="flex items-center gap-2">
+                      <Box className="h-4 w-4" />
+                      <span className="font-medium text-sm">BIM-modeller</span>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", modelsOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="pl-2 pt-2">
+                    <ModelVisibilitySelector viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} listOnly={true} />
                   </div>
                 </CollapsibleContent>
               </Collapsible>
