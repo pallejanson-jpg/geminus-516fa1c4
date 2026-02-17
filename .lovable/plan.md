@@ -1,190 +1,208 @@
 
-# Cesium Globe — Fas 1 (extruderade byggnader) + Fas 2 (BIM-modeller via glTF)
+# Senslinc Keycloak/AD-autentisering — analys och lösning
 
-## Vad som byggs
+## Nuläge och problemet
 
-En ny fullskärmssida `/cesium-globe` utanför AppLayout (precis som `/virtual-twin`) med interaktiv 3D-glob. Fas 1 visar alla 5 byggnader med koordinater som extruderade volymer. Fas 2 laddar faktiska BIM-modeller (XKT → glTF konverterade server-side).
+Den befintliga `senslinc-query`-funktionen använder `/api-token-auth/` (Django token auth) med email + lösenord lagrade som hemligheter `SENSLINC_EMAIL` och `SENSLINC_PASSWORD`. Dessa hemligheter finns redan konfigurerade.
 
----
+Problemet du beskriver är att Senslincs miljö använder **Active Directory via Keycloak** som IdP — vilket innebär att vanliga email/lösenord-inloggningen troligen antingen:
+1. Inte fungerar alls (blockas med 401/403)
+2. Fungerar men är ett AD-konto som kan löpa ut / kräver MFA
 
-## Befintlig data i systemet
+## Tre möjliga autentiseringsflöden hos Senslinc
 
-**5 byggnader med koordinater** (från `building_settings`):
-| Byggnad | Lat | Lng | Rotation |
-|---|---|---|---|
-| Centralstationen (755950d9...) | 59.336 | 18.013 | 0° |
-| Akerselva Atrium (9baa7a3a...) | 59.330 | 18.060 | 108° |
-| Stadshuset Nyköping (acc-bim...) | 58.757 | 16.995 | 190° |
-| Enköping (e471ea3a...) | 59.523 | 17.495 | 0° |
-| Bredäng (cc27795e...) | 59.345 | 18.220 | 0° |
+### Variant A: Keycloak `client_credentials` (Service Account) — REKOMMENDERAT
+Senslinc-instansen har ett **service account** i Keycloak med `client_id` + `client_secret`. Ingen AD-användare behövs. Token hämtas via Keycloaks token-endpoint:
 
-**3 byggnader med XKT-modeller** (Centralstationen: 3 modeller, Akerselva: 2 modeller, Småviken: 2 modeller) — dessa används i Fas 2.
-
----
-
-## Teknikstack
-
-- **`cesium`** — CesiumJS core (3D globe rendering)
-- **`resium`** — React-komponenter för Cesium
-- **`vite-plugin-static-copy`** — Kopierar Cesium's statiska workers/assets till public
-
-Cesium Ion-token lagras som backend-hemlighet `CESIUM_ION_TOKEN` och returneras via ny edge function `get-cesium-token` (samma mönster som `get-mapbox-token`).
-
----
-
-## Arkitektur
-
-```text
-/cesium-globe (fullskärmssida, utanför AppLayout)
-│
-├── CesiumGlobeView (huvud-canvas)
-│   ├── Resium Viewer (Cesium Ion bakgrundskarta + terräng)
-│   ├── Per byggnad (Fas 1):
-│   │   └── BoxGraphics — extruderad 3D-låda med korrekt rotation
-│   └── Per byggnad med XKT (Fas 2):
-│       └── ModelGraphics — glTF-modell med georeferensmatris
-│
-├── GlobeBuildingList (vänster sidebar)
-│   └── Lista med byggnader → klick flyger till byggnad
-│
-└── GlobeInfoCard (popup vid val)
-    ├── Byggnadsnamn, adress, koordinater
-    ├── "Öppna i 3D-visaren" knapp
-    └── "Läs in BIM-modell" knapp (Fas 2, om XKT finns)
+```
+POST {KEYCLOAK_URL}/protocol/openid-connect/token
+grant_type=client_credentials
+client_id={SENSLINC_CLIENT_ID}
+client_secret={SENSLINC_CLIENT_SECRET}
 ```
 
----
+→ Returnerar ett JWT `access_token` som sedan skickas till Senslinc API som `Authorization: Bearer {token}` (istället för nuvarande `Authorization: JWT {token}`).
 
-## Fas 1: Extruderade byggnadsvolymer
+**Förekomst i projektet**: Asset+ och FM Access använder exakt detta mönster — kodmönstret finns redan i `asset-plus-sync/index.ts` och `fm-access-query/index.ts`.
 
-Varje byggnad renderas som en **BoxGraphics** i Cesium Entity API:
+### Variant B: Keycloak `password` grant med AD-konto
+Samma som idag men via Keycloak token-endpoint istället för `/api-token-auth/`:
 
-- **Position**: `Cartesian3.fromDegrees(lng, lat, höjd/2)`
-- **Storlek**: Estimerad baserat på `gross_area` (roten ur area = kant) × antal våningar × 3.2m
-- **Rotation**: `HeadingPitchRoll(rotation, 0, 0)` → korrekt orientering
-- **Färg**: Semi-transparent primärfärg (indigo-600, alpha 0.7) med vit outline
-- **Highlight**: Gul vid hover/val
-
-Antal våningar räknas från `assets`-tabellen (kategori `Building Storey` per byggnad).
-
-### UI-layout
-
-```text
-┌─────────────────────────────────────────────────────┐
-│ [← Tillbaka]    Cesium Globe    [Lager ▼] [⚙]      │
-├───────────┬─────────────────────────────────────────┤
-│ Byggnader │                                         │
-│ ─────────│          CESIUM ION GLOBE               │
-│ 🏢 Central│     (satellitbild + terräng)            │
-│ 🏢 Akersel│                                         │
-│ 🏢 Stadsh │   [Extruderade byggnader placerade      │
-│ 🏢 Enkö.. │    på korrekt geografisk position]      │
-│ 🏢 Bredäng│                                         │
-│           │              [Info-popup vid val]       │
-└───────────┴─────────────────────────────────────────┘
+```
+POST {KEYCLOAK_URL}/protocol/openid-connect/token
+grant_type=password
+username={AD_USERNAME}
+password={AD_PASSWORD}
+client_id={SENSLINC_CLIENT_ID}
 ```
 
----
+Tokenformatet ändras till `Bearer` istället för `JWT`.
 
-## Fas 2: Riktiga BIM-modeller via glTF
+**Risk**: AD-lösenord löper ut, MFA kan aktiveras, kräver AD-konto.
 
-### Konverteringspipeline
+### Variant C: Hybrid — Senslinc API-token via AD-inloggning
+Keycloak bearer-token skickas till Senslincs `/api-token-auth/` som ersätter email/lösenord. Ovanligare men möjligt.
 
-En ny edge function `xkt-to-gltf` konverterar XKT → glTF server-side:
+## Vad vi bygger
 
-```text
-Klient klickar "Läs in BIM-modell"
-    ↓
-CesiumGlobeView anropar /xkt-to-gltf med { buildingFmGuid, modelId }
-    ↓
-Edge function:
-  1. Kontrollera cache: finns gltf-models/{buildingFmGuid}/{modelId}.gltf?
-  2. Om ja → returnera signed URL direkt
-  3. Om nej → hämta XKT-fil från xkt-models storage bucket
-  4. Parsa XKT med @xeokit/xeokit-convert (XKTModel)
-  5. Extrahera geometri och generera glTF JSON + binär buffer
-  6. Spara till gltf-models/{buildingFmGuid}/{modelId}.gltf
-  7. Returnera signed URL
-    ↓
-CesiumGlobeView laddar modellen:
-  Cesium.Model.fromGltfAsync({
-    url: signedUrl,
-    modelMatrix: Transforms.headingPitchRollToFixedFrame(
-      Cartesian3.fromDegrees(lng, lat, 0),
-      new HeadingPitchRoll(toRadians(rotation), 0, 0)
-    )
-  })
+Uppdatera `senslinc-query` edge function med stöd för **alla tre varianterna** via ett autentiseringsval i hemligheten `SENSLINC_AUTH_MODE`.
+
+### Ny autentiseringslogik
+
+```typescript
+// Prioriteringsordning:
+// 1. Om SENSLINC_KEYCLOAK_URL finns → Keycloak-flöde (client_credentials eller password)
+// 2. Om inget Keycloak → befintlig /api-token-auth/ (bakåtkompatibelt)
+
+async function getToken(apiUrl: string, email: string, password: string): Promise<string> {
+  const keycloakUrl = Deno.env.get('SENSLINC_KEYCLOAK_URL');
+  const clientId = Deno.env.get('SENSLINC_CLIENT_ID');
+  const clientSecret = Deno.env.get('SENSLINC_CLIENT_SECRET');
+  
+  // Keycloak-flöde
+  if (keycloakUrl && clientId) {
+    return await getKeycloakToken(keycloakUrl, clientId, clientSecret, email, password);
+  }
+  
+  // Legacy Django token auth (befintlig logik)
+  return await getDjangoToken(apiUrl, email, password);
+}
 ```
 
-### Ny storage bucket
+### Token-header anpassas automatiskt
 
-En ny bucket `gltf-models` (icke-publik, signed URLs) skapas via SQL-migration.
+```typescript
+// Nuvarande (Django):
+headers: { 'Authorization': `JWT ${token}` }
 
-### Georeferensmatris
-
-Samma `rotation`-värde från `building_settings` används för att rikta modellen rätt. Cesium's `Transforms.headingPitchRollToFixedFrame()` placerar modellen korrekt på WGS84-ellipsoiden.
-
----
-
-## Navigering till Cesium Globe
-
-- **Portföljvyn**: Ny knapp "Visa på glob" bredvid befintliga CTA-knappar
-- **MobileNav**: Ny knapp i "Mer"-drawern (`cesium_globe`-key)
-- **Route**: `/cesium-globe` som fristående route i `App.tsx` (fullskärm, skyddad av auth)
-
----
-
-## Tekniska filer som ändras/skapas
-
-### Nya filer
-```text
-src/pages/CesiumGlobe.tsx                    (tunn wrapper, lazy-laddad)
-src/components/globe/CesiumGlobeView.tsx     (huvud-komponent, Cesium viewer)
-src/components/globe/GlobeBuildingList.tsx   (vänster sidebar)
-src/components/globe/GlobeInfoCard.tsx       (info-popup vid byggnadsval)
-supabase/functions/get-cesium-token/index.ts (returnerar Ion-token säkert)
-supabase/functions/xkt-to-gltf/index.ts     (XKT → glTF konvertering)
+// Keycloak bearer:
+headers: { 'Authorization': `Bearer ${token}` }
 ```
 
-### Ändrade filer
-```text
-vite.config.ts                              (viteStaticCopy för Cesium assets)
-src/App.tsx                                 (ny /cesium-globe route)
-src/components/portfolio/PortfolioView.tsx  (knapp "Visa på glob")
-src/components/layout/MobileNav.tsx         (Cesium Globe i Mer-drawern)
-supabase/config.toml                        (verify_jwt = false för get-cesium-token)
-package.json                                (cesium, resium, vite-plugin-static-copy)
+Auth-läget avgörs av om `SENSLINC_KEYCLOAK_URL` är konfigurerad.
+
+## Nya hemligheter som krävs
+
+Beroende på Senslincs faktiska konfiguration behövs ett av:
+
+| Variant | Hemligheter |
+|---|---|
+| A: client_credentials (service account) | `SENSLINC_KEYCLOAK_URL`, `SENSLINC_CLIENT_ID`, `SENSLINC_CLIENT_SECRET` |
+| B: password grant med AD-konto | `SENSLINC_KEYCLOAK_URL`, `SENSLINC_CLIENT_ID`, `SENSLINC_EMAIL` (AD-user), `SENSLINC_PASSWORD` (AD-pwd) |
+| C: Hybrid | Inga nya — befintliga räcker |
+
+`SENSLINC_EMAIL` och `SENSLINC_PASSWORD` finns redan — vid Variant B återanvänds de som AD-konto.
+
+## Teknisk implementation
+
+### `supabase/functions/senslinc-query/index.ts` — uppdateras
+
+Ny `getKeycloakToken`-funktion läggs till (återanvänder mönstret från `asset-plus-sync`):
+
+```typescript
+// 55-minuters cache bibehålls
+let cachedToken: { token: string; expiresAt: number; type: 'JWT' | 'Bearer' } | null = null;
+
+async function getKeycloakToken(
+  keycloakUrl: string,
+  clientId: string,
+  clientSecret: string | undefined,
+  username: string | undefined,
+  password: string | undefined
+): Promise<{ token: string; type: 'Bearer' }> {
+  
+  const tokenUrl = keycloakUrl.endsWith('/protocol/openid-connect/token')
+    ? keycloakUrl
+    : `${keycloakUrl.replace(/\/+$/, '')}/protocol/openid-connect/token`;
+  
+  const params = new URLSearchParams({ client_id: clientId });
+  
+  if (clientSecret && !username) {
+    // Variant A: client_credentials (service account — föredras)
+    params.set('grant_type', 'client_credentials');
+    params.set('client_secret', clientSecret);
+  } else if (username && password) {
+    // Variant B: password grant med AD-konto
+    params.set('grant_type', 'password');
+    params.set('username', username);
+    params.set('password', password);
+    if (clientSecret) params.set('client_secret', clientSecret);
+  }
+  
+  const response = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+  
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Keycloak auth failed: ${response.status} - ${text}`);
+  }
+  
+  const data = await response.json();
+  return { token: data.access_token, type: 'Bearer' };
+}
 ```
 
-### SQL-migration
-```sql
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('gltf-models', 'gltf-models', false);
+### Token-typ propageras till API-anrop
 
-CREATE POLICY "Authenticated users can read gltf models"
-ON storage.objects FOR SELECT TO authenticated
-USING (bucket_id = 'gltf-models');
-
-CREATE POLICY "Service role can write gltf models"
-ON storage.objects FOR INSERT TO service_role
-USING (bucket_id = 'gltf-models');
+```typescript
+// senslincFetchWithRetry uppdateras:
+async function senslincFetchWithRetry(
+  apiUrl: string,
+  endpoint: string,
+  token: string,
+  tokenType: 'JWT' | 'Bearer' = 'JWT',  // ny parameter
+  options?: { method?: string; body?: unknown }
+): Promise<unknown> {
+  // ...
+  headers: { 'Authorization': `${tokenType} ${token}` }
+}
 ```
 
----
+### `test-connection` action uppdateras
 
-## Hemlighet
+Visar vilket autentiseringsläge som används:
 
-**`CESIUM_ION_TOKEN`** lagras som backend-hemlighet (token du angav). Hämtas klient-sidan via den nya `get-cesium-token`-funktionen med samma mönster som `get-mapbox-token`. Token visas aldrig i frontend-koden.
+```typescript
+case 'test-connection': {
+  const mode = Deno.env.get('SENSLINC_KEYCLOAK_URL') ? 'Keycloak' : 'Django token';
+  const { token, type } = await getTokenWithType(...);
+  const sites = await senslincFetch(...);
+  return jsonResponse({
+    success: true,
+    message: `Anslutning lyckades via ${mode}! Hittade ${sites.length} sites.`,
+    authMode: mode,
+  });
+}
+```
 
----
+## Nästa steg — vad vi behöver veta
 
-## Vad detta löser
+Jag behöver en sak av dig för att veta exakt vilka hemligheter som ska konfigureras:
 
-| Fas | Funktion | Resultat |
-|---|---|---|
-| Fas 1 | Extruderade 3D-volymer på glob | Portföljöversikt av alla 5 byggnader geografiskt |
-| Fas 1 | Klick → info-popup | Byggnadsnamn, koordinater, länk till 3D-visaren |
-| Fas 1 | Korrekt rotation per byggnad | Nyköping (190°), Akerselva (108°) pekar rätt |
-| Fas 2 | XKT → glTF server-konvertering | Riktiga IFC-modeller på globen |
-| Fas 2 | Georeferensmatris + rotation | Korrekt orientering (samma data som Virtual Twin) |
-| Fas 2 | glTF-cache i storage | Konverteras en gång, laddas snabbt sedan |
+**Fråga till dig**: Vet du om Senslinc (InUse) har ett **service account** (client_id + client_secret) i Keycloak, eller om vi måste använda ett vanligt **AD-användarkonto** (username + password via Keycloak)?
+
+Om du har kontakt med Senslinc/InUse-supporten eller din IT-avdelning kan de berätta:
+- Finns det ett Keycloak client_id för API-åtkomst?
+- Finns det ett service account med client_secret?
+- Vilken är Keycloak-instansens URL (`/realms/{realm}/...`)?
+
+## Vad som förändras
+
+| Komponent | Förändring |
+|---|---|
+| `senslinc-query/index.ts` | Ny `getKeycloakToken()`, token-typ propageras, `test-connection` visar auth-läge |
+| Hemligheter | `SENSLINC_KEYCLOAK_URL`, `SENSLINC_CLIENT_ID`, ev. `SENSLINC_CLIENT_SECRET` |
+| Befintliga hemligheter | `SENSLINC_EMAIL` / `SENSLINC_PASSWORD` bibehålls (Keycloak password grant eller legacy fallback) |
+| Token-header | Automatiskt `JWT` (legacy) eller `Bearer` (Keycloak) beroende på konfiguration |
+
+## Bakåtkompatibilitet
+
+Om `SENSLINC_KEYCLOAK_URL` inte är satt → **exakt samma beteende som idag**. Ingen funktionsförändring för befintliga miljöer.
+
+## Vad vi implementerar nu
+
+Uppdaterar `senslinc-query` edge function med det kompletta Keycloak-stödet (alla tre varianterna). Konfigurationen sker via hemligheter utan kodändringar.
+
