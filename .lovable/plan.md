@@ -1,83 +1,116 @@
 
 
-## Plan: Progress-indikator for IFC-konvertering
+## Plan: Forbattra rumsetiketter i 3D-viewern
 
-### Bakgrund
+Fem forbattringar av rumslabell-systemet baserat pa dina onskemal.
 
-Idag visas konverteringsstatus som en liten Badge med texten "Server..." eller statusnamnet. Nar IFC-konverteringen kors (som kan ta 1-5 minuter for stora modeller) far anvandaren ingen detaljerad feedback om hur langt processen har kommit.
+### 1. Ocklusionstest -- dolj etiketter bakom vaggar/tak
 
-### Andringar
+Lagg till ett djuptest (occlusion check) som jamfor etikettens djupvarde mot scenens depth buffer. Om nagot objekt (vagg, tak) ar narmare kameran an etiketten doljs den.
 
-#### 1. Utoka `TranslationStatus` med numerisk progress
+**Teknik:** Anvand xeokit-viewerns `scene.pick()` med en ray fran kameran till etikettens 3D-position. Om pick-resultatet traffar ett annat objekt an rummets entity (och det traffade objektet ar narmare) doljs etiketten.
 
-**Fil:** `src/services/acc-xkt-converter.ts`
+**Implementering i `useRoomLabels.ts`, `updateLabelPositions`:**
+- For varje etikett: gor en enkel siktlinjetest med `scene.pick({ pickSurface: false, origin: cameraEye, direction: normalized(labelPos - cameraEye) })`
+- Om det traffade objektets entity-id inte matchar etikettens entityId OCH traffpunkten ar narmare an etiketten -- satt `display: none`
+- Optimering: kors ocklusionstest max var 5:e frame (throttle) for att inte paverka prestanda
 
-Lagg till `progressPercent` (0-100) i `TranslationStatus`-interfacet. Uppdatera alla stallen dar status satts under konverteringen:
-- `runFullPipeline` steg 1-4: Satt progressPercent for varje fas (0-20 for translation, 20-40 for download, 40-95 for konvertering, 95-100 for sparning)
-- `convertGlbToXkt`: Lagg till en `onProgress`-callback som rapporterar ungefar var i konverteringsprocessen vi ar (parsing, finalize, write)
-- `tryServerConversion`: Samma procentstruktur
+### 2. Sank hojden till golvnivaet
 
-#### 2. Skapa en `ConversionProgressOverlay`-komponent
+Andra default `heightOffset` fran `1.2` till `0.0` (eller nara `0.05` for att undvika z-fighting). I `createLabels` anvands `aabb[1]` (botten av rummets bounding box) plus offset -- med offset 0 hamnar etiketten vid golvniva.
 
-**Ny fil:** `src/components/settings/ConversionProgressOverlay.tsx`
+**Andringar:**
+- `useRoomLabels.ts` rad 29: Andra `heightOffset: 1.2` till `heightOffset: 0.05`
+- `RoomLabelSettings.tsx`: Andra slider min-varde fran `0.1` till `0.0` och default fran `1.2` till `0.05`
 
-En liten overlay/panel som visas i ApiSettingsModal under aktivt konverteringsjobb:
-- Visar en `Progress`-bar (ateranvander befintlig `src/components/ui/progress.tsx`)
-- Visar aktuellt steg i text (t.ex. "Vantar pa Autodesk...", "Laddar ner IFC...", "Konverterar IFC till XKT...")
-- Visar filnamn och forlopd tid
-- Animerad ikon nar processen gar (Loader2 spinner)
-- Dold nar inget jobb ar aktivt
+### 3. Minska etikettens bakgrundsstorlek men behall textstorlek
 
-#### 3. Integrera overlayen i ApiSettingsModal
+Minska padding fran `3px 6px` till `1px 3px`, ta bort eller minimera border och box-shadow, och gor bakgrunden mer transparent. Textstorleken paverkas inte.
 
-**Fil:** `src/components/settings/ApiSettingsModal.tsx`
+**Andringar i `createLabels`, `labelEl.style.cssText`:**
+- Andra `padding: 3px 6px` till `padding: 1px 3px`
+- Andra `border-radius: 4px` till `border-radius: 2px`
+- Minska `box-shadow` till `0 0 2px rgba(0,0,0,0.1)`
+- Gor bakgrunden mer transparent: `background: hsl(var(--background) / 0.6)`
 
-- Importera och rendera `ConversionProgressOverlay` ovanfor fillistningen i ACC-fliken
-- Skicka in aktuell `translationStatuses` -- overlayen visar info for det jobb som ar aktivt
-- Behall befintliga badges for individuella filer men visa den detaljerade progressen i overlayen
+### 4. Lagg etiketten platt pa golvet (billboard till plan)
+
+Istallet for att alltid vara vand mot kameran (billboard-stil) kan etiketten renderas som en CSS-transformerad yta som ligger plant pa golvet. Detta kravs en perspektiv-rotation.
+
+**Teknik:** Istallet for att anvanda `translate(-50%, -50%)` som billboard laggs en CSS 3D-rotation till som matchar golvplanet:
+- Berakna etikettens rotation fran kamerans vy sa att den framstar som liggande plant i 3D-rymden
+- Anvand `transform: translate3d(...) rotateX(90deg)` justerat med kamerans projektion
+- Alternativt: anvand xeokits egna sprite/label-system om det stodjer plan-orientering
+
+**Forenklad losning:** Lagg till ett `flat`-lage dar etiketten far en extra `rotateX()`-transform baserad pa kamerans pitch-vinkel, sa att den visuellt "ligger ner" pa golvet. Nar kameran ar rakt ovanifran (planvy) ser den normal ut, och fran sidan ser den perspektiviskt platt ut.
+
+### 5. Lagg till nya konfigurationsalternativ i RoomLabelSettings
+
+Lagg till tva nya installningar i konfigurationsinterfacet:
+
+- **Ocklusion (on/off):** Switch for att aktivera/avaktivera ocklusionstest (default: pa)
+- **Platt lage (on/off):** Switch for att lagga etiketter plant pa golvet istallet for billboard-stil (default: av)
 
 ### Tekniska detaljer
 
-**Uppdaterat TranslationStatus-interface:**
-```typescript
-export interface TranslationStatus {
-  status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' 
-        | 'downloading' | 'converting' | 'complete' | 'server-converting';
-  progress?: string;
-  progressPercent?: number;  // 0-100, ny
-  step?: string;             // kort stegbeskrivning, ny
-  message?: string;
-  error?: string;
-  derivativeCount?: number;
-  downloadUrl?: string;
-}
-```
-
-**Progress-steg i pipelinen:**
-
-| Fas | Procent | Steg-text |
-|-----|---------|-----------|
-| Starta oversattning | 0-5% | "Startar oversattning..." |
-| Vanta pa Autodesk | 5-20% | "Vantar pa Autodesk..." |
-| Ladda ner IFC | 20-35% | "Laddar ner IFC-fil..." |
-| Parsa IFC (WASM) | 35-75% | "Konverterar IFC-geometri..." |
-| Finalisera XKT | 75-90% | "Bygger XKT-modell..." |
-| Spara i cache | 90-100% | "Sparar 3D-modell..." |
-
-**ConversionProgressOverlay layout:**
-```text
-+--------------------------------------------------+
-| [spinner] Konverterar: Stadshuset.rvt             |
-| [==============--------] 62%                      |
-| Konverterar IFC-geometri... (2m 15s)              |
-+--------------------------------------------------+
-```
-
-### Filer som andras
+**Filer som andras:**
 
 | Fil | Andring |
 |-----|---------|
-| `src/services/acc-xkt-converter.ts` | Lagg till `progressPercent` och `step` i TranslationStatus, satt varden i varje pipeline-steg |
-| `src/components/settings/ConversionProgressOverlay.tsx` | Ny komponent med Progress-bar och steg-info |
-| `src/components/settings/ApiSettingsModal.tsx` | Rendera ConversionProgressOverlay i ACC-fliken |
+| `src/hooks/useRoomLabels.ts` | Lagg till ocklusionstest i `updateLabelPositions`, sank default hojd, minska padding, lagg till flat-transform |
+| `src/hooks/useRoomLabelConfigs.ts` | Lagg till `occlusion_enabled` och `flat_on_floor` i `RoomLabelConfig` interface |
+| `src/components/settings/RoomLabelSettings.tsx` | Lagg till switchar for ocklusion och platt-lage, uppdatera slider-defaults |
+
+**Databasandring:** Lagg till tva nya kolumner i `room_label_configs`-tabellen:
+- `occlusion_enabled BOOLEAN DEFAULT true`
+- `flat_on_floor BOOLEAN DEFAULT false`
+
+**Uppdaterat RoomLabelsConfigDetail:**
+```typescript
+export interface RoomLabelsConfigDetail {
+  fields: string[];
+  heightOffset: number;
+  fontSize: number;
+  scaleWithDistance: boolean;
+  clickAction: 'none' | 'flyto' | 'roomcard';
+  occlusionEnabled: boolean;   // ny
+  flatOnFloor: boolean;        // ny
+}
+```
+
+**Ocklusionslogik (pseudokod):**
+```typescript
+// I updateLabelPositions, for varje etikett:
+if (config.occlusionEnabled) {
+  const dir = normalize(subtract(label.worldPos, cameraEye));
+  const pickResult = viewer.scene.pick({
+    origin: cameraEye,
+    direction: dir,
+    pickSurface: false,
+  });
+  if (pickResult?.entity && pickResult.entity.id !== label.entityId) {
+    // Nagot annat objekt blockerar sikten
+    visible = false;
+  }
+}
+```
+
+**Flat-transform (pseudokod):**
+```typescript
+// I updateLabelPositions, for varje etikett:
+if (config.flatOnFloor) {
+  // Berakna pitch fran kamerans eye/look
+  const pitch = Math.atan2(
+    cameraEye[1] - cameraLook[1],
+    horizontalDist
+  );
+  const tiltDeg = 90 - (pitch * 180 / Math.PI);
+  transform += ` rotateX(${tiltDeg}deg)`;
+}
+```
+
+### Prestanda
+
+- Ocklusionstest med `scene.pick()` kan vara tungt for manga etiketter. Begransning: max 1 pick per etikett per 5 frames, och skippa etiketter som ar utanfor synfaltet
+- Flat-transform ar en ren CSS-operation och paverkar inte prestanda
 
