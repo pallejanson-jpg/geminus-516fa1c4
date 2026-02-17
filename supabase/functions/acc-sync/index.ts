@@ -2,6 +2,45 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, forbiddenResponse, corsHeaders } from "../_shared/auth.ts";
 
+// ============ RETRY HELPER ============
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  { maxRetries = 3, baseDelayMs = 2000, retryOn = [502, 503, 504] } = {},
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (attempt < maxRetries && retryOn.includes(res.status)) {
+        const body = await res.text();
+        console.log(`[retry] Attempt ${attempt + 1}/${maxRetries + 1} got ${res.status}, retrying in ${baseDelayMs * (attempt + 1)}ms...`);
+        await new Promise(r => setTimeout(r, baseDelayMs * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < maxRetries && (err as Error).name === 'AbortError') {
+        console.log(`[retry] Attempt ${attempt + 1}/${maxRetries + 1} timed out, retrying...`);
+        await new Promise(r => setTimeout(r, baseDelayMs * (attempt + 1)));
+        continue;
+      }
+      if (attempt < maxRetries) {
+        console.log(`[retry] Attempt ${attempt + 1}/${maxRetries + 1} failed: ${(err as Error).message}, retrying...`);
+        await new Promise(r => setTimeout(r, baseDelayMs * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+  throw lastError || new Error(`fetchWithRetry: all ${maxRetries + 1} attempts failed`);
+}
+
 // ============ APS OAUTH 2-LEGGED ============
 
 async function getApsAccessToken(): Promise<string> {
@@ -1880,7 +1919,7 @@ serve(async (req: Request) => {
           ? "https://developer.api.autodesk.com/modelderivative/v2/regions/eu/designdata/job"
           : "https://developer.api.autodesk.com/modelderivative/v2/designdata/job";
         console.log(`[translate-model] isEmea=${isEmea}, endpoint=${mdEndpoint}`);
-        let jobRes = await fetch(mdEndpoint, {
+        let jobRes = await fetchWithRetry(mdEndpoint, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -1894,7 +1933,7 @@ serve(async (req: Request) => {
         if (jobRes.status === 403) {
           console.log("[translate-model] 3-legged token got 403, retrying with 2-legged app token...");
           const appToken = await getApsAccessToken();
-          jobRes = await fetch(mdEndpoint, {
+          jobRes = await fetchWithRetry(mdEndpoint, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${appToken}`,
@@ -1964,7 +2003,7 @@ serve(async (req: Request) => {
           : `https://developer.api.autodesk.com/modelderivative/v2/designdata/${urnBase64}/manifest`;
         console.log(`[check-translation] isEmea=${isEmeaCheck}, url=${manifestUrl}`);
 
-        let manifestRes = await fetch(manifestUrl, {
+        let manifestRes = await fetchWithRetry(manifestUrl, {
           headers: { "Authorization": `Bearer ${token}` },
         });
 
@@ -1972,7 +2011,7 @@ serve(async (req: Request) => {
         if (manifestRes.status === 403) {
           console.log("[check-translation] 3-legged token got 403, retrying with 2-legged app token...");
           const appToken = await getApsAccessToken();
-          manifestRes = await fetch(manifestUrl, {
+          manifestRes = await fetchWithRetry(manifestUrl, {
             headers: { "Authorization": `Bearer ${appToken}` },
           });
         }
