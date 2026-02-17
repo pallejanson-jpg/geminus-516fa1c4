@@ -91,27 +91,37 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
   useEffect(() => {
     if (step !== 'picking3D') return;
 
-    // Deactivate select tool so clicking doesn't highlight objects
+    // Deactivate select tool AND suppress highlighting during point picking
     const assetView = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
+    const xv = assetView?.viewer;
+    let savedHighlightEdges = true;
+
     if (assetView && typeof assetView.useTool === 'function') {
       assetView.useTool(null);
       console.log('[AlignmentPicker] Deactivated select tool for point picking');
     }
 
+    // Suppress highlighting so clicks don't visually select objects
+    if (xv?.scene) {
+      savedHighlightEdges = xv.scene.highlightMaterial?.edges ?? true;
+      xv.scene.highlightMaterial.edges = false;
+      // Clear any existing highlights
+      const allIds = xv.scene.objectIds;
+      if (allIds?.length) {
+        xv.scene.setObjectsHighlighted(allIds, false);
+        xv.scene.setObjectsSelected(allIds, false);
+      }
+      console.log('[AlignmentPicker] Suppressed highlighting for point picking');
+    }
+
     const handlePick = (e: CustomEvent) => {
-      const coords = e.detail?.worldPos || e.detail?.canvasPos;
-      if (coords && Array.isArray(coords) && coords.length >= 3) {
-        const picked: Vec3 = { x: coords[0], y: coords[1], z: coords[2] };
-        // Validate the pick hit an actual mesh (not empty space)
-        const entityId = e.detail?.entityId || e.detail?.entity?.id;
-        if (!entityId && !e.detail?.worldPos) {
-          toast.warning('Klicka på en synlig yta (vägg, golv, pelare) — inte tom rymd.');
-          return;
-        }
+      const worldPos = e.detail?.worldPos;
+      if (worldPos && Array.isArray(worldPos) && worldPos.length >= 3) {
+        const picked: Vec3 = { x: worldPos[0], y: worldPos[1], z: worldPos[2] };
         setBimPoint(picked);
         setStep('done');
         toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-        console.log('[AlignmentPicker] 3D point picked:', picked, 'entity:', entityId);
+        console.log('[AlignmentPicker] 3D point picked:', picked);
       }
     };
 
@@ -119,28 +129,27 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     window.addEventListener('xeokit-pick', handlePick as EventListener);
     pickListenerRef.current = handlePick as any;
 
-    // Also try to register directly on the viewer instance
-    const win = window as any;
-    const xv = win.__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    // Also register directly on the viewer instance for surface picking
     let inputSub: any = null;
     if (xv?.scene?.input) {
       inputSub = xv.scene.input.on('mouseclicked', (canvasCoords: number[]) => {
         const pickResult = xv.scene.pick({ canvasPos: canvasCoords, pickSurface: true });
         if (pickResult?.worldPos) {
-          // Validate: pickResult.entity must exist (means we hit geometry)
-          if (!pickResult.entity) {
-            toast.warning('Ingen yta träffad. Klicka direkt på ett BIM-objekt.');
-            return;
-          }
+          // Accept ANY surface hit — no entity requirement
           const picked: Vec3 = {
             x: pickResult.worldPos[0],
             y: pickResult.worldPos[1],
             z: pickResult.worldPos[2],
           };
+          // Clear any selection/highlight that the pick may have triggered
+          if (pickResult.entity) {
+            pickResult.entity.highlighted = false;
+            pickResult.entity.selected = false;
+          }
           setBimPoint(picked);
           setStep('done');
           toast.success(`3D-punkt vald: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 3D point picked via xeokit:', picked, 'entity:', pickResult.entity.id);
+          console.log('[AlignmentPicker] 3D point picked via xeokit:', picked, 'entity:', pickResult.entity?.id || 'none');
         } else {
           toast.warning('Ingen yta träffad. Klicka direkt på en synlig vägg, golv eller pelare.');
         }
@@ -152,11 +161,15 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       if (inputSub !== null && xv?.scene?.input) {
         xv.scene.input.off(inputSub);
       }
+      // Restore highlighting behavior
+      if (xv?.scene?.highlightMaterial) {
+        xv.scene.highlightMaterial.edges = savedHighlightEdges;
+      }
       // Restore select tool
       const av = (window as any).__assetPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView;
       if (av && typeof av.useTool === 'function') {
         av.useTool('select');
-        console.log('[AlignmentPicker] Restored select tool');
+        console.log('[AlignmentPicker] Restored select tool and highlighting');
       }
     };
   }, [step]);
