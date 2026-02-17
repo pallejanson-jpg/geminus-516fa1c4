@@ -1525,6 +1525,119 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   useEffect(() => { loadLocalAnnotationsRef.current = loadLocalAnnotations; }, [loadLocalAnnotations]);
   useEffect(() => { loadAlarmAnnotationsRef.current = loadAlarmAnnotations; }, [loadAlarmAnnotations]);
 
+  // Load ACC models (GLB/OBJ) directly via xeokit loader plugins (bypasses XKT conversion)
+  const loadAccDirectModels = useCallback(async () => {
+    const resolvedGuid = buildingFmGuid;
+    if (!resolvedGuid) return;
+
+    // Query for non-XKT models (GLB/OBJ from ACC pipeline)
+    // Use raw filter since 'format' column is new and not in generated types yet
+    const { data: accModels } = await (supabase
+      .from('xkt_models')
+      .select('model_id, storage_path, model_name') as any)
+      .eq('building_fm_guid', resolvedGuid)
+      .neq('format', 'xkt');
+
+    if (!accModels || accModels.length === 0) return;
+
+    console.log(`[ACC Direct] Found ${accModels.length} non-XKT models to load directly`);
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer) {
+      console.warn('[ACC Direct] xeokit viewer not available');
+      return;
+    }
+
+    for (const model of accModels) {
+      try {
+        // Get signed URL
+        const { data: urlData } = await supabase.storage
+          .from('xkt-models')
+          .createSignedUrl(model.storage_path, 3600);
+
+        if (!urlData?.signedUrl) {
+          console.warn(`[ACC Direct] No signed URL for ${model.model_id}`);
+          continue;
+        }
+
+        const modelFormat = model.storage_path?.endsWith('.obj') ? 'obj' : 'glb';
+        console.log(`[ACC Direct] Loading ${modelFormat.toUpperCase()} model: ${model.model_id}`);
+
+        if (modelFormat === 'glb') {
+          // Use GLTFLoaderPlugin
+          let gltfLoader = (xeokitViewer as any).__gltfLoaderPlugin;
+          if (!gltfLoader) {
+            const GLTFLoaderPlugin = (xeokitViewer.constructor as any).GLTFLoaderPlugin || 
+              (window as any).xeokit?.GLTFLoaderPlugin;
+            if (!GLTFLoaderPlugin) {
+              // Dynamic import of xeokit SDK for the loader plugin
+              try {
+                const sdk = await (Function('return import("https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk/dist/xeokit-sdk.es.js")')() as Promise<any>);
+                if (sdk?.GLTFLoaderPlugin) {
+                  gltfLoader = new sdk.GLTFLoaderPlugin(xeokitViewer);
+                }
+              } catch (e) {
+                console.warn('[ACC Direct] Failed to load xeokit SDK for GLTFLoaderPlugin:', e);
+              }
+            } else {
+              gltfLoader = new GLTFLoaderPlugin(xeokitViewer);
+            }
+            if (gltfLoader) {
+              (xeokitViewer as any).__gltfLoaderPlugin = gltfLoader;
+            }
+          }
+          
+          if (gltfLoader) {
+            gltfLoader.load({
+              id: `acc-${model.model_id}`,
+              src: urlData.signedUrl,
+              edges: true,
+            });
+            console.log(`[ACC Direct] GLB model loaded: ${model.model_id}`);
+          } else {
+            console.warn('[ACC Direct] GLTFLoaderPlugin not available');
+          }
+        } else if (modelFormat === 'obj') {
+          // Use OBJLoaderPlugin
+          let objLoader = (xeokitViewer as any).__objLoaderPlugin;
+          if (!objLoader) {
+            const OBJLoaderPlugin = (xeokitViewer.constructor as any).OBJLoaderPlugin || 
+              (window as any).xeokit?.OBJLoaderPlugin;
+            if (!OBJLoaderPlugin) {
+              try {
+                const sdk = await (Function('return import("https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk/dist/xeokit-sdk.es.js")')() as Promise<any>);
+                if (sdk?.OBJLoaderPlugin) {
+                  objLoader = new sdk.OBJLoaderPlugin(xeokitViewer);
+                }
+              } catch (e) {
+                console.warn('[ACC Direct] Failed to load xeokit SDK for OBJLoaderPlugin:', e);
+              }
+            } else {
+              objLoader = new OBJLoaderPlugin(xeokitViewer);
+            }
+            if (objLoader) {
+              (xeokitViewer as any).__objLoaderPlugin = objLoader;
+            }
+          }
+          
+          if (objLoader) {
+            objLoader.load({
+              id: `acc-${model.model_id}`,
+              src: urlData.signedUrl,
+              edges: true,
+            });
+            console.log(`[ACC Direct] OBJ model loaded: ${model.model_id}`);
+          } else {
+            console.warn('[ACC Direct] OBJLoaderPlugin not available');
+          }
+        }
+      } catch (e) {
+        console.warn(`[ACC Direct] Failed to load ${model.model_id}:`, e);
+      }
+    }
+  }, [buildingFmGuid]);
+
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
     try {
@@ -1539,6 +1652,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       setModelLoadState('loaded');
       setInitStep('ready');
+
+      // Load ACC models (GLB/OBJ) directly via xeokit loader plugins
+      loadAccDirectModels().catch(e => {
+        console.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
+      });
 
       // Virtual Twin: apply ghost opacity after all models load
       if (transparentBackground && ghostOpacity !== undefined) {
