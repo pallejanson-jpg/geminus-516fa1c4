@@ -1,130 +1,82 @@
 
-## Plan: CRUD-process for Geminus <-> Asset+
 
-Fyra problem identifierade, med losningar for varje:
+## Plan: Fix Split Screen alignment och kamerasynkronisering
+
+Tva separata problem att losa:
 
 ---
 
-### Problem 1: Skapa inventerade objekt i Asset+ fungerar inte
+### Problem 1: "Select Object" ar aktivt vid 3D-punkt-pickning
 
-**Orsak:** `asset-plus-create` edge function skickar `parentSpaceFmGuid` som `inRoomFmGuid` till Asset+ API. Men Asset+ API:t kraver `AddObject` med korrekt payload-format -- nuvarande implementation saknar `APIKey` i ratt position (det skickas som toppniva-nyckel men borde ligga inuti BimObject-strukturen) och `UsedIdentifier` saknas. Dessutom: om det inventerade objektet ar lokalt (`is_local=true`) och forst ska skapas i Asset+, behover FMGUID genereras korrekt.
+**Orsak:** I `AlignmentPointPicker.tsx` forsoks select-verktyget avaktiveras med `assetView.useTool(null)` (rad 97), men detta kanske inte fungerar med AssetPlus-viewern. Dessutom kraver valideringen att `pickResult.entity` finns (rad 131) -- dvs det KRAVS att man traffar ett objekt. Anvandaren vill bara fanga en position (koordinat pa ytan) utan att varda/highlighta nagot objekt.
 
-**Losning:** Uppdatera `asset-plus-create` edge function sa att:
-- `AddObject`-payloaden foljer samma struktur som fungerar i `acc-to-assetplus` (med `BimObject`-wrapper, `APIKey` inuti, `UsedIdentifier: 1`)
-- `building_fm_guid` setts pa det lokalt sparade objektet (harleds fran rum-hierarkin)
-- Bättre felmeddelanden loggas vid misslyckande
+**Losning:**
+- Anvand `pickSurface: true` utan att krava `entity` -- tillat klick pa alla ytor
+- Avaktivera object-highlighting under pickning genom att stanga av `pickable` pa alla objekt temporart ELLER anvanda `scene.pick()` med `pickSurface: true` utan att trigga selection
+- Ta bort kravet pa `pickResult.entity` -- acceptera alla `worldPos`-resultat
+- Skicka ett event som stanger av highlight/selection-beteendet i AssetPlusViewer under punkt-pickningen
 
 **Filandringar:**
-- `supabase/functions/asset-plus-create/index.ts` -- Omstrukturera payload till AddObject sa att det matchar Asset+ API-schema (BimObject-wrapper med APIKey, UsedIdentifier). Anvand samma format som fungerar i `acc-to-assetplus`.
+- `src/components/viewer/AlignmentPointPicker.tsx`:
+  - I `picking3D`-effecten: Byt fran `useTool(null)` till att avaktivera highlighting direkt via xeokit (`scene.setObjectsHighlighted(ids, false)` och `scene.highlightMaterial.edges = false`)
+  - Ta bort kravet pa `pickResult.entity` i bada pick-lyssnarna (rad 107 och 131-134) -- acceptera alla klick som ger `worldPos`
+  - Lagg till `pickSurface: true` i `scene.pick()` (redan gjort) men tillat resultat aven utan entity
+  - Vid cleanup: aterstall highlighting-beteende
 
 ---
 
-### Problem 2: Radera objekt -- BIM-skydd + UI-koppling
+### Problem 2: Kamerorna foljer inte varandra efter sparande
 
-**Orsak:** Backend-funktionen `asset-plus-delete` finns redan och fungerar korrekt -- den skyddar BIM-objekt (`created_in_model=true`) och expirar synkade objekt i Asset+. Men RLS-policyn pa `assets`-tabellen tillater bara DELETE for `is_local = true`. Edge function anvander service role key sa den gar forbi RLS, sa detta borde fungera redan.
+**Orsak:** I split mode renderas `Ivion360View` INTE -- SDK-containern hanteras direkt av `useIvionSdk` i UnifiedViewer. Men `useIvionCameraSync`-hooken (som pollar Ivion-position och skickar den till ViewerSyncContext) anropas BARA inne i `Ivion360View`. Darfor finns det INGEN Ivion-till-3D-synkronisering i split mode.
 
-**Problem i UI:** Delete-knappen i `UniversalPropertiesDialog` finns, men det ar oklart om den visas for alla objekt och om BIM-skyddet kommuniceras tydligt. Behover sakerstalla att:
-- Delete-knappen visas for alla inventerade/lokala objekt
-- Delete-knappen ar **dold eller disabled** for objekt med `created_in_model = true`
-- Tydligt felmeddelande om man forsoker radera ett BIM-objekt
-- Synkade objekt (is_local=false) visas med varning att de ocksa expirar i Asset+
+3D-sidan har synk (via `AssetPlusViewer.syncEnabled` + `onCameraChange`), men Ivion-sidan uppdaterar aldrig `ViewerSyncContext` med sin position.
+
+Dessutom: efter att alignment sparas med `handleSave`, stanger `onSaved` alignment-panelen men det lokala `transform`-statet uppdateras korrekt i `UnifiedViewer`. Dock om det inte finns nagon aktiv Ivion-synk sa spelar det ingen roll.
+
+**Losning:** Lagg till `useIvionCameraSync` direkt i `UnifiedViewerContent` for split mode. Denna hook pollar Ivion SDK:ns position, konverterar via transform, och skickar till ViewerSyncContext -- precis som den gor i `Ivion360View`.
 
 **Filandringar:**
-- `src/components/common/UniversalPropertiesDialog.tsx` -- Forbattra delete-sektionen: visa/dold baserat pa `created_in_model`, lagg till tydlig varning for synkade objekt, oversatt till svenska.
+- `src/pages/UnifiedViewer.tsx`:
+  - Importera `useIvionCameraSync`
+  - Skapa en dummy `iframeRef` (kravs av hookens interface men anvands inte i SDK-mode)
+  - Anropa `useIvionCameraSync` med `ivApiRef`, `enabled: isSplitMode && syncLocked`, `buildingTransform: transform`, och `ivionSiteId`
+  - Detta ger bi-direktionell synk: Ivion -> ViewerSyncContext -> 3D (via befintlig `sync3DPosition`) OCH 3D -> ViewerSyncContext -> Ivion (via hookens auto-sync effekt)
 
 ---
-
-### Problem 3: "Synka ACC -> Asset+" knappen fungerar inte
-
-**Orsak:** `acc-to-assetplus` edge function saknar `verifyAuth` -- den anvander inte auth-kontroll alls (importerar `corsHeaders` fran `_shared/auth.ts` men anropar aldrig `verifyAuth`). Aven `config.toml` har `verify_jwt = false`. Sa autentisering borde inte vara problemet.
-
-Det verkliga problemet ar troligast att:
-1. Klientkoden inte anropar funktionen korrekt (behover verifiera hur UI-knappen anropar)
-2. Complex-skapandet misslyckas (det skapar en generisk "ACC Import" complex istallet for byggnadsnamnet)
-3. Payload-formatet for `AddObjectList` matchar inte Asset+ API:s forvantade schema
-
-**Losning:** 
-- Verifiera och fixa API-anropet fran UI-knappen i `ApiSettingsModal.tsx`
-- Lagg till auth-kontroll i edge function (verifyAuth) for sakerhet
-- Forbattra felhantering och loggning
-
-**Filandringar:**
-- `supabase/functions/acc-to-assetplus/index.ts` -- Lagg till `verifyAuth`, forbattra AddObjectList payload-format
-- `src/components/settings/ApiSettingsModal.tsx` -- Verifiera att synk-knappen anropar funktionen korrekt
-
----
-
-### Problem 4: ACC-byggnader ska fa en Complex (Fastighet) med eget FMGUID
-
-**Orsak:** Nuvarande logik i `acc-to-assetplus` skapar EN gemensam Complex kallad "ACC Import" for alla byggnader. Enligt krav ska varje byggnad ha sin egen Complex med samma namn som byggnaden.
-
-**Losning:** Andrar synk-logiken sa att:
-1. For varje ACC-byggnad: skapa en Complex (ObjectType 0) med samma namn som byggnaden
-2. Anvand den byggnadens Complex som parent for Building-objektet
-3. Spara Complex FMGUID i GUID-mappningen
-
-**Filandringar:**
-- `supabase/functions/acc-to-assetplus/index.ts` -- I `syncBuildingToAssetPlus`: skapa en Complex per byggnad istallet for att anvanda en delad Complex. Namnge Complex med byggnadens namn. Uppdatera `handleSync` sa den inte langre skapar en global "ACC Import"-complex.
-
----
-
-### Tekniska detaljer
-
-**Asset+ AddObject korrekt format (baserat pa fungerande kod i acc-to-assetplus):**
-```typescript
-// Korrekt format:
-{
-  BimObjectWithParents: [{
-    BimObject: {
-      ObjectType: 4,
-      Designation: "Asset-001",
-      CommonName: "Fire Extinguisher",
-      APIKey: apiKey,
-      FmGuid: "uuid-here",
-      UsedIdentifier: 1,
-    },
-    ParentFmGuid: "parent-room-guid",
-    UsedIdentifier: 1,
-  }]
-}
-
-// Nuvarande (felaktigt) format i asset-plus-create:
-{
-  apiKey: "...",
-  objectType: 4,
-  designation: "...",
-  inRoomFmGuid: "...",
-}
-```
-
-**Complex per byggnad (ny logik):**
-```typescript
-// For varje byggnad:
-const complexGuid = await getOrCreateGuid(supabase, `complex-${buildingFmGuid}`, ObjectType.Complex);
-await addObjectList([{
-  objectType: ObjectType.Complex,
-  fmGuid: complexGuid,
-  designation: buildingName,
-  commonName: buildingName,
-}], accessToken, apiKey);
-// Sedan skapa Building med complexGuid som parent
-```
-
-**Delete-skydd i UI:**
-```typescript
-// Visa/dolj delete-knappen
-const canDelete = !syncStatus?.hasBimCreated;
-// Varningstext for synkade objekt
-const deleteWarning = syncStatus?.allSynced 
-  ? "Objektet kommer aven att tas bort (expieras) i Asset+"
-  : null;
-```
 
 ### Sammanfattning av filandringar
 
 | Fil | Andring |
 |-----|---------|
-| `supabase/functions/asset-plus-create/index.ts` | Fixa AddObject payload-format (BimObject-wrapper) |
-| `supabase/functions/acc-to-assetplus/index.ts` | Lagg till auth, skapa Complex per byggnad, fixa payload |
-| `src/components/common/UniversalPropertiesDialog.tsx` | BIM-skydd for delete, varning for synkade objekt |
-| `src/components/settings/ApiSettingsModal.tsx` | Verifiera synk-knappens funktionalitet |
+| `src/components/viewer/AlignmentPointPicker.tsx` | Ta bort entity-krav vid 3D-pickning, avaktivera highlighting istallet for select-verktyg |
+| `src/pages/UnifiedViewer.tsx` | Lagg till `useIvionCameraSync` for split mode sa att 360-positionen pollas och synkas |
+
+### Tekniska detaljer
+
+**AlignmentPointPicker -- ny pick-logik:**
+```typescript
+// Istallet for att krava entity:
+if (pickResult?.worldPos) {
+  // Acceptera alla ytor, aven utan entity-ID
+  const picked: Vec3 = {
+    x: pickResult.worldPos[0],
+    y: pickResult.worldPos[1],
+    z: pickResult.worldPos[2],
+  };
+  setBimPoint(picked);
+  setStep('done');
+}
+```
+
+**UnifiedViewer -- split sync:**
+```typescript
+const dummyIframeRef = useRef<HTMLIFrameElement>(null);
+const { syncToIvion } = useIvionCameraSync({
+  iframeRef: dummyIframeRef,
+  ivApiRef,
+  enabled: isSplitMode && syncLocked,
+  ivionSiteId: buildingData?.ivionSiteId || '',
+  buildingFmGuid: buildingData?.fmGuid,
+  buildingTransform: transform,
+});
+```
