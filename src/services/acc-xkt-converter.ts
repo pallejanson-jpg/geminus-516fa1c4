@@ -305,14 +305,61 @@ export class AccXktConverter {
       const format = detectFormat(glbData);
       log(`Detekterat format: ${format}`);
 
-      // 2. Save GLB/OBJ directly to storage (skip XKT conversion)
-      // The viewer will load these directly via GLTFLoaderPlugin/OBJLoaderPlugin
-      const fileExt = format === 'obj' ? 'obj' : format === 'ifc' ? 'ifc' : 'glb';
-      const safeName = fileName || modelId;
+      // For IFC and GLB/OBJ: convert to XKT for optimized viewer loading
+      if (format === 'ifc' || format === 'glb' || format === 'obj') {
+        log(`Konverterar ${format.toUpperCase()} till XKT...`);
+        const xktData = await convertGlbToXkt(glbData, log);
+        
+        const storageFileName = `${modelId}.xkt`;
+        const storagePath = `${buildingFmGuid}/${storageFileName}`;
+        
+        log(`Sparar XKT-fil (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)...`);
+        
+        const blob = new Blob([xktData], { type: 'application/octet-stream' });
+        const { error: uploadError } = await supabase.storage
+          .from('xkt-models')
+          .upload(storagePath, blob, {
+            contentType: 'application/octet-stream',
+            upsert: true,
+          });
+        
+        if (uploadError) {
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        // Save metadata as XKT format
+        const { error: dbError } = await supabase
+          .from('xkt_models')
+          .upsert({
+            building_fm_guid: buildingFmGuid,
+            model_id: modelId,
+            model_name: fileName || modelId,
+            file_name: storageFileName,
+            file_size: xktData.byteLength,
+            storage_path: storagePath,
+            file_url: null,
+            format: 'xkt',
+            synced_at: new Date().toISOString(),
+            source_updated_at: new Date().toISOString(),
+          } as any, {
+            onConflict: 'building_fm_guid,model_id',
+          });
+        
+        if (dbError) {
+          log(`DB-fel: ${dbError.message}`);
+          return { success: false, error: `DB error: ${dbError.message}` };
+        }
+
+        log(`XKT-modell sparad! Viewern laddar den direkt.`);
+        return { success: true };
+      }
+
+      // Unknown format - save as-is
+      const fileExt = 'bin';
       const storageFileName = `${modelId}.${fileExt}`;
       const storagePath = `${buildingFmGuid}/${storageFileName}`;
       
-      log(`Sparar ${fileExt.toUpperCase()}-fil direkt (skippar XKT-konvertering)...`);
+      log(`Okänt format, sparar som ${fileExt}...`);
       
       const blob = new Blob([glbData], { type: 'application/octet-stream' });
       const { error: uploadError } = await supabase.storage
@@ -326,13 +373,12 @@ export class AccXktConverter {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      // 3. Save metadata with format info
       const { error: dbError } = await supabase
         .from('xkt_models')
         .upsert({
           building_fm_guid: buildingFmGuid,
           model_id: modelId,
-          model_name: safeName,
+          model_name: fileName || modelId,
           file_name: storageFileName,
           file_size: glbData.byteLength,
           storage_path: storagePath,
@@ -349,7 +395,7 @@ export class AccXktConverter {
         return { success: false, error: `DB error: ${dbError.message}` };
       }
 
-      log(`${fileExt.toUpperCase()}-modell sparad! Viewern laddar den direkt.`);
+      log(`Modell sparad som ${fileExt}.`);
       return { success: true };
     } catch (e: any) {
       log(`Konverteringsfel: ${e.message}`);
