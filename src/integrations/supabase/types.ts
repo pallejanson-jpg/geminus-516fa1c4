@@ -907,11 +907,13 @@ export type Database = {
           click_action: string
           created_at: string | null
           fields: Json
+          flat_on_floor: boolean
           font_size: number
           height_offset: number
           id: string
           is_default: boolean
           name: string
+          occlusion_enabled: boolean
           scale_with_distance: boolean
           updated_at: string | null
         }
@@ -919,11 +921,13 @@ export type Database = {
           click_action?: string
           created_at?: string | null
           fields?: Json
+          flat_on_floor?: boolean
           font_size?: number
           height_offset?: number
           id?: string
           is_default?: boolean
           name: string
+          occlusion_enabled?: boolean
           scale_with_distance?: boolean
           updated_at?: string | null
         }
@@ -931,11 +935,13 @@ export type Database = {
           click_action?: string
           created_at?: string | null
           fields?: Json
+          flat_on_floor?: boolean
           font_size?: number
           height_offset?: number
           id?: string
           is_default?: boolean
           name?: string
+          occlusion_enabled?: boolean
           scale_with_distance?: boolean
           updated_at?: string | null
         }

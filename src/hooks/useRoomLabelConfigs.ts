@@ -11,6 +11,8 @@ export interface RoomLabelConfig {
   scale_with_distance: boolean;
   click_action: 'none' | 'flyto' | 'roomcard';
   is_default: boolean;
+  occlusion_enabled: boolean;
+  flat_on_floor: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -50,6 +52,8 @@ export function useRoomLabelConfigs() {
         scale_with_distance: row.scale_with_distance,
         click_action: row.click_action,
         is_default: row.is_default,
+        occlusion_enabled: row.occlusion_enabled ?? true,
+        flat_on_floor: row.flat_on_floor ?? false,
         created_at: row.created_at,
         updated_at: row.updated_at,
       }));
@@ -86,6 +90,8 @@ export function useRoomLabelConfigs() {
           scale_with_distance: config.scale_with_distance,
           click_action: config.click_action,
           is_default: config.is_default,
+          occlusion_enabled: config.occlusion_enabled,
+          flat_on_floor: config.flat_on_floor,
         })
         .select()
         .single();
@@ -123,6 +129,8 @@ export function useRoomLabelConfigs() {
           scale_with_distance: updates.scale_with_distance,
           click_action: updates.click_action,
           is_default: updates.is_default,
+          occlusion_enabled: updates.occlusion_enabled,
+          flat_on_floor: updates.flat_on_floor,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);

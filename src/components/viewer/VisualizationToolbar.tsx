@@ -313,6 +313,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             fontSize: config.font_size,
             scaleWithDistance: config.scale_with_distance,
             clickAction: config.click_action,
+            occlusionEnabled: config.occlusion_enabled,
+            flatOnFloor: config.flat_on_floor,
           } as RoomLabelsConfigDetail
         }));
       }
