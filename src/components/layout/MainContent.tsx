@@ -21,6 +21,7 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
+const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 
 const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus', 'entity_insights'];
 
@@ -166,6 +167,16 @@ const MainContent: React.FC = () => {
                         </div>
                     }>
                         <AiAssetScan preselectedBuildingGuid={selectedFacility?.fm_guid} />
+                    </Suspense>
+                );
+            case 'globe':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <CesiumGlobeView />
                     </Suspense>
                 );
             default:

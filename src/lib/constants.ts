@@ -1,4 +1,4 @@
-import { BarChart2, Building2, Box, Zap, Archive, Radar, Scan } from 'lucide-react';
+import { BarChart2, Building2, Box, Zap, Archive, Radar, Scan, Globe } from 'lucide-react';
 
 export const IVION_DEFAULT_BASE_URL = 'https://swg.iv.navvis.com';
 
@@ -72,6 +72,7 @@ export const DEFAULT_APP_CONFIGS: Record<string, any> = {
     original_archive: { label: 'OA+', url: '', icon: Archive, openMode: 'internal', username: '', password: '' },
     radar: { label: '360+', url: 'https://swg.iv.navvis.com', icon: Radar, openMode: 'external', username: '', password: '' },
     ai_scan: { label: 'AI Scan', url: '', icon: Scan, openMode: 'internal', username: '', password: '' },
+    globe: { label: 'Globe', url: '', icon: Globe, openMode: 'internal', username: '', password: '' },
 };
 
 export interface SidebarItem {
@@ -89,6 +90,7 @@ export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
     { id: 'iot', hasDividerAfter: false },
     { id: 'original_archive', hasDividerAfter: false },
     { id: 'radar', hasDividerAfter: false },
+    { id: 'globe', hasDividerAfter: false },
 ];
 
 export const SIDEBAR_ORDER_STORAGE_KEY = 'sidebar-app-order';
