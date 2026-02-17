@@ -1,116 +1,190 @@
 
-# Verktygsfältet (ViewerToolbar) — omskrivning från grunden
+# Cesium Globe — Fas 1 (extruderade byggnader) + Fas 2 (BIM-modeller via glTF)
 
-## Namngivning
+## Vad som byggs
 
-För framtida referens:
-- **Verktygsfältet** = `ViewerToolbar` — den nedre flytande raden med nav/interaktionsverktyg (det du vill ha omgjord)
-- **Visningsmenyn** = `ViewerRightPanel` / `VisualizationToolbar` — höger sida med våningar, modeller, xray etc.
-- **Navigatorn** = `ViewerTreePanel` — trädvyn med IFC-hierarki
+En ny fullskärmssida `/cesium-globe` utanför AppLayout (precis som `/virtual-twin`) med interaktiv 3D-glob. Fas 1 visar alla 5 byggnader med koordinater som extruderade volymer. Fas 2 laddar faktiska BIM-modeller (XKT → glTF konverterade server-side).
 
 ---
 
-## Nuläge och problem
+## Befintlig data i systemet
 
-`ViewerToolbar.tsx` är 946 rader med:
+**5 byggnader med koordinater** (från `building_settings`):
+| Byggnad | Lat | Lng | Rotation |
+|---|---|---|---|
+| Centralstationen (755950d9...) | 59.336 | 18.013 | 0° |
+| Akerselva Atrium (9baa7a3a...) | 59.330 | 18.060 | 108° |
+| Stadshuset Nyköping (acc-bim...) | 58.757 | 16.995 | 190° |
+| Enköping (e471ea3a...) | 59.523 | 17.495 | 0° |
+| Bredäng (cc27795e...) | 59.345 | 18.220 | 0° |
 
-- Komplex `ToolbarSettings`-integration (DnD-sorteringslogik för overflow/visible per verktyg — 328 rader i `ToolbarSettings.tsx`)
-- Separata desktop- och mobilrendering med duplicerad logik
-- `settingsKey`-force-rerender-hack
-- Overflow-meny som innehåller verktyg som redan finns på direktnivå
-- `flashOnSelect` och `hoverHighlight` blandas in med navigationsverktyg
-- Komponent definieras inuti komponenten (`ToolButton` definieras inne i render-loopen → React-varning)
-
-Dessutom:
-- `VisualizationToolbar` (visningsmenyn) innehåller redan 2D/3D-toggle — men den finns **också** i `ViewerToolbar` (duplicerad!)
-- `flashOnSelect` och `hoverHighlight` hör hemma i Visningsmenyn, inte i navigationsverktygsfältet
-- `ToolbarSettings`-dialogen med DnD-sortering är överkonstruerad för ett verktygsfält med ~8 knappar
+**3 byggnader med XKT-modeller** (Centralstationen: 3 modeller, Akerselva: 2 modeller, Småviken: 2 modeller) — dessa används i Fas 2.
 
 ---
 
-## Ny design
+## Teknikstack
 
-### Vad behålls (kärn-navigationsfunktioner)
+- **`cesium`** — CesiumJS core (3D globe rendering)
+- **`resium`** — React-komponenter för Cesium
+- **`vite-plugin-static-copy`** — Kopierar Cesium's statiska workers/assets till public
+
+Cesium Ion-token lagras som backend-hemlighet `CESIUM_ION_TOKEN` och returneras via ny edge function `get-cesium-token` (samma mönster som `get-mapbox-token`).
+
+---
+
+## Arkitektur
 
 ```text
-[Orbit] [Förstaperson] | [Zooma in] [Zooma ut] [Anpassa vy] | [Välj] [Mät] [Snitt] | [2D/3D]
+/cesium-globe (fullskärmssida, utanför AppLayout)
+│
+├── CesiumGlobeView (huvud-canvas)
+│   ├── Resium Viewer (Cesium Ion bakgrundskarta + terräng)
+│   ├── Per byggnad (Fas 1):
+│   │   └── BoxGraphics — extruderad 3D-låda med korrekt rotation
+│   └── Per byggnad med XKT (Fas 2):
+│       └── ModelGraphics — glTF-modell med georeferensmatris
+│
+├── GlobeBuildingList (vänster sidebar)
+│   └── Lista med byggnader → klick flyger till byggnad
+│
+└── GlobeInfoCard (popup vid val)
+    ├── Byggnadsnamn, adress, koordinater
+    ├── "Öppna i 3D-visaren" knapp
+    └── "Läs in BIM-modell" knapp (Fas 2, om XKT finns)
 ```
-
-Alla 8 knappar alltid synliga — inget overflow, ingen anpassning, ingen DnD.
-
-### Vad tas bort från ViewerToolbar
-
-| Tas bort | Varför |
-|---|---|
-| `ToolbarSettings` DnD-dialog | Överkonstruerat. Ersätts ingenting |
-| Overflow-meny | Alla viktiga verktyg ryms på en rad |
-| `flashOnSelect` / `hoverHighlight` | Hör hemma i Visningsmenyn |
-| Dubblerad 2D/3D-toggle (behålls i Visningsmenyn) | En toggle räcker |
-| Collapse/expand-knapp ("Dölj verktygsfält") | Onödig komplexitet |
-| `settingsKey` force-rerender | Tas bort med ToolbarSettings |
-| `isExpanded` state | Tas bort med collapse-feature |
-
-### Vad tillkommer
-
-- Tydlig responsiv layout: desktop = horisontell pill, mobil = kompaktare pill
-- `ToolButton` definieras utanför render-loopen (undviker React-varning)
-- Sektioner separeras med `Separator`: Nav | Zoom | Interaktion | Vy
-- Renare tooltip-hantering
-- Loading-state (disabled när viewer inte är redo) bibehålls
 
 ---
 
-## Tekniska filändringar
+## Fas 1: Extruderade byggnadsvolymer
 
-### `src/components/viewer/ViewerToolbar.tsx` — **skriv om från grunden**
+Varje byggnad renderas som en **BoxGraphics** i Cesium Entity API:
 
-Ny komponent ~200 rader:
+- **Position**: `Cartesian3.fromDegrees(lng, lat, höjd/2)`
+- **Storlek**: Estimerad baserat på `gross_area` (roten ur area = kant) × antal våningar × 3.2m
+- **Rotation**: `HeadingPitchRoll(rotation, 0, 0)` → korrekt orientering
+- **Färg**: Semi-transparent primärfärg (indigo-600, alpha 0.7) med vit outline
+- **Highlight**: Gul vid hover/val
 
-```typescript
-interface ViewerToolbarProps {
-  viewerRef: React.MutableRefObject<any>;
-  flashOnSelectEnabled?: boolean;   // Kept for event compat only
-  onToggleFlashOnSelect?: (v: boolean) => void;
-  hoverHighlightEnabled?: boolean;
-  onToggleHoverHighlight?: (v: boolean) => void;
-  className?: string;
-  disableSelectTool?: boolean;
-}
+Antal våningar räknas från `assets`-tabellen (kategori `Building Storey` per byggnad).
+
+### UI-layout
+
+```text
+┌─────────────────────────────────────────────────────┐
+│ [← Tillbaka]    Cesium Globe    [Lager ▼] [⚙]      │
+├───────────┬─────────────────────────────────────────┤
+│ Byggnader │                                         │
+│ ─────────│          CESIUM ION GLOBE               │
+│ 🏢 Central│     (satellitbild + terräng)            │
+│ 🏢 Akersel│                                         │
+│ 🏢 Stadsh │   [Extruderade byggnader placerade      │
+│ 🏢 Enkö.. │    på korrekt geografisk position]      │
+│ 🏢 Bredäng│                                         │
+│           │              [Info-popup vid val]       │
+└───────────┴─────────────────────────────────────────┘
 ```
-
-Verktygsgrupper:
-1. **Navigation**: Orbit, Första person
-2. **Zoom/Vy**: Zooma in, Zooma ut, Anpassa vy
-3. **Interaktion**: Välj objekt, Mätverktyg, Snittplan
-4. **Vyläge**: 2D/3D-toggle
-
-All section-plane-klippningslogik (FLOOR_SELECTION_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT etc.) **behålls** — det är affärslogik, inte UI-komplexitet.
-
-### `src/components/viewer/ToolbarSettings.tsx` — ta bort DnD-dialogen
-
-`ToolbarSettings` som Dialog med drag-and-drop tas bort. Filen behåller bara:
-- `ToolConfig` interface (används fortfarande av `VisualizationToolbar`)
-- `getNavigationToolSettings()` / `getVisualizationToolSettings()` (export för kompatibilitet)
-- `TOOLBAR_SETTINGS_CHANGED_EVENT` constant
-
-NAVIGATION_TOOLS-listan förenklas — alla tools alltid synliga, inget `inOverflow`.
-
-### `src/components/viewer/AssetPlusViewer.tsx`
-
-- Ta bort `toolbarSettingsOpen`-state och `setToolbarSettingsOpen`-anrop
-- Ta bort `onOpenSettings`-prop till `ViewerToolbar` (det öppnade ToolbarSettings-dialogen)
-- Behåll `flashOnSelectEnabled` och `hoverHighlightEnabled` props (de används av ForceShowSpaces-eventlyssnare)
 
 ---
 
-## Vad löser detta
+## Fas 2: Riktiga BIM-modeller via glTF
 
-| Problem | Lösning |
-|---|---|
-| 946 rader komplex kod | Ny komponent ~200 rader |
-| DnD toolbar-customization ingen använder | Tas bort |
-| ToolButton definierad i render-loop | Definieras utanför |
-| Overflow-meny med duplicerade verktyg | Alla knappar direkt synliga |
-| flashOnSelect i navigationsverktyget | Kvar i Visningsmenyn (ViewerRightPanel) |
-| Fungerar dåligt på mobil | Renare responsiv layout |
-| `settingsKey` force-rerender hack | Borttagen |
+### Konverteringspipeline
+
+En ny edge function `xkt-to-gltf` konverterar XKT → glTF server-side:
+
+```text
+Klient klickar "Läs in BIM-modell"
+    ↓
+CesiumGlobeView anropar /xkt-to-gltf med { buildingFmGuid, modelId }
+    ↓
+Edge function:
+  1. Kontrollera cache: finns gltf-models/{buildingFmGuid}/{modelId}.gltf?
+  2. Om ja → returnera signed URL direkt
+  3. Om nej → hämta XKT-fil från xkt-models storage bucket
+  4. Parsa XKT med @xeokit/xeokit-convert (XKTModel)
+  5. Extrahera geometri och generera glTF JSON + binär buffer
+  6. Spara till gltf-models/{buildingFmGuid}/{modelId}.gltf
+  7. Returnera signed URL
+    ↓
+CesiumGlobeView laddar modellen:
+  Cesium.Model.fromGltfAsync({
+    url: signedUrl,
+    modelMatrix: Transforms.headingPitchRollToFixedFrame(
+      Cartesian3.fromDegrees(lng, lat, 0),
+      new HeadingPitchRoll(toRadians(rotation), 0, 0)
+    )
+  })
+```
+
+### Ny storage bucket
+
+En ny bucket `gltf-models` (icke-publik, signed URLs) skapas via SQL-migration.
+
+### Georeferensmatris
+
+Samma `rotation`-värde från `building_settings` används för att rikta modellen rätt. Cesium's `Transforms.headingPitchRollToFixedFrame()` placerar modellen korrekt på WGS84-ellipsoiden.
+
+---
+
+## Navigering till Cesium Globe
+
+- **Portföljvyn**: Ny knapp "Visa på glob" bredvid befintliga CTA-knappar
+- **MobileNav**: Ny knapp i "Mer"-drawern (`cesium_globe`-key)
+- **Route**: `/cesium-globe` som fristående route i `App.tsx` (fullskärm, skyddad av auth)
+
+---
+
+## Tekniska filer som ändras/skapas
+
+### Nya filer
+```text
+src/pages/CesiumGlobe.tsx                    (tunn wrapper, lazy-laddad)
+src/components/globe/CesiumGlobeView.tsx     (huvud-komponent, Cesium viewer)
+src/components/globe/GlobeBuildingList.tsx   (vänster sidebar)
+src/components/globe/GlobeInfoCard.tsx       (info-popup vid byggnadsval)
+supabase/functions/get-cesium-token/index.ts (returnerar Ion-token säkert)
+supabase/functions/xkt-to-gltf/index.ts     (XKT → glTF konvertering)
+```
+
+### Ändrade filer
+```text
+vite.config.ts                              (viteStaticCopy för Cesium assets)
+src/App.tsx                                 (ny /cesium-globe route)
+src/components/portfolio/PortfolioView.tsx  (knapp "Visa på glob")
+src/components/layout/MobileNav.tsx         (Cesium Globe i Mer-drawern)
+supabase/config.toml                        (verify_jwt = false för get-cesium-token)
+package.json                                (cesium, resium, vite-plugin-static-copy)
+```
+
+### SQL-migration
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('gltf-models', 'gltf-models', false);
+
+CREATE POLICY "Authenticated users can read gltf models"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'gltf-models');
+
+CREATE POLICY "Service role can write gltf models"
+ON storage.objects FOR INSERT TO service_role
+USING (bucket_id = 'gltf-models');
+```
+
+---
+
+## Hemlighet
+
+**`CESIUM_ION_TOKEN`** lagras som backend-hemlighet (token du angav). Hämtas klient-sidan via den nya `get-cesium-token`-funktionen med samma mönster som `get-mapbox-token`. Token visas aldrig i frontend-koden.
+
+---
+
+## Vad detta löser
+
+| Fas | Funktion | Resultat |
+|---|---|---|
+| Fas 1 | Extruderade 3D-volymer på glob | Portföljöversikt av alla 5 byggnader geografiskt |
+| Fas 1 | Klick → info-popup | Byggnadsnamn, koordinater, länk till 3D-visaren |
+| Fas 1 | Korrekt rotation per byggnad | Nyköping (190°), Akerselva (108°) pekar rätt |
+| Fas 2 | XKT → glTF server-konvertering | Riktiga IFC-modeller på globen |
+| Fas 2 | Georeferensmatris + rotation | Korrekt orientering (samma data som Virtual Twin) |
+| Fas 2 | glTF-cache i storage | Konverteras en gång, laddas snabbt sedan |
