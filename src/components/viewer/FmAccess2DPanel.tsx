@@ -135,13 +135,13 @@ const FmAccess2DPanel: React.FC<FmAccess2DPanelProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
 
-  // Timeout: reveal iframe after 30s regardless
+  // Timeout: reveal iframe after 15s regardless (app is now whitelisted)
   useEffect(() => {
     if (phase !== 'loading-iframe') return;
     const timeout = setTimeout(() => {
-      console.log('[FmAccess2D] Timeout, revealing iframe');
+      console.log('[FmAccess2D] Timeout (15s), revealing iframe');
       setPhase('ready');
-    }, 30000);
+    }, 15000);
     return () => clearTimeout(timeout);
   }, [phase]);
 
