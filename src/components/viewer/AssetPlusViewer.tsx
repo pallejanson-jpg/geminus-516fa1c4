@@ -17,7 +17,7 @@ import ToolbarSettings from './ToolbarSettings';
 import ViewerTreePanel from './ViewerTreePanel';
 import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
-import MobileViewerOverlay, { MobileFloorInfo } from './mobile/MobileViewerOverlay';
+import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
@@ -206,8 +206,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   
-  // Mobile floors state for visibility control
-  const [mobileFloors, setMobileFloors] = useState<MobileFloorInfo[]>([]);
+  // Mobile floors state for visibility control (internal — no longer imported from overlay)
+  const [mobileFloors, setMobileFloors] = useState<{ id: string; fmGuid: string; name: string; visible: boolean }[]>([]);
   
   // CENTRALIZED showSpaces state - ALWAYS starts OFF
   const [showSpaces, setShowSpaces] = useState(false);
@@ -2608,7 +2608,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     if (!xeokitViewer?.metaScene?.metaObjects) return [];
 
     const metaObjects = xeokitViewer.metaScene.metaObjects;
-    const extractedFloors: MobileFloorInfo[] = [];
+    const extractedFloors: { id: string; fmGuid: string; name: string; visible: boolean }[] = [];
 
     Object.values(metaObjects).forEach((metaObject: any) => {
       const type = metaObject?.type?.toLowerCase();
@@ -3608,21 +3608,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               onClose={onClose}
               viewerInstanceRef={viewerInstanceRef}
               buildingName={assetData?.commonName || assetData?.name}
-              showSpaces={showSpaces}
-              onShowSpacesChange={handleShowSpacesChange}
-              floors={mobileFloors}
-              onFloorToggle={handleMobileFloorToggle}
-              onResetCamera={handleResetCamera}
               isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
-              is2DMode={currentViewMode === '2d'}
-              onToggle2DMode={handleToggle2DMode}
-              showAnnotations={showAnnotations}
-              onShowAnnotationsChange={handleAnnotationsChange}
-              showRoomLabels={showRoomLabels}
-              onShowRoomLabelsChange={handleRoomLabelsToggle}
-              onOpenVisualizationPanel={() => setRightPanelOpen(true)}
-              models={availableModels}
-              onModelToggle={handleModelToggle}
+              onOpenSettings={() => setRightPanelOpen(true)}
             />
           )}
           
