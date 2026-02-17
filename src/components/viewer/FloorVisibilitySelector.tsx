@@ -639,64 +639,110 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
     }
 
     // listOnly mode: render just the toggle list without header/collapsible
+    // Uses tri-state mode: Alla (show all) | Solo (isolate one) | Multi (manual per-floor)
     if (listOnly) {
+      const soloFloorId = visibleFloorIds.size === 1 ? Array.from(visibleFloorIds)[0] : null;
+      
+      // Determine current mode from state
+      const currentMode: 'all' | 'solo' | 'multi' = allVisible ? 'all' : soloFloorId ? 'solo' : 'multi';
+      
+      const handleModeChange = (mode: 'all' | 'solo' | 'multi') => {
+        if (mode === 'all') {
+          handleShowAll();
+        } else if (mode === 'solo') {
+          // Pick first floor as default if entering solo
+          if (floors.length > 0) {
+            handleShowOnlyFloor(floors[0].id);
+          }
+        } else {
+          // Multi: keep current selection, just switch display
+          // If currently all visible, keep that; otherwise keep selection
+        }
+      };
+
       return (
-        <div className={cn("space-y-0.5 sm:space-y-1", className)} ref={ref}>
-          <div className="space-y-0.5 sm:space-y-1 max-h-[40vh] overflow-y-auto pr-0.5 sm:pr-1">
-            {floors.map((floor) => {
-              const isVisible = visibleFloorIds.has(floor.id);
-              const isSolo = visibleFloorIds.size === 1 && isVisible;
-              
-              return (
-                <div
-                  key={floor.id}
-                  className={cn(
-                    "flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1",
-                    isVisible ? "bg-primary/10" : "bg-muted/20"
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
-                    <Switch
-                      checked={isVisible}
-                      onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)}
-                      className="scale-75 sm:scale-90"
-                    />
+        <div className={cn("space-y-2", className)} ref={ref}>
+          {/* Mode selector */}
+          <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
+            {(['all', 'solo', 'multi'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleModeChange(mode)}
+                className={cn(
+                  "flex-1 text-[11px] font-medium py-1 px-1.5 rounded-md transition-all",
+                  currentMode === mode
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                )}
+              >
+                {mode === 'all' ? 'Alla' : mode === 'solo' ? 'Solo' : 'Multi'}
+              </button>
+            ))}
+          </div>
+
+          {/* Floor list — hidden in "all" mode, pills in solo, switches in multi */}
+          {currentMode !== 'all' && (
+            <div className="space-y-0.5 max-h-[40vh] overflow-y-auto pr-0.5">
+              {floors.map((floor) => {
+                const isVisible = visibleFloorIds.has(floor.id);
+                const isActiveSolo = currentMode === 'solo' && soloFloorId === floor.id;
+
+                if (currentMode === 'solo') {
+                  return (
+                    <button
+                      key={floor.id}
+                      onClick={() => handleShowOnlyFloor(floor.id)}
+                      className={cn(
+                        "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all border",
+                        isActiveSolo
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      {floor.name}
+                    </button>
+                  );
+                }
+
+                // Multi mode: switches
+                return (
+                  <div
+                    key={floor.id}
+                    className={cn(
+                      "flex items-center justify-between py-1.5 px-2 rounded-md transition-colors",
+                      isVisible ? "bg-primary/10" : "bg-muted/20"
+                    )}
+                  >
                     <span className={cn(
-                      "text-xs sm:text-sm truncate",
+                      "text-xs sm:text-sm truncate flex-1",
                       isVisible ? "text-foreground" : "text-muted-foreground"
                     )}>
                       {floor.name}
                     </span>
+                    <Switch
+                      checked={isVisible}
+                      onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)}
+                      className="scale-75"
+                    />
                   </div>
-                  
-                  {!isSolo && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0"
-                      onClick={() => handleShowOnlyFloor(floor.id)}
-                      title="Visa endast detta våningsplan"
-                    >
-                      Solo
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          
-          {/* Show All button at bottom */}
-          <div className="pt-1 border-t border-border/30">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full h-6 text-[10px] sm:text-xs"
-              onClick={handleShowAll}
-              disabled={allVisible}
-            >
-              Visa alla våningsplan
-            </Button>
-          </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Show All button — only in multi mode when not all visible */}
+          {currentMode === 'multi' && !allVisible && (
+            <div className="pt-1 border-t border-border/30">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-6 text-[10px] sm:text-xs"
+                onClick={handleShowAll}
+              >
+                Visa alla våningsplan
+              </Button>
+            </div>
+          )}
         </div>
       );
     }
