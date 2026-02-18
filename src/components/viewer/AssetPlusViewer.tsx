@@ -2772,10 +2772,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
       
-      // Check if this is an XKT model request
-      const isXktRequest = url.includes('.xkt') || 
-                           url.toLowerCase().includes('getxktdata') ||
-                           url.toLowerCase().includes('threed');
+      // Check if this is an XKT model request (only Asset+ API URLs, not Supabase/Storage)
+      const isXktRequest = (url.includes('.xkt') && 
+                            !url.includes('supabase') && 
+                            !url.includes('googleapis') &&
+                            !url.includes('storage.')) || 
+                           url.toLowerCase().includes('getxktdata');
       
       if (!isXktRequest) {
         // Not an XKT request, pass through
@@ -2791,8 +2793,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const allowed = allowedModelIdsRef.current;
           const isAllowed = allowed.has(modelId) || allowed.has(modelId.toLowerCase());
           if (!isAllowed) {
-            console.log(`XKT filter: Skipping non-initial model ${modelId}`);
-            return new Response(null, { status: 404, statusText: 'Model deferred' });
+            console.log(`XKT filter: Non-initial model ${modelId} — passing through without caching`);
+            return original!(input, init);
           }
         }
         
@@ -2920,6 +2922,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   const initializeViewer = useCallback(async () => {
     // Always clear error first so the viewer container renders back into the DOM.
+    // Reset allowedModelIdsRef to avoid stale whitelist from previous building
+    allowedModelIdsRef.current = null;
     setInitStep('wait_dom');
     setState(prev => ({ ...prev, isLoading: true, error: null, isInitialized: false }));
 
@@ -3168,7 +3172,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           }
         }
       } catch (e) {
-        console.debug('Model filter setup failed:', e);
+        console.debug('Model filter setup failed — loading all models:', e);
+        allowedModelIdsRef.current = null;
       }
 
       // Save a reference to the real fetch before interceptor patches it
