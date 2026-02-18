@@ -49,7 +49,7 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
     }
 
     return (
-        <div className="h-full p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto">
+        <div className="p-2 sm:p-3 md:p-4 lg:p-6">
             {/* Page Header */}
             <div className="mb-4 sm:mb-6">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground">Insights</h1>
