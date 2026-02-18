@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react';
-import { ChevronRight, ChevronDown, ChevronUp, X, Search, TreeDeciduous, Layers, Building2, DoorOpen, Box, Package, GripVertical, Loader2, Check, Minus } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useContext } from 'react';
+import { ChevronRight, ChevronDown, X, Search, TreeDeciduous, Layers, DoorOpen, Package, GripVertical, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,17 +7,36 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { AppContext } from '@/context/AppContext';
 
-interface TreeNode {
-  id: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AssetNode {
+  fmGuid: string;
+  name: string | null;
+  commonName: string | null;
+  category: string;
+  levelFmGuid?: string | null;
+  inRoomFmGuid?: string | null;
+  buildingFmGuid?: string | null;
+}
+
+interface StoreyTreeNode {
+  fmGuid: string;
   name: string;
-  type: string;
-  children?: TreeNode[];
-  parent?: TreeNode;
-  fmGuid?: string;
-  objectCount?: number;
-  visible: boolean;
-  indeterminate: boolean;
+  spaces: SpaceTreeNode[];
+}
+
+interface SpaceTreeNode {
+  fmGuid: string;
+  name: string;
+  assets: AssetTreeNode[];
+}
+
+interface AssetTreeNode {
+  fmGuid: string;
+  name: string;
+  category: string;
 }
 
 interface ViewerTreePanelProps {
@@ -29,6 +48,9 @@ interface ViewerTreePanelProps {
   embedded?: boolean;
   showVisibilityCheckboxes?: boolean;
   startFromStoreys?: boolean;
+  // Asset+ data props
+  buildingFmGuid?: string;
+  buildingData?: any[];
   // Controlled state for persistence
   selectedId?: string | null;
   onSelectedIdChange?: (id: string | null) => void;
@@ -36,236 +58,223 @@ interface ViewerTreePanelProps {
   onExpandedIdsChange?: (ids: Set<string>) => void;
 }
 
-// IFC type labels in Swedish
-const IFC_TYPE_LABELS: Record<string, string> = {
-  'IfcWall': 'Vägg',
-  'IfcWallStandardCase': 'Vägg',
-  'IfcSlab': 'Bjälklag',
-  'IfcDoor': 'Dörr',
-  'IfcWindow': 'Fönster',
-  'IfcColumn': 'Pelare',
-  'IfcBeam': 'Balk',
-  'IfcStair': 'Trappa',
-  'IfcStairFlight': 'Trapparm',
-  'IfcRoof': 'Tak',
-  'IfcSpace': 'Rum',
-  'IfcBuildingStorey': 'Våning',
-  'IfcFurniture': 'Möbel',
-  'IfcFurnishingElement': 'Inredning',
-  'IfcRailing': 'Räcke',
-  'IfcCovering': 'Beklädnad',
-  'IfcPlate': 'Platta',
-  'IfcMember': 'Element',
-  'IfcOpeningElement': 'Öppning',
-  'IfcCurtainWall': 'Glasvägg',
-  'IfcFlowTerminal': 'Installation',
-  'IfcFlowSegment': 'Rörsegment',
-  'IfcDistributionElement': 'Installation',
-  'IfcBuildingElementProxy': 'Objekt',
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Check if string looks like a GUID
 const isGuid = (str: string): boolean => {
   if (!str || str.length < 20) return false;
-  if (/^[0-9a-f]{8}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{12}$/i.test(str)) {
-    return true;
-  }
-  if (/^[0-9a-zA-Z$_]{22,}$/.test(str)) {
-    return true;
-  }
-  return false;
+  return /^[0-9a-f]{8}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{4}[-]?[0-9a-f]{12}$/i.test(str) ||
+    /^[0-9a-zA-Z$_]{22,}$/.test(str);
 };
 
-// Get display name for meta object
-const getDisplayName = (metaObject: any, siblingIndex?: number): string => {
-  if (metaObject.name && !isGuid(metaObject.name)) {
-    return metaObject.name;
-  }
-  
-  const longName = metaObject.propertySetsByName?.Pset_SpaceCommon?.LongName ||
-                   metaObject.propertySetsByName?.Pset_WallCommon?.Reference ||
-                   metaObject.attributes?.LongName;
-  if (longName && !isGuid(longName)) {
-    return longName;
-  }
-  
-  const typeLabel = IFC_TYPE_LABELS[metaObject.type] || metaObject.type?.replace('Ifc', '') || 'Objekt';
-  
-  if (siblingIndex !== undefined && siblingIndex > 0) {
-    return `${typeLabel} ${siblingIndex}`;
-  }
-  
-  return typeLabel;
+const getNodeDisplayName = (asset: AssetNode, index?: number): string => {
+  const n = asset.commonName || asset.name;
+  if (n && !isGuid(n)) return n;
+  const cat = asset.category.replace(/^Ifc/, '');
+  return index !== undefined ? `${cat} ${index + 1}` : cat;
 };
 
-// Get icon for IFC type
-const getTypeIcon = (type: string) => {
-  const typeLower = type?.toLowerCase() || '';
-  if (typeLower.includes('site') || typeLower.includes('project')) {
-    return <Building2 className="h-4 w-4 text-emerald-500" />;
-  }
-  if (typeLower.includes('building') && !typeLower.includes('storey')) {
-    return <Building2 className="h-4 w-4 text-blue-500" />;
-  }
-  if (typeLower.includes('storey') || typeLower.includes('floor')) {
-    return <Layers className="h-4 w-4 text-amber-500" />;
-  }
-  if (typeLower.includes('space') || typeLower.includes('room')) {
-    return <DoorOpen className="h-4 w-4 text-green-500" />;
-  }
-  if (typeLower.includes('wall') || typeLower.includes('slab') || typeLower.includes('roof')) {
-    return <Box className="h-4 w-4 text-gray-500" />;
-  }
-  return <Package className="h-4 w-4 text-purple-500" />;
+const isStoreyCategory = (cat: string) =>
+  cat === 'Building Storey' || cat === 'IfcBuildingStorey' || cat === 'BuildingStorey';
+
+const isSpaceCategory = (cat: string) =>
+  cat === 'Space' || cat === 'IfcSpace' || cat === 'Room';
+
+// Sort storeys by floor number extracted from name
+const sortStoreys = (a: StoreyTreeNode, b: StoreyTreeNode): number => {
+  const extract = (name: string): number => {
+    const m = name.match(/(-?\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  return extract(a.name) - extract(b.name);
 };
 
-// Get short type label
-const getTypeLabel = (type: string) => {
-  if (!type) return '';
-  return IFC_TYPE_LABELS[type] || type.replace(/^Ifc/, '');
-};
-
-// Count all descendants recursively
-const countDescendants = (node: TreeNode): number => {
-  if (!node.children || node.children.length === 0) return 0;
-  return node.children.reduce((sum, child) => {
-    return sum + 1 + countDescendants(child);
-  }, 0);
-};
-
-// Memoized recursive child search for performance
-const hasMatchingDescendant = (node: TreeNode, query: string): boolean => {
-  if (!node.children) return false;
-  return node.children.some(child => {
-    const childMatches = child.name.toLowerCase().includes(query) ||
-      child.type.toLowerCase().includes(query);
-    return childMatches || hasMatchingDescendant(child, query);
+// Get all xeokit entity IDs for a given fmGuid (via originalSystemId matching)
+const getXeokitIdsForFmGuid = (xeokitViewer: any, fmGuid: string): string[] => {
+  if (!xeokitViewer?.metaScene?.metaObjects) return [];
+  const fmLower = fmGuid.toLowerCase();
+  const ids: string[] = [];
+  Object.values(xeokitViewer.metaScene.metaObjects).forEach((obj: any) => {
+    const sysId = (obj.originalSystemId || '').toLowerCase();
+    if (sysId === fmLower) {
+      ids.push(obj.id);
+    }
   });
+  return ids;
 };
 
-// Memoized TreeNode component to prevent unnecessary re-renders
-const TreeNodeComponent = React.memo<{
-  node: TreeNode;
+// Get all descendant entity IDs for a meta object
+const getDescendantIds = (xeokitViewer: any, rootId: string): string[] => {
+  const metaObj = xeokitViewer?.metaScene?.metaObjects?.[rootId];
+  if (!metaObj) return [rootId];
+  const ids: string[] = [rootId];
+  const collect = (obj: any) => {
+    obj.children?.forEach((child: any) => {
+      ids.push(child.id);
+      collect(child);
+    });
+  };
+  collect(metaObj);
+  return ids;
+};
+
+// Get all xeokit IDs for a storey (storey + all its children)
+const getAllXeokitIdsForStorey = (xeokitViewer: any, storeyFmGuid: string): string[] => {
+  const rootIds = getXeokitIdsForFmGuid(xeokitViewer, storeyFmGuid);
+  const all = new Set<string>();
+  rootIds.forEach(id => {
+    getDescendantIds(xeokitViewer, id).forEach(descId => all.add(descId));
+  });
+  return [...all];
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const SpaceRow = React.memo<{
+  space: SpaceTreeNode;
   level: number;
-  selectedId: string | null;
+  selectedFmGuid: string | null;
   expandedIds: Set<string>;
   onToggle: (id: string) => void;
-  onSelect: (node: TreeNode) => void;
-  onHover: (nodeId: string | null) => void;
-  onVisibilityChange?: (node: TreeNode, visible: boolean) => void;
+  onSelect: (fmGuid: string, name: string) => void;
   searchQuery: string;
-  showVisibilityCheckboxes: boolean;
-}>(({ node, level, selectedId, expandedIds, onToggle, onSelect, onHover, onVisibilityChange, searchQuery, showVisibilityCheckboxes }) => {
-  const hasChildren = node.children && node.children.length > 0;
-  const isExpanded = expandedIds.has(node.id);
-  const isSelected = selectedId === node.id;
-  const descendantCount = node.objectCount ?? countDescendants(node);
-  
-  // Memoize search matching
-  const { matchesSearch, childrenMatchSearch } = useMemo(() => {
-    if (!searchQuery) return { matchesSearch: true, childrenMatchSearch: false };
-    const queryLower = searchQuery.toLowerCase();
-    const matches = node.name.toLowerCase().includes(queryLower) ||
-      node.type.toLowerCase().includes(queryLower);
-    const childMatch = hasMatchingDescendant(node, queryLower);
-    return { matchesSearch: matches, childrenMatchSearch: childMatch };
-  }, [node.name, node.type, node.children, searchQuery]);
+}>(({ space, level, selectedFmGuid, expandedIds, onToggle, onSelect, searchQuery }) => {
+  const isExpanded = expandedIds.has(space.fmGuid);
+  const isSelected = selectedFmGuid === space.fmGuid;
+  const hasAssets = space.assets.length > 0;
 
-  // Early return for filtered nodes
-  if (searchQuery && !matchesSearch && !childrenMatchSearch) {
-    return null;
-  }
+  const matchesSearch = useMemo(() => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return space.name.toLowerCase().includes(q) ||
+      space.assets.some(a => a.name.toLowerCase().includes(q));
+  }, [space, searchQuery]);
+
+  if (searchQuery && !matchesSearch) return null;
 
   return (
     <div>
       <div
         className={cn(
-          "flex items-center gap-1 py-1 sm:py-1.5 px-1 sm:px-1.5 rounded cursor-pointer text-sm transition-colors",
-          "hover:bg-accent/50 active:bg-accent/60",
+          "flex items-center gap-1 py-1 px-1 rounded cursor-pointer text-sm transition-colors",
+          "hover:bg-accent/50",
           isSelected && "bg-accent text-accent-foreground",
-          searchQuery && matchesSearch && "bg-yellow-500/20"
+          searchQuery && matchesSearch && !isSelected && "bg-primary/5"
         )}
-        style={{ paddingLeft: `${level * 14 + 2}px` }}
-        onClick={() => onSelect(node)}
-        onMouseEnter={() => onHover(node.id)}
-        onMouseLeave={() => onHover(null)}
+        style={{ paddingLeft: `${level * 14 + 4}px` }}
+        onClick={() => onSelect(space.fmGuid, space.name)}
       >
-        {/* Visibility checkbox */}
-        {showVisibilityCheckboxes && (
-          <Checkbox
-            checked={node.visible && !node.indeterminate}
-            className={cn(
-              "h-4 w-4 sm:h-5 sm:w-5 mr-0.5",
-              node.indeterminate && "data-[state=checked]:bg-muted data-[state=checked]:text-muted-foreground"
-            )}
-            onClick={(e) => e.stopPropagation()}
-            onCheckedChange={(checked) => {
-              onVisibilityChange?.(node, !!checked);
-            }}
-          />
-        )}
-        
-        {/* Expand/collapse button */}
-        {hasChildren ? (
+        {hasAssets ? (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              onToggle(node.id);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="p-1 hover:bg-muted rounded shrink-0"
+            onClick={(e) => { e.stopPropagation(); onToggle(space.fmGuid); }}
+            className="p-0.5 hover:bg-muted rounded shrink-0"
           >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            )}
+            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </button>
         ) : (
-          <span className="w-5 sm:w-6" />
+          <span className="w-4" />
         )}
-        
-        {/* Type icon */}
-        <span className="shrink-0">{getTypeIcon(node.type)}</span>
-        
-        {/* Name */}
-        <span className={cn(
-          "truncate flex-1 min-w-0 text-sm",
-          !node.visible && "text-muted-foreground line-through"
-        )}>
-          {node.name}
-        </span>
-        
-        {/* Type badge - hidden on mobile */}
-        <Badge variant="outline" className="hidden sm:inline-flex text-[10px] sm:text-xs px-1 py-0 h-4 sm:h-5 shrink-0">
-          {getTypeLabel(node.type)}
-        </Badge>
-
-        {/* Descendant count for expandable nodes */}
-        {hasChildren && descendantCount > 0 && (
-          <Badge variant="secondary" className="text-[10px] sm:text-xs px-0.5 sm:px-1 py-0 h-4 sm:h-5 shrink-0">
-            {descendantCount}
-          </Badge>
+        <DoorOpen className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span className="truncate flex-1 text-xs">{space.name}</span>
+        {hasAssets && (
+          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 shrink-0">{space.assets.length}</Badge>
         )}
       </div>
-      
-      {/* Children - only render when expanded (lazy rendering) */}
-      {hasChildren && isExpanded && (
+
+      {isExpanded && hasAssets && (
         <div>
-          {node.children!.map(child => (
-            <TreeNodeComponent
-              key={child.id}
-              node={child}
-              level={level + 1}
-              selectedId={selectedId}
-              expandedIds={expandedIds}
-              onToggle={onToggle}
+          {space.assets.map((asset, idx) => (
+            <div
+              key={asset.fmGuid}
+              className={cn(
+                "flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer text-xs transition-colors",
+                "hover:bg-accent/40",
+                selectedFmGuid === asset.fmGuid && "bg-accent text-accent-foreground"
+              )}
+              style={{ paddingLeft: `${(level + 1) * 14 + 4}px` }}
+              onClick={() => onSelect(asset.fmGuid, asset.name)}
+            >
+              <span className="w-4" />
+              <Package className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="truncate flex-1">{asset.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+SpaceRow.displayName = 'SpaceRow';
+
+const StoreyRow = React.memo<{
+  storey: StoreyTreeNode;
+  isChecked: boolean;
+  isExpanded: boolean;
+  selectedFmGuid: string | null;
+  expandedSpaceIds: Set<string>;
+  onCheck: (fmGuid: string, checked: boolean) => void;
+  onToggle: (fmGuid: string) => void;
+  onToggleSpace: (fmGuid: string) => void;
+  onSelect: (fmGuid: string, name: string) => void;
+  searchQuery: string;
+}>(({ storey, isChecked, isExpanded, selectedFmGuid, expandedSpaceIds, onCheck, onToggle, onToggleSpace, onSelect, searchQuery }) => {
+  const matchesSearch = useMemo(() => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return storey.name.toLowerCase().includes(q) ||
+      storey.spaces.some(s => s.name.toLowerCase().includes(q) || s.assets.some(a => a.name.toLowerCase().includes(q)));
+  }, [storey, searchQuery]);
+
+  if (searchQuery && !matchesSearch) return null;
+
+  return (
+    <div>
+      <div
+        className={cn(
+          "flex items-center gap-1.5 py-1.5 px-1 rounded cursor-pointer text-sm transition-colors",
+          "hover:bg-accent/50",
+          selectedFmGuid === storey.fmGuid && "bg-accent text-accent-foreground"
+        )}
+        onClick={() => onSelect(storey.fmGuid, storey.name)}
+      >
+        {/* Checkbox for solo visibility */}
+        <Checkbox
+          checked={isChecked}
+          className="h-4 w-4 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          onCheckedChange={(checked) => onCheck(storey.fmGuid, !!checked)}
+        />
+
+        {/* Expand/collapse */}
+        {storey.spaces.length > 0 ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggle(storey.fmGuid); }}
+            className="p-0.5 hover:bg-muted rounded shrink-0"
+          >
+            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        ) : (
+          <span className="w-5" />
+        )}
+
+        <Layers className="h-4 w-4 text-primary/70 shrink-0" />
+        <span className="truncate flex-1 font-medium text-sm">{storey.name}</span>
+        {storey.spaces.length > 0 && (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">{storey.spaces.length} rum</Badge>
+        )}
+      </div>
+
+      {isExpanded && (
+        <div>
+          {storey.spaces.map(space => (
+            <SpaceRow
+              key={space.fmGuid}
+              space={space}
+              level={1}
+              selectedFmGuid={selectedFmGuid}
+              expandedIds={expandedSpaceIds}
+              onToggle={onToggleSpace}
               onSelect={onSelect}
-              onHover={onHover}
-              onVisibilityChange={onVisibilityChange}
               searchQuery={searchQuery}
-              showVisibilityCheckboxes={showVisibilityCheckboxes}
             />
           ))}
         </div>
@@ -273,10 +282,10 @@ const TreeNodeComponent = React.memo<{
     </div>
   );
 });
+StoreyRow.displayName = 'StoreyRow';
 
-TreeNodeComponent.displayName = 'TreeNodeComponent';
+// ─── Main Component ────────────────────────────────────────────────────────────
 
-// Use forwardRef to fix React warning about refs on function components
 const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   viewerRef,
   isVisible,
@@ -286,55 +295,44 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   embedded = false,
   showVisibilityCheckboxes = true,
   startFromStoreys = true,
-  // Controlled state props
+  buildingFmGuid: buildingFmGuidProp,
+  buildingData: buildingDataProp,
   selectedId: externalSelectedId,
   onSelectedIdChange,
   expandedIds: externalExpandedIds,
   onExpandedIdsChange,
 }, ref) => {
-  const [treeData, setTreeData] = useState<TreeNode[]>([]);
-  // Use external state if provided, otherwise use local state
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
-  const [internalExpandedIds, setInternalExpandedIds] = useState<Set<string>>(new Set());
-  
-  // Determine which state to use (controlled vs uncontrolled)
-  const selectedId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
-  const expandedIds = externalExpandedIds !== undefined ? externalExpandedIds : internalExpandedIds;
-  
-  const setSelectedId = useCallback((id: string | null) => {
-    if (onSelectedIdChange) {
-      onSelectedIdChange(id);
-    } else {
-      setInternalSelectedId(id);
-    }
-  }, [onSelectedIdChange]);
-  
-  const setExpandedIds = useCallback((idsOrFn: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    const updateFn = (prev: Set<string>) => {
-      const newIds = typeof idsOrFn === 'function' ? idsOrFn(prev) : idsOrFn;
-      if (onExpandedIdsChange) {
-        onExpandedIdsChange(newIds);
-      } else {
-        setInternalExpandedIds(newIds);
-      }
-      return newIds;
-    };
-    if (typeof idsOrFn === 'function') {
-      const currentIds = externalExpandedIds !== undefined ? externalExpandedIds : internalExpandedIds;
-      updateFn(currentIds);
-    } else {
-      updateFn(new Set());
-    }
-  }, [onExpandedIdsChange, externalExpandedIds, internalExpandedIds]);
-  
+  const { allData } = useContext(AppContext);
+
+  // Use prop data if provided, otherwise use AppContext allData
+  const dataSource = buildingDataProp || allData;
+  const buildingFmGuid = buildingFmGuidProp;
+
+  // ── State ────────────────────────────────────────────────────────────────
+
+  const [storeys, setStoreys] = useState<StoreyTreeNode[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [buildProgress, setBuildProgress] = useState<{ current: number; total: number } | null>(null);
-  const buildAttempts = useRef(0);
-  const buildCancelledRef = useRef(false);
-  
-  // Desktop floating panel state - position, size, drag, resize
+
+  // Checked storeys for solo visibility (checkbox state)
+  const [checkedStoreyFmGuids, setCheckedStoreyFmGuids] = useState<Set<string>>(new Set());
+
+  // Expanded storeys
+  const [expandedStoreyIds, setExpandedStoreyIds] = useState<Set<string>>(new Set());
+
+  // Expanded spaces
+  const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
+
+  // Selected node (for fly-to)
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const selectedId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
+  const setSelectedId = useCallback((id: string | null) => {
+    if (onSelectedIdChange) onSelectedIdChange(id);
+    else setInternalSelectedId(id);
+  }, [onSelectedIdChange]);
+
+  // Desktop floating panel state
   const [position, setPosition] = useState({ x: 12, y: 56 });
   const [size, setSize] = useState({ width: 320, height: 550 });
   const [isDragging, setIsDragging] = useState(false);
@@ -342,743 +340,431 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
-  // Debounce search for performance
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  // ── Xeokit accessor ────────────────────────────────────────────────────────
 
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
-  }, [position]);
-
-  // Resize handlers
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    setResizeStart({
-      x: e.clientX,
-      y: e.clientY,
-      width: size.width,
-      height: size.height,
-    });
-  }, [size]);
-
-  // Mouse move/up effects for drag
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({
-        x: Math.max(0, e.clientX - dragOffset.x),
-        y: Math.max(0, e.clientY - dragOffset.y),
-      });
-    };
-
-    const handleMouseUp = () => setIsDragging(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragOffset]);
-
-  // Mouse move/up effects for resize
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(280, Math.min(600, resizeStart.width + (e.clientX - resizeStart.x)));
-      const newHeight = Math.max(200, Math.min(window.innerHeight - 100, resizeStart.height + (e.clientY - resizeStart.y)));
-      setSize({ width: newWidth, height: newHeight });
-    };
-
-    const handleMouseUp = () => setIsResizing(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, resizeStart]);
-
-  // Get xeokit viewer scene reference
   const getXeokitViewer = useCallback(() => {
-    const viewer = viewerRef.current;
-    return viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // Update visibility state from scene
-  const refreshVisibilityState = useCallback(() => {
-    const xeokitViewer = getXeokitViewer();
-    const scene = xeokitViewer?.scene;
-    if (!scene) return;
+  // ── Debounced search ───────────────────────────────────────────────────────
 
-    setTreeData(prevTree => {
-      const updateNodeVisibility = (node: TreeNode): TreeNode => {
-        const entity = scene.objects?.[node.id];
-        const nodeVisible = entity ? entity.visible : true;
-        
-        let childrenVisible = true;
-        let childrenHidden = true;
-        let indeterminate = false;
-        
-        const updatedChildren = node.children?.map(child => {
-          const updated = updateNodeVisibility(child);
-          if (updated.visible) childrenHidden = false;
-          if (!updated.visible) childrenVisible = false;
-          if (updated.indeterminate) indeterminate = true;
-          return updated;
-        });
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
-        if (node.children && node.children.length > 0) {
-          if (!childrenVisible && !childrenHidden) {
-            indeterminate = true;
-          }
-        }
+  // ── Build tree from Asset+ data ────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isVisible) return;
+    setIsLoading(true);
+
+    // Use setTimeout to not block render
+    const timer = setTimeout(() => {
+      if (!dataSource || dataSource.length === 0) {
+        setStoreys([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Filter storeys for this building
+      const rawStoreys = dataSource.filter((a: any) =>
+        (!buildingFmGuid || a.buildingFmGuid === buildingFmGuid || a.building_fm_guid === buildingFmGuid) &&
+        isStoreyCategory(a.category)
+      );
+
+      // If no storeys found with buildingFmGuid filter, try without (all storeys)
+      const storeysData = rawStoreys.length > 0 ? rawStoreys :
+        dataSource.filter((a: any) => isStoreyCategory(a.category));
+
+      // Build storey → space → asset hierarchy
+      const builtStoreys: StoreyTreeNode[] = storeysData.map((storey: any) => {
+        const storeyFmGuid = storey.fmGuid || storey.fm_guid;
+        const storeyName = storey.commonName || storey.common_name || storey.name || `Våning ${storeyFmGuid?.slice(0, 8)}`;
+
+        // Find spaces for this storey
+        const spacesRaw = dataSource.filter((a: any) =>
+          isSpaceCategory(a.category) &&
+          ((a.levelFmGuid || a.level_fm_guid) === storeyFmGuid)
+        );
+
+        const spaces: SpaceTreeNode[] = spacesRaw.map((space: any, idx: number) => {
+          const spaceFmGuid = space.fmGuid || space.fm_guid;
+          const spaceName = space.commonName || space.common_name || space.name;
+          const displayName = (spaceName && !isGuid(spaceName)) ? spaceName : `Rum ${idx + 1}`;
+
+          // Find assets in this space
+          const assetsRaw = dataSource.filter((a: any) =>
+            !isStoreyCategory(a.category) &&
+            !isSpaceCategory(a.category) &&
+            ((a.inRoomFmGuid || a.in_room_fm_guid) === spaceFmGuid)
+          );
+
+          const assets: AssetTreeNode[] = assetsRaw.map((asset: any, aIdx: number) => ({
+            fmGuid: asset.fmGuid || asset.fm_guid,
+            name: getNodeDisplayName({
+              fmGuid: asset.fmGuid || asset.fm_guid,
+              name: asset.name,
+              commonName: asset.commonName || asset.common_name,
+              category: asset.category,
+            }, aIdx),
+            category: asset.category,
+          }));
+
+          return {
+            fmGuid: spaceFmGuid,
+            name: displayName,
+            assets,
+          };
+        }).sort((a: SpaceTreeNode, b: SpaceTreeNode) =>
+          a.name.localeCompare(b.name, 'sv', { numeric: true })
+        );
 
         return {
-          ...node,
-          visible: nodeVisible,
-          indeterminate,
-          children: updatedChildren,
+          fmGuid: storeyFmGuid,
+          name: (storeyName && !isGuid(storeyName)) ? storeyName : `Våning ${storeyFmGuid?.slice(0, 8)}`,
+          spaces,
         };
-      };
+      }).sort(sortStoreys);
 
-      return prevTree.map(updateNodeVisibility);
-    });
-  }, [getXeokitViewer]);
+      setStoreys(builtStoreys);
+      setIsLoading(false);
+    }, 200);
 
-  // Toggle visibility for a node and all children recursively
-  const handleVisibilityChange = useCallback((node: TreeNode, visible: boolean) => {
+    return () => clearTimeout(timer);
+  }, [isVisible, dataSource, buildingFmGuid]);
+
+  // ── Solo visibility logic ──────────────────────────────────────────────────
+
+  const applyStoreyVisibility = useCallback((checkedGuids: Set<string>) => {
     const xeokitViewer = getXeokitViewer();
     const scene = xeokitViewer?.scene;
-    const metaScene = xeokitViewer?.metaScene;
     if (!scene) return;
 
-    // Recursive function to set visibility on node and ALL descendants
-    const setVisibilityRecursive = (n: TreeNode, vis: boolean) => {
-      const entity = scene.objects?.[n.id];
-      if (entity) {
-        entity.visible = vis;
+    try {
+      if (checkedGuids.size === 0) {
+        // No selection → show all
+        scene.setObjectsVisible(scene.objectIds, true);
+
+        // Dispatch "all floors visible" event
+        const eventDetail: FloorSelectionEventDetail = {
+          floorId: null,
+          floorName: null,
+          bounds: null,
+          visibleMetaFloorIds: [],
+          visibleFloorFmGuids: [],
+          isAllFloorsVisible: true,
+        };
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+        return;
       }
-      
-      // Process all children recursively
-      if (n.children && n.children.length > 0) {
-        n.children.forEach(child => {
-          setVisibilityRecursive(child, vis);
+
+      // Solo mode: hide all, then show only checked storeys
+      scene.setObjectsVisible(scene.objectIds, false);
+
+      const visibleFmGuids: string[] = [];
+      const visibleMetaIds: string[] = [];
+
+      checkedGuids.forEach(storeyFmGuid => {
+        const ids = getAllXeokitIdsForStorey(xeokitViewer, storeyFmGuid);
+        ids.forEach(id => {
+          const entity = scene.objects?.[id];
+          if (entity) entity.visible = true;
         });
-      }
-    };
+        visibleFmGuids.push(storeyFmGuid);
 
-    // Apply visibility to the node and all its descendants
-    setVisibilityRecursive(node, visible);
-
-    // Refresh the tree's visual state to update checkboxes
-    refreshVisibilityState();
-
-    // If this is a storey node, dispatch FLOOR_SELECTION_CHANGED_EVENT to sync other selectors
-    if (node.type?.toLowerCase() === 'ifcbuildingstorey' && metaScene?.metaObjects) {
-      // Collect all currently visible storey nodes
-      const allStoreys: { id: string; name: string; fmGuid: string }[] = [];
-      Object.values(metaScene.metaObjects).forEach((metaObj: any) => {
-        if (metaObj.type?.toLowerCase() === 'ifcbuildingstorey') {
-          allStoreys.push({
-            id: metaObj.id,
-            name: metaObj.name || metaObj.id,
-            fmGuid: metaObj.originalSystemId || metaObj.id,
-          });
-        }
+        // Also collect xeokit meta IDs for event
+        const metaIds = getXeokitIdsForFmGuid(xeokitViewer, storeyFmGuid);
+        visibleMetaIds.push(...metaIds);
       });
 
-      const visibleStoreys = allStoreys.filter(s => {
-        const entity = scene.objects?.[s.id];
-        return entity?.visible;
-      });
-
-      const isAllVisible = visibleStoreys.length === allStoreys.length;
-      const isSolo = visibleStoreys.length === 1;
-      const soloFloor = isSolo ? visibleStoreys[0] : null;
+      // Determine solo floor for clip event
+      const isSolo = checkedGuids.size === 1;
+      const soloFmGuid = isSolo ? [...checkedGuids][0] : null;
+      const soloMetaId = soloFmGuid ? (getXeokitIdsForFmGuid(xeokitViewer, soloFmGuid)[0] || null) : null;
 
       const eventDetail: FloorSelectionEventDetail = {
-        floorId: soloFloor?.id || null,
-        floorName: soloFloor?.name || null,
-        bounds: null, // Could calculate but not critical for sync
-        visibleMetaFloorIds: visibleStoreys.map(s => s.id),
-        visibleFloorFmGuids: visibleStoreys.map(s => s.fmGuid),
-        isAllFloorsVisible: isAllVisible,
+        floorId: soloMetaId,
+        floorName: null,
+        bounds: null,
+        visibleMetaFloorIds: visibleMetaIds,
+        visibleFloorFmGuids: visibleFmGuids,
+        isAllFloorsVisible: false,
       };
-
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
+    } catch (e) {
+      console.debug('ViewerTreePanel: Error applying visibility:', e);
     }
-  }, [getXeokitViewer, refreshVisibilityState]);
+  }, [getXeokitViewer]);
 
-  // Listen for external floor selection changes to refresh checkbox state
-  useEffect(() => {
-    const handleExternalFloorChange = () => {
-      // Delay slightly to allow scene visibility to be applied first
-      setTimeout(() => {
-        refreshVisibilityState();
-      }, 150);
-    };
-    
-    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
-    return () => {
-      window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
-    };
-  }, [refreshVisibilityState]);
-
-  // Build tree from xeokit metaScene with CHUNKED processing to prevent UI freeze
-  const buildTree = useCallback(() => {
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    const metaScene = xeokitViewer?.metaScene;
-    const scene = xeokitViewer?.scene;
-    
-    if (!metaScene) {
-      console.debug('ViewerTreePanel: No metaScene available yet, attempt:', buildAttempts.current);
-      
-      if (buildAttempts.current < 5) {
-        buildAttempts.current++;
-        setTimeout(buildTree, 1000);
-        return;
-      }
-      
-      setIsLoading(false);
-      return;
-    }
-
-    // Reset cancellation flag
-    buildCancelledRef.current = false;
-    
-    const sortByStoreyLevel = (a: TreeNode, b: TreeNode): number => {
-      const extractLevel = (name: string): number => {
-        const match = name.match(/(-?\d+)/);
-        return match ? parseInt(match[1], 10) : 0;
-      };
-      const levelA = extractLevel(a.name);
-      const levelB = extractLevel(b.name);
-      return levelB - levelA;
-    };
-
-    // Phase 1: Collect all meta objects that need processing
-    const rootMetaObjects = metaScene.rootMetaObjects || {};
-    const storeysToProcess: any[] = [];
-    const rootsToProcess: any[] = [];
-    
-    const findStoreys = (metaObject: any): any[] => {
-      const storeys: any[] = [];
-      const traverse = (obj: any) => {
-        if (obj.type === 'IfcBuildingStorey') {
-          storeys.push(obj);
-          return;
-        }
-        obj.children?.forEach(traverse);
-      };
-      traverse(metaObject);
-      return storeys;
-    };
-
-    if (startFromStoreys) {
-      Object.values(rootMetaObjects).forEach((rootObj: any) => {
-        const storeys = findStoreys(rootObj);
-        storeysToProcess.push(...storeys);
-      });
-    } else {
-      Object.values(rootMetaObjects).forEach((rootObj: any) => {
-        rootsToProcess.push(rootObj);
-      });
-    }
-
-    const itemsToProcess = startFromStoreys ? storeysToProcess : rootsToProcess;
-    const totalItems = itemsToProcess.length;
-    
-    if (totalItems === 0) {
-      setIsLoading(false);
-      setBuildProgress(null);
-      return;
-    }
-
-    setBuildProgress({ current: 0, total: totalItems });
-
-    // Phase 2: Process items in chunks
-    const CHUNK_SIZE = 5; // Process 5 root items per chunk (each can have many children)
-    let processedCount = 0;
-    const tree: TreeNode[] = [];
-    const siblingCounters = new Map<string, Map<string, number>>();
-
-    const buildNode = (metaObject: any, parentId: string = 'root', depth: number = 0): TreeNode => {
-      if (!siblingCounters.has(parentId)) {
-        siblingCounters.set(parentId, new Map());
-      }
-      const parentCounters = siblingCounters.get(parentId)!;
-      
-      const typeCount = (parentCounters.get(metaObject.type) || 0) + 1;
-      parentCounters.set(metaObject.type, typeCount);
-
-      const entity = scene?.objects?.[metaObject.id];
-      const isVisible = entity ? entity.visible : true;
-
-      const node: TreeNode = {
-        id: metaObject.id,
-        name: getDisplayName(metaObject, typeCount),
-        type: metaObject.type || 'Unknown',
-        fmGuid: metaObject.propertySetsByName?.Ivion?.fmguid || 
-                metaObject.propertySetsByName?.pset_ivion?.fmguid ||
-                undefined,
-        children: [],
-        visible: isVisible,
-        indeterminate: false,
-      };
-
-      if (metaObject.children && metaObject.children.length > 0) {
-        const childNodes = metaObject.children.map((child: any) => 
-          buildNode(child, metaObject.id, depth + 1)
-        );
-        
-        if (node.type === 'IfcBuilding') {
-          node.children = childNodes.sort(sortByStoreyLevel);
-        } else {
-          node.children = childNodes.sort((a: TreeNode, b: TreeNode) => 
-            a.name.localeCompare(b.name, 'sv', { numeric: true })
-          );
-        }
-
-        const allVisible = node.children.every(c => c.visible && !c.indeterminate);
-        const allHidden = node.children.every(c => !c.visible);
-        if (!allVisible && !allHidden) {
-          node.indeterminate = true;
-        }
-      }
-
-      node.objectCount = countDescendants(node);
-      return node;
-    };
-
-    const processChunk = () => {
-      // Check if build was cancelled
-      if (buildCancelledRef.current) {
-        setIsLoading(false);
-        setBuildProgress(null);
-        return;
-      }
-
-      const endIndex = Math.min(processedCount + CHUNK_SIZE, totalItems);
-      
-      // Process this chunk
-      for (let i = processedCount; i < endIndex; i++) {
-        const item = itemsToProcess[i];
-        const node = buildNode(item);
-        tree.push(node);
-      }
-      
-      processedCount = endIndex;
-      setBuildProgress({ current: processedCount, total: totalItems });
-
-      if (processedCount < totalItems) {
-        // Schedule next chunk using requestIdleCallback if available
-        if ('requestIdleCallback' in window) {
-          (window as any).requestIdleCallback(processChunk, { timeout: 100 });
-        } else {
-          setTimeout(processChunk, 0);
-        }
-      } else {
-        // All done - finalize tree
-        if (startFromStoreys) {
-          tree.sort(sortByStoreyLevel);
-        } else {
-          tree.sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
-        }
-
-        setTreeData(tree);
-        
-        // All nodes collapsed by default - no auto-expand
-        setExpandedIds(new Set<string>());
-        
-        const totalCount = tree.reduce((sum, node) => sum + 1 + (node.objectCount || 0), 0);
-        console.log('ViewerTreePanel: Built tree with', tree.length, 'root nodes,', totalCount, 'total objects');
-        
-        setIsLoading(false);
-        setBuildProgress(null);
-      }
-    };
-
-    // Start processing
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(processChunk, { timeout: 100 });
-    } else {
-      setTimeout(processChunk, 0);
-    }
-  }, [viewerRef, startFromStoreys]);
-
-  // Build tree when panel becomes visible
-  useEffect(() => {
-    if (isVisible) {
-      setIsLoading(true);
-      buildAttempts.current = 0;
-      buildCancelledRef.current = false;
-      const timer = setTimeout(buildTree, 500);
-      return () => {
-        clearTimeout(timer);
-        buildCancelledRef.current = true;
-      };
-    }
-  }, [isVisible, buildTree]);
-
-  // Listen for preload event to build tree in background
-  useEffect(() => {
-    const handlePreload = () => {
-      if (treeData.length === 0 && !isLoading) {
-        console.log('ViewerTreePanel: Preloading tree in background');
-        buildAttempts.current = 0;
-        buildCancelledRef.current = false;
-        buildTree();
-      }
-    };
-    window.addEventListener('PRELOAD_VIEWER_TREE', handlePreload);
-    return () => window.removeEventListener('PRELOAD_VIEWER_TREE', handlePreload);
-  }, [buildTree, treeData.length, isLoading]);
-
-  // Handle node toggle
-  const handleToggle = useCallback((id: string) => {
-    setExpandedIds(prev => {
+  const handleStoreyCheck = useCallback((storeyFmGuid: string, checked: boolean) => {
+    setCheckedStoreyFmGuids(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (checked) next.add(storeyFmGuid);
+      else next.delete(storeyFmGuid);
+      // Apply to scene
+      setTimeout(() => applyStoreyVisibility(next), 0);
+      return next;
+    });
+  }, [applyStoreyVisibility]);
+
+  // ── Toggle storey expand ───────────────────────────────────────────────────
+
+  const handleToggleStorey = useCallback((fmGuid: string) => {
+    setExpandedStoreyIds(prev => {
+      const next = new Set(prev);
+      if (next.has(fmGuid)) next.delete(fmGuid);
+      else next.add(fmGuid);
       return next;
     });
   }, []);
 
-  // Handle node selection - select in scene and fly to
-  const handleSelect = useCallback((node: TreeNode) => {
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    const scene = xeokitViewer?.scene;
-    
-    if (!scene) return;
+  const handleToggleSpace = useCallback((fmGuid: string) => {
+    setExpandedSpaceIds(prev => {
+      const next = new Set(prev);
+      if (next.has(fmGuid)) next.delete(fmGuid);
+      else next.add(fmGuid);
+      return next;
+    });
+  }, []);
 
-    setSelectedId(node.id);
+  // ── Select node (fly-to in xeokit) ────────────────────────────────────────
 
-    try {
-      scene.setObjectsSelected(scene.selectedObjectIds, false);
-      
-      const entity = scene.objects[node.id];
-      if (entity) {
-        entity.selected = true;
-        
-        xeokitViewer.cameraFlight.flyTo({
-          aabb: entity.aabb,
-          duration: 0.5,
-        });
-      }
-      
-      onNodeSelect?.(node.id, node.fmGuid);
-    } catch (e) {
-      console.debug('ViewerTreePanel: Error selecting node:', e);
-    }
-  }, [viewerRef, onNodeSelect]);
+  const handleSelect = useCallback((fmGuid: string, name: string) => {
+    setSelectedId(fmGuid);
+    onNodeSelect?.(fmGuid, fmGuid);
 
-  // Handle hover - highlight in scene
-  const handleHover = useCallback((nodeId: string | null) => {
-    const viewer = viewerRef.current;
-    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    const scene = xeokitViewer?.scene;
-    
-    if (!scene) return;
-
-    try {
-      scene.setObjectsHighlighted(scene.highlightedObjectIds, false);
-      
-      if (nodeId) {
-        const entity = scene.objects[nodeId];
-        if (entity) {
-          entity.highlighted = true;
-        }
-      }
-      
-      onNodeHover?.(nodeId);
-    } catch (e) {
-      console.debug('ViewerTreePanel: Error highlighting node:', e);
-    }
-  }, [viewerRef, onNodeHover]);
-
-  // Handle visibility all - show/hide all objects AND sync tree checkboxes
-  const handleVisibilityAll = useCallback((visible: boolean) => {
     const xeokitViewer = getXeokitViewer();
-    const scene = xeokitViewer?.scene;
-    if (!scene) return;
+    if (!xeokitViewer?.scene) return;
 
     try {
-      scene.setObjectsVisible(scene.objectIds, visible);
-      
-      // Sync tree state with visibility change
-      setTreeData(prevTree => {
-        const updateAllNodes = (nodes: TreeNode[]): TreeNode[] => {
-          return nodes.map(node => ({
-            ...node,
-            visible: visible,
-            indeterminate: false,
-            children: node.children ? updateAllNodes(node.children) : undefined,
-          }));
-        };
-        return updateAllNodes(prevTree);
+      const ids = getXeokitIdsForFmGuid(xeokitViewer, fmGuid);
+      if (ids.length === 0) return;
+
+      xeokitViewer.scene.setObjectsSelected(xeokitViewer.scene.selectedObjectIds, false);
+      ids.forEach(id => {
+        const entity = xeokitViewer.scene.objects?.[id];
+        if (entity) entity.selected = true;
       });
+
+      const firstEntity = xeokitViewer.scene.objects?.[ids[0]];
+      if (firstEntity?.aabb) {
+        xeokitViewer.cameraFlight?.flyTo({ aabb: firstEntity.aabb, duration: 0.5 });
+      }
     } catch (e) {
-      console.debug('ViewerTreePanel: Error toggling all visibility:', e);
+      console.debug('ViewerTreePanel: select error:', e);
     }
-  }, [getXeokitViewer]);
+  }, [getXeokitViewer, onNodeSelect, setSelectedId]);
 
-  // Handle expand all - use requestIdleCallback for performance
-  const handleExpandAll = useCallback(() => {
-    const doExpand = () => {
-      const allIds = new Set<string>();
-      const collectIds = (nodes: TreeNode[]) => {
-        nodes.forEach(node => {
-          allIds.add(node.id);
-          if (node.children) collectIds(node.children);
-        });
-      };
-      collectIds(treeData);
-      setExpandedIds(allIds);
+  // ── Drag handlers ──────────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeStart({ x: e.clientX, y: e.clientY, width: size.width, height: size.height });
+  }, [size]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const move = (e: MouseEvent) => setPosition({ x: Math.max(0, e.clientX - dragOffset.x), y: Math.max(0, e.clientY - dragOffset.y) });
+    const up = () => setIsDragging(false);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+  }, [isDragging, dragOffset]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const move = (e: MouseEvent) => {
+      const w = Math.max(280, Math.min(600, resizeStart.width + (e.clientX - resizeStart.x)));
+      const h = Math.max(200, Math.min(window.innerHeight - 100, resizeStart.height + (e.clientY - resizeStart.y)));
+      setSize({ width: w, height: h });
     };
-    
-    // Use requestIdleCallback to prevent UI blocking on large trees
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(doExpand, { timeout: 500 });
-    } else {
-      setTimeout(doExpand, 0);
+    const up = () => setIsResizing(false);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+  }, [isResizing, resizeStart]);
+
+  // ── Filtered storeys ───────────────────────────────────────────────────────
+
+  const filteredStoreys = useMemo(() => {
+    if (!debouncedSearch) return storeys;
+    const q = debouncedSearch.toLowerCase();
+    return storeys.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.spaces.some(sp => sp.name.toLowerCase().includes(q) || sp.assets.some(a => a.name.toLowerCase().includes(q)))
+    );
+  }, [storeys, debouncedSearch]);
+
+  // ── Tree content ───────────────────────────────────────────────────────────
+
+  const TreeContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Laddar modellträd...</span>
+        </div>
+      );
     }
-  }, [treeData, setExpandedIds]);
 
-  // Handle collapse all
-  const handleCollapseAll = useCallback(() => {
-    setExpandedIds(new Set());
-  }, [setExpandedIds]);
+    if (filteredStoreys.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-1.5">
+          <TreeDeciduous className="h-8 w-8 opacity-40" />
+          <span>{debouncedSearch ? 'Ingen träff' : 'Inga våningsplan hittades'}</span>
+          {!debouncedSearch && (
+            <span className="text-xs text-center px-4">Modelldata laddas från Asset+</span>
+          )}
+        </div>
+      );
+    }
 
-  // Count total nodes
-  const nodeCount = useMemo(() => {
-    const countNodes = (nodes: TreeNode[]): number => {
-      return nodes.reduce((sum, node) => {
-        return sum + 1 + (node.children ? countNodes(node.children) : 0);
-      }, 0);
-    };
-    return countNodes(treeData);
-  }, [treeData]);
+    return (
+      <>
+        {filteredStoreys.map(storey => (
+          <StoreyRow
+            key={storey.fmGuid}
+            storey={storey}
+            isChecked={checkedStoreyFmGuids.has(storey.fmGuid)}
+            isExpanded={expandedStoreyIds.has(storey.fmGuid)}
+            selectedFmGuid={selectedId}
+            expandedSpaceIds={expandedSpaceIds}
+            onCheck={handleStoreyCheck}
+            onToggle={handleToggleStorey}
+            onToggleSpace={handleToggleSpace}
+            onSelect={handleSelect}
+            searchQuery={debouncedSearch}
+          />
+        ))}
+      </>
+    );
+  };
 
   if (!isVisible) return null;
 
-  // Loading indicator with progress
-  const LoadingIndicator = () => (
-    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm gap-2">
-      <Loader2 className="h-5 w-5 animate-spin" />
-      <span>Laddar modellträd...</span>
-      {buildProgress && (
-        <span className="text-[10px] sm:text-xs">
-          {buildProgress.current} / {buildProgress.total} våningar
-        </span>
-      )}
-    </div>
-  );
+  // ── Embedded mode ──────────────────────────────────────────────────────────
 
-  // Action buttons row component
-  const ActionButtons = () => (
-    <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1.5 border-b">
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="h-6 text-[10px] sm:text-xs flex-1 px-1.5"
-        onClick={() => handleVisibilityAll(true)}
-        disabled={isLoading || treeData.length === 0}
-        title="Show all objects"
-      >
-        <Check className="h-3 w-3 mr-0.5" /> All
-      </Button>
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="h-6 text-[10px] sm:text-xs flex-1 px-1.5"
-        onClick={() => handleVisibilityAll(false)}
-        disabled={isLoading || treeData.length === 0}
-        title="Hide all objects"
-      >
-        <Minus className="h-3 w-3 mr-0.5" /> None
-      </Button>
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="h-6 text-[10px] sm:text-xs px-1.5"
-        onClick={handleExpandAll}
-        disabled={isLoading || treeData.length === 0}
-        title="Expand all"
-      >
-        <ChevronDown className="h-3 w-3" />
-      </Button>
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="h-6 text-[10px] sm:text-xs px-1.5"
-        onClick={handleCollapseAll}
-        disabled={isLoading || treeData.length === 0}
-        title="Collapse all"
-      >
-        <ChevronUp className="h-3 w-3" />
-      </Button>
-    </div>
-  );
-
-  // Embedded mode: render without positioning, header, border
   if (embedded) {
     return (
-      <div ref={ref} className="flex flex-col h-full max-h-[80vh]">
-        {/* Action buttons */}
-        <ActionButtons />
-        
+      <div ref={ref} className="flex flex-col h-full">
         {/* Search */}
-        <div className="p-1.5 sm:p-2 border-b">
+        <div className="p-2 border-b">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Sök..."
-              className="h-6 sm:h-7 pl-6 sm:pl-7 text-[11px] sm:text-xs"
+              placeholder="Sök våning, rum..."
+              className="h-7 pl-7 text-xs"
             />
           </div>
         </div>
 
-        {/* Tree content */}
+        {/* Hint if storeys are checked */}
+        {checkedStoreyFmGuids.size > 0 && (
+          <div className="px-2 py-1 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
+            <span>Solo: {checkedStoreyFmGuids.size} våning(ar) valda</span>
+            <button
+              className="underline text-[10px]"
+              onClick={() => {
+                setCheckedStoreyFmGuids(new Set());
+                applyStoreyVisibility(new Set());
+              }}
+            >
+              Rensa
+            </button>
+          </div>
+        )}
+
         <ScrollArea className="flex-1">
-          <div className="p-0.5 sm:p-1">
-            {isLoading ? (
-              <LoadingIndicator />
-            ) : treeData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-3 sm:py-4 text-muted-foreground text-[10px] sm:text-xs gap-1">
-                <TreeDeciduous className="h-5 w-5 sm:h-6 sm:w-6 opacity-50" />
-                <span>Inget modellträd</span>
-              </div>
-            ) : (
-              treeData.map(node => (
-                <TreeNodeComponent
-                  key={node.id}
-                  node={node}
-                  level={0}
-                  selectedId={selectedId}
-                  expandedIds={expandedIds}
-                  onToggle={handleToggle}
-                  onSelect={handleSelect}
-                  onHover={handleHover}
-                  onVisibilityChange={handleVisibilityChange}
-                  searchQuery={debouncedSearch}
-                  showVisibilityCheckboxes={showVisibilityCheckboxes}
-                />
-              ))
-            )}
+          <div className="p-1">
+            <TreeContent />
           </div>
         </ScrollArea>
       </div>
     );
   }
 
-  // Standard floating panel mode - now draggable and resizable on desktop
+  // ── Floating panel mode ────────────────────────────────────────────────────
+
   return (
-    <div 
+    <div
       ref={ref}
       className={cn(
         "fixed z-50",
         "bg-card/90 backdrop-blur-md border rounded-lg shadow-xl",
-        "flex flex-col animate-slide-in-right",
+        "flex flex-col",
         isDragging && "cursor-grabbing select-none"
       )}
-      style={{
-        left: position.x,
-        top: position.y,
-        width: size.width,
-        height: size.height,
-      }}
+      style={{ left: position.x, top: position.y, width: size.width, height: size.height }}
     >
       {/* Draggable Header */}
-      <div 
-        className="flex items-center justify-between p-2 sm:p-3 border-b cursor-grab active:cursor-grabbing"
+      <div
+        className="flex items-center justify-between p-2.5 border-b cursor-grab active:cursor-grabbing"
         onMouseDown={handleDragStart}
       >
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <GripVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
-          <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-          <span className="font-medium text-xs sm:text-sm">Modellträd</span>
-          <Badge variant="secondary" className="text-[10px] sm:text-xs">{nodeCount.toLocaleString('sv-SE')}</Badge>
+        <div className="flex items-center gap-2">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <TreeDeciduous className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">Modellträd</span>
+          {storeys.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{storeys.length} våningar</Badge>
+          )}
         </div>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-5 w-5 sm:h-6 sm:w-6" 
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
         >
-          <X className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
-      
-      {/* Action buttons */}
-      <ActionButtons />
 
       {/* Search */}
-      <div className="p-1.5 sm:p-2 border-b">
+      <div className="p-2 border-b">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Sök..."
-            className="h-7 sm:h-8 pl-6 sm:pl-7 text-xs sm:text-sm"
+            placeholder="Sök våning, rum..."
+            className="h-8 pl-7 text-sm"
           />
         </div>
       </div>
 
+      {/* Solo hint */}
+      {checkedStoreyFmGuids.size > 0 && (
+        <div className="px-3 py-1.5 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
+          <span>Solo: {checkedStoreyFmGuids.size} våning(ar)</span>
+          <button
+            className="underline text-[10px]"
+            onClick={() => {
+              setCheckedStoreyFmGuids(new Set());
+              applyStoreyVisibility(new Set());
+            }}
+          >
+            Visa alla
+          </button>
+        </div>
+      )}
+
       {/* Tree content */}
-      <ScrollArea className="flex-1 p-1 sm:p-2">
-        {isLoading ? (
-          <LoadingIndicator />
-        ) : treeData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm gap-1.5 sm:gap-2">
-            <TreeDeciduous className="h-6 w-6 sm:h-8 sm:w-8 opacity-50" />
-            <span>Inget modellträd</span>
-            <span className="text-[10px] sm:text-xs">Modellen laddas...</span>
-          </div>
-        ) : (
-          treeData.map(node => (
-            <TreeNodeComponent
-              key={node.id}
-              node={node}
-              level={0}
-              selectedId={selectedId}
-              expandedIds={expandedIds}
-              onToggle={handleToggle}
-              onSelect={handleSelect}
-              onHover={handleHover}
-              onVisibilityChange={handleVisibilityChange}
-              searchQuery={debouncedSearch}
-              showVisibilityCheckboxes={showVisibilityCheckboxes}
-            />
-          ))
-        )}
+      <ScrollArea className="flex-1 p-1">
+        <TreeContent />
       </ScrollArea>
-      
-      {/* Resize handle - SE corner (desktop only) */}
+
+      {/* Resize handle */}
       <div
         className="hidden sm:block absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
         onMouseDown={handleResizeStart}
