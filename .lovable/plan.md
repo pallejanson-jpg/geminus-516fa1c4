@@ -1,112 +1,279 @@
 
-# Fyra fixes: Senslinc IOT+, Kartväljare, Duplikatbyggnader
+# Plan: Tre parallella fixes
 
-## Identifierade problem
+## 1. Mobil 3D-layout — responsivitetsproblem
 
-### 1. IOT+-knappen öppnar inte dashboard (kritisk)
+### Nulägesanalys
+Från koden i `AssetPlusViewer.tsx` (rad 3643–3720) och `MobileViewerOverlay.tsx`:
 
-Rotorsak: `handleOpenIoT` i `PortfolioView.tsx` anropar `get-dashboard-url` och sätter `dashboardUrl` i `SenslincDashboardContext`. Sedan öppnar `SenslincDashboardView` hooken `useSenslincData(facilityFmGuid)` som försöker `get-machine-data` → hittar ingen maskin (Småviken är en site, inte en machine) → faller tillbaka med tom `dashboardUrl`.
+**Problem A: NavCube sitter för lågt**
+NavCube-canvaset positioneras med `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)'`. Det hamnar alltså 74px + safe-area från botten – men ViewerToolbar (som renderas på desktop) renderas inte på mobil. NavCuben tar alltså plats mitt i 3D-vy.
 
-Problemet: hooken överskriver `dashboardUrl` från context med den tomma fallbacken. På rad 190 i `SenslincDashboardView.tsx`:
-```typescript
-const dashboardUrl = data?.dashboardUrl || senslincDashboardContext?.dashboardUrl || '';
-```
-Om `data?.dashboardUrl` är en tom sträng (fallback-objektet har `dashboardUrl: ''`) → faller aldrig igenom till `senslincDashboardContext?.dashboardUrl`.
+**Problem B: FloorCarousel och FloorSwitcher renderas inte på mobil**
+`FloatingFloorSwitcher` är insvept i `{!isMobile && (...)}` (rad 3770) – rätt. Men FloorCarousel renderas alltid (rad 3838). Den kan störa layout på mobil.
 
-Fix: lägg till `|| ''` guard – använd context-URL om hook-data saknar URL:
-```typescript
-const dashboardUrl = (data?.dashboardUrl?.trim() ? data.dashboardUrl : null) 
-  ?? senslincDashboardContext?.dashboardUrl ?? '';
-```
+**Problem C: Byggnadsnamn visas under 3D i ett banner-element**
+`AssetPlusViewer` renderar ingen explicit banner under 3D på mobil. Bannet med byggnadsnamnet + "2D/3D-switch" kommer sannolikt från ett annat element ovanför viewern – troligen `SyncProgressBanner` eller ett inlindningselement i `MainContent.tsx` eller `AppLayout.tsx` som fortfarande visar sig på mobil.
 
-Och i hooken `useSenslincData.ts`: fallback-objektet sätts med `dashboardUrl: siteDashboardUrl` korrekt men `siteDashboardUrl` är tom om `get-dashboard-url` anropet misslyckas. Det beror på att `get-dashboard-url` redan anropades av `handleOpenIoT` – men contexten skickas via `facilityFmGuid`, inte via `dashboardUrl` direkt. Hooken gör ett nytt anrop.
+**Problem D: ViewerRightPanel (settings-sheet) är för stor**
+`ViewerRightPanel` är en Sheet som öppnas via Settings2-knappen i MobileViewerOverlay. På mobil öppnar Sheet-komponenten som default en sidosheet – det kan ta för stor andel av skärmen.
 
-Faktiska fix: Hooken ska inte anropa `get-machine-data` när fmGuid matchar en byggnad (site). Vi vet inte i förväg. Enklast: om fallback-anropet till `get-dashboard-url` lyckas, sätt `dashboardUrl` i fallback-data.
+### Fixes
 
-Observerat: Anropet fungerar (curl bekräftar att `get-dashboard-url` ger rätt svar). Problemet är att `data.dashboardUrl = ''` överskuggar context-dashboardUrl på grund av `data?.dashboardUrl || ...` – tom sträng är truthy som `data?.dashboardUrl` men falsy för `||`. **Faktum: tom sträng är falsy för `||`** – alltså borde detta faktiskt fungera. Men: `data?.dashboardUrl` sätts till `siteDashboardUrl` i catch-grenen – om den är tom är den falsy och `senslincDashboardContext?.dashboardUrl` borde ta vid.
+**Fix 1: Lägg NavCube på bättre position på mobil**
+```tsx
+// Nuvarande (alltid samma offset):
+style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)' }}
 
-Faktisk rotorsak: Hooken gör ett `get-machine-data`-anrop, det misslyckas med "No machine found" (eftersom Småviken är en site), sedan görs ett fallback-anrop till `get-dashboard-url` – men det anropet kräver att Senslinc-credentials fungerar och returnerar rätt. Om det lyckas sätts `siteDashboardUrl` korrekt. Om `facilityFmGuid` inte är satt (null) hoppar hooken över hela processen. Om `facilityFmGuid` är satt men kontexten bara innehåller `dashboardUrl` (utan `facilityFmGuid`) → hooken anropas inte.
-
-Kontrollera: `SenslincDashboardView` läser `facilityFmGuid = senslincDashboardContext?.facilityFmGuid ?? null`. Om IOT+-knappen sätter kontexten med `facilityFmGuid: facility.fmGuid` (vilket den gör på rad 248 i PortfolioView), borde hooken köras.
-
-**Faktisk bug**: `handleOpenIoT` sätter redan `dashboardUrl` i kontexten på rad 244-248. Men `SenslincDashboardView.tsx` anropar hooken `useSenslincData(facilityFmGuid)` som gör ett nytt API-anrop, och under laddningstiden är `data?.dashboardUrl = ''`. Sedan när hook-data returneras (med siteDashboardUrl från fallback), sätts `data.dashboardUrl` korrekt – men dashboard-tab visas bara om `dashboardUrl` är satt vid render.
-
-Dashboard-tab renderas conditionally: `{dashboardUrl && (<TabsTrigger value="dashboard">...)}`. Om hooken inte har returnerat ännu (isLoading=true) → `dashboardUrl = '' || senslincDashboardContext?.dashboardUrl`. Context borde ha URL från handleOpenIoT!
-
-Kontrollera `handleOpenIoT` igen: Det anropas `get-dashboard-url` async och sätter `dashboardUrl` lokalt, sedan anropar `openSenslincDashboard({ dashboardUrl, facilityFmGuid })`. Context sätts med korrekt `dashboardUrl`. Men: `openSenslincDashboard` är en context-funktion – vi behöver verifiera att den sätter `senslincDashboardContext` korrekt.
-
-**Sannolikt verkliga problemet**: Från Insights-sidan – det finns ingen IOT+-knapp kopplad dit. `SensorsTab` anropar `useSenslincBuildingData(building?.fmGuid)` som anropar `get-building-sensor-data`. Den returnerar site + machines slim-lista. Men `machines[].latest_values` är `null` för alla (Senslinc API returnerar `null`), och `machines[].code` matchas mot `room.fmGuid` – men room.fmGuid är en Asset+ GUID, inte Senslinc-maskinens `code`.
-
-**Den verkliga felen i SensorsTab**: `liveMachineMap` mappar `machine.code` → `latest_values`. Men Senslinc-maskinens `code` är inte samma som rummet/Assets fmGuid. Det är en annan identifierare. Därför matchar aldrig rum mot maskiner och all data är mockdata.
-
-### 2. Kartans BuildingSidebar – ta bort den
-
-I `InsightsView.tsx` renderas `<MapView initialColoringMode={mapColoringMode} />` i sidopanelen. `MapView` har en inbyggd `BuildingSidebar` som alltid visas (absolut positionerad, täcker kartan). Ska tas bort när kartan visas i Insights-kontexten.
-
-Enklast: Lägg till en `hideSidebar?: boolean` prop till `MapView` och skicka `hideSidebar={true}` från `InsightsView`.
-
-### 3. Duplikatbyggnader (Stadshuset Nyköping)
-
-Databas bekräftar: Två poster för Stadshuset Nyköping:
-- `fm_guid: 7cad5eda-...`, `complex_common_name: 'Stockholmshem'` (Asset+ data)
-- `fm_guid: acc-bim-building-...`, `complex_common_name: null` (ACC BIM-import)
-
-ACC-importen skapar en ny Building-post med prefix `acc-bim-building-...` utan `complex_common_name`. Dessa hamnar i "Other buildings" i portfolio.
-
-Fix på frontend: I `PortfolioView.tsx`, filtrera bort assets med `fmGuid` som börjar på `acc-bim-building-` ur facilities-listan. Dessa är tekniska BIM-imports utan komplex-tillhörighet och ska inte visas separat i portfolion.
-
-Alternativt (renare men mer arbete): Matcha mot befintliga buildings och merga. Men det är komplex logik.
-
-**Föreslagen fix**: Filtrera bort `acc-bim-building-`-prefix-buildings från `navigatorTreeData` i `PortfolioView.tsx`-filtreringen, eftersom de är dubbletter av Asset+-buildings.
-
-### 4. Senslinc data är mockdata (inte riktig data)
-
-**Rotorsak**: `get-building-sensor-data` returnerar machines med `latest_values: null` (Senslinc API ger inte latest_values direkt på maskinlistan). Dessutom matchar `machine.code` (Senslinc-identifierare) inte `room.fmGuid` (Asset+ GUID).
-
-**Fix**: `SensorsTab` visar alltid mockdata för rum eftersom det inte finns en mappning mellan Senslinc-machines och Asset+-rum. Det enda rätta sättet är att visa faktisk sensordata är antingen:
-- Anropa `get-machine-data` per rum (dyrt, N anrop)
-- Visa aggregerade site-siffror (från `get-building-sensor-data` med Elasticsearch)
-
-Pragmatisk fix: Markera rum som har matchande `machine.code` med riktig data, övriga med lila/mock-stil. Visa tydligt att data är beräknade snitt från Senslinc site-level (inte per-rum) när det är live.
-
-**Enklast och mest ärligt**: `SensorsTab` ska visa att datan är mock för de rum som inte har matchande Senslinc-maskin, men **för byggnaden som helhet** (Småviken) ska vi faktiskt visa riktig data från site-nivå.
-
-## Konkreta filändringar
-
-### Fix 1: `src/components/viewer/SenslincDashboardView.tsx`
-Rad 190 – skärp dashboardUrl-läsningen:
-```typescript
-const dashboardUrl = (data?.dashboardUrl?.trim() || senslincDashboardContext?.dashboardUrl || '');
+// Ny (skilj mobil/desktop):
+style={{ 
+  bottom: isMobile 
+    ? 'calc(env(safe-area-inset-bottom, 12px) + 16px)' 
+    : 'calc(env(safe-area-inset-bottom, 12px) + 74px)' 
+}}
 ```
 
-Dessutom: om `isLoading` och context har URL → visa dashboard-tab direkt, vänta inte på hook.
+**Fix 2: Dölj FloatingFloorSwitcher och FloorCarousel på mobil**
+FloatingFloorSwitcher är redan dold. FloorCarousel: lägg till `{!isMobile && (<FloorCarousel .../>)}`.
 
-### Fix 2: `src/components/map/MapView.tsx`
-Lägg till `hideSidebar?: boolean` prop. Wrap `BuildingSidebar` i `{!hideSidebar && (<BuildingSidebar .../>)}`.
+**Fix 3: Identifiera och ta bort banner ovanför 3D**
+Söker i `MainContent.tsx`, `AppLayout.tsx` och `SyncProgressBanner.tsx` efter vad som renderas ovanför viewer-ytan på mobil. Det är sannolikt ett element med byggnadsnamn + 2D/3D-toggle i layout-lagret. Vi sätter `display: none` på mobil eller döljer det via props.
 
-### Fix 3: `src/components/insights/InsightsView.tsx`
-Skicka `hideSidebar={true}` till `MapView`.
+**Fix 4: ViewerRightPanel på mobil — kompaktare sheet**
+SheetContent på mobil får `side="bottom"` och `className="max-h-[70vh]"` istället för default side-sheet. Ändras via `isMobile`-prop i ViewerRightPanel.
 
-### Fix 4: `src/components/portfolio/PortfolioView.tsx`
-I `facilities` useMemo, filtrera bort ACC BIM-buildings:
-```typescript
-return navigatorTreeData
-  .filter(building => !building.fmGuid?.startsWith('acc-bim-building-'))
-  .map((building, index) => { ... })
+---
+
+## 2. AI-skanningsfunktion — djupanalys och rekommendation
+
+### Nulägesanalys av bottlenecks
+
+Från `BrowserScanRunner.tsx`:
+```
+ROTATIONS_PER_POSITION = 6
+ROTATION_DELAY_MS = 1500
+CAPTURE_DELAY_MS = 500
+MAX_IMAGES_PER_SCAN = 200
 ```
 
-### Fix 5: `src/components/insights/tabs/SensorsTab.tsx`
-Tydligare separation: visa "Live-data saknas per rum, visar estimated" när `isLive=false`. Städa upp mock-data-genereringen så lila/streckad stil visas konsekvent.
+**Tidskalkyl per bild:**
+- Navigation + wait: `await sleep(2000)` = **2 000 ms**
+- Per rotation (6 st): `CAPTURE_DELAY_MS (500) + analyzeScreenshot (AI-anrop) + ROTATION_DELAY_MS (1500)` ≈ **3 000–5 000 ms**
+- Totalt per bildposition: `2000 + 6 × ~4000 = 26 000 ms = 26 sekunder per bild`
+- Med 200 bilder: **200 × 26s = 86 minuter** — oanvändbart
 
-## Prioritet
+**Primär bottleneck: AI-anropet (Gemini) per rotation**
+`analyzeScreenshot()` gör ett Supabase Functions-anrop för varje rotation, som i sin tur anropar Gemini Vision API. Det tar 2–5 sekunder per anrop. 6 rotationer × 5s = 30s bara i AI-tid.
 
-1. **Dashboard-URL-bugg** (Fix 1 + kontrollera context-flöde) – kritisk, IOT+ fungerar inte
-2. **ACC-duplikat** (Fix 4) – hög, förvirrar användaren
-3. **Kartväljare** (Fix 2+3) – medel, estetisk
-4. **SensorsTab mock-tydlighet** (Fix 5) – låg, data visas men är alltid mock
+**Sekundär bottleneck: `await sleep(2000)` för panorama-render**
+Onödigt lång wait. Ivion SDK renderar panoramat snabbare än 2 sekunder på moderna enheter.
 
-## Notering om Senslincs riktiga data
+**Tertiär: Rotation-logiken**
+6 rotationer per position med 1500ms väntan = 9 sekunder extra per position utan AI-tid.
 
-Curl-test bekräftar att `get-dashboard-url` för Småviken returnerar korrekt `https://swg-group.productinuse.com/site/28148/home/`. `get-building-sensor-data` hämtar site + machines – men `machine.code` är Senslinc-intern kod, inte Asset+ fmGuid. Det finns ingen direkt mappning utan manuell konfiguration i Asset+ (att lägga maskin-koden som attribut på rum). Därför kan vi inte visa riktig per-rum-data utan den mappningen.
+### Alternativa angreppsätt
 
-**Vad vi KAN göra**: Visa riktig aggregerad site-data (medeltemperatur för hela Småviken) via `get-building-sensor-data` + Elasticsearch på site-nivå. Det behöver ett nytt edge function-anrop för time-series på site-nivå.
+**A. Batch-analys — skicka alla rotationer i ett AI-anrop**
+Istället för att anropa Gemini 6 gånger per position, ta 6 screenshots och skicka dem i ett enda Gemini-anrop (multi-image). Gemini Vision stöder flera bilder per anrop.
+- Tidsbesparing: 5 AI-anrop sparas per position → ~25 sekunder snabbare per position
+- Implementeras i edge function `ai-asset-detection`:
+```typescript
+// Batch: samla screenshots för alla rotationer, sedan ett AI-anrop
+const screenshots = [];
+for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
+  screenshots.push(await captureScreenshot());
+  await rotateView(60);
+  await sleep(500); // Kortare wait
+}
+// Ett AI-anrop med alla bilder:
+await analyzeBatch(screenshots, imageId, position);
+```
+
+**B. Färre rotationer med bredare synfält**
+Minska från 6 till 3 rotationer (120° per rotation täcker mer). Halverar rotationstiden.
+
+**C. Kortare navigation-wait**
+Minska `await sleep(2000)` till `await sleep(800)`. Ivion SDK är normalt snabbare.
+
+**D. Parallell analys med Worker**
+Skicka screenshot till analys utan att invänta svaret — fortsätt navigera och rotera medan föregående analyseras asynkront. Komplex att implementera men halverar totaltiden.
+
+**E. Sampling-förbättring**
+Nuvarande sampling: var N:te bild. Bättre: spatial sampling (hoppa över bilder som är nära i 3D-rum). Kräver att bildernas 3D-koordinater används för avståndskalkyl.
+
+**F. E57-format (NavVis)**
+E57 innehåller punktmoln + panoramabilder. Fördelar: alla bilder i ett format utan navigationstid. Nackdelar: filer på 10–50 GB, kräver server-side parsing (ingen browserbaserad lösning), kräver helt nytt pipeline. **Inte rekommenderat** för nuvarande arkitektur.
+
+### Marknadsöversikt — AI-bildigenkänning för inventering
+
+**Liknande lösningar:**
+1. **viAct** — AI safety/asset detection i byggmiljö. Använder video-feeds. Inte 360°-baserat.
+2. **Mappedin + AI** — Indoor mapping + object recognition. Kräver egna sensorer.
+3. **Matterport AI** — Har inbyggd object detection i sina 360°-skanningar. Bäst referens. Processen: 3D-skanning → AI post-processing off-line (batch), inte real-time.
+4. **Leica Cyclone FIELD 360** — Skannar, exporterar E57/RCP, batch AI-analys offline.
+5. **Samsara** — AI camera-based asset detection, men kräver dedikerade kameror.
+
+**Nyckelinsikt från marknaden:** Alla professionella lösningar kör AI-analysen **batch/offline**, inte i real-time under navigering. Vår approach (navigera → ta screenshot → analysera → nästa bild) är korrekt i princip men för sekventiell.
+
+**Rekommenderad förbättring:**
+Implementera **batch-analys** (alternativ A) + **kortare waits** (alternativ C) + **3 rotationer** (alternativ B). Kombinerat ger detta:
+```
+Tid per position: 
+Nuvarande:  2000 + 6 × (500 + 3000 + 1500) = 32 000 ms = 32 sek
+Förbättrad: 800  + 3 × 500 (capture) + 1 AI-anrop (3000 ms) = 4 000 ms = 4 sek
+```
+→ **8x snabbare** — 200 bilder tar 13 min istället för 107 min.
+
+### Konkreta kodändringar
+
+**`BrowserScanRunner.tsx`:**
+```typescript
+const ROTATIONS_PER_POSITION = 3; // från 6
+const ROTATION_DELAY_MS = 600;    // från 1500
+const CAPTURE_DELAY_MS = 300;     // från 500
+
+// I startScan():
+await sleep(800); // Från 2000ms navigation wait
+
+// Ny batch-loop:
+const screenshots: string[] = [];
+for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
+  const screenshot = await captureScreenshot();
+  if (screenshot) screenshots.push(screenshot);
+  if (rot < ROTATIONS_PER_POSITION - 1) {
+    await rotateView(360 / ROTATIONS_PER_POSITION);
+    await sleep(ROTATION_DELAY_MS);
+  }
+}
+// Ett anrop för alla screenshots:
+const detCount = await analyzeScreenshotBatch(screenshots, img?.id ?? null, position, img?.datasetName);
+```
+
+**`ai-asset-detection/index.ts` — ny action `analyze-screenshot-batch`:**
+```typescript
+case 'analyze-screenshot-batch': {
+  const { screenshots, imageId, imagePosition, datasetName } = body;
+  // Skicka alla bilder i ett Gemini multi-image prompt
+  const parts = screenshots.map(b64 => ({ inlineData: { data: b64, mimeType: 'image/jpeg' } }));
+  parts.unshift({ text: promptText });
+  const result = await gemini.generateContent({ contents: [{ role: 'user', parts }] });
+  // ... parse result
+}
+```
+
+---
+
+## 3. ACC-integration — röd felkod
+
+### Nulägesanalys
+
+Felet uppstod efter att "Testa koppling" och andra knappar togs bort och ersattes med den förenklade "Fler åtgärder"-strukturen.
+
+**Identifierat problem i `useEffect` på rad 678–691:**
+```typescript
+useEffect(() => {
+  if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
+    setHasLoadedAccSettings(true);
+    handleCheckAccStatus();
+    // Auto-fetch hubs if not already loaded
+    if (accHubs.length === 0) {
+      handleFetchHubs(); // ← Anropar list-hubs direkt
+    }
+    // Auto-fetch folders if project is selected but no folders cached
+    if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null) {
+      handleFetchAccFolders(); // ← Anropar list-folders direkt
+    }
+  }
+}, [isOpen, accAuthStatus, hasLoadedAccSettings]);
+```
+
+`handleFetchHubs()` anropar `acc-sync` med `{ action: 'list-hubs' }`. `handleFetchAccFolders()` anropar `acc-sync` med `{ action: 'list-folders' }`.
+
+**Felet:** `list-hubs` kräver en giltig 3-legged OAuth-token (Autodesk-inloggning). Om `accAuthStatus === 'unauthenticated'` men `hasLoadedAccSettings` is false → useEffect triggas, `handleFetchHubs()` anropas → edge function misslyckas → röd toast-error.
+
+**Orsaken till att det fungerade innan:** Tidigare hade vi en "Testa anslutning"-knapp som bara användes manuellt. Nu sker `handleFetchHubs()` automatiskt vid modal-öppning.
+
+**Fix:**
+1. Lägg till check: auto-fetch hubs bara om `accAuthStatus === 'authenticated'`
+2. Visa tydligare info-state i UI:t när Autodesk ej är inloggad — istället för att misslyckas tyst
+
+```typescript
+// Nuvarande (fel):
+if (accHubs.length === 0) {
+  handleFetchHubs();
+}
+
+// Fix:
+if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
+  handleFetchHubs();
+}
+if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null && accAuthStatus === 'authenticated') {
+  handleFetchAccFolders();
+}
+```
+
+**Dessutom:** I `handleFetchHubs()` och `handleFetchAccFolders()` hanteras fel med `toast({ variant: 'destructive', ... })` som visar röda felmeddelanden. Dessa visas nu automatiskt vid modal-öppning. Fix: lägg till `if (!data?.success && accAuthStatus !== 'authenticated') return;` som tyst ignorerar felet när Autodesk ej är inloggad.
+
+### Konkreta filändringar
+
+**`src/components/settings/ApiSettingsModal.tsx` — rad 678–691:**
+```typescript
+useEffect(() => {
+  if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
+    setHasLoadedAccSettings(true);
+    handleCheckAccStatus();
+    // Auto-fetch hubs ONLY if authenticated — avoids red error toast when not logged in
+    if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
+      handleFetchHubs();
+    }
+    // Auto-fetch folders ONLY if authenticated and project selected
+    if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null && accAuthStatus === 'authenticated') {
+      handleFetchAccFolders();
+    }
+  }
+}, [isOpen, accAuthStatus, hasLoadedAccSettings]);
+```
+
+**`handleFetchHubs` (rad ~700–724) — stilla fel om ej inloggad:**
+```typescript
+const handleFetchHubs = async () => {
+  if (accAuthStatus !== 'authenticated') return; // Guard
+  // ... resten oförändrad
+};
+```
+
+**`handleFetchAccFolders` (rad ~726–754) — detsamma:**
+```typescript
+const handleFetchAccFolders = async () => {
+  if (accAuthStatus !== 'authenticated') {
+    toast({ variant: 'destructive', title: 'Autodesk ej inloggad', description: 'Logga in med ditt Autodesk-konto först.' });
+    return;
+  }
+  // ... resten oförändrad
+};
+```
+
+---
+
+## Filer att ändra
+
+| Fil | Ändringar |
+|-----|-----------|
+| `src/components/viewer/AssetPlusViewer.tsx` | NavCube-offset på mobil, dölj FloorCarousel på mobil, identifiera banner |
+| `src/components/viewer/ViewerRightPanel.tsx` | Sheet `side="bottom"` + `max-h-[70vh]` på mobil |
+| `src/components/viewer/MobileViewerOverlay.tsx` | Inga ändringar behövs |
+| `src/components/ai-scan/BrowserScanRunner.tsx` | Reducera delays, batch-screenshots (3 rotationer, kortare waits) |
+| `supabase/functions/ai-asset-detection/index.ts` | Ny `analyze-screenshot-batch` action för multi-image Gemini-anrop |
+| `src/components/settings/ApiSettingsModal.tsx` | Auto-fetch-guard med `accAuthStatus === 'authenticated'` |
+
+## Prioritetsordning
+
+1. **ACC-felet** (10 min) — enkelt, tydlig rotorsak, stoppar användaren från att öppna inställningar utan röda fel
+2. **Mobil 3D** (30 min) — responsivitet, NavCube, dölj FloorCarousel, kompakta paneler
+3. **AI-scan batch-optimering** (45 min) — 8x prestandaförbättring
+
+## Vad ingår inte
+
+- E57-parsning: avråds, kräver nytt server-pipeline och hanterar 10–50 GB filer
+- Spatial sampling per 3D-koordinat: komplext, låg prioritet
+- Senslinc/ACC-duplikat/Insights-karta: hanteras i separata issues
