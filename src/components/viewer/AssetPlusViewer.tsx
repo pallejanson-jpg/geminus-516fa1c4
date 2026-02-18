@@ -513,14 +513,26 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const { modelNamesMap } = useModelNames(buildingFmGuid);
 
   // On-demand XKT sync: ensure models are cached for this building with visual feedback
+  const modelLoadStateRef = useRef<string>(modelLoadState);
+  useEffect(() => { modelLoadStateRef.current = modelLoadState; }, [modelLoadState]);
+  
   useEffect(() => {
     if (!buildingFmGuid) return;
     
     const ensureModels = async () => {
+      // Don't run sync check if models are already loaded in the viewer
+      // Use ref to avoid stale closure (modelLoadState captured at effect creation)
+      if (modelLoadStateRef.current === 'loaded') return;
       setXktSyncStatus('checking');
       
       try {
         const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
+        
+        // After async, re-check if models loaded while we were waiting
+        if (modelLoadStateRef.current === 'loaded') {
+          setXktSyncStatus('done');
+          return;
+        }
         
         if (result.syncing) {
           console.log('On-demand XKT sync triggered for building:', buildingFmGuid);
@@ -3610,8 +3622,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             } as React.CSSProperties}
           />
 
-          {/* Loading spinner overlay */}
-          {((state.isLoading && !state.isInitialized) || (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized) && (
+          {/* Loading spinner overlay - never show when models are already loaded */}
+          {((state.isLoading && !state.isInitialized) || (modelLoadState !== 'loaded' && (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized)) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
               <Spinner 
                 size="xl" 
