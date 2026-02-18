@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.acc-svf-to-gltf]
 verify_jwt = false
+
+[functions.mobile-ai-scan]
+verify_jwt = false
