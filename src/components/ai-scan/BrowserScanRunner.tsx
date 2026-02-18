@@ -647,7 +647,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       <div
         ref={containerRef}
         className="rounded-lg overflow-hidden border bg-muted"
-        style={{ display: 'block', width: '100%', minHeight: '400px', height: '50vh' }}
+        style={{ display: 'block', width: '100%', minHeight: '500px', height: '70vh' }}
       />
     </div>
   );
