@@ -1,279 +1,187 @@
 
-# Plan: Tre parallella fixes
+# Analys: Tre frågor om AI-skanningen
 
-## 1. Mobil 3D-layout — responsivitetsproblem
+## Fråga 1: Varför kör skanningen på Småviken?
 
-### Nulägesanalys
-Från koden i `AssetPlusViewer.tsx` (rad 3643–3720) och `MobileViewerOverlay.tsx`:
+**Svar: Den gör det inte.**
 
-**Problem A: NavCube sitter för lågt**
-NavCube-canvaset positioneras med `bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)'`. Det hamnar alltså 74px + safe-area från botten – men ViewerToolbar (som renderas på desktop) renderas inte på mobil. NavCuben tar alltså plats mitt i 3D-vy.
+Databasen bekräftar att alla skanningar har körts på **Centralstationen** (`building_fm_guid: 755950d9-f235-4d64-a38d-b7fc15a0cad9`, `ivion_site_id: 3045176558137335`). Småviken (`a8fe5835-...`) har **ingen** `ivion_site_id` konfigurerad i `building_settings` och dyker därmed inte ens upp i byggnadslistan i skanningspanelen.
 
-**Problem B: FloorCarousel och FloorSwitcher renderas inte på mobil**
-`FloatingFloorSwitcher` är insvept i `{!isMobile && (...)}` (rad 3770) – rätt. Men FloorCarousel renderas alltid (rad 3838). Den kan störa layout på mobil.
+Den aktuella URL:en i webbläsaren bekräftar också att 360°-viewern visar `site=3045176558137335` = Centralstationen.
 
-**Problem C: Byggnadsnamn visas under 3D i ett banner-element**
-`AssetPlusViewer` renderar ingen explicit banner under 3D på mobil. Bannet med byggnadsnamnet + "2D/3D-switch" kommer sannolikt från ett annat element ovanför viewern – troligen `SyncProgressBanner` eller ett inlindningselement i `MainContent.tsx` eller `AppLayout.tsx` som fortfarande visar sig på mobil.
+Förvirringen om "Småviken" kom troligen från Senslinc-dashboarden, inte AI-skanningen. Det var olika diskussioner som blandades ihop.
 
-**Problem D: ViewerRightPanel (settings-sheet) är för stor**
-`ViewerRightPanel` är en Sheet som öppnas via Settings2-knappen i MobileViewerOverlay. På mobil öppnar Sheet-komponenten som default en sidosheet – det kan ta för stor andel av skärmen.
+**Byggnader med Ivion konfigurerat:**
+- Akerselva Atrium → site `3373717251911143`
+- Centralstationen → site `3045176558137335`
+- Småviken → inget ivion_site_id (kan inte scannas)
 
-### Fixes
+---
 
-**Fix 1: Lägg NavCube på bättre position på mobil**
+## Fråga 2: Kör vi screenshots istället för riktiga 360°-bilder?
+
+**Svar: Ja, och det är ett fundamentalt arkitekturproblem.**
+
+### Hur systemet fungerar idag
+
+```text
+Ivion SDK laddas i webbläsaren
+     ↓
+SDK navigerar till bild-ID via moveToImageId()
+     ↓
+Panorama renderas i WebGL-canvas (~800ms)
+     ↓
+getScreenshot() kör toDataURL() på canvasen
+     ↓
+JPEG-screenshot (~288×398 px) skickas till Gemini
+```
+
+Problemet: Vi tar en **skärmdump av det renderade panoramat** i webbläsarens canvas. Det är inte ett riktigt 360°-foto — det är ett litet utsnitt av det som råkar renderas i det lilla fönstret vid det ögonblicket.
+
+**Varför kan inte riktiga bilder laddas ned?**
+
+Vi har testat direkt nedladdning av Ivion-bildfiler (JPEG, equirectangular 360°) men det misslyckas med 403 Forbidden. NavVis's API kräver att bilderna streamas genom SDK:n med OAuth-tokens som är bundna till webbläsarens session. Filerna kan inte laddas ned server-side med credentials.
+
+**Konsekvenser för mobilanvändning:**
+
+Ja, det är ett problem. `BrowserScanRunner` kräver:
+- En öppen webbläsarflik (inte bakgrundsprocess)
+- En fungerande Ivion SDK-session (kräver full desktop-miljö för bästa rendering)
+- Att användaren väntar medan 200 bilder analyseras
+
+På en mobil är canvasen liten → screenshots är 200–300px → Gemini ser suddig bild → sämre detektering. Dessutom tar det 20+ minuter med fliken öppen.
+
+---
+
+## Fråga 3: Kan vi ladda ned och köra offline som konkurrenter?
+
+**Svar: Tekniskt möjligt via E57, men kräver ny arkitektur och är inte rekommenderat.**
+
+### Marknadsöversikt: Hur konkurrenter gör
+
+| Lösning | Metod |
+|---------|-------|
+| **Matterport** | Proprietary 3D-skanner → equirectangular JPEG offline batch |
+| **Leica Cyclone FIELD 360** | E57-export → lokal batch-analys offline |
+| **viAct** | Video-feeds från säkerhetskameror, inte 360° |
+| **Mappedin** | Egna sensorer + proprietär pipeline |
+
+**Nyckelskillnad**: Alla dessa äger sitt bildformat och sin pipeline. NavVis/Ivion låser bilderna bakom autentisering — det är en affärsmässig begränsning, inte en teknisk.
+
+### E57-formatet — möjligheter och begränsningar
+
+E57 är ett öppet format som innehåller:
+- Punktmoln (3D-koordinater)
+- Equirectangular 360°-bilder (riktiga, full-res JPEG)
+- Metadata (kameraposition, orientering)
+
+**Fördelar:**
+- Riktiga fullupplösta bilder (6000×3000 px vanligt)
+- Inga session-cookies eller OAuth-krav
+- Kan processas offline, server-side
+- Batch-analys utan navigeringstid → mycket snabbare
+
+**Nackdelar:**
+- En E57-fil för ett våningsplan = 5–30 GB
+- NavVis exporterar E57 men inte via API — måste göras manuellt från NavVis-portalen
+- Uppladdning till servern tar 30–60 minuter per våning
+- Browser-side parsing av E57 är omöjligt (binärformat, inga JS-bibliotek)
+- Kräver en backend-process (edge function klarar inte 30 GB-filer)
+
+### Rekommenderad väg framåt
+
+**Kortsiktig fix (implementeras nu):**
+Förbättra screenshot-kvaliteten för att få maximal effekt ur nuvarande approach:
+1. Öka container-storleken i `BrowserScanRunner` till `height: 70vh` så screenshots blir 600–800px höga
+2. Lägg till few-shot example-images i batch-prompten (de tränar Gemini att känna igen rätt objekt)
+3. Förbättra prompt-texten för per-bild analys
+
+**Medellångsiktig (1–2 månader):**
+Utforska om NavVis har ett "download-all-images"-API som vi inte använder än. NavVis har en Enterprise API som ibland tillåter direktnedladdning med service account-credentials (inte OAuth). Värt att testa.
+
+**Långsiktig (om E57 önskas):**
+Skapa ett separat "offline batch"-flöde:
+1. Användaren laddar upp E57-fil via en fil-uppladdnings-sida
+2. Server-side processing extraherar bilder (kräver en persistent bakgrundsprocess, inte en edge function)
+3. Gemini Vision analyserar bilderna i batch
+4. Resultaten importeras till Geminus
+
+Detta är möjligt men kräver en annan arkitektur (t.ex. en separat worker-server).
+
+---
+
+## Plan: Genomför de tre konkreta fixarna för bättre detektering
+
+Dessa kan implementeras omedelbart och förbättrar detektionsförmågan avsevärt utan att byta arkitektur.
+
+### Fix 1: Öka container-storleken
+
+`BrowserScanRunner.tsx` rad 647–651:
 ```tsx
-// Nuvarande (alltid samma offset):
-style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)' }}
+// Nuvarande:
+style={{ display: 'block', width: '100%', minHeight: '400px', height: '50vh' }}
 
-// Ny (skilj mobil/desktop):
-style={{ 
-  bottom: isMobile 
-    ? 'calc(env(safe-area-inset-bottom, 12px) + 16px)' 
-    : 'calc(env(safe-area-inset-bottom, 12px) + 74px)' 
-}}
+// Ny: Ge viewern maximalt utrymme
+style={{ display: 'block', width: '100%', height: '70vh', minHeight: '500px' }}
 ```
 
-**Fix 2: Dölj FloatingFloorSwitcher och FloorCarousel på mobil**
-FloatingFloorSwitcher är redan dold. FloorCarousel: lägg till `{!isMobile && (<FloorCarousel .../>)}`.
+En större container → Ivion renderar i högre upplösning → screenshots är 600–900px → Gemini ser mer detaljer.
 
-**Fix 3: Identifiera och ta bort banner ovanför 3D**
-Söker i `MainContent.tsx`, `AppLayout.tsx` och `SyncProgressBanner.tsx` efter vad som renderas ovanför viewer-ytan på mobil. Det är sannolikt ett element med byggnadsnamn + 2D/3D-toggle i layout-lagret. Vi sätter `display: none` på mobil eller döljer det via props.
+### Fix 2: Lägg till few-shot examples i batch-prompten
 
-**Fix 4: ViewerRightPanel på mobil — kompaktare sheet**
-SheetContent på mobil får `side="bottom"` och `className="max-h-[70vh]"` istället för default side-sheet. Ändras via `isMobile`-prop i ViewerRightPanel.
+I `ai-asset-detection/index.ts`, i `analyze-screenshot-batch`-casen, lägg till template-examples precis som `analyzeImageWithAI` gör:
 
----
-
-## 2. AI-skanningsfunktion — djupanalys och rekommendation
-
-### Nulägesanalys av bottlenecks
-
-Från `BrowserScanRunner.tsx`:
-```
-ROTATIONS_PER_POSITION = 6
-ROTATION_DELAY_MS = 1500
-CAPTURE_DELAY_MS = 500
-MAX_IMAGES_PER_SCAN = 200
-```
-
-**Tidskalkyl per bild:**
-- Navigation + wait: `await sleep(2000)` = **2 000 ms**
-- Per rotation (6 st): `CAPTURE_DELAY_MS (500) + analyzeScreenshot (AI-anrop) + ROTATION_DELAY_MS (1500)` ≈ **3 000–5 000 ms**
-- Totalt per bildposition: `2000 + 6 × ~4000 = 26 000 ms = 26 sekunder per bild`
-- Med 200 bilder: **200 × 26s = 86 minuter** — oanvändbart
-
-**Primär bottleneck: AI-anropet (Gemini) per rotation**
-`analyzeScreenshot()` gör ett Supabase Functions-anrop för varje rotation, som i sin tur anropar Gemini Vision API. Det tar 2–5 sekunder per anrop. 6 rotationer × 5s = 30s bara i AI-tid.
-
-**Sekundär bottleneck: `await sleep(2000)` för panorama-render**
-Onödigt lång wait. Ivion SDK renderar panoramat snabbare än 2 sekunder på moderna enheter.
-
-**Tertiär: Rotation-logiken**
-6 rotationer per position med 1500ms väntan = 9 sekunder extra per position utan AI-tid.
-
-### Alternativa angreppsätt
-
-**A. Batch-analys — skicka alla rotationer i ett AI-anrop**
-Istället för att anropa Gemini 6 gånger per position, ta 6 screenshots och skicka dem i ett enda Gemini-anrop (multi-image). Gemini Vision stöder flera bilder per anrop.
-- Tidsbesparing: 5 AI-anrop sparas per position → ~25 sekunder snabbare per position
-- Implementeras i edge function `ai-asset-detection`:
 ```typescript
-// Batch: samla screenshots för alla rotationer, sedan ett AI-anrop
-const screenshots = [];
-for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
-  screenshots.push(await captureScreenshot());
-  await rotateView(60);
-  await sleep(500); // Kortare wait
-}
-// Ett AI-anrop med alla bilder:
-await analyzeBatch(screenshots, imageId, position);
-```
-
-**B. Färre rotationer med bredare synfält**
-Minska från 6 till 3 rotationer (120° per rotation täcker mer). Halverar rotationstiden.
-
-**C. Kortare navigation-wait**
-Minska `await sleep(2000)` till `await sleep(800)`. Ivion SDK är normalt snabbare.
-
-**D. Parallell analys med Worker**
-Skicka screenshot till analys utan att invänta svaret — fortsätt navigera och rotera medan föregående analyseras asynkront. Komplex att implementera men halverar totaltiden.
-
-**E. Sampling-förbättring**
-Nuvarande sampling: var N:te bild. Bättre: spatial sampling (hoppa över bilder som är nära i 3D-rum). Kräver att bildernas 3D-koordinater används för avståndskalkyl.
-
-**F. E57-format (NavVis)**
-E57 innehåller punktmoln + panoramabilder. Fördelar: alla bilder i ett format utan navigationstid. Nackdelar: filer på 10–50 GB, kräver server-side parsing (ingen browserbaserad lösning), kräver helt nytt pipeline. **Inte rekommenderat** för nuvarande arkitektur.
-
-### Marknadsöversikt — AI-bildigenkänning för inventering
-
-**Liknande lösningar:**
-1. **viAct** — AI safety/asset detection i byggmiljö. Använder video-feeds. Inte 360°-baserat.
-2. **Mappedin + AI** — Indoor mapping + object recognition. Kräver egna sensorer.
-3. **Matterport AI** — Har inbyggd object detection i sina 360°-skanningar. Bäst referens. Processen: 3D-skanning → AI post-processing off-line (batch), inte real-time.
-4. **Leica Cyclone FIELD 360** — Skannar, exporterar E57/RCP, batch AI-analys offline.
-5. **Samsara** — AI camera-based asset detection, men kräver dedikerade kameror.
-
-**Nyckelinsikt från marknaden:** Alla professionella lösningar kör AI-analysen **batch/offline**, inte i real-time under navigering. Vår approach (navigera → ta screenshot → analysera → nästa bild) är korrekt i princip men för sekventiell.
-
-**Rekommenderad förbättring:**
-Implementera **batch-analys** (alternativ A) + **kortare waits** (alternativ C) + **3 rotationer** (alternativ B). Kombinerat ger detta:
-```
-Tid per position: 
-Nuvarande:  2000 + 6 × (500 + 3000 + 1500) = 32 000 ms = 32 sek
-Förbättrad: 800  + 3 × 500 (capture) + 1 AI-anrop (3000 ms) = 4 000 ms = 4 sek
-```
-→ **8x snabbare** — 200 bilder tar 13 min istället för 107 min.
-
-### Konkreta kodändringar
-
-**`BrowserScanRunner.tsx`:**
-```typescript
-const ROTATIONS_PER_POSITION = 3; // från 6
-const ROTATION_DELAY_MS = 600;    // från 1500
-const CAPTURE_DELAY_MS = 300;     // från 500
-
-// I startScan():
-await sleep(800); // Från 2000ms navigation wait
-
-// Ny batch-loop:
-const screenshots: string[] = [];
-for (let rot = 0; rot < ROTATIONS_PER_POSITION; rot++) {
-  const screenshot = await captureScreenshot();
-  if (screenshot) screenshots.push(screenshot);
-  if (rot < ROTATIONS_PER_POSITION - 1) {
-    await rotateView(360 / ROTATIONS_PER_POSITION);
-    await sleep(ROTATION_DELAY_MS);
-  }
-}
-// Ett anrop för alla screenshots:
-const detCount = await analyzeScreenshotBatch(screenshots, img?.id ?? null, position, img?.datasetName);
-```
-
-**`ai-asset-detection/index.ts` — ny action `analyze-screenshot-batch`:**
-```typescript
-case 'analyze-screenshot-batch': {
-  const { screenshots, imageId, imagePosition, datasetName } = body;
-  // Skicka alla bilder i ett Gemini multi-image prompt
-  const parts = screenshots.map(b64 => ({ inlineData: { data: b64, mimeType: 'image/jpeg' } }));
-  parts.unshift({ text: promptText });
-  const result = await gemini.generateContent({ contents: [{ role: 'user', parts }] });
-  // ... parse result
-}
-```
-
----
-
-## 3. ACC-integration — röd felkod
-
-### Nulägesanalys
-
-Felet uppstod efter att "Testa koppling" och andra knappar togs bort och ersattes med den förenklade "Fler åtgärder"-strukturen.
-
-**Identifierat problem i `useEffect` på rad 678–691:**
-```typescript
-useEffect(() => {
-  if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
-    setHasLoadedAccSettings(true);
-    handleCheckAccStatus();
-    // Auto-fetch hubs if not already loaded
-    if (accHubs.length === 0) {
-      handleFetchHubs(); // ← Anropar list-hubs direkt
-    }
-    // Auto-fetch folders if project is selected but no folders cached
-    if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null) {
-      handleFetchAccFolders(); // ← Anropar list-folders direkt
+// Sätt in FÖRE screenshot-bilderna:
+for (const tpl of tpls) {
+  if (tpl.example_images && tpl.example_images.length > 0) {
+    userContent.push({
+      type: 'text',
+      text: `Reference examples for "${tpl.object_type}" (${tpl.name}):`
+    });
+    for (const exUrl of tpl.example_images.slice(0, 3)) {
+      userContent.push({ type: 'image_url', image_url: { url: exUrl } });
     }
   }
-}, [isOpen, accAuthStatus, hasLoadedAccSettings]);
-```
-
-`handleFetchHubs()` anropar `acc-sync` med `{ action: 'list-hubs' }`. `handleFetchAccFolders()` anropar `acc-sync` med `{ action: 'list-folders' }`.
-
-**Felet:** `list-hubs` kräver en giltig 3-legged OAuth-token (Autodesk-inloggning). Om `accAuthStatus === 'unauthenticated'` men `hasLoadedAccSettings` is false → useEffect triggas, `handleFetchHubs()` anropas → edge function misslyckas → röd toast-error.
-
-**Orsaken till att det fungerade innan:** Tidigare hade vi en "Testa anslutning"-knapp som bara användes manuellt. Nu sker `handleFetchHubs()` automatiskt vid modal-öppning.
-
-**Fix:**
-1. Lägg till check: auto-fetch hubs bara om `accAuthStatus === 'authenticated'`
-2. Visa tydligare info-state i UI:t när Autodesk ej är inloggad — istället för att misslyckas tyst
-
-```typescript
-// Nuvarande (fel):
-if (accHubs.length === 0) {
-  handleFetchHubs();
-}
-
-// Fix:
-if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
-  handleFetchHubs();
-}
-if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null && accAuthStatus === 'authenticated') {
-  handleFetchAccFolders();
 }
 ```
 
-**Dessutom:** I `handleFetchHubs()` och `handleFetchAccFolders()` hanteras fel med `toast({ variant: 'destructive', ... })` som visar röda felmeddelanden. Dessa visas nu automatiskt vid modal-öppning. Fix: lägg till `if (!data?.success && accAuthStatus !== 'authenticated') return;` som tyst ignorerar felet när Autodesk ej är inloggad.
+Few-shot examples hjälper Gemini att förstå exakt vilket utseende brandsläckare, dörrar, larmknappar etc. har i svenska byggnader.
 
-### Konkreta filändringar
+### Fix 3: Förbättra prompt-strukturen
 
-**`src/components/settings/ApiSettingsModal.tsx` — rad 678–691:**
+Ändra prompten så Gemini explicit analyserar varje bild separat:
+
 ```typescript
-useEffect(() => {
-  if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
-    setHasLoadedAccSettings(true);
-    handleCheckAccStatus();
-    // Auto-fetch hubs ONLY if authenticated — avoids red error toast when not logged in
-    if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
-      handleFetchHubs();
-    }
-    // Auto-fetch folders ONLY if authenticated and project selected
-    if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null && accAuthStatus === 'authenticated') {
-      handleFetchAccFolders();
-    }
-  }
-}, [isOpen, accAuthStatus, hasLoadedAccSettings]);
+text: `You are an expert at detecting fire safety equipment and building assets in indoor 360° panorama photographs.
+
+You will receive ${params.screenshots.length} viewport captures from the SAME position in a building, taken at different rotations (every ${Math.round(360 / params.screenshots.length)}°).
+
+ANALYZE EACH IMAGE INDIVIDUALLY and report ALL objects you find.
+
+Look for these specific objects:
+${objectDescriptions}
+
+IMPORTANT RULES:
+- Report each detected object separately with its image_index (0, 1, or 2)
+- Include detections even with confidence 0.3 or above  
+- Be generous with detections — it is better to report too many than to miss objects
+- Focus on object type, not background
+
+Return a JSON array. If nothing found return [].`
 ```
 
-**`handleFetchHubs` (rad ~700–724) — stilla fel om ej inloggad:**
-```typescript
-const handleFetchHubs = async () => {
-  if (accAuthStatus !== 'authenticated') return; // Guard
-  // ... resten oförändrad
-};
-```
+### Tekniska filändringar
 
-**`handleFetchAccFolders` (rad ~726–754) — detsamma:**
-```typescript
-const handleFetchAccFolders = async () => {
-  if (accAuthStatus !== 'authenticated') {
-    toast({ variant: 'destructive', title: 'Autodesk ej inloggad', description: 'Logga in med ditt Autodesk-konto först.' });
-    return;
-  }
-  // ... resten oförändrad
-};
-```
+| Fil | Ändring |
+|-----|---------|
+| `src/components/ai-scan/BrowserScanRunner.tsx` | Container `height: '70vh'` |
+| `supabase/functions/ai-asset-detection/index.ts` | Few-shot examples + ny prompt i `analyze-screenshot-batch` |
 
----
+### Sammanfattning om offline/mobil
 
-## Filer att ändra
+Det är inte möjligt att köra AI-skanningen på mobil med nuvarande approach eftersom:
+1. Ivion SDK kräver full webbläsarmiljö för rendering
+2. Screenshots är för små på mobil
 
-| Fil | Ändringar |
-|-----|-----------|
-| `src/components/viewer/AssetPlusViewer.tsx` | NavCube-offset på mobil, dölj FloorCarousel på mobil, identifiera banner |
-| `src/components/viewer/ViewerRightPanel.tsx` | Sheet `side="bottom"` + `max-h-[70vh]` på mobil |
-| `src/components/viewer/MobileViewerOverlay.tsx` | Inga ändringar behövs |
-| `src/components/ai-scan/BrowserScanRunner.tsx` | Reducera delays, batch-screenshots (3 rotationer, kortare waits) |
-| `supabase/functions/ai-asset-detection/index.ts` | Ny `analyze-screenshot-batch` action för multi-image Gemini-anrop |
-| `src/components/settings/ApiSettingsModal.tsx` | Auto-fetch-guard med `accAuthStatus === 'authenticated'` |
-
-## Prioritetsordning
-
-1. **ACC-felet** (10 min) — enkelt, tydlig rotorsak, stoppar användaren från att öppna inställningar utan röda fel
-2. **Mobil 3D** (30 min) — responsivitet, NavCube, dölj FloorCarousel, kompakta paneler
-3. **AI-scan batch-optimering** (45 min) — 8x prestandaförbättring
-
-## Vad ingår inte
-
-- E57-parsning: avråds, kräver nytt server-pipeline och hanterar 10–50 GB filer
-- Spatial sampling per 3D-koordinat: komplext, låg prioritet
-- Senslinc/ACC-duplikat/Insights-karta: hanteras i separata issues
+En riktig mobilapp för inventering skulle behöva en annan approach — t.ex. att användaren fotograferar objekt med kameran och AI:n identifierar dem direkt (liknande en QR-skanner). Det är en separat feature som kan läggas till sidan av Ivion-skanningen.
