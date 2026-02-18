@@ -8,6 +8,7 @@ import FacilityManagementTab from './tabs/FacilityManagementTab';
 import SpaceManagementTab from './tabs/SpaceManagementTab';
 import AssetManagementTab from './tabs/AssetManagementTab';
 import PortfolioManagementTab from './tabs/PortfolioManagementTab';
+import SensorsTab from './tabs/SensorsTab';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { MapColoringMode } from '@/lib/map-coloring-utils';
@@ -25,6 +26,7 @@ const TAB_COLORING_MAP: Record<string, MapColoringMode> = {
     space: 'co2',
     asset: 'work-orders',
     portfolio: 'none',
+    sensors: 'co2',
 };
 
 export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
@@ -92,7 +94,7 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                 <div className="flex-1 min-w-0">
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
-                            <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
+                        <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
                                 <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Performance
                                 </TabsTrigger>
@@ -107,6 +109,10 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                                 </TabsTrigger>
                                 <TabsTrigger value="portfolio" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Portfolio
+                                </TabsTrigger>
+                                <TabsTrigger value="sensors" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
+                                    Sensors
                                 </TabsTrigger>
                             </TabsList>
                         </div>
@@ -129,6 +135,10 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
 
                         <TabsContent value="portfolio" className="mt-0">
                             <PortfolioManagementTab />
+                        </TabsContent>
+
+                        <TabsContent value="sensors" className="mt-0">
+                            <SensorsTab />
                         </TabsContent>
                     </Tabs>
                 </div>
