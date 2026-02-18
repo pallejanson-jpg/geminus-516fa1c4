@@ -3091,38 +3091,53 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
             if (hasRealNames) {
               dbModels.forEach(m => { if (m.model_name) nameMap.set(m.model_id, m.model_name); });
-            } else {
-              // Fetch names from Asset+ API
-              const apiBase = baseUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-              try {
-                const resp = await fetch(
-                  `${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`,
-                  { headers: { 'Authorization': `Bearer ${accessToken}` } }
-                );
-                if (resp.ok) {
-                  const apiModels = await resp.json();
-                  apiModels.forEach((m: any) => {
-                    if (m.id && m.name) nameMap.set(m.id, m.name);
-                  });
-                  // Persist real names to DB in background
-                  for (const m of apiModels) {
-                    if (!m.name || !m.id) continue;
-                    supabase.from('xkt_models')
-                      .update({ model_name: m.name })
-                      .eq('model_id', m.id)
-                      .eq('building_fm_guid', resolvedGuid)
-                      .then(({ error: e }) => {
-                        if (e) console.debug('Name update failed:', e.message);
-                      });
+            }
+            // If all names are GUIDs, fall through to API fetch below
+          }
+
+          // Always fetch from Asset+ API if nameMap is still empty (no DB entries OR all GUIDs)
+          if (nameMap.size === 0) {
+            const apiBase = baseUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
+            try {
+              const resp = await fetch(
+                `${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`,
+                { headers: { 'Authorization': `Bearer ${accessToken}` } }
+              );
+              if (resp.ok) {
+                const apiModels = await resp.json();
+                console.log(`XKT filter: Fetched ${apiModels.length} model(s) from Asset+ API for ${resolvedGuid}`);
+                apiModels.forEach((m: any) => {
+                  if (m.id && m.name) {
+                    nameMap.set(m.id, m.name);
+                    nameMap.set(m.id.toLowerCase(), m.name);
                   }
+                  // Also map by filename extracted from xktFileUrl
+                  if (m.xktFileUrl && m.name) {
+                    const fileId = m.xktFileUrl.split('/').pop()?.replace('.xkt', '');
+                    if (fileId) {
+                      nameMap.set(fileId, m.name);
+                      nameMap.set(fileId.toLowerCase(), m.name);
+                    }
+                  }
+                });
+                // Persist real names to DB in background
+                for (const m of apiModels) {
+                  if (!m.name || !m.id) continue;
+                  supabase.from('xkt_models')
+                    .update({ model_name: m.name })
+                    .eq('model_id', m.id)
+                    .eq('building_fm_guid', resolvedGuid)
+                    .then(({ error: e }) => {
+                      if (e) console.debug('Name update failed:', e.message);
+                    });
                 }
-              } catch (e) {
-                console.debug('Failed to fetch model names from API:', e);
               }
+            } catch (e) {
+              console.debug('Failed to fetch model names from API:', e);
             }
           }
 
-          // Build A-model filter
+          // Build A-model filter — only allow models whose name starts with 'A'
           if (nameMap.size > 0) {
             const aModelIds = new Set<string>();
             nameMap.forEach((name, id) => {
@@ -3134,8 +3149,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
             if (aModelIds.size > 0 && aModelIds.size < nameMap.size * 2) {
               allowedModelIdsRef.current = aModelIds;
-              console.log(`XKT filter: Initial load restricted to ${aModelIds.size / 2} A-model(s) out of ${nameMap.size}`);
+              console.log(`XKT filter: Initial load restricted to ${aModelIds.size / 2} A-model(s) out of ${nameMap.size / 2}`);
             }
+          } else {
+            console.debug('XKT filter: No model names resolved — loading all models');
           }
         }
       } catch (e) {

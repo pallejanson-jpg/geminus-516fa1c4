@@ -161,7 +161,7 @@ export default function HomeLanding() {
   };
 
   return (
-    <div className="relative min-h-full">
+    <div className="relative min-h-full text-foreground">
       {/* Full-page background */}
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center"
@@ -172,13 +172,13 @@ export default function HomeLanding() {
 
       <div className="relative z-10 min-h-full flex flex-col items-center px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight">Welcome to My Geminus</h1>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground">Welcome to My Geminus</h1>
           <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Your digital backbone for digital twins</p>
         </header>
 
       <section className="space-y-2 sm:space-y-3 w-full max-w-4xl mb-4 sm:mb-6">
         <div className="text-center">
-          <h2 className="text-base sm:text-lg font-semibold">AI Assistants</h2>
+          <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
           <p className="text-[11px] sm:text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
         </div>
 
@@ -201,9 +201,9 @@ export default function HomeLanding() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span className="font-semibold text-sm sm:text-base leading-none">{a.title}</span>
+                      <span className="font-semibold text-sm sm:text-base leading-none text-foreground">{a.title}</span>
                       {!a.available && (
-                        <span className="text-[9px] sm:text-[10px] bg-muted px-1 sm:px-1.5 py-0.5 rounded">Snart</span>
+                        <span className="text-[9px] sm:text-[10px] bg-muted text-muted-foreground px-1 sm:px-1.5 py-0.5 rounded">Snart</span>
                       )}
                     </div>
                     <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
@@ -218,7 +218,7 @@ export default function HomeLanding() {
       <section className="w-full max-w-4xl flex-1">
         <Card className="bg-card/60">
           <CardHeader className="pb-2 sm:pb-4">
-            <CardTitle className="text-base sm:text-lg">My Favorites</CardTitle>
+            <CardTitle className="text-base sm:text-lg text-foreground">My Favorites</CardTitle>
             <CardDescription className="text-[11px] sm:text-sm">Quick access to your most used buildings</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
