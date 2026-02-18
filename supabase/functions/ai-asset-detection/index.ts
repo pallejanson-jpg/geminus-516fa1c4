@@ -2187,6 +2187,181 @@ serve(async (req) => {
         result = await deleteTemplate(params.templateId);
         break;
 
+      case 'analyze-screenshot-batch': {
+        // Browser-based batch scan: receives multiple screenshots from all rotations, one AI call
+        if (!params.scanJobId) throw new Error('scanJobId required');
+        if (!params.screenshots || !Array.isArray(params.screenshots) || params.screenshots.length === 0) {
+          throw new Error('screenshots array required');
+        }
+        
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        const { data: scanJob, error: sjErr } = await supabase
+          .from('scan_jobs')
+          .select('*')
+          .eq('id', params.scanJobId)
+          .single();
+        if (sjErr || !scanJob) throw new Error('Scan job not found');
+        
+        const { data: tpls } = await supabase
+          .from('detection_templates')
+          .select('*')
+          .in('object_type', scanJob.templates)
+          .eq('is_active', true);
+        
+        if (!tpls || tpls.length === 0) {
+          result = { detections: 0, message: 'No active templates' };
+          break;
+        }
+        
+        const cameraPos = params.imagePosition || { x: 0, y: 0, z: 0 };
+        
+        // Load existing assets for deduplication
+        const { data: existingAssets } = await supabase
+          .from('assets')
+          .select('fm_guid, coordinate_x, coordinate_y, coordinate_z')
+          .eq('building_fm_guid', scanJob.building_fm_guid)
+          .not('coordinate_x', 'is', null);
+        
+        const DEDUP_DISTANCE_M = 2.0;
+        
+        function isAlreadyInventoriedBatch(coords: { x: number; y: number; z: number }): boolean {
+          if (!existingAssets || existingAssets.length === 0) return false;
+          for (const asset of existingAssets) {
+            if (asset.coordinate_x == null || asset.coordinate_y == null || asset.coordinate_z == null) continue;
+            const dx = coords.x - asset.coordinate_x;
+            const dy = coords.y - asset.coordinate_y;
+            const dz = coords.z - asset.coordinate_z;
+            if (Math.sqrt(dx * dx + dy * dy + dz * dz) < DEDUP_DISTANCE_M) return true;
+          }
+          return false;
+        }
+        
+        // Build multi-image prompt: analyze all rotation screenshots in one AI call
+        const objectDescriptions = tpls.map((t: DetectionTemplate) => `- ${t.object_type}: ${t.ai_prompt}`).join('\n');
+        
+        const userContent: any[] = [
+          {
+            type: 'text',
+            text: `You are analyzing ${params.screenshots.length} viewport captures from a 360° indoor scan taken at the same position but different orientations (every ${Math.round(360 / params.screenshots.length)}°). Detect all objects across ALL images.\n\nDetect:\n${objectDescriptions}\n\nReturn ONE flat JSON array containing all detections across all images. For each detection include: object_type, confidence (0-1), bounding_box ([ymin,xmin,ymax,xmax] 0-1000 scale), description, image_index (0-based), extracted_properties (brand, model, size, type, color, mounting, condition, text_visible).`,
+          },
+        ];
+        
+        // Add all screenshot images
+        for (let idx = 0; idx < params.screenshots.length; idx++) {
+          userContent.push({ type: 'text', text: `Image ${idx + 1} of ${params.screenshots.length} (orientation ${Math.round(idx * 360 / params.screenshots.length)}°):` });
+          userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${params.screenshots[idx]}` } });
+        }
+        
+        const batchResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an expert at detecting objects and equipment in indoor photographs. Return ONLY a valid JSON array. If nothing found, return []. No markdown, no other text.',
+              },
+              { role: 'user', content: userContent },
+            ],
+          }),
+        });
+        
+        if (!batchResponse.ok) {
+          throw new Error(`Batch AI error: ${batchResponse.status}`);
+        }
+        
+        const batchResult = await batchResponse.json();
+        const batchContent = batchResult.choices?.[0]?.message?.content || '[]';
+        
+        // Parse detections (reuse existing JSON extraction)
+        let allDetections: Detection[] = [];
+        try {
+          const start = batchContent.indexOf('[');
+          const end = batchContent.lastIndexOf(']');
+          if (start !== -1 && end !== -1) {
+            allDetections = JSON.parse(batchContent.slice(start, end + 1));
+          }
+        } catch (parseErr) {
+          console.error('[batch] JSON parse error:', parseErr);
+        }
+        
+        console.log(`[analyze-screenshot-batch] AI returned ${allDetections.length} detections from ${params.screenshots.length} images`);
+        
+        let savedCount = 0;
+        let skippedDedup = 0;
+        
+        for (const det of allDetections) {
+          if ((det.confidence || 0) < 0.1) continue;
+          
+          // Use the screenshot from image_index for thumbnail, default to first
+          const screenshotForThumb = params.screenshots[det.image_index ?? 0] || params.screenshots[0];
+          
+          const bbox = {
+            ymin: det.bounding_box[0],
+            xmin: det.bounding_box[1],
+            ymax: det.bounding_box[2],
+            xmax: det.bounding_box[3],
+          };
+          
+          const worldCoords = imageToWorldCoords(bbox, cameraPos);
+          
+          if (isAlreadyInventoriedBatch(worldCoords)) {
+            skippedDedup++;
+            continue;
+          }
+          
+          const matchingTemplate = tpls.find((t: DetectionTemplate) => t.object_type === det.object_type);
+          const detectionId = crypto.randomUUID();
+          
+          let thumbnailUrl: string | null = null;
+          try {
+            thumbnailUrl = await saveThumbnail(screenshotForThumb, bbox, detectionId);
+          } catch (e) {
+            console.error('Thumbnail save failed:', e);
+          }
+          
+          const { error: insertErr } = await supabase
+            .from('pending_detections')
+            .insert({
+              id: detectionId,
+              scan_job_id: params.scanJobId,
+              building_fm_guid: scanJob.building_fm_guid,
+              ivion_site_id: scanJob.ivion_site_id,
+              ivion_image_id: params.imageId || null,
+              ivion_dataset_name: params.datasetName || null,
+              object_type: det.object_type,
+              confidence: det.confidence,
+              bounding_box: bbox,
+              ai_description: det.description,
+              extracted_properties: det.extracted_properties || null,
+              coordinate_x: worldCoords.x,
+              coordinate_y: worldCoords.y,
+              coordinate_z: worldCoords.z,
+              thumbnail_url: thumbnailUrl,
+              detection_template_id: matchingTemplate?.id || null,
+              status: 'pending',
+            });
+          
+          if (!insertErr) savedCount++;
+        }
+        
+        if (skippedDedup > 0) {
+          console.log(`[batch-dedup] Skipped ${skippedDedup} already-inventoried objects`);
+        }
+        
+        await supabase.from('scan_jobs').update({
+          processed_images: (scanJob.processed_images || 0) + 1,
+          detections_found: (scanJob.detections_found || 0) + savedCount,
+          status: 'running',
+          started_at: scanJob.started_at || new Date().toISOString(),
+        }).eq('id', params.scanJobId);
+        
+        result = { detections: savedCount, totalInImages: allDetections.length, imagesAnalyzed: params.screenshots.length };
+        break;
+      }
+
       case 'analyze-screenshot': {
         // Browser-based scan: receives a screenshot captured by the frontend SDK
         if (!params.scanJobId) throw new Error('scanJobId required');
