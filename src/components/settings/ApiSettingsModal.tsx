@@ -679,12 +679,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         if (isOpen && accAuthStatus !== 'checking' && !hasLoadedAccSettings) {
             setHasLoadedAccSettings(true);
             handleCheckAccStatus();
-            // Auto-fetch hubs if not already loaded
-            if (accHubs.length === 0) {
+            // Auto-fetch hubs ONLY if authenticated — avoids red error toast when not logged in
+            if (accHubs.length === 0 && accAuthStatus === 'authenticated') {
                 handleFetchHubs();
             }
-            // Auto-fetch folders if project is selected but no folders cached
-            if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null) {
+            // Auto-fetch folders ONLY if authenticated and project selected
+            if ((manualAccProjectId.trim() || selectedAccProjectId) && accFolders === null && accAuthStatus === 'authenticated') {
                 handleFetchAccFolders();
             }
         }
@@ -699,6 +699,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Fetch ACC Hubs via /project/v1/hubs (auto-discovers all accounts + regions)
     const handleFetchHubs = async () => {
+        if (accAuthStatus !== 'authenticated') return; // Guard: only fetch if authenticated
         setIsLoadingHubs(true);
         try {
             const { data, error } = await supabase.functions.invoke('acc-sync', {
@@ -725,6 +726,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // Fetch ACC folders via Data Management API
     const handleFetchAccFolders = async () => {
+        if (accAuthStatus !== 'authenticated') return; // Guard: only fetch if authenticated
         const effectiveProjectId = manualAccProjectId.trim() || selectedAccProjectId;
         if (!effectiveProjectId) {
             toast({ variant: 'destructive', title: 'Projekt-ID saknas', description: 'Ange ett ACC-projekt-ID först.' });
