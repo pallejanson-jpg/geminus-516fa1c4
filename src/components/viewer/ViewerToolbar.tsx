@@ -10,6 +10,7 @@ import {
   Move,
   Cuboid,
   SquareDashed,
+  Box,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -99,6 +100,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isViewerReady, setIsViewerReady] = useState(false);
+  const [isXrayActive, setIsXrayActive] = useState(false);
 
   const toolDebounceRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(viewMode);
@@ -268,6 +270,53 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     getAssetView()?.clearSlices?.();
   }, [getAssetView]);
 
+  // ── X-ray toggle ──────────────────────────────────────────────────────────
+
+  const XRAY_BATCH = 100;
+  const handleXrayToggle = useCallback(() => {
+    const xeokitViewer = getXeokitViewer();
+    if (!xeokitViewer?.scene) return;
+    const scene = xeokitViewer.scene;
+    const objectIds = scene.objectIds || [];
+    const enabling = !isXrayActive;
+    setIsXrayActive(enabling);
+
+    if (enabling) {
+      const xrayMaterial = scene.xrayMaterial;
+      if (xrayMaterial) {
+        xrayMaterial.fill = true;
+        xrayMaterial.fillAlpha = 0.15;
+        xrayMaterial.fillColor = [0.55, 0.55, 0.6];
+        xrayMaterial.edges = true;
+        xrayMaterial.edgeAlpha = 0.35;
+        xrayMaterial.edgeColor = [0.4, 0.4, 0.45];
+      }
+      scene.alphaDepthMask = false;
+      const toXray = objectIds.filter((id: string) => {
+        const e = scene.objects?.[id];
+        if (!e) return false;
+        const c = e.colorize;
+        return !(c && (c[0] !== 1 || c[1] !== 1 || c[2] !== 1));
+      });
+      let i = 0;
+      const batch = () => {
+        const end = Math.min(i + XRAY_BATCH, toXray.length);
+        for (; i < end; i++) { const e = scene.objects?.[toXray[i]]; if (e) e.xrayed = true; }
+        if (i < toXray.length) requestAnimationFrame(batch);
+      };
+      requestAnimationFrame(batch);
+    } else {
+      let i = 0;
+      const ids = [...objectIds];
+      const off = () => {
+        const end = Math.min(i + XRAY_BATCH, ids.length);
+        for (; i < end; i++) { const e = scene.objects?.[ids[i]]; if (e) { e.xrayed = false; if (e.opacity < 1) e.opacity = 1; } }
+        if (i < ids.length) requestAnimationFrame(off);
+      };
+      requestAnimationFrame(off);
+    }
+  }, [getXeokitViewer, isXrayActive]);
+
   // ── 2D / 3D toggle ───────────────────────────────────────────────────────
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -411,7 +460,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
         <Separator orientation="vertical" className="h-6 mx-1" />
 
-        {/* Group 4 — View mode */}
+        {/* Group 4 — X-ray */}
+        <ToolButton
+          icon={<Box className="h-4 w-4" />}
+          label="X-ray (genomsiktlig vy)"
+          onClick={handleXrayToggle}
+          active={isXrayActive}
+          disabled={disabled}
+        />
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        {/* Group 5 — View mode */}
         <ToolButton
           icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
           label={viewMode === '3d' ? 'Byt till 2D-vy' : 'Byt till 3D-vy'}
