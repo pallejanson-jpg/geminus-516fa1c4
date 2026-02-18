@@ -23,7 +23,11 @@ const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 
-const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus', 'entity_insights', 'navigation', 'portfolio', 'senslinc_dashboard', 'globe', 'ivion_create'];
+// Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas)
+const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe'];
+// Apps that have internal scrollbars and need h-full but NOT overflow:hidden
+const FILL_APPS = ['portfolio', 'navigation', 'map', 'fma_plus', 'entity_insights', 'ivion_create'];
+// All other apps are scroll-pages (home, insights, inventory, fault_report, ai_scan, asset_registration)
 
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
@@ -184,16 +188,19 @@ const MainContent: React.FC = () => {
         }
     };
 
-    // On mobile, immersive viewer apps need overflow-hidden and touch-action: none
-    // to prevent the parent container from intercepting touch events meant for the 3D canvas
-    const isImmersiveViewer = isMobile && IMMERSIVE_VIEWER_APPS.includes(activeApp);
+    // Viewer apps need overflow:hidden + h-full on ALL platforms (desktop + mobile)
+    // Fill apps need h-full but allow internal scroll
+    const isViewerApp = VIEWER_APPS.includes(activeApp);
+    const needsHFull = isViewerApp || FILL_APPS.includes(activeApp);
+    // Viewer apps also need touch-action:none on mobile to prevent touch event hijacking
+    const isMobileViewer = isMobile && (isViewerApp || FILL_APPS.includes(activeApp));
 
     return (
         <main 
-            className={`absolute inset-0 ${isImmersiveViewer ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} ${t.bg}`}
-            style={isImmersiveViewer ? { touchAction: 'none' } : undefined}
+            className={`absolute inset-0 ${isViewerApp ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} ${t.bg}`}
+            style={isMobileViewer ? { touchAction: 'none' } : undefined}
         >
-            <div className={isImmersiveViewer ? "w-full h-full" : "w-full"}>
+            <div className={needsHFull ? "w-full h-full" : "w-full"}>
                 {renderContent()}
             </div>
         </main>
