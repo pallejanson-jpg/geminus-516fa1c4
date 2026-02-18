@@ -80,6 +80,55 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     enabled: sdkEnabled,
   });
 
+  // Minimize Ivion UI when SDK is ready to maximize screenshot coverage
+  useEffect(() => {
+    if (sdkStatus !== 'ready') return;
+
+    // 1. Inject CSS to hide all Ivion UI overlays
+    const style = document.createElement('style');
+    style.id = 'ivion-scan-minimal-ui';
+    style.textContent = `
+      ivion [class*="sidebar"],
+      ivion [class*="menu"],
+      ivion [class*="toolbar"],
+      ivion [class*="controls"],
+      ivion [class*="floor-switcher"],
+      ivion [class*="navigation"],
+      ivion [class*="info-panel"],
+      ivion [class*="minimap"],
+      ivion button,
+      ivion .mat-icon-button,
+      ivion mat-sidenav,
+      ivion mat-toolbar {
+        display: none !important;
+        visibility: hidden !important;
+      }
+      ivion canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
+    `;
+    if (!document.getElementById('ivion-scan-minimal-ui')) {
+      document.head.appendChild(style);
+    }
+
+    // 2. Hide via SDK API
+    try {
+      const api = ivApiRef.current as any;
+      api?.getMenuItems?.()?.forEach((item: any) => item.setVisible?.(false));
+      api?.closeMenu?.();
+      const mainView = api?.view?.mainView ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null);
+      mainView?.setFullscreen?.(true);
+      console.log('[BrowserScan] Ivion UI minimized for scan');
+    } catch (e) {
+      console.warn('[BrowserScan] Could not minimize Ivion UI via SDK:', e);
+    }
+
+    return () => {
+      document.getElementById('ivion-scan-minimal-ui')?.remove();
+    };
+  }, [sdkStatus]);
+
   // Start scanning when SDK is ready — only depend on sdkStatus, guard with isScanningRef
   useEffect(() => {
     if (sdkStatus === 'ready' && !isScanningRef.current) {
@@ -571,7 +620,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {scanState === 'scanning' && <Camera className="h-4 w-4 text-primary animate-pulse" />}
-            {scanState === 'paused' && <Pause className="h-4 w-4 text-amber-500" />}
+            {scanState === 'paused' && <Pause className="h-4 w-4 text-warning" />}
             {scanState === 'initializing' && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             {scanState === 'error' && <AlertCircle className="h-4 w-4 text-destructive" />}
             <span className="text-sm font-medium">
