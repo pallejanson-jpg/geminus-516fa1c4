@@ -41,7 +41,7 @@ const SLIDE_TITLES = [
 const NOTES: string[][] = [
   // Slide 1 — Title
   [
-    "My name is Pål Janson — Product Solution Manager at Symetri.",
+    "My name is Pål Janson — Product Solution Manager at Service Works Global.",
     "20 years of experience across both AEC and O within the AECO industry.",
     "I'm not a developer — I'm a problem-solver who used AI to build a solution.",
     "3 months ago I had an idea. Today it's running in production.",
@@ -126,10 +126,10 @@ const TitleSlide = () => (
         The AI layer that connects Addnode's ecosystem
       </p>
       <blockquote className="text-[30px] text-white/80 max-w-[1100px] leading-relaxed border-l-4 border-cyan-400 pl-8 italic mb-14">
-        "I'm not a developer. I'm Pål Janson — Product Solution Manager with 20 years across AEC and O at Symetri. I saw the gap. I built the bridge."
+        "I'm not a developer. I'm Pål Janson — Product Solution Manager with 20 years across AEC and O at Service Works Global. I saw the gap. I built the bridge."
       </blockquote>
       <div className="flex gap-4 flex-wrap">
-        {["20 years · AEC + FM", "Symetri · Service Works Global", "Built with vibe-coding", "3 months · Non-developer"].map((tag) => (
+        {["20 years · AEC + FM", "Service Works Global", "Built with vibe-coding", "3 months · Non-developer"].map((tag) => (
           <span key={tag} className="px-4 py-2 rounded-full bg-white/10 border border-white/20 text-[20px] text-white/70">
             {tag}
           </span>
@@ -645,7 +645,7 @@ const AskSlide = () => (
           <p className="text-[26px] font-black text-black leading-relaxed">
             "The code is running.<br />The integrations exist.<br />I'm ready. Are you?"
           </p>
-          <p className="text-[20px] text-black/50 mt-4 font-medium">— Pål Janson, Product Solution Manager, Symetri</p>
+          <p className="text-[20px] text-black/50 mt-4 font-medium">— Pål Janson, Product Solution Manager, Service Works Global</p>
         </div>
       </div>
     </div>
