@@ -1,254 +1,285 @@
 
-# Plan: Fixa 3D-laddning, Modellträd och Toolbar
+# Senslinc Integration – Full Implementation Plan
 
-## Problem 1 (KRITISK): 3D-spinner blockerar viewern
+## Sammandrag av nuläget
 
-### Rotorsak
-`xktSyncStatus` sätts till `'checking'` omedelbart när komponenten monteras (i `ensureModels` effecten). Loading-spinnern visas när `xktSyncStatus === 'checking'` AND `state.isInitialized === true`. Det innebär att spinnern **blockerar 3D-viewern** hela tiden från det att viewern initialiseras tills `ensureModels` är klar — vilket kan ta 3-5 sekunder för byggnader utan XKT-cache.
+Senslinc-login fungerar. Edge function har fullständig auth (Django JWT). Koden för `get-dashboard-url` finns redan och fungerar – den söker machine/site/line via FM GUID och returnerar rätt URL. IOT+-knappen i `PortfolioView` anropar redan `get-dashboard-url` och öppnar iframe via `openSenslincDashboard`. Det är alltså egentligen en ganska mogen grund.
 
-För byggnader utan XKT (Centralstationen, Åkerselva): `ensureBuildingModels` returnerar `{cached: false, syncing: false}` → sätter `'idle'` → spinnern borde försvinna. Men `ensureModels` startar med `'checking'` och tar tid → det finns ett fönster där viewern är klar men spinnern blockar.
+Tre delar ska byggas, i prioritetsordning:
 
-### Fix
-Ändra spinner-logiken så att `xktSyncStatus === 'checking'` ALDRIG blockerar viewern. Spinnern ska bara visas under faktisk synkronisering (`'syncing'`) och bara om modeller inte laddats (`modelLoadState !== 'loaded'`). Ta dessutom bort `'checking'`-statusen ur spinner-villkoret:
+---
 
-```tsx
-// FÖRE (blockerar viewern):
-{((state.isLoading && !state.isInitialized) || 
-  (modelLoadState !== 'loaded' && (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized)) && ...}
+## Del 1: IOT+-knappen – Korrekt iframe per entitet
 
-// EFTER (blockerar inte):  
-{((state.isLoading && !state.isInitialized) || 
-  (modelLoadState !== 'loaded' && xktSyncStatus === 'syncing' && state.isInitialized)) && ...}
-```
+### Nuläget
+`buildDashboardUrl` i edge-funktionen bygger URL:en som `{portalUrl}/dashboard/machine/{pk}` – det stämmer förmodligen inte med Senslincs faktiska URL-format.
 
-## Problem 2: Alla BIM-modeller laddas (inte bara A-modell)
+Live-test bekräftade att Senslinc-maskiner har ett `dashboard_url`-fält direkt på API-objektet (`machine.dashboard_url`). Koden försöker redan läsa det: `machine.dashboard_url || buildDashboardUrl(...)` – men fallback-URL:en kan vara fel.
 
-### Rotorsak
-`allowedModelIdsRef` är ett filter för CACHEN (interceptorn) men INTE för vilka modeller viewern laddar. Viewern bestäms av `additionalDefaultPredicate: () => true` (rad 3233) — detta returnerar alltid sant och laddar ALLA modeller.
-
-Dessutom: `GetModels` API returnerar 404 för byggnader som Centralstationen/Åkerselva — varför `nameMap` är tom → `allowedModelIdsRef.current = null` → alla modeller laddas.
-
-### Fix
-`additionalDefaultPredicate` ska använda `allowedModelIdsRef` för att filtrera vilka modeller viewern faktiskt laddar:
+### Fix (liten men viktig)
+Uppdatera `buildDashboardUrl` i `supabase/functions/senslinc-query/index.ts` till att använda korrekt Senslinc URL-format:
 
 ```typescript
-// Skicka med predicate som kontrollerar whitelist:
-(modelId: string) => {
-  // Om ingen whitelist → ladda alla
-  if (!allowedModelIdsRef.current) return true;
-  // Annars kontrollera om modell-ID finns i whitelist
-  return allowedModelIdsRef.current.has(modelId) || 
-         allowedModelIdsRef.current.has(modelId.toLowerCase());
-},
-```
-
-Dessutom: API-anropet för modellnamn (`GetModels`) verkar returna 404 för vissa byggnader. Vi måste hantera detta mer robust — om API returnerar 404, sätt `allowedModelIdsRef.current = null` så alla modeller laddas (graceful fallback).
-
-## Problem 3: BIM-modellnamn visas som "myModel undefined"
-
-### Rotorsak
-Skärmbild visar: "myModel undefined 0 3409.73817..." — detta är Asset+ viewer's interna representation när modellnamnet inte är satt. Modellerna laddas men namnges aldrig korrekt.
-
-Problemet är att `nameMap` är tom (API returnerar 404 eller tomt svar för den aktuella byggnaden) → `allowedModelIdsRef` är null → alla modeller laddas med sina råa ID:n som namn.
-
-`ModelVisibilitySelector` hämtar namn via `useModelNames` hooken som läser från `xkt_models.model_name`. Om `model_name` är ett GUID eller null → fallback till filnamn.
-
-### Fix
-- Säkerställ att `GetModels` API-felet loggas tydligt 
-- Lägg till loggning när modellnamn saknas
-- I `ModelVisibilitySelector`, om ett namn är ett UUID → visa "Modell 1", "Modell 2" etc. istället för UUID
-
-## Problem 4: Modellträdet visar fel data (IFC-hierarki istället för Asset+ hierarki)
-
-### Rotorsak
-`ViewerTreePanel.buildTree()` bygger trädet från `xeokitViewer.metaScene.rootMetaObjects` — detta är IFC-geometrins interna namngivning (IfcBuildingStorey med GUID-namn från IFC-filen). Användaren vill ha:
-
-1. **Startpunkt**: Asset+ byggnadsplaner från databasen (`assets` tabell, `category = 'Building Storey'`)
-2. **Hierarki**: Våning → Rum (Space/IfcSpace) → Tillgångar/Element (liknande Navigator)
-3. **Checkbox-beteende**: En markerad våning → Solo-läge för den våningen. Flera markerade → alla markerade blir Solo
-
-### Fix (komplett omskrivning av ViewerTreePanel):
-
-#### Struktur
-```
-📐 [CB] Våning 01 (från Asset+ DB)
-  🚪 [CB] Rum A101
-    📦 Element...
-  🚪 [CB] Rum A102  
-📐 [CB] Våning 02
-  ...
-```
-
-#### Data-hämtning
-Istället för att bygga trädet från XEOKit metaScene, hämta data från:
-1. `AppContext.allData` — redan laddad, innehåller alla Storeys och Spaces för byggnadens `fmGuid`
-2. Matcha Asset+ `fm_guid` mot XEOKit `metaScene.metaObjects` via `originalSystemId` för att få IFC-objekt-IDs för synkronisering
-
-```typescript
-// Hämta storeys från allData (Asset+ hierarki)
-const storeys = allData.filter(a => 
-  a.buildingFmGuid === buildingFmGuid && 
-  (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
-).sort(/* sortera efter namn */)
-
-// Hämta rum för varje storey
-const rooms = allData.filter(a => 
-  a.levelFmGuid === storey.fmGuid && 
-  (a.category === 'Space' || a.category === 'IfcSpace')
-)
-```
-
-#### Checkbox → Solo visibility
-Vid kryss på en våning:
-1. Samla alla XEOKit IDs för den våningens innehåll (via `metaScene` + `originalSystemId` matchning)
-2. Göm alla andra våningars objekt
-3. Visa enbart de markerade våningarnas objekt
-4. Dispatcha `FLOOR_SELECTION_CHANGED_EVENT` för synkronisering med FloatingFloorSwitcher
-
-## Problem 5: Toolbar saknar tidigare funktioner
-
-### Nuvarande toolbar (8 knappar)
-Orbit, FirstPerson, ZoomIn, ZoomOut, FitView, Select, Measure, Slicer, 2D/3D-toggle
-
-### Vad som saknades (från tidigare implementation)
-Baserat på projekthistoriken innehöll den gamla toolbaren:
-- X-ray toggle
-- Annotations toggle  
-- Room visualization toggle
-- NavCube toggle
-- Settings/Hamburger
-
-Dessa finns nu i `ViewerRightPanel` (höger panel via hamburger-knappen). Problemet är att hamburger-knappen är svår att hitta.
-
-### Fix
-Behåll nuvarande toolbar (8 knappar) men lägg till tillbaka:
-- **X-ray** knapp i toolbar (idag finns `XrayToggle` som en separat komponent men den är gömd i RightPanel)
-- **Rum-visualisering** snabbknapp i toolbar
-- Säkerställ att hamburger-knappen (≡) för RightPanel är tydligare synlig
-
-Vi kan återintroducera XrayToggle i toolbar eftersom det är en primär funktion:
-
-```tsx
-// Lägg till i toolbar
-<XrayToggle viewerRef={viewerRef} compact />
-```
-
-## Konkret implementation — filändringar
-
-### Fil 1: `src/components/viewer/AssetPlusViewer.tsx`
-**Ändring 1**: Spinner-fix — ta bort `'checking'` från spinner-villkor (rad 3626)
-```tsx
-// Rad 3626 — ändra:
-{((state.isLoading && !state.isInitialized) || 
-  (modelLoadState !== 'loaded' && xktSyncStatus === 'syncing' && state.isInitialized)) && (
-```
-
-**Ändring 2**: `additionalDefaultPredicate` — använd allowedModelIdsRef (rad 3233)
-```typescript
-// Ersätt:
-() => true,
-// Med:
-(modelId: string) => {
-  if (!allowedModelIdsRef.current) return true;
-  return allowedModelIdsRef.current.has(modelId) || 
-         allowedModelIdsRef.current.has(modelId.toLowerCase());
-},
-```
-
-**Ändring 3**: Sätt `allowedModelIdsRef.current = null` (ladda alla) om API-anrop misslyckas för byggnader utan modeller.
-
-### Fil 2: `src/components/viewer/ViewerTreePanel.tsx`
-**Komplett omskrivning av datamodell**:
-- Ta emot `buildingFmGuid` och `allData` som props
-- Hämta storeys/spaces från `allData` istället för XEOKit metaScene
-- Matcha Asset+ fmGuid mot XEOKit's `originalSystemId` för synkronisering
-- Implementera checkbox → solo-visibility med `FLOOR_SELECTION_CHANGED_EVENT`
-- Behåll befintlig UI-layout (embedded/floating panel, search, drag/resize)
-
-**Ny props-interface**:
-```typescript
-interface ViewerTreePanelProps {
-  viewerRef: React.RefObject<any>;
-  buildingFmGuid?: string;     // NY: för Asset+ data-hämtning  
-  buildingData?: any[];        // NY: allData (storeys + spaces)
-  isVisible: boolean;
-  onClose: () => void;
-  // ... befintliga props
-}
-```
-
-### Fil 3: `src/components/viewer/ViewerToolbar.tsx`
-Lägg till XRay-knapp:
-```tsx
-import { Eye } from 'lucide-react';
-
-// Ny knapp i Group 3:
-<ToolButton
-  icon={<Eye className="h-4 w-4" />}
-  label="X-Ray (genomsiktlig vy)"
-  onClick={handleXrayToggle}
-  active={isXrayActive}
-  disabled={disabled}
-/>
-```
-
-## Prioritetsordning
-1. **AssetPlusViewer.tsx spinner-fix** — löser att viewern blockeras (alla byggnader)
-2. **AssetPlusViewer.tsx additionalDefaultPredicate** — fixar att bara A-modell laddas
-3. **ViewerTreePanel.tsx** — komplett omskrivning med Asset+ data
-4. **ViewerToolbar.tsx** — lägg till XRay-knapp
-
-## Tekniska detaljer: ViewerTreePanel omskrivning
-
-### Matchning Asset+ fmGuid → XEOKit objekt-IDs
-
-XEOKit's `metaScene.metaObjects` har `originalSystemId` som matchar Asset+ `fmGuid` (GUID):
-
-```typescript
-const getXeokitIdsForFmGuid = (fmGuid: string): string[] => {
-  const xeokitViewer = getXeokitViewer();
-  if (!xeokitViewer?.metaScene?.metaObjects) return [];
+// Korrekt format baserat på Senslinc portal-struktur:
+function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
+  // Ta bort api. prefix och /api suffix för att få portal-URL
+  const portalUrl = apiUrl
+    .replace(/^https?:\/\/api\./, 'https://')
+    .replace(/\/api\/?$/, '');
   
-  const ids: string[] = [];
-  Object.values(xeokitViewer.metaScene.metaObjects).forEach((obj: any) => {
-    const sysId = (obj.originalSystemId || '').toLowerCase();
-    if (sysId === fmGuid.toLowerCase()) {
-      ids.push(obj.id);
-      // Also add all children recursively
-    }
-  });
-  return ids;
+  const pathMap = {
+    machine: `/machine/${pk}/room_analysis/`,
+    site:    `/site/${pk}/home/`,
+    line:    `/line/${pk}/`,
+  };
+  return `${portalUrl}${pathMap[type]}`;
 }
 ```
 
-### Solo-visibility vid checkbox
+### SenslincDashboardView – tabs: iframe + native data
+Komponenten ska ha två flikar:
+1. **Dashboard** – Senslincs iframe (finns redan)
+2. **Sensordata** – Vår egen grafik med live Senslinc-data (nytt)
 
+---
+
+## Del 2: Visualisering av Senslinc-data med vår grafik
+
+Det här är den roligaste och mest värdeskapande delen. Användaren vill se Senslinc-data presenterad med Geminuses egna UI-komponenter (Recharts), inte bara Senslincs iframe.
+
+### Vad Senslinc har
+
+Varje machine har:
+- `indices` – lista av index-ID (Elasticsearch-index för tidsserie-data)
+- Via `get-properties?indice={id}` → fält som `temperature`, `co2`, `humidity`, `occupancy`
+- Via `search-data` med Elasticsearch DSL → historisk + realtid
+
+### Ny hook: `src/hooks/useSenslincData.ts`
+
+Flödet:
+```
+1. get-equipment (kod = fmGuid) → machine-objekt med indices-lista
+2. get-properties (indice = indices[0]) → tillgängliga fält
+3. search-data med DSL → senaste 7 dagars data aggregerat per dag
+```
+
+Resultatet cachas i React state. Fallback: mock-data om Senslinc inte svarar.
+
+### Visualization Design Proposal
+
+#### Alternativ A: Sensor-dashboard card per rum (inuti SenslincDashboardView)
+När man klickar IOT+ på ett rum öppnas en panel med:
+- **Gauge-kort** (4 st, beroende på tillgängliga fält):
+  - 🌡️ Temperatur – stor siffra + färgindikator (blå→grön→röd)
+  - 💨 CO₂ – siffra + trafikljus-ikon (grön/gul/röd)
+  - 💧 Luftfuktighet – progress-bar style
+  - 👥 Beläggning – % gauge
+- **7-dagars sparklines** (mini-linjediagram per sensor)
+- **Iframe-tab** för Senslincs fullständiga dashboard
+
+```
+┌─────────────────────────────────────────────┐
+│  🌡️ Rum A101 – IoT-data          [LIVE] ●  │
+├────────────┬───────────┬──────────┬──────────┤
+│  21.4°C    │  623 ppm  │  42%    │  67%     │
+│  Temperatur│  CO₂      │  Fukt   │  Beläggn │
+│  ▓▓▓▓▓░░  │  🟡Okej  │ ▓▓▓▓░░  │ ▓▓▓▓▓▓░  │
+├────────────┴───────────┴──────────┴──────────┤
+│  Senaste 7 dagarna                           │
+│  [LineChart: temp/co2/humidity trendlines]  │
+├──────────────────────────────────────────────┤
+│  [Tab: Dashboard] [Tab: Historik]            │
+└──────────────────────────────────────────────┘
+```
+
+#### Alternativ B: Sensor-tab i BuildingInsightsView (befintlig sida)
+Lägg till en ny "Sensors" tab bredvid Performance/Space/Asset:
+- Visar aggregerade sensorvärden per byggnad (medel för alla rum)
+- Klick på ett rum → drill-down till rumsnivå
+- Heatmap-vy: rutnät av rum färgade efter sensor-värde (temp/co2/etc)
+
+```
+Performance | FM | Space | Asset | Sensors ← NY
+
+┌─ Sensors ──────────────────────────────────┐
+│  Välj: [Temperatur ▾] [Senaste 7 dagar ▾]  │
+│                                             │
+│  Snitt för Småviken: 21.8°C  [LIVE] ●      │
+│                                             │
+│  Rum-heatmap:                               │
+│  [Röd][Gul][Grön][Grön][Gul]   → Läs av  │
+│                                             │
+│  Trendgraf: Dagliga snitt 7 dagar          │
+│  ────────────────────────────────          │
+│  22 ──╮    ╭──╮                            │
+│  21   ╰────╯  ╰──                          │
+│  20                                        │
+└────────────────────────────────────────────┘
+```
+
+#### Rekommendation: Kombinera A + B
+- **IOT+-knapp** → Alternativ A (rums-specifik panel med gauges + sparklines + iframe-tab)
+- **Insights → Sensors-tab** → Alternativ B (byggnadsöversikt med heatmap + trendgraf)
+
+---
+
+## Konkreta implementationsdelar
+
+### Filer att skapa/ändra
+
+| Fil | Åtgärd |
+|-----|--------|
+| `supabase/functions/senslinc-query/index.ts` | Fixa `buildDashboardUrl`, lägg till `get-machine-data` action för batching |
+| `src/hooks/useSenslincData.ts` | NY – discovery-flöde + Elasticsearch-queries + mock-fallback |
+| `src/components/viewer/SenslincDashboardView.tsx` | Utöka med tabs: "Sensordata" (gauges + sparkline) + "Dashboard" (iframe) |
+| `src/components/insights/tabs/SensorsTab.tsx` | NY – byggnadsöversikt, rum-heatmap, trendgraf |
+| `src/components/insights/InsightsView.tsx` | Lägg till "Sensors" tab som använder SensorsTab |
+
+### Senslinc edge function: ny action `get-machine-data`
+
+Samlar all nödvändig data i ett anrop:
 ```typescript
-const handleStoreyCheck = (storeyFmGuids: string[], visible: boolean) => {
-  const xeokitViewer = getXeokitViewer();
-  const scene = xeokitViewer?.scene;
-  if (!scene) return;
-
-  if (visible && checkedStoreys.size > 0) {
-    // Solo mode: hide all, show selected
-    scene.setObjectsVisible(scene.objectIds, false);
+case 'get-machine-data': {
+  // 1. Hitta machine via fmGuid
+  const machines = await senslincFetch(..., `/api/machines?code=${fmGuid}`)
+  if (!machines.length) return { success: false }
+  const machine = machines[0]
+  
+  // 2. Hämta properties för första indexet
+  const properties = machine.indices.length 
+    ? await senslincFetch(..., `/api/properties?indice=${machine.indices[0]}`)
+    : []
     
-    checkedStoreys.forEach(fmGuid => {
-      const ids = getXeokitIdsForFmGuid(fmGuid);
-      ids.forEach(id => {
-        // Recursively show all children
-        const obj = scene.objects[id];
-        if (obj) obj.visible = true;
-      });
-    });
+  // 3. Hämta senaste 7 dagars daglig data via search-data
+  const query = {
+    size: 0,
+    query: { bool: { must: [
+      { term: { machine_code: fmGuid } },
+      { range: { ts_beg: { gte: "now-7d" } } }
+    ]}},
+    aggs: { per_day: { 
+      date_histogram: { field: "ts_beg", calendar_interval: "day" },
+      aggs: {
+        avg_temp: { avg: { field: "temperature" } },
+        avg_co2:  { avg: { field: "co2" } },
+        avg_hum:  { avg: { field: "humidity" } },
+      }
+    }}
   }
+  const searchResult = await senslincFetchWithRetry(..., `/api/data-workspaces/${workspaceKey}/_search`, ..., { method: 'POST', body: query })
   
-  // Dispatch floor event
-  window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { 
-    detail: { visibleFloorFmGuids: [...checkedStoreys] } 
-  }));
-};
+  return { success: true, data: { machine, properties, timeSeries: searchResult } }
+}
 ```
+
+### useSenslincData hook
+
+```typescript
+export function useSenslincData(fmGuid: string | null | undefined) {
+  const [data, setData] = useState<SenslincSensorData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!fmGuid) return;
+    setIsLoading(true);
+    
+    supabase.functions.invoke('senslinc-query', {
+      body: { action: 'get-machine-data', fmGuid, workspaceKey: '...' }
+    }).then(({ data: result, error }) => {
+      if (result?.success) {
+        setData(parseTimeSeries(result.data));
+        setIsLive(true);
+      } else {
+        setData(generateMockData(fmGuid)); // graceful fallback
+        setIsLive(false);
+      }
+      setIsLoading(false);
+    });
+  }, [fmGuid]);
+
+  return { data, isLoading, isLive, error };
+}
+```
+
+### SenslincDashboardView – utökad med tabs
+
+Nuvarande component visar bara iframe. Den utökas med:
+
+```
+[Sensordata] [Dashboard ↗]
+
+Sensordata-tab:
+- 4 gauge-kort: temp, co2, fuktighet, beläggning
+- 7-dagars sparkline-diagram per sensor
+- LIVE-badge om data är riktig, Demo-badge om mock
+
+Dashboard-tab:
+- Befintlig iframe (Senslincs eget gränssnitt)
+```
+
+### InsightsView – ny Sensors-tab
+
+Ny `SensorsTab` komponent som:
+1. Hämtar alla rum för vald byggnad från `allData`
+2. Anropar `useSenslincData` per rum (batched – max 20 rum, paginering)
+3. Visar:
+   - **Sensor-väljare**: Temperatur | CO₂ | Luftfuktighet | Beläggning
+   - **Rum-grid**: korten färgas efter sensor-värde med `getVisualizationColor()` (redan implementerat i `visualization-utils.ts`)
+   - **Aggregerad trendgraf**: snitt per dag, senaste 7 dagar
+   - **Live/Mock-badge** tydligt
+
+Rum-grid-designen:
+```tsx
+<div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+  {rooms.map(room => {
+    const value = roomSensorData[room.fmGuid]?.[selectedMetric];
+    const color = getVisualizationColor(value, selectedMetric);
+    return (
+      <div 
+        style={{ backgroundColor: color ? rgbToHex(color) + '40' : undefined }}
+        className="p-2 rounded border text-xs text-center"
+      >
+        <div className="font-medium truncate">{room.name}</div>
+        <div className="text-lg font-bold">{value?.toFixed(1) ?? '—'}</div>
+        <div className="text-muted-foreground">{unit}</div>
+      </div>
+    );
+  })}
+</div>
+```
+
+### Teknisk utmaning: workspaceKey
+
+`search-data` kräver ett `workspaceKey`. Det behöver antingen:
+- Hämtas från machine-objektet (om det finns som fält)
+- Konfigureras som secret: `SENSLINC_WORKSPACE_KEY`
+- Hämtas via `get-indices` och plockas från resultatet
+
+Vi löser detta i `get-machine-data` action med en discover-first approach – försök hitta workspace_key från `/api/indices` eller från machine-objektets egna fält.
+
+---
+
+## Prioritetsordning och tidplan
+
+### Steg 1: IOT+-knappens iframe + SenslincDashboardView tabs
+- Fixa `buildDashboardUrl` (5 min)
+- Lägg till tabs i SenslincDashboardView: "Sensordata" + "Dashboard"
+- Sensor-gauger med mock-data från `visualization-utils.ts` befintliga funktioner
+
+### Steg 2: useSenslincData hook + edge function
+- Ny `get-machine-data` action i senslinc-query
+- Ny `useSenslincData` hook med discovery-flöde
+- Integrera live-data i SenslincDashboardView's Sensordata-tab
+
+### Steg 3: Sensors-tab i Insights
+- Ny `SensorsTab.tsx` med rum-grid + trendgraf
+- Integrera i `InsightsView.tsx` som ny tab
 
 ## Desktop och mobil
-Alla ändringar gäller både desktop och mobil. `ViewerTreePanel` används på desktop (floating panel + embedded via MobileViewerOverlay på mobil). `ViewerToolbar` visas på desktop; på mobil är toolsen i MobileViewerOverlay — XRay-knappen behöver också läggas till i MobileViewerOverlay's settings-panel.
+Alla komponenter byggs responsivt. På mobil:
+- SenslincDashboardView (sheets/drawer) – gauger staplas vertikalt
+- Sensors-tab – rum-grid 3 kolumner, sparklines förenklade
+- SenslincDashboardView tab-navigation anpassad för touch
+
