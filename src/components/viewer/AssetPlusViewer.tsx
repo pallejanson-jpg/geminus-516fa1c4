@@ -3625,7 +3625,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             } as React.CSSProperties}
           />
 
-          {/* Loading spinner overlay - only show during initial load OR actual XKT sync (never for 'checking') */}
+          {/* Loading overlay: initial load OR active XKT sync only (not 'checking') */}
           {((state.isLoading && !state.isInitialized) || (modelLoadState !== 'loaded' && xktSyncStatus === 'syncing' && state.isInitialized)) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
               <Spinner 
