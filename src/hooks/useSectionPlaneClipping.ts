@@ -33,6 +33,8 @@ export interface FloorSelectionEventDetail {
   visibleMetaFloorIds?: string[];
   visibleFloorFmGuids?: string[];
   isAllFloorsVisible?: boolean;
+  isSoloFloor?: boolean;
+  soloFloorName?: string;
 }
 
 export interface ViewModeEventDetail {
