@@ -11,19 +11,13 @@ import {
   Maximize,
   Minimize,
   Download,
-  Network,
-  Link2,
   TrendingUp,
   DollarSign,
-  Code2,
-  Users,
   Clock,
   BarChart3,
   CheckCircle2,
-  Sparkles,
   Target,
   Zap,
-  Brain,
   ArrowRight,
   X,
   Timer,
@@ -36,11 +30,10 @@ import {
 const SLIDE_TITLES = [
   "Title — I'm Pål. I connected the dots.",
   "The AECO Gap",
-  "The Addnode Ecosystem",
-  "Geminus — The Bridge",
-  "AI That Works Today",
+  "The Addnode Hub",
+  "What Geminus Unlocks",
+  "The Proof — It Already Works",
   "ROI — The Numbers",
-  "Built With Vibe-Coding",
   "Why Addnode Wins",
   "The Ask",
 ];
@@ -62,29 +55,29 @@ const NOTES: string[][] = [
     "Symetri and Service Works Global now share the Design Management business area.",
     "This is the moment to close the gap and serve the full lifecycle.",
   ],
-  // Slide 3 — Ecosystem
+  // Slide 3 — The Addnode Hub
   [
-    "Addnode already owns the ingredients: SWG, Symetri/ACC, Bimify, Senslinc.",
-    "Bimify digitizes existing buildings with AI — turning photos into BIM models.",
-    "Senslinc provides real-time IoT data — temperature, CO2, occupancy.",
-    "None of these talk to each other today.",
-    "Geminus connects them — using APIs that already exist.",
+    "Addnode already owns every ingredient needed — the question is who connects them.",
+    "Symetri brings BIM and construction data, SWG brings FM operations, Bimify digitizes existing buildings.",
+    "In Use brings space utilization data — real occupancy, desk booking, room usage.",
+    "Senslinc brings the live heartbeat of the building — IoT sensors in real time.",
+    "Geminus is the hub that makes all five more valuable than they are separately.",
   ],
-  // Slide 4 — The Bridge
+  // Slide 4 — What Geminus Unlocks
   [
-    "Geminus sits in the middle of the Addnode ecosystem.",
-    "It pulls BIM from Bimify and ACC, operations data from SWG, sensor data from Senslinc.",
-    "No migration needed — we build on top of existing systems.",
-    "One interface for the facility manager who doesn't care which system the data comes from.",
-    "This is the connective tissue Addnode needs.",
+    "This is not about technology — it's about making each Addnode company more competitive.",
+    "For Symetri: their customers stop using ACC only for construction — it becomes a lifelong tool.",
+    "For SWG: Asset+ becomes the AI-powered system of record — not just a database.",
+    "For Bimify: every digitization project creates a lasting digital twin, not just a one-time deliverable.",
+    "For Senslinc: sensor data finally has a home — visible, contextual, actionable.",
   ],
-  // Slide 5 — AI That Works Today
+  // Slide 5 — The Proof
   [
-    "This is not a prototype or a mockup — it is running in production.",
-    "AI scans 360-degree panorama images and registers fire safety assets automatically.",
-    "Gunnar answers questions about assets in natural language.",
-    "Mobile camera lets field workers photograph an object — Gemini Vision identifies it instantly.",
-    "All assets land directly in Asset+ — the SWG system our customers already use.",
+    "I want to be clear: this is not a PowerPoint vision — it is running in production today.",
+    "A non-developer built this in 3 months using vibe-coding — which is itself the proof of concept for this competition.",
+    "The AI scans 360-degree panorama images and registers assets directly into Asset+ automatically.",
+    "Six API integrations across the Addnode ecosystem already exist in Geminus right now.",
+    "What we are asking for is the investment to turn a working prototype into a certified product.",
   ],
   // Slide 6 — ROI
   [
@@ -94,23 +87,15 @@ const NOTES: string[][] = [
     "SWG has over 500 enterprise customers — even 10% adoption creates enormous value.",
     "Bimify scan-to-BIM combined with Geminus means no manual digitization cost.",
   ],
-  // Slide 7 — Vibe-Coding
+  // Slide 7 — Why Addnode Wins
   [
-    "I built this without writing a single line of code manually.",
-    "I described what I wanted in plain English — the AI wrote the code.",
-    "50+ React components, 15+ serverless backend functions, 6 external API integrations.",
-    "3 months of evenings and weekends.",
-    "This competition is about AI plus vibe-coding — and this IS the proof of what that looks like.",
-  ],
-  // Slide 8 — Why Addnode Wins
-  [
-    "Every Geminus user is locked deeper into the Addnode ecosystem.",
-    "Bimify upsell: does your building have a BIM model yet? Now it can.",
-    "Senslinc upsell: do you have real-time sensor data? Add it to your digital twin.",
-    "SWG and Symetri can go to market together for the first time with a joint value proposition.",
+    "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
+    "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously — churn across the group drops.",
+    "For the first time, SWG and Symetri can approach the same customer together — the building owner who needs both phases.",
+    "Geminus turns five separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
   ],
-  // Slide 9 — The Ask
+  // Slide 8 — The Ask
   [
     "One hundred thousand dollars to productize what is already working.",
     "Security hardening, GDPR compliance, deep SWG Concept Evolution API integration.",
@@ -203,161 +188,242 @@ const AecoGapSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 3 — Addnode Ecosystem                                        */
+/*  Slide 3 — The Addnode Hub                                          */
 /* ------------------------------------------------------------------ */
 
-const EcosystemSlide = () => (
-  <div className="relative w-full h-full overflow-hidden">
-    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-blue-950/80 to-slate-900/70" />
-    <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
-      <h2 className="text-[72px] font-black mb-4 text-white">The Ingredients Are Already Inside Addnode</h2>
-      <p className="text-[28px] text-white/60 mb-14">Four companies. Four data sources. Zero connections.</p>
+const HubSlide = () => {
+  const companies = [
+    { name: "Symetri / ACC", sub: "BIM & construction data", color: "border-blue-400/70 bg-blue-500/20", tc: "text-blue-300", pos: "top" },
+    { name: "In Use", sub: "Space utilization data", color: "border-violet-400/70 bg-violet-500/20", tc: "text-violet-300", pos: "left" },
+    { name: "Bimify", sub: "AI scan-to-BIM", color: "border-purple-400/70 bg-purple-500/20", tc: "text-purple-300", pos: "right" },
+    { name: "SWG / Asset+", sub: "FM operations platform", color: "border-emerald-400/70 bg-emerald-500/20", tc: "text-emerald-300", pos: "bottom-left" },
+    { name: "Senslinc", sub: "IoT real-time data", color: "border-orange-400/70 bg-orange-500/20", tc: "text-orange-300", pos: "bottom-right" },
+  ];
 
-      <div className="grid grid-cols-4 gap-8 mb-12">
-        {[
-          { name: "Symetri / ACC", role: "BIM for new construction", detail: "Autodesk Construction Cloud — project data, BIM models, documents", color: "bg-blue-500/20 border-blue-400/50", icon: "🏗️" },
-          { name: "Service Works Global", role: "FM Platform & Asset+", detail: "Concept Evolution, Asset+, work orders — the O in AECO", color: "bg-emerald-500/20 border-emerald-400/50", icon: "🏢" },
-          { name: "Bimify", role: "AI Scan-to-BIM", detail: "Digitizes existing buildings with AI — photos become BIM models", color: "bg-purple-500/20 border-purple-400/50", icon: "🤖" },
-          { name: "Senslinc", role: "IoT & Real-time Data", detail: "Temperature, CO₂, occupancy, energy — live sensor streams", color: "bg-orange-500/20 border-orange-400/50", icon: "📡" },
-        ].map(({ name, role, detail, color, icon }) => (
-          <div key={name} className={`rounded-2xl border p-6 ${color} flex flex-col`}>
-            <div className="text-[48px] mb-3">{icon}</div>
-            <h3 className="text-[24px] font-bold text-white mb-1">{name}</h3>
-            <p className="text-[18px] text-white/70 font-semibold mb-3">{role}</p>
-            <p className="text-[16px] text-white/50 leading-relaxed">{detail}</p>
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-blue-950/85 to-slate-900/75" />
+      <div className="relative z-10 flex flex-col justify-center h-full text-white px-24 py-12">
+        <h2 className="text-[70px] font-black mb-2 text-white text-center">The Addnode Hub</h2>
+        <p className="text-[26px] text-white/55 mb-10 text-center">Addnode already owns every ingredient — Geminus is the missing center</p>
+
+        {/* Hub diagram */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="relative" style={{ width: 1100, height: 560 }}>
+
+            {/* Connector lines (SVG behind) */}
+            <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 0 }}>
+              {/* Top — Symetri */}
+              <line x1="550" y1="280" x2="550" y2="100" stroke="rgba(99,179,237,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Left — In Use */}
+              <line x1="550" y1="280" x2="130" y2="280" stroke="rgba(167,139,250,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Right — Bimify */}
+              <line x1="550" y1="280" x2="970" y2="280" stroke="rgba(192,132,252,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Bottom-left — SWG */}
+              <line x1="550" y1="280" x2="210" y2="470" stroke="rgba(52,211,153,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+              {/* Bottom-right — Senslinc */}
+              <line x1="550" y1="280" x2="890" y2="470" stroke="rgba(251,146,60,0.35)" strokeWidth="2" strokeDasharray="6 4" />
+            </svg>
+
+            {/* Center — GEMINUS */}
+            <div className="absolute flex flex-col items-center justify-center rounded-full border-4 border-cyan-400/80 bg-cyan-500/20 shadow-2xl shadow-cyan-500/30"
+              style={{ width: 220, height: 220, left: 440, top: 170, zIndex: 10 }}>
+              <Building2 className="w-12 h-12 text-cyan-400 mb-2" />
+              <p className="text-[32px] font-black text-cyan-300 leading-none">GEMINUS</p>
+              <p className="text-[14px] text-white/55 mt-1">Digital Twin Hub</p>
+            </div>
+
+            {/* Symetri — top center */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-blue-400/70 bg-blue-500/20 text-center px-5 py-4"
+              style={{ width: 210, height: 100, left: 445, top: 0, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-blue-300 leading-tight">Symetri / ACC</p>
+              <p className="text-[14px] text-white/55 mt-1">BIM & construction data</p>
+            </div>
+
+            {/* In Use — left */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-violet-400/70 bg-violet-500/20 text-center px-5 py-4"
+              style={{ width: 200, height: 100, left: 20, top: 230, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-violet-300 leading-tight">In Use</p>
+              <p className="text-[14px] text-white/55 mt-1">Space utilization data</p>
+            </div>
+
+            {/* Bimify — right */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-purple-400/70 bg-purple-500/20 text-center px-5 py-4"
+              style={{ width: 200, height: 100, left: 880, top: 230, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-purple-300 leading-tight">Bimify</p>
+              <p className="text-[14px] text-white/55 mt-1">AI scan-to-BIM</p>
+            </div>
+
+            {/* SWG — bottom left */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/20 text-center px-5 py-4"
+              style={{ width: 220, height: 100, left: 100, top: 420, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG / Asset+</p>
+              <p className="text-[14px] text-white/55 mt-1">FM operations platform</p>
+            </div>
+
+            {/* Senslinc — bottom right */}
+            <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-orange-400/70 bg-orange-500/20 text-center px-5 py-4"
+              style={{ width: 210, height: 100, left: 790, top: 420, zIndex: 10 }}>
+              <p className="text-[20px] font-bold text-orange-300 leading-tight">Senslinc</p>
+              <p className="text-[14px] text-white/55 mt-1">IoT real-time data</p>
+            </div>
+
           </div>
-        ))}
-      </div>
+        </div>
 
-      <div className="bg-white/5 rounded-2xl p-8 border border-white/10 text-center">
-        <p className="text-[30px] text-white font-semibold">
-          All four companies now co-exist in the <span className="text-cyan-300">Design Management</span> business area.
-        </p>
-        <p className="text-[24px] text-white/60 mt-3">
-          But they don't talk to each other. <span className="text-white font-bold">Until now.</span>
-        </p>
+        <div className="mt-4 text-center">
+          <p className="text-[24px] text-white/80 font-medium">
+            All five already sit inside Addnode's <span className="text-cyan-300 font-bold">Design Management</span> business area.
+            <span className="text-white font-bold"> Geminus is the missing center.</span>
+          </p>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ------------------------------------------------------------------ */
-/*  Slide 4 — The Bridge                                               */
+/*  Slide 4 — What Geminus Unlocks                                     */
 /* ------------------------------------------------------------------ */
 
-const BridgeSlide = () => (
-  <div className="relative w-full h-full overflow-hidden">
-    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-cyan-950/75 to-slate-900/70" />
-    <div className="relative z-10 flex h-full text-white px-32 py-16">
+const UnlocksSlide = () => {
+  const rows = [
+    {
+      company: "Symetri",
+      badge: "BIM",
+      badgeColor: "bg-blue-500/20 border-blue-400/50 text-blue-300",
+      value: "Their ACC/BIM data becomes useful in Operations — FM customers stay on Autodesk for life",
+      arrowColor: "text-blue-400",
+    },
+    {
+      company: "Service Works Global",
+      badge: "FM",
+      badgeColor: "bg-emerald-500/20 border-emerald-400/50 text-emerald-300",
+      value: "Asset+ becomes the AI-powered system of record for every building — not just a database",
+      arrowColor: "text-emerald-400",
+    },
+    {
+      company: "In Use",
+      badge: "Space",
+      badgeColor: "bg-violet-500/20 border-violet-400/50 text-violet-300",
+      value: "Space utilization data surfaces in real context — visible inside the digital twin view",
+      arrowColor: "text-violet-400",
+    },
+    {
+      company: "Bimify",
+      badge: "BIM",
+      badgeColor: "bg-purple-500/20 border-purple-400/50 text-purple-300",
+      value: "Every building Bimify digitizes becomes a Geminus-ready digital twin — not a one-time deliverable",
+      arrowColor: "text-purple-400",
+    },
+    {
+      company: "Senslinc",
+      badge: "IoT",
+      badgeColor: "bg-orange-500/20 border-orange-400/50 text-orange-300",
+      value: "Sensor data becomes actionable — visible in context, triggering FM workflows automatically",
+      arrowColor: "text-orange-400",
+    },
+  ];
 
-      {/* Left: Content */}
-      <div className="flex-1 flex flex-col justify-center pr-16">
-        <h2 className="text-[72px] font-black mb-4 text-cyan-300">Geminus: The Connective Tissue</h2>
-        <p className="text-[26px] text-white/60 mb-12">
-          One platform. All your building data. Powered by AI.
-        </p>
-        <div className="space-y-6">
-          {[
-            { icon: Network, title: "No migration needed", desc: "Builds on top of existing APIs — SWG Asset+, ACC, Bimify, Senslinc" },
-            { icon: Link2, title: "One source of truth", desc: "BIM, FM-data, sensors and 360° panoramas in one unified interface" },
-            { icon: Brain, title: "AI on top", desc: "Gemini Vision for inventory, Gunnar for FM queries, voice control" },
-          ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="flex gap-5 items-start">
-              <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
-                <Icon className="w-7 h-7 text-cyan-400" />
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-cyan-950/80 to-slate-900/75" />
+      <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
+        <h2 className="text-[68px] font-black mb-2 text-white">What Geminus Unlocks for Each Company</h2>
+        <p className="text-[26px] text-white/55 mb-10">Not what Geminus takes — what each Addnode company <span className="text-cyan-300 font-semibold">gains</span></p>
+
+        <div className="flex-1 flex flex-col justify-center space-y-5">
+          {rows.map(({ company, badge, badgeColor, value, arrowColor }) => (
+            <div key={company} className="flex items-center gap-8 bg-white/5 rounded-2xl border border-white/10 px-8 py-5">
+              {/* Company */}
+              <div className="w-[280px] shrink-0 flex items-center gap-4">
+                <span className={`px-3 py-1 rounded-full border text-[15px] font-semibold ${badgeColor}`}>{badge}</span>
+                <span className="text-[24px] font-bold text-white">{company}</span>
               </div>
-              <div>
-                <h3 className="text-[26px] font-bold text-white">{title}</h3>
-                <p className="text-[20px] text-white/60">{desc}</p>
-              </div>
+              {/* Arrow */}
+              <ArrowRight className={`w-8 h-8 shrink-0 ${arrowColor}`} />
+              {/* Value */}
+              <p className="text-[22px] text-white/80 leading-snug flex-1">{value}</p>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* Right: Integration diagram */}
-      <div className="w-[680px] shrink-0 flex flex-col items-center justify-center">
-        <div className="relative w-full">
-          {/* Surrounding nodes */}
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            {[
-              { label: "Bimify", sub: "AI → BIM", color: "border-purple-400/60 bg-purple-500/20", tc: "text-purple-300" },
-              { label: "Symetri / ACC", sub: "BIM Models", color: "border-blue-400/60 bg-blue-500/20", tc: "text-blue-300" },
-              { label: "SWG Asset+", sub: "FM Operations", color: "border-emerald-400/60 bg-emerald-500/20", tc: "text-emerald-300" },
-              { label: "Senslinc", sub: "IoT Real-time", color: "border-orange-400/60 bg-orange-500/20", tc: "text-orange-300" },
-            ].map(({ label, sub, color, tc }) => (
-              <div key={label} className={`rounded-2xl border-2 p-5 ${color} text-center`}>
-                <p className={`text-[22px] font-bold ${tc}`}>{label}</p>
-                <p className="text-[16px] text-white/50">{sub}</p>
-              </div>
-            ))}
-          </div>
-          {/* Arrows */}
-          <div className="flex justify-center mb-6">
-            <div className="flex gap-8 text-white/40 text-[32px]">
-              <span>↓</span><span>↓</span><span>↓</span><span>↓</span>
-            </div>
-          </div>
-          {/* Geminus center */}
-          <div className="rounded-3xl border-2 border-cyan-400/80 bg-cyan-500/20 p-8 text-center shadow-2xl shadow-cyan-500/20">
-            <Building2 className="w-16 h-16 text-cyan-400 mx-auto mb-3" />
-            <p className="text-[40px] font-black text-cyan-300">GEMINUS</p>
-            <p className="text-[20px] text-white/60 mt-2">Digital Twin Platform</p>
-          </div>
-          {/* Arrow down */}
-          <div className="flex justify-center mt-6 mb-6">
-            <span className="text-white/40 text-[32px]">↓</span>
-          </div>
-          {/* FM User */}
-          <div className="rounded-2xl border border-white/20 bg-white/5 p-5 text-center">
-            <Users className="w-8 h-8 text-white/60 mx-auto mb-2" />
-            <p className="text-[20px] text-white/70">Facility Manager — one interface</p>
-          </div>
+        <div className="mt-6 bg-cyan-500/10 rounded-2xl border border-cyan-400/30 p-5 text-center">
+          <p className="text-[22px] text-white/80 font-medium">
+            Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all five companies</span> — that is ecosystem lock-in through value, not contracts.
+          </p>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ------------------------------------------------------------------ */
-/*  Slide 5 — AI That Works Today                                      */
+/*  Slide 5 — The Proof                                                */
 /* ------------------------------------------------------------------ */
 
-const DemoSlide = () => (
+const ProofSlide = () => (
   <div className="relative w-full h-full overflow-hidden">
     <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-emerald-950/75 to-slate-900/70" />
-    <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
-      <div className="mb-8">
-        <h2 className="text-[68px] font-black text-white">This Is Not a Prototype.</h2>
-        <p className="text-[32px] text-emerald-400 font-semibold">It's Running in Production.</p>
-      </div>
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-emerald-950/80 to-slate-900/75" />
+    <div className="relative z-10 flex h-full text-white px-32 py-14">
 
-      <div className="grid grid-cols-2 gap-8 flex-1">
-        {[
-          { img: screenshotViewer, label: "3D BIM + 360° Panorama", sub: "BIM from Bimify/ACC · NavVis Ivion · Senslinc IoT overlay", color: "border-blue-400/40" },
-          { img: screenshotAiScan, label: "AI Asset Detection", sub: "Gemini Vision scans 360° images → registers assets in Asset+", color: "border-emerald-400/40" },
-          { img: screenshotGunnar, label: "Gunnar — AI Assistant", sub: `"How many fire extinguishers on floor 3?" — answered instantly`, color: "border-purple-400/40" },
-          { img: screenshotMobile, label: "Mobile Camera → AI → Asset+", sub: "Field workers photograph an object — Gemini identifies it instantly", color: "border-orange-400/40" },
-        ].map(({ img, label, sub, color }) => (
-          <div key={label} className={`relative rounded-2xl overflow-hidden border ${color} group`}>
-            <img src={img} alt={label} className="w-full h-full object-cover object-top" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-5">
-              <p className="text-[22px] font-bold text-white">{label}</p>
-              <p className="text-[16px] text-white/60">{sub}</p>
+      {/* Left: Headline + stats */}
+      <div className="flex-1 flex flex-col justify-center pr-16">
+        <div className="flex items-center gap-4 mb-8">
+          <span className="px-5 py-2 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[20px] font-semibold">
+            ✓ Running in production
+          </span>
+        </div>
+        <h2 className="text-[80px] font-black leading-tight text-white mb-6">
+          It Already<br />Works.
+        </h2>
+        <p className="text-[26px] text-white/60 mb-12 max-w-[700px]">
+          This is not a PowerPoint vision. A non-developer built this in 3 months. The AI wrote the code.
+        </p>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 gap-6 mb-12">
+          {[
+            { num: "3 months", label: "start to production" },
+            { num: "Non-developer", label: "no code written manually" },
+            { num: "50+", label: "components built" },
+            { num: "6", label: "Addnode API integrations" },
+          ].map(({ num, label }) => (
+            <div key={label} className="bg-white/5 rounded-2xl border border-white/10 px-6 py-4">
+              <p className="text-[32px] font-black text-emerald-300 leading-none">{num}</p>
+              <p className="text-[18px] text-white/55 mt-1">{label}</p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+
+        <blockquote className="border-l-4 border-emerald-400 pl-6 text-[24px] text-white/75 italic">
+          "I described what I wanted. The AI built it."
+        </blockquote>
       </div>
 
-      <div className="mt-6 text-center">
-        <span className="px-6 py-3 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[20px] font-semibold">
-          Integrated with: Asset+ · Ivion · Senslinc · Autodesk ACC · Bimify BIM
-        </span>
+      {/* Right: 2 screenshots */}
+      <div className="w-[640px] shrink-0 flex flex-col gap-6 justify-center">
+        <div className="relative rounded-2xl overflow-hidden border border-blue-400/40 h-[240px]">
+          <img src={screenshotViewer} alt="3D BIM Viewer" className="w-full h-full object-cover object-top" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-4">
+            <p className="text-[18px] font-bold text-white">3D BIM + Live IoT Overlay</p>
+            <p className="text-[14px] text-white/55">Bimify · ACC · Senslinc in one view</p>
+          </div>
+        </div>
+        <div className="relative rounded-2xl overflow-hidden border border-emerald-400/40 h-[240px]">
+          <img src={screenshotAiScan} alt="AI Asset Scan" className="w-full h-full object-cover object-top" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-4">
+            <p className="text-[18px] font-bold text-white">AI Scans 360° → Registers in Asset+</p>
+            <p className="text-[14px] text-white/55">Gemini Vision · NavVis Ivion · SWG Asset+</p>
+          </div>
+        </div>
       </div>
+
     </div>
   </div>
 );
@@ -454,55 +520,7 @@ const RoiSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 7 — Vibe-Coding                                              */
-/* ------------------------------------------------------------------ */
-
-const VibeCodingSlide = () => (
-  <div className="relative w-full h-full overflow-hidden">
-    <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-950/98 via-purple-950/85 to-slate-900/70" />
-    <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-20">
-      <div className="flex items-center gap-5 mb-6">
-        <Code2 className="w-14 h-14 text-purple-400" />
-        <div className="px-5 py-2 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-[22px] font-medium">
-          Vibe-Coding in action
-        </div>
-      </div>
-      <h2 className="text-[90px] font-black leading-tight text-white mb-4">
-        3 months.<br />No coding experience.<br /><span className="text-purple-400">$0 dev cost.</span>
-      </h2>
-      <p className="text-[28px] text-white/60 mb-14 max-w-[1100px]">
-        This is vibe-coding — and this is what it can produce.
-      </p>
-
-      <div className="grid grid-cols-3 gap-10 mb-14">
-        {[
-          { num: "50+", label: "React components", icon: Sparkles },
-          { num: "15+", label: "Serverless backend functions", icon: Zap },
-          { num: "6", label: "External API integrations", icon: Link2 },
-        ].map(({ num, label, icon: Icon }) => (
-          <div key={label} className="bg-purple-500/10 rounded-2xl border border-purple-400/30 p-8 flex flex-col items-center text-center">
-            <Icon className="w-10 h-10 text-purple-400 mb-4" />
-            <p className="text-[64px] font-black text-purple-300 leading-none mb-2">{num}</p>
-            <p className="text-[22px] text-white/70">{label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white/5 rounded-2xl border border-white/10 p-8">
-        <blockquote className="text-[28px] text-white/80 italic">
-          "I described what I wanted in plain English. The AI wrote the code. I shaped the product."
-        </blockquote>
-        <p className="text-[22px] text-purple-300 mt-4 font-semibold">
-          This competition is about AI + vibe-coding. This IS the proof.
-        </p>
-      </div>
-    </div>
-  </div>
-);
-
-/* ------------------------------------------------------------------ */
-/*  Slide 8 — Why Addnode Wins                                         */
+/*  Slide 7 — Why Addnode Wins (investor language)                     */
 /* ------------------------------------------------------------------ */
 
 const WhyAddnodeSlide = () => (
@@ -511,51 +529,51 @@ const WhyAddnodeSlide = () => (
     <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-amber-950/75 to-slate-900/70" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <TrendingUp className="w-14 h-14 text-amber-400 mb-4" />
-      <h2 className="text-[72px] font-black mb-4 text-white">Three Strategic Wins for Addnode</h2>
-      <p className="text-[26px] text-white/60 mb-14">Every Geminus user is locked deeper into the ecosystem</p>
+      <h2 className="text-[72px] font-black mb-4 text-white">Why Addnode Wins</h2>
+      <p className="text-[26px] text-white/60 mb-14">Three strategic wins that compound across the group</p>
 
       <div className="grid grid-cols-3 gap-10 mb-12">
         {[
           {
-            icon: Target,
-            title: "Ecosystem Stickiness",
+            icon: DollarSign,
+            title: "A new revenue layer in a €1T market",
             color: "border-amber-400/50 bg-amber-500/10",
             tc: "text-amber-300",
             points: [
-              "SWG + Symetri customers who use Geminus stay inside Addnode",
-              "More integrations = harder to leave",
+              "FM software is the fastest-growing segment of the built environment",
+              "Addnode has zero dedicated FM product today — this is the gap",
+              "First-mover advantage in the O of AECO",
+            ],
+          },
+          {
+            icon: Target,
+            title: "Ecosystem lock-in through value",
+            color: "border-cyan-400/50 bg-cyan-500/10",
+            tc: "text-cyan-300",
+            points: [
+              "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously",
+              "Churn across the group drops as integrations deepen",
               "Lock-in through value, not contracts",
             ],
           },
           {
             icon: TrendingUp,
-            title: "Cross-Sell Engine",
-            color: "border-cyan-400/50 bg-cyan-500/10",
-            tc: "text-cyan-300",
-            points: [
-              "Bimify upsell: no BIM model? Now you can have one",
-              "Senslinc upsell: add real-time IoT to your digital twin",
-              "Symetri sells ACC → Geminus visualizes it",
-            ],
-          },
-          {
-            icon: DollarSign,
-            title: "Blue Ocean Revenue",
+            title: "A joint go-to-market for Design Management",
             color: "border-green-400/50 bg-green-500/10",
             tc: "text-green-300",
             points: [
-              "O in AECO is unserved by any Addnode product today",
-              "SWG + Symetri go to market together for the first time",
-              "New AI layer on top of existing licenses",
+              "For the first time, SWG and Symetri can approach the same customer together",
+              "The building owner who needs both construction-phase and operations-phase tools",
+              "One coherent story for the entire Addnode Design Management business area",
             ],
           },
         ].map(({ icon: Icon, title, color, tc, points }) => (
           <div key={title} className={`rounded-3xl border-2 p-8 ${color}`}>
             <Icon className={`w-10 h-10 mb-4 ${tc}`} />
-            <h3 className={`text-[28px] font-bold mb-6 ${tc}`}>{title}</h3>
+            <h3 className={`text-[24px] font-bold mb-6 leading-tight ${tc}`}>{title}</h3>
             <ul className="space-y-4">
               {points.map((p) => (
-                <li key={p} className="flex gap-3 items-start text-[19px] text-white/75">
+                <li key={p} className="flex gap-3 items-start text-[18px] text-white/75">
                   <CheckCircle2 className={`w-5 h-5 mt-1 shrink-0 ${tc}`} />
                   {p}
                 </li>
@@ -567,7 +585,7 @@ const WhyAddnodeSlide = () => (
 
       <div className="bg-white/5 rounded-2xl border border-white/15 p-7 text-center">
         <p className="text-[28px] text-white font-semibold italic">
-          "The $100K doesn't fund a product. It funds a competitive moat across the Design Management business area."
+          "Geminus turns five separate Addnode companies into one coherent value proposition."
         </p>
       </div>
     </div>
@@ -575,7 +593,7 @@ const WhyAddnodeSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 9 — The Ask                                                  */
+/*  Slide 8 — The Ask                                                  */
 /* ------------------------------------------------------------------ */
 
 const AskSlide = () => (
@@ -641,11 +659,10 @@ const AskSlide = () => (
 const slides = [
   TitleSlide,
   AecoGapSlide,
-  EcosystemSlide,
-  BridgeSlide,
-  DemoSlide,
+  HubSlide,
+  UnlocksSlide,
+  ProofSlide,
   RoiSlide,
-  VibeCodingSlide,
   WhyAddnodeSlide,
   AskSlide,
 ];
