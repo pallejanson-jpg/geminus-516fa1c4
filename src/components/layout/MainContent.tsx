@@ -193,7 +193,7 @@ const MainContent: React.FC = () => {
             className={`flex-1 relative ${isImmersiveViewer ? 'overflow-hidden' : 'overflow-auto'} ${t.bg}`}
             style={isImmersiveViewer ? { touchAction: 'none' } : undefined}
         >
-            <div className="w-full h-full">
+        <div className={isImmersiveViewer ? "w-full h-full" : "w-full min-h-full"}>
                 {renderContent()}
             </div>
         </main>

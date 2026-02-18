@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  Home, LayoutGrid, Globe, Network, MoreHorizontal, X,
+  Home, LayoutGrid, Globe, Network, Menu, X,
   ClipboardList, AlertTriangle, BarChart2, Building2, Box, Zap, Archive, Radar, Scan, Cuboid
 } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
@@ -28,12 +28,12 @@ const SIDEBAR_ITEM_META: Record<string, {
   ai_scan:          { icon: Scan,          label: 'AI Scan', type: 'internal' },
 };
 
-// Core bottom nav items (always visible)
+// Core navigation items
 const CORE_NAV = [
-  { key: 'home',       icon: Home,      label: 'Hem' },
+  { key: 'home',       icon: Home,       label: 'Hem' },
   { key: 'portfolio',  icon: LayoutGrid, label: 'Portfolio' },
-  { key: 'navigation', icon: Network,   label: 'Navigator' },
-  { key: 'map',        icon: Globe,     label: 'Karta' },
+  { key: 'navigation', icon: Network,    label: 'Navigator' },
+  { key: 'map',        icon: Globe,      label: 'Karta' },
 ] as const;
 
 interface MobileNavProps {
@@ -88,55 +88,27 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
 
   return (
     <>
-      {/* Fixed Bottom Navigation Bar */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border flex items-stretch"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', height: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+      {/* Floating Menu FAB */}
+      <button
+        onClick={() => setIsMobileMenuOpen(true)}
+        className="fixed z-40 flex items-center gap-2 bg-card/80 backdrop-blur-md border border-border rounded-full px-5 py-2.5 shadow-lg left-1/2 -translate-x-1/2"
+        style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+        aria-label="Öppna meny"
       >
-        {CORE_NAV.map(({ key, icon: Icon, label }) => {
-          const isActive = activeApp === key;
-          return (
-            <button
-              key={key}
-              onClick={() => handleCoreClick(key)}
-              className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[3.5rem]",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground active:text-foreground"
-              )}
-            >
-              <Icon className={cn("h-5 w-5", isActive && "stroke-[2.5px]")} />
-              <span className={cn("text-[10px] font-medium", isActive && "font-semibold")}>{label}</span>
-            </button>
-          );
-        })}
-
-        {/* Mer button */}
-        <button
-          onClick={() => setIsMobileMenuOpen(true)}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors min-h-[3.5rem]",
-            isMobileMenuOpen
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <MoreHorizontal className="h-5 w-5" />
-          <span className="text-[10px] font-medium">Mer</span>
-        </button>
-      </nav>
+        <Menu className="h-4 w-4 text-foreground" />
+        <span className="text-sm font-medium text-foreground">Meny</span>
+      </button>
 
       {/* App Drawer — opens from bottom */}
       <Drawer open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-        <DrawerContent className="max-h-[70dvh] pb-0">
+        <DrawerContent className="max-h-[75dvh] pb-0">
           <div
             className="overflow-y-auto"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <span className="font-semibold text-sm text-foreground">Appar</span>
+              <span className="font-semibold text-sm text-foreground">Navigering</span>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
@@ -146,6 +118,36 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
             </div>
 
             <div className="p-4 space-y-4">
+              {/* Core navigation grid */}
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {CORE_NAV.map(({ key, icon: Icon, label }) => {
+                    const isActive = activeApp === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { handleCoreClick(key); setIsMobileMenuOpen(false); }}
+                        className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-muted/60 transition-colors"
+                      >
+                        <div className={cn(
+                          "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
+                          isActive ? "bg-primary/15" : "bg-muted"
+                        )}>
+                          <Icon className={cn("h-6 w-6", isActive ? "text-primary" : "text-foreground/70")} />
+                        </div>
+                        <span className={cn(
+                          "text-[11px] text-center leading-tight",
+                          isActive ? "text-primary font-medium" : "text-muted-foreground"
+                        )}>
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* 3D Viewer quick link */}
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
