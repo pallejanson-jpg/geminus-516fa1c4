@@ -34,11 +34,7 @@ const LiveBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean 
       <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse inline-block" />LIVE
     </Badge>
   );
-  return (
-    <Badge variant="outline" className="text-[9px] gap-1 border-purple-500/40 text-purple-400 bg-purple-500/10">
-      Demo
-    </Badge>
-  );
+  return null;
 };
 
 // ── Room grid card ──
@@ -262,9 +258,6 @@ export default function SensorsTab() {
           <CardTitle className="text-sm flex items-center gap-2">
             <metricDef.icon className="h-4 w-4" style={{ color: metricDef.color }} />
             Trendgraf – {metricDef.label}
-            {!isLive && !isLoading && (
-              <Badge variant="outline" className="text-[9px] border-purple-500/40 text-purple-400 bg-purple-500/10 ml-1">Demo</Badge>
-            )}
           </CardTitle>
           <CardDescription>Dagligt snitt, senaste 7 dagar</CardDescription>
         </CardHeader>
@@ -286,7 +279,6 @@ export default function SensorsTab() {
           </CardTitle>
           <CardDescription>
             {rooms.length} rum · färgas efter sensor-värde
-            {!isLive && !isLoading && ' (demodata)'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -312,7 +304,7 @@ export default function SensorsTab() {
       {!isLoading && error && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
           <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          <span>Senslinc inte tillgänglig för denna byggnad – visar demodata.</span>
+          <span>Ingen live-koppling till Senslinc för denna byggnad.</span>
         </div>
       )}
       {!isLoading && isLive && buildingData && (
