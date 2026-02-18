@@ -1,137 +1,102 @@
 
-# Fix: 3D-laddning fungerar inte
+# Tre konkreta fixes: Dashboard, `days`-bugg, och Demo-skylt
 
-## Rotorsak
+## Bugg 1: `days is not defined` – Edge function kraschar
 
-Det finns en kritisk timing/matching-bugg i fetch-interceptorn som kombinerat med `additionalDefaultPredicate` skapar ett "dubbelt filter" som kan blockera hela 3D-laddningen.
-
-### Problem A: Interceptorn returnerar 404 på fel modeller
-
-Interceptorn på rad 2793–2796 returnerar `{ status: 404 }` för modeller som inte finns i `allowedModelIdsRef`. Logiken bakom är att "skjuta upp" laddning av icke-A-modeller. **Men detta är fel approach** — Asset+ viewer tolkar 404 som ett permanent fel och hoppar *inte* över till nästa modell. Resultatet: ingen modell laddas alls.
-
-### Problem B: Timing-race med `allowedModelIdsRef`
-
-`allowedModelIdsRef` sätts inuti den asynkrona `initializeViewer`-funktionen. Interceptorn är aktiv från det att `setupCacheInterceptor` anropas. Om en gammal viewer-instans lämnat kvar ett gammalt värde i `allowedModelIdsRef` när ny byggnad laddas → fel filter tillämpas för nya byggnaden.
-
-### Problem C: URL-filtret är för brett
-
-`url.toLowerCase().includes('threed')` matchar även Lovable Storage-URL:er när cachadde XKT hämtas därifrån (sökvägen kan innehålla "threed" i namnet). Effekten: interceptorn försöker filtrera anrop till Lovable Storage och kan returnera 404 på dem.
-
-### Problem D: additionalDefaultPredicate + interceptor = dubbelt filter
-
-`additionalDefaultPredicate` (i Asset+ viewer-init) filtrerar vilka modeller viewern *frågar* om. Interceptorn filtrerar *fetch-svaren*. Om de inte är synkroniserade (t.ex. olika strängformat för model-ID) → viewern frågar om modell X, interceptorn tror det inte är tillåtet, returnerar 404.
-
-## Lösning
-
-### Fix 1: Ta bort 404-returneringen ur interceptorn (KRITISK)
-
-Interceptorn ska **aldrig** returnera 404. Den ska antingen:
-- Returnera data från cache (om cachad)
-- Passera igenom till originalfetch (om inte cachad)
-
-Det är `additionalDefaultPredicate` som avgör vilka modeller viewern laddar — interceptorn ska bara cache:a och leverera, inte blockera.
+### Rotorsak
+På rad 260 i `senslinc-query/index.ts` destructureras `req.json()` men `days` saknas i listan:
 
 ```typescript
-// BEFORE (fel - returnerar 404):
-if (!isAllowed) {
-  console.log(`XKT filter: Skipping non-initial model ${modelId}`);
-  return new Response(null, { status: 404, statusText: 'Model deferred' });
-}
-
-// AFTER (korrekt - passa igenom):
-if (!isAllowed) {
-  console.log(`XKT filter: Non-initial model ${modelId}, passing through without caching`);
-  return original!(input, init);  // Låt viewern hantera det
-}
+// Rad 260 – days saknas!
+const { action, fmGuid, siteCode, indiceId, workspaceKey, query } = await req.json();
 ```
 
-### Fix 2: Strikta URL-filter i interceptorn
-
-Begränsa interceptorn till bara Asset+ API-URL:er, inte Lovable Storage-URL:er:
-
+Sedan på rad 432 används `days`:
 ```typescript
-// BEFORE (för brett):
-const isXktRequest = url.includes('.xkt') || 
-                     url.toLowerCase().includes('getxktdata') ||
-                     url.toLowerCase().includes('threed');
-
-// AFTER (striktare - bara Asset+ API):
-const isXktRequest = (url.includes('.xkt') && !url.includes('storage.googleapis') && !url.includes('supabase')) || 
-                     url.toLowerCase().includes('getxktdata');
-// Notera: 'threed' tas bort som ensam trigger
+const daysBack = days ?? 7;  // ReferenceError: days is not defined
 ```
 
-### Fix 3: Rensa allowedModelIdsRef vid ny byggnad
+Loggen bekräftar exakt: `Error: ReferenceError: days is not defined at Server.<anonymous> (senslinc-query/index.ts:467:28)`
 
-Nollställ `allowedModelIdsRef.current = null` i cleanup/reset innan ny `initializeViewer` startar, för att undvika timing-race.
-
+### Fix
+Lägg till `days` i destructureringen:
 ```typescript
-// I cleanup-funktionen / vid start av initializeViewer:
-allowedModelIdsRef.current = null;
+const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days } = await req.json();
 ```
 
-### Fix 4: additionalDefaultPredicate — ladda alla om nameMap är tom
+---
 
-Om `GetModels` misslyckas för en byggnad (404, timeout) → `nameMap` är tom → `allowedModelIdsRef.current = null`. Det är korrekt. Men just nu loggas bara en debug-rad och predicaten returnerar `true`. Det fungerar men vi måste se till att `allowedModelIdsRef.current = null` faktiskt sätts korrekt i alla felfall:
+## Bugg 2: Småviken dashboard hittas inte
 
+### Rotorsak
+`get-dashboard-url` söker med `/api/sites?code=${fmGuid}` – men Senslincs `site.code` är ett UUID (t.ex. `a8fe5835-e293-4ba3-92c6-c7e36f675f23`) medan Asset+ byggnads-fmGuid kan vara ett annat format.
+
+Dessutom: `useSenslincData`-hooken anropar `get-machine-data` med fmGuid för att hitta maskinen. Om fmGuid är ett byggnads-GUID (inte ett rums-GUID) hittas ingen maskin – `get-machine-data` returnerar `success: false` → hook faller tillbaka på mock-data → `data.dashboardUrl` är tom.
+
+**För byggnader** ska `useSenslincBuildingData` användas (som anropar `get-building-sensor-data`) – denna hämtar site-dashboardUrl korrekt. Men i `SenslincDashboardView` används alltid `useSenslincData` (maskin-hooken), inte byggnadshooken.
+
+### Fix
+I `SenslincDashboardView.tsx`: identifiera om facilityType är 'building'/'site' och använd i så fall `get-building-sensor-data` (via en separat lookup). Enklast: lägg till `get-building-sensor-data`-stöd i hooken, eller bättre – lägg till ett fallback-anrop i `useSenslincData` som när ingen maskin hittas söker site.
+
+Konkret fix i `useSenslincData.ts`: när `get-machine-data` returnerar "No machine found", gör ett extra anrop till `get-dashboard-url` med fmGuid för att hitta site- eller line-dashboardUrl. Returnera det som `dashboardUrl` med mock sensordata.
+
+Alternativt och renare: i `SenslincDashboardView`, om `senslincDashboardContext` innehåller facilityCategory, välj rätt hook. Men context behöver utökas.
+
+**Vald lösning:** Uppdatera `useSenslincData` (redan befintlig hook) att när machine inte hittas, försöka `get-dashboard-url` för att hämta site/line-URL. Maskindatan fallbackar till mock men dashboardUrl sätts korrekt.
+
+---
+
+## Bugg 3: "Demo"-skylt – ta bort, visa med färg istället
+
+### Var "Demo" visas
+1. `SenslincDashboardView.tsx` rad 31-34: `StatusBadge` visar "Demo"-badge
+2. `SensorsTab.tsx` rad 37-41: `LiveBadge` visar "Demo"-badge
+3. `SensorChart` i `SenslincDashboardView.tsx` rad 309: text "Demodata – ingen Senslinc-koppling"
+4. `SenslincDashboardView.tsx` rad 325: "Anslutning till Senslinc ej tillgänglig – visar demodata."
+
+### Fix
+- Ta bort "Demo"-badge-varianten ur `StatusBadge` och `LiveBadge` – när inte LIVE, visa ingenting (eller en liten neutral ikon)
+- Behåll lila linjer för mock-data i chart (det är den visuella markören)
+- Ta bort texten "Demodata – ingen Senslinc-koppling" i `SensorChart`
+- Behåll WifiOff-indikatorn men ändra texten till neutral
+
+---
+
+## Tekniska filändringar
+
+### 1. `supabase/functions/senslinc-query/index.ts` (rad 260)
+Lägg till `days` i destructuring:
 ```typescript
-// Säkerställ att null sätts explicit vid fel:
-} catch (e) {
-  console.debug('Model filter setup failed — loading all models:', e);
-  allowedModelIdsRef.current = null;  // Explicit: ladda allt
-}
+const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days } = await req.json() as SenslincRequest;
 ```
 
-## Konkreta filändringar
-
-### Fil: `src/components/viewer/AssetPlusViewer.tsx`
-
-**Ändring 1** (rad ~2788–2796): Ta bort 404-returnering, ersätt med passthrough:
+### 2. `src/hooks/useSenslincData.ts`
+Lägg till fallback-lookup när maskin inte hittas:
 ```typescript
-if (!isAllowed) {
-  console.log(`XKT filter: Non-initial model ${modelId} — passing through`);
-  return original!(input, init);
+// Om get-machine-data returnerar "No machine found":
+// Gör ett extra anrop till get-dashboard-url för att hitta site/line-URL
+const { data: urlData } = await supabase.functions.invoke('senslinc-query', {
+  body: { action: 'get-dashboard-url', fmGuid }
+});
+if (urlData?.success) {
+  dashboardUrl = urlData.data.dashboardUrl;
 }
 ```
 
-**Ändring 2** (rad ~2776–2778): Skärp URL-filtret:
-```typescript
-const isXktRequest = (url.includes('.xkt') && 
-                      !url.includes('supabase') && 
-                      !url.includes('googleapis') &&
-                      !url.includes('storage.')) || 
-                     url.toLowerCase().includes('getxktdata');
-```
+### 3. `src/components/viewer/SenslincDashboardView.tsx`
+- `StatusBadge`: ta bort "Demo"-variant, visa inget badge (eller liten grå wifi-ikon) när inte LIVE
+- Ta bort "Demodata"-text i `SensorChart`-sektionen
+- Mjuka upp felmeddelandet
 
-**Ändring 3** (rad ~3170): Säkerställ explicit null-reset vid fel:
-```typescript
-} catch (e) {
-  console.debug('Model filter setup failed — loading all models:', e);
-  allowedModelIdsRef.current = null;
-}
-```
+### 4. `src/components/insights/tabs/SensorsTab.tsx`
+- `LiveBadge`: ta bort "Demo"-variant, visa inget badge när inte LIVE
 
-**Ändring 4**: Nollställ `allowedModelIdsRef` i cleanup och i början av `initializeViewer`:
-```typescript
-// Tidigt i initializeViewer, innan async-arbetet:
-allowedModelIdsRef.current = null;
-```
+---
 
-## Tekniska detaljer
+## Deploy-ordning
 
-### Varför fungerade det ibland men inte alltid?
+1. Fixa edge function (`days`-bugg) → deploy
+2. Fixa hook (fallback för site-URL)
+3. Ta bort Demo-skyltar i UI-komponenterna
 
-Byggnader som **redan hade XKT cachat** i memory (t.ex. `0e687ea4-...` som syns i loggar) – dessa levererades direkt från memory-cache och nådde aldrig 404-koden. Problemet uppstår bara när:
-1. Ny byggnad öppnas (inget i memory)
-2. Model-ID:t av någon anledning inte matchas exakt mot whitelist
-3. Intercept returnerar 404 → viewern fastnar
-
-Loggen visar `XKT Memory: Stored 0e687ea4-... (8.79 MB, total: 17.58 MB)` — samma modell lagras **dubbelt** (8.79 × 2 = 17.58 MB). Det är en annan bugg i memory-cachen (dubbel-lagring), men den blockerar inte laddningen.
-
-### Varför hämtas från Lovable/Supabase Storage?
-
-Det är korrekt beteende — det är vår XKT-cache. Modellen hämtas från Asset+ första gången, sparas till Lovable Storage, och nästa gång hämtas den därifrån (snabbare). Problemet är bara att interceptorn fick dessa URL:er att passera genom `isXktRequest`-filtret.
-
-## Prioritet
-
-Ändring 1 (ta bort 404) är den mest kritiska — den bör ensam räcka för att fixa att 3D inte startar. Övriga ändringar förbättrar robusthet och eliminerar edge-cases.
+Allt i ett steg för snabbast resultat.
