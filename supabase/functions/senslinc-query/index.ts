@@ -257,7 +257,7 @@ serve(async (req) => {
     });
 
   try {
-    const { action, fmGuid, siteCode, indiceId, workspaceKey, query } = await req.json() as SenslincRequest;
+    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days } = await req.json() as SenslincRequest;
 
     const apiUrl = Deno.env.get('SENSLINC_API_URL');
     const email = Deno.env.get('SENSLINC_EMAIL');
