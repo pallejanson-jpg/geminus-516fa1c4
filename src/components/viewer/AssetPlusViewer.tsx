@@ -3714,10 +3714,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             height={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
             className="absolute right-3 z-[25]"
             style={{
-              bottom: 'calc(env(safe-area-inset-bottom, 12px) + 74px)',
+              bottom: isMobile
+                ? 'calc(env(safe-area-inset-bottom, 12px) + 80px)'
+                : 'calc(env(safe-area-inset-bottom, 12px) + 74px)',
               width: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               height: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
-              display: showNavCube ? 'block' : 'none',
+              display: showNavCube && !isMobile ? 'block' : 'none',
               background: 'rgba(20, 20, 20, 0.5)',
               borderRadius: '6px',
               backdropFilter: 'blur(6px)',
@@ -3834,13 +3836,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   }}
                 />
               </div>
-              <div className="pointer-events-auto">
-                <FloorCarousel
-                  viewerRef={viewerInstanceRef}
-                  onFloorSelect={handleFloorSelect}
-                  selectedFloorId={selectedFloorId || undefined}
-                />
-              </div>
+              {!isMobile && (
+                <div className="pointer-events-auto">
+                  <FloorCarousel
+                    viewerRef={viewerInstanceRef}
+                    onFloorSelect={handleFloorSelect}
+                    selectedFloorId={selectedFloorId || undefined}
+                  />
+                </div>
+              )}
               
               {/* Right Side Panel (Sheet) - replaces floating VisualizationToolbar + RoomVisualizationPanel */}
               <div className="pointer-events-auto">
