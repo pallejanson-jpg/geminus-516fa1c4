@@ -1,285 +1,137 @@
 
-# Senslinc Integration – Full Implementation Plan
+# Fix: 3D-laddning fungerar inte
 
-## Sammandrag av nuläget
+## Rotorsak
 
-Senslinc-login fungerar. Edge function har fullständig auth (Django JWT). Koden för `get-dashboard-url` finns redan och fungerar – den söker machine/site/line via FM GUID och returnerar rätt URL. IOT+-knappen i `PortfolioView` anropar redan `get-dashboard-url` och öppnar iframe via `openSenslincDashboard`. Det är alltså egentligen en ganska mogen grund.
+Det finns en kritisk timing/matching-bugg i fetch-interceptorn som kombinerat med `additionalDefaultPredicate` skapar ett "dubbelt filter" som kan blockera hela 3D-laddningen.
 
-Tre delar ska byggas, i prioritetsordning:
+### Problem A: Interceptorn returnerar 404 på fel modeller
 
----
+Interceptorn på rad 2793–2796 returnerar `{ status: 404 }` för modeller som inte finns i `allowedModelIdsRef`. Logiken bakom är att "skjuta upp" laddning av icke-A-modeller. **Men detta är fel approach** — Asset+ viewer tolkar 404 som ett permanent fel och hoppar *inte* över till nästa modell. Resultatet: ingen modell laddas alls.
 
-## Del 1: IOT+-knappen – Korrekt iframe per entitet
+### Problem B: Timing-race med `allowedModelIdsRef`
 
-### Nuläget
-`buildDashboardUrl` i edge-funktionen bygger URL:en som `{portalUrl}/dashboard/machine/{pk}` – det stämmer förmodligen inte med Senslincs faktiska URL-format.
+`allowedModelIdsRef` sätts inuti den asynkrona `initializeViewer`-funktionen. Interceptorn är aktiv från det att `setupCacheInterceptor` anropas. Om en gammal viewer-instans lämnat kvar ett gammalt värde i `allowedModelIdsRef` när ny byggnad laddas → fel filter tillämpas för nya byggnaden.
 
-Live-test bekräftade att Senslinc-maskiner har ett `dashboard_url`-fält direkt på API-objektet (`machine.dashboard_url`). Koden försöker redan läsa det: `machine.dashboard_url || buildDashboardUrl(...)` – men fallback-URL:en kan vara fel.
+### Problem C: URL-filtret är för brett
 
-### Fix (liten men viktig)
-Uppdatera `buildDashboardUrl` i `supabase/functions/senslinc-query/index.ts` till att använda korrekt Senslinc URL-format:
+`url.toLowerCase().includes('threed')` matchar även Lovable Storage-URL:er när cachadde XKT hämtas därifrån (sökvägen kan innehålla "threed" i namnet). Effekten: interceptorn försöker filtrera anrop till Lovable Storage och kan returnera 404 på dem.
+
+### Problem D: additionalDefaultPredicate + interceptor = dubbelt filter
+
+`additionalDefaultPredicate` (i Asset+ viewer-init) filtrerar vilka modeller viewern *frågar* om. Interceptorn filtrerar *fetch-svaren*. Om de inte är synkroniserade (t.ex. olika strängformat för model-ID) → viewern frågar om modell X, interceptorn tror det inte är tillåtet, returnerar 404.
+
+## Lösning
+
+### Fix 1: Ta bort 404-returneringen ur interceptorn (KRITISK)
+
+Interceptorn ska **aldrig** returnera 404. Den ska antingen:
+- Returnera data från cache (om cachad)
+- Passera igenom till originalfetch (om inte cachad)
+
+Det är `additionalDefaultPredicate` som avgör vilka modeller viewern laddar — interceptorn ska bara cache:a och leverera, inte blockera.
 
 ```typescript
-// Korrekt format baserat på Senslinc portal-struktur:
-function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
-  // Ta bort api. prefix och /api suffix för att få portal-URL
-  const portalUrl = apiUrl
-    .replace(/^https?:\/\/api\./, 'https://')
-    .replace(/\/api\/?$/, '');
-  
-  const pathMap = {
-    machine: `/machine/${pk}/room_analysis/`,
-    site:    `/site/${pk}/home/`,
-    line:    `/line/${pk}/`,
-  };
-  return `${portalUrl}${pathMap[type]}`;
+// BEFORE (fel - returnerar 404):
+if (!isAllowed) {
+  console.log(`XKT filter: Skipping non-initial model ${modelId}`);
+  return new Response(null, { status: 404, statusText: 'Model deferred' });
+}
+
+// AFTER (korrekt - passa igenom):
+if (!isAllowed) {
+  console.log(`XKT filter: Non-initial model ${modelId}, passing through without caching`);
+  return original!(input, init);  // Låt viewern hantera det
 }
 ```
 
-### SenslincDashboardView – tabs: iframe + native data
-Komponenten ska ha två flikar:
-1. **Dashboard** – Senslincs iframe (finns redan)
-2. **Sensordata** – Vår egen grafik med live Senslinc-data (nytt)
+### Fix 2: Strikta URL-filter i interceptorn
 
----
+Begränsa interceptorn till bara Asset+ API-URL:er, inte Lovable Storage-URL:er:
 
-## Del 2: Visualisering av Senslinc-data med vår grafik
-
-Det här är den roligaste och mest värdeskapande delen. Användaren vill se Senslinc-data presenterad med Geminuses egna UI-komponenter (Recharts), inte bara Senslincs iframe.
-
-### Vad Senslinc har
-
-Varje machine har:
-- `indices` – lista av index-ID (Elasticsearch-index för tidsserie-data)
-- Via `get-properties?indice={id}` → fält som `temperature`, `co2`, `humidity`, `occupancy`
-- Via `search-data` med Elasticsearch DSL → historisk + realtid
-
-### Ny hook: `src/hooks/useSenslincData.ts`
-
-Flödet:
-```
-1. get-equipment (kod = fmGuid) → machine-objekt med indices-lista
-2. get-properties (indice = indices[0]) → tillgängliga fält
-3. search-data med DSL → senaste 7 dagars data aggregerat per dag
-```
-
-Resultatet cachas i React state. Fallback: mock-data om Senslinc inte svarar.
-
-### Visualization Design Proposal
-
-#### Alternativ A: Sensor-dashboard card per rum (inuti SenslincDashboardView)
-När man klickar IOT+ på ett rum öppnas en panel med:
-- **Gauge-kort** (4 st, beroende på tillgängliga fält):
-  - 🌡️ Temperatur – stor siffra + färgindikator (blå→grön→röd)
-  - 💨 CO₂ – siffra + trafikljus-ikon (grön/gul/röd)
-  - 💧 Luftfuktighet – progress-bar style
-  - 👥 Beläggning – % gauge
-- **7-dagars sparklines** (mini-linjediagram per sensor)
-- **Iframe-tab** för Senslincs fullständiga dashboard
-
-```
-┌─────────────────────────────────────────────┐
-│  🌡️ Rum A101 – IoT-data          [LIVE] ●  │
-├────────────┬───────────┬──────────┬──────────┤
-│  21.4°C    │  623 ppm  │  42%    │  67%     │
-│  Temperatur│  CO₂      │  Fukt   │  Beläggn │
-│  ▓▓▓▓▓░░  │  🟡Okej  │ ▓▓▓▓░░  │ ▓▓▓▓▓▓░  │
-├────────────┴───────────┴──────────┴──────────┤
-│  Senaste 7 dagarna                           │
-│  [LineChart: temp/co2/humidity trendlines]  │
-├──────────────────────────────────────────────┤
-│  [Tab: Dashboard] [Tab: Historik]            │
-└──────────────────────────────────────────────┘
-```
-
-#### Alternativ B: Sensor-tab i BuildingInsightsView (befintlig sida)
-Lägg till en ny "Sensors" tab bredvid Performance/Space/Asset:
-- Visar aggregerade sensorvärden per byggnad (medel för alla rum)
-- Klick på ett rum → drill-down till rumsnivå
-- Heatmap-vy: rutnät av rum färgade efter sensor-värde (temp/co2/etc)
-
-```
-Performance | FM | Space | Asset | Sensors ← NY
-
-┌─ Sensors ──────────────────────────────────┐
-│  Välj: [Temperatur ▾] [Senaste 7 dagar ▾]  │
-│                                             │
-│  Snitt för Småviken: 21.8°C  [LIVE] ●      │
-│                                             │
-│  Rum-heatmap:                               │
-│  [Röd][Gul][Grön][Grön][Gul]   → Läs av  │
-│                                             │
-│  Trendgraf: Dagliga snitt 7 dagar          │
-│  ────────────────────────────────          │
-│  22 ──╮    ╭──╮                            │
-│  21   ╰────╯  ╰──                          │
-│  20                                        │
-└────────────────────────────────────────────┘
-```
-
-#### Rekommendation: Kombinera A + B
-- **IOT+-knapp** → Alternativ A (rums-specifik panel med gauges + sparklines + iframe-tab)
-- **Insights → Sensors-tab** → Alternativ B (byggnadsöversikt med heatmap + trendgraf)
-
----
-
-## Konkreta implementationsdelar
-
-### Filer att skapa/ändra
-
-| Fil | Åtgärd |
-|-----|--------|
-| `supabase/functions/senslinc-query/index.ts` | Fixa `buildDashboardUrl`, lägg till `get-machine-data` action för batching |
-| `src/hooks/useSenslincData.ts` | NY – discovery-flöde + Elasticsearch-queries + mock-fallback |
-| `src/components/viewer/SenslincDashboardView.tsx` | Utöka med tabs: "Sensordata" (gauges + sparkline) + "Dashboard" (iframe) |
-| `src/components/insights/tabs/SensorsTab.tsx` | NY – byggnadsöversikt, rum-heatmap, trendgraf |
-| `src/components/insights/InsightsView.tsx` | Lägg till "Sensors" tab som använder SensorsTab |
-
-### Senslinc edge function: ny action `get-machine-data`
-
-Samlar all nödvändig data i ett anrop:
 ```typescript
-case 'get-machine-data': {
-  // 1. Hitta machine via fmGuid
-  const machines = await senslincFetch(..., `/api/machines?code=${fmGuid}`)
-  if (!machines.length) return { success: false }
-  const machine = machines[0]
-  
-  // 2. Hämta properties för första indexet
-  const properties = machine.indices.length 
-    ? await senslincFetch(..., `/api/properties?indice=${machine.indices[0]}`)
-    : []
-    
-  // 3. Hämta senaste 7 dagars daglig data via search-data
-  const query = {
-    size: 0,
-    query: { bool: { must: [
-      { term: { machine_code: fmGuid } },
-      { range: { ts_beg: { gte: "now-7d" } } }
-    ]}},
-    aggs: { per_day: { 
-      date_histogram: { field: "ts_beg", calendar_interval: "day" },
-      aggs: {
-        avg_temp: { avg: { field: "temperature" } },
-        avg_co2:  { avg: { field: "co2" } },
-        avg_hum:  { avg: { field: "humidity" } },
-      }
-    }}
-  }
-  const searchResult = await senslincFetchWithRetry(..., `/api/data-workspaces/${workspaceKey}/_search`, ..., { method: 'POST', body: query })
-  
-  return { success: true, data: { machine, properties, timeSeries: searchResult } }
+// BEFORE (för brett):
+const isXktRequest = url.includes('.xkt') || 
+                     url.toLowerCase().includes('getxktdata') ||
+                     url.toLowerCase().includes('threed');
+
+// AFTER (striktare - bara Asset+ API):
+const isXktRequest = (url.includes('.xkt') && !url.includes('storage.googleapis') && !url.includes('supabase')) || 
+                     url.toLowerCase().includes('getxktdata');
+// Notera: 'threed' tas bort som ensam trigger
+```
+
+### Fix 3: Rensa allowedModelIdsRef vid ny byggnad
+
+Nollställ `allowedModelIdsRef.current = null` i cleanup/reset innan ny `initializeViewer` startar, för att undvika timing-race.
+
+```typescript
+// I cleanup-funktionen / vid start av initializeViewer:
+allowedModelIdsRef.current = null;
+```
+
+### Fix 4: additionalDefaultPredicate — ladda alla om nameMap är tom
+
+Om `GetModels` misslyckas för en byggnad (404, timeout) → `nameMap` är tom → `allowedModelIdsRef.current = null`. Det är korrekt. Men just nu loggas bara en debug-rad och predicaten returnerar `true`. Det fungerar men vi måste se till att `allowedModelIdsRef.current = null` faktiskt sätts korrekt i alla felfall:
+
+```typescript
+// Säkerställ att null sätts explicit vid fel:
+} catch (e) {
+  console.debug('Model filter setup failed — loading all models:', e);
+  allowedModelIdsRef.current = null;  // Explicit: ladda allt
 }
 ```
 
-### useSenslincData hook
+## Konkreta filändringar
 
+### Fil: `src/components/viewer/AssetPlusViewer.tsx`
+
+**Ändring 1** (rad ~2788–2796): Ta bort 404-returnering, ersätt med passthrough:
 ```typescript
-export function useSenslincData(fmGuid: string | null | undefined) {
-  const [data, setData] = useState<SenslincSensorData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLive, setIsLive] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!fmGuid) return;
-    setIsLoading(true);
-    
-    supabase.functions.invoke('senslinc-query', {
-      body: { action: 'get-machine-data', fmGuid, workspaceKey: '...' }
-    }).then(({ data: result, error }) => {
-      if (result?.success) {
-        setData(parseTimeSeries(result.data));
-        setIsLive(true);
-      } else {
-        setData(generateMockData(fmGuid)); // graceful fallback
-        setIsLive(false);
-      }
-      setIsLoading(false);
-    });
-  }, [fmGuid]);
-
-  return { data, isLoading, isLive, error };
+if (!isAllowed) {
+  console.log(`XKT filter: Non-initial model ${modelId} — passing through`);
+  return original!(input, init);
 }
 ```
 
-### SenslincDashboardView – utökad med tabs
-
-Nuvarande component visar bara iframe. Den utökas med:
-
-```
-[Sensordata] [Dashboard ↗]
-
-Sensordata-tab:
-- 4 gauge-kort: temp, co2, fuktighet, beläggning
-- 7-dagars sparkline-diagram per sensor
-- LIVE-badge om data är riktig, Demo-badge om mock
-
-Dashboard-tab:
-- Befintlig iframe (Senslincs eget gränssnitt)
+**Ändring 2** (rad ~2776–2778): Skärp URL-filtret:
+```typescript
+const isXktRequest = (url.includes('.xkt') && 
+                      !url.includes('supabase') && 
+                      !url.includes('googleapis') &&
+                      !url.includes('storage.')) || 
+                     url.toLowerCase().includes('getxktdata');
 ```
 
-### InsightsView – ny Sensors-tab
-
-Ny `SensorsTab` komponent som:
-1. Hämtar alla rum för vald byggnad från `allData`
-2. Anropar `useSenslincData` per rum (batched – max 20 rum, paginering)
-3. Visar:
-   - **Sensor-väljare**: Temperatur | CO₂ | Luftfuktighet | Beläggning
-   - **Rum-grid**: korten färgas efter sensor-värde med `getVisualizationColor()` (redan implementerat i `visualization-utils.ts`)
-   - **Aggregerad trendgraf**: snitt per dag, senaste 7 dagar
-   - **Live/Mock-badge** tydligt
-
-Rum-grid-designen:
-```tsx
-<div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-  {rooms.map(room => {
-    const value = roomSensorData[room.fmGuid]?.[selectedMetric];
-    const color = getVisualizationColor(value, selectedMetric);
-    return (
-      <div 
-        style={{ backgroundColor: color ? rgbToHex(color) + '40' : undefined }}
-        className="p-2 rounded border text-xs text-center"
-      >
-        <div className="font-medium truncate">{room.name}</div>
-        <div className="text-lg font-bold">{value?.toFixed(1) ?? '—'}</div>
-        <div className="text-muted-foreground">{unit}</div>
-      </div>
-    );
-  })}
-</div>
+**Ändring 3** (rad ~3170): Säkerställ explicit null-reset vid fel:
+```typescript
+} catch (e) {
+  console.debug('Model filter setup failed — loading all models:', e);
+  allowedModelIdsRef.current = null;
+}
 ```
 
-### Teknisk utmaning: workspaceKey
+**Ändring 4**: Nollställ `allowedModelIdsRef` i cleanup och i början av `initializeViewer`:
+```typescript
+// Tidigt i initializeViewer, innan async-arbetet:
+allowedModelIdsRef.current = null;
+```
 
-`search-data` kräver ett `workspaceKey`. Det behöver antingen:
-- Hämtas från machine-objektet (om det finns som fält)
-- Konfigureras som secret: `SENSLINC_WORKSPACE_KEY`
-- Hämtas via `get-indices` och plockas från resultatet
+## Tekniska detaljer
 
-Vi löser detta i `get-machine-data` action med en discover-first approach – försök hitta workspace_key från `/api/indices` eller från machine-objektets egna fält.
+### Varför fungerade det ibland men inte alltid?
 
----
+Byggnader som **redan hade XKT cachat** i memory (t.ex. `0e687ea4-...` som syns i loggar) – dessa levererades direkt från memory-cache och nådde aldrig 404-koden. Problemet uppstår bara när:
+1. Ny byggnad öppnas (inget i memory)
+2. Model-ID:t av någon anledning inte matchas exakt mot whitelist
+3. Intercept returnerar 404 → viewern fastnar
 
-## Prioritetsordning och tidplan
+Loggen visar `XKT Memory: Stored 0e687ea4-... (8.79 MB, total: 17.58 MB)` — samma modell lagras **dubbelt** (8.79 × 2 = 17.58 MB). Det är en annan bugg i memory-cachen (dubbel-lagring), men den blockerar inte laddningen.
 
-### Steg 1: IOT+-knappens iframe + SenslincDashboardView tabs
-- Fixa `buildDashboardUrl` (5 min)
-- Lägg till tabs i SenslincDashboardView: "Sensordata" + "Dashboard"
-- Sensor-gauger med mock-data från `visualization-utils.ts` befintliga funktioner
+### Varför hämtas från Lovable/Supabase Storage?
 
-### Steg 2: useSenslincData hook + edge function
-- Ny `get-machine-data` action i senslinc-query
-- Ny `useSenslincData` hook med discovery-flöde
-- Integrera live-data i SenslincDashboardView's Sensordata-tab
+Det är korrekt beteende — det är vår XKT-cache. Modellen hämtas från Asset+ första gången, sparas till Lovable Storage, och nästa gång hämtas den därifrån (snabbare). Problemet är bara att interceptorn fick dessa URL:er att passera genom `isXktRequest`-filtret.
 
-### Steg 3: Sensors-tab i Insights
-- Ny `SensorsTab.tsx` med rum-grid + trendgraf
-- Integrera i `InsightsView.tsx` som ny tab
+## Prioritet
 
-## Desktop och mobil
-Alla komponenter byggs responsivt. På mobil:
-- SenslincDashboardView (sheets/drawer) – gauger staplas vertikalt
-- Sensors-tab – rum-grid 3 kolumner, sparklines förenklade
-- SenslincDashboardView tab-navigation anpassad för touch
-
+Ändring 1 (ta bort 404) är den mest kritiska — den bör ensam räcka för att fixa att 3D inte startar. Övriga ändringar förbättrar robusthet och eliminerar edge-cases.
