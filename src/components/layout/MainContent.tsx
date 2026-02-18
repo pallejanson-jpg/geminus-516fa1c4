@@ -23,7 +23,7 @@ const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 
-const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus', 'entity_insights'];
+const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus', 'entity_insights', 'navigation', 'portfolio', 'senslinc_dashboard', 'globe', 'ivion_create'];
 
 const MainContent: React.FC = () => {
     const { theme, activeApp, insightsFacility, setInsightsFacility, setActiveApp, setIvion360Context, setSenslincDashboardContext, selectedFacility, appConfigs } = useContext(AppContext);
@@ -190,10 +190,10 @@ const MainContent: React.FC = () => {
 
     return (
         <main 
-            className={`flex-1 relative ${isImmersiveViewer ? 'overflow-hidden' : 'overflow-auto'} ${t.bg}`}
+            className={`absolute inset-0 ${isImmersiveViewer ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} ${t.bg}`}
             style={isImmersiveViewer ? { touchAction: 'none' } : undefined}
         >
-        <div className={isImmersiveViewer ? "w-full h-full" : "w-full min-h-full"}>
+            <div className={isImmersiveViewer ? "w-full h-full" : "w-full"}>
                 {renderContent()}
             </div>
         </main>
