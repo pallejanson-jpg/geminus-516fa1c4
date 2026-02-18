@@ -3424,6 +3424,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     return () => {
       clearTimeout(initTimeout);
       isMountedRef.current = false;
+      initializingRef.current = false; // CRITICAL: Reset so re-mount can re-initialize
       
       // Clear any pending error display timeout
       if (showErrorTimeoutRef.current) {
