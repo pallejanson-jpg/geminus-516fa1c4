@@ -34,6 +34,7 @@ const SLIDE_TITLES = [
   "What Geminus Unlocks",
   "The Proof — It Already Works",
   "ROI — The Numbers",
+  "The Competition — And Why We Win",
   "Why Addnode Wins",
   "The Ask",
 ];
@@ -87,7 +88,15 @@ const NOTES: string[][] = [
     "SWG has over 500 enterprise customers — even 10% adoption creates enormous value.",
     "Bimify scan-to-BIM combined with Geminus means no manual digitization cost.",
   ],
-  // Slide 7 — Why Addnode Wins
+  // Slide 7 — Competition
+  [
+    "The market has real competitors — both in the Nordics and internationally.",
+    "Vyer, Twinfinity (Sweco), and Digital Buildings (Zynka/Newsec) are the Nordic players.",
+    "Autodesk Tandem and dTwin by Nemetschek are the international giants.",
+    "None of them have the full Addnode data ecosystem behind them.",
+    "Geminus has AI Assistants, AI Inventory, and more — and it is Addnode's own IP. That is the moat.",
+  ],
+  // Slide 8 — Why Addnode Wins
   [
     "FM software is the fastest-growing segment of the built environment — and Addnode has zero dedicated product today.",
     "Every Geminus user deepens dependency on SWG, Symetri, Bimify, Senslinc simultaneously — churn across the group drops.",
@@ -95,7 +104,7 @@ const NOTES: string[][] = [
     "Geminus turns five separate Addnode companies into one coherent value proposition.",
     "The O in AECO is a blue ocean — and Addnode already has all the assets to win it.",
   ],
-  // Slide 8 — The Ask
+  // Slide 9 — The Ask
   [
     "One hundred thousand dollars to productize what is already working.",
     "Security hardening, GDPR compliance, deep SWG Concept Evolution API integration.",
@@ -520,7 +529,99 @@ const RoiSlide = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/*  Slide 7 — Why Addnode Wins (investor language)                     */
+/*  Slide 7 — The Competition                                          */
+/* ------------------------------------------------------------------ */
+
+const CompetitionSlide = () => {
+  const nordic = [
+    { name: "Vyer", desc: "Digital twin viewer for Nordic FM market", gap: "No AI layer, no Addnode data ecosystem" },
+    { name: "Twinfinity", desc: "Sweco's digital twin platform", gap: "Closed vendor ecosystem, no AI inventory" },
+    { name: "Digital Buildings", desc: "Zynka / Newsec property tech", gap: "Property focus, limited FM & IoT depth" },
+  ];
+  const international = [
+    { name: "Autodesk Tandem", desc: "Autodesk's digital twin SaaS", gap: "US-centric, no Addnode ecosystem integration" },
+    { name: "dTwin", desc: "Nemetschek digital twin platform", gap: "Large vendor lock-in, no native AI assistants" },
+  ];
+
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      <img src={heroImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-red-950/75 to-slate-900/80" />
+      <div className="relative z-10 flex h-full text-white px-28 py-12 gap-16">
+
+        {/* Left — competitors */}
+        <div className="flex-1 flex flex-col">
+          <h2 className="text-[64px] font-black text-white mb-2">The Competition</h2>
+          <p className="text-[24px] text-white/55 mb-10">Who else is in this space — and what they're missing</p>
+
+          <p className="text-[20px] font-bold text-red-300 uppercase tracking-widest mb-4">Nordic</p>
+          <div className="space-y-4 mb-10">
+            {nordic.map(({ name, desc, gap }) => (
+              <div key={name} className="flex items-start gap-6 bg-white/5 rounded-2xl border border-white/10 px-7 py-5">
+                <div className="w-[220px] shrink-0">
+                  <p className="text-[22px] font-bold text-white">{name}</p>
+                  <p className="text-[15px] text-white/45 mt-1">{desc}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-1">
+                  <span className="text-red-400 text-[20px] shrink-0">✕</span>
+                  <p className="text-[18px] text-white/65">{gap}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[20px] font-bold text-orange-300 uppercase tracking-widest mb-4">International</p>
+          <div className="space-y-4">
+            {international.map(({ name, desc, gap }) => (
+              <div key={name} className="flex items-start gap-6 bg-white/5 rounded-2xl border border-white/10 px-7 py-5">
+                <div className="w-[220px] shrink-0">
+                  <p className="text-[22px] font-bold text-white">{name}</p>
+                  <p className="text-[15px] text-white/45 mt-1">{desc}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-1">
+                  <span className="text-orange-400 text-[20px] shrink-0">✕</span>
+                  <p className="text-[18px] text-white/65">{gap}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right — Geminus advantage */}
+        <div className="w-[540px] shrink-0 flex flex-col justify-center gap-6">
+          <div className="bg-cyan-500/10 rounded-3xl border-2 border-cyan-400/50 p-8">
+            <p className="text-[20px] font-bold text-cyan-300 uppercase tracking-widest mb-6">Geminus has everything they have — and more</p>
+            <div className="space-y-5">
+              {[
+                { label: "AI Assistants (Gunnar)", sub: "Natural language FM queries — none of them have this" },
+                { label: "AI Inventory", sub: "360° photo scanning → auto-registration in Asset+" },
+                { label: "Full Addnode data stack", sub: "SWG + Symetri + Bimify + Senslinc + In Use" },
+                { label: "Addnode's own IP", sub: "Not a licensed platform — built and owned by Addnode" },
+              ].map(({ label, sub }) => (
+                <div key={label} className="flex gap-4 items-start">
+                  <CheckCircle2 className="w-6 h-6 text-cyan-400 mt-1 shrink-0" />
+                  <div>
+                    <p className="text-[20px] font-bold text-white">{label}</p>
+                    <p className="text-[15px] text-white/50 mt-1">{sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 text-center">
+            <p className="text-[22px] font-black text-black leading-snug">
+              "Every competitor is a point solution.<br />Geminus is the connective layer<br />— and it's Addnode's own IP."
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Slide 8 — Why Addnode Wins (investor language)                     */
 /* ------------------------------------------------------------------ */
 
 const WhyAddnodeSlide = () => (
@@ -663,6 +764,7 @@ const slides = [
   UnlocksSlide,
   ProofSlide,
   RoiSlide,
+  CompetitionSlide,
   WhyAddnodeSlide,
   AskSlide,
 ];
