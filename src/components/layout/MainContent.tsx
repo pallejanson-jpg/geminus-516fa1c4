@@ -23,10 +23,10 @@ const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 
-// Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas)
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe'];
+// Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas, maps)
+const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
 // Apps that have internal scrollbars and need h-full but NOT overflow:hidden
-const FILL_APPS = ['portfolio', 'navigation', 'map', 'fma_plus', 'entity_insights', 'ivion_create'];
+const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'entity_insights', 'ivion_create'];
 // All other apps are scroll-pages (home, insights, inventory, fault_report, ai_scan, asset_registration)
 
 const MainContent: React.FC = () => {

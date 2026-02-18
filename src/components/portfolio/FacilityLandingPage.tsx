@@ -105,21 +105,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid;
   useXktPreload(buildingGuid);
 
-  // Check if 3D models exist for this building
-  const [has3DModels, setHas3DModels] = useState<boolean | undefined>(undefined);
+  // 3D is always available — viewer loads directly from Asset+ API even without cached XKT
+  const has3DModels = true;
   // Check if FM Access (2D drawings) exist for this building
   const [hasFmAccess, setHasFmAccess] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     if (!buildingGuid) return;
     
-    // Check XKT models
-    supabase
-      .from('xkt_models')
-      .select('id', { count: 'exact', head: true })
-      .eq('building_fm_guid', buildingGuid)
-      .then(({ count }) => setHas3DModels((count ?? 0) > 0));
-
     // Check FM Access availability via building_settings
     supabase
       .from('building_settings')
