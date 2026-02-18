@@ -673,6 +673,14 @@ export default function Presentation() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerStarted = useRef(false);
 
+  // Auto-enter fullscreen if ?fullscreen=1 is in the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("fullscreen") === "1") {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
   const startTimer = useCallback(() => {
     if (timerStarted.current) return;
     timerStarted.current = true;
