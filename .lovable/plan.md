@@ -1,188 +1,141 @@
 
-# Addnode Innovation Pitch — Full Implementation
+# Presentation Rewrite — Value-First for Addnode
 
-## What We're Building
+## What the Feedback Is Telling Us
 
-A complete rewrite of `src/pages/Presentation.tsx` into a 10-slide Dragon's Den pitch for the **Addnode Innovation** competition. Three new features are added on top of the new slide content:
+The current 9 slides spend too many slides on *what Geminus does technically* (AI Demo, Vibe-Coding stats) and not enough on *why Addnode should invest*. The pitch framework from the uploaded course slides asks: "Why is this important for **us**?" — that question needs to be the emotional backbone of every slide.
 
-1. **9 new slides** — Addnode-specific pitch replacing all 8 current generic slides
-2. **ROI Slide** — A dedicated slide with concrete financial numbers
-3. **Speaker Notes Panel** — Toggle with `N` key, shows talking points per slide
-
----
-
-## New Slide Order (10 slides, ~4.5 minutes)
-
-| # | Slide | Time | Color |
-|---|-------|------|-------|
-| 1 | Title — "I'm Pål. I connected the dots." | 25s | Cyan |
-| 2 | The AECO Gap — O is missing | 40s | Red/Orange |
-| 3 | The Addnode Ecosystem — already there, not connected | 35s | Blue |
-| 4 | Geminus — The Bridge | 40s | Cyan |
-| 5 | AI That Works Today — screenshot grid | 35s | Emerald |
-| 6 | ROI — The Numbers (NEW) | 35s | Green |
-| 7 | Built With Vibe-Coding — Pål's story | 30s | Purple |
-| 8 | Why Addnode Wins — 3 strategic wins | 35s | Amber |
-| 9 | The Ask — $100,000 | 20s | White/Black |
+Key feedback points:
+- Less tech, more business value
+- Addnode ecosystem as a hub with Geminus at the center — Symetri, Service Works Global, **In Use**, Bimify
+- AECO framing: Geminus = the solution for "O" (Operations/FM), the identified gap in the Design Management business area
+- Pål's credibility as the connector between AEC and O
+- Keep ROI slide
 
 ---
 
-## Speaker Notes — Per Slide Talking Points
+## New Slide Order — 8 slides, ~4 minutes
 
-Each slide gets 4–5 bullet points (~30s of talking). The notes panel is toggled with `N` and appears as a semi-transparent bottom drawer over the slide (does not interrupt the scaled slide area). It includes a timer.
+The two tech-heavy slides (AI Demo + Vibe-Coding) merge into one short "Proof" slide. The Addnode strategic value story gets expanded across two slides.
 
-Notes are defined as a `speakerNotes: string[]` array in a `NOTES` constant, indexed by slide number.
-
-### Notes Content
-
-**Slide 1 — Title**
-- My name is Pål Janson — Product Solution Manager
-- 20 years across both AEC and O within Symetri
-- I'm not a developer — I'm a problem-solver who used AI to build a solution
-- 3 months ago I had an idea. Today it's running in production.
-- This is Geminus.
-
-**Slide 2 — AECO Gap**
-- The AECO industry covers Architecture, Engineering, Construction and Operations
-- Addnode is strong in A, E and C — through Symetri and its brands
-- But O — Operations and Facility Management — is where buildings live for 50 to 100 years
-- Symetri and Service Works Global now share the Design Management business area
-- This is the moment to close the gap and serve the full lifecycle
-
-**Slide 3 — Ecosystem**
-- Addnode already owns the ingredients: SWG, Symetri/ACC, Bimify, Senslinc
-- Bimify digitizes existing buildings with AI — turning photos into BIM models
-- Senslinc provides real-time IoT data — temperature, CO2, occupancy
-- None of these talk to each other today
-- Geminus connects them — using APIs that already exist
-
-**Slide 4 — The Bridge**
-- Geminus sits in the middle of the Addnode ecosystem
-- It pulls BIM from Bimify and ACC, operations data from SWG, sensor data from Senslinc
-- No migration needed — we build on top of existing systems
-- One interface for the facility manager who doesn't care which system the data comes from
-- This is the connective tissue Addnode needs
-
-**Slide 5 — AI That Works Today**
-- This is not a prototype or a mockup — it is running in production
-- AI scans 360-degree panorama images and registers fire safety assets automatically
-- Gunnar answers questions about assets in natural language
-- Mobile camera lets field workers photograph an object — Gemini Vision identifies it instantly
-- All assets land directly in Asset+ — the SWG system our customers already use
-
-**Slide 6 — ROI**
-- A typical facility manager spends 30% of their time finding information
-- With Geminus, that drops to under 5% — a saving of roughly 200 hours per person per year
-- At a conservative billing rate, that is 60,000 SEK saved per FM employee per year
-- SWG has over 500 enterprise customers — even 10% adoption creates enormous value
-- Bimify scan-to-BIM combined with Geminus means no manual digitization cost
-
-**Slide 7 — Vibe-Coding**
-- I built this without writing a single line of code manually
-- I described what I wanted in plain English — the AI wrote the code
-- 50+ React components, 15+ serverless backend functions, 6 external API integrations
-- 3 months of evenings and weekends
-- This competition is about AI plus vibe-coding — and this IS the proof of what that looks like
-
-**Slide 8 — Why Addnode Wins**
-- Every Geminus user is locked deeper into the Addnode ecosystem
-- Bimify upsell: does your building have a BIM model yet? Now it can.
-- Senslinc upsell: do you have real-time sensor data? Add it to your digital twin.
-- SWG and Symetri can go to market together for the first time with a joint value proposition
-- The O in AECO is a blue ocean — and Addnode already has all the assets to win it
-
-**Slide 9 — The Ask**
-- One hundred thousand dollars to productize what is already working
-- Security hardening, GDPR compliance, deep SWG Concept Evolution API integration
-- Bimify and Senslinc live connectors with certified support agreements
-- Six months. A product. A competitive moat across the Design Management business area.
-- The code is running. The integrations exist. I'm ready. Are you?
+| # | Slide | Core message | Change from current |
+|---|-------|-------------|-------------------|
+| 1 | Title — "I'm Pål. I connected the dots." | Who is Pål, what is Geminus | Keep, minor tweak |
+| 2 | The AECO Gap | O is missing from Addnode's offering | Keep, minor tweak |
+| 3 | The Addnode Hub | Geminus at center, 5 companies orbiting | **Redesign** — add In Use, hub visual |
+| 4 | What Geminus Unlocks for Each Company | Per-company value prop | **New slide** replacing Bridge |
+| 5 | The Proof — It Already Works | Brief credibility, not a tech deep-dive | **Merge** of old Demo + Vibe-coding |
+| 6 | ROI — The Numbers | Concrete financial impact | Keep |
+| 7 | Why Addnode Wins | 3 strategic wins for Addnode group | **Rewrite** — Addnode investor language |
+| 8 | The Ask | $100K, Dragon's Den close | Keep |
 
 ---
 
-## ROI Slide Design — Slide 6
+## Detailed Slide Redesigns
 
-Three columns with concrete numbers:
+### Slide 3 — The Addnode Hub (was: Ecosystem)
 
-**Column 1 — FM Efficiency**
-- FM spends 30% of time searching for info → drops to <5% with Geminus
-- **200 hours saved** per FM employee per year
-- 60,000 SEK / €5,400 per person annually
+**The big change**: Redesign from a 4-card grid into a **hub diagram** with Geminus at the center and 5 Addnode companies orbiting it. This visually makes the point that Geminus is the connective tissue, not just another product.
 
-**Column 2 — AI Inventory at Scale**
-- Manual asset inventory: 4–6 hours per floor
-- AI scan with Geminus: 15–30 minutes per floor
-- **10x faster** — at a fraction of the cost
-
-**Column 3 — Ecosystem Value**
-- SWG: 500+ enterprise customers
-- If 10% adopt Geminus → **50 customers**
-- Cross-sell: Bimify + Senslinc per customer = significant upsell ARR
-
-Bottom line: *"The $100,000 investment has the potential to unlock millions in ecosystem value."*
-
----
-
-## Speaker Notes Panel — Technical Design
-
-A `useState<boolean>` called `showNotes` toggled by the `N` key.
-
-The panel renders **outside** the scaled slide div — positioned as `absolute bottom-0` in the outer container so it's always readable size regardless of slide scale. It has:
-- Semi-transparent dark background (`bg-black/80 backdrop-blur`)
-- Slide title + 5 bullet points for the current slide
-- A simple elapsed timer (`mm:ss`) counting up from 0 when presentation starts
-- Close button (or press N again)
-
+Hub layout:
 ```
-┌──────────────────────────────────────────────────┐  ← always at bottom of viewport
-│  SPEAKER NOTES — Slide 2: The AECO Gap   ⏱ 0:42  │
-│  • The AECO industry covers A, E, C and O...      │
-│  • Addnode is strong in A, E, C through Symetri   │
-│  • O = Operations — buildings live 50–100 years   │
-│  • SWG + Symetri now share Design Management      │
-│  • This is the moment to close the gap            │
-└──────────────────────────────────────────────────┘
+              [Symetri / ACC]
+                    |
+   [In Use] — [GEMINUS] — [Bimify]
+                    |
+     [SWG / Asset+] — [Senslinc]
 ```
+
+Each node shows:
+- Company name
+- What they bring to Geminus (data type)
+- Color coded by company
+
+Bottom statement: *"All five already sit inside Addnode's Design Management business area. Geminus is the missing center."*
+
+### Slide 4 — What Geminus Unlocks for Each Company (NEW)
+
+This is the key business-value slide that was missing. For each Addnode company, show **what they gain** from Geminus — not what Geminus takes from them.
+
+| Company | What Geminus gives them |
+|---------|------------------------|
+| **Symetri** | Their ACC/BIM data becomes useful in Operations — FM customers stay on Autodesk |
+| **Service Works Global** | Asset+ becomes the AI-powered system of record for every building |
+| **In Use** | Space utilization data surfaces in real context — digital twin view |
+| **Bimify** | Every building Bimify digitizes becomes a Geminus-ready digital twin |
+| **Senslinc** | Sensor data becomes actionable — visible in context, triggering FM workflows |
+
+Layout: 5 horizontal rows, each company left, arrow, value right. Compact, scannable, powerful.
+
+### Slide 5 — The Proof (was: Demo + Vibe-Coding merged)
+
+One tight credibility slide. Not a feature tour — just enough to prove this is real:
+- Tag: "Running in production"
+- 2 screenshot thumbnails (viewer + AI scan) — small, not dominant
+- Stats row: 3 months · Non-developer · 50+ components · 6 API integrations
+- Quote: *"I described what I wanted. The AI built it."*
+
+This slide answers "is it real?" in 20 seconds without getting into technology.
+
+### Slide 7 — Why Addnode Wins (rewrite)
+
+Current version is good but needs to speak more directly in investor/board language. Rewrite with:
+
+- **Win 1 — A new revenue layer in a €1T market**: FM software is the fastest-growing segment of the built environment. Addnode has zero dedicated product today.
+- **Win 2 — Ecosystem lock-in through value**: Every Geminus user deepens their dependency on SWG, Symetri, Bimify, Senslinc simultaneously. Churn across the group drops.
+- **Win 3 — A joint go-to-market for Design Management**: For the first time, SWG and Symetri can approach the same customer together — the building owner who needs both construction-phase and operations-phase tools.
+
+Bottom line changes to: *"Geminus turns five separate Addnode companies into one coherent value proposition."*
+
+---
+
+## Speaker Notes — Updated
+
+Notes for slides 3, 4, 5, 7 need to be rewritten to match the new content. Slides 1, 2, 6, 8 keep their existing notes (those slides are mostly unchanged).
+
+**Slide 3 — The Addnode Hub (new notes)**
+- Addnode already owns every ingredient needed — the question is who connects them
+- Symetri brings BIM and construction data, SWG brings FM operations, Bimify digitizes existing buildings
+- In Use brings space utilization data — real occupancy, desk booking, room usage
+- Senslinc brings the live heartbeat of the building — IoT sensors in real time
+- Geminus is the hub that makes all five more valuable than they are separately
+
+**Slide 4 — What Geminus Unlocks (new notes)**
+- This is not about technology — it's about making each Addnode company more competitive
+- For Symetri: their customers stop using ACC only for construction — it becomes a lifelong tool
+- For SWG: Asset+ becomes the AI-powered system of record — not just a database
+- For Bimify: every digitization project creates a lasting digital twin, not just a one-time deliverable
+- For Senslinc: sensor data finally has a home — visible, contextual, actionable
+
+**Slide 5 — The Proof (new notes)**
+- I want to be clear: this is not a PowerPoint vision — it is running in production today
+- A non-developer built this in 3 months using vibe-coding — which is itself the proof of concept for this competition
+- The AI scans 360-degree panorama images and registers assets directly into Asset+ automatically
+- Six API integrations across the Addnode ecosystem already exist in Geminus right now
+- What we are asking for is the investment to turn a working prototype into a certified product
 
 ---
 
 ## Files to Modify
 
-### `src/pages/Presentation.tsx` — Full rewrite
+### `src/pages/Presentation.tsx`
 
-**New imports added** (all from existing packages):
-- `Network`, `Link2`, `TrendingUp`, `DollarSign`, `Code2`, `Users`, `Clock`, `BookOpen`, `BarChart3`, `CheckCircle2`, `Sparkles`, `Target` from `lucide-react`
-- `useRef` for timer (already imported)
-
-**New state added to `Presentation()` shell**:
-```tsx
-const [showNotes, setShowNotes] = useState(false);
-const [elapsed, setElapsed] = useState(0);
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-```
-
-Timer starts on first navigation or N press, counts up.
-
-**Keyboard handler updated** to add `N` key toggle for notes.
-
-**Notes panel** rendered after the scaled slide div, inside the outer `fixed inset-0` container.
-
-**Slide registry** updated to 9 entries.
-
-No other files need modification — the HTML standalone version is a separate file and the existing structure there is less critical than the React version.
-
----
-
-## Summary of Changes to `src/pages/Presentation.tsx`
+Changes by section:
 
 | Section | Change |
 |---------|--------|
-| Imports | Add ~12 new lucide icons + `useRef` already there |
-| Slide components | Replace all 8 with 9 new Dragon's Den slides |
-| NOTES constant | New array of `string[][]` — one entry per slide |
-| slides registry | Replace 8 entries with 9 new slide components |
-| Presentation() state | Add `showNotes`, `elapsed`, `timerRef` |
-| Keyboard handler | Add `N` key to toggle notes |
-| JSX | Add speaker notes panel below scaled slide |
+| `SLIDE_TITLES` | Update index 2→"The Addnode Hub", index 3→"What Geminus Unlocks", index 4→"The Proof" |
+| `NOTES[2]` | New hub-focused notes |
+| `NOTES[3]` | New per-company value notes |
+| `NOTES[4]` | New proof/credibility notes |
+| `NOTES[6]` | Update Why Addnode notes |
+| `EcosystemSlide` | Full redesign as hub diagram with 5 companies + In Use |
+| `BridgeSlide` | Replace with new `UnlocksSlide` — per-company value table |
+| `DemoSlide` | Compress into `ProofSlide` — 2 screenshots + stats, no tech deep-dive |
+| `VibeCodingSlide` | Remove — content folded into ProofSlide |
+| `WhyAddnodeSlide` | Rewrite copy to investor/board language |
+| `slides[]` registry | Remove VibeCodingSlide entry, update order |
 
-The presentation shell (keyboard nav, fullscreen, scale, progress bar, click navigation) stays intact — only content and new features are added.
+**Result: 8 slides instead of 9** — tighter, more focused, less tech.
+
+No new dependencies, no new assets needed. The hub diagram is CSS/JSX, not an image. The two existing screenshots (viewer + AI scan) are still used in the compressed Proof slide.
