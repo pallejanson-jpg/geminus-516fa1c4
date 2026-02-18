@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, ChevronLeft, List, Plus, MapPin, Building2, LayoutGrid, Crosshair, FileEdit, Scan, type LucideIcon } from 'lucide-react';
+import { ClipboardList, ChevronLeft, List, Plus, MapPin, Building2, LayoutGrid, Crosshair, FileEdit, Scan, Sparkles, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import CategorySelectionStep from './CategorySelectionStep';
 import PositionPickerStep from './PositionPickerStep';
 import QuickRegistrationStep from './QuickRegistrationStep';
 import SavedItemsList from './SavedItemsList';
+import PhotoScanStep from './PhotoScanStep';
 
 export interface WizardFormData {
   buildingFmGuid: string;
@@ -26,6 +27,7 @@ export interface WizardFormData {
   imageUrl: string | null;
   description: string;
   coordinates: { x: number; y: number; z: number } | null;
+  aiSuggestionConfidence?: number;
 }
 
 interface SavedItem {
@@ -54,10 +56,10 @@ interface MobileInventoryWizardProps {
   onItemSaved: () => void;
 }
 
-type WizardStep = 'detection' | 'location' | 'category' | 'position' | 'registration';
+type WizardStep = 'detection' | 'location' | 'photo-scan' | 'category' | 'position' | 'registration';
 type ViewMode = 'wizard' | 'list';
 
-const STEP_ORDER: WizardStep[] = ['detection', 'location', 'category', 'position', 'registration'];
+const STEP_ORDER: WizardStep[] = ['detection', 'location', 'photo-scan', 'category', 'position', 'registration'];
 
 const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSaved }) => {
   const navigate = useNavigate();
@@ -182,6 +184,20 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
     goNext();
   }, [goNext]);
 
+  const handlePhotoScanComplete = useCallback((highConfidence: boolean) => {
+    if (highConfidence) {
+      // Skip category step — AI is confident enough
+      goToStep('position');
+    } else {
+      // Go to category so user can verify/correct the AI suggestion
+      goToStep('category');
+    }
+  }, [goToStep]);
+
+  const handlePhotoScanSkip = useCallback(() => {
+    goToStep('category');
+  }, [goToStep]);
+
   const handleCategoryComplete = useCallback(() => {
     goNext();
   }, [goNext]);
@@ -273,6 +289,7 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
     const steps: { key: WizardStep; Icon: LucideIcon }[] = [
       { key: 'detection', Icon: MapPin },
       { key: 'location', Icon: Building2 },
+      { key: 'photo-scan', Icon: Sparkles },
       { key: 'category', Icon: LayoutGrid },
       { key: 'position', Icon: Crosshair },
       { key: 'registration', Icon: FileEdit },
@@ -384,6 +401,15 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
                 onComplete={handleLocationComplete}
                 quickLoopEnabled={quickLoopEnabled}
                 setQuickLoopEnabled={setQuickLoopEnabled}
+              />
+            )}
+
+            {currentStep === 'photo-scan' && (
+              <PhotoScanStep
+                formData={formData}
+                updateFormData={updateFormData}
+                onComplete={handlePhotoScanComplete}
+                onSkip={handlePhotoScanSkip}
               />
             )}
 
