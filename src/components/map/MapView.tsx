@@ -162,7 +162,11 @@ const ColoringLegend: React.FC<{ mode: MapColoringMode }> = ({ mode }) => {
   );
 };
 
-const MapView: React.FC = () => {
+interface MapViewProps {
+  initialColoringMode?: MapColoringMode;
+}
+
+const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
   const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
   const isMobile = useIsMobile();
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
@@ -176,7 +180,7 @@ const MapView: React.FC = () => {
   const [selectedMarker, setSelectedMarker] = useState<MapFacility | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
   const [buildingCoordinates, setBuildingCoordinates] = useState<BuildingCoordinates[]>([]);
-  const [coloringMode, setColoringMode] = useState<MapColoringMode>('none');
+  const [coloringMode, setColoringMode] = useState<MapColoringMode>(initialColoringMode);
   const mapRef = useRef<any>(null);
 
   // Fetch saved building coordinates from database
@@ -304,17 +308,45 @@ const MapView: React.FC = () => {
     return cluster;
   }, [mapFacilities]);
 
-  // Get clusters for current viewport
+  // Get clusters for current viewport — use mapRef for accurate bounds, with fallback
   const clusters = useMemo(() => {
-    const bounds: [number, number, number, number] = [
-      viewState.longitude - 180 / Math.pow(2, viewState.zoom),
-      viewState.latitude - 90 / Math.pow(2, viewState.zoom),
-      viewState.longitude + 180 / Math.pow(2, viewState.zoom),
-      viewState.latitude + 90 / Math.pow(2, viewState.zoom),
-    ];
+    let bounds: [number, number, number, number];
+    
+    // Try to get exact bounds from the map instance
+    const mapInstance = mapRef.current?.getMap?.();
+    if (mapInstance) {
+      try {
+        const b = mapInstance.getBounds();
+        bounds = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+      } catch {
+        // Fallback to approximate bounds with generous 2x padding
+        const pad = 2.0;
+        const lonDelta = (180 / Math.pow(2, viewState.zoom)) * pad;
+        const latDelta = (90 / Math.pow(2, viewState.zoom)) * pad;
+        bounds = [
+          viewState.longitude - lonDelta,
+          viewState.latitude - latDelta,
+          viewState.longitude + lonDelta,
+          viewState.latitude + latDelta,
+        ];
+      }
+    } else {
+      // Fallback with generous 2x padding for when map isn't yet initialized
+      const pad = 2.0;
+      const lonDelta = (180 / Math.pow(2, viewState.zoom)) * pad;
+      const latDelta = (90 / Math.pow(2, viewState.zoom)) * pad;
+      bounds = [
+        viewState.longitude - lonDelta,
+        viewState.latitude - latDelta,
+        viewState.longitude + lonDelta,
+        viewState.latitude + latDelta,
+      ];
+    }
 
     return supercluster.getClusters(bounds, Math.floor(viewState.zoom));
-  }, [supercluster, viewState]);
+  // coloringMode included so markers re-render immediately on mode change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supercluster, viewState, coloringMode]);
 
   // Fetch Mapbox token from backend
   useEffect(() => {
