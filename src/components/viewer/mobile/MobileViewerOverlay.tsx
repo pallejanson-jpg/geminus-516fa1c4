@@ -7,6 +7,7 @@ interface MobileViewerOverlayProps {
   onClose?: () => void;
   viewerInstanceRef: React.RefObject<any>;
   buildingName?: string;
+  buildingFmGuid?: string;
   isViewerReady: boolean;
   onOpenSettings?: () => void;
   // Tree state
@@ -25,6 +26,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   onClose,
   viewerInstanceRef,
   buildingName,
+  buildingFmGuid,
   isViewerReady,
   onOpenSettings,
   treeSelectedId,
@@ -113,6 +115,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <div className="flex-1 overflow-hidden">
               <ViewerTreePanel
                 viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingFmGuid}
                 isVisible={showTreeOverlay}
                 onClose={() => setShowTreeOverlay(false)}
                 onNodeSelect={handleTreeNodeSelect}

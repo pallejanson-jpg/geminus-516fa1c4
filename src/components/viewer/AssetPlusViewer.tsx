@@ -3229,8 +3229,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
-        // additionalDefaultPredicate - () => true = load ALL models for this building
-        () => true,
+        // additionalDefaultPredicate - filter to only load allowed models (A-model whitelist)
+        (modelId: string) => {
+          if (!allowedModelIdsRef.current) return true; // no filter → load all
+          return allowedModelIdsRef.current.has(modelId) || allowedModelIdsRef.current.has(modelId.toLowerCase());
+        },
         // externalCustomObjectContextMenuItems
         undefined,
         // horizontalAngle (use default)
@@ -3622,8 +3625,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             } as React.CSSProperties}
           />
 
-          {/* Loading spinner overlay - never show when models are already loaded */}
-          {((state.isLoading && !state.isInitialized) || (modelLoadState !== 'loaded' && (xktSyncStatus === 'syncing' || xktSyncStatus === 'checking') && state.isInitialized)) && (
+          {/* Loading spinner overlay - only show during initial load OR actual XKT sync (never for 'checking') */}
+          {((state.isLoading && !state.isInitialized) || (modelLoadState !== 'loaded' && xktSyncStatus === 'syncing' && state.isInitialized)) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
               <Spinner 
                 size="xl" 
@@ -3638,6 +3641,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               onClose={onClose}
               viewerInstanceRef={viewerInstanceRef}
               buildingName={assetData?.commonName || assetData?.name}
+              buildingFmGuid={buildingFmGuid}
               isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
               onOpenSettings={() => setRightPanelOpen(true)}
             />
@@ -3785,6 +3789,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 <div className="pointer-events-auto">
                   <ViewerTreePanel
                     viewerRef={viewerInstanceRef}
+                    buildingFmGuid={buildingFmGuid}
                     isVisible={showTreePanel}
                     onClose={() => setShowTreePanel(false)}
                     onNodeSelect={(nodeId, nodeFmGuid) => {
