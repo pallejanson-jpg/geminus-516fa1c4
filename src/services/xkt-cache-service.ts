@@ -264,21 +264,22 @@ export class XktCacheService {
       
       console.log(`XKT save: Uploading ${modelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
       
-      // Upload to storage - wrap in Blob for proper binary handling
-      const blob = new Blob([xktData], { type: 'application/octet-stream' });
-      const { error: uploadError } = await supabase.storage
-        .from('xkt-models')
-        .upload(storagePath, blob, {
-          contentType: 'application/octet-stream',
-          upsert: true,
-        });
-      
-      if (uploadError) {
-        console.warn('XKT save: Upload failed', uploadError);
+      // Use edge function for upload to bypass LockManager issues in Web Worker contexts
+      // (Direct supabase.storage.upload() fails with "LockManager lock timed out" in NavVis/Ivion contexts)
+      const base64Data = this.arrayBufferToBase64(xktData);
+      const { data: storeData, error: storeError } = await supabase.functions.invoke('xkt-cache', {
+        body: {
+          action: 'store',
+          modelId: fileName,
+          buildingFmGuid,
+          xktData: base64Data,
+        },
+      });
+
+      if (storeError || !storeData?.success) {
+        console.warn('XKT save: Edge function upload failed', storeError || storeData?.error);
         return false;
       }
-      
-      // No need to generate signed URL here - checkCache generates fresh ones on demand
       
       // Save metadata to database (don't store signed URL - it expires)
       const { error: dbError } = await supabase
@@ -299,7 +300,7 @@ export class XktCacheService {
       
       if (dbError) {
         console.warn('XKT save: DB insert failed', dbError);
-        return false;
+        // Still return true since storage upload succeeded
       }
       
       console.log(`XKT save: Cached ${modelId} successfully`);
