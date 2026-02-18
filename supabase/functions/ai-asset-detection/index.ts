@@ -2243,9 +2243,40 @@ serve(async (req) => {
         const userContent: any[] = [
           {
             type: 'text',
-            text: `You are analyzing ${params.screenshots.length} viewport captures from a 360° indoor scan taken at the same position but different orientations (every ${Math.round(360 / params.screenshots.length)}°). Detect all objects across ALL images.\n\nDetect:\n${objectDescriptions}\n\nReturn ONE flat JSON array containing all detections across all images. For each detection include: object_type, confidence (0-1), bounding_box ([ymin,xmin,ymax,xmax] 0-1000 scale), description, image_index (0-based), extracted_properties (brand, model, size, type, color, mounting, condition, text_visible).`,
+            text: `You are an expert at detecting fire safety equipment and building assets in indoor 360° panorama photographs.
+
+You will receive ${params.screenshots.length} viewport captures from the SAME position in a building, taken at different rotations (every ${Math.round(360 / params.screenshots.length)}°).
+
+ANALYZE EACH IMAGE INDIVIDUALLY and report ALL objects you find across all images.
+
+Look for these specific objects:
+${objectDescriptions}
+
+IMPORTANT RULES:
+- Report each detected object separately with its image_index (0, 1, or 2)
+- Include detections even with confidence 0.3 or above
+- Be generous with detections — it is better to report too many than to miss objects
+- Focus on the object type, not the background
+- For each detection include: object_type, confidence (0-1), bounding_box ([ymin,xmin,ymax,xmax] 0-1000 scale), description, image_index (0-based), extracted_properties (brand, model, size, type, color, mounting, condition, text_visible)
+
+Return ONE flat JSON array containing all detections across all images. If nothing found, return [].`,
           },
         ];
+
+        // Add few-shot reference examples BEFORE the actual screenshots
+        for (const tpl of tpls) {
+          if (tpl.example_images && tpl.example_images.length > 0) {
+            userContent.push({
+              type: 'text',
+              text: `Reference examples for "${tpl.object_type}" (${tpl.name}) — this is what you are looking for:`,
+            });
+            for (const exUrl of (tpl.example_images as string[]).slice(0, 3)) {
+              userContent.push({ type: 'image_url', image_url: { url: exUrl } });
+            }
+          }
+        }
+
+        userContent.push({ type: 'text', text: `--- Now analyze the ${params.screenshots.length} scan images below: ---` });
         
         // Add all screenshot images
         for (let idx = 0; idx < params.screenshots.length; idx++) {
@@ -2293,7 +2324,7 @@ serve(async (req) => {
         let skippedDedup = 0;
         
         for (const det of allDetections) {
-          if ((det.confidence || 0) < 0.1) continue;
+          if ((det.confidence || 0) < 0.3) continue;
           
           // Use the screenshot from image_index for thumbnail, default to first
           const screenshotForThumb = params.screenshots[det.image_index ?? 0] || params.screenshots[0];
