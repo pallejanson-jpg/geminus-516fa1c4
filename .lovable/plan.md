@@ -1,189 +1,188 @@
 
-# Plan: Mobilkamera-inventering + Ivion UI-minimering för skanning
+# Addnode Innovation Pitch — Full Implementation
 
-## Del 1: Mobilkamera-inventering med Gemini Vision
+## What We're Building
 
-### Hur det fungerar idag
-Mobilinventeringswizarden har 5 steg: detection → location → category → position → registration. Användaren väljer kategori manuellt och anger namn för hand.
+A complete rewrite of `src/pages/Presentation.tsx` into a 10-slide Dragon's Den pitch for the **Addnode Innovation** competition. Three new features are added on top of the new slide content:
 
-### Ny feature: "Foto-skanning" — ett valfritt steg
-Användaren tar ett foto INNAN kategori-steget. Gemini Vision analyserar fotot och föreslår:
-- Objekttyp (kategori)
-- Namn/beteckning
-- Symbol att använda
-- Egenskaper (färg, märke, skick)
+1. **9 new slides** — Addnode-specific pitch replacing all 8 current generic slides
+2. **ROI Slide** — A dedicated slide with concrete financial numbers
+3. **Speaker Notes Panel** — Toggle with `N` key, shows talking points per slide
 
-Flödet blir:
-```text
-detection → location → [NYTT: photo-scan] → category (förifylld) → position → registration (förifylld)
+---
+
+## New Slide Order (10 slides, ~4.5 minutes)
+
+| # | Slide | Time | Color |
+|---|-------|------|-------|
+| 1 | Title — "I'm Pål. I connected the dots." | 25s | Cyan |
+| 2 | The AECO Gap — O is missing | 40s | Red/Orange |
+| 3 | The Addnode Ecosystem — already there, not connected | 35s | Blue |
+| 4 | Geminus — The Bridge | 40s | Cyan |
+| 5 | AI That Works Today — screenshot grid | 35s | Emerald |
+| 6 | ROI — The Numbers (NEW) | 35s | Green |
+| 7 | Built With Vibe-Coding — Pål's story | 30s | Purple |
+| 8 | Why Addnode Wins — 3 strategic wins | 35s | Amber |
+| 9 | The Ask — $100,000 | 20s | White/Black |
+
+---
+
+## Speaker Notes — Per Slide Talking Points
+
+Each slide gets 4–5 bullet points (~30s of talking). The notes panel is toggled with `N` and appears as a semi-transparent bottom drawer over the slide (does not interrupt the scaled slide area). It includes a timer.
+
+Notes are defined as a `speakerNotes: string[]` array in a `NOTES` constant, indexed by slide number.
+
+### Notes Content
+
+**Slide 1 — Title**
+- My name is Pål Janson — Product Solution Manager
+- 20 years across both AEC and O within Symetri
+- I'm not a developer — I'm a problem-solver who used AI to build a solution
+- 3 months ago I had an idea. Today it's running in production.
+- This is Geminus.
+
+**Slide 2 — AECO Gap**
+- The AECO industry covers Architecture, Engineering, Construction and Operations
+- Addnode is strong in A, E and C — through Symetri and its brands
+- But O — Operations and Facility Management — is where buildings live for 50 to 100 years
+- Symetri and Service Works Global now share the Design Management business area
+- This is the moment to close the gap and serve the full lifecycle
+
+**Slide 3 — Ecosystem**
+- Addnode already owns the ingredients: SWG, Symetri/ACC, Bimify, Senslinc
+- Bimify digitizes existing buildings with AI — turning photos into BIM models
+- Senslinc provides real-time IoT data — temperature, CO2, occupancy
+- None of these talk to each other today
+- Geminus connects them — using APIs that already exist
+
+**Slide 4 — The Bridge**
+- Geminus sits in the middle of the Addnode ecosystem
+- It pulls BIM from Bimify and ACC, operations data from SWG, sensor data from Senslinc
+- No migration needed — we build on top of existing systems
+- One interface for the facility manager who doesn't care which system the data comes from
+- This is the connective tissue Addnode needs
+
+**Slide 5 — AI That Works Today**
+- This is not a prototype or a mockup — it is running in production
+- AI scans 360-degree panorama images and registers fire safety assets automatically
+- Gunnar answers questions about assets in natural language
+- Mobile camera lets field workers photograph an object — Gemini Vision identifies it instantly
+- All assets land directly in Asset+ — the SWG system our customers already use
+
+**Slide 6 — ROI**
+- A typical facility manager spends 30% of their time finding information
+- With Geminus, that drops to under 5% — a saving of roughly 200 hours per person per year
+- At a conservative billing rate, that is 60,000 SEK saved per FM employee per year
+- SWG has over 500 enterprise customers — even 10% adoption creates enormous value
+- Bimify scan-to-BIM combined with Geminus means no manual digitization cost
+
+**Slide 7 — Vibe-Coding**
+- I built this without writing a single line of code manually
+- I described what I wanted in plain English — the AI wrote the code
+- 50+ React components, 15+ serverless backend functions, 6 external API integrations
+- 3 months of evenings and weekends
+- This competition is about AI plus vibe-coding — and this IS the proof of what that looks like
+
+**Slide 8 — Why Addnode Wins**
+- Every Geminus user is locked deeper into the Addnode ecosystem
+- Bimify upsell: does your building have a BIM model yet? Now it can.
+- Senslinc upsell: do you have real-time sensor data? Add it to your digital twin.
+- SWG and Symetri can go to market together for the first time with a joint value proposition
+- The O in AECO is a blue ocean — and Addnode already has all the assets to win it
+
+**Slide 9 — The Ask**
+- One hundred thousand dollars to productize what is already working
+- Security hardening, GDPR compliance, deep SWG Concept Evolution API integration
+- Bimify and Senslinc live connectors with certified support agreements
+- Six months. A product. A competitive moat across the Design Management business area.
+- The code is running. The integrations exist. I'm ready. Are you?
+
+---
+
+## ROI Slide Design — Slide 6
+
+Three columns with concrete numbers:
+
+**Column 1 — FM Efficiency**
+- FM spends 30% of time searching for info → drops to <5% with Geminus
+- **200 hours saved** per FM employee per year
+- 60,000 SEK / €5,400 per person annually
+
+**Column 2 — AI Inventory at Scale**
+- Manual asset inventory: 4–6 hours per floor
+- AI scan with Geminus: 15–30 minutes per floor
+- **10x faster** — at a fraction of the cost
+
+**Column 3 — Ecosystem Value**
+- SWG: 500+ enterprise customers
+- If 10% adopt Geminus → **50 customers**
+- Cross-sell: Bimify + Senslinc per customer = significant upsell ARR
+
+Bottom line: *"The $100,000 investment has the potential to unlock millions in ecosystem value."*
+
+---
+
+## Speaker Notes Panel — Technical Design
+
+A `useState<boolean>` called `showNotes` toggled by the `N` key.
+
+The panel renders **outside** the scaled slide div — positioned as `absolute bottom-0` in the outer container so it's always readable size regardless of slide scale. It has:
+- Semi-transparent dark background (`bg-black/80 backdrop-blur`)
+- Slide title + 5 bullet points for the current slide
+- A simple elapsed timer (`mm:ss`) counting up from 0 when presentation starts
+- Close button (or press N again)
+
 ```
-
-Photo-scan-steget är frivilligt — användaren kan hoppa över det direkt till category som idag.
-
-### Teknisk implementation
-
-#### 1. Ny edge function: `mobile-ai-scan`
-Enkel, dedikerad edge function som tar emot en base64-bild och returnerar objektidentifiering.
-
-**`supabase/functions/mobile-ai-scan/index.ts`** (ny fil):
-- Tar emot `{ imageBase64, templateNames? }` 
-- Hämtar aktiva detection templates från databasen
-- Skickar bild + templates + few-shot examples till `google/gemini-3-flash-preview`
-- Returnerar `{ objectType, suggestedName, symbolId, confidence, properties }`
-
-Lägg till i `config.toml`:
-```toml
-[functions.mobile-ai-scan]
-verify_jwt = false
-```
-
-#### 2. Nytt wizard-steg: `PhotoScanStep`
-**`src/components/inventory/mobile/PhotoScanStep.tsx`** (ny fil):
-
-```text
-┌─────────────────────────────────────┐
-│  📷  Fotografera objektet           │
-│                                     │
-│  ┌───────────────────────────────┐  │
-│  │                               │  │
-│  │   [Ta foto / Välj bild]       │  │
-│  │                               │  │
-│  └───────────────────────────────┘  │
-│                                     │
-│  AI identifierar objekttyp          │
-│  automatiskt från fotot             │
-│                                     │
-│  [Hoppa över →]                     │
-└─────────────────────────────────────┘
-```
-
-När bild tagits:
-- Visar laddningsindikator: "Identifierar objekt..."
-- Vid success: visar detektionsresultat med ikon och confidence
-- Förifyllar `formData.category`, `formData.categoryLabel`, `formData.name`, `formData.symbolId`
-- Går automatiskt vidare till position-steget (hoppar category)
-
-Om AI:n inte är säker (confidence < 0.5): visar förslaget men låter användaren korrigera i category-steget.
-
-#### 3. Uppdatera `MobileInventoryWizard.tsx`
-- Lägg till `'photo-scan'` som nytt steg mellan `'location'` och `'category'`
-- `STEP_ORDER: ['detection', 'location', 'photo-scan', 'category', 'position', 'registration']`
-- Ny stegindikator-ikon: `Sparkles` (AI-ikon)
-- Om photo-scan ger hög confidence (> 0.7): hoppa automatiskt förbi category-steget
-- Uppdatera `WizardFormData` med `aiSuggestionConfidence?: number`
-
-#### 4. Uppdatera `QuickRegistrationStep.tsx`
-- Om `formData.imageUrl` redan är satt från photo-scan: visa bilden direkt (ingen ny bildknapp)
-- Lägg till en liten "AI-föreslagen" badge vid kategori/namn om de kom från AI:n
-
-### AI-prompt för mobilkamera
-Enkelt och fokuserat — identifiera ett enskilt objekt (inte batch):
-
-```typescript
-system: `You are an expert at identifying building equipment and assets from photos taken during facility management inspections. Return ONLY valid JSON.`
-
-user: `Identify the main object in this photo. Return JSON with:
-- objectType: one of [fire_extinguisher, fire_alarm_button, smoke_detector, fire_hose, electrical_panel, door, elevator, staircase, ventilation, other]
-- suggestedName: a short descriptive name in Swedish (e.g. "Brandsläckare 6kg", "Larmknapp plan 2")
-- confidence: 0.0-1.0
-- properties: { brand, model, size, color, condition, text_visible }
-- category: one of [Brandskydd, El, VVS, Ventilation, Dörrar, Transporter, Övrigt]`
+┌──────────────────────────────────────────────────┐  ← always at bottom of viewport
+│  SPEAKER NOTES — Slide 2: The AECO Gap   ⏱ 0:42  │
+│  • The AECO industry covers A, E, C and O...      │
+│  • Addnode is strong in A, E, C through Symetri   │
+│  • O = Operations — buildings live 50–100 years   │
+│  • SWG + Symetri now share Design Management      │
+│  • This is the moment to close the gap            │
+└──────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Del 2: Ivion UI-minimering för skanning
+## Files to Modify
 
-### Problemet
-Ivions inbyggda UI-element (sidomeny, kontrollknappar, våningsväljare, informationspaneler) täcker delar av panoramabilden när `BrowserScanRunner` tar screenshots. Det minskar bildytan som Gemini ser.
+### `src/pages/Presentation.tsx` — Full rewrite
 
-### Vad kan göras via SDK + CSS
+**New imports added** (all from existing packages):
+- `Network`, `Link2`, `TrendingUp`, `DollarSign`, `Code2`, `Users`, `Clock`, `BookOpen`, `BarChart3`, `CheckCircle2`, `Sparkles`, `Target` from `lucide-react`
+- `useRef` for timer (already imported)
 
-Från `ivion-sdk.ts` ser vi att:
-- `iv.getMenuItems()?.forEach(item => item.setVisible(false))` — döljer sidomenyobjekt
-- `iv.closeMenu?.()` — stänger sidomenyn
-
-Det saknas dock CSS-injicering specifikt för scan-läget. Vi lägger till det i `BrowserScanRunner` när SDK:n är redo.
-
-#### CSS-injicering i `BrowserScanRunner.tsx`
-När `sdkStatus === 'ready'`, injicera CSS i `<ivion>` shadow DOM eller direkt på containern:
-
-```typescript
-// I useEffect när sdkStatus === 'ready':
-const injectScanCSS = () => {
-  const style = document.createElement('style');
-  style.id = 'ivion-scan-minimal-ui';
-  style.textContent = `
-    /* Hide all Ivion UI controls during scan */
-    ivion [class*="sidebar"],
-    ivion [class*="menu"],
-    ivion [class*="toolbar"],
-    ivion [class*="controls"],
-    ivion [class*="floor-switcher"],
-    ivion [class*="navigation"],
-    ivion [class*="info-panel"],
-    ivion [class*="minimap"],
-    ivion button,
-    ivion .mat-icon-button,
-    ivion mat-sidenav,
-    ivion mat-toolbar {
-      display: none !important;
-      visibility: hidden !important;
-    }
-    /* Ensure canvas fills container */
-    ivion canvas {
-      width: 100% !important;
-      height: 100% !important;
-    }
-  `;
-  document.head.appendChild(style);
-};
+**New state added to `Presentation()` shell**:
+```tsx
+const [showNotes, setShowNotes] = useState(false);
+const [elapsed, setElapsed] = useState(0);
+const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 ```
 
-Rensa upp CSS när komponenten avmonteras (`return () => document.getElementById('ivion-scan-minimal-ui')?.remove()`).
+Timer starts on first navigation or N press, counts up.
 
-#### Också: Dölj via SDK API
-I `useEffect` när `sdkStatus === 'ready'`:
-```typescript
-const api = ivApiRef.current;
-try {
-  // Hide all menu items
-  api.getMenuItems?.()?.forEach(item => item.setVisible?.(false));
-  api.closeMenu?.();
-  // Try to set fullscreen panorama mode
-  const mainView = api.view?.mainView ?? api.getMainView?.();
-  mainView?.setFullscreen?.(true);
-} catch (e) { /* ignore */ }
-```
+**Keyboard handler updated** to add `N` key toggle for notes.
 
-### Tekniska filändringar
+**Notes panel** rendered after the scaled slide div, inside the outer `fixed inset-0` container.
 
-| Fil | Ändring |
-|-----|---------|
-| `supabase/functions/mobile-ai-scan/index.ts` | Ny edge function för AI-identifiering av enskilda objekt |
-| `supabase/config.toml` | Lägg till `[functions.mobile-ai-scan] verify_jwt = false` |
-| `src/components/inventory/mobile/PhotoScanStep.tsx` | Nytt wizard-steg med kamera + Gemini Vision |
-| `src/components/inventory/mobile/MobileInventoryWizard.tsx` | Lägg till photo-scan i STEP_ORDER och stegindikator |
-| `src/components/ai-scan/BrowserScanRunner.tsx` | CSS-injicering + SDK API-anrop för att dölja Ivion UI vid skanning |
+**Slide registry** updated to 9 entries.
 
-### Flödesdiagram
+No other files need modification — the HTML standalone version is a separate file and the existing structure there is less critical than the React version.
 
-```text
-MobileInventoryWizard
-  detection
-    ↓
-  location
-    ↓
-  photo-scan (NYTT)
-    ├─ [Hoppa över] → category → position → registration
-    ├─ [confidence < 0.5] → category (AI förslag synligt men redigerbart)
-    └─ [confidence ≥ 0.7] → position (category auto-ifyllt, hoppar steget)
-    
-BrowserScanRunner (BEFINTLIG)
-  SDK ready → inject CSS (dölj Ivion controls)
-           → SDK API (closeMenu, setVisible false)
-           → Ta screenshots utan UI-brus
-```
+---
 
-### Prioritering
-Del 2 (Ivion UI-minimering) är en liten ändring i en befintlig fil och implementeras snabbt. Del 1 (mobilkamera) kräver ny edge function + ny komponent + wizard-uppdatering. Båda implementeras i samma iteration.
+## Summary of Changes to `src/pages/Presentation.tsx`
+
+| Section | Change |
+|---------|--------|
+| Imports | Add ~12 new lucide icons + `useRef` already there |
+| Slide components | Replace all 8 with 9 new Dragon's Den slides |
+| NOTES constant | New array of `string[][]` — one entry per slide |
+| slides registry | Replace 8 entries with 9 new slide components |
+| Presentation() state | Add `showNotes`, `elapsed`, `timerRef` |
+| Keyboard handler | Add `N` key to toggle notes |
+| JSX | Add speaker notes panel below scaled slide |
+
+The presentation shell (keyboard nav, fullscreen, scale, progress bar, click navigation) stays intact — only content and new features are added.
