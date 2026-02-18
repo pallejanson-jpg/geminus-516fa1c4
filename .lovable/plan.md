@@ -1,210 +1,144 @@
 
-# Plan: Fixa 6 buggar i Desktop 3D-viewer + XKT-cache + BIM-namnsättning
+# Plan: 8 buggar att åtgärda
 
-## Sammanfattning av identifierade problem
+## Inventering av alla problem
 
-### Problem 1: 3D startar inte på desktop (och split/2D FMA fungerar inte)
-**Rotorsak**: `MainContent.tsx` rad 189 — `isImmersiveViewer` är bara sant **på mobil**: 
-```tsx
-const isImmersiveViewer = isMobile && IMMERSIVE_VIEWER_APPS.includes(activeApp);
-```
-På desktop renderas `assetplus_viewer` i en `<main>` med `absolute inset-0` och `overflow-y-auto`. Problemet är att `<main>` ärver höjden från sin relativt-positionerade parent `flex-1 min-h-0 relative`. AssetPlusViewer behöver `h-full` på containern men eftersom `overflow-y-auto` är satt krymper containern när innehållet är litet — 3D-viewerns canvas-element kan inte renderas i en 0-höjd container.
+### Problem 1: Centralstationen & Åkerselva — 3D-knapp gråad
+**Rotorsak bekräftad**: Databasen har bara XKT-modeller för 3 byggnader:
+- `755950d9` (Småviken — 3 modeller, alla med UUID-namn)
+- `9baa7a3a` (okänd — 2 modeller)
+- `a8fe5835` (okänd — 2 modeller)
 
-Dessutom: `Viewer.tsx` wrappar `AssetPlusViewer` i `<div className="h-full">` — men dess förälder `<main>` med `overflow-y-auto` gör att `h-full` inte fungerar korrekt på desktop (den beräknas mot viewport, inte parent).
-
-**Fix**: Ändra `isImmersiveViewer` så att den gäller för ALLA viewer-appar (inte bara mobil), och separera "scrollbara" appar från "viewer-appar":
-```tsx
-// Viewer-appar är fullskärm på BÅDE mobil och desktop
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe', 'ivion_create'];
-// Portfolio, navigation, map mm. har interna scrollar
-const INTERNAL_SCROLL_APPS = ['portfolio', 'navigation', 'map', 'fma_plus', 'entity_insights'];
-// Scrollbara sida-appar
-const SCROLLABLE_APPS = ['home', 'insights', 'inventory', 'fault_report', 'ai_scan', 'asset_registration'];
-
-const isViewerApp = VIEWER_APPS.includes(activeApp);
-const isScrollable = SCROLLABLE_APPS.includes(activeApp);
-```
-
-```tsx
-<main className={`absolute inset-0 
-  ${isViewerApp ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} 
-  ${t.bg}`}
-  style={isViewerApp ? { touchAction: 'none' } : undefined}
->
-  <div className={isViewerApp || !isScrollable ? "w-full h-full" : "w-full"}>
-    {renderContent()}
-  </div>
-</main>
-```
-
-### Problem 2: Textfärger mörka på ljus bakgrund i menyer (dark mode)
-**Rotorsak**: På startskärmen och menyerna används `text-foreground` men i dark mode kan detta vara mörkt om temat är fel — men viktigare: `NavigatorView`, `InsightsView`, `PortfolioView` mm. har ingen explicit `text-foreground` på deras `bg-card` containers. `HomeLanding.tsx` behöver granskas för att säkerställa att `text-foreground` används genomgående.
-
-**Fix**: Säkerställ att alla text-element i menyer och sidebars har `text-foreground` eller `text-card-foreground` explicit, inte implicit (som kan ärva fel färg).
-
-### Problem 3: XKT sparas inte korrekt — Småviken laddar långsamt varje gång
-**Rotorsak konsolllogg-bekräftad**: 
-```
-XKT save: Upload failed { StorageUnknownError: Acquiring an exclusive Navigator LockManager lock "lock:sb-..." timed out waiting 10000ms }
-```
-`saveModelFromViewer` anropar `supabase.storage.upload()` — detta kräver en auth-session. Men Supabase-klienten försöker hämta sessionen via en `LockManager`-lock i en Service Worker/Web Worker context (Ivion SDK / NavVis Zone-kontexten) som inte kan nå `localStorage`. Uppladdet misslyckas varför modellerna aldrig sparas.
-
-**Fix i `xkt-cache-service.ts`**: Använda `Service Role Key` via edge function istället för direkt Supabase-klient för uppladdning. Alternativt: anropa `xkt-cache` edge function (som redan finns) med `action: 'store'` — den använder `SUPABASE_SERVICE_ROLE_KEY` som kringgår LockManager-problemet.
-
-Ändr `saveModelFromViewer` för att använda edge function för storage upload:
+Centralstationen och Åkerselva saknas helt i `xkt_models`-tabellen. `FacilityLandingPage.tsx` kontrollerar:
 ```typescript
-// Istället för direkt supabase.storage.upload():
-const { data, error } = await supabase.functions.invoke('xkt-cache', {
-  body: { action: 'store', modelId, buildingFmGuid, xktData: base64Data }
-});
+supabase.from('xkt_models').select('id', { count: 'exact', head: true })
+  .eq('building_fm_guid', buildingGuid)
+  .then(({ count }) => setHas3DModels((count ?? 0) > 0));
 ```
+Om inga rader finns → `has3DModels = false` → 3D-knappen gråas ut.
 
-### Problem 4: Alla BIM-modeller laddas vid första öppning av Småviken
-**Rotorsak**: `initializeViewer` bygger ett filter (`allowedModelIdsRef`) baserat på `model_name` i `xkt_models`-tabellen. Men för Småviken är `model_name`-kolumnen null/GUID — `hasRealNames` är false → Asset+ API anropas. Problemet är att API-anropet för att hämta modellnamn misslyckas (se XKT cache-fel ovan) → `nameMap` förblir tom → `allowedModelIdsRef.current = null` → **alla modeller laddas**.
+**Orsak**: XKT-cache sparas bara när någon *öppnat* 3D-viewern för ett specifikt byggnad. Om den aldrig öppnats via `/split-viewer` fungerar inte knappen.
 
-**Fix (två delar)**:
-1. XKT save-fix (Problem 3) löser root cause — när modeller sparas lagras namnen korrekt.
-2. Lägg till fallback i `initializeViewer` för att alltid försöka hämta modellnamn via Asset+ API, oavsett om DB-modeller finns. Separera modellnamns-fetch från existerande DB-kontroll:
+**Fix**: `FacilityLandingPage.tsx` ska **inte** gråa ut 3D-knappen baserat på XKT-cache. 3D-viewer fungerar även utan cachat XKT — den laddar direkt från Asset+ API. Knappen ska alltid vara aktiv för byggnader (ej gråad). Logiken för att checka XKT-tabell tas bort som port-check — istället visar vi 3D-knappen alltid för byggnader.
 
+### Problem 2: Map-funktionen i övre menyn fungerar inte
+**Rotorsak**: `handleMenuClick('map')` sätter `setActiveApp('map')`. Men i `MainContent.tsx` är `map` i `FILL_APPS` (inte `VIEWER_APPS`). Det innebär att containern är `w-full h-full` men `overflow-y-auto` är satt. Kartans `<Map>` komponent renderas i `flex-1 flex flex-col h-full` — detta fungerar korrekt. Problemet är att kartan inte får explicit höjd.
+
+Men det verkliga problemet är: när `map` aktiveras via header-knappen — fungerar det faktiskt? Det borde fungera. Låt oss kontrollera om problemet är att `mapboxToken` inte laddas. Nej — token-logiken är korrekt.
+
+Det troligaste problemet: kartans container `<div className="flex-1 flex flex-col h-full relative">` i `MapView.tsx` rad 415 fungerar inte om föräldern inte har explicit höjd. `MainContent` ger `h-full` till wrap-diven för FILL_APPS, men `overflow-y-auto` är satt på `<main>`. När `overflow-y-auto` är satt på föräldern + `h-full` på barnet, beräknas `h-full` mot scrollable height, inte viewport height.
+
+**Fix**: Flytta `map` från `FILL_APPS` till `VIEWER_APPS` i `MainContent.tsx` — kartan behöver `overflow:hidden` precis som 3D-viewern.
+
+### Problem 3: Byggnadsikonerna i Mapbox syns dåligt vid zoom/pan
+**Rotorsak**: `clusters` beräknas via `useMemo` beroende på `viewState` — men `viewState` uppdateras *kontinuerligt* under `onMove`. Problemet är bounds-beräkningen:
 ```typescript
-// ALLTID försök hämta från API om nameMap är tom:
-if (nameMap.size === 0) {
-  const resp = await fetch(`${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`, ...);
-  // ... bygg nameMap från API
-}
-// Sedan bygg A-model filter
+const bounds: [number, number, number, number] = [
+  viewState.longitude - 180 / Math.pow(2, viewState.zoom),
+  viewState.latitude - 90 / Math.pow(2, viewState.zoom),
+  ...
+];
+```
+Denna formel är en approximation och ger ibland fel bounds, vilket gör att supercluster returnerar tomma clusters för en del vyer.
+
+**Fix**: Använd `mapRef.getBounds()` för att få exakta bounds, och beräkna clusters via `onMoveEnd`-callback (inte `useMemo` på `viewState`). Alternativt: använd `Map`'s `onMoveEnd` event och spara bounds i state för re-rendering.
+
+Enklare fix: Lägg till en stor margin (padding) till bounds-beräkningen:
+```typescript
+const pad = 1.5;
+const bounds: [number, number, number, number] = [
+  viewState.longitude - (180 / Math.pow(2, viewState.zoom)) * pad,
+  viewState.latitude - (90 / Math.pow(2, viewState.zoom)) * pad,
+  viewState.longitude + (180 / Math.pow(2, viewState.zoom)) * pad,
+  viewState.latitude + (90 / Math.pow(2, viewState.zoom)) * pad,
+];
 ```
 
-### Problem 5: BIM-modellnamn visas som konstiga ID:n istället för "A-modell", "V-modell" etc.
-**Rotorsak**: Samma som Problem 4. `ModelVisibilitySelector` och `useModelNames` hämtar från `xkt_models.model_name` — om den är null/GUID visas "Laddar..." eller `fileNameWithoutExt.replace(/-/g, ' ')`.
+Dessutom: `coloringMode`-ändring re-renderar inte markererna. Fördröjning i `useMemo` kan orsaka att gamla markers kvarstår. Säkerställ att `coloringMode` är en dependency i cluster-beräkning.
 
-**Fix**: Samma API-hämtnings-fix som ovan. Dessutom i `useModelNames`:
-- Säkerställ att API-anropet faktiskt uppdaterar DB-raderna med rätt `model_name`
-- Logiken finns redan men misslyckas pga LockManager-problem i uploaden
+### Problem 4: 360° i inbäddad vy säger "No 360° view configured"
+**Rotorsak**: `LeftSidebar.tsx` anropar `setActiveApp('radar')` via `handleItemClick`. `MainContent.tsx` renderar `<Ivion360View>`. Ivion360View (rad 79): `const ivionUrl = ivion360Context?.ivionUrl || url || localStorage.getItem('ivion360Url')`. Men `ivion360Context` är null (inget sätts i LeftSidebar) och `url` är undefined. Komponenten söker efter `ivion360Context` men hittar inget → visar felmeddelandet.
 
-### Problem 6: Felaktiga/konstiga våningsplan i Småviken
-**Rotorsak**: `FloatingFloorSwitcher` hämtar våningsnamn via `supabase.from('assets').select(...).eq('category', 'Building Storey')` — men från konsollloggen: `"AssetPlusViewer: Floor selection changed { guids: 0, isAllVisible: false }"` — detta indikerar att `visibleFloorFmGuids` är tomt. 
+Lösningen är att när användaren klickar på "Radar" (360°) i LeftSidebar, ska `ivion360Context` sättas med datan från `selectedFacility` (om byggnad är vald) och dess Ivion-inställningar.
 
-Mer specifikt: `extractFloors()` i `FloatingFloorSwitcher` hittar `IfcBuildingStorey` metaobjekt men deras namn är GUIDs (från BIM-modellen direkt) eftersom `floorNamesMap` är tom när modellen laddas. Sedan matchas dessa mot `floorNamesMap` från DB — men DB-datat kan ha olika GUID-format.
+**Fix i `LeftSidebar.tsx`**: För `radar`-alternativet, kontrollera om `selectedFacility` har en `ivionSiteId` i `building_settings`. Sätt `ivion360Context` med rätt data, annars visa ett meddelande om att konfigurera Ivion Site ID.
 
-**Fix**: `floorNamesMap`-populationen är korrekt men timing-problem: `floorNamesMap` kan vara tomt när `extractFloors` körs. Loopen `Re-extract when names map updates` borde hantera det — men kan misslyckas om `isInitialized` är true men namnkartan ej laddats. Säkerställ att re-extract körs efter att DB-namnen laddas.
+### Problem 5: Bakåtknapp saknas — inkonsekvent navigation
+**Konsekventhetsprincip**: Välj EN strategi för bakåtknapp. **Rekommendation**: Bakåtpil (←) uppe till vänster för alla sidor. X-knapp (×) används bara för modala/overlay-komponenter.
+
+**Sidor som saknar bakåtknapp**:
+- `InsightsView` (ingen bakåt-knapp alls)
+- `Viewer.tsx` / `AssetPlusViewer.tsx` inbäddad i AppLayout (ingen bakåt-knapp till portfolio)
+
+**Fix**: 
+- Lägg till bakåtknapp i `InsightsView.tsx` (← uppe till vänster) som navigerar till portfolio
+- `Viewer.tsx` (inbäddad 3D) — lägg till bakåtpil i `AssetPlusViewer`-toolbar som anropar `onClose`
+- `FacilityLandingPage` använder X — byt till ← uppe till vänster (konsekvent med UnifiedViewer)
+
+### Problem 6: 2D Ritning gråad — förklaring och fix
+**Förklaring av skillnad**:
+- **2D Ritning** (`hasFmAccess`) = FM Access system (Tessel HDC) — kräver att `fm_access_building_guid` är satt i `building_settings`. Detta är ett separat CAD/ritningssystem.
+- **2D FMA** i UnifiedViewer = samma sak men via iframe, visas på byggnads-/våningsnivå i 3D-viewern
+
+**Varför gråat**: `hasFmAccess` checkar `fm_access_building_guid` i `building_settings`. Om detta fält är null/tomt → knapp gråas.
+
+**Fix**: Det är korrekt beteende — knappen ska vara gråad om FM Access inte är konfigurerat. Men felbeskrivningen ska vara tydligare när användaren hover:ar. Lägg till tooltip: "FM Access-ritning. Kräver FM Access-konfiguration i byggnadsinstllningar."
+
+### Problem 7: Cesium (Globe) fungerar inte
+Cesium renderas via `CesiumGlobeView.tsx`. Problemet kan vara att `globe` är i `VIEWER_APPS` men att Cesium-token inte laddas, eller att komponenten kraschar.
+
+**Fix**: Behöver undersöka `CesiumGlobeView.tsx` mer — men troligast är att `globe` bör hanteras som `VIEWER_APPS` (overflow hidden) och att Cesium-tokenhämtning fungerar.
+
+### Problem 8: Insights — karta till höger med byggnadsikoner
+**Ny feature**: I `InsightsView.tsx` på övergripande nivå, vill användaren ha en inbäddad karta (Mapbox) till höger med byggnadsikoner färgade enligt aktiv chart-kolumn/pie.
+
+**Implementation**: Delad layout i InsightsView — vänster 60% = tabs/charts, höger 40% = inbäddad miniature MapView med `coloringMode` synkad till aktiv chart-typ.
 
 ---
 
 ## Konkret implementation — filändringar
 
-### Fil 1: `src/components/layout/MainContent.tsx`
-**Problem 1 & 2 fixas**
+### Fil 1: `src/components/portfolio/FacilityLandingPage.tsx`
+- Ta bort `has3DModels` state och XKT-kontroll
+- 3D-knappen är alltid aktiv för byggnader (inte gråad baserat på XKT)
+- 2D-knapp: lägg till tydlig tooltip med förklaring
 
-```tsx
-// Nuvarande:
-const IMMERSIVE_VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus', 'entity_insights', 'navigation', 'portfolio', 'senslinc_dashboard', 'globe', 'ivion_create'];
+### Fil 2: `src/components/layout/MainContent.tsx`
+- Flytta `'map'` från `FILL_APPS` till `VIEWER_APPS`
 
-// Ny uppdelning:
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe']; 
-// Dessa har h-full på ALLA plattformar
-const FILL_APPS = ['portfolio', 'navigation', 'map', 'fma_plus', 'entity_insights', 'ivion_create'];
-// Dessa har interna scrollbars och behöver h-full
-const SCROLLABLE_PAGE_APPS = ['home', 'insights', 'inventory', 'fault_report', 'ai_scan', 'asset_registration'];
-// Dessa är scroll-sidor utan h-full
+### Fil 3: `src/components/map/MapView.tsx`
+- Fixa bounds-beräkning med padding-faktor (1.5x)
+- Lägg till `mapRef` och använd `onMoveEnd` event för att trigga cluster-re-rendering
+- Fixa `coloringMode`-ändring: säkerställ att markers uppdateras omedelbart
 
-// isViewerApp = viewer app på ALLA plattformar (inte bara mobil)
-const isViewerApp = VIEWER_APPS.includes(activeApp);
-// Alla appar utom scroll-sidor behöver h-full
-const needsHFull = isViewerApp || FILL_APPS.includes(activeApp);
-```
+### Fil 4: `src/components/layout/LeftSidebar.tsx`
+- För `radar`-klick: hämta ivion-inställningar för `selectedFacility` och sätt `ivion360Context`
 
-```tsx
-// Render:
-<main 
-  className={`absolute inset-0 
-    ${isViewerApp ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden'} 
-    ${t.bg}`}
-  style={isViewerApp ? { touchAction: 'none' } : undefined}
->
-  <div className={needsHFull ? "w-full h-full" : "w-full"}>
-    {renderContent()}
-  </div>
-</main>
-```
+### Fil 5: `src/components/insights/InsightsView.tsx`
+- Lägg till bakåtpil (←) uppe till vänster som navigerar till 'portfolio'
+- Lägg till inbäddad mini-karta till höger med ColoringMode synkad till aktiv tab
 
-### Fil 2: `src/services/xkt-cache-service.ts`
-**Problem 3 fixas — `saveModelFromViewer`**
-
-Ändra upload-logiken för att använda edge function istället för direkt storage-anrop:
-```typescript
-// Konvertera till base64 och anropa edge function:
-const base64Data = this.arrayBufferToBase64(xktData);
-const { data, error } = await supabase.functions.invoke('xkt-cache', {
-  body: { action: 'store', modelId: fileName, buildingFmGuid, xktData: base64Data }
-});
-
-// Sedan uppdatera metadata i DB:
-await supabase.from('xkt_models').upsert({...}, { onConflict: 'building_fm_guid,model_id' });
-```
-
-### Fil 3: `src/components/viewer/AssetPlusViewer.tsx` (initializeViewer)
-**Problem 4 & 5 fixas — modellnamnshämtning**
-
-I `initializeViewer` (rad ~3078-3143), säkerställ att API-anropet **alltid** sker när `nameMap` är tom:
-```typescript
-// Om DB inte har riktiga namn, hämta alltid från API:
-if (nameMap.size === 0) {
-  try {
-    const apiBase = baseUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-    const resp = await fetch(
-      `${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-    if (resp.ok) {
-      const apiModels = await resp.json();
-      apiModels.forEach((m: any) => {
-        if (m.id && m.name) nameMap.set(m.id, m.name);
-        // Also map by xktFileUrl filename
-        if (m.xktFileUrl) {
-          const fileName = m.xktFileUrl.split('/').pop()?.replace('.xkt', '');
-          if (fileName) nameMap.set(fileName, m.name);
-        }
-      });
-    }
-  } catch (e) {
-    console.debug('Failed to fetch model names from API:', e);
-  }
-}
-```
-
-### Fil 4: `src/components/viewer/FloatingFloorSwitcher.tsx`
-**Problem 6 fixas — våningsplan**
-
-Lägg till retry när `floorNamesMap` uppdateras efter initial extraction:
-```typescript
-// Re-extract with names as soon as they're available
-useEffect(() => {
-  if (floorNamesMap.size === 0) return;
-  const updatedFloors = extractFloors();
-  if (updatedFloors.length > 0) {
-    setFloors(updatedFloors);
-    // Also trigger re-visibility
-  }
-}, [floorNamesMap]);
-```
-(Denna kod finns redan men verifieras att den körs rätt.)
-
-### Färgfix (Problem 2) — text i dark mode
-I `HomeLanding.tsx`, `NavigatorView.tsx`, `PortfolioView.tsx`:
-- Säkerställ att alla rubriker, labels och list-items har `text-foreground` explicit
-- Dropdown-menyer ska ha `text-foreground` på `SelectItem` och `DropdownMenuItem`
-- I 3D-viewerns paneler: `ViewerRightPanel`, `ViewerTreePanel` — kolla att `text-white` används på dark bakgrunder
+### Fil 6: `src/components/viewer/AssetPlusViewer.tsx`
+- Säkerställ att back-knappen (onClose) alltid är synlig i toolbar (redan finns men verifiera)
 
 ---
 
-## Prioritetsordning för implementering
+## Navigation-konsekvensprincip
 
-1. **MainContent.tsx** — fixar att 3D-viewer, split och 2D FMA visas korrekt på desktop (root cause)
-2. **xkt-cache-service.ts** — fixar att XKT faktiskt sparas, löser långsam laddning
-3. **AssetPlusViewer.tsx initializeViewer** — fixar modellnamnshämtning och A-model-filter
-4. **FloatingFloorSwitcher.tsx** — verifierar timing av våningsplansnamn
-5. **Textfärger** — genomgångna klasser för dark mode
+Valet är: **alltid bakåtpil (←) uppe till vänster**.
+- X-knapp reserveras för modaler/dialogs/sheets
+- Bakåtpil för alla sidor/vyer: InsightsView, FacilityLandingPage, 3D-viewer (inbäddad)
+- UnifiedViewer (/split-viewer) har redan korrekt ← Tillbaka-knapp
 
-## Inga DB-ändringar behövs
-Alla buggar är rent kod-relaterade.
+---
+
+## Sammanfattning av filändringar
+
+| Fil | Problem | Ändring |
+|---|---|---|
+| `FacilityLandingPage.tsx` | 3D-knapp gråad | Ta bort XKT-kontroll, knappen alltid aktiv |
+| `MainContent.tsx` | Map-layout | Flytta 'map' till VIEWER_APPS |
+| `MapView.tsx` | Ikoner försvinner | Fixa bounds + coloringMode |
+| `LeftSidebar.tsx` | 360° saknar context | Sätt ivion360Context vid radar-klick |
+| `InsightsView.tsx` | Bakåtknapp + karta | Lägg till ← och mini-karta |
+| `AssetPlusViewer.tsx` | Bakåtknapp synlighet | Verifiera onClose-knapp |
