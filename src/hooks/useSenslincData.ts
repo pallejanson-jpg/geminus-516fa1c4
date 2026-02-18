@@ -125,25 +125,40 @@ export function useSenslincData(fmGuid: string | null | undefined) {
     // Cancel any in-flight request
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    const abortController = abortRef.current;
 
     setIsLoading(true);
     setError(null);
 
-    supabase.functions
-      .invoke('senslinc-query', {
-        body: { action: 'get-machine-data', fmGuid, days: 7 },
-      })
-      .then(({ data: result, error: fnError }) => {
-        if (abortRef.current?.signal.aborted) return;
+    const fetchData = async () => {
+      try {
+        const { data: result, error: fnError } = await supabase.functions.invoke('senslinc-query', {
+          body: { action: 'get-machine-data', fmGuid, days: 7 },
+        });
+
+        if (abortController.signal.aborted) return;
 
         if (fnError || !result?.success) {
-          console.warn('[useSenslincData] Using mock data for', fmGuid, fnError || result?.error);
-          // Graceful mock fallback
+          console.warn('[useSenslincData] No machine found for', fmGuid, fnError || result?.error);
+          // Fallback: try to get a site/line dashboard URL
+          let siteDashboardUrl = '';
+          try {
+            const { data: urlData } = await supabase.functions.invoke('senslinc-query', {
+              body: { action: 'get-dashboard-url', fmGuid },
+            });
+            if (urlData?.success && urlData.data?.dashboardUrl) {
+              siteDashboardUrl = urlData.data.dashboardUrl;
+              console.log('[useSenslincData] Found site/line dashboard URL via fallback:', siteDashboardUrl);
+            }
+          } catch (e) {
+            console.debug('[useSenslincData] Dashboard URL fallback failed:', e);
+          }
+          if (abortController.signal.aborted) return;
           const mockTs = generateMockTimeSeries(fmGuid);
           setData({
             machinePk: 0,
-            machineName: 'Sensor (Demo)',
-            dashboardUrl: '',
+            machineName: fmGuid,
+            dashboardUrl: siteDashboardUrl,
             current: deriveCurrentValues(mockTs, null),
             timeSeries: mockTs,
             availableFields: ['temperature', 'co2', 'humidity'],
@@ -155,7 +170,6 @@ export function useSenslincData(fmGuid: string | null | undefined) {
           const timeSeries = parseTimeSeries(esData);
           const availableFields = detectAvailableFields(timeSeries, properties);
 
-          // If no time series data but we have machine, still show with mock trend
           const finalTimeSeries = timeSeries.length > 0 ? timeSeries : generateMockTimeSeries(fmGuid);
           const finalFields = availableFields.length > 0 ? availableFields : ['temperature', 'co2', 'humidity'];
 
@@ -169,15 +183,13 @@ export function useSenslincData(fmGuid: string | null | undefined) {
           });
           setIsLive(timeSeries.length > 0);
         }
-        setIsLoading(false);
-      })
-      .catch(err => {
-        if (abortRef.current?.signal.aborted) return;
+      } catch (err: any) {
+        if (abortController.signal.aborted) return;
         console.error('[useSenslincData] Unexpected error:', err);
         const mockTs = generateMockTimeSeries(fmGuid);
         setData({
           machinePk: 0,
-          machineName: 'Sensor (Demo)',
+          machineName: fmGuid,
           dashboardUrl: '',
           current: deriveCurrentValues(mockTs, null),
           timeSeries: mockTs,
@@ -185,10 +197,14 @@ export function useSenslincData(fmGuid: string | null | undefined) {
         });
         setIsLive(false);
         setError(err.message);
-        setIsLoading(false);
-      });
+      } finally {
+        if (!abortController.signal.aborted) setIsLoading(false);
+      }
+    };
 
-    return () => { abortRef.current?.abort(); };
+    fetchData();
+
+    return () => { abortController.abort(); };
   }, [fmGuid]);
 
   return { data, isLoading, isLive, error };
