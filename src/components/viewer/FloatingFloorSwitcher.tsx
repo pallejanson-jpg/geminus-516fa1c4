@@ -176,66 +176,62 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
     return extractedFloors;
   }, [getXeokitViewer, floorNamesMap]);
 
-  // Initialize floors
+  // Initialize floors — also re-run whenever floorNamesMap loads (timing fix)
   useEffect(() => {
-    if (isInitialized || !isViewerReady) return;
+    if (!isViewerReady) return;
 
     const checkFloors = () => {
       const newFloors = extractFloors();
       if (newFloors.length > 0) {
         setFloors(newFloors);
         
-        // Load saved selection from localStorage
-        const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
-        const saved = localStorage.getItem(storageKey);
-        
-        if (saved) {
-          try {
-            const savedIds = JSON.parse(saved) as string[];
-            const validIds = new Set(savedIds.filter(id => 
-              newFloors.some(f => f.id === id)
-            ));
-            if (validIds.size > 0) {
-              setVisibleFloorIds(validIds);
-            } else {
+        if (!isInitialized) {
+          // Load saved selection from localStorage only on first init
+          const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
+          const saved = localStorage.getItem(storageKey);
+          
+          if (saved) {
+            try {
+              const savedIds = JSON.parse(saved) as string[];
+              const validIds = new Set(savedIds.filter(id => 
+                newFloors.some(f => f.id === id)
+              ));
+              if (validIds.size > 0) {
+                setVisibleFloorIds(validIds);
+              } else {
+                setVisibleFloorIds(new Set(newFloors.map(f => f.id)));
+              }
+            } catch (e) {
               setVisibleFloorIds(new Set(newFloors.map(f => f.id)));
             }
-          } catch (e) {
+          } else {
             setVisibleFloorIds(new Set(newFloors.map(f => f.id)));
           }
-        } else {
-          setVisibleFloorIds(new Set(newFloors.map(f => f.id)));
+          
+          setIsInitialized(true);
         }
-        
-        setIsInitialized(true);
       }
     };
 
     checkFloors();
     
-    let attempts = 0;
-    const maxAttempts = 10;
-    const interval = setInterval(() => {
-      if (isInitialized || attempts >= maxAttempts) {
-        clearInterval(interval);
-        return;
-      }
-      checkFloors();
-      attempts++;
-    }, 500);
+    if (!isInitialized) {
+      let attempts = 0;
+      const maxAttempts = 20; // More attempts to handle slow model loading
+      const interval = setInterval(() => {
+        if (isInitialized || attempts >= maxAttempts) {
+          clearInterval(interval);
+          return;
+        }
+        checkFloors();
+        attempts++;
+      }, 500);
 
-    return () => clearInterval(interval);
-  }, [extractFloors, isInitialized, isViewerReady, buildingFmGuid]);
-
-  // Re-extract when names map updates
-  useEffect(() => {
-    if (!isInitialized || floorNamesMap.size === 0) return;
-    
-    const updatedFloors = extractFloors();
-    if (updatedFloors.length > 0) {
-      setFloors(updatedFloors);
+      return () => clearInterval(interval);
     }
-  }, [floorNamesMap, isInitialized, extractFloors]);
+  // Re-run when floorNamesMap updates — fixes race condition where names load after extractFloors() ran
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isViewerReady, buildingFmGuid, floorNamesMap, isInitialized]);
 
   // Listen for external floor selection changes (from ViewerTreePanel, FloorVisibilitySelector, etc.)
   useEffect(() => {
