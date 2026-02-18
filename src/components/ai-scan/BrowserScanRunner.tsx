@@ -81,53 +81,129 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
   });
 
   // Minimize Ivion UI when SDK is ready to maximize screenshot coverage
-  useEffect(() => {
-    if (sdkStatus !== 'ready') return;
-
-    // 1. Inject CSS to hide all Ivion UI overlays
-    const style = document.createElement('style');
-    style.id = 'ivion-scan-minimal-ui';
-    style.textContent = `
-      ivion [class*="sidebar"],
-      ivion [class*="menu"],
-      ivion [class*="toolbar"],
-      ivion [class*="controls"],
-      ivion [class*="floor-switcher"],
-      ivion [class*="navigation"],
-      ivion [class*="info-panel"],
-      ivion [class*="minimap"],
-      ivion button,
-      ivion .mat-icon-button,
-      ivion mat-sidenav,
-      ivion mat-toolbar {
+  // Inject CSS into shadow root(s) and via direct DOM manipulation
+  const injectMinimalUiCss = useCallback(() => {
+    const SCAN_UI_CSS = `
+      mat-sidenav, mat-toolbar, mat-sidenav-container,
+      [class*="sidebar"], [class*="menu-panel"], [class*="toolbar"],
+      [class*="floor-switcher"], [class*="floor-changer"],
+      [class*="navigation-panel"], [class*="info-panel"],
+      [class*="minimap"], [class*="controls-panel"],
+      .mat-icon-button, .sidenav, .toolbar,
+      nv-floor-changer, nv-minimap, nv-controls,
+      nv-sidebar, nv-toolbar, nv-navigation,
+      [_nghost*="nv-"], [class*="nv-sidebar"],
+      [class*="nv-floor"], [class*="nv-toolbar"],
+      [class*="nv-menu"], [class*="nv-controls"],
+      button:not([aria-label="close"]) {
         display: none !important;
         visibility: hidden !important;
+        pointer-events: none !important;
       }
-      ivion canvas {
+      canvas {
         width: 100% !important;
         height: 100% !important;
       }
     `;
+
+    // 1. Try to inject into shadow roots of <ivion> and its children
+    const ivionEls = document.querySelectorAll('ivion');
+    ivionEls.forEach((ivionEl) => {
+      // Shadow root of <ivion> itself
+      const roots: ShadowRoot[] = [];
+      if (ivionEl.shadowRoot) roots.push(ivionEl.shadowRoot);
+
+      // Also walk children looking for shadow roots (Angular elements)
+      const walker = document.createTreeWalker(ivionEl, NodeFilter.SHOW_ELEMENT);
+      let node: Node | null = walker.nextNode();
+      while (node) {
+        const el = node as Element;
+        if (el.shadowRoot) roots.push(el.shadowRoot);
+        node = walker.nextNode();
+      }
+
+      roots.forEach((root) => {
+        if (!root.getElementById('ivion-scan-css')) {
+          const s = document.createElement('style');
+          s.id = 'ivion-scan-css';
+          s.textContent = SCAN_UI_CSS;
+          root.appendChild(s);
+        }
+      });
+
+      // 2. Directly hide Angular Material elements inside <ivion>
+      const hideSelectors = [
+        'mat-sidenav', 'mat-toolbar', 'mat-sidenav-container',
+        'nv-floor-changer', 'nv-minimap', 'nv-sidebar', 'nv-controls',
+        '[class*="floor"]', '[class*="Floor"]',
+        '[class*="sidebar"]', '[class*="Sidebar"]',
+        '[class*="toolbar"]', '[class*="Toolbar"]',
+        '[class*="minimap"]', '[class*="menu-panel"]',
+        '[class*="navigation-panel"]', '[class*="controls-panel"]',
+      ];
+      hideSelectors.forEach((sel) => {
+        try {
+          ivionEl.querySelectorAll(sel).forEach((el) => {
+            (el as HTMLElement).style.setProperty('display', 'none', 'important');
+            (el as HTMLElement).style.setProperty('visibility', 'hidden', 'important');
+          });
+        } catch { /* ignore */ }
+      });
+    });
+
+    // 3. Fallback: inject global CSS that tries ::slotted and :host selectors too
     if (!document.getElementById('ivion-scan-minimal-ui')) {
-      document.head.appendChild(style);
+      const globalStyle = document.createElement('style');
+      globalStyle.id = 'ivion-scan-minimal-ui';
+      globalStyle.textContent = `
+        ivion mat-sidenav, ivion mat-toolbar, ivion mat-sidenav-container,
+        ivion nv-floor-changer, ivion nv-minimap, ivion nv-sidebar,
+        ivion nv-controls, ivion nv-toolbar, ivion nv-navigation,
+        ivion [class*="floor-changer"], ivion [class*="floor-switcher"],
+        ivion [class*="sidebar"], ivion [class*="toolbar"],
+        ivion [class*="minimap"], ivion [class*="controls"],
+        ivion [class*="navigation-panel"], ivion [class*="info-panel"],
+        ivion .mat-sidenav, ivion .mat-toolbar {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        ivion canvas { width: 100% !important; height: 100% !important; }
+      `;
+      document.head.appendChild(globalStyle);
     }
 
-    // 2. Hide via SDK API
+    console.log('[BrowserScan] Ivion minimal UI CSS injected into', ivionEls.length, 'element(s)');
+  }, []);
+
+  useEffect(() => {
+    if (sdkStatus !== 'ready') return;
+
+    // Inject CSS immediately
+    injectMinimalUiCss();
+
+    // Also retry after a short delay to catch late-rendered Angular components
+    const retryTimer = setTimeout(injectMinimalUiCss, 1500);
+    const retryTimer2 = setTimeout(injectMinimalUiCss, 4000);
+
+    // Hide via SDK API
     try {
       const api = ivApiRef.current as any;
+      api?.ui?.sidebarMenu?.hide?.();
       api?.getMenuItems?.()?.forEach((item: any) => item.setVisible?.(false));
       api?.closeMenu?.();
       const mainView = api?.view?.mainView ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null);
       mainView?.setFullscreen?.(true);
-      console.log('[BrowserScan] Ivion UI minimized for scan');
+      console.log('[BrowserScan] Ivion UI minimized via SDK');
     } catch (e) {
       console.warn('[BrowserScan] Could not minimize Ivion UI via SDK:', e);
     }
 
     return () => {
+      clearTimeout(retryTimer);
+      clearTimeout(retryTimer2);
       document.getElementById('ivion-scan-minimal-ui')?.remove();
     };
-  }, [sdkStatus]);
+  }, [sdkStatus, injectMinimalUiCss]);
 
   // Start scanning when SDK is ready — only depend on sdkStatus, guard with isScanningRef
   useEffect(() => {
