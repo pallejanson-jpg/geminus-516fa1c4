@@ -27,11 +27,7 @@ const StatusBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolea
       <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />LIVE
     </Badge>
   );
-  return (
-    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-purple-500/40 text-purple-400 bg-purple-500/10">
-      Demo
-    </Badge>
-  );
+  return null;
 };
 
 // ── Single sensor gauge card ──
@@ -305,9 +301,6 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-medium text-muted-foreground">Senaste 7 dagarna</h3>
-              {!isLive && !isLoading && (
-                <span className="text-[9px] text-purple-400">Demodata – ingen Senslinc-koppling</span>
-              )}
             </div>
             {isLoading ? (
               <div className="h-40 flex items-center justify-center">
@@ -321,8 +314,8 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
           {/* Info row */}
           {!isLoading && error && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
-              <WifiOff className="h-3.5 w-3.5 shrink-0 text-destructive" />
-              <span>Anslutning till Senslinc ej tillgänglig – visar demodata.</span>
+              <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span>Ingen live-koppling till Senslinc.</span>
             </div>
           )}
           {!isLoading && isLive && (
