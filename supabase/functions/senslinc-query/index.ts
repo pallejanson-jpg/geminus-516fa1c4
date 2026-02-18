@@ -7,12 +7,14 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data';
   fmGuid?: string;
   siteCode?: string;
+  sitePk?: number;
   indiceId?: number;
   workspaceKey?: string;
   query?: Record<string, unknown>;
+  days?: number;
 }
 
 // ── Token cache (55-minute TTL) ──
@@ -229,8 +231,18 @@ async function senslincFetch(apiUrl: string, endpoint: string, token: string, to
 
 // Build dashboard URL from base URL and entity type
 function buildDashboardUrl(apiUrl: string, type: 'machine' | 'site' | 'line', pk: number): string {
-  const portalUrl = apiUrl.replace('api.', '').replace('/api', '');
-  return `${portalUrl}/dashboard/${type}/${pk}`;
+  // Strip api. subdomain prefix and /api path suffix to get portal URL
+  let portalUrl = apiUrl
+    .replace(/^(https?:\/\/)api\./, '$1')  // api.example.com → example.com
+    .replace(/\/api\/?$/, '');              // .../api/ → ...
+  portalUrl = portalUrl.replace(/\/$/, '');
+
+  const pathMap = {
+    machine: `/machine/${pk}/room_analysis/`,
+    site:    `/site/${pk}/home/`,
+    line:    `/line/${pk}/`,
+  };
+  return `${portalUrl}${pathMap[type]}`;
 }
 
 serve(async (req) => {
@@ -274,6 +286,8 @@ serve(async (req) => {
       'get-indices',
       'get-properties',
       'search-data',
+      'get-machine-data',
+      'get-building-sensor-data',
     ]);
 
     let token: string | null = null;
@@ -411,6 +425,118 @@ serve(async (req) => {
         return jsonResponse({ success: true, data: results });
       }
 
+      // ── get-machine-data: all-in-one fetch for a single machine by fmGuid ──
+      case 'get-machine-data': {
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
+        const authToken = token as string;
+        const daysBack = days ?? 7;
+
+        // 1. Find machine by code (= fmGuid)
+        const machinesRaw = await senslincFetchWithRetry(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
+        if (!Array.isArray(machinesRaw) || machinesRaw.length === 0) {
+          return jsonResponse({ success: false, error: 'No machine found for this fmGuid' });
+        }
+        const machine = machinesRaw[0] as any;
+        const dashboardUrl = machine.dashboard_url || buildDashboardUrl(cleanApiUrl, 'machine', machine.pk);
+
+        // 2. Fetch properties for first indice (to know available fields)
+        let properties: any[] = [];
+        let workspaceKeyDiscovered: string | null = null;
+        if (Array.isArray(machine.indices) && machine.indices.length > 0) {
+          try {
+            const indiceId = machine.indices[0];
+            const propsRaw = await senslincFetchWithRetry(cleanApiUrl, `/api/properties?indice=${indiceId}`, authToken, tokenType) as any;
+            properties = Array.isArray(propsRaw) ? propsRaw : (propsRaw?.results ?? []);
+            // Try to extract workspace key from properties
+            if (properties.length > 0 && properties[0].indice_workspace) {
+              workspaceKeyDiscovered = properties[0].indice_workspace;
+            }
+          } catch (e) {
+            console.warn('[Senslinc] Could not fetch properties:', e);
+          }
+        }
+
+        // 3. Fetch time-series data if workspace key is available
+        let timeSeries: any = null;
+        const wsKey = workspaceKey || workspaceKeyDiscovered;
+        if (wsKey) {
+          try {
+            const esQuery = {
+              size: 0,
+              query: {
+                bool: {
+                  must: [
+                    { term: { machine_code: fmGuid } },
+                    { range: { ts_beg: { gte: `now-${daysBack}d`, lte: 'now' } } }
+                  ]
+                }
+              },
+              aggs: {
+                per_day: {
+                  date_histogram: { field: 'ts_beg', calendar_interval: 'day' },
+                  aggs: {
+                    avg_temp: { avg: { field: 'temperature' } },
+                    avg_co2: { avg: { field: 'co2' } },
+                    avg_humidity: { avg: { field: 'humidity' } },
+                    avg_occupancy: { avg: { field: 'occupancy' } }
+                  }
+                }
+              }
+            };
+            timeSeries = await senslincFetchWithRetry(
+              cleanApiUrl,
+              `/api/data-workspaces/${encodeURIComponent(wsKey)}/_search`,
+              authToken, tokenType,
+              { method: 'POST', body: esQuery }
+            );
+          } catch (e) {
+            console.warn('[Senslinc] Could not fetch time-series data:', e);
+          }
+        }
+
+        return jsonResponse({
+          success: true,
+          data: { machine, dashboardUrl, properties, timeSeries, workspaceKey: wsKey }
+        });
+      }
+
+      // ── get-building-sensor-data: all machines for a site in one call ──
+      case 'get-building-sensor-data': {
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid (site code) required' }, 400);
+        const authToken = token as string;
+
+        // Find site matching fmGuid
+        const sitesRaw = await senslincFetchWithRetry(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+        const sitesArr = Array.isArray(sitesRaw) ? sitesRaw : (sitesRaw?.results ?? []);
+
+        if (sitesArr.length === 0) {
+          return jsonResponse({ success: false, error: 'No Senslinc site found for this building fmGuid' });
+        }
+        const site = sitesArr[0] as any;
+
+        // Fetch all machines for this site using site pk
+        const machinesRaw = await senslincFetchWithRetry(cleanApiUrl, `/api/machines?site=${site.pk}`, authToken, tokenType) as any;
+        const machines = Array.isArray(machinesRaw) ? machinesRaw : (machinesRaw?.results ?? []);
+
+        // Return slim machine list (code, pk, name, latest_values if available)
+        const machineSlim = machines.map((m: any) => ({
+          pk: m.pk,
+          code: m.code,
+          name: m.name,
+          dashboard_url: m.dashboard_url || buildDashboardUrl(cleanApiUrl, 'machine', m.pk),
+          latest_values: m.latest_values ?? null,
+          indices: m.indices ?? [],
+        }));
+
+        return jsonResponse({
+          success: true,
+          data: {
+            site: { pk: site.pk, code: site.code, name: site.name, dashboard_url: site.dashboard_url || buildDashboardUrl(cleanApiUrl, 'site', site.pk) },
+            machines: machineSlim,
+          }
+        });
+      }
+
       default:
         return jsonResponse({ success: false, error: `Unknown action: ${action}` }, 400);
     }
@@ -419,3 +545,4 @@ serve(async (req) => {
     return jsonResponse({ success: false, error: error.message }, 200);
   }
 });
+
