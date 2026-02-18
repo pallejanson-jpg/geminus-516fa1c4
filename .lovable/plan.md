@@ -1,186 +1,108 @@
 
-# Senslinc Keycloak-stöd — implementation
+# Mobilnavigeringen — tre buggar att åtgärda
 
-## Nuläge (bekräftat)
+## Problem 1: Karta och Portfolio fungerar inte
 
-`test-connection`-knappen i Settings fungerar idag — det innebär att `SENSLINC_EMAIL` + `SENSLINC_PASSWORD` autentiserar mot Senslincs `/api-token-auth/`-endpoint just nu. Troligen ett lokalt servicekonto i Senslinc-instansen.
-
-Problemet uppstår när/om Senslinc migrerar kontot till AD via Keycloak — då slutar Django-token-authen fungera och vi behöver Keycloak OAuth2.
-
-## Vad som ändras
-
-En enda fil ändras: `supabase/functions/senslinc-query/index.ts`.
-
-### Prioritetsordning för autentisering
-
-```
-1. SENSLINC_KEYCLOAK_URL finns + SENSLINC_CLIENT_ID finns
-   → Keycloak client_credentials (service account) — Variant A
-   → Keycloak password grant med SENSLINC_EMAIL/PASSWORD — Variant B (fallback)
-
-2. SENSLINC_KEYCLOAK_URL finns INTE
-   → Befintlig Django /api-token-auth/ — exakt som idag
-```
-
-### Token-cache uppdateras
-
-Nuvarande cache:
+**Rotorsak bekräftad**: I `AppLayout.tsx` rad 19 finns:
 ```typescript
-let cachedToken: { token: string; expiresAt: number } | null = null;
+const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'radar', 'map', 'fma_plus'];
 ```
 
-Ny cache (lägger till `type`):
+`'map'` finns i listan — det gör att när användaren trycker Karta sätts `isImmersive = true` → `MobileNav` döljs → knappar verkar "dö". Även `'fma_plus'` bör troligen tas bort här eftersom kartan ska behålla sin nav.
+
+**Fix**: Ta bort `'map'` och `'fma_plus'` från `IMMERSIVE_APPS`. Immersiva appar ska bara vara de som verkligen behöver fullscreen utan navigationsbar: `'assetplus_viewer'`, `'viewer'`, `'radar'`.
+
+---
+
+## Problem 2: Fast navbar tar för mycket skärm — ersätt med hamburger-FAB
+
+**Nuläge**: `MobileNav.tsx` renderar alltid en fast `<nav>`-bar på 3.5rem längst ned med 5 knappar (Hem, Portfolio, Navigator, Karta, Mer).
+
+**Nytt beteende**:
+- Ta bort den fasta navbar-baren helt
+- Lägg till en **liten flytande FAB-knapp** (pill-formad) centrerad längst ned: `fixed bottom-5 left-1/2 -translate-x-1/2 z-40`
+- Designen: semi-transparent `bg-card/80 backdrop-blur-md border border-border rounded-full px-5 py-2.5 shadow-lg`
+- Innehåll i FAB: hamburgermenyikon + ev. "Meny" text
+- Tryck på FAB → öppnar befintlig `Drawer` (AppDrawer)
+- I drawern: flytta CORE_NAV-alternativen (Hem, Portfolio, Navigator, Karta) som ett grid-avsnitt **överst** i drawern, sedan Viewer och Integrationer som idag
+
+**Konsekvens i AppLayout.tsx**: Ta bort `pb-14`-paddingen som tidigare reserverade plats för den fasta navbaren (rad 85):
 ```typescript
-let cachedToken: { token: string; expiresAt: number; type: 'JWT' | 'Bearer' } | null = null;
+// Nuvarande (tar bort):
+className={`flex-1 min-h-0 ${isMobile && !isImmersive ? 'pb-14' : ''}`}
+style={isMobile && !isImmersive ? { paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' } : {}}
+
+// Nytt (enkel):
+className="flex-1 min-h-0"
 ```
 
-### Ny `getTokenWithType()`-funktion
+FAB:en flötar ovanpå innehållet utan att blockera — liten och diskret.
 
-Ersätter befintliga `getJwtToken()` (som behålls för bakåtkompatibilitet men delegerar till den nya):
+---
 
-```typescript
-async function getTokenWithType(
-  apiUrl: string, email: string, password: string
-): Promise<{ token: string; type: 'JWT' | 'Bearer' }> {
-  
-  // Check cache
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return { token: cachedToken.token, type: cachedToken.type };
-  }
-  
-  const keycloakUrl = Deno.env.get('SENSLINC_KEYCLOAK_URL');
-  const clientId = Deno.env.get('SENSLINC_CLIENT_ID');
-  const clientSecret = Deno.env.get('SENSLINC_CLIENT_SECRET');
-  
-  if (keycloakUrl && clientId) {
-    // Variant A: client_credentials (service account, inget AD-konto behövs)
-    // Variant B: password grant med AD-konto (om client_credentials misslyckas)
-    const result = await getKeycloakToken(keycloakUrl, clientId, clientSecret, email, password);
-    cachedToken = { ...result, expiresAt: Date.now() + TOKEN_TTL_MS };
-    return result;
-  }
-  
-  // Legacy: Django /api-token-auth/ (nuvarande beteende)
-  const token = await getDjangoToken(apiUrl, email, password);
-  cachedToken = { token, type: 'JWT', expiresAt: Date.now() + TOKEN_TTL_MS };
-  return { token, type: 'JWT' };
-}
+## Problem 3: Landningssidan går inte att scrolla
+
+**Rotorsak bekräftad**: 
+- `AppLayout` sätter `h-screen overflow-hidden` på root-diven (rad 72)
+- `MainContent` (rad 196) wrappar allt i `<div className="w-full h-full">` — detta fixerar höjden
+- `HomeLanding` (rad 164) har `min-h-full` på sin ytterdiv men kan inte expandera bortom sin fixerade förälders höjd
+
+**Fix i `MainContent.tsx`** — ändra inner wrapper (rad 196):
+```tsx
+// Nuvarande:
+<div className="w-full h-full">
+
+// Nytt — h-full bara för immersiva viewers, annars min-h-full:
+<div className={isImmersiveViewer ? "w-full h-full" : "w-full min-h-full"}>
 ```
 
-### `getKeycloakToken()` — ny funktion
+`min-h-full` tillåter att innehållet växer och `overflow-auto` på `<main>` (rad 193) tar hand om scrollningen.
 
-```typescript
-async function getKeycloakToken(
-  keycloakUrl: string, clientId: string,
-  clientSecret: string | undefined,
-  username: string | undefined, password: string | undefined
-): Promise<{ token: string; type: 'Bearer' }> {
-  
-  const tokenUrl = keycloakUrl.includes('/protocol/openid-connect/token')
-    ? keycloakUrl
-    : `${keycloakUrl.replace(/\/+$/, '')}/protocol/openid-connect/token`;
-  
-  // Försök 1: client_credentials (service account)
-  if (clientSecret) {
-    const params = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: clientId,
-      client_secret: clientSecret,
-    });
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return { token: data.access_token, type: 'Bearer' };
-    }
-    // Om client_credentials misslyckas → försök password grant
-  }
-  
-  // Försök 2: password grant med AD-konto
-  if (username && password) {
-    const params = new URLSearchParams({
-      grant_type: 'password',
-      client_id: clientId,
-      username,
-      password,
-    });
-    if (clientSecret) params.set('client_secret', clientSecret);
-    
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Keycloak auth failed: ${res.status} - ${text}`);
-    }
-    const data = await res.json();
-    return { token: data.access_token, type: 'Bearer' };
-  }
-  
-  throw new Error('Keycloak: varken client_secret eller username/password finns');
-}
-```
+---
 
-### `senslincFetchWithRetry` uppdateras
+## Teknisk implementation — tre filer, tydliga ändringar
 
-Lägger till `tokenType`-parameter:
+### Fil 1: `src/components/layout/AppLayout.tsx`
+- Rad 19: ändra `IMMERSIVE_APPS` — ta bort `'map'` och `'fma_plus'`
+- Rad 85: ta bort `pb-14`-padding och inline style
 
-```typescript
-async function senslincFetchWithRetry(
-  apiUrl: string, endpoint: string, token: string,
-  tokenType: 'JWT' | 'Bearer' = 'JWT',   // ← ny parameter
-  options?: { method?: string; body?: unknown }
-): Promise<unknown> {
-  // ...
-  headers: { 
-    'Authorization': `${tokenType} ${token}`,  // ← dynamisk typ
-    'Content-Type': 'application/json',
-  }
-}
-```
+### Fil 2: `src/components/layout/MobileNav.tsx`
+- Ta bort hela `<nav>`-blocket (rader 92–128)
+- Ersätt med en FAB-knapp:
+  ```tsx
+  <button
+    onClick={() => setIsMobileMenuOpen(true)}
+    className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-card/80 backdrop-blur-md border border-border rounded-full px-5 py-2.5 shadow-lg"
+    style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+  >
+    <Menu className="h-4 w-4 text-foreground" />
+    <span className="text-sm font-medium text-foreground">Meny</span>
+  </button>
+  ```
+- I `DrawerContent` — lägg till CORE_NAV-grid överst (före "Viewer"-sektionen):
+  ```tsx
+  {/* Core navigation */}
+  <div>
+    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
+    <div className="grid grid-cols-4 gap-2">
+      {CORE_NAV.map(({ key, icon: Icon, label }) => (
+        <button key={key} onClick={() => { setActiveApp(key); setIsMobileMenuOpen(false); }}
+          className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-muted/60">
+          <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center",
+            activeApp === key ? "bg-primary/15" : "bg-muted")}>
+            <Icon className={cn("h-6 w-6", activeApp === key ? "text-primary" : "text-foreground/70")} />
+          </div>
+          <span className="text-[11px]">{label}</span>
+        </button>
+      ))}
+    </div>
+  </div>
+  ```
 
-### `test-connection` uppdateras
+### Fil 3: `src/components/layout/MainContent.tsx`
+- Rad 196: ändra `<div className="w-full h-full">` till `<div className={isImmersiveViewer ? "w-full h-full" : "w-full min-h-full"}>`
 
-Visar vilket auth-läge som används och fungerar som diagnostikverktyg:
-
-```typescript
-case 'test-connection': {
-  const authMode = Deno.env.get('SENSLINC_KEYCLOAK_URL') ? 'Keycloak' : 'Django token';
-  const { token, type } = await getTokenWithType(cleanApiUrl, email, password);
-  const sites = await senslincFetchWithRetry(cleanApiUrl, '/api/sites', token, type);
-  return jsonResponse({
-    success: true,
-    message: `Anslutning lyckades via ${authMode}! Hittade ${Array.isArray(sites) ? sites.length : 0} sites.`,
-    authMode,
-  });
-}
-```
-
-## Bakåtkompatibilitet
-
-- Om `SENSLINC_KEYCLOAK_URL` **inte är satt**: exakt samma beteende som idag — `/api-token-auth/` med `JWT`-header. Ingen förändring.
-- Om `SENSLINC_KEYCLOAK_URL` **är satt**: Keycloak-flödet aktiveras med `Bearer`-header.
-- Befintliga hemligheter `SENSLINC_EMAIL` och `SENSLINC_PASSWORD` används i båda fallen.
-
-## Nya hemligheter (konfigureras när du fått dem från Senslinc)
-
-| Hemlighet | Krävs för |
-|---|---|
-| `SENSLINC_KEYCLOAK_URL` | Aktiverar Keycloak-flödet (t.ex. `https://auth.inuse.se/realms/senslinc`) |
-| `SENSLINC_CLIENT_ID` | Keycloak client-id för Senslinc-applikationen |
-| `SENSLINC_CLIENT_SECRET` | Service account-secret (Variant A) — valfri om Variant B används |
-
-Utan dessa → befintlig inloggning fortsätter fungera.
-
-## Vad som ändras
-
-| Fil | Ändring |
-|---|---|
-| `supabase/functions/senslinc-query/index.ts` | Ny `getTokenWithType()`, `getKeycloakToken()`, dynamisk token-header i `senslincFetchWithRetry`, uppdaterad `test-connection` |
-
-Inga frontend-ändringar. Inga DB-migrationer. Inga nya edge functions.
+## Vad som INTE ändras
+- Desktop-layouten påverkas inte (alla ändringar är bakom `isMobile`-guards)
+- Drawer-designen och integrationsavsnittet är oförändrat
+- Immersiva appar (viewer, radar, assetplus_viewer) förblir fullscreen utan navbar
