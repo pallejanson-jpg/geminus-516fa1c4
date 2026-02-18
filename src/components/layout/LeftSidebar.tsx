@@ -5,6 +5,7 @@ import { THEMES, DEFAULT_APP_CONFIGS, DEFAULT_SIDEBAR_ORDER, SIDEBAR_ORDER_STORA
 import type { SidebarItem } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
+import { supabase } from '@/integrations/supabase/client';
 
 // Map sidebar item IDs to icon + color + label + handler type
 const SIDEBAR_ITEM_META: Record<string, {
@@ -33,7 +34,10 @@ const LeftSidebar: React.FC = () => {
         appConfigs, 
         setSelectedFacility,
         isSidebarExpanded,
-        setIsSidebarExpanded
+        setIsSidebarExpanded,
+        selectedFacility,
+        setIvion360Context,
+        open360WithContext,
     } = useContext(AppContext);
     
     const t = THEMES[theme];
@@ -65,9 +69,42 @@ const LeftSidebar: React.FC = () => {
         return SIDEBAR_ITEM_META[key]?.color || 'text-muted-foreground';
     };
     
-    const handleItemClick = useCallback((id: string) => {
+    const handleItemClick = useCallback(async (id: string) => {
         const meta = SIDEBAR_ITEM_META[id];
         if (!meta) return;
+
+        // Special handling for radar (360°): try to set context from selectedFacility
+        if (id === 'radar') {
+            const radarConfig = appConfigs?.radar || {};
+            const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
+
+            if (selectedFacility?.fmGuid) {
+                try {
+                    const { data: settings } = await supabase
+                        .from('building_settings')
+                        .select('ivion_site_id')
+                        .eq('fm_guid', selectedFacility.fmGuid)
+                        .maybeSingle();
+
+                    if (settings?.ivion_site_id) {
+                        open360WithContext({
+                            buildingFmGuid: selectedFacility.fmGuid,
+                            buildingName: selectedFacility.commonName || selectedFacility.name || '',
+                            ivionSiteId: settings.ivion_site_id,
+                            ivionUrl,
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.debug('Failed to fetch ivion settings for radar:', e);
+                }
+            }
+
+            // No site ID configured or no building selected — open with empty context so viewer shows config message
+            setIvion360Context(null);
+            setActiveApp('radar');
+            return;
+        }
 
         if (meta.type === 'config') {
             const currentAppConfig = appConfigs[id] || {};
@@ -80,7 +117,7 @@ const LeftSidebar: React.FC = () => {
             // Internal items: inventory, fault_report, insights
             setActiveApp(id);
         }
-    }, [appConfigs, setActiveApp]);
+    }, [appConfigs, setActiveApp, selectedFacility, setIvion360Context, open360WithContext]);
 
     return (
         <aside 
