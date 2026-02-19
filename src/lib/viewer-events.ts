@@ -53,6 +53,23 @@ export interface ModelLoadRequestedDetail {
   modelId: string;
 }
 
+/** Event dispatched when Insights drawer wants to update room colorization in 3D */
+export const INSIGHTS_COLOR_UPDATE_EVENT = 'INSIGHTS_COLOR_UPDATE';
+
+/** Event dispatched when Insights drawer wants to show alarm annotations in 3D */
+export const ALARM_ANNOTATIONS_SHOW_EVENT = 'ALARM_ANNOTATIONS_SHOW';
+
+/** Type for insights color update event detail */
+export interface InsightsColorUpdateDetail {
+  mode: string;
+  colorMap: Record<string, [number, number, number]>;
+}
+
+/** Type for alarm annotations show event detail */
+export interface AlarmAnnotationsShowDetail {
+  alarms: { fmGuid: string; x: number; y: number; z: number }[];
+}
+
 /** Type for load saved view event detail */
 export interface LoadSavedViewDetail {
   viewId: string;
