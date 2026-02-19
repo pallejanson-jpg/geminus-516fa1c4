@@ -180,6 +180,13 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 const response = await fetch(url);
                 if (response.ok) {
                   const data = await response.arrayBuffer();
+                  // Validate binary data — reject HTML/JSON error responses from expired signed URLs
+                  const MIN_VALID_XKT_BYTES = 50_000;
+                  const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
+                  if (data.byteLength < MIN_VALID_XKT_BYTES || firstByte === '<' || firstByte === '{') {
+                    console.warn(`XKT Preload: Skipping ${model.model_id} — invalid data (${data.byteLength} bytes, starts with '${firstByte}')`);
+                    return;
+                  }
                   storeModelInMemory(model.model_id, buildingFmGuid, data);
                   completedCount++;
                   console.log(`XKT Preload: ${completedCount}/${sortedModels.length} models loaded`);
