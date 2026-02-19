@@ -103,22 +103,33 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
 
     const metaObjects = viewer.metaScene.metaObjects;
     const extractedFloors: FloorInfo[] = [];
+    const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
     Object.values(metaObjects).forEach((metaObject: any) => {
       const type = metaObject?.type?.toLowerCase();
       if (type === 'ifcbuildingstorey') {
-        const name = metaObject.name || 'Unknown Floor';
-        // Extract short name (e.g., "Plan 2" -> "2", "Våning 03" -> "03")
-        const shortMatch = name.match(/(\d+)/);
-        const shortName = shortMatch ? shortMatch[1] : name.substring(0, 4);
+        const rawName = metaObject.name || '';
         
-        // Get fmGuid from originalSystemId for database matching
+        // Check if name is a GUID or missing
+        const isGuid = GUID_RE.test(rawName);
+        const isUnknown = !rawName || rawName === 'Unknown Floor';
+        
+        if (isGuid || isUnknown) {
+          // Check if this floor has children — skip empty GUID floors
+          const hasChildren = Object.values(metaObjects).some((m: any) => m.parent?.id === metaObject.id);
+          if (!hasChildren) return;
+        }
+        
+        const displayName = (isGuid || isUnknown) ? `Våning ${extractedFloors.length + 1}` : rawName;
+        const shortMatch = displayName.match(/(\d+)/);
+        const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 4);
+        
         const fmGuid = metaObject.originalSystemId || metaObject.id;
         
         extractedFloors.push({
           id: metaObject.id,
           fmGuid: fmGuid,
-          name,
+          name: displayName,
           shortName,
           databaseLevelFmGuids: [fmGuid],
         });

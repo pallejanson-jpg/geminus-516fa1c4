@@ -157,7 +157,6 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         }
         
         // Strategy 6: Extract name from metaScene IfcProject root
-        // Each loaded model has a root IfcProject meta-object with a human-readable name
         if (!matchedName && viewer?.metaScene) {
           try {
             const metaModel = viewer.metaScene.metaModels?.[modelId];
@@ -168,21 +167,33 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
                 console.debug("Strategy 6 (metaScene IfcProject) matched:", modelId, "->", matchedName);
               }
             }
-            // Fallback: search all metaObjects for IfcProject belonging to this model
+            // Strategy 6b: search all metaObjects for IfcProject belonging to this model
             if (!matchedName) {
               const metaObjects = viewer.metaScene.metaObjects || {};
               for (const metaObj of Object.values(metaObjects) as any[]) {
-                if (metaObj.type === 'IfcProject' && metaObj.metaModel?.id === modelId) {
-                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                    matchedName = metaObj.name;
-                    console.debug("Strategy 6b (metaObjects search) matched:", modelId, "->", matchedName);
+                if (metaObj.type === 'IfcProject') {
+                  // Check by metaModel reference
+                  if (metaObj.metaModel?.id === modelId) {
+                    if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                      matchedName = metaObj.name;
+                      console.debug("Strategy 6b matched:", modelId, "->", matchedName);
+                    }
+                    break;
                   }
-                  break;
+                  // Strategy 7: Check by ID namespace (modelId#objectId pattern)
+                  const objId = metaObj.id || '';
+                  if (objId.startsWith(modelId + '#') || objId.startsWith(modelId + '.')) {
+                    if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                      matchedName = metaObj.name;
+                      console.debug("Strategy 7 (namespace) matched:", modelId, "->", matchedName);
+                    }
+                    break;
+                  }
                 }
               }
             }
           } catch (e) {
-            console.debug("Strategy 6 failed for model:", modelId, e);
+            console.debug("Strategy 6/7 failed for model:", modelId, e);
           }
         }
         
