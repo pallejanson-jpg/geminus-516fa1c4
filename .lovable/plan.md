@@ -1,80 +1,83 @@
 
 
-## Merge Larm into FM-flik + Visa i 3D + Rum-interaktion i 3D-panel
+## Analys och atergarder: 3D-laddning, annotations, vaningstal, sensor/space-konsolidering
 
-### Sammanfattning
+### Problem 1: Annotation-laddning tar 2+ minuter
 
-Tre sammankopplade funktioner:
+**Rotorsak identifierad:**
+I `loadAlarmAnnotations` (AssetPlusViewer.tsx rad 1516-1548) gors en linjar sokning for varje alarm:
 
-1. **Bygg FM-flik per byggnad** -- flytta larminnehall fran separat "Larm"-flik till en ny "FM"-flik i BuildingInsightsView, med riktiga rumsnamn/nummer istallet for GUIDs, plus en "Visa i 3D"-knapp
-2. **Rum-kort i 3D** -- fran Space-fliken: farglagg rum i 3D-viewern och ta med sig rumslistan till InsightsDrawerPanel sa man kan jobba med rum i 3D
-3. **InsightsDrawerPanel som arbetsyta** -- utoka panelen sa att den visar rumlistan med fargkodning och lat anvandaren tanda/slacka/klicka pa rum direkt i 3D
-
----
-
-### Del 1: FM-flik med riktig data i BuildingInsightsView
-
-**Andringar i `src/components/insights/BuildingInsightsView.tsx`:**
-
-- Byt namn pa "Larm"-fliken (value="alarms") till **"FM"** (value="fm")
-- Behall KPI-kort (totalt antal larm, vaningar med larm, snitt per vaning)
-- Behall stapeldiagram (larm per vaningsplan)
-- **Forbattra alarmlistan:**
-  - Hamta rum-metadata (name, common_name) via en join-query: for varje alarm.in_room_fm_guid, sla upp motsvarande rum i allData eller en separat query
-  - Visa kolumner: **Rumsnamn** | **Rumsnummer** | **Vaning** | **Datum** | **Visa i 3D** | Radera
-  - Rumsnamn = common_name fran det rum som alarm.in_room_fm_guid pekar pa
-  - Rumsnummer = name fran samma rum
-  - Vaning = levelNames-map (redan implementerat)
-- **"Visa i 3D"-knapp** pa varje alarm-rad + en global "Visa alla i 3D"-knapp:
-  - Global-knappen: tar de 50 senaste larmens koordinater och navigerar till 3D-viewern med en URL-parameter (t.ex. `showAlarmAnnotations=50`) som triggar att annotations tands for dessa 50 larm
-  - Per-rad-knapp: navigerar till 3D med `entity=<alarm.fm_guid>` for att flyga till och flash-highlighta det specifika larmet
-
-**Data-hamtning:**
-- Utoka fetchAlarmData sa att den ocksa hamtar `name, common_name, coordinate_x, coordinate_y, coordinate_z` for alarmen
-- Hamta rum-lookup: `SELECT fm_guid, name, common_name FROM assets WHERE building_fm_guid = X AND category IN ('Space','IfcSpace')` -- anvand allData som redan finns i context istallet for ny query
-
----
-
-### Del 2: Rum-visualisering fran Space-fliken till 3D
-
-**Andringar i `src/components/insights/BuildingInsightsView.tsx` (Space-tab):**
-
-- Lagg till en **"Visa rum i 3D"**-knapp i Space-fliken som:
-  1. Bygger en colorMap dar varje rums fmGuid mappas till samma farg som i Room Types-pajen (baserat pa spaceType)
-  2. Anropar `handleInsightsClick({ mode: 'room_spaces', colorMap })` -- detta fargar in rum i inline-viewern (desktop) eller navigerar till 3D (mobil)
-- Rumskorten i Space-tabben far ocksa `onClick` som fargar in det specifika rummet i 3D
-
-**Nytt insightsMode `room_spaces`:**
-- Lagg till stod for detta mode i `RoomVisualizationPanel.tsx` (eller direkt i AssetPlusViewer via `insightsColorMap`)
-- Befintlig logik i AssetPlusViewer hanterar redan `insightsColorMap` -- nar den ar satt fargas matchande IfcSpace-entiteter in med angivna farger
-
----
-
-### Del 3: InsightsDrawerPanel som arbetsyta i 3D
-
-**Andringar i `src/components/viewer/InsightsDrawerPanel.tsx`:**
-
-- Utoka panelens hojd fran 320px till 400px (eller gorbar resizable)
-- BuildingInsightsView kors redan i drawerMode -- den visar flikar utan inline-viewer
-- Nar anvandaren klickar pa diagram/rum i panelen uppdateras farglagningen i 3D-viewern direkt via sessionStorage + custom event
-
-**Ny interaktionslank:**
-- Fran BuildingInsightsView (i drawerMode) nar anvandaren klickar pa ett rum eller diagram-segment:
-  - Istallet for att navigera (som pa standalone-sidan) dispatchar en CustomEvent `INSIGHTS_COLOR_UPDATE` med det nya colorMap
-  - UnifiedViewer/AssetPlusViewer lyssnar pa detta event och uppdaterar farglagningen i realtid
-  - Detta gor att anvandaren kan klicka runt i Insights-panelen och se rum tanda/slacka direkt i 3D ovanfor
-
-**Teknisk implementation:**
 ```text
-InsightsDrawerPanel (bottom sheet i 3D)
-  --> BuildingInsightsView (drawerMode=true)
-       --> Space-flik: klick pa rum -> dispatch INSIGHTS_COLOR_UPDATE
-       --> FM-flik: klick pa "Visa i 3D" -> dispatch ALARM_ANNOTATIONS_SHOW
-  
-UnifiedViewer / AssetPlusViewer
-  --> lyssnar pa INSIGHTS_COLOR_UPDATE -> applicera insightsColorMap
-  --> lyssnar pa ALARM_ANNOTATIONS_SHOW -> tand annotations for angivna larm
+alarms.forEach(alarm => {
+  const metaObj = Object.values(metaObjects).find(m =>
+    (m.originalSystemId || m.id)?.toUpperCase() === alarm.fm_guid?.toUpperCase()
+  );
+});
 ```
+
+Med 1000 alarm och potentiellt 50 000+ metaObjects blir detta ~50 miljoner jamforelser. Loggen visar 2 minuter fran "Found 1000 alarm assets" till "Found 0 alarm annotations" -- all tid gar at till denna loop.
+
+**Fix:** Bygg en uppslagningsmapp (`Map<string, metaObject>`) FORE loopen. Det reducerar O(n*m) till O(n+m) -- fran minuter till millisekunder.
+
+---
+
+### Problem 2: "13 vaningar" -- felaktig rakning
+
+**Rotorsak:** Smavikenbyggnaden har 13 Building Storey-poster i databasen, men manga ar dubbletter fran olika modeller:
+- `01` (1 st)
+- `04 - 01` (1 st)
+- `05 - 01`, `05 - 02` (samma vaning, tva modeller)
+- `06 - 01`, `06 - 02` (samma vaning, tva modeller)
+- `FLAKTRUM - 01`, `FLAKTRUM - 02` (samma, tva modeller)
+- `TAKPLAN - 02` (1 st)
+- `Base Level` (1 st)
+- 3 utan namn (null)
+
+**Fix:** Deduplicera vaningar baserat pa `common_name`-prefix (ta bort " - 01", " - 02" suffix) och raekna unika. Det ger ~7 unika vaningsplan istallet for 13.
+
+Andring i `stats`-berakningen (rad 362):
+```text
+// Nuvarande: floorCount: buildingStoreys.length (= 13)
+// Ny: deduplicate by common_name prefix
+const uniqueFloors = new Set(buildingStoreys.map(s =>
+  (s.commonName || s.fmGuid).replace(/\s*-\s*\d+$/, '')
+));
+floorCount: uniqueFloors.size
+```
+
+---
+
+### Problem 3: "Visa rum i 3D" pa fel flik och for stor
+
+**Nuvarande:** Knappen ligger pa Space-fliken (rad 710-743) som ett eget Card-block.
+
+**Fix:** Flytta knappen till Sensors-fliken (som snart integreras i Space-fliken -- se nedan), inline med "Rumsheatmap"-rubriken. Minska fran eget Card till en liten knapp pa samma rad som rubriken.
+
+---
+
+### Problem 4: Sensor-fliken ska slas ihop med Space-fliken
+
+**Atgard:**
+1. Flytta sensorinnehallet (rumsheatmap, trend-diagram, metrik-valjare, LIVE-badge) in i Space-fliken, nedanfor befintligt rum-typdiagram
+2. Ta bort "Sensorer"-tabben fran TabsList
+3. Placera "Visa rum i 3D"-knappen inline med "Rumsheatmap"-rubriken (liten, samma hojd)
+4. Rumsheatmap visar 60 rum med en kommentar om att byggnaden har 555 totalt
+
+---
+
+### Problem 5: Sensorer for icke-rumobjekt pa Asset-fliken
+
+**Atgard:** Pa Asset-fliken, lagg till en sektion "Tillgangs-sensorer" som visar sensordata for objekt av kategori "Instance" (kategori 4) som har Senslinc-koppling. Dessa ar maskiner/installationer som inte tillhor rum.
+
+---
+
+### Problem 6: XKT-laddtider -- cachestrategi
+
+Konsolloggarna visar att cachade modeller ar korrupta (0 bytes) och faller igenom till ny nedladdning. Edge-funktionen `xkt-cache` far "Memory limit exceeded". Modellerna ar 41-53 MB styck, totalt ~150 MB i minnet.
+
+Cachen fungerar korrekt for modeller som ar inladdade (`XKT Memory: Stored`) men edge-funktionens uppladdning misslyckas (`FunctionsHttpError`, `FunctionsFetchError`, auth lock timeouts). Det innebar att modeller aldrig sparas i backend-cachen -- de hamtas fran Asset+ varje gang.
+
+**Detta ar ett separat problem** -- edge-funktionens minnesgrans ar for lag for 53 MB XKT-filer. Plan: lagga till chunked upload eller skippa edge-funktionen for stora filer och ladda upp direkt till Storage fran klienten. (Behandlas separat.)
 
 ---
 
@@ -82,12 +85,18 @@ UnifiedViewer / AssetPlusViewer
 
 | Fil | Andring |
 |---|---|
-| `src/components/insights/BuildingInsightsView.tsx` | 1) Byt "Larm"-flik till "FM", 2) Visa rumsnamn/nummer i alarmlistan, 3) Lagg till "Visa i 3D"-knappar, 4) Lagg till "Visa rum i 3D" i Space-fliken, 5) I drawerMode: dispatcha events istallet for navigate |
-| `src/components/viewer/InsightsDrawerPanel.tsx` | Oka hojd, hantera events fran BuildingInsightsView |
-| `src/components/viewer/AssetPlusViewer.tsx` | Lyssna pa `INSIGHTS_COLOR_UPDATE` event for att uppdatera farglagning i realtid |
-| `src/lib/viewer-events.ts` | Lagg till nya event-namn: `INSIGHTS_COLOR_UPDATE`, `ALARM_ANNOTATIONS_SHOW` |
+| `src/components/viewer/AssetPlusViewer.tsx` | Bygg Map-lookup for metaObjects FORE alarm-loopen (fixar 2-min hang) |
+| `src/components/insights/BuildingInsightsView.tsx` | 1) Deduplicera vaningstal, 2) Flytta sensorinnehall till Space-fliken, 3) Ta bort Sensors-tabben, 4) Placera "Visa rum i 3D" inline med Rumsheatmap-rubrik |
+| `src/components/insights/tabs/SensorsTab.tsx` | Ingen -- filen kan ligga kvar som standalone men anvands inte langre fran BuildingInsightsView |
 
-### Inga databasandringar
+### Ingen databasandring
 
-All data som behovs finns redan i `assets`-tabellen och `allData`-kontexten. Rum-lookup gors via allData (redan laddad). Inga nya edge functions.
+All data finns redan. Deduplicering och sammanslagning sker i frontend-logik.
 
+### Prioritetsordning
+
+1. **Annotation-fix** -- storst prestandaproblem, fixar 2-minuters hang
+2. **Vaningstal-deduplicering** -- enkel fix, en rad
+3. **Sensor+Space ihopslagning** -- storre UI-refaktor men isolerad till BuildingInsightsView
+4. **"Visa rum i 3D" flytt** -- del av punkt 3
+5. **Tillgangs-sensorer pa Asset** -- ny sektion, laggs till sist
