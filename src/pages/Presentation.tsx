@@ -139,7 +139,7 @@ const TitleSlide = () => (
       </blockquote>
       <div className="flex gap-4 flex-wrap">
         {["20 years · AEC + FM", "Service Works Global", "Built with vibe-coding", "3 months · Non-developer"].map((tag) => (
-          <span key={tag} className="px-4 py-2 rounded-full bg-white/10 border border-white/20 text-[20px] text-white/70">
+          <span key={tag} className="px-4 py-2 rounded-full bg-white/15 border border-white/30 text-[20px] text-white/90">
             {tag}
           </span>
         ))}
@@ -158,7 +158,7 @@ const AecoGapSlide = () => (
     <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-red-950/80 to-orange-950/60" />
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <h2 className="text-[80px] font-black mb-4 text-white">The AECO Industry Has a Gap</h2>
-      <p className="text-[28px] text-white/60 mb-14">Addnode is strong in A, E and C — but O is underserved</p>
+      <p className="text-[28px] text-white/80 mb-14">Addnode is strong in A, E and C — but O is underserved</p>
 
       {/* AECO pipeline */}
       <div className="flex items-center gap-0 mb-14">
@@ -172,7 +172,7 @@ const AecoGapSlide = () => (
             <div className={`flex flex-col items-center justify-center w-[290px] h-[200px] rounded-3xl border-2 ${color} ${strong ? "scale-110 shadow-2xl shadow-red-500/30" : ""}`}>
               <span className={`text-[90px] font-black leading-none ${text}`}>{letter}</span>
               <span className="text-[22px] font-semibold text-white mt-1">{label}</span>
-              <span className="text-[17px] text-white/50 mt-1">{sub}</span>
+              <span className="text-[17px] text-white/75 mt-1">{sub}</span>
               {strong && <span className="mt-2 text-[16px] text-red-300 font-semibold">← THE GAP</span>}
             </div>
             {i < 3 && <ArrowRight className="w-10 h-10 text-white/30 mx-2" />}
@@ -181,13 +181,13 @@ const AecoGapSlide = () => (
       </div>
 
       <div className="grid grid-cols-2 gap-10">
-        <div className="bg-white/5 rounded-2xl p-8 border border-white/10">
-          <p className="text-[26px] text-white/80 leading-relaxed">
+        <div className="bg-white/10 rounded-2xl p-8 border border-white/20">
+          <p className="text-[26px] text-white/90 leading-relaxed">
             <span className="text-white font-bold">Symetri</span> and <span className="text-white font-bold">Service Works Global</span> now share the same business area — <span className="text-cyan-300 font-semibold">Design Management</span>.
           </p>
         </div>
-        <div className="bg-red-500/10 rounded-2xl p-8 border border-red-400/30">
-          <p className="text-[26px] text-white/80 leading-relaxed">
+        <div className="bg-red-500/15 rounded-2xl p-8 border border-red-400/50">
+          <p className="text-[26px] text-white/90 leading-relaxed">
             Buildings are operated for <span className="text-red-300 font-bold">50–100 years</span>. AEC tools stop at handover. <span className="text-white font-semibold">The O in AECO is where the value lives.</span>
           </p>
         </div>
@@ -215,7 +215,7 @@ const HubSlide = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-blue-950/85 to-slate-900/75" />
       <div className="relative z-10 flex flex-col justify-center h-full text-white px-24 py-12">
         <h2 className="text-[70px] font-black mb-2 text-white text-center">The Addnode Hub</h2>
-        <p className="text-[26px] text-white/55 mb-10 text-center">Addnode already owns every ingredient — Geminus is the missing center</p>
+        <p className="text-[26px] text-white/80 mb-10 text-center">Addnode already owns every ingredient — Geminus is the missing center</p>
 
         {/* Hub diagram */}
         <div className="flex-1 flex items-center justify-center">
@@ -240,42 +240,42 @@ const HubSlide = () => {
               style={{ width: 220, height: 220, left: 440, top: 170, zIndex: 10 }}>
               <Building2 className="w-12 h-12 text-cyan-400 mb-2" />
               <p className="text-[32px] font-black text-cyan-300 leading-none">GEMINUS</p>
-              <p className="text-[14px] text-white/55 mt-1">Digital Twin Hub</p>
+              <p className="text-[14px] text-white/75 mt-1">Digital Twin Hub</p>
             </div>
 
             {/* Symetri — top center */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-blue-400/70 bg-blue-500/20 text-center px-5 py-4"
               style={{ width: 210, height: 100, left: 445, top: 0, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-blue-300 leading-tight">Symetri / ACC</p>
-              <p className="text-[14px] text-white/55 mt-1">BIM & construction data</p>
+              <p className="text-[14px] text-white/75 mt-1">BIM & construction data</p>
             </div>
 
             {/* In Use — left */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-violet-400/70 bg-violet-500/20 text-center px-5 py-4"
               style={{ width: 200, height: 100, left: 20, top: 230, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-violet-300 leading-tight">In Use</p>
-              <p className="text-[14px] text-white/55 mt-1">Space utilization data</p>
+              <p className="text-[14px] text-white/75 mt-1">Space utilization data</p>
             </div>
 
             {/* Bimify — right */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-purple-400/70 bg-purple-500/20 text-center px-5 py-4"
               style={{ width: 200, height: 100, left: 880, top: 230, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-purple-300 leading-tight">Bimify</p>
-              <p className="text-[14px] text-white/55 mt-1">AI scan-to-BIM</p>
+              <p className="text-[14px] text-white/75 mt-1">AI scan-to-BIM</p>
             </div>
 
             {/* SWG — bottom left */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-emerald-400/70 bg-emerald-500/20 text-center px-5 py-4"
               style={{ width: 220, height: 100, left: 100, top: 420, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-emerald-300 leading-tight">SWG / Asset+</p>
-              <p className="text-[14px] text-white/55 mt-1">FM operations platform</p>
+              <p className="text-[14px] text-white/75 mt-1">FM operations platform</p>
             </div>
 
             {/* Senslinc — bottom right */}
             <div className="absolute flex flex-col items-center justify-center rounded-2xl border-2 border-orange-400/70 bg-orange-500/20 text-center px-5 py-4"
               style={{ width: 210, height: 100, left: 790, top: 420, zIndex: 10 }}>
               <p className="text-[20px] font-bold text-orange-300 leading-tight">Senslinc</p>
-              <p className="text-[14px] text-white/55 mt-1">IoT real-time data</p>
+              <p className="text-[14px] text-white/75 mt-1">IoT real-time data</p>
             </div>
 
           </div>
@@ -341,11 +341,11 @@ const UnlocksSlide = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-slate-950/97 via-cyan-950/80 to-slate-900/75" />
       <div className="relative z-10 flex flex-col h-full text-white px-32 py-14">
         <h2 className="text-[68px] font-black mb-2 text-white">What Geminus Unlocks for Each Company</h2>
-        <p className="text-[26px] text-white/55 mb-10">Not what Geminus takes — what each Addnode company <span className="text-cyan-300 font-semibold">gains</span></p>
+        <p className="text-[26px] text-white/80 mb-10">Not what Geminus takes — what each Addnode company <span className="text-cyan-300 font-semibold">gains</span></p>
 
         <div className="flex-1 flex flex-col justify-center space-y-5">
           {rows.map(({ company, badge, badgeColor, value, arrowColor }) => (
-            <div key={company} className="flex items-center gap-8 bg-white/5 rounded-2xl border border-white/10 px-8 py-5">
+            <div key={company} className="flex items-center gap-8 bg-white/10 rounded-2xl border border-white/20 px-8 py-5">
               {/* Company */}
               <div className="w-[280px] shrink-0 flex items-center gap-4">
                 <span className={`px-3 py-1 rounded-full border text-[15px] font-semibold ${badgeColor}`}>{badge}</span>
@@ -354,13 +354,13 @@ const UnlocksSlide = () => {
               {/* Arrow */}
               <ArrowRight className={`w-8 h-8 shrink-0 ${arrowColor}`} />
               {/* Value */}
-              <p className="text-[22px] text-white/80 leading-snug flex-1">{value}</p>
+              <p className="text-[22px] text-white/90 leading-snug flex-1">{value}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-6 bg-cyan-500/10 rounded-2xl border border-cyan-400/30 p-5 text-center">
-          <p className="text-[22px] text-white/80 font-medium">
+        <div className="mt-6 bg-cyan-500/15 rounded-2xl border border-cyan-400/50 p-5 text-center">
+          <p className="text-[22px] text-white font-medium">
             Every Geminus user simultaneously deepens value for <span className="text-cyan-300 font-bold">all five companies</span> — that is ecosystem lock-in through value, not contracts.
           </p>
         </div>
@@ -389,7 +389,7 @@ const ProofSlide = () => (
         <h2 className="text-[80px] font-black leading-tight text-white mb-6">
           It Already<br />Works.
         </h2>
-        <p className="text-[26px] text-white/60 mb-12 max-w-[700px]">
+        <p className="text-[26px] text-white/80 mb-12 max-w-[700px]">
           This is not a PowerPoint vision. A non-developer built this in 3 months. The AI wrote the code.
         </p>
 
@@ -401,14 +401,14 @@ const ProofSlide = () => (
             { num: "50+", label: "components built" },
             { num: "6", label: "Addnode API integrations" },
           ].map(({ num, label }) => (
-            <div key={label} className="bg-white/5 rounded-2xl border border-white/10 px-6 py-4">
+            <div key={label} className="bg-white/10 rounded-2xl border border-white/20 px-6 py-4">
               <p className="text-[32px] font-black text-emerald-300 leading-none">{num}</p>
-              <p className="text-[18px] text-white/55 mt-1">{label}</p>
+              <p className="text-[18px] text-white/80 mt-1">{label}</p>
             </div>
           ))}
         </div>
 
-        <blockquote className="border-l-4 border-emerald-400 pl-6 text-[24px] text-white/75 italic">
+        <blockquote className="border-l-4 border-emerald-400 pl-6 text-[24px] text-white/90 italic">
           "I described what I wanted. The AI built it."
         </blockquote>
       </div>
@@ -420,7 +420,7 @@ const ProofSlide = () => (
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-4">
             <p className="text-[18px] font-bold text-white">3D BIM + Live IoT Overlay</p>
-            <p className="text-[14px] text-white/55">Bimify · ACC · Senslinc in one view</p>
+            <p className="text-[14px] text-white/80">Bimify · ACC · Senslinc in one view</p>
           </div>
         </div>
         <div className="relative rounded-2xl overflow-hidden border border-emerald-400/40 h-[240px]">
@@ -428,7 +428,7 @@ const ProofSlide = () => (
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-4">
             <p className="text-[18px] font-bold text-white">AI Scans 360° → Registers in Asset+</p>
-            <p className="text-[14px] text-white/55">Gemini Vision · NavVis Ivion · SWG Asset+</p>
+            <p className="text-[14px] text-white/80">Gemini Vision · NavVis Ivion · SWG Asset+</p>
           </div>
         </div>
       </div>
@@ -458,7 +458,7 @@ const RoiSlide = () => (
           <h3 className="text-[28px] font-bold text-green-300 mb-6">FM Efficiency</h3>
           <div className="space-y-5">
             <div>
-              <p className="text-[18px] text-white/60">FM time searching for info</p>
+              <p className="text-[18px] text-white/80">FM time searching for info</p>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[32px] font-black text-white">30%</span>
                 <ArrowRight className="w-6 h-6 text-green-400" />
@@ -467,11 +467,11 @@ const RoiSlide = () => (
             </div>
             <div className="bg-green-500/20 rounded-2xl p-4">
               <p className="text-[42px] font-black text-green-300">200 h</p>
-              <p className="text-[18px] text-white/70">saved per FM employee / year</p>
+              <p className="text-[18px] text-white/80">saved per FM employee / year</p>
             </div>
             <div>
               <p className="text-[28px] font-bold text-white">60 000 SEK</p>
-              <p className="text-[17px] text-white/50">≈ €5 400 per person annually</p>
+              <p className="text-[17px] text-white/75">≈ €5 400 per person annually</p>
             </div>
           </div>
         </div>
@@ -482,18 +482,18 @@ const RoiSlide = () => (
           <h3 className="text-[28px] font-bold text-blue-300 mb-6">AI Inventory at Scale</h3>
           <div className="space-y-5">
             <div>
-              <p className="text-[18px] text-white/60">Manual inventory per floor</p>
+              <p className="text-[18px] text-white/80">Manual inventory per floor</p>
               <p className="text-[28px] font-bold text-white mt-1">4–6 hours</p>
             </div>
             <div>
-              <p className="text-[18px] text-white/60">AI scan with Geminus</p>
+              <p className="text-[18px] text-white/80">AI scan with Geminus</p>
               <p className="text-[28px] font-bold text-green-300 mt-1">15–30 minutes</p>
             </div>
             <div className="bg-blue-500/20 rounded-2xl p-4">
               <p className="text-[42px] font-black text-blue-300">10×</p>
-              <p className="text-[18px] text-white/70">faster — at a fraction of the cost</p>
+              <p className="text-[18px] text-white/80">faster — at a fraction of the cost</p>
             </div>
-            <p className="text-[17px] text-white/50">Bimify scan-to-BIM = no manual digitization cost</p>
+            <p className="text-[17px] text-white/75">Bimify scan-to-BIM = no manual digitization cost</p>
           </div>
         </div>
 
@@ -503,23 +503,23 @@ const RoiSlide = () => (
           <h3 className="text-[28px] font-bold text-amber-300 mb-6">Ecosystem Value</h3>
           <div className="space-y-5">
             <div>
-              <p className="text-[18px] text-white/60">SWG enterprise customers</p>
+              <p className="text-[18px] text-white/80">SWG enterprise customers</p>
               <p className="text-[32px] font-black text-white mt-1">500+</p>
             </div>
             <div>
-              <p className="text-[18px] text-white/60">At 10% Geminus adoption</p>
+              <p className="text-[18px] text-white/80">At 10% Geminus adoption</p>
               <div className="bg-amber-500/20 rounded-2xl p-4 mt-1">
                 <p className="text-[42px] font-black text-amber-300">50</p>
-                <p className="text-[18px] text-white/70">enterprise customers</p>
+                <p className="text-[18px] text-white/80">enterprise customers</p>
               </div>
             </div>
-            <p className="text-[17px] text-white/50">Cross-sell: Bimify + Senslinc per customer = significant upsell ARR</p>
+            <p className="text-[17px] text-white/75">Cross-sell: Bimify + Senslinc per customer = significant upsell ARR</p>
           </div>
         </div>
       </div>
 
       {/* Bottom line */}
-      <div className="bg-white/5 rounded-2xl border border-white/15 p-6 text-center">
+      <div className="bg-white/10 rounded-2xl border border-white/25 p-6 text-center">
         <p className="text-[26px] text-white font-semibold italic">
           "The $100,000 investment has the potential to unlock millions in ecosystem value."
         </p>
@@ -552,19 +552,19 @@ const CompetitionSlide = () => {
         {/* Left — competitors */}
         <div className="flex-1 flex flex-col">
           <h2 className="text-[64px] font-black text-white mb-2">The Competition</h2>
-          <p className="text-[24px] text-white/55 mb-10">Who else is in this space — and what they're missing</p>
+          <p className="text-[24px] text-white/80 mb-10">Who else is in this space — and what they're missing</p>
 
           <p className="text-[20px] font-bold text-red-300 uppercase tracking-widest mb-4">Nordic</p>
           <div className="space-y-4 mb-10">
             {nordic.map(({ name, desc, gap }) => (
-              <div key={name} className="flex items-start gap-6 bg-white/5 rounded-2xl border border-white/10 px-7 py-5">
+              <div key={name} className="flex items-start gap-6 bg-white/10 rounded-2xl border border-white/20 px-7 py-5">
                 <div className="w-[220px] shrink-0">
                   <p className="text-[22px] font-bold text-white">{name}</p>
-                  <p className="text-[15px] text-white/45 mt-1">{desc}</p>
+                  <p className="text-[15px] text-white/70 mt-1">{desc}</p>
                 </div>
                 <div className="flex items-center gap-3 flex-1">
                   <span className="text-red-400 text-[20px] shrink-0">✕</span>
-                  <p className="text-[18px] text-white/65">{gap}</p>
+                  <p className="text-[18px] text-white/85">{gap}</p>
                 </div>
               </div>
             ))}
@@ -573,14 +573,14 @@ const CompetitionSlide = () => {
           <p className="text-[20px] font-bold text-orange-300 uppercase tracking-widest mb-4">International</p>
           <div className="space-y-4">
             {international.map(({ name, desc, gap }) => (
-              <div key={name} className="flex items-start gap-6 bg-white/5 rounded-2xl border border-white/10 px-7 py-5">
+              <div key={name} className="flex items-start gap-6 bg-white/10 rounded-2xl border border-white/20 px-7 py-5">
                 <div className="w-[220px] shrink-0">
                   <p className="text-[22px] font-bold text-white">{name}</p>
-                  <p className="text-[15px] text-white/45 mt-1">{desc}</p>
+                  <p className="text-[15px] text-white/70 mt-1">{desc}</p>
                 </div>
                 <div className="flex items-center gap-3 flex-1">
                   <span className="text-orange-400 text-[20px] shrink-0">✕</span>
-                  <p className="text-[18px] text-white/65">{gap}</p>
+                  <p className="text-[18px] text-white/85">{gap}</p>
                 </div>
               </div>
             ))}
@@ -589,7 +589,7 @@ const CompetitionSlide = () => {
 
         {/* Right — Geminus advantage */}
         <div className="w-[540px] shrink-0 flex flex-col justify-center gap-6">
-          <div className="bg-cyan-500/10 rounded-3xl border-2 border-cyan-400/50 p-8">
+          <div className="bg-cyan-500/15 rounded-3xl border-2 border-cyan-400/70 p-8">
             <p className="text-[20px] font-bold text-cyan-300 uppercase tracking-widest mb-6">Geminus has everything they have — and more</p>
             <div className="space-y-5">
               {[
@@ -602,7 +602,7 @@ const CompetitionSlide = () => {
                   <CheckCircle2 className="w-6 h-6 text-cyan-400 mt-1 shrink-0" />
                   <div>
                     <p className="text-[20px] font-bold text-white">{label}</p>
-                    <p className="text-[15px] text-white/50 mt-1">{sub}</p>
+                    <p className="text-[15px] text-white/75 mt-1">{sub}</p>
                   </div>
                 </div>
               ))}
@@ -631,7 +631,7 @@ const WhyAddnodeSlide = () => (
     <div className="relative z-10 flex flex-col justify-center h-full text-white px-32 py-16">
       <TrendingUp className="w-14 h-14 text-amber-400 mb-4" />
       <h2 className="text-[72px] font-black mb-4 text-white">Why Addnode Wins</h2>
-      <p className="text-[26px] text-white/60 mb-14">Three strategic wins that compound across the group</p>
+      <p className="text-[26px] text-white/80 mb-14">Three strategic wins that compound across the group</p>
 
       <div className="grid grid-cols-3 gap-10 mb-12">
         {[
@@ -674,7 +674,7 @@ const WhyAddnodeSlide = () => (
             <h3 className={`text-[24px] font-bold mb-6 leading-tight ${tc}`}>{title}</h3>
             <ul className="space-y-4">
               {points.map((p) => (
-                <li key={p} className="flex gap-3 items-start text-[18px] text-white/75">
+                <li key={p} className="flex gap-3 items-start text-[18px] text-white/90">
                   <CheckCircle2 className={`w-5 h-5 mt-1 shrink-0 ${tc}`} />
                   {p}
                 </li>
@@ -684,7 +684,7 @@ const WhyAddnodeSlide = () => (
         ))}
       </div>
 
-      <div className="bg-white/5 rounded-2xl border border-white/15 p-7 text-center">
+      <div className="bg-white/10 rounded-2xl border border-white/25 p-7 text-center">
         <p className="text-[28px] text-white font-semibold italic">
           "Geminus turns five separate Addnode companies into one coherent value proposition."
         </p>
@@ -706,9 +706,9 @@ const AskSlide = () => (
       {/* Left — The Ask */}
       <div className="flex-1 flex flex-col justify-center pr-20">
         <DollarSign className="w-16 h-16 text-white mb-6" />
-        <p className="text-[30px] text-white/60 mb-4 font-semibold uppercase tracking-widest">The Ask</p>
+        <p className="text-[30px] text-white/80 mb-4 font-semibold uppercase tracking-widest">The Ask</p>
         <p className="text-[130px] font-black leading-none text-white mb-6">$100K</p>
-        <p className="text-[28px] text-white/60 mb-12">For 6 months of productization</p>
+        <p className="text-[28px] text-white/80 mb-12">For 6 months of productization</p>
 
         <div className="space-y-4 mb-12">
           {[
@@ -718,7 +718,7 @@ const AskSlide = () => (
           ].map((item) => (
             <div key={item} className="flex items-center gap-4">
               <CheckCircle2 className="w-6 h-6 text-white/60 shrink-0" />
-              <p className="text-[24px] text-white/80">{item}</p>
+              <p className="text-[24px] text-white/90">{item}</p>
             </div>
           ))}
         </div>
@@ -727,7 +727,7 @@ const AskSlide = () => (
       {/* Right — What Addnode gets */}
       <div className="w-[680px] shrink-0 flex flex-col justify-center">
         <div className="bg-white/5 rounded-3xl border border-white/20 p-10 mb-8">
-          <h3 className="text-[26px] font-bold text-white/60 mb-6 uppercase tracking-widest">What Addnode gets</h3>
+          <h3 className="text-[26px] font-bold text-white/80 mb-6 uppercase tracking-widest">What Addnode gets</h3>
           <div className="space-y-5">
             {[
               { icon: Building2, text: "An AI Operations layer across the entire Design Management business area" },
@@ -735,8 +735,8 @@ const AskSlide = () => (
               { icon: Target, text: "First-mover advantage in the O of AECO" },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-start gap-4">
-                <Icon className="w-7 h-7 text-white/50 shrink-0 mt-1" />
-                <p className="text-[22px] text-white/80">{text}</p>
+                <Icon className="w-7 h-7 text-white/70 shrink-0 mt-1" />
+                <p className="text-[22px] text-white/90">{text}</p>
               </div>
             ))}
           </div>
