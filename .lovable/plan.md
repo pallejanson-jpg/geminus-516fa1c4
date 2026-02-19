@@ -1,69 +1,44 @@
 
-# Orsak till "Sorry, we ran into an issue starting the live preview!"
+## Plan: Ta bort kartan från startsidan och återställa till ursprungligt utseende
 
-## Vad som händer
+Problemet är att Cesium-biblioteket orsakar krascher (React error #31 + module specifier-fel) och att kartan på startsidan som lades till idag inte fungerar stabilt. Lösningen är att ta bort allt som lades till idag och återgå till det ursprungliga utseendet.
 
-Det nyligen tillagda `HomeMapPanel` i `HomeLanding.tsx` orsakar att appen kraschar vid start på `/`-routen.
+---
 
-Orsakskedjan:
+### Vad som ändrades idag (och behöver återställas)
 
-```
-HomeLanding.tsx
-  → importerar HomeMapPanel (direkt import, inte lazy)
-    → HomeMapPanel lazy-laddar CesiumGlobeView (standard är 'cesium')
-      → CesiumGlobeView.tsx importerar resium + @cesium/engine
-        → Cesium kraschar previews / laddas instabilt
-```
+1. **`HomeLanding.tsx`** — Det lades till en höger kolumn med `HomeMapPanel`. Denna ska tas bort så att layouten enbart visar vänster kolumn (assistenter + favoriter), centrerat som tidigare.
 
-Det finns **tre problem** i kombination:
+2. **`vite.config.ts`** — Cesium-specifik konfiguration lades till (`exclude: ['cesium', 'resium']`, `manualChunks` för cesium-vendor). Dessa ska tas bort och återgå till den enkla konfigurationen som fanns innan.
 
-1. **`HomeLanding` importerar `HomeMapPanel` utan `Suspense`** – om lazy-laddningen av Cesium kastar ett fel fångas det inte, och appen kraschar.
+3. **`package.json`** — Paketet `cesium` installerades (utöver `@cesium/engine` som redan fanns). Detta ska tas bort.
 
-2. **Standard-läge är `'cesium'`** – Cesium är den tyngsta och mest instabila komponenten i projektet (den kräver Cesium Ion-token, WASM, WebGL). Den laddas omedelbart när startsidan öppnas.
+4. **`src/components/globe/CesiumGlobeView.tsx`** — Importen ändrades från `@cesium/engine` till `cesium`. Denna ska återgå till `@cesium/engine`.
 
-3. **`HomeMapPanel` saknar Error Boundary** – om `CesiumGlobeView` kastar ett fel (t.ex. misslyckad token-hämtning, WebGL-problem) bubblar felet upp och kraschar hela appen.
+---
 
-## Lösning
+### Konkreta ändringar
 
-Tre konkreta fixes:
+**`src/components/home/HomeLanding.tsx`**
+- Ta bort importen av `HomeMapPanel` och `Loader2`
+- Ta bort den högra kolumnen (div med `hidden xl:block xl:flex-1 ...` och `<HomeMapPanel />`)
+- Ändra huvudlayouten från `xl:flex-row` tillbaka till enkel `flex-col` centrerad layout, exakt som den var innan idag
 
-### Fix 1 – Sätt Mapbox som standard-läge
-Ändra `useState<MapMode>('cesium')` → `useState<MapMode>('mapbox')` i `HomeMapPanel.tsx`. Mapbox är stabilare och kräver ingen WASM eller Ion-token för att initieras. Cesium finns fortfarande tillgänglig via toggle-knappen.
+**`vite.config.ts`**
+- Ta bort `optimizeDeps.exclude: ['cesium', 'resium']`-blocket
+- Ta bort `build.rollupOptions.output.manualChunks`-blocket
+- Återgå till den enkla konfigurationen med enbart `@`-aliaset
 
-### Fix 2 – Lägg till `Suspense` runt `HomeMapPanel` i `HomeLanding.tsx`
-`HomeMapPanel` är en tung komponent som lazy-laddar underkomponenter. Den ska wrappas i `<Suspense>` med en loading-spinner som fallback.
+**`src/components/globe/CesiumGlobeView.tsx`**
+- Återgå till `import * as Cesium from '@cesium/engine'` (originalimport)
 
-### Fix 3 – Lägg till Error Boundary runt kartinnehållet i `HomeMapPanel.tsx`
-En enkel `try/catch`-baserad Error Boundary runt `CesiumGlobeView` och `MapView` så att om kartan kraschar visas ett felmeddelande istället för att hela appen går ned.
+**`package.json`**
+- Ta bort `cesium`-paketet (behåll `@cesium/engine` och `resium` som var där sedan tidigare)
 
-## Filer som ändras
+---
 
-| Fil | Ändring |
-|-----|---------|
-| `src/components/home/HomeMapPanel.tsx` | Ändra default till `'mapbox'`, lägg till Error Boundary runt kartinnehållet |
-| `src/components/home/HomeLanding.tsx` | Wrappa `<HomeMapPanel>` i `<Suspense>` med fallback |
+### Resultat
 
-## Implementationsdetaljer
+Startsidan återgår till den enkla, fungerande layouten med enbart AI-assistenter och My Favorites-kortet, centrerat med bakgrundsbilden — precis som den såg ut innan idag.
 
-**HomeMapPanel.tsx:**
-```tsx
-// Fix 1: Mapbox som default (stabilt, ingen WASM)
-const [mapMode, setMapMode] = useState<MapMode>('mapbox');
-
-// Fix 3: Error Boundary runt kartan
-class MapErrorBoundary extends React.Component<...> {
-  // visar "Kartan kunde inte laddas" + retry-knapp vid fel
-}
-```
-
-**HomeLanding.tsx:**
-```tsx
-// Fix 2: Suspense-wrapper
-<div className="hidden xl:block xl:flex-1 xl:min-h-[600px] xl:sticky xl:top-4 self-stretch">
-  <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="animate-spin" /></div>}>
-    <HomeMapPanel />
-  </Suspense>
-</div>
-```
-
-Dessa tre fixes säkerställer att startsidan alltid kan laddas utan att Cesium-problemet påverkar resten av appen.
+Cesium-globen (på sin dedikerade route `/globe`) behålls men återgår till att använda `@cesium/engine` som den ursprungligen gjorde.
