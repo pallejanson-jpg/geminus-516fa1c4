@@ -259,10 +259,15 @@ export class XktCacheService {
     currentSaveCount++;
     
     try {
-      const fileName = modelId.endsWith('.xkt') ? modelId : `${modelId}.xkt`;
+      // Always use the bare modelId (without .xkt) when calling the edge function.
+      // The edge function appends .xkt itself after running safeModelId transformation.
+      // Previously, passing fileName (with .xkt) caused the dot to be replaced with '_',
+      // resulting in a mismatched storage path: modelId_xkt.xkt vs modelId.xkt
+      const bareModelId = modelId.endsWith('.xkt') ? modelId.slice(0, -4) : modelId;
+      const fileName = `${bareModelId}.xkt`;
       const storagePath = `${buildingFmGuid}/${fileName}`;
       
-      console.log(`XKT save: Uploading ${modelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+      console.log(`XKT save: Uploading ${bareModelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
       
       // Use edge function for upload to bypass LockManager issues in Web Worker contexts
       // (Direct supabase.storage.upload() fails with "LockManager lock timed out" in NavVis/Ivion contexts)
@@ -270,7 +275,7 @@ export class XktCacheService {
       const { data: storeData, error: storeError } = await supabase.functions.invoke('xkt-cache', {
         body: {
           action: 'store',
-          modelId: fileName,
+          modelId: bareModelId,  // Pass bare UUID — edge function appends .xkt
           buildingFmGuid,
           xktData: base64Data,
         },
