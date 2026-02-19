@@ -5,7 +5,7 @@ import {
   CameraFlyTo,
   CesiumComponentRef,
 } from 'resium';
-import * as Cesium from 'cesium';
+import * as Cesium from '@cesium/engine';
 import { Building2, Eye, Globe, Loader2, Box, RotateCcw } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,7 +39,7 @@ const CesiumGlobeView: React.FC = () => {
   const { navigatorTreeData, setActiveApp, setSelectedFacility, allData, open360WithContext, appConfigs } = useContext(AppContext);
   const navigate = useNavigate();
 
-  const viewerRef = useRef<CesiumComponentRef<Cesium.Viewer>>(null);
+  const viewerRef = useRef<CesiumComponentRef<any>>(null);
 
   const [cesiumToken, setCesiumToken] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState(false);
