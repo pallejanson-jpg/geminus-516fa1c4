@@ -1,117 +1,91 @@
 
-## Diagnos: Viewern monteras men visar tomt — race condition i initieringsordning
+## Rotorsak: Två separata problem måste lösas
 
-### Vad loggarna bekräftar
+### Problem 1 — `getAnnotations` kraschar inuti Asset+ SDK (inte vår kod)
 
-Loggens sekvens är:
+Loggarna visar stack trace från `assetplusviewer.umd.min.js:534:33175` — det är Asset+ **interna** `allModelsLoadedCallback` som anropar `getAnnotations` av sig självt. Vi kan inte stoppa det med vår `setTimeout` eftersom det är SDK:ns egna interna anrop som sker vid fel tidpunkt.
+
+Loggsekvensen:
 ```
-allModelsLoadedCallback           ← modeller är laddade
-Model data or models array is not available  ← ERROR inuti Asset+ viewer
-Spaces hidden by default via Asset+ API
-allModelsLoadedCallback - got an FMGUID to look at
-selectFmGuid 755950d9-...
+allModelsLoadedCallback           ← vår callback triggas
+Model data or models array is not available  ← SDK INTERN krasch (ej vår kod)
+Spaces hidden by default          ← vår kod fortsätter
 ```
 
-XKT-data laddas korrekt (1,33 MB + 14 MB i minnet), men `getAnnotations` misslyckas direkt efter `allModelsLoadedCallback`. Det här är ett känt Asset+ Vue-internt timing-problem: `allModelsLoadedCallback` skjutar för tidigt, innan den interna datastrukturen `models` är populerad.
+Detta är ett känt problem med Asset+ 2.5.1 — `allModelsLoadedCallback` skjutar för tidigt. Vi kan inte fixa SDK:ns interna race condition. **Men** — detta är troligen inte orsaken till att 3D inte visas. SDK:n hanterar felet internt och fortsätter.
 
-Andra kritiska observationer:
-- Felet uppstår på **BOTH** desktop och mobil nu
-- Loggarna har **dubbla** preload-meddelanden (`XKT Preload: 1/2 models loaded` visas **2 gånger**) — det tyder på att viewern mountas **DUBBELT** (React Strict Mode dubbelkörning + `UnifiedViewer` håller viewern i DOM hela tiden)
-- `initializeViewer` körs med `initTimeout = 50ms` men setupCacheInterceptor (`useEffect([buildingFmGuid])`) kan köras **parallellt** och installera interceptorn före eller efter att viewern initialiseras
+### Problem 2 — Viewern renderar inte (tom canvas) — trolig rotorsak
 
-### Grundproblemet: HEAD-request blockerar cache-flödet
+XKT-data hämtas korrekt (bekräftat i network requests: `200 OK` med 1,33 MB binärdata från storage). Men viewern är osynlig. Det tyder på att:
 
-I interceptorn (rad 2822-2834) görs en **HEAD-request mot Asset+ API** för varje modell:
+**Hypotes:** `initializeViewer` injicerar `freshDiv` dynamiskt inuti `viewerContainerRef`. Om `viewerContainerRef` har `height: 100%` men dess **förälder** saknar explicit höjd, kollapsar hela stacken till 0px.
+
+Från diff:n syns att vi lade till:
 ```typescript
-const headResp = await original!(url, { method: 'HEAD' });
+height: '100%',
+minHeight: 0,
 ```
+till `viewerContainerRef`. Men problemet kan vara att **föräldern** (`dx-viewport`) har `h-full` från Tailwind, och den i sin tur är inuti `flex-1 min-h-0` — en flex-kedja som kan brytas.
 
-Detta anrop görs **inuti** den interceptade fetch. Om HEAD-requesten misslyckas (timeout, 403, CORS-problem) kastar den ett undantag som fångas i `catch` och ignoreras — men om den är **långsam** (t.ex. 5-10 sekunder) blockeras hela modelladdningen tills HEAD-requesten är klar.
+### Åtgärdsplan: Tre riktade fixar
 
-Effekt på desktop vs mobil:
-- Desktop: CORS-policies och corporate-nätverk kan blockera HEAD-requests annorlunda
-- Mobil: Kan ha fungerat p.g.a. enklare nätverkssituation (mobilt data vs WiFi routing)
+#### Fix 1 — Ta bort `getAnnotations` från vår kod helt
 
-### Åtgärdsplan: Ta bort HEAD-check + förenkla interceptorn
-
-Problemet med nuvarande interceptor-logik är att den är för komplex och blockerar viewer-init. Lösningen är att **ta bort HEAD-requesten** och istället bara kolla åldern på cache-posten (vi har redan `stale`-flaggan via datum-jämförelse i `checkCache`).
-
-#### Ändring 1: `src/components/viewer/AssetPlusViewer.tsx` — Ta bort HEAD-check
-
-Ersätt HEAD-requestblocket (rad 2820-2851) med en enklare logik som bara kollar om cache-posten är äldre än 7 dagar (via `cacheResult.stale` som redan finns):
+Vi behöver inte anropa `getAnnotations` manuellt — Asset+ SDK gör det internt. Vår nuvarande kod (`onToggleAnnotation(true)` + `getAnnotations()`) **dubbelanropar** det. Ta bort `getAnnotations`-anropet, behåll bara `onToggleAnnotation(true)`:
 
 ```typescript
-// BEFORE (slow, blocking HEAD request):
-if (!cacheResult.stale) {
-  try {
-    const headResp = await original!(url, { method: 'HEAD' });
-    const sourceLastMod = headResp.headers.get('Last-Modified');
-    // ... lengthy HEAD comparison logic
-  } catch {
-    // silently ignored
-  }
-  if (!sourceNewer) {
-    // use cache
-  }
-}
-
-// AFTER (fast, date-based only):
-if (!cacheResult.stale) {
-  console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
-  const cachedResponse = await original!(cacheResult.url, init);
-  if (cachedResponse.ok) {
-    const data = await cachedResponse.clone().arrayBuffer();
-    storeModelInMemory(modelId, resolvedBuildingGuid, data);
-    return new Response(data, {
-      status: 200,
-      headers: { 'Content-Type': 'application/octet-stream' }
-    });
-  }
-}
+// Behåll:
+assetViewer.onToggleAnnotation(true);
+// Ta bort (SDK anropar detta internt):
+// assetViewer.getAnnotations();  ← RADERAS
 ```
 
-Detta eliminerar en potentiellt blockerande nätverksanrop och förenklar cacheflödet markant.
+#### Fix 2 — Öka setTimeout-fördröjningen från 100ms till 500ms
 
-#### Ändring 2: `src/components/viewer/AssetPlusViewer.tsx` — Skydda `getAnnotations`-anropet
+100ms räcker inte för Vue:s interna state-propagering i Asset+ 2.5.1. Höj till 500ms för att ge SDK:n tillräckligt med tid:
 
-Felet `Model data or models array is not available` uppstår för att `getAnnotations` anropas för tidigt. Lägg till en liten fördröjning (100ms) innan vi kallar funktioner som beror på modelldata:
-
-Hitta i `handleAllModelsLoaded` callback-sektionen och skydda annotations-anropet:
 ```typescript
-// Existing (crashes immediately):
-viewer.getAnnotations?.(...);
-
-// Fixed (wait for Vue to propagate model data):
 setTimeout(() => {
   try {
-    viewer.getAnnotations?.(...);
+    const viewer = viewerInstanceRef.current;
+    const assetViewer = viewer?.assetViewer;
+    if (assetViewer?.onToggleAnnotation) {
+      assetViewer.onToggleAnnotation(true);
+      console.log("Annotations enabled");
+      // NOTE: Do NOT call getAnnotations() here — SDK handles it internally
+    }
   } catch (e) {
-    console.warn('getAnnotations: models not ready yet', e);
+    console.warn("Could not enable annotations:", e);
   }
-}, 100);
+}, 500);
 ```
 
-#### Ändring 3: Desktop-specifik fix — Verifiera att containern har rätt höjd
+#### Fix 3 — Lägg till explicit pixel-höjd på viewerContainerRef (inte bara `height: '100%'`)
 
-Loggarna visar att viewern initialiseras (`Initialization completed in 0.2s`) men är osynlig. En container med `height: 0` skulle ge exakt detta symptom. Lägg till ett explicit `height: 100%` på containern i JSX:
+`height: '100%'` fungerar inte alltid i flex-kedjor med dynamisk layout. Lägg till `flex: '1 1 auto'` och `position: 'relative'` som säkerhetsnät:
 
 ```typescript
-// viewerContainerRef div ska ha explicit height
 style={{
   display: 'flex',
   flexDirection: 'column',
-  height: '100%',  // ← Säkerställ att detta finns
-  minHeight: 0,    // ← Krävs för flex children att respektera förälderns höjd
-  // ... rest
+  flex: '1 1 auto',        // ← Tar upp tillgängligt utrymme i flex-förälder
+  height: '100%',
+  minHeight: 0,
+  position: 'relative',   // ← Krävs för absolute-positionerade barn (loading overlay)
+  background: ...,
 }}
+```
+
+Och på `dx-viewport`-wrappern (som är `viewportWrapperRef`):
+```typescript
+className="dx-viewport relative w-full h-full"
+style={{ margin: 0, display: 'flex', flexDirection: 'column' }}
 ```
 
 ### Filer som ändras
 
 | Fil | Ändring |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | 1) Ta bort HEAD-check i interceptorn, 2) Skydda `getAnnotations` med timeout, 3) Explicit `height: 100%` + `minHeight: 0` på container |
+| `src/components/viewer/AssetPlusViewer.tsx` | 1) Ta bort `getAnnotations()`-anrop från vår callback, 2) Höj timeout till 500ms, 3) Lägg till `flex: '1 1 auto'` + `position: 'relative'` på container, 4) Lägg till `display: flex` på `dx-viewport` wrapper |
 
-Inga edge functions, inga databas-ändringar, inga nya beroenden.
-
-Dessa ändringar gäller exakt samma kod för desktop och mobil (unified code path) — fix på ett ställe fixar båda.
+Inga edge functions, inga databasändringar, inga nya beroenden. Samma kodstig för desktop och mobil.
