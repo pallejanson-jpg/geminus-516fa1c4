@@ -156,6 +156,12 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           const fetchModel = async (model: typeof models[0]) => {
             try {
+              // Skip models that are suspiciously small — likely corrupt cache entries (HTML/JSON error responses)
+              if ((model.file_size || 0) < 50_000) {
+                console.warn(`XKT Preload: Skipping ${model.model_id} — file_size ${model.file_size} bytes is too small (likely corrupt)`);
+                return;
+              }
+
               // Skip if already in memory
               if (isModelInMemory(model.model_id, buildingFmGuid)) {
                 console.log(`XKT Preload: ${model.model_id} already in memory`);

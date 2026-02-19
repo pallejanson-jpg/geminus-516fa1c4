@@ -2871,8 +2871,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           try {
             const data = await responseClone.arrayBuffer();
             
-            // Validate it's actual XKT data (should start with specific bytes)
-            if (data.byteLength > 100) {
+            // Validate it's actual XKT data — minimum 50 KB and not an HTML/JSON error response
+            const MIN_VALID_XKT_BYTES = 50_000;
+            const isLargeEnough = data.byteLength >= MIN_VALID_XKT_BYTES;
+            const headerBytes = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+            const firstChar = String.fromCharCode(headerBytes[0]);
+            const isHtmlOrJsonResponse = firstChar === '<' || firstChar === '{' || firstChar === 'E';
+
+            if (isLargeEnough && !isHtmlOrJsonResponse) {
               // Store in memory cache
               storeModelInMemory(modelId, resolvedBuildingGuid, data);
               
@@ -2890,6 +2896,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               }).catch(e => {
                 console.debug(`XKT cache: Failed to save ${modelId} to backend:`, e);
               });
+            } else if (!isLargeEnough) {
+              console.warn(`XKT cache: Rejected ${modelId} — only ${data.byteLength} bytes (< 50 KB minimum, likely corrupt)`);
+            } else if (isHtmlOrJsonResponse) {
+              console.warn(`XKT cache: Rejected ${modelId} — starts with '${firstChar}', looks like HTML/JSON error response`);
             }
           } catch (e) {
             console.debug('XKT cache: Failed to process response for caching:', e);
