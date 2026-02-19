@@ -2306,25 +2306,64 @@ Return ONE flat JSON array containing all detections across all images. If nothi
         const batchResult = await batchResponse.json();
         const batchContent = batchResult.choices?.[0]?.message?.content || '[]';
         
-        // Parse detections (reuse existing JSON extraction)
+        // Parse detections — use depth-tracking extraction to handle AI text after the JSON array
+        function extractJsonArrayFromBatch(text: string): string | null {
+          const start = text.indexOf('[');
+          if (start === -1) return null;
+          let depth = 0;
+          for (let i = start; i < text.length; i++) {
+            if (text[i] === '[') depth++;
+            else if (text[i] === ']') { depth--; if (depth === 0) return text.slice(start, i + 1); }
+          }
+          return null;
+        }
+
         let allDetections: Detection[] = [];
         try {
-          const start = batchContent.indexOf('[');
-          const end = batchContent.lastIndexOf(']');
-          if (start !== -1 && end !== -1) {
-            allDetections = JSON.parse(batchContent.slice(start, end + 1));
+          const jsonString = extractJsonArrayFromBatch(batchContent);
+          if (jsonString) {
+            allDetections = JSON.parse(jsonString);
           }
         } catch (parseErr) {
-          console.error('[batch] JSON parse error:', parseErr);
+          console.error('[batch] JSON parse error:', parseErr, 'Raw content length:', batchContent.length);
         }
-        
+
+        // Fix 1: Cap detections per batch to prevent hallucination storms
+        const MAX_DETECTIONS_PER_BATCH = 15;
+        if (allDetections.length > MAX_DETECTIONS_PER_BATCH) {
+          console.warn(`[batch] Capping ${allDetections.length} detections to ${MAX_DETECTIONS_PER_BATCH} (hallucination guard)`);
+          allDetections = allDetections.slice(0, MAX_DETECTIONS_PER_BATCH);
+        }
+
         console.log(`[analyze-screenshot-batch] AI returned ${allDetections.length} detections from ${params.screenshots.length} images`);
         
         let savedCount = 0;
         let skippedDedup = 0;
+
+        // Fix 3: Check per-image cap BEFORE saving — max 5 detections per ivion_image_id
+        const MAX_DETECTIONS_PER_IMAGE = 5;
+        if (params.imageId) {
+          const { count: existingCount } = await supabase
+            .from('pending_detections')
+            .select('*', { count: 'exact', head: true })
+            .eq('scan_job_id', params.scanJobId)
+            .eq('ivion_image_id', params.imageId);
+          
+          if ((existingCount || 0) >= MAX_DETECTIONS_PER_IMAGE) {
+            console.warn(`[batch-dedup] Already ${existingCount} detections for image ${params.imageId}, skipping entire batch`);
+            result = { detections: 0, skipped: 'max_per_image', existing: existingCount };
+            break;
+          }
+        }
         
         for (const det of allDetections) {
           if ((det.confidence || 0) < 0.3) continue;
+
+          // Stop saving if we hit per-image cap mid-loop
+          if (params.imageId && savedCount >= MAX_DETECTIONS_PER_IMAGE) {
+            console.warn(`[batch-dedup] Hit per-image cap of ${MAX_DETECTIONS_PER_IMAGE} for image ${params.imageId}, stopping`);
+            break;
+          }
           
           // Use the screenshot from image_index for thumbnail, default to first
           const screenshotForThumb = params.screenshots[det.image_index ?? 0] || params.screenshots[0];
