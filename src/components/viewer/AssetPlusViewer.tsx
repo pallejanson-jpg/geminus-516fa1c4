@@ -25,7 +25,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -448,7 +448,133 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     return () => clearTimeout(timer);
   }, [insightsColorMode, spacesCacheReady, modelLoadState, initStep]);
 
-  // Camera sync hook for Split View synchronization
+  // ─── Listen for INSIGHTS_COLOR_UPDATE from InsightsDrawerPanel (drawerMode) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+      if (!detail?.colorMap) return;
+
+      const viewer = viewerInstanceRef.current;
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xeokitViewer?.scene) return;
+
+      const scene = xeokitViewer.scene;
+      const metaObjects = xeokitViewer.metaScene?.metaObjects || {};
+      const mode = detail.mode;
+      const colorMap = detail.colorMap;
+
+      // Activate spaces
+      setShowSpaces(true);
+      try { viewer?.assetViewer?.onShowSpacesChanged?.(true); } catch {}
+
+      // X-ray everything
+      const allIds = scene.objectIds || [];
+      ensureXrayConfig(scene);
+      scene.setObjectsXRayed(allIds, true);
+
+      if (mode === 'room_spaces' || mode === 'room_types' || mode === 'room_type') {
+        // colorMap keys are fmGuids (for room_spaces) or type names (for room_types)
+        if (mode === 'room_spaces') {
+          // Per-room coloring: key = fmGuid
+          Object.values(metaObjects).forEach((mo: any) => {
+            if (mo.type?.toLowerCase() !== 'ifcspace') return;
+            const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+            const rgb = colorMap[moGuid] || colorMap[moGuid.toUpperCase()];
+            if (!rgb) return;
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.85;
+            }
+          });
+        } else {
+          // By type name — reuse existing room_types logic
+          const currentData = allDataRef.current;
+          const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
+          const spaceTypeMap = new Map<string, string>();
+          currentData.forEach((a: any) => {
+            if (a.buildingFmGuid !== buildingGuid) return;
+            if (a.category !== 'Space' && a.category !== 'IfcSpace') return;
+            const attrs = a.attributes || {};
+            const type = attrs.spaceType || attrs.roomType || 'Unknown';
+            spaceTypeMap.set(a.fmGuid.toLowerCase(), type);
+          });
+          Object.values(metaObjects).forEach((mo: any) => {
+            if (mo.type?.toLowerCase() !== 'ifcspace') return;
+            const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+            const roomType = spaceTypeMap.get(moGuid);
+            if (!roomType) return;
+            let rgb = colorMap[roomType];
+            if (!rgb) {
+              const truncated = roomType.length > 15 ? roomType.substring(0, 15) + '...' : roomType;
+              rgb = colorMap[truncated];
+            }
+            if (!rgb) return;
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.85;
+            }
+          });
+        }
+      } else {
+        // Forward to existing insights logic — update cache and trigger re-render
+        insightsColorMapCacheRef.current = { mode, colorMap };
+        // Force re-evaluation
+        insightsColorModeRef.current = mode;
+      }
+
+      console.log('[AssetPlusViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
+    };
+
+    window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+    return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+  }, []);
+
+  // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
+      if (!detail?.alarms?.length) return;
+
+      const viewer = viewerInstanceRef.current;
+      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      if (!xeokitViewer?.scene) return;
+
+      // If only one alarm, fly to it
+      if (detail.alarms.length === 1) {
+        const a = detail.alarms[0];
+        if (a.x != null && a.y != null && a.z != null) {
+          xeokitViewer.cameraFlight?.flyTo({
+            eye: [a.x, a.y + 3, a.z + 3],
+            look: [a.x, a.y, a.z],
+            up: [0, 1, 0],
+            duration: 1,
+          });
+        }
+        // Flash the entity
+        const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+        if (assetView) {
+          const itemIds = assetView.getItemsByPropertyValue("fmguid", a.fmGuid.toUpperCase()) || [];
+          if (itemIds.length > 0) {
+            flashEntityById(xeokitViewer.scene, itemIds[0]);
+          }
+        }
+      }
+
+      // Show annotations via existing toggle
+      setShowAnnotations(true);
+      console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', detail.alarms.length, 'alarms');
+    };
+
+    window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+    return () => window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+  }, [flashEntityById]);
+
   const { broadcastCamera } = useViewerCameraSync({
     viewerRef: viewerInstanceRef,
     enabled: syncEnabled,

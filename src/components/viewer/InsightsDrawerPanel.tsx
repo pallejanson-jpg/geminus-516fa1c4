@@ -63,7 +63,7 @@ export default function InsightsDrawerPanel({
   return (
     <div
       className="shrink-0 border-t border-white/10 bg-background/95 backdrop-blur-md overflow-hidden flex flex-col"
-      style={{ height: '320px' }}
+      style={{ height: '400px' }}
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 shrink-0">
