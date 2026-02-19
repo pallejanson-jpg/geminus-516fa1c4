@@ -3,9 +3,10 @@ import { AppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Thermometer, Wind, Droplets, Users, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import {
@@ -13,6 +14,7 @@ import {
   VisualizationType,
 } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
+import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
 
 // ── Sensor metric types shown in this tab ──
 const METRICS = [
@@ -37,21 +39,29 @@ const LiveBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean 
   return null;
 };
 
-// ── Room grid card ──
+// ── Room grid card — clickable ──
 interface RoomCardProps {
   name: string;
   value: number | null;
   metric: VisualizationType;
   unit: string;
+  onClick?: () => void;
 }
 
-const RoomCard: React.FC<RoomCardProps> = ({ name, value, metric, unit }) => {
+const RoomCard: React.FC<RoomCardProps> = ({ name, value, metric, unit, onClick }) => {
   const rgb = value !== null ? getVisualizationColor(value, metric) : null;
   const hex = rgb ? rgbToHex(rgb) : undefined;
   return (
     <div
-      className="rounded border border-border text-center p-2 transition-all duration-300"
-      style={{ backgroundColor: hex ? hex + '22' : undefined, borderColor: hex ? hex + '55' : undefined }}
+      className={cn(
+        'rounded-lg border text-center p-2.5 transition-all duration-200',
+        onClick ? 'cursor-pointer hover:scale-105 hover:shadow-md active:scale-95' : ''
+      )}
+      style={{
+        backgroundColor: hex ? hex + '22' : undefined,
+        borderColor: hex ? hex + '55' : undefined,
+      }}
+      onClick={onClick}
     >
       <div className="text-[10px] text-muted-foreground truncate mb-0.5">{name}</div>
       <div
@@ -65,7 +75,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ name, value, metric, unit }) => {
   );
 };
 
-// ── Aggregate trend chart for whole building ──
+// ── Aggregate trend chart ──
 interface BuildingTrendChartProps {
   rooms: Array<{ fmGuid: string; commonName?: string; name?: string }>;
   liveMachineMap: Map<string, any>;
@@ -74,7 +84,6 @@ interface BuildingTrendChartProps {
 }
 
 const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMachineMap, isLive, metric }) => {
-  // Build a 7-day average across all machines (if live) or mock rooms
   const chartData = useMemo(() => {
     const days = 7;
     const now = new Date();
@@ -85,14 +94,12 @@ const BuildingTrendChart: React.FC<BuildingTrendChartProps> = ({ rooms, liveMach
       points.push({ date: d.toISOString().substring(0, 10), value: null, count: 0 });
     }
 
-    // Aggregate mock sensor values per room per day
     rooms.slice(0, 30).forEach(room => {
       const mockVal = generateMockSensorData(room.fmGuid, metric);
       if (mockVal === null) return;
       points.forEach((pt, idx) => {
-        // Add slight daily variation
         const seed = ((room.fmGuid.charCodeAt(idx % room.fmGuid.length) ?? 65) * (idx + 1) * 17) % 100 / 100;
-        const variation = (seed - 0.5) * 2; // -1 to +1
+        const variation = (seed - 0.5) * 2;
         pt.value = (pt.value ?? 0) + mockVal + variation;
         pt.count++;
       });
@@ -147,12 +154,25 @@ export default function SensorsTab() {
   const { navigatorTreeData, selectedFacility } = useContext(AppContext);
   const [selectedMetric, setSelectedMetric] = useState<VisualizationType>('temperature');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string | null>(null);
 
-  // Pick building: selectedFacility or first in tree
+  // Room detail sheet state
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetRoom, setSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
+
+  // All available buildings
+  const buildings = useMemo(() => navigatorTreeData.filter(
+    (n: any) => n.category === 'Building' || !n.category
+  ), [navigatorTreeData]);
+
+  // Pick active building: explicit selection > selectedFacility > first
   const building = useMemo(() => {
+    if (selectedBuildingGuid) {
+      return buildings.find((b: any) => b.fmGuid === selectedBuildingGuid) ?? buildings[0] ?? null;
+    }
     if (selectedFacility?.category === 'Building') return selectedFacility;
-    return navigatorTreeData[0] ?? null;
-  }, [selectedFacility, navigatorTreeData]);
+    return buildings[0] ?? null;
+  }, [selectedBuildingGuid, selectedFacility, buildings]);
 
   const { data: buildingData, isLoading, isLive, error } = useSenslincBuildingData(
     building?.fmGuid ?? null
@@ -167,7 +187,7 @@ export default function SensorsTab() {
         result.push({ fmGuid: space.fmGuid, commonName: space.commonName, name: space.name });
       });
     });
-    return result.slice(0, 60); // cap for perf
+    return result.slice(0, 60);
   }, [building]);
 
   // Map machine code → latest_values (for live rooms)
@@ -179,7 +199,6 @@ export default function SensorsTab() {
     return m;
   }, [buildingData]);
 
-  // Get value per room (live if available, else mock)
   const metricDef = METRICS.find(m => m.key === selectedMetric)!;
 
   const roomValues = useMemo(() => {
@@ -190,7 +209,7 @@ export default function SensorsTab() {
     });
   }, [rooms, liveMachineMap, selectedMetric]);
 
-  // Building aggregate
+  // Building aggregate KPI
   const buildingAvg = useMemo(() => {
     const vals = roomValues.filter(r => r.value !== null).map(r => r.value as number);
     if (!vals.length) return null;
@@ -200,14 +219,39 @@ export default function SensorsTab() {
   const avgRgb = buildingAvg !== null ? getVisualizationColor(buildingAvg, selectedMetric) : null;
   const avgHex = avgRgb ? rgbToHex(avgRgb) : undefined;
 
+  const handleRoomClick = (room: { fmGuid: string; commonName?: string; name?: string }) => {
+    setSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
+    setSheetOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">{building?.commonName || building?.name || 'Sensorer'}</h3>
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Building selector (only when multiple buildings) */}
+          {buildings.length > 1 ? (
+            <Select
+              value={building?.fmGuid ?? ''}
+              onValueChange={val => setSelectedBuildingGuid(val)}
+            >
+              <SelectTrigger className="h-7 text-xs w-44">
+                <SelectValue placeholder="Välj byggnad" />
+              </SelectTrigger>
+              <SelectContent>
+                {buildings.map((b: any) => (
+                  <SelectItem key={b.fmGuid} value={b.fmGuid} className="text-xs">
+                    {b.commonName || b.name || b.fmGuid}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <h3 className="text-sm font-medium truncate">{building?.commonName || building?.name || 'Sensorer'}</h3>
+          )}
           <LiveBadge isLive={isLive} isLoading={isLoading} />
         </div>
+
         <div className="flex items-center gap-2">
           {/* Metric selector */}
           <div className="flex gap-1">
@@ -241,9 +285,7 @@ export default function SensorsTab() {
         <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-2 bg-card">
           <metricDef.icon className="h-5 w-5" style={{ color: avgHex }} />
           <div>
-            <span className="text-2xl font-bold" style={{ color: avgHex }}>
-              {buildingAvg}
-            </span>
+            <span className="text-2xl font-bold" style={{ color: avgHex }}>{buildingAvg}</span>
             <span className="text-sm text-muted-foreground ml-1">{metricDef.unit}</span>
           </div>
           <div className="text-xs text-muted-foreground">
@@ -271,14 +313,12 @@ export default function SensorsTab() {
         </CardContent>
       </Card>
 
-      {/* Room heatmap grid */}
+      {/* Room heatmap grid — klickbara rum */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">
-            Rumsheatmap – {metricDef.label}
-          </CardTitle>
+          <CardTitle className="text-sm">Rumsheatmap – {metricDef.label}</CardTitle>
           <CardDescription>
-            {rooms.length} rum · färgas efter sensor-värde
+            {rooms.length} rum · klicka på ett rum för sensordetaljer
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -293,6 +333,7 @@ export default function SensorsTab() {
                   value={room.value}
                   metric={selectedMetric}
                   unit={metricDef.unit}
+                  onClick={() => handleRoomClick(room)}
                 />
               ))}
             </div>
@@ -313,6 +354,14 @@ export default function SensorsTab() {
           <span>Live-data från Senslinc · Site: {buildingData.siteName} · {buildingData.machines.length} sensorer</span>
         </div>
       )}
+
+      {/* Room detail sheet */}
+      <RoomSensorDetailSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        roomFmGuid={sheetRoom?.fmGuid ?? null}
+        roomName={sheetRoom?.name}
+      />
     </div>
   );
 }
