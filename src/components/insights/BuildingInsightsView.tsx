@@ -359,8 +359,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             spaceTypes[type] = (spaceTypes[type] || 0) + 1;
         });
 
+        // Deduplicate floors: strip model suffix like " - 01", " - 02" and count unique
+        const uniqueFloors = new Set(buildingStoreys.map((s: any) =>
+            (s.commonName || s.fmGuid).replace(/\s*-\s*\d+$/, '')
+        ));
+
         return { 
-            floorCount: buildingStoreys.length,
+            floorCount: uniqueFloors.size,
             roomCount: buildingSpaces.length, 
             assetCount: dbAssetCount,
             totalArea: Math.round(totalArea),
@@ -541,9 +546,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <TabsTrigger value="asset" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Asset
                                 </TabsTrigger>
-                                <TabsTrigger value="sensors" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
-                                    <Zap className="h-3 w-3" />Sensorer
-                                </TabsTrigger>
                                 <TabsTrigger value="fm" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
                                     <Boxes className="h-3 w-3" />
                                     FM
@@ -707,42 +709,133 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                     </CardContent>
                                 </Card>
 
-                                {/* "Visa rum i 3D" button — builds per-room colorMap from spaceType */}
-                                <Card className="border-primary/20">
-                                    <CardContent className="p-4 flex flex-col gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <MapPin className="h-4 w-4 text-primary" />
-                                            <span className="text-sm font-medium">Visa rum i 3D</span>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">Färglägg alla rum i 3D-modellen baserat på rumstyp, med samma färger som i pajen ovan.</p>
-                                        <Button
-                                            size="sm"
-                                            className="gap-1.5"
-                                            onClick={() => {
-                                                // Build per-room colorMap: each room fmGuid → color of its spaceType
-                                                const typeColorMap: Record<string, [number, number, number]> = {};
-                                                spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
+                             </div>
 
-                                                const roomColorMap: Record<string, [number, number, number]> = {};
-                                                buildingSpaces.forEach((space: any) => {
-                                                    const attrs = space.attributes || {};
-                                                    const type = attrs.spaceType || attrs.roomType || 'Unknown';
-                                                    const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
-                                                    const color = typeColorMap[type] || typeColorMap[truncated];
-                                                    if (color) {
-                                                        roomColorMap[space.fmGuid] = color;
-                                                    }
-                                                });
-                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
-                                            }}
-                                        >
-                                            <Eye className="h-3.5 w-3.5" />
-                                            Färglägg rum
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </TabsContent>
+                             {/* ── Sensor content (merged from Sensors tab) ── */}
+                             <div className="space-y-4 mt-6">
+                                 {/* Metric buttons */}
+                                 <div className="flex flex-wrap gap-1.5 items-center justify-between">
+                                     <div className="flex items-center gap-2">
+                                         {iotLoading && (
+                                             <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground">
+                                                 <Loader2 className="h-2.5 w-2.5 animate-spin" />Laddar…
+                                             </span>
+                                         )}
+                                         {!iotLoading && iotLive && (
+                                             <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0 bg-green-500/10">
+                                                 <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse inline-block" />LIVE
+                                             </span>
+                                         )}
+                                     </div>
+                                     <div className="flex gap-1">
+                                         {SENSOR_METRICS.map(m => (
+                                             <Button
+                                                 key={m.key}
+                                                 size="sm"
+                                                 variant={sensorMetric === m.key ? 'default' : 'outline'}
+                                                 className="h-7 px-2 text-[10px] gap-1"
+                                                 onClick={() => setSensorMetric(m.key)}
+                                             >
+                                                 <m.icon className="h-3 w-3" />
+                                                 {m.label}
+                                             </Button>
+                                         ))}
+                                     </div>
+                                 </div>
+
+                                 {/* Room heatmap with inline "Visa rum i 3D" button */}
+                                 <Card>
+                                     <CardHeader className="pb-2">
+                                         <div className="flex items-center justify-between">
+                                             <CardTitle className="text-sm flex items-center gap-2">
+                                                 <sensorMetricDef.icon className="h-4 w-4" style={{ color: sensorMetricDef.color }} />
+                                                 Rumsheatmap – {sensorMetricDef.label}
+                                             </CardTitle>
+                                             <Button
+                                                 variant="outline"
+                                                 size="sm"
+                                                 className="h-7 px-2 text-[10px] gap-1"
+                                                 onClick={() => {
+                                                     const typeColorMap: Record<string, [number, number, number]> = {};
+                                                     spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
+                                                     const roomColorMap: Record<string, [number, number, number]> = {};
+                                                     buildingSpaces.forEach((space: any) => {
+                                                         const attrs = space.attributes || {};
+                                                         const type = attrs.spaceType || attrs.roomType || 'Unknown';
+                                                         const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
+                                                         const color = typeColorMap[type] || typeColorMap[truncated];
+                                                         if (color) roomColorMap[space.fmGuid] = color;
+                                                     });
+                                                     handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                                 }}
+                                             >
+                                                 <Eye className="h-3 w-3" />
+                                                 Visa rum i 3D
+                                             </Button>
+                                         </div>
+                                         <CardDescription>
+                                             {sensorRooms.length} av {buildingSpaces.length} rum · klicka för sensordetaljer
+                                         </CardDescription>
+                                     </CardHeader>
+                                     <CardContent>
+                                         {sensorRooms.length === 0 ? (
+                                             <p className="text-sm text-muted-foreground text-center py-8">Inga rum hittades</p>
+                                         ) : (
+                                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+                                                 {sensorRoomValues.map(room => {
+                                                     const rgb = room.value !== null ? getVisualizationColor(room.value, sensorMetric) : null;
+                                                     const hex = rgb ? rgbToHex(rgb) : undefined;
+                                                     return (
+                                                         <div
+                                                             key={room.fmGuid}
+                                                             className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
+                                                             style={{
+                                                                 backgroundColor: hex ? hex + '22' : undefined,
+                                                                 borderColor: hex ? hex + '55' : undefined,
+                                                             }}
+                                                             onClick={() => {
+                                                                 setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
+                                                                 setSensorSheetOpen(true);
+                                                             }}
+                                                         >
+                                                             <div className="text-[10px] text-muted-foreground truncate mb-0.5">
+                                                                 {room.commonName || room.name || room.fmGuid.substring(0, 6)}
+                                                             </div>
+                                                             <div className="text-base font-bold leading-none" style={{ color: hex ?? 'hsl(var(--foreground))' }}>
+                                                                 {room.value !== null ? room.value.toFixed(1) : '—'}
+                                                             </div>
+                                                             <div className="text-[9px] text-muted-foreground">{sensorMetricDef.unit}</div>
+                                                         </div>
+                                                     );
+                                                 })}
+                                             </div>
+                                         )}
+                                     </CardContent>
+                                 </Card>
+
+                                 {/* Status */}
+                                 {!iotLoading && iotLive && buildingIoT && (
+                                     <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
+                                         <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
+                                         <span>Live-data från Senslinc · {buildingIoT.machines.length} sensorer</span>
+                                     </div>
+                                 )}
+                                 {!iotLoading && !iotLive && (
+                                     <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
+                                         <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                         <span>Ingen live-koppling till Senslinc – visar demodata.</span>
+                                     </div>
+                                 )}
+
+                                 {/* Room sensor sheet */}
+                                 <RoomSensorDetailSheet
+                                     open={sensorSheetOpen}
+                                     onClose={() => setSensorSheetOpen(false)}
+                                     roomFmGuid={sensorSheetRoom?.fmGuid ?? null}
+                                     roomName={sensorSheetRoom?.name}
+                                 />
+                             </div>
+                         </TabsContent>
 
                         {/* Asset Tab - REAL asset data */}
                         <TabsContent value="asset" className="mt-0 space-y-6">
@@ -788,108 +881,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                             </div>
                         </TabsContent>
 
-                        {/* ── Sensors Tab ── */}
-                        <TabsContent value="sensors" className="mt-0 space-y-4">
-                            {/* Metric buttons */}
-                            <div className="flex flex-wrap gap-1.5 items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-sm font-medium">{facility.commonName || facility.name}</h3>
-                                    {iotLoading && (
-                                        <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground">
-                                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Laddar…
-                                        </span>
-                                    )}
-                                    {!iotLoading && iotLive && (
-                                        <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0 bg-green-500/10">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse inline-block" />LIVE
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex gap-1">
-                                    {SENSOR_METRICS.map(m => (
-                                        <Button
-                                            key={m.key}
-                                            size="sm"
-                                            variant={sensorMetric === m.key ? 'default' : 'outline'}
-                                            className="h-7 px-2 text-[10px] gap-1"
-                                            onClick={() => setSensorMetric(m.key)}
-                                        >
-                                            <m.icon className="h-3 w-3" />
-                                            {m.label}
-                                        </Button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Room heatmap grid */}
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm flex items-center gap-2">
-                                        <sensorMetricDef.icon className="h-4 w-4" style={{ color: sensorMetricDef.color }} />
-                                        Rumsheatmap – {sensorMetricDef.label}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {sensorRooms.length} rum · klicka för sensordetaljer
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    {sensorRooms.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground text-center py-8">Inga rum hittades</p>
-                                    ) : (
-                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
-                                            {sensorRoomValues.map(room => {
-                                                const rgb = room.value !== null ? getVisualizationColor(room.value, sensorMetric) : null;
-                                                const hex = rgb ? rgbToHex(rgb) : undefined;
-                                                return (
-                                                    <div
-                                                        key={room.fmGuid}
-                                                        className="rounded-lg border text-center p-2.5 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95"
-                                                        style={{
-                                                            backgroundColor: hex ? hex + '22' : undefined,
-                                                            borderColor: hex ? hex + '55' : undefined,
-                                                        }}
-                                                        onClick={() => {
-                                                            setSensorSheetRoom({ fmGuid: room.fmGuid, name: room.commonName || room.name || room.fmGuid });
-                                                            setSensorSheetOpen(true);
-                                                        }}
-                                                    >
-                                                        <div className="text-[10px] text-muted-foreground truncate mb-0.5">
-                                                            {room.commonName || room.name || room.fmGuid.substring(0, 6)}
-                                                        </div>
-                                                        <div className="text-base font-bold leading-none" style={{ color: hex ?? 'hsl(var(--foreground))' }}>
-                                                            {room.value !== null ? room.value.toFixed(1) : '—'}
-                                                        </div>
-                                                        <div className="text-[9px] text-muted-foreground">{sensorMetricDef.unit}</div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            {/* Status */}
-                            {!iotLoading && iotLive && buildingIoT && (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
-                                    <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-                                    <span>Live-data från Senslinc · {buildingIoT.machines.length} sensorer</span>
-                                </div>
-                            )}
-                            {!iotLoading && !iotLive && (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
-                                    <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                    <span>Ingen live-koppling till Senslinc – visar demodata.</span>
-                                </div>
-                            )}
-
-                            {/* Room sensor sheet */}
-                            <RoomSensorDetailSheet
-                                open={sensorSheetOpen}
-                                onClose={() => setSensorSheetOpen(false)}
-                                roomFmGuid={sensorSheetRoom?.fmGuid ?? null}
-                                roomName={sensorSheetRoom?.name}
-                            />
-                        </TabsContent>
 
                         {/* ── FM Tab — REAL IfcAlarm data ── */}
                         <TabsContent value="fm" className="mt-0 space-y-4">
