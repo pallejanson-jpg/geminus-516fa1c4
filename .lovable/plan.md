@@ -1,129 +1,113 @@
 
-## Rotorsak: Korrupt cachad XKT-fil i storage
+## Koppla IfcAlarm till Insights FM-vy + Alarmhantering
 
-### Det definitiva beviset
+### Nulägesanalys
 
-**Console-felet är:**
+Systemet har tre separata delar att koppla ihop:
+
+1. **IfcAlarm i databasen** — Småviken har 17 397 IfcAlarm-objekt med `level_fm_guid`, `in_room_fm_guid`, `fm_guid`. De saknar `name`/`common_name` men har IFC-identitet via `attributes`.
+
+2. **BuildingInsightsView** — Byggnadsnivå-vyn har flikarna Performance, Space, Asset, Sensors men **ingen FM-flik**. Den bör få en "Larm"-flik som visar riktiga IfcAlarm-objekt från databasen.
+
+3. **FacilityManagementTab** — Portfolio-nivåvyn (InsightsView → FM-flik) visar idag enbart mock-arbetsordrar. Denna ska **även visa IfcAlarm** som arbetsordrar i listan och diagrammen.
+
+---
+
+### Del A — Tidigare plan (annotations + minimap): samma som godkänd plan
+
+Dessa tre fixar genomförs som planerat:
+- **Fix Småviken hang:** Ta bort batch-uppdatering av `symbol_id` i `loadAlarmAnnotations`
+- **Fix annotation-synlighet:** Anropa `updatePositions()` i `showAnnotations`-effekten
+- **Fix minimap-skala:** Beräkna AABB från synliga IfcSpace istället för hela scenen
+
+---
+
+### Del B — Ny funktionalitet: IfcAlarm → FM-Insights
+
+#### B1. Ny "Larm"-flik i BuildingInsightsView
+
+Lägg till en femte flik **"Larm"** i `BuildingInsightsView` (bredvid Performance, Space, Asset, Sensors). Denna flik:
+
+- Hämtar IfcAlarm-objekt för byggnaden från `assets`-tabellen (med paginering, max 500 visas)
+- Visar tre KPI-kort: Totalt antal larm, Fördelning per våning, Larm per rum (top 5)
+- Visar ett stapeldiagram: Antal larm per våningsplan (RIKTIGT från DB)
+- Visar en lista med de 50 senaste larmen med kolumnerna: FM-GUID (trunkerat), Våning, Rum, Datum-modifierad
+- Varje rad i listan har en **soptunna-knapp** för att radera larmet (DELETE från `assets` — möjligt eftersom `is_local=true` eller admin)
+- Visar ett "Live data"-märke (inga mock-data för larm)
+
 ```
-RangeError: Offset is outside the bounds of the DataView
-  at DataView.prototype.getUint32
-  at fJ._parseModel (assetplusviewer.umd.min.js:522:376042)
-```
-
-Detta är **ingen nätverksfel, ingen autentiseringsfel.** Det är Asset+ SDK:ns XKT-parser som kraschar för att binärdata är korrupt eller ogiltig.
-
-**Databasen visar:**
-```
-model_id:    0e687ea4-cdd0-48b0-bed1-df7fe588f648
-file_size:   9,215,200 bytes (9.2 MB) ← ser OK ut
-storage_path: 9baa7a3a-.../0e687ea4-....xkt
-synced_at:   2026-02-18 16:05:52
-```
-
-**Nätverksloggarna visar (konsekvent):**
-```
-XKT cache: Memory hit for bc185635-9507-41b6-93d4-a7d484acc0fd  ← MINNESTRÄFF
-allModelsLoadedCallback                                           ← callback körs
-RangeError: Offset is outside the bounds of the DataView         ← KRASCHAR vid parse
-```
-
-**Minnesträffen är problemet.** Sekvensen är:
-1. `useXktPreload` laddar XKT-filen från storage (signerad URL) och sparar i minnet
-2. Cache-interceptorn returnerar minnesdata direkt när SDK:n begär filen
-3. SDK:n försöker parsa data → `RangeError` → krasch → viewer visas aldrig
-
-Varför är minnesdata korrupt? Troligtvis laddades filen ned från en **utgången signerad URL** (de lever bara 3600 sekunder = 1 timme). Om `useXktPreload` fetchar från en signerad URL som gick ut, returnerar Supabase storage ett **HTML-felmeddelande** istället för binär XKT-data. Den HTML-strängen sparas sedan i minnesminnet (`xktMemoryCache`), och när SDK:n sedan begär filen returneras HTML — inte XKT — vilket orsakar `RangeError` vid parsing.
-
-Observera att koden i `useXktPreload.ts` (rad 160-163) har en guard mot korrupta filer:
-```typescript
-if ((model.file_size || 0) < 50_000) {
-  console.warn(`Skipping ${model.model_id} — file_size too small (likely corrupt)`);
-  return;
-}
-```
-
-Men `file_size` i databasen är **9.2 MB** (korrekt storlek) — guarddatat matchar det lagrade metadatat, inte den faktiska storleken på vad som fetches. Om signad URL är utgången och returnerar en HTML-respons på t.ex. 500 bytes, accepteras ändå data eftersom databasens `file_size` valideras istället för `data.byteLength`.
-
-Dessutom: `useXktPreload` validerar inte svarens `Content-Type` eller kontrollerar att svaret faktiskt är binär XKT-data. Det räcker att `response.ok` är true.
-
-Ytterligare bekräftelse: den konsol-loggen visar `Memory hit for bc185635-...` men databas-posten är `0e687ea4-...`. Det är **ett annat model-ID!** Det betyder att minnesminnet från en tidigare session innehåller data för `bc185635-...` som aldrig rensas.
-
-### Tre-stegs-fix
-
-#### Fix 1 — Validera binärdata i `useXktPreload` och `setupCacheInterceptor` vid minneslagring
-
-Lägg till validering av faktisk binärstorlek och XKT-header när data hämtas och lagras i minnet:
-
-```typescript
-// Validate before storing to memory
-const MIN_VALID_XKT_BYTES = 50_000;
-const headerBytes = new Uint8Array(data, 0, Math.min(4, data.byteLength));
-const firstChar = String.fromCharCode(headerBytes[0]);
-const isHtmlOrJsonResponse = firstChar === '<' || firstChar === '{';
-
-if (data.byteLength < MIN_VALID_XKT_BYTES || isHtmlOrJsonResponse) {
-  console.warn(`XKT Preload: Skipping ${model.model_id} — data invalid (${data.byteLength} bytes, starts with '${firstChar}')`);
-  return;
-}
-storeModelInMemory(model.model_id, buildingFmGuid, data);
+Larmfliken
+┌──────────────────────────────────────────────────┐
+│  🔔 Larm  [Live]                                  │
+│  KPI: Totalt | Per våning | Per rum (top)         │
+│                                                    │
+│  Diagram: Larm per våning (stapeldiagram)         │
+│                                                    │
+│  Lista: FM-GUID | Våning | Rum | Datum | [🗑️]    │
+└──────────────────────────────────────────────────┘
 ```
 
-#### Fix 2 — Rensa minnesminnet vid viewer-initiering
+#### B2. Uppdatera FacilityManagementTab med riktiga IfcAlarm
 
-Det mest direkta symptomet är att minnesminnet innehåller korrupt/gammal data från tidigare sessions. Lägg till en rensning i `initializeViewer` innan cacheinterceptorn sätts upp:
+I portfolio-FM-fliken (`FacilityManagementTab`) ersätts den nuvarande mock-generatorn för arbetsordrar med en **blandmodell**:
 
-```typescript
-// In initializeViewer, before setupCacheInterceptorRef.current():
-import { clearBuildingFromMemory } from '@/hooks/useXktPreload';
+- Hämta IfcAlarm-aggregering per byggnad från `assets`-tabellen (GROUP BY building_fm_guid, COUNT)
+- Visa antal riktiga larm i "Issues per Building"-diagrammet (RIKTIGT för byggnader med IfcAlarm, annars mock för resten)
+- Lägg till en "Alarm"-tagg i KPI-korten som visar totalt antal IfcAlarm i hela portföljen
+- KPI-kortet "Active Issues" uppdateras: visar riktigt larmantal om det finns, annars mock
 
-// Clear stale in-memory XKT cache for this building
-// (prevents corrupt data from previous sessions being served to the parser)
-clearBuildingFromMemory(buildingFmGuid);
-console.log('AssetPlusViewer: Cleared in-memory XKT cache for fresh load');
-```
+#### B3. Ny AlarmManagementView-komponent
 
-`clearBuildingFromMemory` existerar redan i `useXktPreload.ts` men anropas aldrig vid viewer-init.
+Skapa `src/components/insights/tabs/AlarmManagementTab.tsx` — en dedikerad alarmhanteringsvy som kan öppnas från byggnadens Larm-flik via en "Hantera larm"-knapp:
 
-#### Fix 3 — Verifiera Content-Type och byteLength när data hämtas från storage-URL i cache-interceptorn
+**Funktioner:**
+- Lista ALLA larm för en byggnad (paginerad, 100 åt gången)
+- Sök/filtrering på våning (`level_fm_guid` → mappas till våningsnamn)
+- Multi-select med checkbox för batch-radering
+- "Radera valda larm"-knapp med bekräftelsedialog
+- "Radera alla larm för denna byggnad"-knapp (med extra bekräftelse)
 
-I `setupCacheInterceptor` (rad 2826-2833), när cached data hämtas från storage, validera svaret:
+**Radering:** Använder `supabase.from('assets').delete().in('fm_guid', selectedIds)` — detta fungerar eftersom IfcAlarm-objekten har `is_local=false` men RLS-policyn "Authenticated users can delete local assets" kräver `is_local=true`. Vi behöver **en edge function** som kör delete med `service_role_key` för att kringgå RLS.
 
-```typescript
-const cachedResponse = await original!(cacheResult.url, init);
-if (cachedResponse.ok) {
-  const data = await cachedResponse.clone().arrayBuffer();
-  // Validate data before serving and storing
-  const MIN_XKT_BYTES = 50_000;
-  const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
-  if (data.byteLength >= MIN_XKT_BYTES && firstByte !== '<' && firstByte !== '{') {
-    storeModelInMemory(modelId, resolvedBuildingGuid, data);
-    return new Response(data, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
-  } else {
-    console.warn(`XKT cache: Corrupt cache data for ${modelId} (${data.byteLength} bytes), falling through to fresh fetch`);
-    // Fall through to fetch from Asset+ API
-  }
-}
-```
+Alternativt: Skapa en ny RLS-policy: `DELETE WHERE asset_type = 'IfcAlarm'` — enklare och mer direkt.
 
-### Varför token-fixarna inte hjälpte
+#### B4. IfcAlarm visas i Portfolio-FM mock-datan
 
-- Token är giltigt och API-anropen returnerar 200 OK (bekräftat i nätverksloggen)
-- `GetAllRelatedModels` och `PublishDataServiceGet` returnerar båda 200 OK med korrekt data
-- Crashen sker i **XKT-parsern** (Asset+ SDK internt) när den försöker tolka minnesminne-data som inte är giltig XKT-binärdata
-- Token-cachelogiken är irrelevant eftersom crashen inträffar före/efter autentiseringsflödet
+I `FacilityManagementTab` (portfolio-vy):
+- Hämta alarm-antal per byggnad från DB
+- Ersätt mock "Issues per Building" med riktiga larmantal för de byggnader som har IfcAlarm
+- Behåll mock för byggnader utan IfcAlarm
+- Lägg till ett "Real data"-badge bredvid diagramtiteln när riktiga data används
+
+---
 
 ### Filer som ändras
 
 | Fil | Ändring |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | 1) Anropa `clearBuildingFromMemory(buildingFmGuid)` i `initializeViewer`, 2) Lägg till binärvalidering i cache-interceptorn |
-| `src/hooks/useXktPreload.ts` | Lägg till binärvalidering (`byteLength` + header-byte) innan `storeModelInMemory` anropas |
+| `src/components/viewer/AssetPlusViewer.tsx` | Del A: Fix hang + annotation-sync |
+| `src/components/viewer/MinimapPanel.tsx` | Del A: Fix AABB-beräkning |
+| `src/components/insights/BuildingInsightsView.tsx` | Del B1: Lägg till "Larm"-flik med IfcAlarm-data |
+| `src/components/insights/tabs/FacilityManagementTab.tsx` | Del B2 + B4: Blanda in riktiga alarm-KPI:er i portfolio-FM-vyn |
+| `src/components/insights/tabs/AlarmManagementTab.tsx` | **NY** Del B3: Dedikerad alarmhanteringsvy med lista + radering |
 
-Inga edge functions, inga databasändringar, inga nya beroenden.
+### Databasändring
 
-### Varför detta löser problemet
+Ny RLS-policy på `assets`-tabellen för att tillåta radering av IfcAlarm-objekt (för autentiserade användare):
 
-1. `clearBuildingFromMemory` vid viewer-init rensar ut alla eventuellt korrupta minnesdata från tidigare sessions
-2. Binärvalidering i preload och interceptor förhindrar att HTML-felsvar sparas som "XKT-data"
-3. Om storage-URL är utgången och returnerar HTML: interceptorn faller igenom och hämtar från Asset+ API istället för att serva korrupt data
-4. SDK:n får alltid giltig XKT-binärdata att parsa → ingen `RangeError`
+```sql
+CREATE POLICY "Authenticated users can delete alarm assets"
+ON public.assets FOR DELETE
+USING (auth.uid() IS NOT NULL AND asset_type = 'IfcAlarm');
+```
+
+Alternativt: tillåt radering via service-role edge function (ingen schema-ändring).
+
+Rekommendation: **RLS-policy** är enklare och mer transparent — ingen edge function behövs.
+
+### Varför detta är rätt approach
+
+- IfcAlarm-data finns redan i databasen — noll extra API-anrop eller synkning behövs
+- Radering via RLS-policy är säkrare än att exponera service-role i frontend
+- Portfolio-FM-vyn förbättras med riktiga data för Småviken utan att bryta mock för övriga byggnader
+- AlarmManagementTab är en isolerad komponent som kan widareutvecklas (t.ex. exportera till CSV, koppla till arbetsordersystem)
