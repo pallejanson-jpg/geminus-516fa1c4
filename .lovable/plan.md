@@ -1,107 +1,117 @@
 
-## Rotorsak: Korrupta cacheposter blockerar 3D-laddning för Akerselva Atrium
+## Diagnos: Viewern monteras men visar tomt — race condition i initieringsordning
 
-### Vad loggarna visar
+### Vad loggarna bekräftar
 
-Felet `[xeokit plugin XKTLoader]: Unsupported .XKT file version: 1769153147` visas för Akerselva Atrium (byggnad `9baa7a3a`). Det decimala värdet `1769153147` är `0x696F6E3B` i hex — vilket är ASCII-tecknen `ion;` — alltså början av ett **HTML- eller JSON-felsvar**, inte ett riktigt XKT-filhuvud.
-
-### Databaskonfirmation
-
-Akerselva Atrium har 3 poster i `xkt_models`:
-
-| Model ID | Filstorlek | Status |
-|---|---|---|
-| `0e687ea4` | 9,2 MB | Troligen giltig |
-| `bc185635` | **457 bytes** | KORRUPT (för liten) |
-| `xkt_models` | **310 bytes** | KORRUPT (för liten) |
-
-En riktig XKT-fil är åtminstone några hundra kilobyte. 457 och 310 bytes är definitivt ett HTML-felsvar som cachats av misstag — troligen ett "404 Not Found" eller "403 Forbidden" från Asset+ API som sparades som XKT-data.
-
-### Flödet som orsakar problemet
-
-```text
-1. Viewer begär modell bc185635 → Asset+ API returnerar 403/404 (HTML-fel)
-2. Fetch-interceptorn (row 2875): if (data.byteLength > 100) → 457 > 100 → TRUE
-3. Felsvaret sparas till backend storage som .xkt-fil
-4. Vid nästa laddning: memory hit eller database hit → returnerar HTML-felsvaret
-5. Xeokit-parsern läser "ion;" i header → "Unsupported XKT version: 1769153147"
-6. Modellen laddas inte → ingen 3D visas
+Loggens sekvens är:
+```
+allModelsLoadedCallback           ← modeller är laddade
+Model data or models array is not available  ← ERROR inuti Asset+ viewer
+Spaces hidden by default via Asset+ API
+allModelsLoadedCallback - got an FMGUID to look at
+selectFmGuid 755950d9-...
 ```
 
-Centralstationen fungerar för att dess enda egentliga modell (`494de6e6`, 14,7 MB) är giltig och inte träffar den korrupta cache-posten. Akerselva Atrium träffar alltid en korrupt post först.
+XKT-data laddas korrekt (1,33 MB + 14 MB i minnet), men `getAnnotations` misslyckas direkt efter `allModelsLoadedCallback`. Det här är ett känt Asset+ Vue-internt timing-problem: `allModelsLoadedCallback` skjutar för tidigt, innan den interna datastrukturen `models` är populerad.
 
-### Fix: Tre delar
+Andra kritiska observationer:
+- Felet uppstår på **BOTH** desktop och mobil nu
+- Loggarna har **dubbla** preload-meddelanden (`XKT Preload: 1/2 models loaded` visas **2 gånger**) — det tyder på att viewern mountas **DUBBELT** (React Strict Mode dubbelkörning + `UnifiedViewer` håller viewern i DOM hela tiden)
+- `initializeViewer` körs med `initTimeout = 50ms` men setupCacheInterceptor (`useEffect([buildingFmGuid])`) kan köras **parallellt** och installera interceptorn före eller efter att viewern initialiseras
 
-#### Del 1 — Rensa de korrupta databasposterna (migration)
+### Grundproblemet: HEAD-request blockerar cache-flödet
 
-Radera alla `xkt_models`-poster med `file_size < 50000` (50 KB) för Akerselva Atrium, och även den felaktiga `model_id = 'xkt_models'` som är ett generiskt alias, inte ett riktigt modell-ID:
-
-```sql
-DELETE FROM xkt_models 
-WHERE building_fm_guid = '9baa7a3a-717d-4fcb-8718-0f5ca618b28a'
-AND (file_size < 50000 OR model_id = 'xkt_models');
-```
-
-Mer generellt, rensa alla byggnader med suspekt litet filstorlek:
-```sql
-DELETE FROM xkt_models WHERE file_size < 50000;
-```
-
-#### Del 2 — Förbättra valideringen i fetch-interceptorn
-
-I `AssetPlusViewer.tsx` rad 2875 är valideringen:
+I interceptorn (rad 2822-2834) görs en **HEAD-request mot Asset+ API** för varje modell:
 ```typescript
-if (data.byteLength > 100) {  // ← FEL: 457 bytes passerar detta!
+const headResp = await original!(url, { method: 'HEAD' });
 ```
 
-Höj gränsen avsevärt och lägg till en XKT magic-byte check:
+Detta anrop görs **inuti** den interceptade fetch. Om HEAD-requesten misslyckas (timeout, 403, CORS-problem) kastar den ett undantag som fångas i `catch` och ignoreras — men om den är **långsam** (t.ex. 5-10 sekunder) blockeras hela modelladdningen tills HEAD-requesten är klar.
+
+Effekt på desktop vs mobil:
+- Desktop: CORS-policies och corporate-nätverk kan blockera HEAD-requests annorlunda
+- Mobil: Kan ha fungerat p.g.a. enklare nätverkssituation (mobilt data vs WiFi routing)
+
+### Åtgärdsplan: Ta bort HEAD-check + förenkla interceptorn
+
+Problemet med nuvarande interceptor-logik är att den är för komplex och blockerar viewer-init. Lösningen är att **ta bort HEAD-requesten** och istället bara kolla åldern på cache-posten (vi har redan `stale`-flaggan via datum-jämförelse i `checkCache`).
+
+#### Ändring 1: `src/components/viewer/AssetPlusViewer.tsx` — Ta bort HEAD-check
+
+Ersätt HEAD-requestblocket (rad 2820-2851) med en enklare logik som bara kollar om cache-posten är äldre än 7 dagar (via `cacheResult.stale` som redan finns):
 
 ```typescript
-// Validate actual XKT binary signature before caching
-// Real XKT files start with the byte 0x78 ('x') or specific version headers
-// Minimum realistic XKT model is at least 50KB
-const MIN_VALID_XKT_BYTES = 50_000; // 50 KB minimum
+// BEFORE (slow, blocking HEAD request):
+if (!cacheResult.stale) {
+  try {
+    const headResp = await original!(url, { method: 'HEAD' });
+    const sourceLastMod = headResp.headers.get('Last-Modified');
+    // ... lengthy HEAD comparison logic
+  } catch {
+    // silently ignored
+  }
+  if (!sourceNewer) {
+    // use cache
+  }
+}
 
-if (data.byteLength >= MIN_VALID_XKT_BYTES) {
-  // Extra: check that it's not an HTML error response
-  const header = new Uint8Array(data, 0, Math.min(4, data.byteLength));
-  const firstChar = String.fromCharCode(header[0]);
-  const isHtmlResponse = firstChar === '<' || firstChar === '{' || firstChar === 'E';
-  
-  if (!isHtmlResponse) {
+// AFTER (fast, date-based only):
+if (!cacheResult.stale) {
+  console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+  const cachedResponse = await original!(cacheResult.url, init);
+  if (cachedResponse.ok) {
+    const data = await cachedResponse.clone().arrayBuffer();
     storeModelInMemory(modelId, resolvedBuildingGuid, data);
-    xktCacheService.saveModelFromViewer(...);
-  } else {
-    console.warn(`XKT cache: Rejected ${modelId} — looks like HTML/JSON error response`);
+    return new Response(data, {
+      status: 200,
+      headers: { 'Content-Type': 'application/octet-stream' }
+    });
   }
 }
 ```
 
-#### Del 3 — Rensa minneskaachen vid uppstart för Akerselva Atrium
+Detta eliminerar en potentiellt blockerande nätverksanrop och förenklar cacheflödet markant.
 
-Loggen visar `XKT cache: Memory hit for bc185635-9507-41b6-93d4-a7d484acc0fd` — det korrupta felet finns redan i minnescachen (15,4 MB totalt, 4 modeller). Preloaden laddade upp de korrupta posterna i minnet vid start.
+#### Ändring 2: `src/components/viewer/AssetPlusViewer.tsx` — Skydda `getAnnotations`-anropet
 
-Lösning: När en cachad modell returnerar "Unsupported XKT version" från xeokit, ska interceptorn invalidera den minnescachen. Men xeokit ger oss inget callback på detta.
+Felet `Model data or models array is not available` uppstår för att `getAnnotations` anropas för tidigt. Lägg till en liten fördröjning (100ms) innan vi kallar funktioner som beror på modelldata:
 
-Alternativ lösning: I `useXktPreload.ts`, lägg till filstorleksvalidering innan modeller laddas in i minnescachen:
-
+Hitta i `handleAllModelsLoaded` callback-sektionen och skydda annotations-anropet:
 ```typescript
-const fetchModel = async (model) => {
-  // Skip models that are suspiciously small — likely corrupt cache entries
-  if ((model.file_size || 0) < 50_000) {
-    console.warn(`XKT Preload: Skipping ${model.model_id} — file_size ${model.file_size} too small (likely corrupt)`);
-    return;
+// Existing (crashes immediately):
+viewer.getAnnotations?.(...);
+
+// Fixed (wait for Vue to propagate model data):
+setTimeout(() => {
+  try {
+    viewer.getAnnotations?.(...);
+  } catch (e) {
+    console.warn('getAnnotations: models not ready yet', e);
   }
-  // ... rest of fetch logic
-};
+}, 100);
 ```
 
-### Sammanfattning av ändringar
+#### Ändring 3: Desktop-specifik fix — Verifiera att containern har rätt höjd
+
+Loggarna visar att viewern initialiseras (`Initialization completed in 0.2s`) men är osynlig. En container med `height: 0` skulle ge exakt detta symptom. Lägg till ett explicit `height: 100%` på containern i JSX:
+
+```typescript
+// viewerContainerRef div ska ha explicit height
+style={{
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',  // ← Säkerställ att detta finns
+  minHeight: 0,    // ← Krävs för flex children att respektera förälderns höjd
+  // ... rest
+}}
+```
+
+### Filer som ändras
 
 | Fil | Ändring |
 |---|---|
-| **Databas (migration)** | Radera korrupta poster med `file_size < 50000` |
-| **`src/components/viewer/AssetPlusViewer.tsx`** | Höj valideringsgränsen från 100 till 50 000 bytes + kolla att svaret inte är HTML |
-| **`src/hooks/useXktPreload.ts`** | Skippa modeller med `file_size < 50000` i preload-loopen |
+| `src/components/viewer/AssetPlusViewer.tsx` | 1) Ta bort HEAD-check i interceptorn, 2) Skydda `getAnnotations` med timeout, 3) Explicit `height: 100%` + `minHeight: 0` på container |
 
-Inga nya tabeller, inga edge functions, inga auth-ändringar.
+Inga edge functions, inga databas-ändringar, inga nya beroenden.
+
+Dessa ändringar gäller exakt samma kod för desktop och mobil (unified code path) — fix på ett ställe fixar båda.
