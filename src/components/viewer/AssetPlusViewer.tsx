@@ -507,7 +507,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   useEffect(() => { assetDataRef.current = assetData; }, [assetData]);
   
   // Get the building fmGuid for cache organization
-  const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
+  // fmGuid prop is always the building GUID when passed from UnifiedViewer.
+  // Fall back to assetData lookup only for room/floor deep-links.
+  const buildingFmGuid = fmGuid || assetData?.buildingFmGuid || assetData?.fmGuid;
 
   // Shared model names hook (used by extractModels for mobile + ModelVisibilitySelector)
   const { modelNamesMap } = useModelNames(buildingFmGuid);
@@ -3117,47 +3119,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             // If all names are GUIDs, fall through to API fetch below
           }
 
-          // Always fetch from Asset+ API if nameMap is still empty (no DB entries OR all GUIDs)
-          if (nameMap.size === 0) {
-            const apiBase = baseUrl.replace(/\/api\/v\d+\/AssetDB\/?$/i, '').replace(/\/+$/, '');
-            try {
-              const resp = await fetch(
-                `${apiBase}/api/threed/GetModels?fmGuid=${resolvedGuid}&apiKey=${apiKey}`,
-                { headers: { 'Authorization': `Bearer ${accessToken}` } }
-              );
-              if (resp.ok) {
-                const apiModels = await resp.json();
-                console.log(`XKT filter: Fetched ${apiModels.length} model(s) from Asset+ API for ${resolvedGuid}`);
-                apiModels.forEach((m: any) => {
-                  if (m.id && m.name) {
-                    nameMap.set(m.id, m.name);
-                    nameMap.set(m.id.toLowerCase(), m.name);
-                  }
-                  // Also map by filename extracted from xktFileUrl
-                  if (m.xktFileUrl && m.name) {
-                    const fileId = m.xktFileUrl.split('/').pop()?.replace('.xkt', '');
-                    if (fileId) {
-                      nameMap.set(fileId, m.name);
-                      nameMap.set(fileId.toLowerCase(), m.name);
-                    }
-                  }
-                });
-                // Persist real names to DB in background
-                for (const m of apiModels) {
-                  if (!m.name || !m.id) continue;
-                  supabase.from('xkt_models')
-                    .update({ model_name: m.name })
-                    .eq('model_id', m.id)
-                    .eq('building_fm_guid', resolvedGuid)
-                    .then(({ error: e }) => {
-                      if (e) console.debug('Name update failed:', e.message);
-                    });
-                }
-              }
-            } catch (e) {
-              console.debug('Failed to fetch model names from API:', e);
-            }
-          }
+          // If nameMap is empty, skip filtering — load all models (safer than a failing API call)
 
           // Build A-model filter — only allow models whose name starts with 'A'
           if (nameMap.size > 0) {
