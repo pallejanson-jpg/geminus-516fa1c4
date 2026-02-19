@@ -1697,8 +1697,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
 
       // Enable annotations after models are loaded
-      // Wrap in setTimeout to allow Vue's internal model data to propagate
-      // before calling getAnnotations (which requires models[] to be ready)
+      // Wrap in setTimeout (500ms) to allow Vue's internal model data to fully propagate.
+      // DO NOT call getAnnotations() here — the SDK handles it internally via onToggleAnnotation.
+      // Calling getAnnotations() manually causes "Model data or models array is not available" error.
       setTimeout(() => {
         try {
           const viewer = viewerInstanceRef.current;
@@ -1706,15 +1707,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           if (assetViewer?.onToggleAnnotation) {
             assetViewer.onToggleAnnotation(true);
             console.log("Annotations enabled");
-            
-            if (assetViewer.getAnnotations) {
-              assetViewer.getAnnotations();
-            }
+            // NOTE: Do NOT call getAnnotations() here — SDK handles it internally
           }
         } catch (e) {
           console.warn("Could not enable annotations (models not ready):", e);
         }
-      }, 100);
+      }, 500);
 
       // CRITICAL: Ensure spaces (rooms) are hidden by default
       // Skip when insightsColorMode is active — the insights effect will handle visibility
@@ -3615,7 +3613,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         <div 
           ref={viewportWrapperRef}
           className="dx-viewport relative w-full h-full"
-          style={{ margin: 0 }}
+          style={{ margin: 0, display: 'flex', flexDirection: 'column' }}
         >
           {/* AssetPlusViewer container - no id here; freshDiv inside gets id="AssetPlusViewer" */}
           <div 
@@ -3624,8 +3622,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             style={{
               display: 'flex',
               flexDirection: 'column',
+              flex: '1 1 auto',
               height: '100%',
               minHeight: 0,
+              position: 'relative',
               background: transparentBackground
                 ? 'transparent'
                 : 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
