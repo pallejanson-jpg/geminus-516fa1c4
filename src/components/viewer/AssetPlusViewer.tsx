@@ -19,7 +19,7 @@ import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
+import { isModelInMemory, getModelFromMemory, storeModelInMemory, getMemoryStats, clearBuildingFromMemory } from '@/hooks/useXktPreload';
 import { useFlashHighlight } from '@/hooks/useFlashHighlight';
 import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -2822,15 +2822,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               console.log(`XKT cache: Stale entry (>7d) for ${modelId}, fetching fresh from Asset+`);
             } else {
               // Use date-based staleness only — no blocking HEAD request
-              console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+            console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
               const cachedResponse = await original!(cacheResult.url, init);
               if (cachedResponse.ok) {
                 const data = await cachedResponse.clone().arrayBuffer();
-                storeModelInMemory(modelId, resolvedBuildingGuid, data);
-                return new Response(data, {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/octet-stream' }
-                });
+                // Validate binary data before serving — reject HTML/JSON error responses
+                const MIN_XKT_BYTES = 50_000;
+                const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
+                if (data.byteLength >= MIN_XKT_BYTES && firstByte !== '<' && firstByte !== '{') {
+                  storeModelInMemory(modelId, resolvedBuildingGuid, data);
+                  return new Response(data, {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/octet-stream' }
+                  });
+                } else {
+                  console.warn(`XKT cache: Corrupt storage data for ${modelId} (${data.byteLength} bytes, starts with '${firstByte}') — falling through to fresh fetch`);
+                  // Fall through to fetch from Asset+ API
+                }
               }
             }
           }
@@ -2986,6 +2994,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     setModelLoadState('idle');
     setCacheStatus(null);
     
+    // Clear stale in-memory XKT cache for this building before initializing.
+    // Prevents corrupt/expired data from previous sessions being served to the XKT parser (→ RangeError).
+    if (buildingFmGuid) {
+      clearBuildingFromMemory(buildingFmGuid);
+      console.log('AssetPlusViewer: Cleared in-memory XKT cache for fresh load');
+    }
+
     // Setup cache interceptor before viewer initialization
     // SKIP on mobile to save memory – cache-on-load doubles memory usage via .clone() + .arrayBuffer()
     // on every XKT model. For a building with 5 models × 10 MB = ~50 MB extra memory avoided on mobile.
