@@ -1,5 +1,5 @@
-import React, { Suspense, useCallback, useState, useContext, useMemo, useEffect } from "react";
-import { Database, FileQuestion, Sparkles, Building2, Loader2 } from "lucide-react";
+import React, { useCallback, useState, useContext, useMemo, useEffect } from "react";
+import { Database, FileQuestion, Sparkles, Building2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +9,6 @@ import GunnarChat from "@/components/chat/GunnarChat";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
-import HomeMapPanel from "@/components/home/HomeMapPanel";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -171,25 +170,24 @@ export default function HomeLanding() {
       />
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
-      {/* Main layout: stacked on mobile, side-by-side on xl+ */}
-      <div className="relative z-10 min-h-full flex flex-col xl:flex-row xl:items-stretch gap-4 sm:gap-6 px-3 sm:px-4 md:px-6 xl:px-8 py-4 sm:py-6">
+      {/* Main layout */}
+      <div className="relative z-10 min-h-full flex flex-col items-center gap-4 sm:gap-6 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
 
-        {/* ─── Left column: assistants + favorites ─── */}
-        <div className="flex flex-col items-center xl:items-start w-full xl:w-[540px] xl:shrink-0">
+        <div className="flex flex-col items-center w-full max-w-2xl">
 
-          <header className="space-y-1 sm:space-y-2 text-center xl:text-left mb-4 sm:mb-6 w-full">
+          <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6 w-full">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground">Welcome to My Geminus</h1>
             <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Your digital backbone for digital twins</p>
           </header>
 
           {/* AI Assistants */}
           <section className="space-y-2 sm:space-y-3 w-full mb-4 sm:mb-6">
-            <div className="text-center xl:text-left">
+            <div className="text-center">
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
               <p className="text-[11px] sm:text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
 
-            <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3 xl:grid-cols-1">
+            <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
               {ASSISTANTS.map((a) => {
                 const Icon = a.icon;
                 return (
@@ -280,17 +278,6 @@ export default function HomeLanding() {
               </CardContent>
             </Card>
           </section>
-        </div>
-
-        {/* ─── Right column: interactive map (xl+ screens only) ─── */}
-        <div className="hidden xl:block xl:flex-1 xl:min-h-[600px] xl:sticky xl:top-4 self-stretch">
-          <Suspense fallback={
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          }>
-            <HomeMapPanel />
-          </Suspense>
         </div>
       </div>
 
