@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useContext, useMemo, useEffect } from "react";
-import { Database, FileQuestion, Sparkles, Building2 } from "lucide-react";
+import React, { Suspense, useCallback, useState, useContext, useMemo, useEffect } from "react";
+import { Database, FileQuestion, Sparkles, Building2, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -284,7 +284,13 @@ export default function HomeLanding() {
 
         {/* ─── Right column: interactive map (xl+ screens only) ─── */}
         <div className="hidden xl:block xl:flex-1 xl:min-h-[600px] xl:sticky xl:top-4 self-stretch">
-          <HomeMapPanel />
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          }>
+            <HomeMapPanel />
+          </Suspense>
         </div>
       </div>
 
