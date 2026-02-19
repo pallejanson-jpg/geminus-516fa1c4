@@ -13,9 +13,10 @@ import {
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
-    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes
+    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
@@ -175,6 +176,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
     const [showAlarmManagement, setShowAlarmManagement] = useState(false);
 
+    // Space tab floor filter
+    const [spaceFloorFilter, setSpaceFloorFilter] = useState<string>('');
+    // FM grid search + level filter
+    const [alarmSearch, setAlarmSearch] = useState('');
+    const [alarmLevelFilter, setAlarmLevelFilter] = useState<string>('');
+    // Controlled tabs
+    const [activeTab, setActiveTab] = useState('performance');
+
     // Room metadata lookup from allData (for enriching alarm list)
     const roomLookup = useMemo(() => {
         const map = new Map<string, { name: string; commonName: string }>();
@@ -208,8 +217,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 .limit(50);
 
             const levelMap = new Map<string, string>();
+            let unkIdx = 1;
             (levelAssets || []).forEach((l: any) => {
-                levelMap.set(l.fm_guid, l.common_name || l.name || l.fm_guid.slice(0, 8));
+                levelMap.set(l.fm_guid, l.common_name || l.name || `Våning (okänd ${unkIdx++})`);
             });
 
             const { data: alarmLevels } = await supabase
@@ -228,7 +238,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 const mapped = Object.entries(lvlCounts)
                     .map(([g, cnt]) => ({
                         levelGuid: g,
-                        levelName: g === '__none__' ? 'Okänd' : (levelMap.get(g) || g.slice(0, 10) + '…'),
+                        levelName: g === '__none__' ? 'Okänd' : (levelMap.get(g) || 'Våning (okänd)'),
                         count: cnt,
                     }))
                     .sort((a, b) => b.count - a.count)
@@ -299,8 +309,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Level name lookup (needs buildingStoreys)
     const levelNames = useMemo(() => {
         const map = new Map<string, string>();
+        let unknownIndex = 1;
         buildingStoreys.forEach((s: any) => {
-            map.set(s.fmGuid?.toLowerCase(), s.commonName || s.name || s.fmGuid?.slice(0, 8));
+            const name = s.commonName || s.name;
+            map.set(s.fmGuid?.toLowerCase(), name || `Våning (okänd ${unknownIndex++})`);
         });
         levelNamesRef.current = map;
         return map;
@@ -313,11 +325,55 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         { key: 'occupancy' as VisualizationType, label: 'Beläggning', unit: '%', icon: Users, color: '#f97316' },
     ] as const;
 
-    const sensorRooms = useMemo(() => buildingSpaces.slice(0, 60).map((s: any) => ({
-        fmGuid: s.fmGuid,
-        commonName: s.commonName,
-        name: s.name,
-    })), [buildingSpaces]);
+    // Deduplicated floor list for Space tab filter
+    const spaceFloorOptions = useMemo(() => {
+        const seen = new Set<string>();
+        const options: { guid: string; name: string }[] = [];
+        buildingStoreys.forEach((s: any) => {
+            const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
+            if (!baseName || seen.has(baseName)) return;
+            seen.add(baseName);
+            options.push({ guid: s.fmGuid, name: baseName });
+        });
+        return options;
+    }, [buildingStoreys]);
+
+    const sensorRooms = useMemo(() => {
+        let filtered = buildingSpaces;
+        if (spaceFloorFilter) {
+            const matchingGuids = new Set<string>();
+            buildingStoreys.forEach((s: any) => {
+                const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
+                if (baseName === spaceFloorFilter) matchingGuids.add(s.fmGuid?.toLowerCase());
+            });
+            filtered = buildingSpaces.filter((s: any) => matchingGuids.has(s.levelFmGuid?.toLowerCase()));
+        }
+        return filtered.slice(0, 60).map((s: any) => ({
+            fmGuid: s.fmGuid,
+            commonName: s.commonName,
+            name: s.name,
+            levelFmGuid: s.levelFmGuid,
+        }));
+    }, [buildingSpaces, buildingStoreys, spaceFloorFilter]);
+
+    // Filtered alarm list for FM grid
+    const filteredAlarmList = useMemo(() => {
+        let list = alarmList;
+        if (alarmLevelFilter) {
+            list = list.filter((a: any) => a.level_fm_guid === alarmLevelFilter);
+        }
+        if (alarmSearch) {
+            const q = alarmSearch.toLowerCase();
+            list = list.filter((a: any) => {
+                const room = a.in_room_fm_guid ? roomLookup.get(a.in_room_fm_guid.toLowerCase()) : null;
+                const lvl = a.level_fm_guid ? levelNames.get(a.level_fm_guid.toLowerCase()) : '';
+                return (room?.commonName || '').toLowerCase().includes(q) ||
+                       (room?.name || '').toLowerCase().includes(q) ||
+                       (lvl || '').toLowerCase().includes(q);
+            });
+        }
+        return list;
+    }, [alarmList, alarmLevelFilter, alarmSearch, roomLookup, levelNames]);
 
     const iotMachineMap = useMemo(() => {
         const m = new Map<string, any>();
@@ -506,7 +562,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             {/* KPI Cards - REAL counts */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4 sm:mb-6">
                 {[
-                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-blue-500', isMock: false, onView: () => navigateTo3D() },
+                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-blue-500', isMock: false, onView: () => setActiveTab('space') },
                     { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-green-500', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
                     { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-purple-500', isMock: false, onView: () => navigateTo3D() },
                     { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
@@ -534,7 +590,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             <div className="flex gap-4">
                 <div className="flex-1 min-w-0">
                     {/* Tabs: Performance, Space, Asset */}
-                    <Tabs defaultValue="performance" className="w-full">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
                             <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
                                 <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
@@ -713,6 +769,32 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
                              {/* ── Sensor content (merged from Sensors tab) ── */}
                              <div className="space-y-4 mt-6">
+                                 {/* Floor filter pills */}
+                                 {spaceFloorOptions.length > 1 && (
+                                     <div className="flex flex-wrap gap-1.5 items-center">
+                                         <span className="text-xs text-muted-foreground mr-1">Våning:</span>
+                                         <Button
+                                             size="sm"
+                                             variant={spaceFloorFilter === '' ? 'default' : 'outline'}
+                                             className="h-6 px-2 text-[10px]"
+                                             onClick={() => setSpaceFloorFilter('')}
+                                         >
+                                             Alla
+                                         </Button>
+                                         {spaceFloorOptions.map(opt => (
+                                             <Button
+                                                 key={opt.guid}
+                                                 size="sm"
+                                                 variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
+                                                 className="h-6 px-2 text-[10px]"
+                                                 onClick={() => setSpaceFloorFilter(opt.name)}
+                                             >
+                                                 {opt.name}
+                                             </Button>
+                                         ))}
+                                     </div>
+                                 )}
+
                                  {/* Metric buttons */}
                                  <div className="flex flex-wrap gap-1.5 items-center justify-between">
                                      <div className="flex items-center gap-2">
@@ -774,7 +856,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                              </Button>
                                          </div>
                                          <CardDescription>
-                                             {sensorRooms.length} av {buildingSpaces.length} rum · klicka för sensordetaljer
+                                             {sensorRooms.length} av {spaceFloorFilter ? `rum på ${spaceFloorFilter}` : `${buildingSpaces.length} rum`} · klicka för sensordetaljer
                                          </CardDescription>
                                      </CardHeader>
                                      <CardContent>
@@ -889,7 +971,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0.5 bg-green-500/10">
                                     <span className="h-1.5 w-1.5 rounded-full bg-green-400 inline-block" />LIVE
                                 </span>
-                                <span className="text-xs text-muted-foreground">IfcAlarm-objekt från databasen</span>
+                                <span className="text-xs text-muted-foreground">Larm-objekt från databasen</span>
                                 {!showAlarmManagement && (
                                     <>
                                         <Button
@@ -990,28 +1072,55 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Bell className="h-4 w-4 text-destructive" />
                                                     Larm per våningsplan
                                                 </CardTitle>
-                                                <CardDescription>Antal IfcAlarm per våning (riktiga data)</CardDescription>
+                                                <CardDescription>Antal alarm per våning (riktiga data) · Klicka stapel för att filtrera</CardDescription>
                                             </CardHeader>
-                                            <CardContent>
+                                            <CardContent className="space-y-3">
                                                 <div className="h-56">
                                                     <ResponsiveContainer width="100%" height="100%">
                                                         <BarChart data={alarmsByLevel} layout="vertical">
                                                             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                                             <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                                                            <YAxis
-                                                                dataKey="levelName"
-                                                                type="category"
-                                                                width={isMobile ? 60 : 100}
-                                                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
-                                                            />
-                                                            <Tooltip
-                                                                contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
-                                                                formatter={(v: number) => [`${v} larm`]}
-                                                            />
-                                                            <Bar dataKey="count" name="Larm" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
+                                                            <YAxis dataKey="levelName" type="category" width={isMobile ? 60 : 100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }} />
+                                                            <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`${v} larm`]} />
+                                                            <Bar dataKey="count" name="Larm" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
+                                                                {alarmsByLevel.map((entry, index) => (
+                                                                    <Cell
+                                                                        key={`cell-${index}`}
+                                                                        fill={alarmLevelFilter === entry.levelGuid ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
+                                                                        onClick={() => setAlarmLevelFilter(prev => prev === entry.levelGuid ? '' : entry.levelGuid)}
+                                                                    />
+                                                                ))}
+                                                            </Bar>
                                                         </BarChart>
                                                     </ResponsiveContainer>
                                                 </div>
+                                                {/* Annotation buttons per floor */}
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {alarmsByLevel.map((level) => (
+                                                        <Button
+                                                            key={level.levelGuid}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-[10px] gap-1"
+                                                            title={`Visa ${level.count} larm-annotations för ${level.levelName}`}
+                                                            onClick={() => {
+                                                                const levelAlarms = alarmList
+                                                                    .filter((a: any) => a.level_fm_guid === level.levelGuid && a.coordinate_x != null)
+                                                                    .slice(0, 50)
+                                                                    .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
+                                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                            }}
+                                                        >
+                                                            <MapPin className="h-2.5 w-2.5" />
+                                                            {level.levelName}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                                {alarmLevelFilter && (
+                                                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setAlarmLevelFilter('')}>
+                                                        <X className="h-3 w-3" /> Visa alla våningar
+                                                    </Button>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     )}
@@ -1021,8 +1130,25 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         <CardHeader className="pb-2">
                                             <CardTitle className="text-base flex items-center gap-2">
                                                 <Bell className="h-4 w-4 text-destructive" />
-                                                Senaste 50 larm
+                                                {alarmLevelFilter
+                                                    ? `Larm — ${alarmsByLevel.find(l => l.levelGuid === alarmLevelFilter)?.levelName || 'Vald våning'}`
+                                                    : 'Senaste 50 larm'
+                                                }
                                             </CardTitle>
+                                            <div className="relative mt-2">
+                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                <Input
+                                                    placeholder="Sök rumsnamn, nummer, våning…"
+                                                    value={alarmSearch}
+                                                    onChange={(e) => setAlarmSearch(e.target.value)}
+                                                    className="h-8 pl-8 text-xs"
+                                                />
+                                                {alarmSearch && (
+                                                    <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => setAlarmSearch('')}>
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </CardHeader>
                                         <CardContent className="p-0">
                                             <div className="overflow-x-auto">
@@ -1038,37 +1164,29 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {alarmList.map((alarm: any) => {
+                                                        {filteredAlarmList.map((alarm: any) => {
                                                             const room = alarm.in_room_fm_guid ? roomLookup.get(alarm.in_room_fm_guid.toLowerCase()) : null;
                                                             const lvlName = alarm.level_fm_guid ? levelNames.get(alarm.level_fm_guid.toLowerCase()) : null;
                                                             return (
                                                                 <TableRow key={alarm.id}>
-                                                                    <TableCell className="text-xs">
-                                                                        {room?.commonName || '—'}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-xs font-mono text-muted-foreground">
-                                                                        {room?.name || '—'}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-xs text-muted-foreground">
-                                                                        {lvlName || (alarm.level_fm_guid ? alarm.level_fm_guid.slice(0, 8) + '…' : '—')}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-xs text-muted-foreground">
-                                                                        {new Date(alarm.updated_at).toLocaleDateString('sv-SE')}
-                                                                    </TableCell>
+                                                                    <TableCell className="text-xs">{room?.commonName || '—'}</TableCell>
+                                                                    <TableCell className="text-xs font-mono text-muted-foreground">{room?.name || '—'}</TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">{lvlName || 'Våning (okänd)'}</TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">{new Date(alarm.updated_at).toLocaleDateString('sv-SE')}</TableCell>
                                                                     <TableCell>
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
                                                                             className="h-7 w-7 text-primary hover:bg-primary/10"
-                                                                            title="Visa i 3D"
+                                                                            title="Visa annotation och zooma till larm"
                                                                             onClick={() => {
+                                                                                const alarms = alarm.coordinate_x != null
+                                                                                    ? [{ fmGuid: alarm.fm_guid, x: alarm.coordinate_x, y: alarm.coordinate_y, z: alarm.coordinate_z }]
+                                                                                    : [];
                                                                                 if (drawerMode) {
-                                                                                    // Dispatch single alarm annotation
-                                                                                    const alarms = alarm.coordinate_x != null
-                                                                                        ? [{ fmGuid: alarm.fm_guid, x: alarm.coordinate_x, y: alarm.coordinate_y, z: alarm.coordinate_z }]
-                                                                                        : [];
-                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms } }));
+                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
                                                                                 } else {
+                                                                                    sessionStorage.setItem('insights_alarm_annotations', JSON.stringify(alarms));
                                                                                     navigateTo3D({ entity: alarm.fm_guid });
                                                                                 }
                                                                             }}
@@ -1081,6 +1199,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             variant="ghost"
                                                                             size="icon"
                                                                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                                            title="Radera larm"
                                                                             onClick={async () => {
                                                                                 await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
                                                                                 setAlarmRefreshKey(k => k + 1);
@@ -1092,10 +1211,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 </TableRow>
                                                             );
                                                         })}
-                                                        {alarmList.length === 0 && (
+                                                        {filteredAlarmList.length === 0 && (
                                                             <TableRow>
                                                                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                                                    Inga larm hittades
+                                                                    {alarmSearch || alarmLevelFilter ? 'Inga matchande larm' : 'Inga larm hittades'}
                                                                 </TableCell>
                                                             </TableRow>
                                                         )}
