@@ -104,7 +104,25 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
       canvas.width = size.width * pixelRatio;
       canvas.height = (size.height - 40) * pixelRatio;
 
-      const aabb = scene.getAABB?.() || scene.aabb;
+      // Build tight AABB from only visible IfcSpace objects so minimap zooms to active floor
+      let tightAabb: number[] | null = null;
+      const metaSceneForAabb = xeokitViewer.metaScene;
+      if (metaSceneForAabb?.metaObjects) {
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        let hasVisible = false;
+        Object.values(metaSceneForAabb.metaObjects).forEach((metaObject: any) => {
+          if (metaObject?.type?.toLowerCase() !== 'ifcspace') return;
+          const sceneObj = scene.objects?.[metaObject.id];
+          if (!sceneObj?.visible || !sceneObj?.aabb) return;
+          const [ax, ay, az, bx, by, bz] = sceneObj.aabb;
+          minX = Math.min(minX, ax); minY = Math.min(minY, ay); minZ = Math.min(minZ, az);
+          maxX = Math.max(maxX, bx); maxY = Math.max(maxY, by); maxZ = Math.max(maxZ, bz);
+          hasVisible = true;
+        });
+        if (hasVisible && isFinite(minX)) tightAabb = [minX, minY, minZ, maxX, maxY, maxZ];
+      }
+      const aabb = tightAabb || scene.getAABB?.() || scene.aabb;
       if (!aabb || aabb.length < 6 || !isFinite(aabb[0])) {
         setError('Laddar modell...');
         setIsLoading(false);
