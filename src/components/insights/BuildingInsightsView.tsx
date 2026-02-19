@@ -41,6 +41,8 @@ const FLOOR_COLORS = [
 interface BuildingInsightsViewProps {
     facility: Facility;
     onBack: () => void;
+    /** When true, hides the page header (back button + title) — used in drawer/panel context */
+    drawerMode?: boolean;
 }
 
 
@@ -143,7 +145,7 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
     );
 };
 
-export default function BuildingInsightsView({ facility, onBack }: BuildingInsightsViewProps) {
+export default function BuildingInsightsView({ facility, onBack, drawerMode }: BuildingInsightsViewProps) {
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
     const navigate = useNavigate();
@@ -378,20 +380,22 @@ export default function BuildingInsightsView({ facility, onBack }: BuildingInsig
 
     return (
         <div className="h-full p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto">
-            {/* Page Header */}
-            <div className="mb-4 sm:mb-6 flex items-start gap-3">
-                <Button variant="ghost" size="icon" onClick={onBack} className="mt-0.5 shrink-0">
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div>
-                    <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground">
-                        {facility.commonName || facility.name}
-                    </h1>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                        Building insights and analytics
-                    </p>
+            {/* Page Header — hidden in drawer mode (panel provides its own header) */}
+            {!drawerMode && (
+                <div className="mb-4 sm:mb-6 flex items-start gap-3">
+                    <Button variant="ghost" size="icon" onClick={onBack} className="mt-0.5 shrink-0">
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <div>
+                        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground">
+                            {facility.commonName || facility.name}
+                        </h1>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Building insights and analytics
+                        </p>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* KPI Cards - REAL counts */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4 sm:mb-6">

@@ -17,7 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
-  Loader2, Square,
+  Loader2, Square, BarChart2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import FmAccess2DPanel from '@/components/viewer/FmAccess2DPanel';
@@ -29,6 +29,7 @@ import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
+import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
@@ -118,6 +119,8 @@ const UnifiedViewerContent: React.FC<{
   const [ghostOpacity, setGhostOpacity] = useState(30);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
+  // Insights drawer — auto-open if insightsModeParam is set in URL
+  const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
 
   useEffect(() => {
     if (buildingData?.transform) {
@@ -391,6 +394,23 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Right: Controls */}
         <div className="flex items-center gap-1">
+          {/* Insights drawer toggle — desktop only */}
+          {!isMobile && buildingFmGuid && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => setInsightsPanelOpen(v => !v)}
+                  className={`gap-1.5 px-3 h-8 text-xs ${insightsPanelOpen ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+                >
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  Insights
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Byggnadsinsikter och analys</TooltipContent>
+            </Tooltip>
+          )}
+
           {viewMode === 'vt' && vtSyncActive && (
             <span className="text-xs text-green-400 bg-green-900/40 px-2 py-0.5 rounded flex items-center gap-1 mr-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -513,6 +533,16 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
       </div>
+
+      {/* ─── Insights bottom-sheet panel — desktop only ─── */}
+      {!isMobile && buildingFmGuid && (
+        <InsightsDrawerPanel
+          buildingFmGuid={buildingFmGuid}
+          buildingName={buildingData?.name}
+          open={insightsPanelOpen}
+          onClose={() => setInsightsPanelOpen(false)}
+        />
+      )}
     </div>
   );
 };
