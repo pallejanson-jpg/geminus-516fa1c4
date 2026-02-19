@@ -1,153 +1,129 @@
 
-## Diagnos: Rootorsak är ett korrumperat sessionStorage + felaktig API-nyckel i SDK-anropet
+## Rotorsak: Korrupt cachad XKT-fil i storage
 
-### Vad nätverksloggarna bevisar
+### Det definitiva beviset
 
-**Problem 1: `GetModels` GET → 404 (linje 22-25)**
+**Console-felet är:**
 ```
-GET .../api/threed/GetModels?fmGuid=9baa7a3a...&apiKey=e132b81e... → 404
-```
-Trots att koden raderades finns detta anrop kvar. Orsak: `sessionStorage` cache innehåller gammal config (`geminus_ap_config`) och tokenet cachas i `geminus_ap_token`. Om `useModelNames`-hooken anropar samma endpoint, eller om sessionStorage innehåller gammalt state, kan det dyka upp här.
-
-**Problem 2: `GetAllRelatedModels` POST → 401 (kritisk)**
-```
-POST .../GetAllRelatedModels
-Headers: Authorization: Bearer eyJ...  (BARA Bearer, ingen apiKey)
-Body: {"fmGuids":["9BAA7A3A-..."]}
-→ 401
+RangeError: Offset is outside the bounds of the DataView
+  at DataView.prototype.getUint32
+  at fJ._parseModel (assetplusviewer.umd.min.js:522:376042)
 ```
 
-Asset+ SDK:n gör detta anrop internt — men tokenet har GILTIGA claims (Admin-roll, rätt tenant-id `d294c6d5-...`). Varför 401?
+Detta är **ingen nätverksfel, ingen autentiseringsfel.** Det är Asset+ SDK:ns XKT-parser som kraschar för att binärdata är korrupt eller ogiltig.
 
-**JWT-token är utgånget.** Token i nätverksloggen har:
-- `iat: 1771514505` = 2026-02-19T**16:01:45**Z
-- `exp: 1771514805` = 2026-02-19T**16:06:45**Z (bara 5 minuter livslängd!)
+**Databasen visar:**
+```
+model_id:    0e687ea4-cdd0-48b0-bed1-df7fe588f648
+file_size:   9,215,200 bytes (9.2 MB) ← ser OK ut
+storage_path: 9baa7a3a-.../0e687ea4-....xkt
+synced_at:   2026-02-18 16:05:52
+```
 
-Loggtimestampet för anropet är `16:06:47Z` — **2 sekunder EFTER att tokenet gick ut!**
+**Nätverksloggarna visar (konsekvent):**
+```
+XKT cache: Memory hit for bc185635-9507-41b6-93d4-a7d484acc0fd  ← MINNESTRÄFF
+allModelsLoadedCallback                                           ← callback körs
+RangeError: Offset is outside the bounds of the DataView         ← KRASCHAR vid parse
+```
 
-Token expires at **16:06:45**, request happens at **16:06:47** → 401 Unauthorized är korrekt respons.
+**Minnesträffen är problemet.** Sekvensen är:
+1. `useXktPreload` laddar XKT-filen från storage (signerad URL) och sparar i minnet
+2. Cache-interceptorn returnerar minnesdata direkt när SDK:n begär filen
+3. SDK:n försöker parsa data → `RangeError` → krasch → viewer visas aldrig
 
-### Varför cachat token är problemet
+Varför är minnesdata korrupt? Troligtvis laddades filen ned från en **utgången signerad URL** (de lever bara 3600 sekunder = 1 timme). Om `useXktPreload` fetchar från en signerad URL som gick ut, returnerar Supabase storage ett **HTML-felmeddelande** istället för binär XKT-data. Den HTML-strängen sparas sedan i minnesminnet (`xktMemoryCache`), och när SDK:n sedan begär filen returneras HTML — inte XKT — vilket orsakar `RangeError` vid parsing.
 
-`sessionStorage.getItem('geminus_ap_token')` cachen har en "1 min margin" guard:
+Observera att koden i `useXktPreload.ts` (rad 160-163) har en guard mot korrupta filer:
 ```typescript
-if (Date.now() < expiresAt - 60000) { // 1 min margin
-  accessToken = token;  // Use cached token
+if ((model.file_size || 0) < 50_000) {
+  console.warn(`Skipping ${model.model_id} — file_size too small (likely corrupt)`);
+  return;
 }
 ```
 
-Men backend-tokenet från Asset+ staging-miljön har **bara 5 minuters livslängd** (inte 60 minuter som antaget). Med 1 minuts säkerhetsmarginal används cachad token upp till minut 4 av 5 — men om SDK:n tar >1 sekund att initialisera och modellen inte laddas direkt, hinner token gå ut.
+Men `file_size` i databasen är **9.2 MB** (korrekt storlek) — guarddatat matchar det lagrade metadatat, inte den faktiska storleken på vad som fetches. Om signad URL är utgången och returnerar en HTML-respons på t.ex. 500 bytes, accepteras ändå data eftersom databasens `file_size` valideras istället för `data.byteLength`.
 
-Dessutom: sessionStorage-värdet `expiresAt` sätts till `Date.now() + 55 * 60 * 1000` (55 minuter!) oberoende av hur länge tokenet faktiskt är giltigt. Det innebär att ett 5-minuters-token cachas och används i upp till 55 minuter → **alla requests efter minut 5 returnerar 401**.
+Dessutom: `useXktPreload` validerar inte svarens `Content-Type` eller kontrollerar att svaret faktiskt är binär XKT-data. Det räcker att `response.ok` är true.
 
-### Åtgärdsplan
+Ytterligare bekräftelse: den konsol-loggen visar `Memory hit for bc185635-...` men databas-posten är `0e687ea4-...`. Det är **ett annat model-ID!** Det betyder att minnesminnet från en tidigare session innehåller data för `bc185635-...` som aldrig rensas.
 
-#### Fix 1 — Rensa sessionStorage-cache och läs token-expiry från JWT
+### Tre-stegs-fix
 
-Istället för att anta 55 minuters token-livslängd, läs `exp`-claimet direkt från JWT-payload och använd det faktiska utgångsdatumet minus 30 sekunder säkerhetsmarginal:
+#### Fix 1 — Validera binärdata i `useXktPreload` och `setupCacheInterceptor` vid minneslagring
+
+Lägg till validering av faktisk binärstorlek och XKT-header när data hämtas och lagras i minnet:
 
 ```typescript
-// Rensa gammal felaktig cache
-sessionStorage.removeItem('geminus_ap_token');
-sessionStorage.removeItem('geminus_ap_config');
+// Validate before storing to memory
+const MIN_VALID_XKT_BYTES = 50_000;
+const headerBytes = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+const firstChar = String.fromCharCode(headerBytes[0]);
+const isHtmlOrJsonResponse = firstChar === '<' || firstChar === '{';
 
-// Läs exp från JWT-payload
-function getJwtExpiry(token: string): number {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return (payload.exp * 1000) - 30_000; // 30s safety margin
-  } catch {
-    return Date.now() + 4 * 60 * 1000; // fallback: 4 min
-  }
+if (data.byteLength < MIN_VALID_XKT_BYTES || isHtmlOrJsonResponse) {
+  console.warn(`XKT Preload: Skipping ${model.model_id} — data invalid (${data.byteLength} bytes, starts with '${firstChar}')`);
+  return;
 }
-
-// Cachelag token med korrekt expiry
-sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
-  token: accessToken,
-  expiresAt: getJwtExpiry(accessToken),  // ← Läs från JWT, inte hårdkodad 55 min
-}));
+storeModelInMemory(model.model_id, buildingFmGuid, data);
 ```
 
-#### Fix 2 — Reducera cache-guard från 60 sekunder till 30 sekunder
+#### Fix 2 — Rensa minnesminnet vid viewer-initiering
 
-Med 5-minuterstokens och 60-sekunders guard kastas tokenet efter 4 minuter. Med 30-sekunders guard används det i 4,5 minuter:
+Det mest direkta symptomet är att minnesminnet innehåller korrupt/gammal data från tidigare sessions. Lägg till en rensning i `initializeViewer` innan cacheinterceptorn sätts upp:
 
 ```typescript
-// BEFORE:
-if (Date.now() < expiresAt - 60000) { // 1 min margin
+// In initializeViewer, before setupCacheInterceptorRef.current():
+import { clearBuildingFromMemory } from '@/hooks/useXktPreload';
 
-// AFTER:
-if (Date.now() < expiresAt - 30000) { // 30s margin (tokens can be short-lived)
+// Clear stale in-memory XKT cache for this building
+// (prevents corrupt data from previous sessions being served to the parser)
+clearBuildingFromMemory(buildingFmGuid);
+console.log('AssetPlusViewer: Cleared in-memory XKT cache for fresh load');
 ```
 
-#### Fix 3 — Rensa sessionStorage vid viewer-init (engångsfix)
+`clearBuildingFromMemory` existerar redan i `useXktPreload.ts` men anropas aldrig vid viewer-init.
 
-Lägg till en rensning av sessionStorage-nycklarna i `initializeViewer` INNAN token-hämtningen:
+#### Fix 3 — Verifiera Content-Type och byteLength när data hämtas från storage-URL i cache-interceptorn
+
+I `setupCacheInterceptor` (rad 2826-2833), när cached data hämtas från storage, validera svaret:
 
 ```typescript
-// Clear potentially stale cached token/config on fresh viewer init
-// This ensures we always use a fresh token, avoiding 401 from expired cached tokens
-const now = Date.now();
-const cachedToken = sessionStorage.getItem(TOKEN_CACHE_KEY);
-if (cachedToken) {
-  try {
-    const { expiresAt } = JSON.parse(cachedToken);
-    if (now >= expiresAt - 30000) {
-      sessionStorage.removeItem(TOKEN_CACHE_KEY); // Expired or near-expiry: force refresh
-    }
-  } catch {
-    sessionStorage.removeItem(TOKEN_CACHE_KEY); // Bad cache: clear
+const cachedResponse = await original!(cacheResult.url, init);
+if (cachedResponse.ok) {
+  const data = await cachedResponse.clone().arrayBuffer();
+  // Validate data before serving and storing
+  const MIN_XKT_BYTES = 50_000;
+  const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
+  if (data.byteLength >= MIN_XKT_BYTES && firstByte !== '<' && firstByte !== '{') {
+    storeModelInMemory(modelId, resolvedBuildingGuid, data);
+    return new Response(data, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+  } else {
+    console.warn(`XKT cache: Corrupt cache data for ${modelId} (${data.byteLength} bytes), falling through to fresh fetch`);
+    // Fall through to fetch from Asset+ API
   }
 }
 ```
 
-#### Fix 4 — `getAccessTokenCallback` ska alltid returnera ett färskt token
+### Varför token-fixarna inte hjälpte
 
-SDK:n anropar `getAccessTokenCallback` när den behöver ett nytt token. Just nu returnerar den bara `accessTokenRef.current` som sattes vid init. Om SDK:n kallar tillbaka efter 5 minuter returneras ett utgånget token.
-
-Implementera en automatisk token-refresh i callbacken:
-
-```typescript
-async () => {
-  // Check if cached token is still valid (with 30s margin)
-  const cached = sessionStorage.getItem(TOKEN_CACHE_KEY);
-  if (cached) {
-    try {
-      const { token, expiresAt } = JSON.parse(cached);
-      if (Date.now() < expiresAt - 30000) {
-        accessTokenRef.current = token;
-        return token;
-      }
-    } catch { /* clear bad cache */ }
-  }
-  
-  // Token expired or missing — fetch fresh token
-  const { data } = await supabase.functions.invoke('asset-plus-query', {
-    body: { action: 'getToken' }
-  });
-  const freshToken = data?.accessToken;
-  if (freshToken) {
-    accessTokenRef.current = freshToken;
-    sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
-      token: freshToken,
-      expiresAt: getJwtExpiry(freshToken),
-    }));
-  }
-  return accessTokenRef.current;
-},
-```
+- Token är giltigt och API-anropen returnerar 200 OK (bekräftat i nätverksloggen)
+- `GetAllRelatedModels` och `PublishDataServiceGet` returnerar båda 200 OK med korrekt data
+- Crashen sker i **XKT-parsern** (Asset+ SDK internt) när den försöker tolka minnesminne-data som inte är giltig XKT-binärdata
+- Token-cachelogiken är irrelevant eftersom crashen inträffar före/efter autentiseringsflödet
 
 ### Filer som ändras
 
 | Fil | Ändring |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | 1) Lägg till `getJwtExpiry()` hjälpfunktion, 2) Fix token-cache med JWT-baserad expiry, 3) Fix `getAccessTokenCallback` för automatisk token-refresh, 4) Minska cache-guard från 60s till 30s |
+| `src/components/viewer/AssetPlusViewer.tsx` | 1) Anropa `clearBuildingFromMemory(buildingFmGuid)` i `initializeViewer`, 2) Lägg till binärvalidering i cache-interceptorn |
+| `src/hooks/useXktPreload.ts` | Lägg till binärvalidering (`byteLength` + header-byte) innan `storeModelInMemory` anropas |
 
 Inga edge functions, inga databasändringar, inga nya beroenden.
 
 ### Varför detta löser problemet
 
-- Token hämtas alltid med korrekt expiry från JWT-payload
-- `getAccessTokenCallback` refreshar automatiskt utgångna tokens under pågående session
-- Gamla felaktiga sessionStorage-caches identifieras och rensas vid nästa viewer-init
-- SDK:n får alltid ett giltigt token oavsett när den anropar callback
+1. `clearBuildingFromMemory` vid viewer-init rensar ut alla eventuellt korrupta minnesdata från tidigare sessions
+2. Binärvalidering i preload och interceptor förhindrar att HTML-felsvar sparas som "XKT-data"
+3. Om storage-URL är utgången och returnerar HTML: interceptorn faller igenom och hämtar från Asset+ API istället för att serva korrupt data
+4. SDK:n får alltid giltig XKT-binärdata att parsa → ingen `RangeError`
