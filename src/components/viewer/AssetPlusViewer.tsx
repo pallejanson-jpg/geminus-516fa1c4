@@ -3016,16 +3016,41 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     try {
       setInitStep('fetch_token');
       
-      // Try sessionStorage cached token first
       const TOKEN_CACHE_KEY = 'geminus_ap_token';
       const CONFIG_CACHE_KEY = 'geminus_ap_config';
+
+      // Read actual token expiry from JWT payload (Asset+ staging tokens expire in 5 min!)
+      // Using hardcoded 55min was causing 401s on all requests after minute 5.
+      const getJwtExpiry = (token: string): number => {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          return (payload.exp * 1000) - 30_000; // 30s safety margin
+        } catch {
+          return Date.now() + 4 * 60 * 1000; // fallback: 4 min
+        }
+      };
+
       let accessToken: string | null = null;
       
+      // Clear stale/expired cached token before using it
+      const rawCached = sessionStorage.getItem(TOKEN_CACHE_KEY);
+      if (rawCached) {
+        try {
+          const { expiresAt } = JSON.parse(rawCached);
+          if (Date.now() >= expiresAt - 30000) {
+            sessionStorage.removeItem(TOKEN_CACHE_KEY); // Expired or near-expiry: force refresh
+            console.log('AssetPlusViewer: Cleared stale cached token');
+          }
+        } catch {
+          sessionStorage.removeItem(TOKEN_CACHE_KEY); // Bad cache: clear
+        }
+      }
+
       const cachedToken = sessionStorage.getItem(TOKEN_CACHE_KEY);
       if (cachedToken) {
         try {
           const { token, expiresAt } = JSON.parse(cachedToken);
-          if (Date.now() < expiresAt - 60000) { // 1 min margin
+          if (Date.now() < expiresAt - 30000) { // 30s margin
             accessToken = token;
             console.log('AssetPlusViewer: Using cached token (saves ~500ms)');
           }
@@ -3048,11 +3073,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           throw new Error('Asset+ access token is missing. Check your API settings.');
         }
         
-        // Cache for 55 minutes (tokens typically last 60 min)
+        // Cache with actual JWT expiry (not hardcoded 55 min!)
         sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
           token: accessToken,
-          expiresAt: Date.now() + 55 * 60 * 1000,
+          expiresAt: getJwtExpiry(accessToken),
         }));
+        console.log('AssetPlusViewer: Fresh token fetched and cached with JWT expiry');
       }
 
       accessTokenRef.current = accessToken;
@@ -3154,9 +3180,43 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const viewer = await assetplusviewer(
         baseUrl,  // URL to the API Backend
         apiKey,   // API Key in UUID format
-        // getAccessTokenCallback
+        // getAccessTokenCallback — always returns a valid (non-expired) token
         async () => {
           console.log("getAccessTokenCallback");
+          const TOKEN_CACHE_KEY = 'geminus_ap_token';
+          // Check if cached token still valid (30s margin)
+          const raw = sessionStorage.getItem(TOKEN_CACHE_KEY);
+          if (raw) {
+            try {
+              const { token, expiresAt } = JSON.parse(raw);
+              if (Date.now() < expiresAt - 30000) {
+                accessTokenRef.current = token;
+                return token;
+              }
+            } catch { /* fall through to refresh */ }
+          }
+          // Token expired or missing — fetch fresh
+          console.log("getAccessTokenCallback: Token expired, fetching fresh token");
+          try {
+            const { data } = await supabase.functions.invoke('asset-plus-query', {
+              body: { action: 'getToken' }
+            });
+            const freshToken = data?.accessToken;
+            if (freshToken) {
+              accessTokenRef.current = freshToken;
+              const getJwtExpiry = (t: string) => {
+                try { return (JSON.parse(atob(t.split('.')[1])).exp * 1000) - 30_000; }
+                catch { return Date.now() + 4 * 60 * 1000; }
+              };
+              sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
+                token: freshToken,
+                expiresAt: getJwtExpiry(freshToken),
+              }));
+              return freshToken;
+            }
+          } catch (e) {
+            console.error("getAccessTokenCallback: Failed to refresh token", e);
+          }
           return accessTokenRef.current;
         },
         // selectionChangedCallback - flash highlight on selection (if enabled)
