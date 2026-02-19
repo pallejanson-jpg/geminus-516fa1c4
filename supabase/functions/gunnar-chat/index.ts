@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
 const MAX_TOOL_ROUNDS = 5;
-const AI_MODEL = "google/gemini-2.5-pro";
+const AI_MODEL = "google/gemini-3-flash-preview";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 /* ─────────────────────────────────────────────
