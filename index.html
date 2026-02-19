@@ -14,6 +14,11 @@
     <!-- Asset+ 3D Viewer Styles -->
     <link rel="stylesheet" href="/lib/assetplus/assetplusviewer.css" />
 
+    <!-- Cesium loaded as global UMD so the "cesium" external in Vite/Rollup
+         resolves to window.Cesium when the globe view is lazy-loaded. -->
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/CesiumUnminified/Cesium.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/CesiumUnminified/Widgets/widgets.css" />
+
     
     
     <meta property="og:type" content="website" />
