@@ -3032,14 +3032,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       let accessToken: string | null = null;
       
-      // Clear stale/expired cached token before using it
+      // Clear stale/expired cached token — validate against JWT exp directly
+      // (cached expiresAt may be wrong from old sessions that used hardcoded 55min)
       const rawCached = sessionStorage.getItem(TOKEN_CACHE_KEY);
       if (rawCached) {
         try {
-          const { expiresAt } = JSON.parse(rawCached);
-          if (Date.now() >= expiresAt - 30000) {
-            sessionStorage.removeItem(TOKEN_CACHE_KEY); // Expired or near-expiry: force refresh
-            console.log('AssetPlusViewer: Cleared stale cached token');
+          const { token } = JSON.parse(rawCached);
+          // Always re-derive expiry from the JWT itself (ignores cached expiresAt)
+          const jwtExpiry = getJwtExpiry(token);
+          if (Date.now() >= jwtExpiry) {
+            sessionStorage.removeItem(TOKEN_CACHE_KEY); // JWT expired: force refresh
+            console.log('AssetPlusViewer: JWT expired, cleared stale cached token');
           }
         } catch {
           sessionStorage.removeItem(TOKEN_CACHE_KEY); // Bad cache: clear
@@ -3049,10 +3052,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const cachedToken = sessionStorage.getItem(TOKEN_CACHE_KEY);
       if (cachedToken) {
         try {
-          const { token, expiresAt } = JSON.parse(cachedToken);
-          if (Date.now() < expiresAt - 30000) { // 30s margin
+          const { token } = JSON.parse(cachedToken);
+          // Re-validate against JWT exp (not cached expiresAt which may be wrong)
+          const jwtExpiry = getJwtExpiry(token);
+          if (Date.now() < jwtExpiry) { // JWT still valid
             accessToken = token;
             console.log('AssetPlusViewer: Using cached token (saves ~500ms)');
+          } else {
+            sessionStorage.removeItem(TOKEN_CACHE_KEY); // Race condition: expired between checks
           }
         } catch { /* ignore bad cache */ }
       }
@@ -3184,19 +3191,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         async () => {
           console.log("getAccessTokenCallback");
           const TOKEN_CACHE_KEY = 'geminus_ap_token';
-          // Check if cached token still valid (30s margin)
+          // Validate cached token against JWT exp directly (not cached expiresAt)
           const raw = sessionStorage.getItem(TOKEN_CACHE_KEY);
           if (raw) {
             try {
-              const { token, expiresAt } = JSON.parse(raw);
-              if (Date.now() < expiresAt - 30000) {
+              const { token } = JSON.parse(raw);
+              const jwtExpiry = (t: string) => {
+                try { return (JSON.parse(atob(t.split('.')[1])).exp * 1000) - 30_000; }
+                catch { return 0; }
+              };
+              if (Date.now() < jwtExpiry(token)) {
                 accessTokenRef.current = token;
                 return token;
               }
             } catch { /* fall through to refresh */ }
           }
           // Token expired or missing — fetch fresh
-          console.log("getAccessTokenCallback: Token expired, fetching fresh token");
+          console.log("getAccessTokenCallback: JWT expired, fetching fresh token");
           try {
             const { data } = await supabase.functions.invoke('asset-plus-query', {
               body: { action: 'getToken' }
@@ -3204,13 +3215,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             const freshToken = data?.accessToken;
             if (freshToken) {
               accessTokenRef.current = freshToken;
-              const getJwtExpiry = (t: string) => {
+              const jwtExp = (t: string) => {
                 try { return (JSON.parse(atob(t.split('.')[1])).exp * 1000) - 30_000; }
                 catch { return Date.now() + 4 * 60 * 1000; }
               };
               sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
                 token: freshToken,
-                expiresAt: getJwtExpiry(freshToken),
+                expiresAt: jwtExp(freshToken),
               }));
               return freshToken;
             }
