@@ -328,7 +328,10 @@ const UnifiedViewerContent: React.FC<{
     top: 0,
     left: 0,
     height: '100%',
-    display: needs3D ? 'block' : 'none',
+    // CRITICAL: Use 'flex' not 'block' so AssetPlusViewer's flex-column children
+    // inherit height correctly. 'block' breaks the flex chain → 0px canvas.
+    display: needs3D ? 'flex' : 'none',
+    flexDirection: 'column',
     width: isSplitMode ? '50%' : '100%',
     zIndex: is3DMode ? 10 : isVTMode ? 10 : 5,
     pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
@@ -621,7 +624,7 @@ function MobileUnifiedViewer({
       {/* Canvas layer — fills entire screen, behind header */}
       <div className="absolute inset-0">
         {/* 3D viewer — always mounted, hidden when 360 active */}
-        <div style={{ display: activePanel === '3d' ? 'block' : 'none', height: '100%' }}>
+        <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
             initialFmGuidToFocus={entityFmGuid || undefined}
