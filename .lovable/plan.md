@@ -1,134 +1,107 @@
 
-## Analys: Vad gick fel med AI-skanningen (97 objekt från samma bild)
+## Rotorsak: Korrupta cacheposter blockerar 3D-laddning för Akerselva Atrium
 
-### Bekräftade fakta från databasen och loggar
+### Vad loggarna visar
 
-Skanjobbet `7d14a8ea` (Centralstationen):
-- **Status:** `failed` — avbröt automatiskt efter 30 min inaktivitet
-- **Processade:** 150/200 bilder
-- **Detektioner:** 97 stycken — **ALLA** från exakt samma `ivion_image_id: 71228241`
+Felet `[xeokit plugin XKTLoader]: Unsupported .XKT file version: 1769153147` visas för Akerselva Atrium (byggnad `9baa7a3a`). Det decimala värdet `1769153147` är `0x696F6E3B` i hex — vilket är ASCII-tecknen `ion;` — alltså början av ett **HTML- eller JSON-felsvar**, inte ett riktigt XKT-filhuvud.
 
-Det är alltså inte 97 fynd från 150 bilder fördelade — det är 97 fynd som registrerades på ca 30 sekunder (11:22:11 → 11:22:44) och samtliga pekar på *en och samma* panoramabild.
+### Databaskonfirmation
 
----
+Akerselva Atrium har 3 poster i `xkt_models`:
 
-### Grundorsak: Tre samverkande buggar
+| Model ID | Filstorlek | Status |
+|---|---|---|
+| `0e687ea4` | 9,2 MB | Troligen giltig |
+| `bc185635` | **457 bytes** | KORRUPT (för liten) |
+| `xkt_models` | **310 bytes** | KORRUPT (för liten) |
 
-#### Bug 1 — Skannt en och samma bild upprepade gånger (utan navigering)
+En riktig XKT-fil är åtminstone några hundra kilobyte. 457 och 310 bytes är definitivt ett HTML-felsvar som cachats av misstag — troligen ett "404 Not Found" eller "403 Forbidden" från Asset+ API som sparades som XKT-data.
 
-I `BrowserScanRunner.tsx` ser navigeringslogiken ut såhär:
+### Flödet som orsakar problemet
 
-```typescript
-await (api as any).legacyApi.moveToImageId(img.id, undefined, undefined);
+```text
+1. Viewer begär modell bc185635 → Asset+ API returnerar 403/404 (HTML-fel)
+2. Fetch-interceptorn (row 2875): if (data.byteLength > 100) → 457 > 100 → TRUE
+3. Felsvaret sparas till backend storage som .xkt-fil
+4. Vid nästa laddning: memory hit eller database hit → returnerar HTML-felsvaret
+5. Xeokit-parsern läser "ion;" i header → "Unsupported XKT version: 1769153147"
+6. Modellen laddas inte → ingen 3D visas
 ```
 
-Från konsolloggarna syns att navigeringen **lyckas** (bilderna byts korrekt: `✅ Navigated to image 3272302481819579`, `✅ Navigated to image 3297820599403364`...).
+Centralstationen fungerar för att dess enda egentliga modell (`494de6e6`, 14,7 MB) är giltig och inte träffar den korrupta cache-posten. Akerselva Atrium träffar alltid en korrupt post först.
 
-Men ALLA 97 detektioner är kopplade till `ivion_image_id: 71228241` — det är **starbilden** (den som Ivion laddade när SDK startade). Det stämmer med att skanningen startade kl 11:22:11, dvs inom de **första 2 minuterna** av jobbet.
+### Fix: Tre delar
 
-Vad som hände: En enda batch-anrop till AI returnerade plötsligt **97 detektioner** från 3 screenshot — vilket är omöjligt om systemet fungerar normalt (max 3 bilder × ett rimligt antal objekt). Det tyder på att Gemini returnerade en defekt/oändlig JSON-response, troligen med felaktig struktur som parsades fel.
+#### Del 1 — Rensa de korrupta databasposterna (migration)
 
-#### Bug 2 — JSON-parsning av batch-response är sårbar
+Radera alla `xkt_models`-poster med `file_size < 50000` (50 KB) för Akerselva Atrium, och även den felaktiga `model_id = 'xkt_models'` som är ett generiskt alias, inte ett riktigt modell-ID:
 
-I edge-funktionen (rad 2312-2316):
-```typescript
-const start = batchContent.indexOf('[');
-const end = batchContent.lastIndexOf(']');
-if (start !== -1 && end !== -1) {
-  allDetections = JSON.parse(batchContent.slice(start, end + 1));
-}
-```
-
-Detta är den **enkla** varianten — den använder `lastIndexOf(']')` istället för den robusta `extractJsonArray` som används i den andra kodvägen. Om Gemini returnerar ett svar som t.ex. innehåller en förklaring EFTER JSON-arrayen, kan `lastIndexOf` ta med fel del av texten och orsaka en ofantlig array.
-
-Eller: Gemini returnerade en array med 97 element (alla dörrar av liknande koordinater), vilket tyder på att modellen "hallucinated" massivt — möjligt när samma bild skickas med 97 referensexempel (example_images) i prompten, vilket överväldigar kontextfönstret.
-
-#### Bug 3 — Skanningen hängde sedan pga 403-fel från Ivion
-
-Efter att de 97 objekten sparades (kl 11:22:44) fortsatte skanningen men:
-- Ivion returnerar `403` på `storage/download/prefix/signed/url`
-- `EventSource` (Ivion:s interna SSE-kanal) fick också `403`
-
-Det är Ivion SDK:s egna internrequests (för att ladda panoramadata) som misslyckas — troligen för att token hann gå ut. Token-refresh sker var 8 min men om SDK:n redan etablerat en SSE-kanal med en gammal token, hjälper inte refresh.
-
-Skanningen fortsatte ändå (processar nya bilder, tar screenshot) men **efter ca 30 min** utan framsteg triggades auto-timeout och jobbet markerades `failed`.
-
----
-
-### Åtgärdsplan
-
-#### Fix 1 — Begränsa max detektioner per batch
-
-I `analyze-screenshot-batch` (edge function), lägg till ett tak på hur många detektioner en batch-request kan returnera:
-
-```typescript
-// Cap per batch to prevent hallucination storms
-const MAX_DETECTIONS_PER_BATCH = 15;
-if (allDetections.length > MAX_DETECTIONS_PER_BATCH) {
-  console.warn(`[batch] Capping ${allDetections.length} detections to ${MAX_DETECTIONS_PER_BATCH}`);
-  allDetections = allDetections.slice(0, MAX_DETECTIONS_PER_BATCH);
-}
-```
-
-#### Fix 2 — Använd den robusta JSON-extraktionen (identisk med den andra kodvägen)
-
-Ersätt `lastIndexOf` med `extractJsonArray` (depth-tracking) i batch-hanteraren:
-
-```typescript
-// Före (sårbar):
-const start = batchContent.indexOf('[');
-const end = batchContent.lastIndexOf(']');
-allDetections = JSON.parse(batchContent.slice(start, end + 1));
-
-// Efter (robust, identisk med analyzeImageWithAI):
-function extractJsonArray(text: string): string | null {
-  const start = text.indexOf('[');
-  if (start === -1) return null;
-  let depth = 0;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '[') depth++;
-    else if (text[i] === ']') { depth--; if (depth === 0) return text.slice(start, i + 1); }
-  }
-  return null;
-}
-const jsonString = extractJsonArray(batchContent);
-if (jsonString) allDetections = JSON.parse(jsonString);
-```
-
-#### Fix 3 — Nollduplika detektioner från samma position (tätare dedup)
-
-Nuvarande dedup-avstånd är `2.0 meter`. Det stoppade inte 97 dörrar på samma ställe. Tillägg: hoppa över hela batchen om redan fler än X detektioner sparats för exakt samma `image_id`:
-
-```typescript
-// Kontrollera per image_id — max 5 detektioner per Ivion-bild
-const { count } = await supabase
-  .from('pending_detections')
-  .select('*', { count: 'exact', head: true })
-  .eq('scan_job_id', params.scanJobId)
-  .eq('ivion_image_id', params.imageId);
-
-if ((count || 0) >= 5) {
-  result = { detections: 0, skipped: 'max_per_image' };
-  break;
-}
-```
-
-#### Fix 4 — Rensa upp befintliga 97 falska detektioner
-
-Lägg till en "Rensa felaktiga" -knapp i DetectionReviewQueue, alternativt köra en direkt SQL-query för att ta bort alla detektioner med samma `ivion_image_id` från detta jobb.
-
-Raderingsfråga att köra direkt:
 ```sql
-DELETE FROM pending_detections 
-WHERE scan_job_id = '7d14a8ea-194d-41c7-8842-0f607e928754' 
-AND ivion_image_id = 71228241;
+DELETE FROM xkt_models 
+WHERE building_fm_guid = '9baa7a3a-717d-4fcb-8718-0f5ca618b28a'
+AND (file_size < 50000 OR model_id = 'xkt_models');
 ```
 
----
+Mer generellt, rensa alla byggnader med suspekt litet filstorlek:
+```sql
+DELETE FROM xkt_models WHERE file_size < 50000;
+```
 
-### Filer som ändras
+#### Del 2 — Förbättra valideringen i fetch-interceptorn
 
-1. **`supabase/functions/ai-asset-detection/index.ts`** — Fix 1 (cap), Fix 2 (robust JSON), Fix 3 (per-image dedup)
-2. **Databas** — Rensa de 97 falska detektionerna via migration
+I `AssetPlusViewer.tsx` rad 2875 är valideringen:
+```typescript
+if (data.byteLength > 100) {  // ← FEL: 457 bytes passerar detta!
+```
 
-Inga frontend-ändringar behövs för själva buggarna. Ivion 403-felet är ett token-timeout-problem från Ivions egna internrequests och kräver ingen fix — skanningen fortsatte korrekt ändå.
+Höj gränsen avsevärt och lägg till en XKT magic-byte check:
+
+```typescript
+// Validate actual XKT binary signature before caching
+// Real XKT files start with the byte 0x78 ('x') or specific version headers
+// Minimum realistic XKT model is at least 50KB
+const MIN_VALID_XKT_BYTES = 50_000; // 50 KB minimum
+
+if (data.byteLength >= MIN_VALID_XKT_BYTES) {
+  // Extra: check that it's not an HTML error response
+  const header = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+  const firstChar = String.fromCharCode(header[0]);
+  const isHtmlResponse = firstChar === '<' || firstChar === '{' || firstChar === 'E';
+  
+  if (!isHtmlResponse) {
+    storeModelInMemory(modelId, resolvedBuildingGuid, data);
+    xktCacheService.saveModelFromViewer(...);
+  } else {
+    console.warn(`XKT cache: Rejected ${modelId} — looks like HTML/JSON error response`);
+  }
+}
+```
+
+#### Del 3 — Rensa minneskaachen vid uppstart för Akerselva Atrium
+
+Loggen visar `XKT cache: Memory hit for bc185635-9507-41b6-93d4-a7d484acc0fd` — det korrupta felet finns redan i minnescachen (15,4 MB totalt, 4 modeller). Preloaden laddade upp de korrupta posterna i minnet vid start.
+
+Lösning: När en cachad modell returnerar "Unsupported XKT version" från xeokit, ska interceptorn invalidera den minnescachen. Men xeokit ger oss inget callback på detta.
+
+Alternativ lösning: I `useXktPreload.ts`, lägg till filstorleksvalidering innan modeller laddas in i minnescachen:
+
+```typescript
+const fetchModel = async (model) => {
+  // Skip models that are suspiciously small — likely corrupt cache entries
+  if ((model.file_size || 0) < 50_000) {
+    console.warn(`XKT Preload: Skipping ${model.model_id} — file_size ${model.file_size} too small (likely corrupt)`);
+    return;
+  }
+  // ... rest of fetch logic
+};
+```
+
+### Sammanfattning av ändringar
+
+| Fil | Ändring |
+|---|---|
+| **Databas (migration)** | Radera korrupta poster med `file_size < 50000` |
+| **`src/components/viewer/AssetPlusViewer.tsx`** | Höj valideringsgränsen från 100 till 50 000 bytes + kolla att svaret inte är HTML |
+| **`src/hooks/useXktPreload.ts`** | Skippa modeller med `file_size < 50000` i preload-loopen |
+
+Inga nya tabeller, inga edge functions, inga auth-ändringar.
