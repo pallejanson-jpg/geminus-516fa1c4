@@ -55,12 +55,26 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    // Force re-bundling to clear stale chunk references
+    // Pre-bundle cesium via esbuild (handles large CJS better than Rollup)
+    include: ['cesium', 'resium'],
     force: true,
   },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
   build: {
-    rollupOptions: {},
+    rollupOptions: {
+      output: {
+        // Isolate cesium + resium in their own vendor chunk to prevent
+        // React chunk-splitting issues caused by the large CJS module.
+        manualChunks(id) {
+          if (id.includes('/node_modules/cesium/') || id.includes('/node_modules/resium/')) {
+            return 'cesium-vendor';
+          }
+          if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/') || id.includes('/node_modules/scheduler/')) {
+            return 'react-vendor';
+          }
+        },
+      },
+    },
   },
 }));
