@@ -1,114 +1,91 @@
 
-## Plan: Fix duplicerat ID som bryter 3D-laddning
+## Rot-orsaken: CSS-toolbar-gömning matchar inte längre
 
-### Rot-orsaken (nu bekräftad)
+Tidigare hade containern `id="AssetPlusViewer"` OCH klassen `asset-plus-hide-builtin-toolbar`, vilket fick CSS-regeln att fungera:
 
-JSX-renderingen i `AssetPlusViewer.tsx` har:
-
-```tsx
-<div 
-  ref={viewerContainerRef}
-  id="AssetPlusViewer"   // ← yttre container med ID
-  ...
-/>
+```css
+#AssetPlusViewer.asset-plus-hide-builtin-toolbar [class*="toolbar"] { display: none !important; }
 ```
 
-Den tidigare "fix"-koden gör sedan i `initializeViewer`:
+Nu (efter senaste fix) ser DOM-trädet ut såhär:
 
-```typescript
-container.innerHTML = '';        // Rensar containern
-const freshDiv = document.createElement('div');
-freshDiv.id = 'AssetPlusViewer'; // ← SKAPAR EN TILL div med SAMMA ID inuti
-container.appendChild(freshDiv);
-```
-
-Nu finns **två element med `id="AssetPlusViewer"`** i DOM — den yttre JSX-divven OCH den nyskapade inre divven. Det är ogiltig HTML och Asset+ Vue-runtime hittar fel element som monteringspunkt.
-
-DOM-trädet ser ut såhär (felaktigt):
 ```text
-<div id="AssetPlusViewer" ref={viewerContainerRef}>  ← JSX yttre
-  <div id="AssetPlusViewer">                           ← nyskapad (fel!)
+<div ref={viewerContainerRef} class="asset-plus-hide-builtin-toolbar ...">  ← har KLASSEN men inte ID
+  <div id="AssetPlusViewer">                                                   ← har ID:t men inte KLASSEN
+    ... (Asset+ Vue-innehåll, toolbars visas här)
   </div>
 </div>
 ```
 
-Det gör att Asset+ antingen monterar sig i fel div, eller att `document.getElementById('AssetPlusViewer')` i DOM-check-loopen hittar den yttre divven (som alltid finns) och aldrig väntar tillräckligt.
+CSS-selektorn kräver att SAMMA element har **båda** — `#AssetPlusViewer` OCH `.asset-plus-hide-builtin-toolbar`. Det stämmer inte längre → toolbars visas.
+
+Dessutom: `freshDiv` (med `id="AssetPlusViewer"`) ärver klasser från sin parent men CSS-selektorn `#AssetPlusViewer.asset-plus-hide-builtin-toolbar` kollar inte parent-element.
 
 ---
 
-### Korrekt fix
+## Lösning: Tre delar
 
-**Strategi**: Behåll `id="AssetPlusViewer"` på JSX-containern (Asset+ behöver den), men istället för att skapa en ny inre div — lägg ett unikt `data-viewer-key`-attribut på containern vid varje ny initiering. Detta tvingar Vue att betrakta elementet som nytt.
+### Del 1 — Lägg klassen på `freshDiv` (inte containern)
 
-Men det räcker inte — Vue cachelagrar baserat på DOM-noden, inte attribut. Den verkliga lösningen är att:
+I `initializeViewer` (rad ~2968–2971), när vi skapar `freshDiv`, lägg till alla DX-klasser OCH `asset-plus-hide-builtin-toolbar` direkt på `freshDiv`:
 
-1. Ta bort `id="AssetPlusViewer"` från JSX-divven
-2. Låt containern bara ha `ref={viewerContainerRef}` utan ID
-3. Behåll skapandet av `freshDiv` med `id="AssetPlusViewer"` inuti containern — nu finns det bara **ett** element med rätt ID i DOM
-
-DOM-trädet ser ut såhär (korrekt):
-```text
-<div ref={viewerContainerRef} class="...">  ← JSX yttre (inget ID)
-  <div id="AssetPlusViewer">                 ← nyskapad, enda med ID
-  </div>
-</div>
-```
-
-DOM-check-loopen `document.getElementById('AssetPlusViewer')` i `initializeViewer` letar efter detta ID — och hittar **ingenting** tills vi skapat `freshDiv`. Men vi skapar `freshDiv` **efter** att loopen är klar, vilket är korrekt ordning.
-
-**Waitloop-check**: Loopen kontrollerar `viewerContainerRef.current && document.getElementById('AssetPlusViewer')`. Om JSX-divven inte längre har `id="AssetPlusViewer"`, kommer `document.getElementById` returnera `null` — och loopen väntar i upp till 3 sekunder i onödan.
-
-Rätt lösning för loopen: Ta bort `document.getElementById('AssetPlusViewer')` från villkoret — det räcker att kontrollera `viewerContainerRef.current`. Containern är alltid kopplad via ref.
-
----
-
-### Ändringar
-
-**`src/components/viewer/AssetPlusViewer.tsx`** — tre punkter:
-
-**1. Ta bort `id="AssetPlusViewer"` från JSX-divven** (rad ~3620):
-```tsx
-// Före:
-<div 
-  ref={viewerContainerRef}
-  id="AssetPlusViewer"
-  className={...}
-/>
-
-// Efter:
-<div 
-  ref={viewerContainerRef}
-  className={...}
-/>
-```
-
-**2. Förenkla DOM-check-loopen** (rad ~2941):
 ```typescript
 // Före:
-if (viewerContainerRef.current && document.getElementById('AssetPlusViewer')) {
-
-// Efter:
-if (viewerContainerRef.current) {
-```
-
-**3. Behåll `freshDiv`-skapandet** (rad ~2968-2975) — oförändrat, det är korrekt nu:
-```typescript
-container.innerHTML = '';
 const freshDiv = document.createElement('div');
 freshDiv.id = 'AssetPlusViewer';
 container.appendChild(freshDiv);
-await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-await new Promise<void>(r => setTimeout(r, 50));
+
+// Efter:
+const freshDiv = document.createElement('div');
+freshDiv.id = 'AssetPlusViewer';
+// Lägg DX-klasser + toolbar-hiding på freshDiv — CSS-selector kräver att ID och klass är på SAMMA element
+freshDiv.className = [
+  'w-full', 'h-full',
+  isMobile ? 'dx-device-mobile' : 'dx-device-desktop',
+  'dx-device-generic', 'dx-theme-material', 'dx-theme-material-typography',
+  'asset-plus-hide-builtin-toolbar'
+].join(' ');
+freshDiv.style.cssText = 'width:100%;height:100%;display:flex;flex:1 0 auto;';
+container.appendChild(freshDiv);
 ```
+
+### Del 2 — Ta bort klassen från JSX-containern
+
+JSX-containern (`viewerContainerRef`) behöver inte längre klassen `asset-plus-hide-builtin-toolbar` — den är nu på `freshDiv`. Ta bort den för att undvika duplicering. Behåll övriga klasser för layout.
+
+```tsx
+// Före:
+className={`w-full h-full ${isMobile ? 'dx-device-mobile' : 'dx-device-desktop'} dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar`}
+
+// Efter (containern är bara ett layout-skal):
+className="w-full h-full"
+```
+
+### Del 3 — Säkerställ att `assetplusviewer()` hittar rätt element
+
+`assetplusviewer()`-biblioteket anropar `document.getElementById('AssetPlusViewer')` internt för att hitta sin mount-target. Nu finns det bara ett sådant element i DOM (`freshDiv`). Det stämmer.
+
+Men: Vi måste se till att `assetplusviewer()` anropas EFTER att `freshDiv` är tillagd i DOM — vilket det redan är (vi lägger till `freshDiv` och väntar 2 rAF + 50ms innan `assetplusviewer()` anropas). Bra.
 
 ---
 
-### Sammanfattning
+## Filer som ändras
+
+**`src/components/viewer/AssetPlusViewer.tsx`** — två ställen:
+
+1. `initializeViewer` (~rad 2969): Lägg klasser + stilar på `freshDiv`
+2. JSX-container (~rad 3619): Förenkla className till bara layout-klasser
+
+**`src/index.css`** — inga ändringar behövs (CSS-selektorn är redan korrekt, det var bara DOM som var fel)
+
+---
+
+## Teknisk sammanfattning
 
 | Problem | Orsak | Fix |
 |---|---|---|
-| Duplicerat `id="AssetPlusViewer"` | JSX-div + nyskapad div har samma ID | Ta bort ID från JSX-div |
-| DOM-loop väntar i onödan | Letar efter ID som inte finns förrän efter loopen | Ta bort `getElementById`-check från loop |
-| Asset+ monterar i fel element | Hittar yttre div istället för inner | Nu finns bara ett element med rätt ID |
+| Toolbars visas | `#AssetPlusViewer.asset-plus-hide-builtin-toolbar` matchar ingenting — ID och klass är på olika element | Flytta klassen till `freshDiv` som har ID:t |
+| Ingen 3D på desktop | Asset+ Vue-runtime kan ha haft problem med ny DOM-struktur | `freshDiv` har nu rätt klasser + inline-stilar för korrekt layout |
+| Fungerar på mobil men inte desktop | `isMobile`-check på DX-klassen sattes fel | Klassen sätts nu dynamiskt baserat på `isMobile` på `freshDiv` |
 
 Inga DB-ändringar, inga nya filer, inga edge functions.
