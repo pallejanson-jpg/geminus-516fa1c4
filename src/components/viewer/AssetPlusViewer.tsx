@@ -2962,16 +2962,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       return;
     }
 
-    // CRITICAL FIX: Clear container innerHTML before initialization
-    // This prevents 'nextSibling' null errors during React mount/unmount cycles
-    viewerContainerRef.current.innerHTML = '';
-    
-    // Wait one frame to ensure DOM is fully settled after clearing
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    
-    // Re-check container after rAF — React may have unmounted us
+    // CRITICAL FIX: Destroy and recreate #AssetPlusViewer div to give Asset+ a fresh DOM anchor.
+    // This prevents 'nextSibling' null errors when the old Vue runtime hasn't fully detached yet.
+    const container = viewerContainerRef.current;
+    container.innerHTML = '';
+    const freshDiv = document.createElement('div');
+    freshDiv.id = 'AssetPlusViewer';
+    container.appendChild(freshDiv);
+
+    // Wait 2 rAF + 50ms so the old Vue instance fully releases its DOM bindings
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    await new Promise<void>(r => setTimeout(r, 50));
+
+    // Re-check container after settlement — React may have unmounted us during the wait
     if (!viewerContainerRef.current) {
-      console.warn('[AssetPlusViewer] Container lost after rAF, aborting init');
+      console.warn('[AssetPlusViewer] Container lost after settlement wait, aborting init');
       return;
     }
 
@@ -3465,24 +3470,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       try {
         const viewer = viewerInstanceRef.current;
         if (viewer) {
-          // Defer cleanup to next frame to allow Asset+ to complete pending operations
-          requestAnimationFrame(() => {
+          // Use setTimeout(0) instead of rAF so cleanup runs after the current call stack
+          // but does NOT interleave with the new init's rAF-based settlement loops.
+          setTimeout(() => {
             try {
-              // Only call clearData if the viewer is fully initialized
               const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
               const scene = assetView?.viewer?.scene;
-              
               if (scene && typeof viewer.clearData === 'function') {
                 viewer.clearData();
               }
             } catch (e) {
-              // Silently ignore cleanup errors - the DOM is being torn down anyway
               console.debug('Viewer cleanup (expected during teardown):', e);
             }
-          });
+          }, 0);
         }
       } catch (e) {
-        // Silently ignore cleanup errors - the DOM is being torn down anyway
         console.debug('Viewer cleanup (expected during teardown):', e);
       }
       

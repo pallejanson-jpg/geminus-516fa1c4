@@ -750,8 +750,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                     </Tabs>
                 </div>
 
-                {/* Desktop inline 3D viewer */}
-                {!isMobile && (
+                {/* Desktop inline 3D viewer — hidden in drawerMode (already inside the 3D viewer) */}
+                {!isMobile && !drawerMode && (
                     <InsightsInlineViewer
                         key={inlineUpdateKey}
                         fmGuid={facility.fmGuid}
