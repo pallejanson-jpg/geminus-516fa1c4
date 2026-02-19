@@ -7,7 +7,7 @@
  */
 
 import React, { Suspense, useState } from 'react';
-import { Globe, Map, Loader2 } from 'lucide-react';
+import { Globe, Map, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 // Lazy load to avoid heavy bundle impact on initial render
@@ -16,8 +16,46 @@ const MapView = React.lazy(() => import('@/components/map/MapView'));
 
 type MapMode = 'cesium' | 'mapbox';
 
+// Error boundary to prevent map crashes from bubbling up to the whole app
+interface MapErrorBoundaryState { hasError: boolean; }
+class MapErrorBoundary extends React.Component<
+  { children: React.ReactNode; onRetry: () => void },
+  MapErrorBoundaryState
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error) { console.warn('[HomeMapPanel] Map error caught by boundary:', error.message); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+          <AlertTriangle className="h-8 w-8 opacity-50" />
+          <p className="text-sm">Kartan kunde inte laddas</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              this.setState({ hasError: false });
+              this.props.onRetry();
+            }}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Försök igen
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function HomeMapPanel() {
-  const [mapMode, setMapMode] = useState<MapMode>('cesium');
+  const [mapMode, setMapMode] = useState<MapMode>('mapbox');
+  const [boundaryKey, setBoundaryKey] = useState(0);
 
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-border bg-card/40">
@@ -45,19 +83,21 @@ export default function HomeMapPanel() {
 
       {/* Map content */}
       <div className="absolute inset-0">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          }
-        >
-          {mapMode === 'cesium' ? (
-            <CesiumGlobeView />
-          ) : (
-            <MapView />
-          )}
-        </Suspense>
+        <MapErrorBoundary key={boundaryKey} onRetry={() => setBoundaryKey(k => k + 1)}>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            }
+          >
+            {mapMode === 'cesium' ? (
+              <CesiumGlobeView />
+            ) : (
+              <MapView />
+            )}
+          </Suspense>
+        </MapErrorBoundary>
       </div>
     </div>
   );
