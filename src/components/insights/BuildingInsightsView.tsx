@@ -13,7 +13,7 @@ import {
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
-    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2
+    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
@@ -25,6 +25,7 @@ import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
 import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
+import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT } from '@/lib/viewer-events';
 
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
@@ -167,12 +168,26 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [sensorSheetRoom, setSensorSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
     const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useSenslincBuildingData(facility.fmGuid);
 
-    // Larm-flik state
+    // FM-flik state (was "Larm")
     const [alarmCount, setAlarmCount] = useState<number>(0);
     const [alarmsByLevel, setAlarmsByLevel] = useState<{ levelGuid: string; levelName: string; count: number }[]>([]);
     const [alarmList, setAlarmList] = useState<any[]>([]);
     const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
     const [showAlarmManagement, setShowAlarmManagement] = useState(false);
+
+    // Room metadata lookup from allData (for enriching alarm list)
+    const roomLookup = useMemo(() => {
+        const map = new Map<string, { name: string; commonName: string }>();
+        allData.forEach((a: any) => {
+            if (a.buildingFmGuid !== facility.fmGuid) return;
+            if (a.category !== 'Space' && a.category !== 'IfcSpace') return;
+            map.set(a.fmGuid?.toLowerCase(), { name: a.name || '', commonName: a.commonName || '' });
+        });
+        return map;
+    }, [allData, facility.fmGuid]);
+
+    // Level name lookup — defined after buildingStoreys below, use lazy initializer
+    const levelNamesRef = React.useRef(new Map<string, string>());
 
     const fetchAlarmData = useCallback(async () => {
         try {
@@ -221,10 +236,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 setAlarmsByLevel(mapped);
             }
 
-            // Recent list
+            // Recent list — include coordinates for "Visa i 3D"
             const { data: recent } = await supabase
                 .from('assets')
-                .select('id, fm_guid, level_fm_guid, in_room_fm_guid, updated_at')
+                .select('id, fm_guid, level_fm_guid, in_room_fm_guid, updated_at, coordinate_x, coordinate_y, coordinate_z, name, common_name, attributes')
                 .eq('building_fm_guid', facility.fmGuid)
                 .eq('asset_type', 'IfcAlarm')
                 .order('updated_at', { ascending: false })
@@ -281,7 +296,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
     ), [allData, facility.fmGuid]);
 
-    // ── Sensor tab data ──
+    // Level name lookup (needs buildingStoreys)
+    const levelNames = useMemo(() => {
+        const map = new Map<string, string>();
+        buildingStoreys.forEach((s: any) => {
+            map.set(s.fmGuid?.toLowerCase(), s.commonName || s.name || s.fmGuid?.slice(0, 8));
+        });
+        levelNamesRef.current = map;
+        return map;
+    }, [buildingStoreys]);
+
     const SENSOR_METRICS = [
         { key: 'temperature' as VisualizationType, label: 'Temp', unit: '°C', icon: Thermometer, color: '#22c55e' },
         { key: 'co2' as VisualizationType, label: 'CO₂', unit: 'ppm', icon: Wind, color: '#60a5fa' },
@@ -347,7 +371,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Navigation helper: open 3D viewer with context + insights color map
     const navigateToInsights3D = useCallback((opts: {
-        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type';
+        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type' | 'room_spaces';
         colorMap: Record<string, [number, number, number]>;
         entity?: string;
         assetType?: string;
@@ -363,14 +387,19 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         navigate(`/split-viewer?${params.toString()}`);
     }, [facility.fmGuid, navigate]);
 
-    // Dual-path handler: desktop updates inline viewer, mobile navigates
+    // Dual-path handler: drawerMode dispatches event, desktop updates inline viewer, mobile navigates
     const handleInsightsClick = useCallback((opts: {
-        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type';
+        mode: 'energy_floors' | 'energy_floor' | 'asset_categories' | 'asset_category' | 'room_types' | 'room_type' | 'room_spaces';
         colorMap: Record<string, [number, number, number]>;
         entity?: string;
         assetType?: string;
     }) => {
-        if (isMobile) {
+        if (drawerMode) {
+            // In drawer mode (inside 3D viewer) — dispatch event for real-time colorization
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
+                detail: { mode: opts.mode, colorMap: opts.colorMap },
+            }));
+        } else if (isMobile) {
             navigateToInsights3D(opts);
         } else {
             // Update inline viewer reactively — bump key to force re-render even if mode is the same
@@ -378,7 +407,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             setInlineColorMap(opts.colorMap);
             setInlineUpdateKey(k => k + 1);
         }
-    }, [isMobile, navigateToInsights3D]);
+    }, [isMobile, drawerMode, navigateToInsights3D]);
 
     // Fullscreen handler for inline viewer
     const handleInlineFullscreen = useCallback(() => {
@@ -515,9 +544,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <TabsTrigger value="sensors" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
                                     <Zap className="h-3 w-3" />Sensorer
                                 </TabsTrigger>
-                                <TabsTrigger value="alarms" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
-                                    <Bell className="h-3 w-3" />
-                                    Larm
+                                <TabsTrigger value="fm" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
+                                    <Boxes className="h-3 w-3" />
+                                    FM
                                     {alarmCount > 0 && (
                                         <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
                                     )}
@@ -677,6 +706,41 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         </div>
                                     </CardContent>
                                 </Card>
+
+                                {/* "Visa rum i 3D" button — builds per-room colorMap from spaceType */}
+                                <Card className="border-primary/20">
+                                    <CardContent className="p-4 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="h-4 w-4 text-primary" />
+                                            <span className="text-sm font-medium">Visa rum i 3D</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">Färglägg alla rum i 3D-modellen baserat på rumstyp, med samma färger som i pajen ovan.</p>
+                                        <Button
+                                            size="sm"
+                                            className="gap-1.5"
+                                            onClick={() => {
+                                                // Build per-room colorMap: each room fmGuid → color of its spaceType
+                                                const typeColorMap: Record<string, [number, number, number]> = {};
+                                                spaceTypePie.forEach(s => { typeColorMap[s.name] = hslStringToRgbFloat(s.color); });
+
+                                                const roomColorMap: Record<string, [number, number, number]> = {};
+                                                buildingSpaces.forEach((space: any) => {
+                                                    const attrs = space.attributes || {};
+                                                    const type = attrs.spaceType || attrs.roomType || 'Unknown';
+                                                    const truncated = type.length > 15 ? type.substring(0, 15) + '...' : type;
+                                                    const color = typeColorMap[type] || typeColorMap[truncated];
+                                                    if (color) {
+                                                        roomColorMap[space.fmGuid] = color;
+                                                    }
+                                                });
+                                                handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
+                                            }}
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            Färglägg rum
+                                        </Button>
+                                    </CardContent>
+                                </Card>
                             </div>
                         </TabsContent>
 
@@ -827,8 +891,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                             />
                         </TabsContent>
 
-                        {/* ── Larm Tab — REAL IfcAlarm data ── */}
-                        <TabsContent value="alarms" className="mt-0 space-y-4">
+                        {/* ── FM Tab — REAL IfcAlarm data ── */}
+                        <TabsContent value="fm" className="mt-0 space-y-4">
                             {/* Live badge + KPI row */}
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0.5 bg-green-500/10">
@@ -836,15 +900,38 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 </span>
                                 <span className="text-xs text-muted-foreground">IfcAlarm-objekt från databasen</span>
                                 {!showAlarmManagement && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="ml-auto gap-1.5"
-                                        onClick={() => setShowAlarmManagement(true)}
-                                    >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                        Hantera larm
-                                    </Button>
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="ml-auto gap-1.5"
+                                            onClick={() => {
+                                                // "Visa alla i 3D" — dispatch alarm annotations for the 50 latest
+                                                const alarmsWithCoords = alarmList
+                                                    .filter((a: any) => a.coordinate_x != null && a.coordinate_y != null && a.coordinate_z != null)
+                                                    .slice(0, 50)
+                                                    .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
+                                                if (drawerMode) {
+                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsWithCoords } }));
+                                                } else {
+                                                    sessionStorage.setItem('insights_alarm_annotations', JSON.stringify(alarmsWithCoords));
+                                                    navigateTo3D();
+                                                }
+                                            }}
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            Visa alla i 3D
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5"
+                                            onClick={() => setShowAlarmManagement(true)}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Hantera larm
+                                        </Button>
+                                    </>
                                 )}
                                 {showAlarmManagement && (
                                     <Button
@@ -938,7 +1025,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         </Card>
                                     )}
 
-                                    {/* Recent alarm list */}
+                                    {/* Recent alarm list — enriched with room names */}
                                     <Card>
                                         <CardHeader className="pb-2">
                                             <CardTitle className="text-base flex items-center gap-2">
@@ -951,46 +1038,72 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <Table>
                                                     <TableHeader>
                                                         <TableRow>
-                                                            <TableHead>FM-GUID</TableHead>
+                                                            <TableHead>Rumsnamn</TableHead>
+                                                            <TableHead>Rumsnr</TableHead>
                                                             <TableHead>Våning</TableHead>
-                                                            <TableHead>Rum (GUID)</TableHead>
                                                             <TableHead>Datum</TableHead>
+                                                            <TableHead className="w-10">3D</TableHead>
                                                             <TableHead className="w-10"></TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {alarmList.map((alarm: any) => (
-                                                            <TableRow key={alarm.id}>
-                                                                <TableCell className="font-mono text-xs">
-                                                                    {alarm.fm_guid ? `${alarm.fm_guid.slice(0, 8)}…` : '—'}
-                                                                </TableCell>
-                                                                <TableCell className="text-xs text-muted-foreground">
-                                                                    {alarm.level_fm_guid ? alarm.level_fm_guid.slice(0, 10) + '…' : '—'}
-                                                                </TableCell>
-                                                                <TableCell className="text-xs text-muted-foreground">
-                                                                    {alarm.in_room_fm_guid ? alarm.in_room_fm_guid.slice(0, 10) + '…' : '—'}
-                                                                </TableCell>
-                                                                <TableCell className="text-xs text-muted-foreground">
-                                                                    {new Date(alarm.updated_at).toLocaleDateString('sv-SE')}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                                                        onClick={async () => {
-                                                                            await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
-                                                                            setAlarmRefreshKey(k => k + 1);
-                                                                        }}
-                                                                    >
-                                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                                    </Button>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
+                                                        {alarmList.map((alarm: any) => {
+                                                            const room = alarm.in_room_fm_guid ? roomLookup.get(alarm.in_room_fm_guid.toLowerCase()) : null;
+                                                            const lvlName = alarm.level_fm_guid ? levelNames.get(alarm.level_fm_guid.toLowerCase()) : null;
+                                                            return (
+                                                                <TableRow key={alarm.id}>
+                                                                    <TableCell className="text-xs">
+                                                                        {room?.commonName || '—'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs font-mono text-muted-foreground">
+                                                                        {room?.name || '—'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {lvlName || (alarm.level_fm_guid ? alarm.level_fm_guid.slice(0, 8) + '…' : '—')}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {new Date(alarm.updated_at).toLocaleDateString('sv-SE')}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 text-primary hover:bg-primary/10"
+                                                                            title="Visa i 3D"
+                                                                            onClick={() => {
+                                                                                if (drawerMode) {
+                                                                                    // Dispatch single alarm annotation
+                                                                                    const alarms = alarm.coordinate_x != null
+                                                                                        ? [{ fmGuid: alarm.fm_guid, x: alarm.coordinate_x, y: alarm.coordinate_y, z: alarm.coordinate_z }]
+                                                                                        : [];
+                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms } }));
+                                                                                } else {
+                                                                                    navigateTo3D({ entity: alarm.fm_guid });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <Eye className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                                            onClick={async () => {
+                                                                                await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
+                                                                                setAlarmRefreshKey(k => k + 1);
+                                                                            }}
+                                                                        >
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })}
                                                         {alarmList.length === 0 && (
                                                             <TableRow>
-                                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                                                     Inga larm hittades
                                                                 </TableCell>
                                                             </TableRow>
