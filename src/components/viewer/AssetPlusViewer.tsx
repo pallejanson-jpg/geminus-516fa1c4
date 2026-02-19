@@ -2938,7 +2938,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     while (true) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      if (viewerContainerRef.current && document.getElementById('AssetPlusViewer')) {
+      if (viewerContainerRef.current) {
         containerReady = true;
         break;
       }
@@ -3614,10 +3614,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           className="dx-viewport relative w-full h-full"
           style={{ margin: 0 }}
         >
-          {/* AssetPlusViewer container - MUST have id="AssetPlusViewer" */}
+          {/* AssetPlusViewer container - no id here; freshDiv inside gets id="AssetPlusViewer" */}
           <div 
             ref={viewerContainerRef}
-            id="AssetPlusViewer"
             className={`w-full h-full ${isMobile ? 'dx-device-mobile' : 'dx-device-desktop'} dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar`}
             style={{
               display: 'flex',
