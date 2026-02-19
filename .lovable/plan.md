@@ -1,107 +1,166 @@
 
-# Senslinc Integration – Förbättringsplan
+# Uppdaterad plan: Senslinc-integration + Unified 3D+Analytics + Karta på startsidan
 
-## Nulägesanalys
+## Förtydligande: Insights-panelen är byggnadsscoppad
 
-### Fråga 1: Har vi riktig data i Insights?
+Som du korrekt påpekar: 3D-viewern laddar alltid EN byggnad åt gången (via `?building=<fmGuid>` i URL). Insights-panelen ska följa exakt samma scope – den visar data för den specifika byggnaden, inte portfolion.
 
-**Delvis.** Systemet är korrekt uppbyggt men det finns ett kritiskt gap:
+Tekniskt sett har vi redan allt vi behöver:
+- `UnifiedViewer` har `buildingFmGuid` från URL-parametern
+- `BuildingInsightsView` tar `facility: Facility` som prop
+- Vi kan slå upp `facility` ur `AppContext.allData` med hjälp av `buildingFmGuid`
 
-- `useSenslincBuildingData` (används i `SensorsTab`) anropar `get-building-sensor-data` som söker via `/api/sites?code={fmGuid}`. Detta fungerar bara om byggnadens FM GUID matchar Senslincs `code`-fält på en site.
-- Om det finns en match (t.ex. Småviken) → vi har live `latest_values` per maskin, men **trendgrafen i SensorsTab är fortfarande mock** – den ignorerar live-data och kör generateMockSensorData.
-- `SenslincDashboardView` (IoT+ knappen) anropar `get-machine-data` per rum/entitet och har live-stöd + mock-fallback.
-
-**Slutsats:** IoT-data som finns i Senslinc (Småviken) kan hämtas, men trendgrafen i SensorsTab visar aldrig riktig historisk data. Rutnätet av rum visar live `latest_values` om matchning finns.
-
-### Fråga 2: Fungerar IoT+-knapparna?
-
-IoT+-knappen anropar `onOpenIoT(facility)` i QuickActions. I `FacilityLandingPage` är `onOpenIoT` kopplad till `openSenslincDashboard()` i AppContext, som öppnar `SenslincDashboardView`. Flödet finns – men eftersom `SenslincDashboardView` ligger i en sidopanel och kräver att `senslincDashboardContext` är satt behöver vi verifiera att hanteringen i portfolio-flödet är komplett.
-
-### Fråga 3: Insights-navigering per rum
-
-Idag: Insights → SensorsTab visar bara EN byggnad i ett statiskt rutnät. Det finns inget klickbart rum som öppnar detaljvy.
+Panelen renderar alltså `<BuildingInsightsView facility={currentBuilding} />` – men i en collapsible bottom-sheet inuti viewern, istället för som en separat sida.
 
 ---
 
-## Vad vi bygger
+## Del 1 – InsightsDrawerPanel i UnifiedViewer (byggnadsscoppad)
 
-### Del A – Fixa trendgrafen i SensorsTab med riktig data
-
-**Problem:** `BuildingTrendChart` ignorerar `liveMachineMap` och kör bara mock.
-
-**Fix:** Komplettera trendgrafen för att använda historisk data om det finns maskiner med live-data. Anropa `get-machine-data` för ett representativt urval maskiner (max 5) och aggregera deras tidserier. Visa LIVE-badgen korrekt.
-
-### Del B – Insights-navigering: Byggnadsval → Rumsdrilldown
-
-**Ny flödeslogik i InsightsView + SensorsTab:**
+### Flödet
+Oavsett hur man öppnar 3D-viewern (Portfolio → 3D, Navigator → 3D, Insights → fullscreen) är `?building=<guid>` alltid med i URL. Panelen läser den och visar Insights för exakt den byggnaden.
 
 ```
-Insights (portfolio) 
-  → klicka byggnad i Sensors-tab
-  → öppnas BuildingInsightsView (befintlig)
-    → inom BuildingInsightsView: ny "Sensors"-flik
-      → heatmap-grid av rum (klickbart)
-        → klicka ett rum 
-          → öppnar RoomSensorDetailSheet (NY) 
-            = vår egna snygga dashboard (ingen iframe!)
+URL: /split-viewer?building=<fmGuid>&mode=3d
+
+UnifiedViewerContent
+  ├── AssetPlusViewer (3D-canvasen)
+  └── InsightsDrawerPanel
+        ├── slår upp facility från allData via buildingFmGuid
+        └── renderar BuildingInsightsView(facility) i collapsible sheet
+              ├── Performance
+              ├── Space  
+              ├── Asset
+              └── Sensorer (med RoomSensorDetailSheet)
 ```
 
-### Del C – RoomSensorDetailSheet (ny komponent)
+### Ny komponent: `InsightsDrawerPanel`
+Placeras i `src/components/viewer/InsightsDrawerPanel.tsx`.
 
-En ny Sheet-komponent som ersätter Senslincs gamla iframe-dashboard. Den visar:
-- **4 gauge-kort** (temp, CO₂, fukt, beläggning) – befintlig GaugeCard från SenslincDashboardView
-- **7-dagars linjediagram** – befintlig SensorChart
-- **Rumsnamn + LIVE/Demo-status**
-- **Länk till extern Senslinc-dashboard** (som fallback om man vill se originalet)
+- Läser `buildingFmGuid` som prop (passas från `UnifiedViewerContent`)
+- Slår upp `facility` via `useContext(AppContext).allData`
+- Renderar en **collapsible bottom bar**:
+  - Stängd: smal balk (~48px) med `📊 Insights – [Byggnadens namn]` + en chevron-upp-knapp
+  - Öppen: panelen glider upp till ~300px med en scrollbar tab-vy
+- Innehåller tabbar: **Performance | Space | Asset | Sensorer**
+- Varje tabb återanvänder befintliga chart-komponenter från `BuildingInsightsView`
+- `handleInsightsClick` delegeras upp till `UnifiedViewerContent` som redan hanterar 3D-färgläggning via `sessionStorage` + navigation
 
-### Del D – IoT+-knappen verifieras och förbättras
+### Layout i UnifiedViewer
+```
+┌──────────────────────────────────────────────┐
+│  [←] [3D][360][VT][Split]  [📊 Insights ▲]  │  ← toggle-knapp i befintlig toolbar
+├──────────────────────────────────────────────┤
+│                                              │
+│         AssetPlusViewer                      │
+│         (flex-1, krymper när panel öppnas)   │
+│                                              │
+├──────────────────────────────────────────────┤ ← drag-handle (resize)
+│  Performance | Space | Asset | Sensorer      │  ← 300px collapsible
+│  [BarChart]  [PieChart]  [SensorGrid]        │
+└──────────────────────────────────────────────┘
+```
 
-IoT+-knappen via Portfolio → Building → QuickActions ska öppna vår egna dashboard (RoomSensorDetailSheet/SenslincDashboardView) korrekt. Vi verifierar koppling och fixar om länken saknas.
+- Toggle-knappen läggs till i den befintliga ModeButton-raden i `UnifiedViewerContent`
+- Panelen är dold på mobile (samma mönster som andra desktop-only features)
+- Panelen startar stängd – användaren öppnar manuellt
 
-### Del E – SensorsTab: Byggnadsselektor
-
-Idag tar SensorsTab `navigatorTreeData[0]` (första byggnaden). Lägg till en enkel byggnadsselektor högst upp om det finns flera byggnader, så man kan byta aktivt.
+### Entrypoint-harmoni
+| Entrypoint | Vad händer |
+|---|---|
+| Portfolio → 3D | `/split-viewer?building=X&mode=3d` → panel tillgänglig, stängd initialt |
+| Navigator → 3D | Samma URL-mönster → panel tillgänglig |
+| Insights → fullscreen inline-viewer | Navigerar till `/split-viewer?building=X&mode=3d&insightsMode=Y` → panel öppnar automatiskt och aktiverar rätt tabb |
+| QuickActions → IoT+ | Öppnar panel och hoppar till Sensorer-tabben |
 
 ---
 
-## Filer som ändras
+## Del 2 – Karta på startsidan (HomeMapPanel)
 
-| Fil | Vad ändras |
-|-----|-----------|
-| `src/components/insights/tabs/SensorsTab.tsx` | Byggnadsselektor, klickbara rum-kort, trendgraf med riktig data |
-| `src/components/insights/BuildingInsightsView.tsx` | Lägg till Sensors-flik med klickbara rum |
-| `src/components/viewer/SenslincDashboardView.tsx` | Exportera GaugeCard + SensorChart för återanvändning |
-| `src/components/insights/RoomSensorDetailSheet.tsx` | NY – vår egna snygga rum-dashboard utan iframe |
-
-## Ny komponent: RoomSensorDetailSheet
-
+### Layout på desktop
 ```
-┌──────────────────────────────────────────────────┐
-│  ⚡ Konferensrum 3A                    LIVE  [X] │
-│  Senslinc IoT · Maskin #142                       │
-├──────────────────────────────────────────────────┤
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────┐ │
-│  │ 22.3 °C │  │ 687 ppm │  │  48 %   │  │ 65% │ │
-│  │  Temp   │  │   CO₂   │  │  Fukt   │  │ Belägg│
-│  └─────────┘  └─────────┘  └─────────┘  └─────┘ │
-├──────────────────────────────────────────────────┤
-│  Senaste 7 dagarna                                │
-│  [Linjediagram - Temp/CO₂/Fukt, toggle-knappar] │
-├──────────────────────────────────────────────────┤
-│  [↗ Öppna i Senslinc]                            │
-└──────────────────────────────────────────────────┘
+HomeLanding (xl:flex-row)
+┌───────────────────────────────┬────────────────────────────────┐
+│  AI Assistants                │                                │
+│  [Gunnar] [Ilean] [Doris]     │   HomeMapPanel                 │
+│                               │   (Cesium-glob primär)         │
+│  My Favorites                 │                                │
+│  [Bld1] [Bld2] [Bld3]        │  ┌─────────────────────────┐   │
+│                               │  │  🌍 Cesium  🗺 Mapbox   │   │  ← toggle
+└───────────────────────────────┴──┴─────────────────────────┴───┘
 ```
 
-Komponenten återanvänder GaugeCard och SensorChart från SenslincDashboardView och hämtar data via `useSenslincData(roomFmGuid)`.
+- Ny komponent `src/components/home/HomeMapPanel.tsx`
+- State: `mapMode: 'cesium' | 'mapbox'`
+- Cesium-glob: lazy-loadar `CesiumGlobeView` och flyger in till byggnadernas koordinater
+- Mapbox: renderar befintlig `MapView` med kluster
+- Toggle: liten knapp-par i övre hörnet av kartan
+- Klick på karta → navigerar till `map` eller `globe` i appens sidomenyer
+- På `<xl:` → kartan döljs (mobil ändras inte)
 
-## Prioritering
+### Ändring i HomeLanding
+- Layout: `max-w-4xl mx-auto` → `max-w-none xl:flex xl:gap-6 xl:px-8`
+- Vänsterkolumn: `xl:w-[560px] shrink-0`
+- Högerkolumn: `xl:flex-1 xl:min-h-[500px]`
 
-1. **RoomSensorDetailSheet** – den centrala förbättringen (vår egna dashboard)
-2. **Klickbara rum i SensorsTab** – kopplar rum → RoomSensorDetailSheet
-3. **Klickbara rum i BuildingInsightsView** – samma sheet från Sensors-fliken
-4. **Fixa trendgrafen** – visa live-data korrekt
-5. **Byggnadsselektor i SensorsTab** – bra UX om flera byggnader
+---
 
-## Teknisk not om Småviken
+## Del 3 – Desktop-layout generellt
 
-Småviken-byggnaden är det primära testfallet. Om byggnadens `fmGuid` matchar Senslincs site `code` → `get-building-sensor-data` returnerar maskiner med `latest_values`. För rum-nivå: om rummets `fmGuid` matchar en maskins `code` → `get-machine-data` returnerar full tidsserie. Om det inte matchar visas demo-data med lila streckad linje (befintligt beteende).
+Ingår som sidoeffekt av Del 2 (bredare layout på startsidan). Byggnadssidan (`FacilityLandingPage`) lämnas tills vidare – den är inte lika tom eftersom den redan har inline-3D-viewern på desktop.
+
+---
+
+## Filer som ändras/skapas
+
+| Fil | Vad |
+|---|---|
+| `src/components/viewer/InsightsDrawerPanel.tsx` | NY – byggnadsscoppad bottom-sheet med Insights-tabbar |
+| `src/pages/UnifiedViewer.tsx` | Lägg till toggle-knapp + montera `InsightsDrawerPanel` |
+| `src/components/home/HomeMapPanel.tsx` | NY – Cesium/Mapbox-växlare |
+| `src/components/home/HomeLanding.tsx` | Desktop-layout + montera `HomeMapPanel` |
+
+BuildingInsightsView.tsx behöver INTE refaktoreras – `InsightsDrawerPanel` renderar den direkt som en child (med `onBack` som no-op). Grafer återanvänds automatiskt.
+
+---
+
+## Tekniska detaljer
+
+### InsightsDrawerPanel – scope-lösning
+```tsx
+// I InsightsDrawerPanel.tsx
+const { allData } = useContext(AppContext);
+
+const facility = useMemo(() => {
+  // Slå upp byggnaden från allData via buildingFmGuid
+  for (const portfolio of allData) {
+    const match = portfolio.facilities?.find(f => f.fmGuid === buildingFmGuid);
+    if (match) return match;
+  }
+  return null;
+}, [allData, buildingFmGuid]);
+
+if (!facility) return null; // Visar ingenting om byggnaden inte hittas
+```
+
+### Toggle-knapp i UnifiedViewer toolbar
+```tsx
+// Läggs till i modeButton-raden
+<ModeButton
+  mode="insights" // Ny pseudo-mode, styr bara panelen
+  icon={BarChart2}
+  label="Insights"
+  active={insightsPanelOpen}
+  onClick={() => setInsightsPanelOpen(!insightsPanelOpen)}
+/>
+```
+
+### Auto-öppna från Insights-entrypoint
+Om `?insightsMode=` finns i URL → `InsightsDrawerPanel` startar öppen och hoppar till rätt tabb. Detta harmoniserar flödet från `BuildingInsightsView` inline → fullscreen 3D med analytics.
+
+---
+
+## Vad implementeras INTE i detta steg
+- Refaktorering av graf-komponenter (onödig komplexitet, panelen renderar `BuildingInsightsView` direkt)
+- IoT+-knapp som öppnar panelen direkt (kan läggas till i steg 2 om det fungerar bra)
+- Resize/drag-handle för panelen (kan läggas till i steg 2)
+- Ändringar på mobil (oförändrat)
