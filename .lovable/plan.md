@@ -1,113 +1,93 @@
 
-## Koppla IfcAlarm till Insights FM-vy + Alarmhantering
 
-### Nulägesanalys
+## Merge Larm into FM-flik + Visa i 3D + Rum-interaktion i 3D-panel
 
-Systemet har tre separata delar att koppla ihop:
+### Sammanfattning
 
-1. **IfcAlarm i databasen** — Småviken har 17 397 IfcAlarm-objekt med `level_fm_guid`, `in_room_fm_guid`, `fm_guid`. De saknar `name`/`common_name` men har IFC-identitet via `attributes`.
+Tre sammankopplade funktioner:
 
-2. **BuildingInsightsView** — Byggnadsnivå-vyn har flikarna Performance, Space, Asset, Sensors men **ingen FM-flik**. Den bör få en "Larm"-flik som visar riktiga IfcAlarm-objekt från databasen.
-
-3. **FacilityManagementTab** — Portfolio-nivåvyn (InsightsView → FM-flik) visar idag enbart mock-arbetsordrar. Denna ska **även visa IfcAlarm** som arbetsordrar i listan och diagrammen.
-
----
-
-### Del A — Tidigare plan (annotations + minimap): samma som godkänd plan
-
-Dessa tre fixar genomförs som planerat:
-- **Fix Småviken hang:** Ta bort batch-uppdatering av `symbol_id` i `loadAlarmAnnotations`
-- **Fix annotation-synlighet:** Anropa `updatePositions()` i `showAnnotations`-effekten
-- **Fix minimap-skala:** Beräkna AABB från synliga IfcSpace istället för hela scenen
+1. **Bygg FM-flik per byggnad** -- flytta larminnehall fran separat "Larm"-flik till en ny "FM"-flik i BuildingInsightsView, med riktiga rumsnamn/nummer istallet for GUIDs, plus en "Visa i 3D"-knapp
+2. **Rum-kort i 3D** -- fran Space-fliken: farglagg rum i 3D-viewern och ta med sig rumslistan till InsightsDrawerPanel sa man kan jobba med rum i 3D
+3. **InsightsDrawerPanel som arbetsyta** -- utoka panelen sa att den visar rumlistan med fargkodning och lat anvandaren tanda/slacka/klicka pa rum direkt i 3D
 
 ---
 
-### Del B — Ny funktionalitet: IfcAlarm → FM-Insights
+### Del 1: FM-flik med riktig data i BuildingInsightsView
 
-#### B1. Ny "Larm"-flik i BuildingInsightsView
+**Andringar i `src/components/insights/BuildingInsightsView.tsx`:**
 
-Lägg till en femte flik **"Larm"** i `BuildingInsightsView` (bredvid Performance, Space, Asset, Sensors). Denna flik:
+- Byt namn pa "Larm"-fliken (value="alarms") till **"FM"** (value="fm")
+- Behall KPI-kort (totalt antal larm, vaningar med larm, snitt per vaning)
+- Behall stapeldiagram (larm per vaningsplan)
+- **Forbattra alarmlistan:**
+  - Hamta rum-metadata (name, common_name) via en join-query: for varje alarm.in_room_fm_guid, sla upp motsvarande rum i allData eller en separat query
+  - Visa kolumner: **Rumsnamn** | **Rumsnummer** | **Vaning** | **Datum** | **Visa i 3D** | Radera
+  - Rumsnamn = common_name fran det rum som alarm.in_room_fm_guid pekar pa
+  - Rumsnummer = name fran samma rum
+  - Vaning = levelNames-map (redan implementerat)
+- **"Visa i 3D"-knapp** pa varje alarm-rad + en global "Visa alla i 3D"-knapp:
+  - Global-knappen: tar de 50 senaste larmens koordinater och navigerar till 3D-viewern med en URL-parameter (t.ex. `showAlarmAnnotations=50`) som triggar att annotations tands for dessa 50 larm
+  - Per-rad-knapp: navigerar till 3D med `entity=<alarm.fm_guid>` for att flyga till och flash-highlighta det specifika larmet
 
-- Hämtar IfcAlarm-objekt för byggnaden från `assets`-tabellen (med paginering, max 500 visas)
-- Visar tre KPI-kort: Totalt antal larm, Fördelning per våning, Larm per rum (top 5)
-- Visar ett stapeldiagram: Antal larm per våningsplan (RIKTIGT från DB)
-- Visar en lista med de 50 senaste larmen med kolumnerna: FM-GUID (trunkerat), Våning, Rum, Datum-modifierad
-- Varje rad i listan har en **soptunna-knapp** för att radera larmet (DELETE från `assets` — möjligt eftersom `is_local=true` eller admin)
-- Visar ett "Live data"-märke (inga mock-data för larm)
+**Data-hamtning:**
+- Utoka fetchAlarmData sa att den ocksa hamtar `name, common_name, coordinate_x, coordinate_y, coordinate_z` for alarmen
+- Hamta rum-lookup: `SELECT fm_guid, name, common_name FROM assets WHERE building_fm_guid = X AND category IN ('Space','IfcSpace')` -- anvand allData som redan finns i context istallet for ny query
 
+---
+
+### Del 2: Rum-visualisering fran Space-fliken till 3D
+
+**Andringar i `src/components/insights/BuildingInsightsView.tsx` (Space-tab):**
+
+- Lagg till en **"Visa rum i 3D"**-knapp i Space-fliken som:
+  1. Bygger en colorMap dar varje rums fmGuid mappas till samma farg som i Room Types-pajen (baserat pa spaceType)
+  2. Anropar `handleInsightsClick({ mode: 'room_spaces', colorMap })` -- detta fargar in rum i inline-viewern (desktop) eller navigerar till 3D (mobil)
+- Rumskorten i Space-tabben far ocksa `onClick` som fargar in det specifika rummet i 3D
+
+**Nytt insightsMode `room_spaces`:**
+- Lagg till stod for detta mode i `RoomVisualizationPanel.tsx` (eller direkt i AssetPlusViewer via `insightsColorMap`)
+- Befintlig logik i AssetPlusViewer hanterar redan `insightsColorMap` -- nar den ar satt fargas matchande IfcSpace-entiteter in med angivna farger
+
+---
+
+### Del 3: InsightsDrawerPanel som arbetsyta i 3D
+
+**Andringar i `src/components/viewer/InsightsDrawerPanel.tsx`:**
+
+- Utoka panelens hojd fran 320px till 400px (eller gorbar resizable)
+- BuildingInsightsView kors redan i drawerMode -- den visar flikar utan inline-viewer
+- Nar anvandaren klickar pa diagram/rum i panelen uppdateras farglagningen i 3D-viewern direkt via sessionStorage + custom event
+
+**Ny interaktionslank:**
+- Fran BuildingInsightsView (i drawerMode) nar anvandaren klickar pa ett rum eller diagram-segment:
+  - Istallet for att navigera (som pa standalone-sidan) dispatchar en CustomEvent `INSIGHTS_COLOR_UPDATE` med det nya colorMap
+  - UnifiedViewer/AssetPlusViewer lyssnar pa detta event och uppdaterar farglagningen i realtid
+  - Detta gor att anvandaren kan klicka runt i Insights-panelen och se rum tanda/slacka direkt i 3D ovanfor
+
+**Teknisk implementation:**
+```text
+InsightsDrawerPanel (bottom sheet i 3D)
+  --> BuildingInsightsView (drawerMode=true)
+       --> Space-flik: klick pa rum -> dispatch INSIGHTS_COLOR_UPDATE
+       --> FM-flik: klick pa "Visa i 3D" -> dispatch ALARM_ANNOTATIONS_SHOW
+  
+UnifiedViewer / AssetPlusViewer
+  --> lyssnar pa INSIGHTS_COLOR_UPDATE -> applicera insightsColorMap
+  --> lyssnar pa ALARM_ANNOTATIONS_SHOW -> tand annotations for angivna larm
 ```
-Larmfliken
-┌──────────────────────────────────────────────────┐
-│  🔔 Larm  [Live]                                  │
-│  KPI: Totalt | Per våning | Per rum (top)         │
-│                                                    │
-│  Diagram: Larm per våning (stapeldiagram)         │
-│                                                    │
-│  Lista: FM-GUID | Våning | Rum | Datum | [🗑️]    │
-└──────────────────────────────────────────────────┘
-```
-
-#### B2. Uppdatera FacilityManagementTab med riktiga IfcAlarm
-
-I portfolio-FM-fliken (`FacilityManagementTab`) ersätts den nuvarande mock-generatorn för arbetsordrar med en **blandmodell**:
-
-- Hämta IfcAlarm-aggregering per byggnad från `assets`-tabellen (GROUP BY building_fm_guid, COUNT)
-- Visa antal riktiga larm i "Issues per Building"-diagrammet (RIKTIGT för byggnader med IfcAlarm, annars mock för resten)
-- Lägg till en "Alarm"-tagg i KPI-korten som visar totalt antal IfcAlarm i hela portföljen
-- KPI-kortet "Active Issues" uppdateras: visar riktigt larmantal om det finns, annars mock
-
-#### B3. Ny AlarmManagementView-komponent
-
-Skapa `src/components/insights/tabs/AlarmManagementTab.tsx` — en dedikerad alarmhanteringsvy som kan öppnas från byggnadens Larm-flik via en "Hantera larm"-knapp:
-
-**Funktioner:**
-- Lista ALLA larm för en byggnad (paginerad, 100 åt gången)
-- Sök/filtrering på våning (`level_fm_guid` → mappas till våningsnamn)
-- Multi-select med checkbox för batch-radering
-- "Radera valda larm"-knapp med bekräftelsedialog
-- "Radera alla larm för denna byggnad"-knapp (med extra bekräftelse)
-
-**Radering:** Använder `supabase.from('assets').delete().in('fm_guid', selectedIds)` — detta fungerar eftersom IfcAlarm-objekten har `is_local=false` men RLS-policyn "Authenticated users can delete local assets" kräver `is_local=true`. Vi behöver **en edge function** som kör delete med `service_role_key` för att kringgå RLS.
-
-Alternativt: Skapa en ny RLS-policy: `DELETE WHERE asset_type = 'IfcAlarm'` — enklare och mer direkt.
-
-#### B4. IfcAlarm visas i Portfolio-FM mock-datan
-
-I `FacilityManagementTab` (portfolio-vy):
-- Hämta alarm-antal per byggnad från DB
-- Ersätt mock "Issues per Building" med riktiga larmantal för de byggnader som har IfcAlarm
-- Behåll mock för byggnader utan IfcAlarm
-- Lägg till ett "Real data"-badge bredvid diagramtiteln när riktiga data används
 
 ---
 
-### Filer som ändras
+### Filer som andras
 
-| Fil | Ändring |
+| Fil | Andring |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | Del A: Fix hang + annotation-sync |
-| `src/components/viewer/MinimapPanel.tsx` | Del A: Fix AABB-beräkning |
-| `src/components/insights/BuildingInsightsView.tsx` | Del B1: Lägg till "Larm"-flik med IfcAlarm-data |
-| `src/components/insights/tabs/FacilityManagementTab.tsx` | Del B2 + B4: Blanda in riktiga alarm-KPI:er i portfolio-FM-vyn |
-| `src/components/insights/tabs/AlarmManagementTab.tsx` | **NY** Del B3: Dedikerad alarmhanteringsvy med lista + radering |
+| `src/components/insights/BuildingInsightsView.tsx` | 1) Byt "Larm"-flik till "FM", 2) Visa rumsnamn/nummer i alarmlistan, 3) Lagg till "Visa i 3D"-knappar, 4) Lagg till "Visa rum i 3D" i Space-fliken, 5) I drawerMode: dispatcha events istallet for navigate |
+| `src/components/viewer/InsightsDrawerPanel.tsx` | Oka hojd, hantera events fran BuildingInsightsView |
+| `src/components/viewer/AssetPlusViewer.tsx` | Lyssna pa `INSIGHTS_COLOR_UPDATE` event for att uppdatera farglagning i realtid |
+| `src/lib/viewer-events.ts` | Lagg till nya event-namn: `INSIGHTS_COLOR_UPDATE`, `ALARM_ANNOTATIONS_SHOW` |
 
-### Databasändring
+### Inga databasandringar
 
-Ny RLS-policy på `assets`-tabellen för att tillåta radering av IfcAlarm-objekt (för autentiserade användare):
+All data som behovs finns redan i `assets`-tabellen och `allData`-kontexten. Rum-lookup gors via allData (redan laddad). Inga nya edge functions.
 
-```sql
-CREATE POLICY "Authenticated users can delete alarm assets"
-ON public.assets FOR DELETE
-USING (auth.uid() IS NOT NULL AND asset_type = 'IfcAlarm');
-```
-
-Alternativt: tillåt radering via service-role edge function (ingen schema-ändring).
-
-Rekommendation: **RLS-policy** är enklare och mer transparent — ingen edge function behövs.
-
-### Varför detta är rätt approach
-
-- IfcAlarm-data finns redan i databasen — noll extra API-anrop eller synkning behövs
-- Radering via RLS-policy är säkrare än att exponera service-role i frontend
-- Portfolio-FM-vyn förbättras med riktiga data för Småviken utan att bryta mock för övriga byggnader
-- AlarmManagementTab är en isolerad komponent som kan widareutvecklas (t.ex. exportera till CSV, koppla till arbetsordersystem)
