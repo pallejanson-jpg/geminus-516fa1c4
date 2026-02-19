@@ -1697,20 +1697,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
 
       // Enable annotations after models are loaded
-      try {
-        const viewer = viewerInstanceRef.current;
-        const assetViewer = viewer?.assetViewer;
-        if (assetViewer?.onToggleAnnotation) {
-          assetViewer.onToggleAnnotation(true);
-          console.log("Annotations enabled");
-          
-          if (assetViewer.getAnnotations) {
-            assetViewer.getAnnotations();
+      // Wrap in setTimeout to allow Vue's internal model data to propagate
+      // before calling getAnnotations (which requires models[] to be ready)
+      setTimeout(() => {
+        try {
+          const viewer = viewerInstanceRef.current;
+          const assetViewer = viewer?.assetViewer;
+          if (assetViewer?.onToggleAnnotation) {
+            assetViewer.onToggleAnnotation(true);
+            console.log("Annotations enabled");
+            
+            if (assetViewer.getAnnotations) {
+              assetViewer.getAnnotations();
+            }
           }
+        } catch (e) {
+          console.warn("Could not enable annotations (models not ready):", e);
         }
-      } catch (e) {
-        console.debug("Could not enable annotations:", e);
-      }
+      }, 100);
 
       // CRITICAL: Ensure spaces (rooms) are hidden by default
       // Skip when insightsColorMode is active — the insights effect will handle visibility
@@ -2817,36 +2821,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             if (cacheResult.stale) {
               console.log(`XKT cache: Stale entry (>7d) for ${modelId}, fetching fresh from Asset+`);
             } else {
-              // HEAD request to check if source has been updated since cache
-              let sourceNewer = false;
-              try {
-                const headResp = await original!(url, { method: 'HEAD' });
-                const sourceLastMod = headResp.headers.get('Last-Modified');
-                if (sourceLastMod && cacheResult.sourceUpdatedAt) {
-                  const sourceDate = new Date(sourceLastMod).getTime();
-                  const cachedDate = new Date(cacheResult.sourceUpdatedAt).getTime();
-                  if (sourceDate > cachedDate) {
-                    console.log(`XKT cache: Source newer than cache for ${modelId} (source: ${sourceLastMod}, cached: ${cacheResult.sourceUpdatedAt})`);
-                    sourceNewer = true;
-                  }
-                }
-              } catch {
-                console.debug(`XKT cache: HEAD check failed for ${modelId}, using cached version`);
-              }
-
-              if (!sourceNewer) {
-                console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
-                const cachedResponse = await original!(cacheResult.url, init);
-                if (cachedResponse.ok) {
-                  const data = await cachedResponse.clone().arrayBuffer();
-                  storeModelInMemory(modelId, resolvedBuildingGuid, data);
-                  return new Response(data, {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/octet-stream' }
-                  });
-                }
-              } else {
-                console.log(`XKT cache: Source updated, fetching fresh for ${modelId}`);
+              // Use date-based staleness only — no blocking HEAD request
+              console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+              const cachedResponse = await original!(cacheResult.url, init);
+              if (cachedResponse.ok) {
+                const data = await cachedResponse.clone().arrayBuffer();
+                storeModelInMemory(modelId, resolvedBuildingGuid, data);
+                return new Response(data, {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/octet-stream' }
+                });
               }
             }
           }
@@ -3640,6 +3624,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             style={{
               display: 'flex',
               flexDirection: 'column',
+              height: '100%',
+              minHeight: 0,
               background: transparentBackground
                 ? 'transparent'
                 : 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
