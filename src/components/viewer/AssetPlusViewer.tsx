@@ -2876,7 +2876,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             const isLargeEnough = data.byteLength >= MIN_VALID_XKT_BYTES;
             const headerBytes = new Uint8Array(data, 0, Math.min(4, data.byteLength));
             const firstChar = String.fromCharCode(headerBytes[0]);
-            const isHtmlOrJsonResponse = firstChar === '<' || firstChar === '{' || firstChar === 'E';
+            const isHtmlOrJsonResponse = firstChar === '<' || firstChar === '{';
 
             if (isLargeEnough && !isHtmlOrJsonResponse) {
               // Store in memory cache
