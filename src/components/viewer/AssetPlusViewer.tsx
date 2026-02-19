@@ -1500,6 +1500,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       const metaObjects = xeokitViewer.metaScene.metaObjects;
       const scene = xeokitViewer.scene;
 
+      // Build a lookup map ONCE instead of O(n*m) linear scan per alarm
+      const metaLookup = new Map<string, any>();
+      Object.values(metaObjects).forEach((m: any) => {
+        const key = (m.originalSystemId || m.id)?.toUpperCase();
+        if (key) metaLookup.set(key, m);
+      });
+      console.log(`Built metaObject lookup map with ${metaLookup.size} entries`);
+
       // Find alarms in BIM geometry and calculate their positions
       let foundCount = 0;
       const alarmAnnotations: Array<{
@@ -1514,10 +1522,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }> = [];
 
       alarms.forEach(alarm => {
-        // Look up object in metaScene via fmGuid
-        const metaObj = Object.values(metaObjects).find((m: any) =>
-          (m.originalSystemId || m.id)?.toUpperCase() === alarm.fm_guid?.toUpperCase()
-        );
+        // O(1) lookup instead of O(m) linear scan
+        const metaObj = metaLookup.get(alarm.fm_guid?.toUpperCase());
 
         if (!metaObj) return; // Not in loaded BIM model
 
