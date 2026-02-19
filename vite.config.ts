@@ -52,22 +52,19 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // resium imports "cesium" as a bare specifier; redirect it to @cesium/engine
+      // which is the actual installed package.
+      "cesium": path.resolve(__dirname, "node_modules/@cesium/engine"),
     },
   },
   optimizeDeps: {
     // Force re-bundling to clear stale chunk references
     force: true,
+    exclude: ['@cesium/engine'],
   },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
   build: {
-    rollupOptions: {
-      external: ['cesium'],
-      output: {
-        globals: {
-          cesium: 'Cesium',
-        },
-      },
-    },
+    rollupOptions: {},
   },
 }));
