@@ -1,125 +1,153 @@
 
-## Grundlig diagnos av 3D-viewer-felet
+## Diagnos: Rootorsak är ett korrumperat sessionStorage + felaktig API-nyckel i SDK-anropet
 
-### Vad loggarna visar (faktisk sekvens)
+### Vad nätverksloggarna bevisar
 
+**Problem 1: `GetModels` GET → 404 (linje 22-25)**
 ```
-allModelsLoadedCallback           ← modeller laddade (detta är rätt)
-Model data or models array is not available  ← SDK:ns interna krasch
-Spaces hidden by default          ← vår kod fortsätter normalt
-NavCube initialized successfully  ← allt detta körs korrekt
-...
-[AssetPlusViewer] ⏱ Initialization completed in 0.2s ← klar
+GET .../api/threed/GetModels?fmGuid=9baa7a3a...&apiKey=e132b81e... → 404
+```
+Trots att koden raderades finns detta anrop kvar. Orsak: `sessionStorage` cache innehåller gammal config (`geminus_ap_config`) och tokenet cachas i `geminus_ap_token`. Om `useModelNames`-hooken anropar samma endpoint, eller om sessionStorage innehåller gammalt state, kan det dyka upp här.
+
+**Problem 2: `GetAllRelatedModels` POST → 401 (kritisk)**
+```
+POST .../GetAllRelatedModels
+Headers: Authorization: Bearer eyJ...  (BARA Bearer, ingen apiKey)
+Body: {"fmGuids":["9BAA7A3A-..."]}
+→ 401
 ```
 
-Viewern **initialiseras**, XKT-data hämtas (bekräftat i network: 200 OK med 1,33 MB), modeller laddas, callbacks körs — men canvasen är **osynlig**. Felet `Model data or models array is not available` är SDK-internt och är inte orsaken.
+Asset+ SDK:n gör detta anrop internt — men tokenet har GILTIGA claims (Admin-roll, rätt tenant-id `d294c6d5-...`). Varför 401?
 
-### Rotorsak identifierad: `buildingFmGuid` är `undefined` vid viewer-init
+**JWT-token är utgånget.** Token i nätverksloggen har:
+- `iat: 1771514505` = 2026-02-19T**16:01:45**Z
+- `exp: 1771514805` = 2026-02-19T**16:06:45**Z (bara 5 minuter livslängd!)
 
-Rad 506–510 i `AssetPlusViewer.tsx`:
+Loggtimestampet för anropet är `16:06:47Z` — **2 sekunder EFTER att tokenet gick ut!**
+
+Token expires at **16:06:45**, request happens at **16:06:47** → 401 Unauthorized är korrekt respons.
+
+### Varför cachat token är problemet
+
+`sessionStorage.getItem('geminus_ap_token')` cachen har en "1 min margin" guard:
 ```typescript
-const assetData = allData.find((a: any) => a.fmGuid === fmGuid);
-const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
-```
-
-`allData` laddas asynkront från AppContext. Vid första render är `allData` tom (`[]`) → `assetData` är `undefined` → `buildingFmGuid` är `undefined`.
-
-`initializeViewer` har dependency-array `[fmGuid, initialFmGuidToFocus, isMobile]` — den bryr sig **inte** om `buildingFmGuid`. Initieringslogiken (rad 2990):
-```typescript
-if (!isMobile) {
-  setupCacheInterceptorRef.current();  ← anropas med buildingFmGuid = undefined
+if (Date.now() < expiresAt - 60000) { // 1 min margin
+  accessToken = token;  // Use cached token
 }
 ```
 
-Interceptorn tidigt-returnerar om `buildingFmGuid` saknas (rad 2758–2761):
+Men backend-tokenet från Asset+ staging-miljön har **bara 5 minuters livslängd** (inte 60 minuter som antaget). Med 1 minuts säkerhetsmarginal används cachad token upp till minut 4 av 5 — men om SDK:n tar >1 sekund att initialisera och modellen inte laddas direkt, hinner token gå ut.
+
+Dessutom: sessionStorage-värdet `expiresAt` sätts till `Date.now() + 55 * 60 * 1000` (55 minuter!) oberoende av hur länge tokenet faktiskt är giltigt. Det innebär att ett 5-minuters-token cachas och används i upp till 55 minuter → **alla requests efter minut 5 returnerar 401**.
+
+### Åtgärdsplan
+
+#### Fix 1 — Rensa sessionStorage-cache och läs token-expiry från JWT
+
+Istället för att anta 55 minuters token-livslängd, läs `exp`-claimet direkt från JWT-payload och använd det faktiska utgångsdatumet minus 30 sekunder säkerhetsmarginal:
+
 ```typescript
-if (!resolvedBuildingGuid) {
-  console.log('XKT cache: No building GUID, skipping interceptor');
-  return;
+// Rensa gammal felaktig cache
+sessionStorage.removeItem('geminus_ap_token');
+sessionStorage.removeItem('geminus_ap_config');
+
+// Läs exp från JWT-payload
+function getJwtExpiry(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return (payload.exp * 1000) - 30_000; // 30s safety margin
+  } catch {
+    return Date.now() + 4 * 60 * 1000; // fallback: 4 min
+  }
+}
+
+// Cachelag token med korrekt expiry
+sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
+  token: accessToken,
+  expiresAt: getJwtExpiry(accessToken),  // ← Läs från JWT, inte hårdkodad 55 min
+}));
+```
+
+#### Fix 2 — Reducera cache-guard från 60 sekunder till 30 sekunder
+
+Med 5-minuterstokens och 60-sekunders guard kastas tokenet efter 4 minuter. Med 30-sekunders guard används det i 4,5 minuter:
+
+```typescript
+// BEFORE:
+if (Date.now() < expiresAt - 60000) { // 1 min margin
+
+// AFTER:
+if (Date.now() < expiresAt - 30000) { // 30s margin (tokens can be short-lived)
+```
+
+#### Fix 3 — Rensa sessionStorage vid viewer-init (engångsfix)
+
+Lägg till en rensning av sessionStorage-nycklarna i `initializeViewer` INNAN token-hämtningen:
+
+```typescript
+// Clear potentially stale cached token/config on fresh viewer init
+// This ensures we always use a fresh token, avoiding 401 from expired cached tokens
+const now = Date.now();
+const cachedToken = sessionStorage.getItem(TOKEN_CACHE_KEY);
+if (cachedToken) {
+  try {
+    const { expiresAt } = JSON.parse(cachedToken);
+    if (now >= expiresAt - 30000) {
+      sessionStorage.removeItem(TOKEN_CACHE_KEY); // Expired or near-expiry: force refresh
+    }
+  } catch {
+    sessionStorage.removeItem(TOKEN_CACHE_KEY); // Bad cache: clear
+  }
 }
 ```
 
-**Effekt:** Interceptorn installeras aldrig. Viewer-init fortsätter utan cache. Sedan (rad 3100–3183) görs ett API-anrop till Asset+ `GetModels` som returnerar **404**:
+#### Fix 4 — `getAccessTokenCallback` ska alltid returnera ett färskt token
 
-```
-GET .../api/threed/GetModels?fmGuid=... → 404
-```
+SDK:n anropar `getAccessTokenCallback` när den behöver ett nytt token. Just nu returnerar den bara `accessTokenRef.current` som sattes vid init. Om SDK:n kallar tillbaka efter 5 minuter returneras ett utgånget token.
 
-Detta förorsakar att `allowedModelIdsRef.current` förblir `null` och A-modell-filtret baserat på modellnamn inte kan byggas upp. Viewer-instansen skapas, men `GetAllRelatedModels` returnerar **401** (rad i network):
-
-```
-POST .../GetAllRelatedModels → 401
-```
-
-Det är 401-felet som gör att Asset+ SDK inte kan ladda modellen visuellt — den har inget att visa.
-
-### Varför det fungerade tidigare
-
-Tidigare hämtades modellnamn från databasen direkt (utan API-fallback), och `buildingFmGuid` löstes troligtvis i tid eftersom `allData` var cachad. De senaste ändringarna av interceptor-logiken (ta bort HEAD-request, lägga till `GetModels`-API-anrop) introducerade:
-1. Ett nytt nätverksanrop till `GetModels` som returnerar 404 (endpoint existerar ej för alla byggnader)
-2. `GetAllRelatedModels` POST som returnerar 401 — detta verkar vara ett **autentiseringsproblem med Asset+ Bearer-token** vs API-nyckel-baserat auth
-
-### Sekundärt problem: Mobile navigation för bred
-
-`MobileNav.tsx` — knappen ändrades men behöver ytterligare responsive-justering för att passa bättre på smala skärmar (360px).
-
----
-
-## Åtgärdsplan: Exakt tre riktade fixar
-
-### Fix 1 — Ta bort `GetModels`-API-anropet som returnerar 404
-
-Blocket på rad 3120–3160 gör ett `fetch` till `GetModels`-endpointen som returnerar 404. Ta bort detta API-anrop helt. Lita istället enbart på databasens `xkt_models`-tabell för modellnamn (som redan fungerar):
+Implementera en automatisk token-refresh i callbacken:
 
 ```typescript
-// REMOVE this entire block:
-if (nameMap.size === 0) {
-  const apiBase = baseUrl.replace(...)
-  const resp = await fetch(`${apiBase}/api/threed/GetModels?...`)
-  // ... 
-}
+async () => {
+  // Check if cached token is still valid (with 30s margin)
+  const cached = sessionStorage.getItem(TOKEN_CACHE_KEY);
+  if (cached) {
+    try {
+      const { token, expiresAt } = JSON.parse(cached);
+      if (Date.now() < expiresAt - 30000) {
+        accessTokenRef.current = token;
+        return token;
+      }
+    } catch { /* clear bad cache */ }
+  }
+  
+  // Token expired or missing — fetch fresh token
+  const { data } = await supabase.functions.invoke('asset-plus-query', {
+    body: { action: 'getToken' }
+  });
+  const freshToken = data?.accessToken;
+  if (freshToken) {
+    accessTokenRef.current = freshToken;
+    sessionStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({
+      token: freshToken,
+      expiresAt: getJwtExpiry(freshToken),
+    }));
+  }
+  return accessTokenRef.current;
+},
 ```
 
-Om `nameMap.size === 0` → ladda alla modeller (ingen filtrering). Detta är säkrare och eliminerar 404-felet.
-
-### Fix 2 — Lös `buildingFmGuid` från `fmGuid`-prop direkt (utan att vänta på `allData`)
-
-`buildingFmGuid` bestäms nu av `assetData?.buildingFmGuid`, men `assetData` kan vara `undefined` om `allData` inte är laddad än. Eftersom `fmGuid`-propen som skickas in till viewern **alltid är byggnadens GUID** (inte ett rum eller en våning), kan vi använda `fmGuid` direkt:
-
-```typescript
-// RAD 510 - ersätt:
-const buildingFmGuid = assetData?.buildingFmGuid || assetData?.fmGuid;
-
-// MED:
-// fmGuid is always the building GUID when passed from UnifiedViewer
-// Fall back to assetData lookup only if needed (for room/floor deep-links)
-const buildingFmGuid = fmGuid || assetData?.buildingFmGuid || assetData?.fmGuid;
-```
-
-Detta garanterar att `setupCacheInterceptor` alltid har ett giltigt GUID och installeras korrekt.
-
-### Fix 3 — Mobil navigation: smalare layout
-
-`MobileNav.tsx` — justera bredden på "Meny"-knappen och text för att passa bättre på smala mobil-skärmar:
-- Göm knapp-texten på extra-smala skärmar (`< sm`)
-- Minska padding ytterligare
-
----
-
-## Teknisk sammanfattning av ändrade filer
+### Filer som ändras
 
 | Fil | Ändring |
 |---|---|
-| `src/components/viewer/AssetPlusViewer.tsx` | 1) Rad 510: `buildingFmGuid = fmGuid` som primär källa, 2) Rad 3120–3160: Ta bort `GetModels` API-anrop |
-| `src/components/layout/MobileNav.tsx` | Smalare Meny-knapp med dold text på smala skärmar |
+| `src/components/viewer/AssetPlusViewer.tsx` | 1) Lägg till `getJwtExpiry()` hjälpfunktion, 2) Fix token-cache med JWT-baserad expiry, 3) Fix `getAccessTokenCallback` för automatisk token-refresh, 4) Minska cache-guard från 60s till 30s |
 
-Inga edge functions, inga databasändringar, inga nya beroenden. Exakt samma kodstig för desktop och mobil.
+Inga edge functions, inga databasändringar, inga nya beroenden.
 
 ### Varför detta löser problemet
 
-1. `buildingFmGuid = fmGuid` (prop) fungerar omedelbart, utan att vänta på `allData`
-2. Interceptorn installeras alltid med korrekt GUID
-3. `GetModels` 404 tas bort → inga onödiga nätverksfel
-4. `GetAllRelatedModels` 401 är troligen en sidoeffekt av felaktig timing — med korrekt GUID-kedja bör Asset+ SDK:n initiera korrekt med Bearer-tokenet
-
-Om `GetAllRelatedModels` fortsätter returnera 401 efter dessa fixar, innebär det ett separat autentiseringsproblem med Asset+ staging-miljöns token, vilket inte kan åtgärdas från vår kodbas.
+- Token hämtas alltid med korrekt expiry från JWT-payload
+- `getAccessTokenCallback` refreshar automatiskt utgångna tokens under pågående session
+- Gamla felaktiga sessionStorage-caches identifieras och rensas vid nästa viewer-init
+- SDK:n får alltid ett giltigt token oavsett när den anropar callback
