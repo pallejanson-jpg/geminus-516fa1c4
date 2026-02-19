@@ -61,13 +61,6 @@ export default defineConfig(({ mode }) => ({
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
   build: {
-    rollupOptions: {
-      external: ['cesium'],
-      output: {
-        globals: {
-          cesium: 'Cesium',
-        },
-      },
-    },
+    rollupOptions: {},
   },
 }));
