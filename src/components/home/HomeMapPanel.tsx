@@ -8,10 +8,9 @@
  * browser module system outside of its dedicated route bundle.
  */
 
-import React, { Suspense, useState } from 'react';
-import { Globe, Map, Loader2, AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import React, { Suspense, useState, useContext } from 'react';
+import { Globe, Map, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useContext } from 'react';
 import { AppContext } from '@/context/AppContext';
 
 // Lazy load Mapbox only — no Cesium here
@@ -50,7 +49,7 @@ class MapErrorBoundary extends React.Component<
         </div>
       );
     }
-    return this.props.children;
+    return <>{this.props.children}</>;
   }
 }
 
