@@ -54,25 +54,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  optimizeDeps: {
-    // Do NOT include cesium/resium here — they are ESM-compatible and
-    // forcing esbuild pre-bundling causes duplicate React instances
-    // (pre-bundled resium captures its own React ref, breaking $$typeof checks).
-    exclude: ['cesium', 'resium'],
-  },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
-  build: {
-    rollupOptions: {
-      output: {
-        // Only isolate cesium into its own chunk — do NOT split React,
-        // as that causes duplicate React instance errors (#31).
-        manualChunks(id) {
-          if (id.includes('/node_modules/cesium/') || id.includes('/node_modules/resium/')) {
-            return 'cesium-vendor';
-          }
-        },
-      },
-    },
-  },
 }));
