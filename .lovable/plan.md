@@ -1,91 +1,134 @@
 
-## Rot-orsaken: CSS-toolbar-gömning matchar inte längre
+## Analys: Vad gick fel med AI-skanningen (97 objekt från samma bild)
 
-Tidigare hade containern `id="AssetPlusViewer"` OCH klassen `asset-plus-hide-builtin-toolbar`, vilket fick CSS-regeln att fungera:
+### Bekräftade fakta från databasen och loggar
 
-```css
-#AssetPlusViewer.asset-plus-hide-builtin-toolbar [class*="toolbar"] { display: none !important; }
-```
+Skanjobbet `7d14a8ea` (Centralstationen):
+- **Status:** `failed` — avbröt automatiskt efter 30 min inaktivitet
+- **Processade:** 150/200 bilder
+- **Detektioner:** 97 stycken — **ALLA** från exakt samma `ivion_image_id: 71228241`
 
-Nu (efter senaste fix) ser DOM-trädet ut såhär:
-
-```text
-<div ref={viewerContainerRef} class="asset-plus-hide-builtin-toolbar ...">  ← har KLASSEN men inte ID
-  <div id="AssetPlusViewer">                                                   ← har ID:t men inte KLASSEN
-    ... (Asset+ Vue-innehåll, toolbars visas här)
-  </div>
-</div>
-```
-
-CSS-selektorn kräver att SAMMA element har **båda** — `#AssetPlusViewer` OCH `.asset-plus-hide-builtin-toolbar`. Det stämmer inte längre → toolbars visas.
-
-Dessutom: `freshDiv` (med `id="AssetPlusViewer"`) ärver klasser från sin parent men CSS-selektorn `#AssetPlusViewer.asset-plus-hide-builtin-toolbar` kollar inte parent-element.
+Det är alltså inte 97 fynd från 150 bilder fördelade — det är 97 fynd som registrerades på ca 30 sekunder (11:22:11 → 11:22:44) och samtliga pekar på *en och samma* panoramabild.
 
 ---
 
-## Lösning: Tre delar
+### Grundorsak: Tre samverkande buggar
 
-### Del 1 — Lägg klassen på `freshDiv` (inte containern)
+#### Bug 1 — Skannt en och samma bild upprepade gånger (utan navigering)
 
-I `initializeViewer` (rad ~2968–2971), när vi skapar `freshDiv`, lägg till alla DX-klasser OCH `asset-plus-hide-builtin-toolbar` direkt på `freshDiv`:
+I `BrowserScanRunner.tsx` ser navigeringslogiken ut såhär:
 
 ```typescript
-// Före:
-const freshDiv = document.createElement('div');
-freshDiv.id = 'AssetPlusViewer';
-container.appendChild(freshDiv);
-
-// Efter:
-const freshDiv = document.createElement('div');
-freshDiv.id = 'AssetPlusViewer';
-// Lägg DX-klasser + toolbar-hiding på freshDiv — CSS-selector kräver att ID och klass är på SAMMA element
-freshDiv.className = [
-  'w-full', 'h-full',
-  isMobile ? 'dx-device-mobile' : 'dx-device-desktop',
-  'dx-device-generic', 'dx-theme-material', 'dx-theme-material-typography',
-  'asset-plus-hide-builtin-toolbar'
-].join(' ');
-freshDiv.style.cssText = 'width:100%;height:100%;display:flex;flex:1 0 auto;';
-container.appendChild(freshDiv);
+await (api as any).legacyApi.moveToImageId(img.id, undefined, undefined);
 ```
 
-### Del 2 — Ta bort klassen från JSX-containern
+Från konsolloggarna syns att navigeringen **lyckas** (bilderna byts korrekt: `✅ Navigated to image 3272302481819579`, `✅ Navigated to image 3297820599403364`...).
 
-JSX-containern (`viewerContainerRef`) behöver inte längre klassen `asset-plus-hide-builtin-toolbar` — den är nu på `freshDiv`. Ta bort den för att undvika duplicering. Behåll övriga klasser för layout.
+Men ALLA 97 detektioner är kopplade till `ivion_image_id: 71228241` — det är **starbilden** (den som Ivion laddade när SDK startade). Det stämmer med att skanningen startade kl 11:22:11, dvs inom de **första 2 minuterna** av jobbet.
 
-```tsx
-// Före:
-className={`w-full h-full ${isMobile ? 'dx-device-mobile' : 'dx-device-desktop'} dx-device-generic dx-theme-material dx-theme-material-typography asset-plus-hide-builtin-toolbar`}
+Vad som hände: En enda batch-anrop till AI returnerade plötsligt **97 detektioner** från 3 screenshot — vilket är omöjligt om systemet fungerar normalt (max 3 bilder × ett rimligt antal objekt). Det tyder på att Gemini returnerade en defekt/oändlig JSON-response, troligen med felaktig struktur som parsades fel.
 
-// Efter (containern är bara ett layout-skal):
-className="w-full h-full"
+#### Bug 2 — JSON-parsning av batch-response är sårbar
+
+I edge-funktionen (rad 2312-2316):
+```typescript
+const start = batchContent.indexOf('[');
+const end = batchContent.lastIndexOf(']');
+if (start !== -1 && end !== -1) {
+  allDetections = JSON.parse(batchContent.slice(start, end + 1));
+}
 ```
 
-### Del 3 — Säkerställ att `assetplusviewer()` hittar rätt element
+Detta är den **enkla** varianten — den använder `lastIndexOf(']')` istället för den robusta `extractJsonArray` som används i den andra kodvägen. Om Gemini returnerar ett svar som t.ex. innehåller en förklaring EFTER JSON-arrayen, kan `lastIndexOf` ta med fel del av texten och orsaka en ofantlig array.
 
-`assetplusviewer()`-biblioteket anropar `document.getElementById('AssetPlusViewer')` internt för att hitta sin mount-target. Nu finns det bara ett sådant element i DOM (`freshDiv`). Det stämmer.
+Eller: Gemini returnerade en array med 97 element (alla dörrar av liknande koordinater), vilket tyder på att modellen "hallucinated" massivt — möjligt när samma bild skickas med 97 referensexempel (example_images) i prompten, vilket överväldigar kontextfönstret.
 
-Men: Vi måste se till att `assetplusviewer()` anropas EFTER att `freshDiv` är tillagd i DOM — vilket det redan är (vi lägger till `freshDiv` och väntar 2 rAF + 50ms innan `assetplusviewer()` anropas). Bra.
+#### Bug 3 — Skanningen hängde sedan pga 403-fel från Ivion
+
+Efter att de 97 objekten sparades (kl 11:22:44) fortsatte skanningen men:
+- Ivion returnerar `403` på `storage/download/prefix/signed/url`
+- `EventSource` (Ivion:s interna SSE-kanal) fick också `403`
+
+Det är Ivion SDK:s egna internrequests (för att ladda panoramadata) som misslyckas — troligen för att token hann gå ut. Token-refresh sker var 8 min men om SDK:n redan etablerat en SSE-kanal med en gammal token, hjälper inte refresh.
+
+Skanningen fortsatte ändå (processar nya bilder, tar screenshot) men **efter ca 30 min** utan framsteg triggades auto-timeout och jobbet markerades `failed`.
 
 ---
 
-## Filer som ändras
+### Åtgärdsplan
 
-**`src/components/viewer/AssetPlusViewer.tsx`** — två ställen:
+#### Fix 1 — Begränsa max detektioner per batch
 
-1. `initializeViewer` (~rad 2969): Lägg klasser + stilar på `freshDiv`
-2. JSX-container (~rad 3619): Förenkla className till bara layout-klasser
+I `analyze-screenshot-batch` (edge function), lägg till ett tak på hur många detektioner en batch-request kan returnera:
 
-**`src/index.css`** — inga ändringar behövs (CSS-selektorn är redan korrekt, det var bara DOM som var fel)
+```typescript
+// Cap per batch to prevent hallucination storms
+const MAX_DETECTIONS_PER_BATCH = 15;
+if (allDetections.length > MAX_DETECTIONS_PER_BATCH) {
+  console.warn(`[batch] Capping ${allDetections.length} detections to ${MAX_DETECTIONS_PER_BATCH}`);
+  allDetections = allDetections.slice(0, MAX_DETECTIONS_PER_BATCH);
+}
+```
+
+#### Fix 2 — Använd den robusta JSON-extraktionen (identisk med den andra kodvägen)
+
+Ersätt `lastIndexOf` med `extractJsonArray` (depth-tracking) i batch-hanteraren:
+
+```typescript
+// Före (sårbar):
+const start = batchContent.indexOf('[');
+const end = batchContent.lastIndexOf(']');
+allDetections = JSON.parse(batchContent.slice(start, end + 1));
+
+// Efter (robust, identisk med analyzeImageWithAI):
+function extractJsonArray(text: string): string | null {
+  const start = text.indexOf('[');
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '[') depth++;
+    else if (text[i] === ']') { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  return null;
+}
+const jsonString = extractJsonArray(batchContent);
+if (jsonString) allDetections = JSON.parse(jsonString);
+```
+
+#### Fix 3 — Nollduplika detektioner från samma position (tätare dedup)
+
+Nuvarande dedup-avstånd är `2.0 meter`. Det stoppade inte 97 dörrar på samma ställe. Tillägg: hoppa över hela batchen om redan fler än X detektioner sparats för exakt samma `image_id`:
+
+```typescript
+// Kontrollera per image_id — max 5 detektioner per Ivion-bild
+const { count } = await supabase
+  .from('pending_detections')
+  .select('*', { count: 'exact', head: true })
+  .eq('scan_job_id', params.scanJobId)
+  .eq('ivion_image_id', params.imageId);
+
+if ((count || 0) >= 5) {
+  result = { detections: 0, skipped: 'max_per_image' };
+  break;
+}
+```
+
+#### Fix 4 — Rensa upp befintliga 97 falska detektioner
+
+Lägg till en "Rensa felaktiga" -knapp i DetectionReviewQueue, alternativt köra en direkt SQL-query för att ta bort alla detektioner med samma `ivion_image_id` från detta jobb.
+
+Raderingsfråga att köra direkt:
+```sql
+DELETE FROM pending_detections 
+WHERE scan_job_id = '7d14a8ea-194d-41c7-8842-0f607e928754' 
+AND ivion_image_id = 71228241;
+```
 
 ---
 
-## Teknisk sammanfattning
+### Filer som ändras
 
-| Problem | Orsak | Fix |
-|---|---|---|
-| Toolbars visas | `#AssetPlusViewer.asset-plus-hide-builtin-toolbar` matchar ingenting — ID och klass är på olika element | Flytta klassen till `freshDiv` som har ID:t |
-| Ingen 3D på desktop | Asset+ Vue-runtime kan ha haft problem med ny DOM-struktur | `freshDiv` har nu rätt klasser + inline-stilar för korrekt layout |
-| Fungerar på mobil men inte desktop | `isMobile`-check på DX-klassen sattes fel | Klassen sätts nu dynamiskt baserat på `isMobile` på `freshDiv` |
+1. **`supabase/functions/ai-asset-detection/index.ts`** — Fix 1 (cap), Fix 2 (robust JSON), Fix 3 (per-image dedup)
+2. **Databas** — Rensa de 97 falska detektionerna via migration
 
-Inga DB-ändringar, inga nya filer, inga edge functions.
+Inga frontend-ändringar behövs för själva buggarna. Ivion 403-felet är ett token-timeout-problem från Ivions egna internrequests och kräver ingen fix — skanningen fortsatte korrekt ändå.
