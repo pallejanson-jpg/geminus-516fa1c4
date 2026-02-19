@@ -68,6 +68,7 @@ export interface InsightsColorUpdateDetail {
 /** Type for alarm annotations show event detail */
 export interface AlarmAnnotationsShowDetail {
   alarms: { fmGuid: string; x: number; y: number; z: number }[];
+  flyTo?: boolean;
 }
 
 /** Type for load saved view event detail */
