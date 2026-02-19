@@ -13,8 +13,10 @@ import {
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
-    Loader2, Thermometer, Wind, Users, Wifi, WifiOff
+    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2
 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
 import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -164,6 +166,76 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [sensorSheetOpen, setSensorSheetOpen] = useState(false);
     const [sensorSheetRoom, setSensorSheetRoom] = useState<{ fmGuid: string; name: string } | null>(null);
     const { data: buildingIoT, isLoading: iotLoading, isLive: iotLive } = useSenslincBuildingData(facility.fmGuid);
+
+    // Larm-flik state
+    const [alarmCount, setAlarmCount] = useState<number>(0);
+    const [alarmsByLevel, setAlarmsByLevel] = useState<{ levelGuid: string; levelName: string; count: number }[]>([]);
+    const [alarmList, setAlarmList] = useState<any[]>([]);
+    const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
+    const [showAlarmManagement, setShowAlarmManagement] = useState(false);
+
+    const fetchAlarmData = useCallback(async () => {
+        try {
+            // Count
+            const { count } = await supabase
+                .from('assets')
+                .select('*', { count: 'exact', head: true })
+                .eq('building_fm_guid', facility.fmGuid)
+                .eq('asset_type', 'IfcAlarm');
+            setAlarmCount(count || 0);
+
+            // Per-level aggregation
+            const { data: levelAssets } = await supabase
+                .from('assets')
+                .select('fm_guid, name, common_name')
+                .eq('building_fm_guid', facility.fmGuid)
+                .in('category', ['Building Storey', 'IfcBuildingStorey'])
+                .limit(50);
+
+            const levelMap = new Map<string, string>();
+            (levelAssets || []).forEach((l: any) => {
+                levelMap.set(l.fm_guid, l.common_name || l.name || l.fm_guid.slice(0, 8));
+            });
+
+            const { data: alarmLevels } = await supabase
+                .from('assets')
+                .select('level_fm_guid')
+                .eq('building_fm_guid', facility.fmGuid)
+                .eq('asset_type', 'IfcAlarm')
+                .limit(5000);
+
+            if (alarmLevels) {
+                const lvlCounts: Record<string, number> = {};
+                alarmLevels.forEach((a: any) => {
+                    const guid = a.level_fm_guid || '__none__';
+                    lvlCounts[guid] = (lvlCounts[guid] || 0) + 1;
+                });
+                const mapped = Object.entries(lvlCounts)
+                    .map(([g, cnt]) => ({
+                        levelGuid: g,
+                        levelName: g === '__none__' ? 'Okänd' : (levelMap.get(g) || g.slice(0, 10) + '…'),
+                        count: cnt,
+                    }))
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 8);
+                setAlarmsByLevel(mapped);
+            }
+
+            // Recent list
+            const { data: recent } = await supabase
+                .from('assets')
+                .select('id, fm_guid, level_fm_guid, in_room_fm_guid, updated_at')
+                .eq('building_fm_guid', facility.fmGuid)
+                .eq('asset_type', 'IfcAlarm')
+                .order('updated_at', { ascending: false })
+                .limit(50);
+            setAlarmList(recent || []);
+        } catch (e) {
+            console.error('Error fetching alarm data:', e);
+        }
+    }, [facility.fmGuid, alarmRefreshKey]);
+
+    useEffect(() => { fetchAlarmData(); }, [fetchAlarmData]);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -442,6 +514,13 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 </TabsTrigger>
                                 <TabsTrigger value="sensors" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
                                     <Zap className="h-3 w-3" />Sensorer
+                                </TabsTrigger>
+                                <TabsTrigger value="alarms" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2 gap-1">
+                                    <Bell className="h-3 w-3" />
+                                    Larm
+                                    {alarmCount > 0 && (
+                                        <Badge variant="destructive" className="text-[9px] h-4 px-1 ml-0.5">{alarmCount > 999 ? '999+' : alarmCount}</Badge>
+                                    )}
                                 </TabsTrigger>
                             </TabsList>
                         </div>
@@ -746,6 +825,183 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 roomFmGuid={sensorSheetRoom?.fmGuid ?? null}
                                 roomName={sensorSheetRoom?.name}
                             />
+                        </TabsContent>
+
+                        {/* ── Larm Tab — REAL IfcAlarm data ── */}
+                        <TabsContent value="alarms" className="mt-0 space-y-4">
+                            {/* Live badge + KPI row */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0.5 bg-green-500/10">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-green-400 inline-block" />LIVE
+                                </span>
+                                <span className="text-xs text-muted-foreground">IfcAlarm-objekt från databasen</span>
+                                {!showAlarmManagement && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="ml-auto gap-1.5"
+                                        onClick={() => setShowAlarmManagement(true)}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        Hantera larm
+                                    </Button>
+                                )}
+                                {showAlarmManagement && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="ml-auto"
+                                        onClick={() => setShowAlarmManagement(false)}
+                                    >
+                                        ← Översikt
+                                    </Button>
+                                )}
+                            </div>
+
+                            {showAlarmManagement ? (
+                                <AlarmManagementTab
+                                    buildingFmGuid={facility.fmGuid}
+                                    buildingName={facility.commonName || facility.name}
+                                    onAlarmsDeleted={() => {
+                                        setAlarmRefreshKey(k => k + 1);
+                                        setShowAlarmManagement(false);
+                                    }}
+                                />
+                            ) : (
+                                <>
+                                    {/* KPI cards */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Bell className="h-4 w-4 text-destructive" />
+                                                </div>
+                                                <p className="text-2xl font-bold">{alarmCount.toLocaleString()}</p>
+                                                <p className="text-xs text-muted-foreground">Totalt antal larm</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Layers className="h-4 w-4 text-primary" />
+                                                </div>
+                                                <p className="text-2xl font-bold">{alarmsByLevel.length}</p>
+                                                <p className="text-xs text-muted-foreground">Våningar med larm</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <DoorOpen className="h-4 w-4 text-orange-500" />
+                                                </div>
+                                                <p className="text-2xl font-bold">
+                                                    {alarmsByLevel.length > 0
+                                                        ? Math.round(alarmCount / Math.max(alarmsByLevel.length, 1))
+                                                        : 0}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">Snitt per våning</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* Chart: alarms per level */}
+                                    {alarmsByLevel.length > 0 && (
+                                        <Card>
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-base flex items-center gap-2">
+                                                    <Bell className="h-4 w-4 text-destructive" />
+                                                    Larm per våningsplan
+                                                </CardTitle>
+                                                <CardDescription>Antal IfcAlarm per våning (riktiga data)</CardDescription>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="h-56">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart data={alarmsByLevel} layout="vertical">
+                                                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                                                            <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                                                            <YAxis
+                                                                dataKey="levelName"
+                                                                type="category"
+                                                                width={isMobile ? 60 : 100}
+                                                                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
+                                                            />
+                                                            <Tooltip
+                                                                contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                                                                formatter={(v: number) => [`${v} larm`]}
+                                                            />
+                                                            <Bar dataKey="count" name="Larm" fill="hsl(var(--destructive))" radius={[0, 4, 4, 0]} />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    {/* Recent alarm list */}
+                                    <Card>
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-base flex items-center gap-2">
+                                                <Bell className="h-4 w-4 text-destructive" />
+                                                Senaste 50 larm
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>FM-GUID</TableHead>
+                                                            <TableHead>Våning</TableHead>
+                                                            <TableHead>Rum (GUID)</TableHead>
+                                                            <TableHead>Datum</TableHead>
+                                                            <TableHead className="w-10"></TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {alarmList.map((alarm: any) => (
+                                                            <TableRow key={alarm.id}>
+                                                                <TableCell className="font-mono text-xs">
+                                                                    {alarm.fm_guid ? `${alarm.fm_guid.slice(0, 8)}…` : '—'}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {alarm.level_fm_guid ? alarm.level_fm_guid.slice(0, 10) + '…' : '—'}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {alarm.in_room_fm_guid ? alarm.in_room_fm_guid.slice(0, 10) + '…' : '—'}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {new Date(alarm.updated_at).toLocaleDateString('sv-SE')}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                                        onClick={async () => {
+                                                                            await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
+                                                                            setAlarmRefreshKey(k => k + 1);
+                                                                        }}
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                        {alarmList.length === 0 && (
+                                                            <TableRow>
+                                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                                    Inga larm hittades
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </>
+                            )}
                         </TabsContent>
                     </Tabs>
                 </div>

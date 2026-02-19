@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
     Wrench, AlertTriangle, CheckCircle2, Clock, 
-    Building2, TrendingUp, Calendar, FileText, List, ChevronRight
+    Building2, TrendingUp, Calendar, FileText, List, ChevronRight, Bell
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -123,6 +124,35 @@ export default function FacilityManagementTab() {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | 'all'>('all');
 
+    // Real alarm counts per building from DB
+    const [alarmCountByBuilding, setAlarmCountByBuilding] = useState<Record<string, number>>({});
+    const [totalRealAlarms, setTotalRealAlarms] = useState(0);
+
+    useEffect(() => {
+        const fetchAlarmCounts = async () => {
+            try {
+                const { data } = await supabase
+                    .from('assets')
+                    .select('building_fm_guid')
+                    .eq('asset_type', 'IfcAlarm')
+                    .limit(5000);
+                if (data) {
+                    const counts: Record<string, number> = {};
+                    data.forEach((row: any) => {
+                        if (row.building_fm_guid) {
+                            counts[row.building_fm_guid] = (counts[row.building_fm_guid] || 0) + 1;
+                        }
+                    });
+                    setAlarmCountByBuilding(counts);
+                    setTotalRealAlarms(data.length);
+                }
+            } catch (e) {
+                console.error('Failed to fetch alarm counts:', e);
+            }
+        };
+        fetchAlarmCounts();
+    }, []);
+
     // Generate mock work orders
     const workOrders = useMemo(() => {
         return generateMockWorkOrders(navigatorTreeData);
@@ -154,18 +184,22 @@ export default function FacilityManagementTab() {
             const hash = hashString(building.fmGuid || '');
             const buildingOrders = workOrders.filter(wo => wo.buildingFmGuid === building.fmGuid);
             const fullName = building.commonName || building.name || 'Building';
+            // Use real alarm count as "activeIssues" for buildings that have IfcAlarm data
+            const realAlarms = alarmCountByBuilding[building.fmGuid];
+            const mockActive = buildingOrders.filter(wo => wo.status === 'open' || wo.status === 'in_progress').length;
             return {
                 fmGuid: building.fmGuid,
                 name: truncateName(fullName),
                 fullName,
-                activeIssues: buildingOrders.filter(wo => wo.status === 'open' || wo.status === 'in_progress').length,
+                activeIssues: realAlarms !== undefined ? realAlarms : mockActive,
+                hasRealData: realAlarms !== undefined,
                 plannedMaintenance: 1 + (hash % 5),
                 completedThisMonth: buildingOrders.filter(wo => wo.status === 'completed').length,
                 slaCompliance: 85 + (hash % 15),
                 monthlyCost: 15000 + (hash % 35000),
             };
         });
-    }, [navigatorTreeData, workOrders]);
+    }, [navigatorTreeData, workOrders, alarmCountByBuilding]);
 
     // KPI totals
     const totals = useMemo(() => {
@@ -174,13 +208,14 @@ export default function FacilityManagementTab() {
         const pendingOrders = workOrders.filter(wo => wo.status === 'pending');
         
         return {
-            totalActive: activeOrders.length,
+            totalActive: totalRealAlarms > 0 ? totalRealAlarms : activeOrders.length,
             totalPending: pendingOrders.length,
             totalCompleted: completedOrders.length,
             avgSla: Math.round(fmData.reduce((sum, b) => sum + b.slaCompliance, 0) / Math.max(fmData.length, 1)),
             totalCost: fmData.reduce((sum, b) => sum + b.monthlyCost, 0),
+            hasRealAlarms: totalRealAlarms > 0,
         };
-    }, [workOrders, fmData]);
+    }, [workOrders, fmData, totalRealAlarms]);
 
     // Issue type distribution
     const categoryData = useMemo(() => {
@@ -222,32 +257,36 @@ export default function FacilityManagementTab() {
 
     const kpiCards = [
         { 
-            title: isMobile ? 'Active' : 'Active Issues', 
+            title: totals.hasRealAlarms ? 'Aktiva larm' : (isMobile ? 'Active' : 'Active Issues'), 
             value: totals.totalActive, 
-            icon: AlertTriangle, 
-            color: 'text-yellow-500',
-            badge: isMobile ? 'Open' : 'Open + In Progress'
+            icon: totals.hasRealAlarms ? Bell : AlertTriangle, 
+            color: totals.hasRealAlarms ? 'text-destructive' : 'text-yellow-500',
+            badge: totals.hasRealAlarms ? 'IfcAlarm' : (isMobile ? 'Open' : 'Open + In Progress'),
+            isReal: totals.hasRealAlarms,
         },
         { 
             title: 'Pending', 
             value: totals.totalPending, 
             icon: Clock, 
             color: 'text-purple-500',
-            badge: isMobile ? 'Wait' : 'Awaiting'
+            badge: isMobile ? 'Wait' : 'Awaiting',
+            isReal: false,
         },
         { 
             title: isMobile ? 'Done' : 'Completed (month)', 
             value: totals.totalCompleted, 
             icon: CheckCircle2, 
             color: 'text-green-500',
-            badge: isMobile ? 'Period' : 'This period'
+            badge: isMobile ? 'Period' : 'This period',
+            isReal: false,
         },
         { 
             title: isMobile ? 'SLA' : 'SLA Compliance', 
             value: `${totals.avgSla}%`, 
             icon: TrendingUp, 
             color: 'text-primary',
-            badge: isMobile ? 'Avg' : 'Average'
+            badge: isMobile ? 'Avg' : 'Average',
+            isReal: false,
         },
     ];
 
@@ -267,15 +306,18 @@ export default function FacilityManagementTab() {
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpiCards.map((kpi, index) => (
-                    <Card key={index}>
+                    <Card key={index} className={kpi.isReal ? 'border-destructive/30' : ''}>
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-2">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
-                                <Badge variant="secondary" className="text-[10px] sm:text-xs max-w-[60px] sm:max-w-none truncate">
+                                <Badge
+                                    variant={kpi.isReal ? 'destructive' : 'secondary'}
+                                    className="text-[10px] sm:text-xs max-w-[60px] sm:max-w-none truncate"
+                                >
                                     {kpi.badge}
                                 </Badge>
                             </div>
-                            <p className="text-xl sm:text-2xl font-bold text-purple-400 truncate">{kpi.value}</p>
+                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isReal ? 'text-destructive' : 'text-foreground'}`}>{kpi.value}</p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
@@ -336,8 +378,11 @@ export default function FacilityManagementTab() {
                         <CardTitle className="text-base flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-primary" />
                             Issues per Building
+                            {totals.hasRealAlarms && (
+                                <Badge variant="destructive" className="text-[9px] px-1 py-0 ml-1">Live</Badge>
+                            )}
                         </CardTitle>
-                        <CardDescription>Active service issues</CardDescription>
+                        <CardDescription>{totals.hasRealAlarms ? 'IfcAlarm-data (riktiga) + mock för övriga' : 'Active service issues'}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">

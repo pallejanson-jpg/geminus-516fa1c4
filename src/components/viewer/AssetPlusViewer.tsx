@@ -808,6 +808,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         ann.markerElement.style.display = showAnnotations ? 'flex' : 'none';
       }
     });
+    // Force position recalculation so markers appear at correct screen coords (not 0,0)
+    if (showAnnotations && plugin.updatePositions) {
+      plugin.updatePositions();
+    }
   }, [showAnnotations]);
 
   // Handler for individual model visibility toggle from mobile overlay
@@ -1515,21 +1519,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log(`Created ${foundCount} alarm annotations for building:`, resolvedBuildingGuid);
 
-      // Bulk update symbol_id for alarms that don't have it set
-      const alarmsWithoutSymbol = alarms.filter(a => !a.symbol_id);
-      if (alarmsWithoutSymbol.length > 0) {
-        console.log(`Updating ${alarmsWithoutSymbol.length} alarms with Alarm symbol_id`);
-        // Update in batches to avoid large queries
-        const batchSize = 100;
-        for (let i = 0; i < alarmsWithoutSymbol.length; i += batchSize) {
-          const batch = alarmsWithoutSymbol.slice(i, i + batchSize);
-          const ids = batch.map(a => a.id);
-          await supabase
-            .from('assets')
-            .update({ symbol_id: alarmSymbol.id })
-            .in('id', ids);
-        }
-      }
+      // NOTE: Do NOT bulk-update symbol_id here — it triggers 100+ sequential DB requests
+      // which hangs the UI for buildings with thousands of IfcAlarm assets (e.g. Småviken ~17k).
+      // The alarm symbol is resolved at load-time above; saving it to DB is not required for functionality.
     } catch (e) {
       console.error('Error loading alarm annotations:', e);
     }
