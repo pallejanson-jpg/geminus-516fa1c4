@@ -2971,12 +2971,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     // CRITICAL: CSS selector #AssetPlusViewer.asset-plus-hide-builtin-toolbar requires BOTH id AND class on the SAME element.
     // DX-classes must also be here so Asset+ Vue runtime finds correct device/theme context.
     freshDiv.className = [
-      'w-full', 'h-full',
       isMobile ? 'dx-device-mobile' : 'dx-device-desktop',
       'dx-device-generic', 'dx-theme-material', 'dx-theme-material-typography',
       'asset-plus-hide-builtin-toolbar'
     ].join(' ');
-    freshDiv.style.cssText = 'width:100%;height:100%;display:flex;flex:1 0 auto;';
+    // flex:1 expands to fill the flex-column container; height:100% as fallback
+    freshDiv.style.cssText = 'width:100%;height:100%;flex:1 1 auto;display:flex;flex-direction:column;';
     container.appendChild(freshDiv);
 
     // Wait 2 rAF + 50ms so the old Vue instance fully releases its DOM bindings
@@ -3629,13 +3629,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             className="w-full h-full"
             style={{
               display: 'flex',
-              flex: '1 0 auto',
+              flexDirection: 'column',
               background: transparentBackground
                 ? 'transparent'
                 : 'radial-gradient(90% 100% at center top, rgb(236, 236, 236), rgb(42, 42, 50))',
-              touchAction: transparentBackground ? 'none' : 'none',
+              touchAction: 'none',
               WebkitTouchCallout: 'none',
               WebkitUserSelect: 'none',
+              userSelect: 'none',
               pointerEvents: transparentBackground ? 'none' : undefined,
             } as React.CSSProperties}
           />
