@@ -1,129 +1,143 @@
 
 
-## Ny funktion: Skapa byggnad med IFC-uppladdning
+## Skapa byggnad med A-modell och IFC-hierarki i Asset+
 
 ### Oversikt
 
-En ny flik "Byggnad" laggs till i Installningar (ApiSettingsModal) dar anvandaren kan:
-
-1. Skapa en ny Fastighet (Complex) + Byggnad i Asset+ med korrekta FMGUID:s
-2. Ladda upp en IFC-fil som konverteras till XKT for 3D-visning
-3. Allt registreras bade i Asset+ och lokala databasen
-
-### Flode (steg for steg)
+Utoka det befintliga byggnadsverktyget sa att hela Asset+-hierarkin skapas korrekt nar en IFC-fil laddas upp:
 
 ```text
-Anvandaren oppnar Installningar -> Ny flik "Byggnad"
+Complex (ObjectType 0) -- Fastighet
   |
-  v
-Steg 1: Grunduppgifter
-  - Fastighetsbeteckning (designation) + namn (commonName) for Complex
-  - Byggnadsbeteckning + namn for Building
-  - Latitude/Longitude (valfritt, for kartan)
-  |
-  v
-Steg 2: Klicka "Skapa i Asset+"
-  - Edge function skapar Complex (ObjectType 0) via AddObjectList
-  - Returnerat FmGuid anvands som parent for Building (ObjectType 1)
-  - Building skapas via samma endpoint
-  - Bada sparas lokalt i assets-tabellen + building_settings
-  |
-  v
-Steg 3: Ladda upp IFC-fil (valfritt)
-  - Filinput accepterar .ifc-filer
-  - Filen konverteras till XKT i webblasaren via xeokit-convert + web-ifc
-  - XKT sparas i xkt-models bucket
-  - Metadata sparas i xkt_models-tabellen
-  |
-  v
-Klart! Byggnaden syns i Portfolio, Navigator och 3D-viewer
+  Building (ObjectType 1) -- Byggnad  
+    |
+    Model (ObjectType 5) -- t.ex. "A-modell"
+      |
+      +-- Level (ObjectType 2) -- Vaningsplan fran IFC (IfcBuildingStorey)
+      +-- Space (ObjectType 3) -- Rum fran IFC (IfcSpace)  
+      +-- Instance (ObjectType 4) -- Objekt (framtida)
+```
+
+### Flode
+
+```text
+1. Anvandaren fyller i fastighets- och byggnadsuppgifter (som idag)
+2. Anvandaren anger ett modellnamn, t.ex. "A-modell" (nytt falt)
+3. Klicka "Skapa i Asset+"
+   -> Complex, Building OCH Model skapas i Asset+ via edge function
+   -> Alla sparas lokalt med korrekta FmGuids
+4. Ladda upp IFC-fil
+   -> Konverteras till XKT (som idag)
+   -> IFC-hierarkin (vaningsplan, rum) parsas fran XKT-modellens metadata
+   -> Vaningsplan och rum skapas i Asset+ via AddObjectList
+   -> Sparas aven lokalt i assets-tabellen
+   -> XKT sparas i storage
 ```
 
 ### Teknisk implementation
 
-#### 1. Ny edge function: `asset-plus-create-building`
+#### 1. Uppdatera edge function `asset-plus-create-building`
 
-En ny dedikerad edge function som hanterar hela hierarki-skapandet (Complex + Building). Den befintliga `asset-plus-create` hanterar bara Instance-objekt.
+Lagg till ett tredje steg: Skapa Model (ObjectType 5) under Building.
 
-Flodet i edge function:
-1. Ta emot: `{ complexDesignation, complexName, buildingDesignation, buildingName }`
-2. Generera FmGuid for bade Complex och Building
-3. Skapa Complex via `AddObjectList` med ObjectType 0, ingen parent
-4. Skapa Building via `AddObjectList` med ObjectType 1, parentFmGuid = Complex FmGuid
-5. Spara bada lokalt i `assets`-tabellen
-6. Skapa en rad i `building_settings` med latitude/longitude
-7. Returnera bada FmGuids
-
-Asset+ API-payload for Complex (fran sync-api.md):
+Asset+ API-payload for Model:
 ```json
 {
   "BimObjectWithParents": [{
-    "BimObject": {
-      "ObjectType": 0,
-      "Designation": "FASTIGHET-01",
-      "CommonName": "Min Fastighet",
-      "APIKey": "<api-key>",
-      "FmGuid": "<genererat-uuid>",
-      "UsedIdentifier": 1
-    }
-  }]
-}
-```
-
-Asset+ API-payload for Building:
-```json
-{
-  "BimObjectWithParents": [{
-    "ParentFmGuid": "<complex-fm-guid>",
+    "ParentFmGuid": "<building-fm-guid>",
     "UsedIdentifier": 1,
     "BimObject": {
-      "ObjectType": 1,
-      "Designation": "BYGGNAD-01",
-      "CommonName": "Min Byggnad",
+      "ObjectType": 5,
+      "Designation": "A-modell",
+      "CommonName": "A-modell",
       "APIKey": "<api-key>",
       "FmGuid": "<genererat-uuid>",
-      "UsedIdentifier": 1
+      "UsedIdentifier": 1,
+      "SourceType": 1
     }
   }]
 }
 ```
 
-#### 2. Ny UI-komponent: `CreateBuildingPanel.tsx`
+`SourceType: 1` = IFC (fran enum i API-schemat).
 
-Placeras i `src/components/settings/CreateBuildingPanel.tsx`. Innehaller:
+Edge function returnerar nu aven `modelFmGuid` i svaret.
 
-- Formulardel med falt for:
-  - Fastighetsbeteckning + namn
-  - Byggnadsbeteckning + namn
-  - Latitude/Longitude (valfritt)
-- "Skapa"-knapp som anropar edge function
-- IFC-uppladdningsdel (visas efter att byggnaden skapats):
-  - Filval (`<input type="file" accept=".ifc">`)
-  - Konverteringslogg som visar progress
-  - Anvander `convertGlbToXkt()` fran `acc-xkt-converter.ts`
-  - Sparar XKT via Supabase Storage + `xkt_models`-tabellen
+Uppdatera aven payloaden att ta emot `modelName` (t.ex. "A-modell") fran frontend.
 
-#### 3. Ny flik i ApiSettingsModal
+#### 2. Ny edge function `asset-plus-create-hierarchy`
 
-Lagg till en ny TabsTrigger "Byggnad" med Building2-ikonen i tabblisten. TabsContent renderar `CreateBuildingPanel`.
+En separat edge function som tar emot parsad IFC-hierarki och skapar objekt i Asset+. Anropas fran frontend efter att IFC parserats.
 
-#### 4. Config.toml
+Payload:
+```json
+{
+  "buildingFmGuid": "...",
+  "modelFmGuid": "...",
+  "levels": [
+    { "fmGuid": "...", "designation": "Plan 01", "commonName": "Vaningsplan 1" }
+  ],
+  "spaces": [
+    { "fmGuid": "...", "designation": "101", "commonName": "Kontor", "levelFmGuid": "..." }
+  ]
+}
+```
 
-Lagg till `[functions.asset-plus-create-building]` med `verify_jwt = false`.
+Logik:
+1. Skapa alla Levels (ObjectType 2) under Building med `AddObjectList`
+2. Skapa alla Spaces (ObjectType 3) under Building med `AddObjectList`
+3. Anvand `UpsertRelationships` for att koppla Spaces till ratt Level
+4. Spara allt lokalt i assets-tabellen
+
+#### 3. Uppdatera `acc-xkt-converter.ts`
+
+Utoka `convertGlbToXkt` (eller skapa ny funktion `convertIfcToXktWithMetadata`) som returnerar bade XKT-datan OCH en lista med extraherade metadataobjekt (floors, rooms) fran `xktModel.metaObjects` efter finalize().
+
+Returformat:
+```typescript
+interface IfcHierarchyResult {
+  xktData: ArrayBuffer;
+  levels: Array<{ id: string; name: string; type: string }>;
+  spaces: Array<{ id: string; name: string; type: string; parentId: string }>;
+}
+```
+
+#### 4. Uppdatera `CreateBuildingPanel.tsx`
+
+Andringar:
+- Lagg till falt for "Modellnamn" (default: "A-modell")
+- Skicka `modelName` till edge function
+- Visa `modelFmGuid` i bekraftelsen
+- Efter IFC-konvertering: extrahera hierarki fran metadata och anropa `asset-plus-create-hierarchy`
+- Visa progress for hierarkiskapandet (t.ex. "Skapar 5 vaningsplan och 42 rum i Asset+...")
+- Hantera aven fallen att ladda upp IFC till befintlig byggnad (valj fran lista)
+
+#### 5. Config.toml
+
+Lagg till `[functions.asset-plus-create-hierarchy]` med `verify_jwt = false`.
 
 ### Filer som skapas/andras
 
 | Fil | Andring |
 |---|---|
-| `supabase/functions/asset-plus-create-building/index.ts` | **NY** - Edge function for att skapa Complex + Building i Asset+ |
-| `src/components/settings/CreateBuildingPanel.tsx` | **NY** - UI-komponent med formular och IFC-uppladdning |
-| `src/components/settings/ApiSettingsModal.tsx` | Lagg till ny flik "Byggnad" med CreateBuildingPanel |
-| `supabase/config.toml` | Lagg till `[functions.asset-plus-create-building]` |
+| `supabase/functions/asset-plus-create-building/index.ts` | Lagg till Model-skapande (ObjectType 5), ta emot modelName |
+| `supabase/functions/asset-plus-create-hierarchy/index.ts` | **NY** - Skapar Levels + Spaces i Asset+ fran parsad IFC-data |
+| `src/services/acc-xkt-converter.ts` | Ny funktion som returnerar bade XKT och extraherad IFC-hierarki |
+| `src/components/settings/CreateBuildingPanel.tsx` | Modellnamn-falt, hierarki-skapande efter IFC-parsning, befintlig byggnad-dropdown |
+| `supabase/config.toml` | Lagg till asset-plus-create-hierarchy |
+
+### Relationshantering i Asset+
+
+Notera fran API-dokumentationen:
+- Levels, Spaces, Instances skapas med Building som `ParentFmGuid` (inte Model)
+- Asset+ tilldelar automatiskt ratt `modelId` till objekten
+- `UpsertRelationships` anvands for att flytta Spaces under ratt Level (om de skapats med Building som parent)
+- Objekten far `createdInModel: false` eftersom de skapas via API (inte fran en BIM-modelluppladdning via Asset+ native)
 
 ### Sakerhetsaspekter
 
-- Edge function anvander `verifyAuth` for att sakerstalla inloggad anvandare
-- Alla Asset+ credentials hamtas fran Supabase secrets (redan konfigurerade)
-- Lokala databasoperationer anvander service role key i edge function
-- Inga nya RLS-policyer behovs -- befintliga policyer pa `assets` och `building_settings` tillater INSERT for autentiserade anvandare
+- Inga nya databastabeller behovs
+- Befintliga RLS-policyer tillater INSERT pa assets och building_settings for autentiserade anvandare
+- Edge functions anvander verifyAuth + service role for databasoperationer
+- Alla Asset+ credentials hamtas fran redan konfigurerade secrets
 
