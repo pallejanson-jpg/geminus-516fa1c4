@@ -2,18 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
-/**
- * Asset+ Create Building Edge Function
- * 
- * Creates a Complex (ObjectType 0) + Building (ObjectType 1) hierarchy in Asset+
- * and stores both locally in the assets table + building_settings.
- * 
- * Payload format follows Asset+ AddObjectList spec:
- * - Complex: no ParentFmGuid, ObjectType 0
- * - Building: ParentFmGuid = Complex FmGuid, ObjectType 1
- */
-
-const ObjectType = { Complex: 0, Building: 1 } as const;
+const ObjectType = { Complex: 0, Building: 1, Model: 5 } as const;
 
 async function getAccessToken(): Promise<string> {
   const keycloakUrl = Deno.env.get("ASSET_PLUS_KEYCLOAK_URL");
@@ -56,18 +45,18 @@ interface CreateBuildingRequest {
   complexName: string;
   buildingDesignation: string;
   buildingName: string;
+  modelName?: string;
   latitude?: number | null;
   longitude?: number | null;
 }
 
 async function addObjectToAssetPlus(
   apiUrl: string,
-  apiKey: string,
   accessToken: string,
   payload: any
 ): Promise<any> {
   const endpoint = `${apiUrl.replace(/\/+$/, "")}/AddObjectList`;
-  
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -78,7 +67,7 @@ async function addObjectToAssetPlus(
   });
 
   const text = await response.text();
-  
+
   if (!response.ok) {
     let errorMsg = `Asset+ API error: ${response.status}`;
     try {
@@ -114,7 +103,6 @@ serve(async (req) => {
   try {
     const body: CreateBuildingRequest = await req.json();
 
-    // Validate required fields
     if (!body.complexDesignation || !body.complexName) {
       return new Response(
         JSON.stringify({ success: false, error: "complexDesignation och complexName krävs" }),
@@ -139,9 +127,10 @@ serve(async (req) => {
       );
     }
 
-    // Generate FMGUIDs
     const complexFmGuid = crypto.randomUUID();
     const buildingFmGuid = crypto.randomUUID();
+    const modelFmGuid = crypto.randomUUID();
+    const modelName = body.modelName || "A-modell";
 
     // Step 1: Create Complex (ObjectType 0)
     console.log(`Creating Complex: ${body.complexDesignation} (${complexFmGuid})`);
@@ -157,8 +146,7 @@ serve(async (req) => {
         },
       }],
     };
-
-    const complexResult = await addObjectToAssetPlus(apiUrl, apiKey, accessToken, complexPayload);
+    const complexResult = await addObjectToAssetPlus(apiUrl, accessToken, complexPayload);
     console.log("Complex created:", JSON.stringify(complexResult).slice(0, 200));
 
     // Step 2: Create Building (ObjectType 1) under Complex
@@ -177,69 +165,83 @@ serve(async (req) => {
         },
       }],
     };
-
-    const buildingResult = await addObjectToAssetPlus(apiUrl, apiKey, accessToken, buildingPayload);
+    const buildingResult = await addObjectToAssetPlus(apiUrl, accessToken, buildingPayload);
     console.log("Building created:", JSON.stringify(buildingResult).slice(0, 200));
 
-    // Step 3: Store locally using service role
+    // Step 3: Create Model (ObjectType 5) under Building
+    console.log(`Creating Model: ${modelName} (${modelFmGuid}) under Building ${buildingFmGuid}`);
+    const modelPayload = {
+      BimObjectWithParents: [{
+        ParentFmGuid: buildingFmGuid,
+        UsedIdentifier: 1,
+        BimObject: {
+          ObjectType: ObjectType.Model,
+          Designation: modelName,
+          CommonName: modelName,
+          APIKey: apiKey,
+          FmGuid: modelFmGuid,
+          UsedIdentifier: 1,
+          SourceType: 1,
+        },
+      }],
+    };
+    const modelResult = await addObjectToAssetPlus(apiUrl, accessToken, modelPayload);
+    console.log("Model created:", JSON.stringify(modelResult).slice(0, 200));
+
+    // Step 4: Store locally using service role
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Insert Complex into assets
-    const { error: complexDbError } = await supabase
-      .from("assets")
-      .upsert({
-        fm_guid: complexFmGuid,
-        name: body.complexDesignation,
-        common_name: body.complexName,
-        category: "Complex",
-        is_local: false,
-        synced_at: new Date().toISOString(),
-      }, { onConflict: "fm_guid" });
-
-    if (complexDbError) {
-      console.warn("Failed to store Complex locally:", complexDbError);
-    }
+    await supabase.from("assets").upsert({
+      fm_guid: complexFmGuid,
+      name: body.complexDesignation,
+      common_name: body.complexName,
+      category: "Complex",
+      is_local: false,
+      synced_at: new Date().toISOString(),
+    }, { onConflict: "fm_guid" });
 
     // Insert Building into assets
-    const { error: buildingDbError } = await supabase
-      .from("assets")
-      .upsert({
-        fm_guid: buildingFmGuid,
-        name: body.buildingDesignation,
-        common_name: body.buildingName,
-        complex_common_name: body.complexName,
-        category: "Building",
-        building_fm_guid: buildingFmGuid,
-        is_local: false,
-        synced_at: new Date().toISOString(),
-      }, { onConflict: "fm_guid" });
+    await supabase.from("assets").upsert({
+      fm_guid: buildingFmGuid,
+      name: body.buildingDesignation,
+      common_name: body.buildingName,
+      complex_common_name: body.complexName,
+      category: "Building",
+      building_fm_guid: buildingFmGuid,
+      is_local: false,
+      synced_at: new Date().toISOString(),
+    }, { onConflict: "fm_guid" });
 
-    if (buildingDbError) {
-      console.warn("Failed to store Building locally:", buildingDbError);
-    }
+    // Insert Model into assets
+    await supabase.from("assets").upsert({
+      fm_guid: modelFmGuid,
+      name: modelName,
+      common_name: modelName,
+      category: "Model",
+      building_fm_guid: buildingFmGuid,
+      is_local: false,
+      synced_at: new Date().toISOString(),
+    }, { onConflict: "fm_guid" });
 
     // Create building_settings entry
-    const { error: settingsError } = await supabase
-      .from("building_settings")
-      .upsert({
-        fm_guid: buildingFmGuid,
-        latitude: body.latitude ?? null,
-        longitude: body.longitude ?? null,
-        is_favorite: true,
-      }, { onConflict: "fm_guid" });
-
-    if (settingsError) {
-      console.warn("Failed to create building_settings:", settingsError);
-    }
+    await supabase.from("building_settings").upsert({
+      fm_guid: buildingFmGuid,
+      latitude: body.latitude ?? null,
+      longitude: body.longitude ?? null,
+      is_favorite: true,
+    }, { onConflict: "fm_guid" });
 
     return new Response(
       JSON.stringify({
         success: true,
         complexFmGuid,
         buildingFmGuid,
-        message: `Fastighet "${body.complexName}" och byggnad "${body.buildingName}" skapade i Asset+`,
+        modelFmGuid,
+        modelName,
+        message: `Fastighet "${body.complexName}", byggnad "${body.buildingName}" och modell "${modelName}" skapade i Asset+`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
