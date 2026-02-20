@@ -22,7 +22,7 @@ import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
-import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
+const AssetPlusViewer = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
 import { useSenslincBuildingData } from '@/hooks/useSenslincData';
 import { cn } from '@/lib/utils';
 import RoomSensorDetailSheet from '@/components/insights/RoomSensorDetailSheet';
@@ -108,16 +108,28 @@ interface InsightsInlineViewerProps {
 const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, insightsColorMode, insightsColorMap, onFullscreen, expanded, onToggleExpand }) => {
     return (
         <div className={`${expanded ? 'w-[700px] h-[700px]' : 'w-[400px] h-[500px]'} shrink-0 sticky top-2 rounded-lg border border-border overflow-hidden relative group transition-all duration-300`}>
-            {/* Interactive viewer */}
-            <div className="absolute inset-0">
-                <AssetPlusViewer
-                    fmGuid={fmGuid}
-                    suppressOverlay
-                    insightsColorMode={insightsColorMode}
-                    insightsColorMap={insightsColorMap}
-                    forceXray={!!insightsColorMode}
-                />
-            </div>
+            {/* Only mount the 3D viewer when user has interacted (insightsColorMode is set) */}
+            {insightsColorMode ? (
+                <div className="absolute inset-0">
+                    <React.Suspense fallback={
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <AssetPlusViewer
+                            fmGuid={fmGuid}
+                            suppressOverlay
+                            insightsColorMode={insightsColorMode}
+                            insightsColorMap={insightsColorMap}
+                            forceXray={!!insightsColorMode}
+                        />
+                    </React.Suspense>
+                </div>
+            ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
+                    <p className="text-xs text-muted-foreground/60 text-center px-4">Klicka på ett diagram för att visa i 3D</p>
+                </div>
+            )}
             {/* Toolbar buttons overlay */}
             <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button
@@ -139,12 +151,6 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
             </div>
-            {/* Placeholder text when no mode is active */}
-            {!insightsColorMode && (
-                <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
-                    <p className="text-xs text-muted-foreground/60 text-center px-4">Klicka på ett diagram för att visa i 3D</p>
-                </div>
-            )}
         </div>
     );
 };
@@ -1101,9 +1107,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 title={`Visa ${level.count} larm för ${level.levelName}`}
                                                                 onClick={() => {
                                                                     const levelAlarms = alarmList
-                                                                        .filter((a: any) => a.level_fm_guid === level.levelGuid && a.coordinate_x != null)
+                                                                        .filter((a: any) => a.level_fm_guid === level.levelGuid)
                                                                         .slice(0, 50)
-                                                                        .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
+                                                                        .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
                                                                     window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
                                                                 }}
                                                             >
@@ -1176,9 +1182,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             className="h-7 w-7 text-primary hover:bg-primary/10"
                                                                             title="Visa annotation och zooma till larm"
                                                                             onClick={() => {
-                                                                                const alarms = alarm.coordinate_x != null
-                                                                                    ? [{ fmGuid: alarm.fm_guid, x: alarm.coordinate_x, y: alarm.coordinate_y, z: alarm.coordinate_z }]
-                                                                                    : [];
+                                                                                const alarms = [{ fmGuid: alarm.fm_guid, roomFmGuid: alarm.in_room_fm_guid }];
                                                                                 // Always dispatch event (works in both drawer and desktop inline viewer)
                                                                                 window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
                                                                             }}
