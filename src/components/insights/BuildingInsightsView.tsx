@@ -986,11 +986,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             className="ml-auto gap-1.5"
                                             onClick={() => {
                                                 // "Visa alla i 3D" — dispatch alarm annotations for the 50 latest
-                                                const alarmsWithCoords = alarmList
-                                                    .filter((a: any) => a.coordinate_x != null && a.coordinate_y != null && a.coordinate_z != null)
+                                                const alarmsForViewer = alarmList
                                                     .slice(0, 50)
-                                                    .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
-                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsWithCoords } }));
+                                                    .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
+                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsForViewer } }));
                                             }}
                                         >
                                             <Eye className="h-3.5 w-3.5" />

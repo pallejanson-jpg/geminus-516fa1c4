@@ -3307,17 +3307,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
           // Build A-model filter — only allow models whose name starts with 'A'
           if (nameMap.size > 0) {
+            const aModelIdsOriginal = new Set<string>();
             const aModelIds = new Set<string>();
             nameMap.forEach((name, id) => {
               if (name.toLowerCase().startsWith('a')) {
+                aModelIdsOriginal.add(id);
                 aModelIds.add(id);
                 aModelIds.add(id.toLowerCase());
               }
             });
 
-            if (aModelIds.size > 0 && aModelIds.size < nameMap.size * 2) {
+            const totalUniqueModels = new Set([...nameMap.keys()].map(k => k.toLowerCase())).size;
+            if (aModelIdsOriginal.size > 0 && aModelIdsOriginal.size < totalUniqueModels) {
               allowedModelIdsRef.current = aModelIds;
-              console.log(`XKT filter: Initial load restricted to ${aModelIds.size / 2} A-model(s) out of ${nameMap.size / 2}`);
+              console.log(`XKT filter: Initial load restricted to ${aModelIdsOriginal.size} A-model(s) out of ${totalUniqueModels}`);
             }
           } else {
             console.debug('XKT filter: No model names resolved — loading all models');
