@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
 import { 
@@ -641,7 +641,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                             width={isMobile ? 60 : 80}
                                                             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                                         />
-                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                         <Bar dataKey="kwhPerSqm" name="kWh/m²" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                             {energyByFloor.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.color} onClick={() => {
@@ -688,7 +687,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                             }} />
                                                         ))}
                                                     </Pie>
-                                                    {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                     {!isMobile && <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />}
                                                 </PieChart>
                                             </ResponsiveContainer>
@@ -712,7 +710,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                                 <XAxis dataKey="month" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                                                {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                 <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                 <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
                                                 <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
@@ -754,7 +751,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 }} />
                                                             ))}
                                                         </Pie>
-                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
                                                         <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
@@ -950,7 +946,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 }} />
                                                             ))}
                                                         </Pie>
-                                                        {!isMobile && <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />}
+                                                        
                                                         <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
@@ -1076,7 +1072,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                                                 <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                                                                 <YAxis dataKey="levelName" type="category" width={isMobile ? 60 : 100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }} />
-                                                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`${v} larm`]} />
+                                                                
                                                                 <Bar dataKey="count" name="Larm" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                                     {alarmsByLevel.map((entry, index) => (
                                                                         <Cell

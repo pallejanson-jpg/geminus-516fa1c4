@@ -10,6 +10,7 @@ interface ClusterMarkerProps {
   totalPoints: number;
   onClick: () => void;
   isSelected?: boolean;
+  compact?: boolean;
 }
 
 const ClusterMarker: React.FC<ClusterMarkerProps> = ({
@@ -19,9 +20,12 @@ const ClusterMarker: React.FC<ClusterMarkerProps> = ({
   totalPoints,
   onClick,
   isSelected,
+  compact,
 }) => {
-  // Scale the marker size based on point count
-  const size = Math.min(60, Math.max(36, 36 + (pointCount / totalPoints) * 40));
+  // Scale the marker size based on point count — smaller in compact mode
+  const baseMin = compact ? 24 : 36;
+  const baseMax = compact ? 40 : 60;
+  const size = Math.min(baseMax, Math.max(baseMin, baseMin + (pointCount / totalPoints) * (compact ? 20 : 40)));
 
   return (
     <Marker longitude={longitude} latitude={latitude} anchor="center">
@@ -39,7 +43,7 @@ const ClusterMarker: React.FC<ClusterMarkerProps> = ({
         style={{
           width: size,
           height: size,
-          fontSize: size > 40 ? 14 : 12,
+          fontSize: compact ? 10 : (size > 40 ? 14 : 12),
         }}
       >
         {pointCount}
@@ -55,6 +59,7 @@ interface SingleMarkerProps {
   onClick: () => void;
   isSelected?: boolean;
   color?: string;
+  compact?: boolean;
 }
 
 const SingleMarker: React.FC<SingleMarkerProps> = ({
@@ -64,7 +69,9 @@ const SingleMarker: React.FC<SingleMarkerProps> = ({
   onClick,
   isSelected,
   color,
+  compact,
 }) => {
+  const iconSize = compact ? 12 : 16;
   return (
     <Marker longitude={longitude} latitude={latitude} anchor="bottom">
       <div
@@ -73,7 +80,8 @@ const SingleMarker: React.FC<SingleMarkerProps> = ({
           onClick();
         }}
         className={cn(
-          "p-2 rounded-full cursor-pointer transition-all shadow-lg",
+          "rounded-full cursor-pointer transition-all shadow-lg",
+          compact ? "p-1" : "p-2",
           !color && (isSelected
             ? "bg-primary scale-125"
             : "bg-primary/80 hover:bg-primary hover:scale-110"),
@@ -82,7 +90,7 @@ const SingleMarker: React.FC<SingleMarkerProps> = ({
         style={color ? { backgroundColor: color } : undefined}
         title={name}
       >
-        <Building2 size={16} className="text-white" />
+        <Building2 size={iconSize} className="text-white" />
       </div>
     </Marker>
   );
