@@ -66,12 +66,8 @@ export function useRoomLabelConfigs() {
         setActiveConfigId(defaultConfig.id);
       }
     } catch (error: any) {
-      console.error('Failed to fetch room label configs:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Kunde inte hämta etikettkonfigurationer',
-        description: error.message,
-      });
+      console.debug('Failed to fetch room label configs:', error?.message);
+      // Silently fail — don't show toast for this non-critical feature
     } finally {
       setLoading(false);
     }
