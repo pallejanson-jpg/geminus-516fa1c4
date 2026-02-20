@@ -75,7 +75,7 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
     };
 
     return (
-        <div className="p-2 sm:p-3 md:p-4 lg:p-6">
+        <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4">
             {/* Page Header with back button */}
             <div className="mb-4 sm:mb-6 flex items-center gap-3">
                 <Button
@@ -102,19 +102,19 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                         <div className="overflow-x-auto -mx-2 px-2 pb-1 mb-4 sm:mb-6">
                         <TabsList className="inline-flex w-max min-w-full sm:w-full sm:min-w-0 h-auto p-0.5 sm:p-1 gap-0.5 sm:gap-1">
-                                <TabsTrigger value="performance" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                <TabsTrigger value="performance" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Performance
                                 </TabsTrigger>
-                                <TabsTrigger value="facility" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                <TabsTrigger value="facility" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     FM
                                 </TabsTrigger>
-                                <TabsTrigger value="space" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                <TabsTrigger value="space" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Space
                                 </TabsTrigger>
-                                <TabsTrigger value="asset" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                <TabsTrigger value="asset" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Asset
                                 </TabsTrigger>
-                                <TabsTrigger value="portfolio" className="text-[10px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
+                                <TabsTrigger value="portfolio" className="text-[11px] sm:text-xs md:text-sm whitespace-nowrap px-2 sm:px-3 py-1.5 sm:py-2">
                                     Portfolio
                                 </TabsTrigger>
                             </TabsList>
@@ -159,7 +159,7 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                                 />
                             </Suspense>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+                        <p className="text-[11px] sm:text-xs text-muted-foreground mt-1.5 text-center">
                             Markeringar färgas efter aktiv tab ({activeTab})
                         </p>
                     </div>

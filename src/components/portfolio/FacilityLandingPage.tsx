@@ -302,7 +302,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
-        <div className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 pb-24">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24">
           {/* Header */}
           <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white">
             <div className="flex-1 min-w-0">
@@ -354,17 +354,17 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm">
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Name</label>
+                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">
+                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">
                       {isBuilding ? 'Address' : 'Designation'}
                     </label>
                     <p className="font-medium truncate">{subTitle}</p>
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Category</label>
+                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Category</label>
                     <p className="font-medium truncate">{facility.category || '-'}</p>
                   </div>
                 </div>
@@ -401,7 +401,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] sm:text-xs text-muted-foreground">
                         Used for 360° viewer integration
                       </p>
                     </div>
@@ -419,7 +419,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           {settings?.isFavorite ? 'In Favorites' : 'Add to Favorites'}
                         </Button>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] sm:text-xs text-muted-foreground">
                         Favorite buildings appear on the home landing page
                       </p>
                     </div>
@@ -488,7 +488,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                       
                       <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2">
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-[11px] sm:text-xs text-muted-foreground">
                           Byggnadens orientering relativt norr
                         </p>
                         <Button 
@@ -547,7 +547,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                     )}
                     
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[11px] sm:text-xs text-muted-foreground">
                       Visas som bakgrundsbild på byggnadens landningssida
                     </p>
                     
