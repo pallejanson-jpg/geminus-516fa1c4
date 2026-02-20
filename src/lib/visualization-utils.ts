@@ -2,7 +2,7 @@
  * Visualization utilities for room color-coding based on sensor data
  */
 
-export type VisualizationType = 'temperature' | 'co2' | 'humidity' | 'occupancy' | 'area' | 'none';
+export type VisualizationType = 'temperature' | 'co2' | 'humidity' | 'occupancy' | 'area' | 'light' | 'none';
 
 export interface ColorStop {
   value: number;
@@ -80,6 +80,21 @@ export const VISUALIZATION_CONFIGS: Record<VisualizationType, VisualizationConfi
     ],
     min: 0,
     max: 100,
+  },
+  light: {
+    type: 'light',
+    label: 'Belysning',
+    unit: 'lux',
+    colorStops: [
+      { value: 0, color: [30, 30, 30] },       // Very dark
+      { value: 50, color: [100, 100, 100] },    // Dim
+      { value: 200, color: [234, 179, 8] },     // Yellow - moderate
+      { value: 500, color: [250, 204, 21] },    // Bright yellow
+      { value: 1000, color: [253, 224, 71] },   // Light yellow
+      { value: 2000, color: [254, 249, 195] },  // Very bright
+    ],
+    min: 0,
+    max: 2000,
   },
   area: {
     type: 'area',
@@ -234,6 +249,7 @@ export interface RoomSensorData {
   co2?: number | null;
   humidity?: number | null;
   occupancy?: number | null;
+  light?: number | null;
   area?: number | null;
 }
 

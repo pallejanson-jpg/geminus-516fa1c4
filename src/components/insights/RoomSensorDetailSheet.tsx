@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap, ExternalLink, Thermometer, Wind, Droplets, Users, Wifi, WifiOff } from 'lucide-react';
+import { Loader2, Zap, ExternalLink, Thermometer, Wind, Droplets, Users, Wifi, WifiOff, Sun, Info, Building2 } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { useSenslincData } from '@/hooks/useSenslincData';
-import { VISUALIZATION_CONFIGS, getVisualizationColor, rgbToHex } from '@/lib/visualization-utils';
+import { VISUALIZATION_CONFIGS, getVisualizationColor, rgbToHex, type VisualizationType } from '@/lib/visualization-utils';
 import { cn } from '@/lib/utils';
 
 interface RoomSensorDetailSheetProps {
@@ -15,6 +15,76 @@ interface RoomSensorDetailSheetProps {
   onClose: () => void;
   roomFmGuid: string | null;
   roomName?: string;
+}
+
+// ── Air Quality Score calculation ──
+function calculateAirQualityScore(current: { temperature: number | null; co2: number | null; humidity: number | null }): { score: number; label: string; color: string } {
+  let total = 0;
+  let count = 0;
+
+  // Temperature: ideal 20-22, acceptable 18-24
+  if (current.temperature !== null) {
+    const t = current.temperature;
+    if (t >= 20 && t <= 22) total += 100;
+    else if (t >= 18 && t <= 24) total += 70;
+    else if (t >= 16 && t <= 26) total += 40;
+    else total += 10;
+    count++;
+  }
+
+  // CO2: ideal <600, acceptable <1000
+  if (current.co2 !== null) {
+    const c = current.co2;
+    if (c <= 600) total += 100;
+    else if (c <= 800) total += 80;
+    else if (c <= 1000) total += 60;
+    else if (c <= 1500) total += 30;
+    else total += 10;
+    count++;
+  }
+
+  // Humidity: ideal 40-60, acceptable 30-70
+  if (current.humidity !== null) {
+    const h = current.humidity;
+    if (h >= 40 && h <= 60) total += 100;
+    else if (h >= 30 && h <= 70) total += 70;
+    else total += 30;
+    count++;
+  }
+
+  if (count === 0) return { score: 0, label: 'Okänd', color: 'hsl(var(--muted-foreground))' };
+
+  const score = Math.round(total / count);
+  if (score >= 80) return { score, label: 'Utmärkt', color: '#22c55e' };
+  if (score >= 60) return { score, label: 'Bra', color: '#84cc16' };
+  if (score >= 40) return { score, label: 'Acceptabelt', color: '#eab308' };
+  return { score, label: 'Dålig', color: '#ef4444' };
+}
+
+// ── Comfort explanation ──
+function getComfortExplanation(current: { temperature: number | null; co2: number | null; humidity: number | null; light: number | null }): string[] {
+  const tips: string[] = [];
+  if (current.temperature !== null) {
+    if (current.temperature < 18) tips.push('🥶 Temperaturen är under komfortgränsen (18°C). Överväg att höja värmen.');
+    else if (current.temperature > 24) tips.push('🌡️ Temperaturen är hög (>24°C). Ventilation eller kylning rekommenderas.');
+    else tips.push('✅ Temperaturen ligger inom komfortzonen (18–24°C).');
+  }
+  if (current.co2 !== null) {
+    if (current.co2 > 1000) tips.push('⚠️ CO₂-nivån är hög (>1000 ppm). Öka ventilationen för bättre luftkvalitet.');
+    else if (current.co2 > 800) tips.push('🔔 CO₂-nivån börjar bli hög. Överväg att vädra.');
+    else tips.push('✅ CO₂-nivån är god (<800 ppm).');
+  }
+  if (current.humidity !== null) {
+    if (current.humidity < 30) tips.push('💨 Luftfuktigheten är låg (<30%). Kan orsaka torrhet.');
+    else if (current.humidity > 70) tips.push('💧 Luftfuktigheten är hög (>70%). Risk för mögel.');
+    else tips.push('✅ Luftfuktigheten är inom komfortzonen (30–70%).');
+  }
+  if (current.light !== null) {
+    if (current.light < 100) tips.push('🌙 Belysningen är svag (<100 lux). Kan påverka produktivitet.');
+    else if (current.light > 1000) tips.push('☀️ Starkt ljus (>1000 lux). Kontrollera bländning.');
+    else tips.push('✅ Belysningen är på en komfortabel nivå.');
+  }
+  return tips;
 }
 
 // ── Status badge ──
@@ -42,12 +112,23 @@ interface GaugeCardProps {
   value: number | null;
   unit: string;
   icon: React.ElementType;
-  type: 'temperature' | 'co2' | 'humidity' | 'occupancy';
+  type: VisualizationType;
   isLoading?: boolean;
 }
 
 const GaugeCard: React.FC<GaugeCardProps> = ({ label, value, unit, icon: Icon, type, isLoading }) => {
   const config = VISUALIZATION_CONFIGS[type];
+  if (!config || config.colorStops.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-3 flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Icon className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <div className="text-lg text-muted-foreground">—</div>
+      </div>
+    );
+  }
   const rgb = value !== null ? getVisualizationColor(value, type) : null;
   const hexColor = rgb ? rgbToHex(rgb) : undefined;
   const pct = value !== null
@@ -96,19 +177,25 @@ const GaugeCard: React.FC<GaugeCardProps> = ({ label, value, unit, icon: Icon, t
 };
 
 // ── Sensor sparkline chart ──
-interface SensorChartProps {
-  timeSeries: Array<{ date: string; temperature: number | null; co2: number | null; humidity: number | null; occupancy: number | null }>;
+const SensorChart: React.FC<{
+  timeSeries: Array<{ date: string; temperature: number | null; co2: number | null; humidity: number | null; occupancy: number | null; light: number | null }>;
   isLive: boolean;
-}
-
-const SensorChart: React.FC<SensorChartProps> = ({ timeSeries, isLive }) => {
-  const [activeLines, setActiveLines] = useState({ temperature: true, co2: true, humidity: false });
-
-  const lines = [
-    { key: 'temperature' as const, label: 'Temp (°C)',  color: '#22c55e' },
-    { key: 'co2'         as const, label: 'CO₂ (ppm)', color: '#60a5fa' },
-    { key: 'humidity'    as const, label: 'Fukt (%)',   color: '#a78bfa' },
+  availableFields: string[];
+}> = ({ timeSeries, isLive, availableFields }) => {
+  const allLines = [
+    { key: 'temperature' as const, label: 'Temp (°C)',    color: '#22c55e' },
+    { key: 'co2'         as const, label: 'CO₂ (ppm)',   color: '#60a5fa' },
+    { key: 'humidity'    as const, label: 'Fukt (%)',     color: '#a78bfa' },
+    { key: 'light'       as const, label: 'Ljus (lux)',   color: '#fbbf24' },
+    { key: 'occupancy'   as const, label: 'Belägg. (%)', color: '#f97316' },
   ];
+
+  const lines = allLines.filter(l => availableFields.includes(l.key));
+  const [activeLines, setActiveLines] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    lines.forEach((l, i) => { init[l.key] = i < 3; }); // show first 3 by default
+    return init;
+  });
 
   return (
     <div className="space-y-2">
@@ -176,8 +263,19 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
 }) => {
   const { data, isLoading, isLive, error } = useSenslincData(open ? roomFmGuid : null);
 
-  const displayName = data?.machineName || roomName || 'Rum';
+  const displayName = roomName || data?.machineName || 'Rum';
+  const machineLabel = data?.machineLabel || data?.machineName;
   const dashboardUrl = data?.dashboardUrl || '';
+
+  const airQuality = useMemo(() => {
+    if (!data?.current) return null;
+    return calculateAirQualityScore(data.current);
+  }, [data?.current]);
+
+  const comfortTips = useMemo(() => {
+    if (!data?.current) return [];
+    return getComfortExplanation(data.current);
+  }, [data?.current]);
 
   return (
     <Sheet open={open} onOpenChange={open => !open && onClose()}>
@@ -195,7 +293,10 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               <SheetHeader className="p-0 text-left">
                 <SheetTitle className="text-sm font-semibold truncate leading-tight">{displayName}</SheetTitle>
               </SheetHeader>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {machineLabel && machineLabel !== displayName && (
+                  <span className="text-xs text-muted-foreground">{machineLabel}</span>
+                )}
                 <span className="text-xs text-muted-foreground">Senslinc IoT</span>
                 {data?.machinePk ? (
                   <span className="text-xs text-muted-foreground">· #{data.machinePk}</span>
@@ -221,7 +322,32 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Gauge cards 2×2 */}
+          {/* Air Quality Score */}
+          {!isLoading && airQuality && airQuality.score > 0 && (
+            <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-4">
+              <div
+                className="h-16 w-16 rounded-full flex items-center justify-center text-2xl font-bold shrink-0"
+                style={{
+                  background: `conic-gradient(${airQuality.color} ${airQuality.score * 3.6}deg, hsl(var(--muted)) 0deg)`,
+                  color: airQuality.color,
+                }}
+              >
+                <div className="h-12 w-12 rounded-full bg-card flex items-center justify-center">
+                  {airQuality.score}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: airQuality.color }}>
+                  {airQuality.label}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Air Quality Score baserat på temperatur, CO₂ och luftfuktighet
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Gauge cards – 5 cards in responsive grid */}
           <div className="grid grid-cols-2 gap-2.5">
             <GaugeCard
               label="Temperatur"
@@ -248,6 +374,14 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
               isLoading={isLoading}
             />
             <GaugeCard
+              label="Belysning"
+              value={data?.current.light ?? null}
+              unit="lux"
+              icon={Sun}
+              type="light"
+              isLoading={isLoading}
+            />
+            <GaugeCard
               label="Beläggning"
               value={data?.current.occupancy ?? null}
               unit="%"
@@ -265,9 +399,47 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
             ) : data ? (
-              <SensorChart timeSeries={data.timeSeries} isLive={isLive} />
+              <SensorChart
+                timeSeries={data.timeSeries}
+                isLive={isLive}
+                availableFields={data.availableFields}
+              />
             ) : null}
           </div>
+
+          {/* Comfort Explanation */}
+          {!isLoading && comfortTips.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Info className="h-3.5 w-3.5" />
+                Comfort Explanation
+              </div>
+              <div className="space-y-1.5">
+                {comfortTips.map((tip, i) => (
+                  <p key={i} className="text-xs text-foreground/80 leading-relaxed">{tip}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Machine info */}
+          {!isLoading && data && (data.siteName || data.lineName) && (
+            <div className="rounded-xl border border-border bg-card p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5" />
+                Maskininfo
+              </div>
+              {data.siteName && (
+                <p className="text-xs text-foreground/70">Site: {data.siteName}</p>
+              )}
+              {data.lineName && (
+                <p className="text-xs text-foreground/70">Linje: {data.lineName}</p>
+              )}
+              {data.machinePk > 0 && (
+                <p className="text-xs text-foreground/70">Maskin PK: {data.machinePk}</p>
+              )}
+            </div>
+          )}
 
           {/* Status row */}
           {!isLoading && error && (

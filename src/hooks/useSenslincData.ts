@@ -8,6 +8,7 @@ export interface SenslincTimePoint {
   co2: number | null;
   humidity: number | null;
   occupancy: number | null;
+  light: number | null;
 }
 
 export interface SenslincCurrentValues {
@@ -15,11 +16,15 @@ export interface SenslincCurrentValues {
   co2: number | null;
   humidity: number | null;
   occupancy: number | null;
+  light: number | null;
 }
 
 export interface SenslincMachineData {
   machinePk: number;
   machineName: string;
+  machineLabel?: string;
+  siteName?: string;
+  lineName?: string;
   dashboardUrl: string;
   current: SenslincCurrentValues;
   timeSeries: SenslincTimePoint[];
@@ -35,7 +40,52 @@ function parseTimeSeries(esData: any): SenslincTimePoint[] {
     co2: bucket.avg_co2?.value ?? null,
     humidity: bucket.avg_humidity?.value ?? null,
     occupancy: bucket.avg_occupancy?.value ?? null,
+    light: bucket.avg_light?.value ?? null,
   }));
+}
+
+// Parse /api/machines/{pk}/data/ response into time series
+function parseMachineData(dataRows: any[]): SenslincTimePoint[] {
+  if (!Array.isArray(dataRows) || dataRows.length === 0) return [];
+
+  // Group by day
+  const byDay = new Map<string, { temps: number[]; co2s: number[]; hums: number[]; occs: number[]; lights: number[] }>();
+
+  for (const row of dataRows) {
+    const ts = row.ts_beg || row.timestamp || row.date;
+    if (!ts) continue;
+    const dayKey = typeof ts === 'string' ? ts.substring(0, 10) : new Date(ts).toISOString().substring(0, 10);
+
+    if (!byDay.has(dayKey)) {
+      byDay.set(dayKey, { temps: [], co2s: [], hums: [], occs: [], lights: [] });
+    }
+    const bucket = byDay.get(dayKey)!;
+
+    const temp = row.temperature_mean ?? row.temperature ?? row.temp;
+    const co2 = row.co2_mean ?? row.co2;
+    const hum = row.humidity_mean ?? row.humidity;
+    const occ = row.occupation_mean ?? row.occupancy ?? row.occupation;
+    const light = row.light_mean ?? row.light;
+
+    if (typeof temp === 'number') bucket.temps.push(temp);
+    if (typeof co2 === 'number') bucket.co2s.push(co2);
+    if (typeof hum === 'number') bucket.hums.push(hum);
+    if (typeof occ === 'number') bucket.occs.push(occ);
+    if (typeof light === 'number') bucket.lights.push(light);
+  }
+
+  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+  return Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, b]) => ({
+      date: day,
+      temperature: avg(b.temps),
+      co2: avg(b.co2s),
+      humidity: avg(b.hums),
+      occupancy: avg(b.occs),
+      light: avg(b.lights),
+    }));
 }
 
 // Derive current values as the latest non-null reading from time series
@@ -43,22 +93,24 @@ function deriveCurrentValues(timeSeries: SenslincTimePoint[], latestValues: any)
   // If the machine has latest_values directly, prefer those
   if (latestValues) {
     return {
-      temperature: latestValues.temperature ?? null,
-      co2: latestValues.co2 ?? null,
-      humidity: latestValues.humidity ?? null,
-      occupancy: latestValues.occupancy ?? null,
+      temperature: latestValues.temperature_mean ?? latestValues.temperature ?? null,
+      co2: latestValues.co2_mean ?? latestValues.co2 ?? null,
+      humidity: latestValues.humidity_mean ?? latestValues.humidity ?? null,
+      occupancy: latestValues.occupation_mean ?? latestValues.occupancy ?? latestValues.occupation ?? null,
+      light: latestValues.light_mean ?? latestValues.light ?? null,
     };
   }
 
   // Otherwise use the last non-null entry from time series
-  const result: SenslincCurrentValues = { temperature: null, co2: null, humidity: null, occupancy: null };
+  const result: SenslincCurrentValues = { temperature: null, co2: null, humidity: null, occupancy: null, light: null };
   for (let i = timeSeries.length - 1; i >= 0; i--) {
     const pt = timeSeries[i];
     if (result.temperature === null && pt.temperature !== null) result.temperature = pt.temperature;
     if (result.co2 === null && pt.co2 !== null) result.co2 = pt.co2;
     if (result.humidity === null && pt.humidity !== null) result.humidity = pt.humidity;
     if (result.occupancy === null && pt.occupancy !== null) result.occupancy = pt.occupancy;
-    if (result.temperature !== null && result.co2 !== null && result.humidity !== null && result.occupancy !== null) break;
+    if (result.light === null && pt.light !== null) result.light = pt.light;
+    if (result.temperature !== null && result.co2 !== null && result.humidity !== null && result.occupancy !== null && result.light !== null) break;
   }
   return result;
 }
@@ -71,6 +123,7 @@ function detectAvailableFields(timeSeries: SenslincTimePoint[], properties: any[
     if (pt.co2 !== null) fromTimeSeries.add('co2');
     if (pt.humidity !== null) fromTimeSeries.add('humidity');
     if (pt.occupancy !== null) fromTimeSeries.add('occupancy');
+    if (pt.light !== null) fromTimeSeries.add('light');
   });
 
   // If time series is empty, look at property names from API
@@ -80,7 +133,8 @@ function detectAvailableFields(timeSeries: SenslincTimePoint[], properties: any[
       if (name.includes('temp')) fromTimeSeries.add('temperature');
       if (name.includes('co2')) fromTimeSeries.add('co2');
       if (name.includes('hum')) fromTimeSeries.add('humidity');
-      if (name.includes('occup')) fromTimeSeries.add('occupancy');
+      if (name.includes('occup') || name.includes('occupation')) fromTimeSeries.add('occupancy');
+      if (name.includes('light') || name.includes('lux')) fromTimeSeries.add('light');
     });
   }
 
@@ -102,6 +156,7 @@ function generateMockTimeSeries(fmGuid: string, days = 7): SenslincTimePoint[] {
       co2: 400 + seed * 800,
       humidity: 30 + seed * 40,
       occupancy: Math.round(seed * 100),
+      light: 50 + seed * 800,
     });
   }
   return pts;
@@ -148,7 +203,6 @@ export function useSenslincData(fmGuid: string | null | undefined) {
             });
             if (urlData?.success && urlData.data?.dashboardUrl) {
               siteDashboardUrl = urlData.data.dashboardUrl;
-              console.log('[useSenslincData] Found site/line dashboard URL via fallback:', siteDashboardUrl);
             }
           } catch (e) {
             console.debug('[useSenslincData] Dashboard URL fallback failed:', e);
@@ -161,23 +215,38 @@ export function useSenslincData(fmGuid: string | null | undefined) {
             dashboardUrl: siteDashboardUrl,
             current: deriveCurrentValues(mockTs, null),
             timeSeries: mockTs,
-            availableFields: ['temperature', 'co2', 'humidity'],
+            availableFields: ['temperature', 'co2', 'humidity', 'light'],
           });
           setIsLive(false);
           setError(fnError?.message ?? result?.error ?? 'Senslinc not available');
         } else {
-          const { machine, dashboardUrl, properties, timeSeries: esData } = result.data;
-          const timeSeries = parseTimeSeries(esData);
-          const availableFields = detectAvailableFields(timeSeries, properties);
+          const { machine, dashboardUrl, properties, timeSeries: esData, machineData } = result.data;
 
+          // Parse time series from ES or from /api/machines/{pk}/data/
+          let timeSeries = parseTimeSeries(esData);
+          if (timeSeries.length === 0 && Array.isArray(machineData) && machineData.length > 0) {
+            timeSeries = parseMachineData(machineData);
+            console.log('[useSenslincData] Parsed machineData rows:', timeSeries.length);
+          }
+
+          const availableFields = detectAvailableFields(timeSeries, properties);
           const finalTimeSeries = timeSeries.length > 0 ? timeSeries : generateMockTimeSeries(fmGuid);
-          const finalFields = availableFields.length > 0 ? availableFields : ['temperature', 'co2', 'humidity'];
+          const finalFields = availableFields.length > 0 ? availableFields : ['temperature', 'co2', 'humidity', 'light'];
+
+          // Derive current values from machineData latest row or machine.latest_values
+          let latestVals = machine.latest_values;
+          if (!latestVals && Array.isArray(machineData) && machineData.length > 0) {
+            latestVals = machineData[machineData.length - 1];
+          }
 
           setData({
             machinePk: machine.pk,
             machineName: machine.name || fmGuid,
+            machineLabel: machine.label || machine.name,
+            siteName: machine.site_name || undefined,
+            lineName: machine.line_name || undefined,
             dashboardUrl: dashboardUrl || '',
-            current: deriveCurrentValues(timeSeries, machine.latest_values),
+            current: deriveCurrentValues(timeSeries, latestVals),
             timeSeries: finalTimeSeries,
             availableFields: finalFields,
           });
@@ -193,7 +262,7 @@ export function useSenslincData(fmGuid: string | null | undefined) {
           dashboardUrl: '',
           current: deriveCurrentValues(mockTs, null),
           timeSeries: mockTs,
-          availableFields: ['temperature', 'co2', 'humidity'],
+          availableFields: ['temperature', 'co2', 'humidity', 'light'],
         });
         setIsLive(false);
         setError(err.message);
