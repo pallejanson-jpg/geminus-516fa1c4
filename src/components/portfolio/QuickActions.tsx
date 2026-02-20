@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Facility } from '@/lib/types';
 
 export interface InventoryPrefill {
@@ -63,359 +62,202 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const canAddAsset = isStorey || isSpace;
 
   // Availability flags for visualization buttons
-  const has3D = has3DModels !== false; // default true (loading/unknown)
+  const has3D = has3DModels !== false;
   const has360 = !!ivionSiteId;
   const hasSplit = has3D && has360;
-  const has2D = hasFmAccess !== false; // default true (loading/unknown)
+  const has2D = hasFmAccess !== false;
 
   const disabledClass = 'opacity-40 cursor-not-allowed';
-  const ivionDisabledTooltip = "Konfigurera Ivion Site ID först";
+
+  // Standardized button style with proper touch targets (min 44x44)
+  const btnClass = "justify-start sm:justify-center gap-2 h-auto py-3 px-3 sm:py-3 sm:px-4";
+  const iconSize = 16;
+  const labelClass = "text-[11px] sm:text-xs";
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <Card className="mt-4 sm:mt-6">
-        <CardHeader className="pb-3 sm:pb-4">
-          <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
-            {/* ===== ROW 1: VISUALIZATION TOOLS ===== */}
-            
-            {/* 2D - Only for Storey */}
-            {isStorey && onToggle2D && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onToggle2D(facility)} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <Square size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                    <span className="text-[10px] sm:text-xs">2D</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Visa 2D-planritning</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+    <Card className="mt-4 sm:mt-6">
+      <CardHeader className="pb-3 sm:pb-4">
+        <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+          {/* ===== VISUALIZATION TOOLS ===== */}
+          
+          {/* 2D - Only for Storey */}
+          {isStorey && onToggle2D && (
+            <Button variant="ghost" onClick={() => onToggle2D(facility)} className={btnClass}>
+              <Square size={iconSize} className="text-primary" />
+              <span className={labelClass}>2D</span>
+            </Button>
+          )}
 
-            {/* 2D FMA - Only for Storey */}
-            {isStorey && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => {
-                      const buildingGuid = (facility as any).buildingFmGuid || facility.fmGuid;
-                      const floorName = facility.commonName || facility.name || '';
-                      navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}&floorName=${encodeURIComponent(floorName)}`);
-                    }}
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <Square size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                    <span className="text-[10px] sm:text-xs">2D FMA</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Visa FM Access 2D-ritning för våning</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* 2D FMA - Only for Storey */}
+          {isStorey && (
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                const buildingGuid = (facility as any).buildingFmGuid || facility.fmGuid;
+                const floorName = facility.commonName || facility.name || '';
+                navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}&floorName=${encodeURIComponent(floorName)}`);
+              }}
+              className={btnClass}
+            >
+              <Square size={iconSize} className="text-accent" />
+              <span className={labelClass}>2D FMA</span>
+            </Button>
+          )}
 
-            {/* 3D - Building or Storey - navigates to UnifiedViewer with mode=3d */}
-            {(isBuilding || isStorey || isSpace) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => {
-                      if (!has3D) return;
-                      const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                      const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
-                      navigate(`/split-viewer?building=${buildingGuid}&mode=3d${entityParam}`);
-                    }} 
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has3D ? disabledClass : ''}`}
-                  >
-                    <Cuboid size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                    <span className="text-[10px] sm:text-xs">3D</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{has3D ? (isSpace ? "Visa rum i 3D" : "Visa 3D-modell") : "Ingen 3D-modell tillgänglig"}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* 3D */}
+          {(isBuilding || isStorey || isSpace) && (
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                if (!has3D) return;
+                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+                const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
+                navigate(`/split-viewer?building=${buildingGuid}&mode=3d${entityParam}`);
+              }} 
+              className={`${btnClass} ${!has3D ? disabledClass : ''}`}
+            >
+              <Cuboid size={iconSize} className="text-primary" />
+              <span className={labelClass}>3D</span>
+            </Button>
+          )}
 
-            {/* 360° - Building or Storey - navigates to UnifiedViewer with mode=360 */}
-            {(isBuilding || isStorey) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => {
-                      if (!has360) return;
-                      const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                      navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
-                    }} 
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has360 ? disabledClass : ''}`}
-                  >
-                    <View size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
-                    <span className="text-[10px] sm:text-xs">360°</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{has360 ? "Öppna 360°-panorama" : "Ingen 360°-data tillgänglig"}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* 360° */}
+          {(isBuilding || isStorey) && (
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                if (!has360) return;
+                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+                navigate(`/split-viewer?building=${buildingGuid}&mode=360`);
+              }} 
+              className={`${btnClass} ${!has360 ? disabledClass : ''}`}
+            >
+              <View size={iconSize} className="text-destructive" />
+              <span className={labelClass}>360°</span>
+            </Button>
+          )}
 
-            {/* Split View - Building only */}
-            {isBuilding && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`); }}
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!hasSplit ? disabledClass : ''}`}
-                  >
-                    <SplitSquareHorizontal size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                    <span className="text-[10px] sm:text-xs">3D+360°</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{hasSplit ? "Synkroniserad 3D och 360°-vy" : `Kräver ${!has3D ? '3D-modell' : ''}${!has3D && !has360 ? ' och ' : ''}${!has360 ? '360°-data' : ''}`}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Split View - Building only */}
+          {isBuilding && (
+            <Button 
+              variant="ghost" 
+              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`); }}
+              className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
+            >
+              <SplitSquareHorizontal size={iconSize} className="text-accent" />
+              <span className={labelClass}>3D+360°</span>
+            </Button>
+          )}
 
-            {/* 2D Ritning - Building only, navigates to UnifiedViewer with mode=2d */}
-            {isBuilding && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => { if (has2D) navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`); }}
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!has2D ? disabledClass : ''}`}
-                  >
-                    <Square size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                    <span className="text-[10px] sm:text-xs">2D Ritning</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{has2D ? "Visa FM Access 2D-ritning" : "Ingen 2D-ritning tillgänglig"}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* 2D Ritning - Building only */}
+          {isBuilding && (
+            <Button 
+              variant="ghost" 
+              onClick={() => { if (has2D) navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`); }}
+              className={`${btnClass} ${!has2D ? disabledClass : ''}`}
+            >
+              <Square size={iconSize} className="text-primary" />
+              <span className={labelClass}>2D Ritning</span>
+            </Button>
+          )}
 
-            {/* Virtual Twin - Building only */}
-            {isBuilding && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`); }}
-                    className={`justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4 ${!hasSplit ? disabledClass : ''}`}
-                  >
-                    <Layers size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                    <span className="text-[10px] sm:text-xs">Virtual Twin</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{hasSplit ? "3D-modell överlagrad på 360°-panorama" : `Kräver ${!has3D ? '3D-modell' : ''}${!has3D && !has360 ? ' och ' : ''}${!has360 ? '360°-data' : ''}`}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Virtual Twin - Building only */}
+          {isBuilding && (
+            <Button 
+              variant="ghost" 
+              onClick={() => { if (hasSplit) navigate(`/split-viewer?building=${facility.fmGuid}&mode=vt`); }}
+              className={`${btnClass} ${!hasSplit ? disabledClass : ''}`}
+            >
+              <Layers size={iconSize} className="text-primary" />
+              <span className={labelClass}>Virtual Twin</span>
+            </Button>
+          )}
 
-            {/* ===== ROW 2+: DATA & TOOLS ===== */}
+          {/* ===== DATA & TOOLS ===== */}
 
-            {/* Insights - available for all levels */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onShowInsights(facility)} 
-                  className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                >
-                  <BarChart size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                  <span className="text-[10px] sm:text-xs">Insights</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Visa nyckeltal och analyser</p>
-              </TooltipContent>
-            </Tooltip>
+          {/* Insights */}
+          <Button variant="ghost" onClick={() => onShowInsights(facility)} className={btnClass}>
+            <BarChart size={iconSize} className="text-accent" />
+            <span className={labelClass}>Insights</span>
+          </Button>
 
-            {/* Assets */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onShowAssets(facility)} 
-                  className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                >
-                  <Package size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                  <span className="text-[10px] sm:text-xs">Assets</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Visa tillgångar</p>
-              </TooltipContent>
-            </Tooltip>
+          {/* Assets */}
+          <Button variant="ghost" onClick={() => onShowAssets(facility)} className={btnClass}>
+            <Package size={iconSize} className="text-primary" />
+            <span className={labelClass}>Assets</span>
+          </Button>
 
-            {/* Rooms - Building or Storey */}
-            {(isBuilding || isStorey) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onShowRooms(facility)} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <DoorOpen size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                    <span className="text-[10px] sm:text-xs">Rooms</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Visa rum och utrymmen</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Rooms */}
+          {(isBuilding || isStorey) && (
+            <Button variant="ghost" onClick={() => onShowRooms(facility)} className={btnClass}>
+              <DoorOpen size={iconSize} className="text-accent" />
+              <span className={labelClass}>Rooms</span>
+            </Button>
+          )}
 
-            {/* Map - Building only */}
-            {isBuilding && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={onOpenMap} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <Globe size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                    <span className="text-[10px] sm:text-xs">Map</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Visa på karta</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Map - Building only */}
+          {isBuilding && (
+            <Button variant="ghost" onClick={onOpenMap} className={btnClass}>
+              <Globe size={iconSize} className="text-accent" />
+              <span className={labelClass}>Map</span>
+            </Button>
+          )}
 
-            {/* Navigator */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onOpenNavigator(facility)} 
-                  className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                >
-                  <Network size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                  <span className="text-[10px] sm:text-xs">Navigator</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Öppna hierarkisk navigator</p>
-              </TooltipContent>
-            </Tooltip>
+          {/* Navigator */}
+          <Button variant="ghost" onClick={() => onOpenNavigator(facility)} className={btnClass}>
+            <Network size={iconSize} className="text-primary" />
+            <span className={labelClass}>Navigator</span>
+          </Button>
 
-            {/* Docs+ */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onShowDocs(facility)} 
-                  className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                >
-                  <FileText size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                  <span className="text-[10px] sm:text-xs">Docs+</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Visa dokument</p>
-              </TooltipContent>
-            </Tooltip>
+          {/* Docs+ */}
+          <Button variant="ghost" onClick={() => onShowDocs(facility)} className={btnClass}>
+            <FileText size={iconSize} className="text-muted-foreground" />
+            <span className={labelClass}>Docs+</span>
+          </Button>
 
-            {/* IOT+ */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onOpenIoT(facility)} 
-                  className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                >
-                  <Zap size={12} className="sm:w-3.5 sm:h-3.5 text-primary" />
-                  <span className="text-[10px] sm:text-xs">IOT+</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Visa IoT-sensorer</p>
-              </TooltipContent>
-            </Tooltip>
+          {/* IOT+ */}
+          <Button variant="ghost" onClick={() => onOpenIoT(facility)} className={btnClass}>
+            <Zap size={iconSize} className="text-accent" />
+            <span className={labelClass}>IOT+</span>
+          </Button>
 
-            {/* Add Asset - Storey or Space */}
-            {canAddAsset && onAddAsset && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onAddAsset(facility)} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <Plus size={12} className="sm:w-3.5 sm:h-3.5 text-accent" />
-                    <span className="text-[10px] sm:text-xs">Add Asset</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Registrera ny tillgång</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Add Asset */}
+          {canAddAsset && onAddAsset && (
+            <Button variant="ghost" onClick={() => onAddAsset(facility)} className={btnClass}>
+              <Plus size={iconSize} className="text-accent" />
+              <span className={labelClass}>Add Asset</span>
+            </Button>
+          )}
 
-            {/* Inventory */}
-            {onInventory && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onInventory({
-                      buildingFmGuid: isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid,
-                      levelFmGuid: isStorey ? facility.fmGuid : (facility as any).levelFmGuid,
-                      roomFmGuid: isSpace ? facility.fmGuid : undefined,
-                    })} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <ClipboardList size={12} className="sm:w-3.5 sm:h-3.5 text-orange-500" />
-                    <span className="text-[10px] sm:text-xs">Inventering</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Inventera tillgångar här</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Inventory */}
+          {onInventory && (
+            <Button 
+              variant="ghost" 
+              onClick={() => onInventory({
+                buildingFmGuid: isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid,
+                levelFmGuid: isStorey ? facility.fmGuid : (facility as any).levelFmGuid,
+                roomFmGuid: isSpace ? facility.fmGuid : undefined,
+              })} 
+              className={btnClass}
+            >
+              <ClipboardList size={iconSize} className="text-accent" />
+              <span className={labelClass}>Inventering</span>
+            </Button>
+          )}
 
-            {/* Felanmälan */}
-            {onFaultReport && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onFaultReport(facility)} 
-                    className="justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 sm:py-3 px-2 sm:px-4"
-                  >
-                    <AlertTriangle size={12} className="sm:w-3.5 sm:h-3.5 text-destructive" />
-                    <span className="text-[10px] sm:text-xs">Felanmälan</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Rapportera ett fel</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </TooltipProvider>
+          {/* Felanmälan */}
+          {onFaultReport && (
+            <Button variant="ghost" onClick={() => onFaultReport(facility)} className={btnClass}>
+              <AlertTriangle size={iconSize} className="text-destructive" />
+              <span className={labelClass}>Felanmälan</span>
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

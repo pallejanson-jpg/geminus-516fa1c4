@@ -1,4 +1,5 @@
 import React, { useState, useContext, useMemo } from 'react';
+import { extractNtaFromAttributes } from '@/lib/building-utils';
 import { Search, LayoutGrid, List, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,19 +54,7 @@ const PortfolioView: React.FC = () => {
   const [addAssetDialogOpen, setAddAssetDialogOpen] = useState(false);
   const [addAssetParentNode, setAddAssetParentNode] = useState<NavigatorNode | null>(null);
 
-  // Helper to extract NTA value from attributes (dynamic key names like "nta51780ACD...")
-  const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
-    if (!attributes) return 0;
-    for (const key of Object.keys(attributes)) {
-      if (key.toLowerCase().startsWith('nta')) {
-        const ntaObj = attributes[key];
-        if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
-          return ntaObj.value;
-        }
-      }
-    }
-    return 0;
-  };
+// extractNtaFromAttributes imported from shared module at top
 
   // Convert navigatorTreeData (buildings) to Facility[] format, filtering out empty duplicates
   const facilities: Facility[] = useMemo(() => {
@@ -431,7 +420,7 @@ const PortfolioView: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col p-3 sm:p-4 md:p-6 overflow-auto">
+    <div className="h-full flex flex-col px-3 sm:px-4 md:px-6 py-3 sm:py-4 overflow-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div>
