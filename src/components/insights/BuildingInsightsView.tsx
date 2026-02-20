@@ -108,28 +108,22 @@ interface InsightsInlineViewerProps {
 const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, insightsColorMode, insightsColorMap, onFullscreen, expanded, onToggleExpand }) => {
     return (
         <div className={`${expanded ? 'w-[700px] h-[700px]' : 'w-[400px] h-[500px]'} shrink-0 sticky top-2 rounded-lg border border-border overflow-hidden relative group transition-all duration-300`}>
-            {/* Only mount the 3D viewer when user has interacted (insightsColorMode is set) */}
-            {insightsColorMode ? (
-                <div className="absolute inset-0">
-                    <React.Suspense fallback={
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    }>
-                        <AssetPlusViewer
-                            fmGuid={fmGuid}
-                            suppressOverlay
-                            insightsColorMode={insightsColorMode}
-                            insightsColorMap={insightsColorMap}
-                            forceXray={!!insightsColorMode}
-                        />
-                    </React.Suspense>
-                </div>
-            ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
-                    <p className="text-xs text-muted-foreground/60 text-center px-4">Klicka på ett diagram för att visa i 3D</p>
-                </div>
-            )}
+            {/* Always mount the 3D viewer so it loads in the background */}
+            <div className="absolute inset-0">
+                <React.Suspense fallback={
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                }>
+                    <AssetPlusViewer
+                        fmGuid={fmGuid}
+                        suppressOverlay
+                        insightsColorMode={insightsColorMode}
+                        insightsColorMap={insightsColorMap}
+                        forceXray={!!insightsColorMode}
+                    />
+                </React.Suspense>
+            </div>
             {/* Toolbar buttons overlay */}
             <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button
