@@ -64,13 +64,33 @@ function detectFormat(data: ArrayBuffer): 'glb' | 'obj' | 'ifc' | 'unknown' {
 }
 
 /**
- * Convert a GLB/glTF/OBJ ArrayBuffer into an XKT ArrayBuffer using xeokit-convert.
+ * Extracted IFC hierarchy from XKT model metadata.
+ */
+export interface IfcHierarchyResult {
+  xktData: ArrayBuffer;
+  levels: Array<{ id: string; name: string; type: string }>;
+  spaces: Array<{ id: string; name: string; type: string; parentId: string }>;
+}
+
+/**
+ * Convert a GLB/glTF/OBJ/IFC ArrayBuffer into an XKT ArrayBuffer using xeokit-convert.
  * Returns the XKT binary ready for storage.
  */
 export async function convertGlbToXkt(
   glbData: ArrayBuffer,
   log?: (msg: string) => void
 ): Promise<ArrayBuffer> {
+  const result = await convertToXktWithMetadata(glbData, log);
+  return result.xktData;
+}
+
+/**
+ * Convert to XKT and also extract IFC hierarchy metadata (levels, spaces).
+ */
+export async function convertToXktWithMetadata(
+  glbData: ArrayBuffer,
+  log?: (msg: string) => void
+): Promise<IfcHierarchyResult> {
   const logger = log || ((msg: string) => console.log('[xkt-convert]', msg));
 
   const format = detectFormat(glbData);
@@ -79,7 +99,6 @@ export async function convertGlbToXkt(
   if (format === 'unknown') {
     const header = new Uint8Array(glbData, 0, Math.min(64, glbData.byteLength));
     const headerHex = Array.from(header.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-    // Try to detect if it's a JSON manifest (SVF2 bubble metadata)
     const firstBytes = new TextDecoder().decode(header.slice(0, 20));
     const looksLikeJson = firstBytes.trimStart().startsWith('{') || firstBytes.trimStart().startsWith('[');
     
@@ -148,12 +167,43 @@ export async function convertGlbToXkt(
   logger('Finalizing XKTModel...');
   xktModel.finalize();
 
+  // Extract IFC hierarchy from metaObjects
+  const levels: IfcHierarchyResult['levels'] = [];
+  const spaces: IfcHierarchyResult['spaces'] = [];
+
+  if (xktModel.metaObjects) {
+    const metaObjValues = Array.isArray(xktModel.metaObjects)
+      ? xktModel.metaObjects
+      : Object.values(xktModel.metaObjects);
+    for (const metaObj of metaObjValues as any[]) {
+      const metaType = metaObj.metaType || metaObj.type || '';
+      if (metaType === 'IfcBuildingStorey') {
+        levels.push({
+          id: metaObj.metaObjectId || metaObj.id || '',
+          name: metaObj.metaObjectName || metaObj.name || metaType,
+          type: metaType,
+        });
+      } else if (metaType === 'IfcSpace') {
+        spaces.push({
+          id: metaObj.metaObjectId || metaObj.id || '',
+          name: metaObj.metaObjectName || metaObj.name || metaType,
+          type: metaType,
+          parentId: metaObj.parentMetaObjectId || metaObj.parentId || '',
+        });
+      }
+    }
+  }
+
+  if (levels.length || spaces.length) {
+    logger(`Extracted IFC hierarchy: ${levels.length} levels, ${spaces.length} spaces`);
+  }
+
   logger('Writing XKT to ArrayBuffer...');
   const stats: Record<string, any> = { texturesSize: 0 };
   const xktArrayBuffer = writeXKTModelToArrayBuffer(xktModel, null, stats, { zip: false });
 
   logger(`XKT conversion complete (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
-  return xktArrayBuffer;
+  return { xktData: xktArrayBuffer, levels, spaces };
 }
 
 export class AccXktConverter {
