@@ -67,9 +67,14 @@ const PortfolioView: React.FC = () => {
     return 0;
   };
 
-  // Convert navigatorTreeData (buildings) to Facility[] format
+  // Convert navigatorTreeData (buildings) to Facility[] format, filtering out empty duplicates
   const facilities: Facility[] = useMemo(() => {
-    return navigatorTreeData.map((building, index) => {
+    return navigatorTreeData.filter((building) => {
+      // Filter out buildings with 0 storeys AND 0 spaces (empty duplicates)
+      const hasStoreys = allData.some((a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid);
+      const hasSpaces = allData.some((a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid);
+      return hasStoreys || hasSpaces;
+    }).map((building, index) => {
       // Get spaces for this building from allData
       const buildingSpaces = allData.filter(
         (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid

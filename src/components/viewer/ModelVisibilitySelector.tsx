@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 import { useModelNames } from '@/hooks/useModelNames';
 import { MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 
@@ -170,30 +171,56 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             // Strategy 6b: search all metaObjects for IfcProject belonging to this model
             if (!matchedName) {
               const metaObjects = viewer.metaScene.metaObjects || {};
-              for (const metaObj of Object.values(metaObjects) as any[]) {
-                if (metaObj.type === 'IfcProject') {
-                  // Check by metaModel reference
-                  if (metaObj.metaModel?.id === modelId) {
-                    if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                      matchedName = metaObj.name;
-                      console.debug("Strategy 6b matched:", modelId, "->", matchedName);
-                    }
-                    break;
+              const ifcProjects = Object.values(metaObjects).filter((m: any) => m.type === 'IfcProject') as any[];
+              
+              for (const metaObj of ifcProjects) {
+                // Check by metaModel reference
+                if (metaObj.metaModel?.id === modelId) {
+                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                    matchedName = metaObj.name;
+                    console.debug("Strategy 6b matched:", modelId, "->", matchedName);
                   }
-                  // Strategy 7: Check by ID namespace (modelId#objectId pattern)
-                  const objId = metaObj.id || '';
-                  if (objId.startsWith(modelId + '#') || objId.startsWith(modelId + '.')) {
-                    if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                      matchedName = metaObj.name;
-                      console.debug("Strategy 7 (namespace) matched:", modelId, "->", matchedName);
-                    }
-                    break;
+                  break;
+                }
+                // Strategy 7: Check by ID namespace (modelId#objectId pattern)
+                const objId = metaObj.id || '';
+                if (objId.startsWith(modelId + '#') || objId.startsWith(modelId + '.')) {
+                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
+                    matchedName = metaObj.name;
+                    console.debug("Strategy 7 (namespace) matched:", modelId, "->", matchedName);
                   }
+                  break;
+                }
+              }
+              
+              // Strategy 8: Position-based matching — assign IfcProject names in order to unnamed models
+              if (!matchedName && ifcProjects.length > 0) {
+                const unclaimedProjects = ifcProjects.filter(p => 
+                  p.name && !p.name.match(/^[0-9A-Fa-f-]{30,}$/)
+                );
+                // Find the index of this model among all scene models
+                const sceneModelIds = Object.keys(sceneModels);
+                const myIndex = sceneModelIds.indexOf(modelId);
+                if (myIndex >= 0 && myIndex < unclaimedProjects.length) {
+                  matchedName = unclaimedProjects[myIndex].name;
+                  console.debug("Strategy 8 (position-based) matched:", modelId, "->", matchedName);
                 }
               }
             }
+            
+            // Write-back: persist discovered name to DB for next time
+            if (matchedName && buildingFmGuid) {
+              const cleanId = modelId.replace(/\.xkt$/i, '');
+              supabase.from('xkt_models')
+                .update({ model_name: matchedName })
+                .eq('building_fm_guid', buildingFmGuid)
+                .or(`model_id.eq.${cleanId},file_name.eq.${cleanId}.xkt`)
+                .then(({ error }) => {
+                  if (!error) console.debug("Write-back model name to DB:", cleanId, "->", matchedName);
+                });
+            }
           } catch (e) {
-            console.debug("Strategy 6/7 failed for model:", modelId, e);
+            console.debug("Strategy 6/7/8 failed for model:", modelId, e);
           }
         }
         

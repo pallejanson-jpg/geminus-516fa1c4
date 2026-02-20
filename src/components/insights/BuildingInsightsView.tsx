@@ -984,12 +984,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     .filter((a: any) => a.coordinate_x != null && a.coordinate_y != null && a.coordinate_z != null)
                                                     .slice(0, 50)
                                                     .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
-                                                if (drawerMode) {
-                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsWithCoords } }));
-                                                } else {
-                                                    sessionStorage.setItem('insights_alarm_annotations', JSON.stringify(alarmsWithCoords));
-                                                    navigateTo3D();
-                                                }
+                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: alarmsWithCoords } }));
                                             }}
                                         >
                                             <Eye className="h-3.5 w-3.5" />
@@ -1075,46 +1070,47 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <CardDescription>Antal alarm per våning (riktiga data) · Klicka stapel för att filtrera</CardDescription>
                                             </CardHeader>
                                             <CardContent className="space-y-3">
-                                                <div className="h-56">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <BarChart data={alarmsByLevel} layout="vertical">
-                                                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                                                            <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                                                            <YAxis dataKey="levelName" type="category" width={isMobile ? 60 : 100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }} />
-                                                            <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`${v} larm`]} />
-                                                            <Bar dataKey="count" name="Larm" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
-                                                                {alarmsByLevel.map((entry, index) => (
-                                                                    <Cell
-                                                                        key={`cell-${index}`}
-                                                                        fill={alarmLevelFilter === entry.levelGuid ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
-                                                                        onClick={() => setAlarmLevelFilter(prev => prev === entry.levelGuid ? '' : entry.levelGuid)}
-                                                                    />
-                                                                ))}
-                                                            </Bar>
-                                                        </BarChart>
-                                                    </ResponsiveContainer>
-                                                </div>
-                                                {/* Annotation buttons per floor */}
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {alarmsByLevel.map((level) => (
-                                                        <Button
-                                                            key={level.levelGuid}
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-6 px-2 text-[10px] gap-1"
-                                                            title={`Visa ${level.count} larm-annotations för ${level.levelName}`}
-                                                            onClick={() => {
-                                                                const levelAlarms = alarmList
-                                                                    .filter((a: any) => a.level_fm_guid === level.levelGuid && a.coordinate_x != null)
-                                                                    .slice(0, 50)
-                                                                    .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
-                                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
-                                                            }}
-                                                        >
-                                                            <MapPin className="h-2.5 w-2.5" />
-                                                            {level.levelName}
-                                                        </Button>
-                                                    ))}
+                                                <div className="flex gap-2">
+                                                    <div className="flex-1 h-56">
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <BarChart data={alarmsByLevel} layout="vertical">
+                                                                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                                                                <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                                                                <YAxis dataKey="levelName" type="category" width={isMobile ? 60 : 100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }} />
+                                                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`${v} larm`]} />
+                                                                <Bar dataKey="count" name="Larm" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
+                                                                    {alarmsByLevel.map((entry, index) => (
+                                                                        <Cell
+                                                                            key={`cell-${index}`}
+                                                                            fill={alarmLevelFilter === entry.levelGuid ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
+                                                                            onClick={() => setAlarmLevelFilter(prev => prev === entry.levelGuid ? '' : entry.levelGuid)}
+                                                                        />
+                                                                    ))}
+                                                                </Bar>
+                                                            </BarChart>
+                                                        </ResponsiveContainer>
+                                                    </div>
+                                                    {/* MapPin buttons aligned to the right of bars */}
+                                                    <div className="flex flex-col justify-between py-1 shrink-0" style={{ height: '14rem' }}>
+                                                        {alarmsByLevel.map((level) => (
+                                                            <Button
+                                                                key={level.levelGuid}
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-6 text-primary hover:bg-primary/10"
+                                                                title={`Visa ${level.count} larm för ${level.levelName}`}
+                                                                onClick={() => {
+                                                                    const levelAlarms = alarmList
+                                                                        .filter((a: any) => a.level_fm_guid === level.levelGuid && a.coordinate_x != null)
+                                                                        .slice(0, 50)
+                                                                        .map((a: any) => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }));
+                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms: levelAlarms } }));
+                                                                }}
+                                                            >
+                                                                <MapPin className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                                 {alarmLevelFilter && (
                                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setAlarmLevelFilter('')}>
@@ -1183,12 +1179,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                                 const alarms = alarm.coordinate_x != null
                                                                                     ? [{ fmGuid: alarm.fm_guid, x: alarm.coordinate_x, y: alarm.coordinate_y, z: alarm.coordinate_z }]
                                                                                     : [];
-                                                                                if (drawerMode) {
-                                                                                    window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
-                                                                                } else {
-                                                                                    sessionStorage.setItem('insights_alarm_annotations', JSON.stringify(alarms));
-                                                                                    navigateTo3D({ entity: alarm.fm_guid });
-                                                                                }
+                                                                                // Always dispatch event (works in both drawer and desktop inline viewer)
+                                                                                window.dispatchEvent(new CustomEvent(ALARM_ANNOTATIONS_SHOW_EVENT, { detail: { alarms, flyTo: true } }));
                                                                             }}
                                                                         >
                                                                             <Eye className="h-3.5 w-3.5" />
