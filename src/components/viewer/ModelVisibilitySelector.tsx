@@ -161,6 +161,8 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         if (!matchedName && viewer?.metaScene) {
           try {
             const metaModel = viewer.metaScene.metaModels?.[modelId];
+            console.debug("[ModelNames] Strategy 6: metaModels keys:", Object.keys(viewer.metaScene.metaModels || {}));
+            console.debug("[ModelNames] Strategy 6: metaModel for", modelId, "=", metaModel ? 'found' : 'undefined');
             if (metaModel?.rootMetaObject) {
               const rootObj = metaModel.rootMetaObject;
               if (rootObj.type === 'IfcProject' && rootObj.name && !rootObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
@@ -172,6 +174,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             if (!matchedName) {
               const metaObjects = viewer.metaScene.metaObjects || {};
               const ifcProjects = Object.values(metaObjects).filter((m: any) => m.type === 'IfcProject') as any[];
+              console.debug("[ModelNames] Strategy 6b/7/8: Found", ifcProjects.length, "IfcProject objects:", ifcProjects.map((p: any) => ({ id: p.id, name: p.name, metaModelId: p.metaModel?.id })));
               
               for (const metaObj of ifcProjects) {
                 // Check by metaModel reference
@@ -198,9 +201,11 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
                 const unclaimedProjects = ifcProjects.filter(p => 
                   p.name && !p.name.match(/^[0-9A-Fa-f-]{30,}$/)
                 );
+                console.debug("[ModelNames] Strategy 8: unclaimed IfcProjects with valid names:", unclaimedProjects.map((p: any) => p.name));
                 // Find the index of this model among all scene models
                 const sceneModelIds = Object.keys(sceneModels);
                 const myIndex = sceneModelIds.indexOf(modelId);
+                console.debug("[ModelNames] Strategy 8: modelId", modelId, "at index", myIndex, "of", sceneModelIds.length, "scene models");
                 if (myIndex >= 0 && myIndex < unclaimedProjects.length) {
                   matchedName = unclaimedProjects[myIndex].name;
                   console.debug("Strategy 8 (position-based) matched:", modelId, "->", matchedName);
