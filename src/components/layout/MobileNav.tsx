@@ -1,32 +1,16 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Home, LayoutGrid, Globe, Network, Menu, X,
-  ClipboardList, AlertTriangle, BarChart2, Building2, Box, Zap, Archive, Radar, Scan, Cuboid
+  Home, LayoutGrid, Globe, Network, Menu, X, Cuboid
 } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { DEFAULT_APP_CONFIGS, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
+import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
 import type { SidebarItem } from '@/lib/constants';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { cn } from '@/lib/utils';
-
-const SIDEBAR_ITEM_META: Record<string, {
-  icon: React.ElementType;
-  label: string;
-  type: 'internal' | 'config';
-}> = {
-  inventory:        { icon: ClipboardList, label: 'Inventering', type: 'internal' },
-  fault_report:     { icon: AlertTriangle, label: 'Felanmälan', type: 'internal' },
-  insights:         { icon: BarChart2,     label: 'Insights',   type: 'internal' },
-  fma_plus:         { icon: Building2,     label: DEFAULT_APP_CONFIGS.fma_plus.label, type: 'config' },
-  asset_plus:       { icon: Box,           label: DEFAULT_APP_CONFIGS.asset_plus.label, type: 'config' },
-  iot:              { icon: Zap,           label: DEFAULT_APP_CONFIGS.iot.label, type: 'config' },
-  original_archive: { icon: Archive,       label: DEFAULT_APP_CONFIGS.original_archive.label, type: 'config' },
-  radar:            { icon: Radar,         label: DEFAULT_APP_CONFIGS.radar.label, type: 'config' },
-  ai_scan:          { icon: Scan,          label: 'AI Scan', type: 'internal' },
-};
+import { SIDEBAR_ITEM_META } from '@/lib/sidebar-config';
 
 // Core navigation items
 const CORE_NAV = [
@@ -120,7 +104,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
             <div className="p-4 space-y-4">
               {/* Core navigation grid */}
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
+                <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
                 <div className="grid grid-cols-4 gap-2">
                   {CORE_NAV.map(({ key, icon: Icon, label }) => {
                     const isActive = activeApp === key;
@@ -137,7 +121,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
                           <Icon className={cn("h-6 w-6", isActive ? "text-primary" : "text-foreground/70")} />
                         </div>
                         <span className={cn(
-                          "text-[11px] text-center leading-tight",
+                          "text-xs text-center leading-tight",
                           isActive ? "text-primary font-medium" : "text-muted-foreground"
                         )}>
                           {label}
@@ -150,7 +134,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
 
               {/* 3D Viewer quick link */}
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
+                <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
                 <button
                   onClick={() => { navigate('/split-viewer?mode=3d'); setIsMobileMenuOpen(false); }}
                   className="flex flex-col items-center gap-1.5 w-[72px] p-2 rounded-xl hover:bg-muted/60 transition-colors"
@@ -158,14 +142,14 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
                   <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
                     <Cuboid className="h-6 w-6 text-foreground/70" />
                   </div>
-                  <span className="text-[11px] text-center text-muted-foreground leading-tight">3D Viewer</span>
+                  <span className="text-xs text-center text-muted-foreground leading-tight">3D Viewer</span>
                 </button>
               </div>
 
               {/* Dynamic apps */}
               {sidebarOrder.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrationer</p>
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrationer</p>
                   <div className="flex flex-wrap gap-3">
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];
@@ -185,7 +169,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
                               <IconComp className={cn("h-6 w-6", isActive ? "text-primary" : "text-foreground/70")} />
                             </div>
                             <span className={cn(
-                              "text-[11px] text-center leading-tight",
+                              "text-xs text-center leading-tight",
                               isActive ? "text-primary font-medium" : "text-muted-foreground"
                             )}>
                               {meta.label}
