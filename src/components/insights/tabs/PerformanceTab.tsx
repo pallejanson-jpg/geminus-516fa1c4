@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -6,13 +6,14 @@ import {
 } from 'recharts';
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
-    ThermometerSun, Droplets, Gauge, ChevronRight
+    ThermometerSun, Droplets, Gauge, ChevronsUpDown, Check, Search
 } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '@/components/ui/command';
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -208,46 +209,52 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 ))}
             </div>
 
-            {/* Building List - REAL names, MOCK energy data */}
+            {/* Building Selector - compact searchable combobox */}
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        Buildings
-                    </CardTitle>
-                    <CardDescription>Click a building for detailed insights</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {navigatorTreeData.map((building) => {
-                            const energyData = energyByBuilding.find(b => b.fmGuid === building.fmGuid);
-                            return (
-                                <Button
-                                    key={building.fmGuid}
-                                    variant="outline"
-                                    className="h-auto p-3 flex items-center justify-between gap-2 text-left"
-                                    onClick={() => onSelectBuilding(building as Facility)}
-                                >
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-medium text-sm truncate text-foreground">
-                                            {building.commonName || building.name}
-                                        </p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Badge 
-                                                variant="secondary" 
-                                                className="text-[10px] px-1.5 text-purple-300 bg-purple-500/20 border-purple-500/30"
-                                            >
-                                                {energyData?.rating || 'C'}
-                                            </Badge>
-                                            <span className="text-xs text-purple-400">
-                                                {energyData?.kwhPerSqm || '?'} kWh/m²
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                </Button>
-                            );
-                        })}
+                <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                        <span className="text-sm font-medium text-foreground">Select building</span>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button className="flex-1 flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                                    <span className="text-muted-foreground">Search buildings...</span>
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[320px] p-0" align="start">
+                                <Command>
+                                    <CommandInput placeholder="Search buildings..." />
+                                    <CommandList>
+                                        <CommandEmpty>No buildings found.</CommandEmpty>
+                                        {navigatorTreeData.map((building) => {
+                                            const energyData = energyByBuilding.find(b => b.fmGuid === building.fmGuid);
+                                            return (
+                                                <CommandItem
+                                                    key={building.fmGuid}
+                                                    value={building.commonName || building.name || ''}
+                                                    onSelect={() => onSelectBuilding(building as Facility)}
+                                                    className="flex items-center justify-between"
+                                                >
+                                                    <span className="truncate">{building.commonName || building.name}</span>
+                                                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                                        <Badge 
+                                                            variant="secondary" 
+                                                            className="text-[10px] px-1.5 text-purple-300 bg-purple-500/20 border-purple-500/30"
+                                                        >
+                                                            {energyData?.rating || 'C'}
+                                                        </Badge>
+                                                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                            {energyData?.kwhPerSqm || '?'} kWh/m²
+                                                        </span>
+                                                    </div>
+                                                </CommandItem>
+                                            );
+                                        })}
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
                     </div>
                 </CardContent>
             </Card>
