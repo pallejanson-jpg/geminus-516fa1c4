@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data' | 'get-machine-air-quality';
   fmGuid?: string;
   siteCode?: string;
   sitePk?: number;
@@ -288,6 +288,7 @@ serve(async (req) => {
       'search-data',
       'get-machine-data',
       'get-building-sensor-data',
+      'get-machine-air-quality',
     ]);
 
     let token: string | null = null;
@@ -447,17 +448,28 @@ serve(async (req) => {
             const indiceId = machine.indices[0];
             const propsRaw = await senslincFetchWithRetry(cleanApiUrl, `/api/properties?indice=${indiceId}`, authToken, tokenType) as any;
             properties = Array.isArray(propsRaw) ? propsRaw : (propsRaw?.results ?? []);
-            // Try to extract workspace key from properties
-            if (properties.length > 0 && properties[0].indice_workspace) {
-              workspaceKeyDiscovered = properties[0].indice_workspace;
+            // Try to extract workspace key -- check natural_key[0] first, then indice_workspace
+            if (properties.length > 0) {
+              const p0 = properties[0];
+              if (Array.isArray(p0.natural_key) && p0.natural_key.length > 0) {
+                workspaceKeyDiscovered = p0.natural_key[0];
+                console.log('[Senslinc] Workspace key from natural_key:', workspaceKeyDiscovered);
+              } else if (p0.indice_workspace) {
+                workspaceKeyDiscovered = p0.indice_workspace;
+                console.log('[Senslinc] Workspace key from indice_workspace:', workspaceKeyDiscovered);
+              }
             }
           } catch (e) {
             console.warn('[Senslinc] Could not fetch properties:', e);
           }
         }
 
-        // 3. Fetch time-series data if workspace key is available
+        // 3. Try to fetch time-series data via multiple strategies
         let timeSeries: any = null;
+        let machineDataResult: any = null;
+        const machinePk = machine.pk;
+
+        // Strategy A: ES data-workspaces/_search (works on some Senslinc instances)
         const wsKey = workspaceKey || workspaceKeyDiscovered;
         if (wsKey) {
           try {
@@ -475,10 +487,11 @@ serve(async (req) => {
                 per_day: {
                   date_histogram: { field: 'ts_beg', calendar_interval: 'day' },
                   aggs: {
-                    avg_temp: { avg: { field: 'temperature' } },
-                    avg_co2: { avg: { field: 'co2' } },
-                    avg_humidity: { avg: { field: 'humidity' } },
-                    avg_occupancy: { avg: { field: 'occupancy' } }
+                    avg_temp: { avg: { field: 'temperature_mean' } },
+                    avg_co2: { avg: { field: 'co2_mean' } },
+                    avg_humidity: { avg: { field: 'humidity_mean' } },
+                    avg_occupancy: { avg: { field: 'occupation_mean' } },
+                    avg_light: { avg: { field: 'light_mean' } }
                   }
                 }
               }
@@ -489,14 +502,117 @@ serve(async (req) => {
               authToken, tokenType,
               { method: 'POST', body: esQuery }
             );
+            console.log('[Senslinc] ES data-workspaces OK for key:', wsKey);
           } catch (e) {
-            console.warn('[Senslinc] Could not fetch time-series data:', e);
+            console.warn('[Senslinc] ES data-workspaces failed, trying /api/machines/{pk}/data/:', (e as Error).message);
+          }
+        }
+
+        // Strategy B: /api/machines/{pk}/data/ (alternative data endpoint)
+        if (!timeSeries && machinePk) {
+          try {
+            const now = new Date();
+            const from = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
+            const fromStr = from.toISOString();
+            const toStr = now.toISOString();
+            // Try with each known indice key
+            const indiceKeys = Array.isArray(machine.indices) ? machine.indices : [];
+            for (const indKey of indiceKeys) {
+              try {
+                const dataUrl = `/api/machines/${machinePk}/data/?indice_key=${indKey}&from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`;
+                const dataResult = await senslincFetchWithRetry(cleanApiUrl, dataUrl, authToken, tokenType) as any;
+                if (dataResult && (Array.isArray(dataResult) ? dataResult.length > 0 : dataResult.results?.length > 0)) {
+                  machineDataResult = Array.isArray(dataResult) ? dataResult : dataResult.results;
+                  console.log('[Senslinc] /api/machines/{pk}/data/ OK for indice:', indKey, 'rows:', machineDataResult.length);
+                  break;
+                }
+              } catch (innerErr) {
+                console.warn('[Senslinc] machines/data failed for indice', indKey, ':', (innerErr as Error).message);
+              }
+            }
+          } catch (e) {
+            console.warn('[Senslinc] Could not fetch /api/machines/{pk}/data/:', (e as Error).message);
+          }
+        }
+
+        // Strategy C: latest values only via ?last=1
+        if (!timeSeries && !machineDataResult && machinePk) {
+          try {
+            const indiceKeys = Array.isArray(machine.indices) ? machine.indices : [];
+            for (const indKey of indiceKeys) {
+              try {
+                const latestUrl = `/api/machines/${machinePk}/data/?indice_key=${indKey}&last=1`;
+                const latestResult = await senslincFetchWithRetry(cleanApiUrl, latestUrl, authToken, tokenType) as any;
+                if (latestResult && (Array.isArray(latestResult) ? latestResult.length > 0 : latestResult.results?.length > 0)) {
+                  machineDataResult = Array.isArray(latestResult) ? latestResult : latestResult.results;
+                  console.log('[Senslinc] /api/machines/{pk}/data/?last=1 OK for indice:', indKey);
+                  break;
+                }
+              } catch (innerErr) {
+                // continue to next indice
+              }
+            }
+          } catch (e) {
+            console.warn('[Senslinc] Could not fetch latest values:', (e as Error).message);
           }
         }
 
         return jsonResponse({
           success: true,
-          data: { machine, dashboardUrl, properties, timeSeries, workspaceKey: wsKey }
+          data: { machine, dashboardUrl, properties, timeSeries, machineData: machineDataResult, workspaceKey: wsKey }
+        });
+      }
+
+      // ── get-machine-air-quality: fetch Air Quality data from all indices ──
+      case 'get-machine-air-quality': {
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
+        const authToken = token as string;
+        const daysBack = days ?? 7;
+
+        // Find machine
+        const machinesRaw2 = await senslincFetchWithRetry(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType);
+        if (!Array.isArray(machinesRaw2) || machinesRaw2.length === 0) {
+          return jsonResponse({ success: false, error: 'No machine found' });
+        }
+        const machine2 = machinesRaw2[0] as any;
+        const dashUrl2 = machine2.dashboard_url || buildDashboardUrl(cleanApiUrl, 'machine', machine2.pk);
+        const indiceKeys2 = Array.isArray(machine2.indices) ? machine2.indices : [];
+
+        // Fetch data from all indices
+        const allData: Record<number, any[]> = {};
+        const now2 = new Date();
+        const from2 = new Date(now2.getTime() - daysBack * 24 * 60 * 60 * 1000);
+        for (const indKey of indiceKeys2) {
+          try {
+            const url2 = `/api/machines/${machine2.pk}/data/?indice_key=${indKey}&from=${encodeURIComponent(from2.toISOString())}&to=${encodeURIComponent(now2.toISOString())}`;
+            const result2 = await senslincFetchWithRetry(cleanApiUrl, url2, authToken, tokenType) as any;
+            const arr = Array.isArray(result2) ? result2 : (result2?.results ?? []);
+            if (arr.length > 0) allData[indKey] = arr;
+          } catch (e) {
+            console.warn('[Senslinc] air-quality data for indice', indKey, 'failed:', (e as Error).message);
+          }
+        }
+
+        // Also fetch properties for each indice
+        const allProps: Record<number, any[]> = {};
+        for (const indKey of indiceKeys2) {
+          try {
+            const propsRaw2 = await senslincFetchWithRetry(cleanApiUrl, `/api/properties?indice=${indKey}`, authToken, tokenType) as any;
+            allProps[indKey] = Array.isArray(propsRaw2) ? propsRaw2 : (propsRaw2?.results ?? []);
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        return jsonResponse({
+          success: true,
+          data: {
+            machine: machine2,
+            dashboardUrl: dashUrl2,
+            indices: indiceKeys2,
+            dataByIndice: allData,
+            propertiesByIndice: allProps,
+          }
         });
       }
 
