@@ -36,6 +36,7 @@ async function loadXeokitConvert() {
     XKTModel: mod.XKTModel,
     writeXKTModelToArrayBuffer: mod.writeXKTModelToArrayBuffer,
     parseGLTFIntoXKTModel: mod.parseGLTFIntoXKTModel,
+    parseIFCIntoXKTModel: mod.parseIFCIntoXKTModel,
   };
 }
 
@@ -101,10 +102,13 @@ export async function convertGlbToXkt(
   if (format === 'ifc') {
     logger('Parsing IFC into XKTModel via web-ifc WASM...');
     const mod = await import('@xeokit/xeokit-convert');
+    const WebIFC = await import('web-ifc');
     if (typeof (mod as any).parseIFCIntoXKTModel === 'function') {
       await (mod as any).parseIFCIntoXKTModel({
+        WebIFC,
         data: new Uint8Array(glbData),
         xktModel,
+        autoNormals: true,
         wasmPath: '/lib/xeokit/',
         log: logger,
       });
