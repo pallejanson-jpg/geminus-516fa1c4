@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { 
@@ -352,13 +352,6 @@ export default function FacilityManagementTab() {
                                     tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                 />
                                 <YAxis />
-                                {!isMobile && <Tooltip 
-                                    contentStyle={{ 
-                                        backgroundColor: 'hsl(var(--popover))',
-                                        border: '1px solid hsl(var(--border))',
-                                        borderRadius: '8px'
-                                    }}
-                                />}
                                 <Bar 
                                     dataKey="value" 
                                     name="Count"
@@ -396,17 +389,6 @@ export default function FacilityManagementTab() {
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value: number, name: string, props: any) => [
-                                            `${value} issues`,
-                                            props.payload.fullName
-                                        ]}
-                                    />}
                                     <Bar 
                                         dataKey="activeIssues" 
                                         name="Issues"
@@ -447,13 +429,6 @@ export default function FacilityManagementTab() {
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>

@@ -1,10 +1,10 @@
 import React, { useContext, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
-import { 
+import {
     Building2, TrendingUp, CircleDollarSign, MapPin,
     Briefcase, BarChart3, Shield
 } from 'lucide-react';
@@ -12,6 +12,11 @@ import { AppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useIsMobile } from '@/hooks/use-mobile';
+import type { MapColoringMode } from '@/lib/map-coloring-utils';
+
+interface PortfolioManagementTabProps {
+    onColorMap?: (mode: MapColoringMode) => void;
+}
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -29,7 +34,7 @@ const hashString = (str: string) => {
 const truncateName = (name: string, maxLen = 12) => 
     name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
 
-export default function PortfolioManagementTab() {
+export default function PortfolioManagementTab({ onColorMap }: PortfolioManagementTabProps) {
     const { navigatorTreeData } = useContext(AppContext);
     const isMobile = useIsMobile();
 
@@ -195,17 +200,6 @@ export default function PortfolioManagementTab() {
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value: number, name: string, props: any) => [
-                                            `${value.toFixed(1)} MSEK`,
-                                            props.payload.fullName
-                                        ]}
-                                    />}
                                     <Bar 
                                         dataKey="valueInMillions" 
                                         name="Value (MSEK)"
@@ -246,13 +240,6 @@ export default function PortfolioManagementTab() {
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -283,14 +270,6 @@ export default function PortfolioManagementTab() {
                                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                                     tickFormatter={(v) => `${(v / 1000000).toFixed(0)}`}
                                 />
-                                {!isMobile && <Tooltip 
-                                    contentStyle={{ 
-                                        backgroundColor: 'hsl(var(--popover))',
-                                        border: '1px solid hsl(var(--border))',
-                                        borderRadius: '8px'
-                                    }}
-                                    formatter={(value: number) => [`${(value / 1000000).toFixed(1)} MSEK`, 'Value']}
-                                />}
                                 <Line 
                                     type="monotone" 
                                     dataKey="value" 
