@@ -1,128 +1,89 @@
 
 
-## Forbattringar: Vaningsnamn, 3D-laddning, FM-grid, Portfolio, BIM-namn
+## Fix: Lazy-loading 3D, Alarm-annotations via rum-BIM, BIM-modellnamn
 
-### Sammanfattning
+### 1. Lazy-load 3D i Insights (stoppa blockeringen)
 
-Denna plan adresserar alla kvarstaende problem fran den tidigare analysen: namnlosa vaningar, trog 3D-laddning, FM-grid-buggar, Portfolio-duplicering och BIM-modellnamn.
+`BuildingInsightsView.tsx` importerar `AssetPlusViewer` direkt, vilket tvingar webblasaren att ladda hela 3D-motorn nar Insights oppnas -- innan anvandaren ens sett ett diagram.
+
+**Losning:**
+- Byt `import AssetPlusViewer from '...'` till `const AssetPlusViewer = React.lazy(() => import(...))`
+- Wrappa `InsightsInlineViewer` med `<Suspense fallback={<Spinner />}>`
+- Villkora montering: rendera `AssetPlusViewer` BARA nar `inlineInsightsMode` har ett varde (anvandaren har klickat pa ett diagram)
+- Fore det visas en platshallare med text "Klicka pa ett diagram for att visa i 3D"
+- Diagram och staplar renderas omedelbart utan att vanta pa 3D-motorn
+
+**Effekt:** Insights-sidan oppnas direkt. Diagram och KPI:er visas pa millisekunder. 3D laddas forst vid behov.
 
 ---
 
-### 1. Databasfix: Namnge 3 namnlosa vaningar i Smaviken
+### 2. Alarm-annotations -- korrekt flode via rum-BIM
 
-Tre vaningar saknar `common_name` och `name`. Rumnamnsmonster avslojar vilka vaningar de tillhor:
+**Faktisk datamodell (verifierad mot databasen):**
+- IfcAlarm har INGA egna koordinater (`coordinate_x/y/z = null`)
+- IfcAlarm HAR en `in_room_fm_guid` (relation till rummet de tillhor)
+- Rummen (IfcSpace) har OCKSA `null` koordinater i databasen
+- MEN rummen har BIM-geometri i 3D-viewern (de ar IfcSpace-objekt med bounding boxes)
+
+**Korrekt flyTo-flode:**
+
+1. Hamta alarmets `in_room_fm_guid` fran databasen
+2. I 3D-viewern: hitta rummets entities via `getItemsByPropertyValue("fmguid", roomFmGuid)`
+3. Berakna rummets centrum fran dess bounding box (AABB) i 3D-scenen
+4. Flyga kameran dit med `viewFit` pa rummets entities
+5. Placera en DOM-annotation mitt i rummets bounding box
+
+**Implementering i `AssetPlusViewer.tsx` (ALARM_ANNOTATIONS_SHOW_EVENT-handler):**
 
 ```text
-38591717-... → rum heter "01.2.xxx" → Våning 02
-15c10118-... → rum heter "01.3.xxx" → Våning 03
-b78f0b93-... → rum heter "02.4.xxx" → Våning 04
+Nuvarande (trasig):
+  - Tar emot { alarms: [{ fmGuid, x, y, z }], flyTo }
+  - x/y/z ar alltid null/0
+  - Forsoker flasha entity via alarm-fmGuid (hittar inget i BIM)
+
+Nytt flode:
+  1. For varje alarm: sla upp in_room_fm_guid (redan hamtat i BuildingInsightsView)
+  2. For varje unikt rum: hitta BIM-entities och berakna AABB-centrum
+  3. Skapa DOM-annotation vid centrum
+  4. Om flyTo=true: viewFit pa ALLA berorda rums entities
 ```
 
-**SQL-migrering:**
-```sql
-UPDATE assets SET common_name = '02', name = 'Våning 02' WHERE fm_guid = '38591717-d449-44c5-b28b-67c13c9941d4';
-UPDATE assets SET common_name = '03', name = 'Våning 03' WHERE fm_guid = '15c10118-0d2e-4919-9c96-dd2f17932dbf';
-UPDATE assets SET common_name = '04', name = 'Våning 04' WHERE fm_guid = 'b78f0b93-9a69-49d0-9727-37cc42c04003';
+**Andring i `BuildingInsightsView.tsx` (event dispatch):**
+
+Skicka `in_room_fm_guid` med i event-detail istallet for (tomma) koordinater:
+
+```text
+Nuvarande:
+  alarms.map(a => ({ fmGuid: a.fm_guid, x: a.coordinate_x, y: a.coordinate_y, z: a.coordinate_z }))
+
+Nytt:
+  alarms.map(a => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }))
 ```
 
-Detta fixar automatiskt alla stallen dar vaningsnamn visas (karusell, diagram, grid).
+**Andring i `viewer-events.ts`:**
 
----
-
-### 2. Radera 90% av IfcAlarm for Smaviken
-
-Smaviken har 17 000+ alarm som gor allt trogt. Radera slumpmasigt 90% (ca 15 400 st):
-
-```sql
-DELETE FROM assets 
-WHERE asset_type = 'IfcAlarm' 
-  AND building_fm_guid = 'a8fe5835-e293-4ba3-92c6-c7e36f675f23'
-  AND random() < 0.9;
+Uppdatera `AlarmAnnotationsShowDetail`:
+```text
+Nuvarande: { fmGuid: string; x: number; y: number; z: number }[]
+Nytt: { fmGuid: string; roomFmGuid: string }[]
 ```
 
 ---
 
-### 3. Portfolio: Ta bort dubbletten Stadshuset Nykoping
+### 3. BIM-modellnamn -- databasfix + diagnostik
 
-Byggnaden `7cad5eda-796f-4b41-a74a-2f74dc290c31` (Stockholmshem-gruppen) har 0 rum och 0 vaningar -- den ar en tom kopia. Filtrera bort tomma byggnader i `PortfolioView.tsx`.
+**Omedelbar fix (SQL):**
 
-**Andring i `PortfolioView.tsx`:** I facilities-memo, filtrera bort byggnader som har exakt 0 barn-vaningar och 0 barn-rum i `allData`.
+Uppdatera `xkt_models`-tabellen med ratta namn for Smaviken. For att veta exakt vilka modeller som finns, behover vi kolla tabellen och satta ratt namn.
 
----
+**Diagnostik i `ModelVisibilitySelector.tsx`:**
 
-### 4. XKT Backend-cache: Direct Storage Upload
+Lagg till `console.log` i Strategy 6-8 som ALLTID loggar -- inte bara vid matchning:
+- Logga alla metaModels-nycklar
+- Logga alla IfcProject-objekt som hittas
+- Logga matchningsresultat
 
-**Problem:** `saveModelFromViewer` skickar 50 MB base64-data via edge function -- den misslyckas (kroppen ar for stor for edge functions, 8 MB gransen). Loggen visar: `XKT save: Edge function upload failed - FunctionsHttpError`.
-
-**Losning:** Byt fran edge function till direkt `supabase.storage.from('xkt-models').upload()` i klienten.
-
-**Andring i `xkt-cache-service.ts` (`saveModelFromViewer`):**
-- Ersatt `supabase.functions.invoke('xkt-cache', { body: { action: 'store', xktData: base64 } })`
-- Med `supabase.storage.from('xkt-models').upload(path, xktBlob, { upsert: true, contentType: 'application/octet-stream' })`
-- Behall metadata-upsert till `xkt_models`-tabellen (redan korrekt)
-- Fordelning: ingen base64-konvertering behoves (sparar 33% minne), ingen edge function timeout
-
-**RLS:** Saker att storage bucket `xkt-models` tillater authenticated uploads. Om inte, lagg till en policy.
-
----
-
-### 5. FloorCarousel: Forbattrad namnfallback
-
-Aven med databasfixen bor `FloorCarousel.tsx` ha battre generell fallback for namnlosa vaningar. Nuvarande kod visar "Vaning 1, 2, 3..." men numreringen ar sekventiell (inte baserad pa riktiga vaningsnummer).
-
-**Forbattring:** Nar `rawName` ar ett GUID och vaningen har barn, analysera barnens namn for att haerleda vaningsnummer (monstra typ `xx.N.xxx` -> Vaning N).
-
----
-
-### 6. FM-grid: MapPin-knappar till hoger om staplar
-
-**Problem:** MapPin-knapparna ligger under diagrammet istallet for bredvid staplarna.
-
-**Losning:** Byt layout fran vertikal till horisontell: diagrammet till vanster (85% bredd) + en kolumn med MapPin-knappar till hoger (15%). Varje MapPin-knapp placeras i linje med sin stapel.
-
-**Implementering:** Ersatt `<div className="flex flex-wrap">` under diagrammet med en `flex`-layout dar diagrammet och knappkolumnen sitter sida vid sida. MapPin-knapparna renderas i en vertikal lista som matchar staplarnas positioner.
-
----
-
-### 7. Oga-knappen i FM-grid: Annotation + Zoom
-
-**Nuvarande status:** Koden ar redan korrekt i `drawerMode` -- den dispatchar `ALARM_ANNOTATIONS_SHOW_EVENT` med `flyTo: true`. I icke-drawerMode navigerar den till 3D-viewern med `entity`-param.
-
-**Problem:** Anvandaren vill att den ALDRIG navigerar till fullskarms-3D. Den ska alltid dispatcha event.
-
-**Fix:** I icke-drawerMode, dispatcha eventet ocksa (istallet for `navigateTo3D`). Om inline-viewern ar synlig (desktop) hanteras det dar. Om den inte ar synlig, ga till 3D med annotation-data i sessionStorage men utan fullskarmsnavigering.
-
----
-
-### 8. BIM-modellnamn: Fixa for Smaviken
-
-**Rotorsak:** `xkt_models`-tabellen har `model_name = GUID` for bada Smaviken-modellerna. Hooken `useModelNames` faller igenom till Asset+ API (`GetModels`-endpointen), men den returnerar troligen inga resultat (eftersom modellerna synkats med GUID-baserade filnamn).
-
-**Losning (tvasteg):**
-
-1. **Strategy 6/7 forbattring i `ModelVisibilitySelector`:** Nar `metaModel.rootMetaObject` ar null (vanligt for XKT-modeller), sok ALLA metaObjects av typen `IfcProject` och matcha via `metaObj.metaModel?.id`. Om `metaModel`-referensen ocksa saknas, anvand en position-baserad matchning: tilldela IfcProject-namn i ordning till modeller som saknar namn.
-
-2. **Uppdatera `xkt_models` med riktiga namn:** Nar Strategy 6/7 hittar ett IfcProject-namn, skriv tillbaka det till databasen (`model_name`) sa det cachas for nasta gang.
-
----
-
-### 9. Kompakt 3D-lage for Insights
-
-**Problem:** Inline-viewern i Insights (400x500px) visar for mycket UI: FloorCarousel, NavCube, toolbar ar for breda.
-
-**Losning:** Lagg till en prop `compactMode` pa `AssetPlusViewer` som:
-- Doljer FloorCarousel helt
-- Minskar NavCube-storleken
-- Doljer toolbar-text (bara ikoner)
-- Doljer Room Labels-knapp
-
-Satt `compactMode={true}` pa `InsightsInlineViewer`s `AssetPlusViewer`.
-
----
-
-### 10. Etikettfel: "Kan inte ladda etikettkonfigurationer"
-
-Kontrollera `useRoomLabelConfigs` -- den soker i `room_label_configs`-tabellen. Felet kan bero pa att tabellen inte finns eller att RLS blockerar. Fixa genom att wrappa queryn i try/catch sa att felet inte visar en rod banner.
+Detta ger oss data for att fixa Strategy 8 korrekt i nasta iteration.
 
 ---
 
@@ -130,22 +91,14 @@ Kontrollera `useRoomLabelConfigs` -- den soker i `room_label_configs`-tabellen. 
 
 | Fil | Andring |
 |---|---|
-| Databasmigrering | 1) Namnge 3 vaningar, 2) Radera 90% alarm |
-| `src/services/xkt-cache-service.ts` | Byt `saveModelFromViewer` till direkt Storage upload |
-| `src/components/insights/BuildingInsightsView.tsx` | 1) MapPin-layout hoger om staplar, 2) Oga-knapp dispatchar event aven i icke-drawerMode |
-| `src/components/viewer/FloorCarousel.tsx` | Forbattrad namnfallback med barnnamnsanalys |
-| `src/components/portfolio/PortfolioView.tsx` | Filtrera bort tomma byggnader (0 rum + 0 vaningar) |
-| `src/components/viewer/ModelVisibilitySelector.tsx` | Forbattrad Strategy 6/7 + write-back till DB |
-| `src/hooks/useModelNames.ts` | Lagg till Strategy 6 write-back |
-| `src/components/viewer/AssetPlusViewer.tsx` | Lagg till `compactMode` prop |
+| `src/components/insights/BuildingInsightsView.tsx` | 1) React.lazy for AssetPlusViewer, 2) Villkorad montering, 3) Skicka roomFmGuid istallet for koordinater i event |
+| `src/components/viewer/AssetPlusViewer.tsx` | Skriv om ALARM_ANNOTATIONS_SHOW_EVENT-handler: sla upp rum-BIM, berakna AABB-centrum, skapa DOM-annotation, viewFit |
+| `src/lib/viewer-events.ts` | Uppdatera AlarmAnnotationsShowDetail med roomFmGuid istallet for x/y/z |
+| `src/components/viewer/ModelVisibilitySelector.tsx` | Lagg till diagnostik-loggning i Strategy 6-8 |
+| SQL (databasfix) | Uppdatera model_name for Smavikens modeller i xkt_models |
 
 ### Prioritetsordning
 
-1. **Databasfixar** (vaningsnamn + alarm-reducering) -- omedelbar effekt
-2. **XKT direct storage upload** -- fixar backend-cache, snabbare laddning
-3. **Portfolio duplicering** -- enkel fix
-4. **MapPin-layout + Oga-knapp** -- FM-grid forbattringar
-5. **BIM-modellnamn** -- Strategy 6/7 forbattring + write-back
-6. **Kompakt 3D-lage** -- responsivitet i Insights
-7. **FloorCarousel fallback** -- sakerhetsnat for framtida byggnader
-
+1. **Lazy-load 3D** -- omedelbar prestandaforabttring, enkel andring
+2. **Alarm-annotations via rum-BIM** -- korrekt flyTo + visuella markeringar
+3. **BIM-modellnamn** -- databasfix + diagnostik for framtida forbattring
