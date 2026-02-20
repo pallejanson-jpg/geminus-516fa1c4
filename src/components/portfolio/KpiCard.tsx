@@ -11,17 +11,14 @@ interface KpiCardProps {
 // Format number to use proper locale formatting without excessive decimals
 const formatValue = (value: string | number): string => {
   if (typeof value === 'number') {
-    // Round to max 2 decimals and use Swedish locale for proper formatting
     return value.toLocaleString('sv-SE', { maximumFractionDigits: 2 });
   }
-  // For strings, try to clean up excessive decimal formatting
   const numMatch = value.match(/^([\d\s,.]+)\s*(m²|kWh.*|%)?$/);
   if (numMatch) {
     const numPart = numMatch[1].replace(/\s/g, '').replace(',', '.');
     const num = parseFloat(numPart);
     if (!isNaN(num)) {
       const unit = numMatch[2] || '';
-      // Format number with max 1 decimal for area values
       const formatted = num.toLocaleString('sv-SE', { maximumFractionDigits: 1 });
       return unit ? `${formatted} ${unit}` : formatted;
     }
@@ -37,8 +34,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, icon: Icon, onClick }) 
   
   const content = (
     <CardContent className="p-3 sm:p-4 flex flex-col justify-between h-full">
-      <div className="flex items-center gap-2 text-muted-foreground text-[10px] sm:text-xs uppercase font-bold">
-        <Icon size={12} className="sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+      <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase font-bold">
+        <Icon size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />
         <span className="truncate">{title}</span>
       </div>
       <p className="text-lg sm:text-2xl font-bold text-foreground mt-1 truncate">{displayValue}</p>

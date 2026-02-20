@@ -1,30 +1,12 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { Box, Menu as MenuIcon, Home, ClipboardList, AlertTriangle, BarChart2, Building2, Zap, Archive, Radar, Scan, Globe } from 'lucide-react';
+import { Menu as MenuIcon, Home } from 'lucide-react';
 import { AppButton } from '@/components/common/AppButton';
-import { THEMES, DEFAULT_APP_CONFIGS, DEFAULT_SIDEBAR_ORDER, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
+import { THEMES, SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
 import type { SidebarItem } from '@/lib/constants';
 import { AppContext } from '@/context/AppContext';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { supabase } from '@/integrations/supabase/client';
-
-// Map sidebar item IDs to icon + color + label + handler type
-const SIDEBAR_ITEM_META: Record<string, {
-    icon: React.ElementType;
-    color: string;
-    label: string;
-    type: 'internal' | 'config'; // 'internal' = custom setActiveApp, 'config' = from DEFAULT_APP_CONFIGS
-}> = {
-    inventory: { icon: ClipboardList, color: 'text-orange-500', label: 'Inventering', type: 'internal' },
-    fault_report: { icon: AlertTriangle, color: 'text-red-500', label: 'Felanmälan', type: 'internal' },
-    insights: { icon: BarChart2, color: 'text-green-500', label: 'Insights', type: 'internal' },
-    fma_plus: { icon: Building2, color: 'text-blue-500', label: DEFAULT_APP_CONFIGS.fma_plus.label, type: 'config' },
-    asset_plus: { icon: Box, color: 'text-purple-500', label: DEFAULT_APP_CONFIGS.asset_plus.label, type: 'config' },
-    iot: { icon: Zap, color: 'text-yellow-500', label: DEFAULT_APP_CONFIGS.iot.label, type: 'config' },
-    original_archive: { icon: Archive, color: 'text-indigo-500', label: DEFAULT_APP_CONFIGS.original_archive.label, type: 'config' },
-    radar: { icon: Radar, color: 'text-pink-500', label: DEFAULT_APP_CONFIGS.radar.label, type: 'config' },
-    ai_scan: { icon: Scan, color: 'text-emerald-500', label: 'AI Scan', type: 'internal' },
-    globe: { icon: Globe, color: 'text-sky-400', label: 'Globe', type: 'internal' },
-};
+import { SIDEBAR_ITEM_META } from '@/lib/sidebar-config';
 
 const LeftSidebar: React.FC = () => {
     const { 
@@ -114,7 +96,6 @@ const LeftSidebar: React.FC = () => {
                 setActiveApp(id);
             }
         } else {
-            // Internal items: inventory, fault_report, insights
             setActiveApp(id);
         }
     }, [appConfigs, setActiveApp, selectedFacility, setIvion360Context, open360WithContext]);
@@ -149,7 +130,7 @@ const LeftSidebar: React.FC = () => {
                         className="w-full !justify-start gap-2 sm:gap-3 h-9 sm:h-10 text-xs sm:text-sm" 
                         title={isSidebarExpanded ? "" : "Home"}
                     >
-                        <Home size={16} className={`sm:w-[18px] sm:h-[18px] ${activeApp === 'home' ? '' : 'text-sky-500'}`} />
+                        <Home size={16} className={`sm:w-[18px] sm:h-[18px] ${activeApp === 'home' ? '' : 'text-primary'}`} />
                         <span className={`truncate ${!isSidebarExpanded && 'hidden'}`}>Home</span>
                     </AppButton>
                     

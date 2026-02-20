@@ -9,6 +9,7 @@ import GunnarChat from "@/components/chat/GunnarChat";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
+import { extractNtaFromAttributes } from "@/lib/building-utils";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -55,25 +56,11 @@ function writeCachedFavorites(buildings: FavoriteBuilding[]) {
   } catch { /* quota exceeded etc */ }
 }
 
-// Helper to extract NTA value from attributes
-const extractNtaFromAttributes = (attributes: Record<string, any> | undefined): number => {
-  if (!attributes) return 0;
-  for (const key of Object.keys(attributes)) {
-    if (key.toLowerCase().startsWith('nta')) {
-      const ntaObj = attributes[key];
-      if (ntaObj && typeof ntaObj === 'object' && typeof ntaObj.value === 'number') {
-        return ntaObj.value;
-      }
-    }
-  }
-  return 0;
-};
-
 function FavoriteBuildingSkeleton() {
   return (
-    <div className="rounded-lg sm:rounded-xl border border-border bg-card/80 overflow-hidden">
-      <Skeleton className="h-20 sm:h-24 w-full" />
-      <div className="p-2 sm:p-3 flex items-center justify-between">
+    <div className="rounded-xl border border-border bg-card/80 overflow-hidden">
+      <Skeleton className="h-24 sm:h-28 w-full" />
+      <div className="p-2.5 sm:p-3 flex items-center justify-between">
         <Skeleton className="h-3 w-10" />
         <Skeleton className="h-3 w-10" />
         <Skeleton className="h-3 w-14" />
@@ -177,14 +164,14 @@ export default function HomeLanding() {
 
           <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6 w-full">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground">Welcome to My Geminus</h1>
-            <p className="text-xs sm:text-sm md:text-base text-muted-foreground">Your digital backbone for digital twins</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">Your digital backbone for digital twins</p>
           </header>
 
           {/* AI Assistants */}
           <section className="space-y-2 sm:space-y-3 w-full mb-4 sm:mb-6">
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
-              <p className="text-[11px] sm:text-sm text-muted-foreground">Quick help for data, documents and integrations</p>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
 
             <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
@@ -196,7 +183,7 @@ export default function HomeLanding() {
                     type="button"
                     onClick={() => openAssistant(a.id)}
                     disabled={!a.available}
-                    className={`rounded-lg sm:rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors ${
+                    className={`rounded-xl border border-border bg-card/60 p-3 sm:p-4 text-left transition-colors ${
                       a.available ? 'hover:bg-muted hover:border-primary/50 active:bg-muted/80' : 'opacity-60 cursor-not-allowed'
                     }`}
                   >
@@ -208,10 +195,10 @@ export default function HomeLanding() {
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-semibold text-sm sm:text-base leading-none text-foreground">{a.title}</span>
                           {!a.available && (
-                            <span className="text-[9px] sm:text-[10px] bg-muted text-muted-foreground px-1 sm:px-1.5 py-0.5 rounded">Snart</span>
+                            <span className="text-[11px] sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Snart</span>
                           )}
                         </div>
-                        <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
+                        <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
                       </div>
                     </div>
                   </button>
@@ -225,7 +212,7 @@ export default function HomeLanding() {
             <Card className="bg-card/60">
               <CardHeader className="pb-2 sm:pb-4">
                 <CardTitle className="text-base sm:text-lg text-foreground">My Favorites</CardTitle>
-                <CardDescription className="text-[11px] sm:text-sm">Quick access to your most used buildings</CardDescription>
+                <CardDescription className="text-[11px] sm:text-xs">Quick access to your most used buildings</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 {showSkeleton ? (
@@ -241,9 +228,9 @@ export default function HomeLanding() {
                         key={building.fmGuid}
                         type="button"
                         onClick={() => handleBuildingClick(building)}
-                        className="rounded-lg sm:rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
+                        className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
                       >
-                        <div className="h-20 sm:h-24 relative overflow-hidden">
+                        <div className="h-24 sm:h-28 relative overflow-hidden">
                           <img
                             src={building.image}
                             alt={building.commonName || building.name}
@@ -256,7 +243,7 @@ export default function HomeLanding() {
                             </h3>
                           </div>
                         </div>
-                        <div className="p-2 sm:p-3 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground">
+                        <div className="p-2.5 sm:p-3 flex items-center justify-between text-[11px] sm:text-xs text-muted-foreground">
                           <span>{building.numberOfLevels || 0} fl</span>
                           <span>{building.numberOfSpaces || 0} rm</span>
                           <span>{building.area?.toLocaleString() || 0} m²</span>
@@ -265,12 +252,12 @@ export default function HomeLanding() {
                     ))}
                   </div>
                 ) : showEmpty ? (
-                  <div className="rounded-lg border border-dashed border-border p-3 sm:p-4">
+                  <div className="rounded-xl border border-dashed border-border p-3 sm:p-4">
                     <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
                       <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
                         <p className="text-xs sm:text-sm font-medium">No favorites yet</p>
-                        <p className="text-[10px] sm:text-xs">Mark buildings as favorites from Portfolio.</p>
+                        <p className="text-[11px] sm:text-xs">Mark buildings as favorites from Portfolio.</p>
                       </div>
                     </div>
                   </div>
