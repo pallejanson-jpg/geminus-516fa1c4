@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.mobile-ai-scan]
 verify_jwt = false
+
+[functions.asset-plus-create-building]
+verify_jwt = false

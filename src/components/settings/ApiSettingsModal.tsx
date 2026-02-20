@@ -31,6 +31,7 @@ import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
 import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
+import CreateBuildingPanel from './CreateBuildingPanel';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
 interface ApiSettingsModalProps {
@@ -1908,6 +1909,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
                             Gunnar
                         </TabsTrigger>
+                        <TabsTrigger value="building" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                            <Building2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Byggnad
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Profile Settings Tab */}
@@ -3074,6 +3079,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     {/* Gunnar AI Settings Tab */}
                     <TabsContent value="gunnar" className="space-y-4 mt-4 flex-1 overflow-y-auto">
                         <GunnarSettings />
+                    </TabsContent>
+
+                    {/* Create Building Tab */}
+                    <TabsContent value="building" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <CreateBuildingPanel />
                     </TabsContent>
                 </Tabs>
             </DialogContent>
