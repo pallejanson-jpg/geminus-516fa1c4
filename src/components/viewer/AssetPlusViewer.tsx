@@ -521,10 +521,73 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             }
           });
         }
+      } else if (mode === 'energy_floors' || mode === 'energy_floor') {
+        // colorMap keys are floor fmGuids — colorize all children of each IfcBuildingStorey
+        const getChildEntityIds = (parent: any, allMeta: any): string[] => {
+          const result: string[] = [];
+          Object.values(allMeta).forEach((mo: any) => {
+            if (mo.parent === parent.id || mo.parentId === parent.id) {
+              // If it's a leaf that maps to a scene object, add it
+              if (scene.objects?.[mo.id]) result.push(mo.id);
+              // Also recurse into children
+              result.push(...getChildEntityIds(mo, allMeta));
+            }
+          });
+          return result;
+        };
+
+        Object.values(metaObjects).forEach((mo: any) => {
+          if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+          const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+          const rgb = colorMap[moGuid] || colorMap[moGuid.toUpperCase()] || colorMap[mo.originalSystemId] || colorMap[mo.id];
+          if (!rgb) return;
+          const childIds = getChildEntityIds(mo, metaObjects);
+          childIds.forEach(childId => {
+            const entity = scene.objects?.[childId];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.85;
+            }
+          });
+        });
+      } else if (mode === 'asset_categories' || mode === 'asset_category') {
+        // colorMap keys are category names — match assets via allData
+        const currentData = allDataRef.current;
+        const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
+        const categoryToFmGuids = new Map<string, string[]>();
+        currentData.forEach((a: any) => {
+          if (a.buildingFmGuid !== buildingGuid) return;
+          const cat = a.category || 'Unknown';
+          if (!categoryToFmGuids.has(cat)) categoryToFmGuids.set(cat, []);
+          categoryToFmGuids.get(cat)!.push(a.fmGuid.toLowerCase());
+        });
+
+        categoryToFmGuids.forEach((fmGuids, cat) => {
+          let rgb = colorMap[cat];
+          if (!rgb) {
+            const truncated = cat.length > 15 ? cat.substring(0, 15) + '...' : cat;
+            rgb = colorMap[truncated];
+          }
+          if (!rgb) return;
+          fmGuids.forEach(guid => {
+            Object.values(metaObjects).forEach((mo: any) => {
+              const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+              if (moGuid !== guid) return;
+              const entity = scene.objects?.[mo.id];
+              if (entity) {
+                entity.xrayed = false;
+                entity.visible = true;
+                entity.colorize = rgb;
+                entity.opacity = 0.85;
+              }
+            });
+          });
+        });
       } else {
         // Forward to existing insights logic — update cache and trigger re-render
         insightsColorMapCacheRef.current = { mode, colorMap };
-        // Force re-evaluation
         insightsColorModeRef.current = mode;
       }
 
