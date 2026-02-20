@@ -1,7 +1,7 @@
 import React, { useContext, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { 
@@ -201,17 +201,6 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                         width={isMobile ? 60 : 100}
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value: number, name: string, props: any) => [
-                                            `${value}%`, 
-                                            props.payload.fullName
-                                        ]}
-                                    />}
                                     <Bar 
                                         dataKey="occupancy" 
                                         name="Occupancy"
@@ -252,17 +241,6 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value: number, name: string, props: any) => [
-                                            `${value} rooms (${props.payload.area.toLocaleString()} m²)`,
-                                            name
-                                        ]}
-                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>

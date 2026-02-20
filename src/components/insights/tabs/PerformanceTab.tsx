@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
 import { 
@@ -14,6 +14,7 @@ import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '@/components/ui/command';
+import type { MapColoringMode } from '@/lib/map-coloring-utils';
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -47,6 +48,7 @@ const monthlyTrend = [
 
 interface PerformanceTabProps {
     onSelectBuilding: (building: Facility) => void;
+    onColorMap?: (mode: MapColoringMode) => void;
 }
 
 // Truncate name for chart display
@@ -284,18 +286,6 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                         className="text-xs"
                                         tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                        labelStyle={{ color: 'hsl(var(--foreground))' }}
-                                        formatter={(value: number, name: string, props: any) => [
-                                            `${value} kWh/m²`, 
-                                            props.payload.fullName
-                                        ]}
-                                    />}
                                     <Bar 
                                         dataKey="kwhPerSqm" 
                                         name="kWh/m²"
@@ -342,13 +332,6 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                    />}
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -382,13 +365,6 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                         className="text-xs"
                                         tick={{ fill: 'hsl(var(--muted-foreground))' }}
                                     />
-                                    {!isMobile && <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'hsl(var(--popover))',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '8px'
-                                        }}
-                                    />}
                                     <Legend />
                                     <Line 
                                         type="monotone" 

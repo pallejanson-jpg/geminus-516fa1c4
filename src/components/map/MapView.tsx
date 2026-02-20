@@ -164,9 +164,15 @@ const ColoringLegend: React.FC<{ mode: MapColoringMode }> = ({ mode }) => {
 
 interface MapViewProps {
   initialColoringMode?: MapColoringMode;
+  /** Hide the building sidebar (used when embedded in Insights) */
+  hideSidebar?: boolean;
+  /** Use smaller markers when map is compact */
+  compact?: boolean;
+  /** External coloring override — when set, overrides the internal dropdown */
+  externalColoringMode?: MapColoringMode;
 }
 
-const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
+const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSidebar, compact, externalColoringMode }) => {
   const { setSelectedFacility, setActiveApp, navigatorTreeData, isLoadingData, allData } = useContext(AppContext);
   const isMobile = useIsMobile();
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
@@ -181,6 +187,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
   const [buildingCoordinates, setBuildingCoordinates] = useState<BuildingCoordinates[]>([]);
   const [coloringMode, setColoringMode] = useState<MapColoringMode>(initialColoringMode);
+  const effectiveColoringMode = externalColoringMode ?? coloringMode;
   const mapRef = useRef<any>(null);
 
   // Fetch saved building coordinates from database
@@ -346,7 +353,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
     return supercluster.getClusters(bounds, Math.floor(viewState.zoom));
   // coloringMode included so markers re-render immediately on mode change
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supercluster, viewState, coloringMode]);
+  }, [supercluster, viewState, coloringMode, externalColoringMode]);
 
   // Fetch Mapbox token from backend
   useEffect(() => {
@@ -466,7 +473,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
               variant="secondary"
               size="icon"
               className={`h-8 w-8 sm:h-9 sm:w-9 bg-card/90 backdrop-blur-sm shadow-lg ${
-                coloringMode !== 'none' ? 'ring-2 ring-primary' : ''
+                effectiveColoringMode !== 'none' ? 'ring-2 ring-primary' : ''
               }`}
             >
               <Palette size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -506,15 +513,17 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
         </Button>
       </div>
 
-      {/* Facility List Sidebar - Collapsible on mobile */}
-      <BuildingSidebar 
-        facilities={mapFacilities}
-        selectedMarker={selectedMarker}
-        onMarkerClick={handleMarkerClick}
-      />
+      {/* Facility List Sidebar - Collapsible on mobile — hidden when hideSidebar */}
+      {!hideSidebar && (
+        <BuildingSidebar 
+          facilities={mapFacilities}
+          selectedMarker={selectedMarker}
+          onMarkerClick={handleMarkerClick}
+        />
+      )}
 
       {/* Color legend */}
-      <ColoringLegend mode={coloringMode} />
+      <ColoringLegend mode={effectiveColoringMode} />
 
       {/* Map */}
       <Map
@@ -542,14 +551,15 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
                 pointCount={pointCount || 0}
                 totalPoints={mapFacilities.length}
                 onClick={() => handleClusterClick(cluster.id as number, longitude, latitude)}
+                compact={compact}
               />
             );
           }
 
           const facility = cluster.properties.facility!;
           const metrics = buildingMetricsMap[facility.fmGuid];
-          const markerColor = coloringMode !== 'none' && metrics 
-            ? getBuildingColor(metrics, coloringMode) 
+          const markerColor = effectiveColoringMode !== 'none' && metrics 
+            ? getBuildingColor(metrics, effectiveColoringMode) 
             : undefined;
 
           return (
@@ -561,6 +571,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none' }) => {
               onClick={() => handleMarkerClick(facility)}
               isSelected={selectedMarker?.fmGuid === facility.fmGuid}
               color={markerColor}
+              compact={compact}
             />
           );
         })}
