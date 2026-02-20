@@ -259,30 +259,20 @@ export class XktCacheService {
     currentSaveCount++;
     
     try {
-      // Always use the bare modelId (without .xkt) when calling the edge function.
-      // The edge function appends .xkt itself after running safeModelId transformation.
-      // Previously, passing fileName (with .xkt) caused the dot to be replaced with '_',
-      // resulting in a mismatched storage path: modelId_xkt.xkt vs modelId.xkt
       const bareModelId = modelId.endsWith('.xkt') ? modelId.slice(0, -4) : modelId;
       const fileName = `${bareModelId}.xkt`;
       const storagePath = `${buildingFmGuid}/${fileName}`;
       
       console.log(`XKT save: Uploading ${bareModelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
       
-      // Use edge function for upload to bypass LockManager issues in Web Worker contexts
-      // (Direct supabase.storage.upload() fails with "LockManager lock timed out" in NavVis/Ivion contexts)
-      const base64Data = this.arrayBufferToBase64(xktData);
-      const { data: storeData, error: storeError } = await supabase.functions.invoke('xkt-cache', {
-        body: {
-          action: 'store',
-          modelId: bareModelId,  // Pass bare UUID — edge function appends .xkt
-          buildingFmGuid,
-          xktData: base64Data,
-        },
-      });
+      // Upload directly to storage — avoids the 8 MB edge function body limit
+      const blob = new Blob([xktData], { type: 'application/octet-stream' });
+      const { error: uploadError } = await supabase.storage
+        .from('xkt-models')
+        .upload(storagePath, blob, { upsert: true, contentType: 'application/octet-stream' });
 
-      if (storeError || !storeData?.success) {
-        console.warn('XKT save: Edge function upload failed', storeError || storeData?.error);
+      if (uploadError) {
+        console.warn('XKT save: Direct storage upload failed', uploadError);
         return false;
       }
       
