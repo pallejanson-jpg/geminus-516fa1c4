@@ -1,40 +1,129 @@
 
 
-## Fix: Byggfel (412) och 3D i Smaviken
+## Ny funktion: Skapa byggnad med IFC-uppladdning
 
-### Rotorsak: Bygget ar trasigt
+### Oversikt
 
-Hela appen visar "HTTP ERROR 412" -- ingenting fungerar, inte bara 3D. Detta beror pa ett kompileringsfel fran de senaste andringarna. Tva specifika problem har identifierats:
+En ny flik "Byggnad" laggs till i Installningar (ApiSettingsModal) dar anvandaren kan:
 
-### Problem 1: Inkonsekvent alarm-event-format i BuildingInsightsView
+1. Skapa en ny Fastighet (Complex) + Byggnad i Asset+ med korrekta FMGUID:s
+2. Ladda upp en IFC-fil som konverteras till XKT for 3D-visning
+3. Allt registreras bade i Asset+ och lokala databasen
 
-I `BuildingInsightsView.tsx` finns TVA olika format for alarm-events:
+### Flode (steg for steg)
 
-- **Rad 992** (ovannivaknappar): Skickar gamla formatet med `x, y, z` koordinater (som alltid ar null)
-- **Rad 1112 och 1185** (vanings- och enskilda alarm): Skickar det nya formatet med `roomFmGuid`
-
-Det gamla formatet pa rad 992 matchar inte langre `AlarmAnnotationsShowDetail`-typen som nu forvanter `roomFmGuid` istallet for `x/y/z`. Detta kan orsaka TypeScript-kompileringsfel.
-
-**Fix:** Uppdatera rad 991-992 sa att det anvander samma `roomFmGuid`-format som de andra dispatcherna:
+```text
+Anvandaren oppnar Installningar -> Ny flik "Byggnad"
+  |
+  v
+Steg 1: Grunduppgifter
+  - Fastighetsbeteckning (designation) + namn (commonName) for Complex
+  - Byggnadsbeteckning + namn for Building
+  - Latitude/Longitude (valfritt, for kartan)
+  |
+  v
+Steg 2: Klicka "Skapa i Asset+"
+  - Edge function skapar Complex (ObjectType 0) via AddObjectList
+  - Returnerat FmGuid anvands som parent for Building (ObjectType 1)
+  - Building skapas via samma endpoint
+  - Bada sparas lokalt i assets-tabellen + building_settings
+  |
+  v
+Steg 3: Ladda upp IFC-fil (valfritt)
+  - Filinput accepterar .ifc-filer
+  - Filen konverteras till XKT i webblasaren via xeokit-convert + web-ifc
+  - XKT sparas i xkt-models bucket
+  - Metadata sparas i xkt_models-tabellen
+  |
+  v
+Klart! Byggnaden syns i Portfolio, Navigator och 3D-viewer
 ```
-.map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }))
+
+### Teknisk implementation
+
+#### 1. Ny edge function: `asset-plus-create-building`
+
+En ny dedikerad edge function som hanterar hela hierarki-skapandet (Complex + Building). Den befintliga `asset-plus-create` hanterar bara Instance-objekt.
+
+Flodet i edge function:
+1. Ta emot: `{ complexDesignation, complexName, buildingDesignation, buildingName }`
+2. Generera FmGuid for bade Complex och Building
+3. Skapa Complex via `AddObjectList` med ObjectType 0, ingen parent
+4. Skapa Building via `AddObjectList` med ObjectType 1, parentFmGuid = Complex FmGuid
+5. Spara bada lokalt i `assets`-tabellen
+6. Skapa en rad i `building_settings` med latitude/longitude
+7. Returnera bada FmGuids
+
+Asset+ API-payload for Complex (fran sync-api.md):
+```json
+{
+  "BimObjectWithParents": [{
+    "BimObject": {
+      "ObjectType": 0,
+      "Designation": "FASTIGHET-01",
+      "CommonName": "Min Fastighet",
+      "APIKey": "<api-key>",
+      "FmGuid": "<genererat-uuid>",
+      "UsedIdentifier": 1
+    }
+  }]
+}
 ```
 
-### Problem 2: XKT-filter loggbugg (kosmetisk)
+Asset+ API-payload for Building:
+```json
+{
+  "BimObjectWithParents": [{
+    "ParentFmGuid": "<complex-fm-guid>",
+    "UsedIdentifier": 1,
+    "BimObject": {
+      "ObjectType": 1,
+      "Designation": "BYGGNAD-01",
+      "CommonName": "Min Byggnad",
+      "APIKey": "<api-key>",
+      "FmGuid": "<genererat-uuid>",
+      "UsedIdentifier": 1
+    }
+  }]
+}
+```
 
-Loggen visar "Initial load restricted to 0.5 A-model(s)" for att `aModelIds.add(id)` och `aModelIds.add(id.toLowerCase())` laggar till samma strang (UUID ar redan lowercase), sa Set-storleken = 1 istallet for 2. Delat med 2 = 0.5. Sjalva filtret fungerar korrekt -- det ar bara loggen som visar fel.
+#### 2. Ny UI-komponent: `CreateBuildingPanel.tsx`
 
-**Fix:** Andra loggberakningen fran `aModelIds.size / 2` till att rakna unika modell-ID:n korrekt.
+Placeras i `src/components/settings/CreateBuildingPanel.tsx`. Innehaller:
 
-### Filer som andras
+- Formulardel med falt for:
+  - Fastighetsbeteckning + namn
+  - Byggnadsbeteckning + namn
+  - Latitude/Longitude (valfritt)
+- "Skapa"-knapp som anropar edge function
+- IFC-uppladdningsdel (visas efter att byggnaden skapats):
+  - Filval (`<input type="file" accept=".ifc">`)
+  - Konverteringslogg som visar progress
+  - Anvander `convertGlbToXkt()` fran `acc-xkt-converter.ts`
+  - Sparar XKT via Supabase Storage + `xkt_models`-tabellen
+
+#### 3. Ny flik i ApiSettingsModal
+
+Lagg till en ny TabsTrigger "Byggnad" med Building2-ikonen i tabblisten. TabsContent renderar `CreateBuildingPanel`.
+
+#### 4. Config.toml
+
+Lagg till `[functions.asset-plus-create-building]` med `verify_jwt = false`.
+
+### Filer som skapas/andras
 
 | Fil | Andring |
 |---|---|
-| `src/components/insights/BuildingInsightsView.tsx` | Fixa rad 991-992: byt `x/y/z`-format till `roomFmGuid`-format for alarm-event dispatch |
-| `src/components/viewer/AssetPlusViewer.tsx` | Fixa XKT-filter-logg: byt `aModelIds.size / 2` till korrekt rakning |
+| `supabase/functions/asset-plus-create-building/index.ts` | **NY** - Edge function for att skapa Complex + Building i Asset+ |
+| `src/components/settings/CreateBuildingPanel.tsx` | **NY** - UI-komponent med formular och IFC-uppladdning |
+| `src/components/settings/ApiSettingsModal.tsx` | Lagg till ny flik "Byggnad" med CreateBuildingPanel |
+| `supabase/config.toml` | Lagg till `[functions.asset-plus-create-building]` |
 
-### Prioritetsordning
+### Sakerhetsaspekter
 
-1. **Fixa alarm-event-formatet** -- detta loser troligen byggfelet (412)
-2. **Fixa XKT-logg** -- kosmetisk fix
+- Edge function anvander `verifyAuth` for att sakerstalla inloggad anvandare
+- Alla Asset+ credentials hamtas fran Supabase secrets (redan konfigurerade)
+- Lokala databasoperationer anvander service role key i edge function
+- Inga nya RLS-policyer behovs -- befintliga policyer pa `assets` och `building_settings` tillater INSERT for autentiserade anvandare
 
