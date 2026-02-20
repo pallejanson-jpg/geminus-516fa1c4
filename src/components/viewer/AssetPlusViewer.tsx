@@ -542,33 +542,45 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       if (!detail?.alarms?.length) return;
 
       const viewer = viewerInstanceRef.current;
-      const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+      const xeokitViewer = assetView?.viewer;
       if (!xeokitViewer?.scene) return;
 
-      // If only one alarm, fly to it
-      if (detail.alarms.length === 1) {
-        const a = detail.alarms[0];
-        if (a.x != null && a.y != null && a.z != null) {
+      // Collect all room entity IDs for viewFit
+      const allRoomEntityIds: string[] = [];
+
+      for (const alarm of detail.alarms) {
+        const roomGuid = alarm.roomFmGuid;
+        if (!roomGuid) continue;
+
+        // Find room entities in BIM by fmguid property
+        const roomItemIds = assetView.getItemsByPropertyValue?.("fmguid", roomGuid.toUpperCase()) || [];
+        if (roomItemIds.length === 0) {
+          console.debug('[AlarmAnnotations] No BIM entities for room:', roomGuid);
+          continue;
+        }
+
+        allRoomEntityIds.push(...roomItemIds);
+
+        // Flash the first room entity to highlight it
+        flashEntityById(xeokitViewer.scene, roomItemIds[0]);
+      }
+
+      // flyTo: viewFit on all room entities
+      if (detail.flyTo && allRoomEntityIds.length > 0) {
+        try {
           xeokitViewer.cameraFlight?.flyTo({
-            eye: [a.x, a.y + 3, a.z + 3],
-            look: [a.x, a.y, a.z],
-            up: [0, 1, 0],
+            aabb: xeokitViewer.scene.getAABB(allRoomEntityIds),
             duration: 1,
           });
-        }
-        // Flash the entity
-        const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-        if (assetView) {
-          const itemIds = assetView.getItemsByPropertyValue("fmguid", a.fmGuid.toUpperCase()) || [];
-          if (itemIds.length > 0) {
-            flashEntityById(xeokitViewer.scene, itemIds[0]);
-          }
+        } catch (err) {
+          console.warn('[AlarmAnnotations] flyTo failed:', err);
         }
       }
 
       // Show annotations via existing toggle
       setShowAnnotations(true);
-      console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', detail.alarms.length, 'alarms');
+      console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', detail.alarms.length, 'alarms, rooms found:', allRoomEntityIds.length);
     };
 
     window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
