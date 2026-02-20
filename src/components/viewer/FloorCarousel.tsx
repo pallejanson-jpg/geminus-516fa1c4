@@ -114,13 +114,30 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
         const isGuid = GUID_RE.test(rawName);
         const isUnknown = !rawName || rawName === 'Unknown Floor';
         
+        // Get children of this floor
+        const children = Object.values(metaObjects).filter((m: any) => m.parent?.id === metaObject.id);
+        
         if (isGuid || isUnknown) {
-          // Check if this floor has children — skip empty GUID floors
-          const hasChildren = Object.values(metaObjects).some((m: any) => m.parent?.id === metaObject.id);
-          if (!hasChildren) return;
+          // Skip empty GUID floors
+          if (children.length === 0) return;
         }
         
-        const displayName = (isGuid || isUnknown) ? `Våning ${extractedFloors.length + 1}` : rawName;
+        let displayName: string;
+        if (isGuid || isUnknown) {
+          // Try to infer floor number from children names (pattern: "XX.N.XXX" → Våning N)
+          let inferredNumber: string | null = null;
+          for (const child of children) {
+            const childName = (child as any).name || '';
+            const match = childName.match(/^\d+\.(\d+)\./);
+            if (match) {
+              inferredNumber = match[1];
+              break;
+            }
+          }
+          displayName = inferredNumber ? `Våning ${inferredNumber.replace(/^0+/, '') || '0'}` : `Våning ${extractedFloors.length + 1}`;
+        } else {
+          displayName = rawName;
+        }
         const shortMatch = displayName.match(/(\d+)/);
         const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 4);
         
