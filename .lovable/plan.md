@@ -1,99 +1,72 @@
 
-## Förbättringar av Xeokit 2D-läge
 
-Sammanfattning av de förbättringar som behövs, uppdelade i fem delområden.
+## 2D-lagesfoerrbattringar -- 4 deluppgifter
 
----
+### 1. Ren 2D: Isolera vald vaning vid start
 
-### 1. Bättre kontrast och fyllda väggar i 2D
+**Problem**: Nar man navigerar fran en byggnad med en specifik vaning (?building=X&floor=Y), visas hela byggnaden i 2D istallet for att isolera den valda vaningen.
 
-**Problem**: Väggar visas som två tunna streck (konturerna av vägg-geometrin sedd ovanifrån). Kontrasten är låg.
+**Orsak**: `UnifiedViewer` laser `floorFmGuid` fran URL-parametern `floor`, men nar 2D-laget aktiveras skickas den aldrig vidare till `ViewerToolbar.handleViewModeChange('2d')`. Toolbaren kollar `currentFloorId` som ar null vid forsta start.
 
-**Lösning**: När 2D-läget aktiveras, applicera en 2D-specifik stil på scenen:
-- Sätt `scene.edgeMaterial.edgeColor` till mörkt grå `[0.15, 0.15, 0.15]` och `edgeAlpha` till `1.0` för tydliga konturer
-- Sätt `edgeWidth` till `2` för tjockare linjer
-- Aktivera `entity.edges = true` på alla synliga väggar (`IfcWall`, `IfcWallStandardCase`)
-- Applicera en mörkare `colorize` på väggar, t.ex. `[0.2, 0.2, 0.2]` med `opacity: 1.0` -- detta fyller väggarna med en mörk färg istället för att bara visa kanter
-- Sänk ljusstyrkan på övriga objekt (dörrkarmar, fönster etc.) för att ge väggar prioritet
+**Losning**: 
+- I `UnifiedViewer.tsx`: Nar `viewMode` satts till `'2d'` OCH `floorFmGuid` finns i URL:en, dispatcha ett `FLOOR_SELECTION_CHANGED_EVENT` med `visibleFloorFmGuids: [floorFmGuid]` och `isSoloFloor: true` kort efter 2D-toggle-eventet (med 500ms delay). Detta synkar ViewerToolbar och FloorVisibilitySelector.
+- I `ViewerToolbar.tsx`: Se till att `handleViewModeChange('2d')` respekterar det inkommande floor-selection-eventet for klippning.
 
-Vid byte tillbaka till 3D: återställ alla modifierade edge- och färgvärden (spara originalvärden i en ref, samma mönster som `hiddenFor2dRef`).
-
-**Fil**: `src/components/viewer/ViewerToolbar.tsx` -- utöka `handleViewModeChange('2d')` med edge/color-logik
+**Fil**: `src/pages/UnifiedViewer.tsx`
 
 ---
 
-### 2. Room labels i 2D -- fast orientering
+### 2. Flytande vaningsvaljare i 2D-lage
 
-**Problem**: I ortho-vy (top-down) fungerar labels men de roterar inte med kameran om man panorerar/zoomar, och de kan bli svårlästa.
+**Problem**: FloatingFloorSwitcher (pill-knappar) togs bort fran 2D-flode men behovs for att byta vaning i planvy.
 
-**Lösning**: I `useRoomLabels.ts`, när `viewModeRef.current === '2d'`:
-- Stäng av `scaleWithDistance` (ortho har inget avståndsperspektiv)
-- Stäng av `occlusionEnabled` (ovanifrån syns alla rum)
-- Öka `fontSize` något (t.ex. 12px istället för 10px) för bättre läsbarhet i planvy
-- Labels behöver ingen rotation-kompensation i ortho top-down med `up = [0,0,-1]` -- de visas redan rakt
+**Losning**: 
+- FloatingFloorSwitcher ar redan renderad i `AssetPlusViewer.tsx` (rad 4028-4036) men enbart for desktop (`!isMobile`). 
+- For mobilt: Lagg till `FloatingFloorSwitcher` aven i `MobileUnifiedViewer` nar `viewMode === '2d'`, med kompakt styling (mindre pills, horisontellt langst ner).
+- Gor komponentens styling responsiv: lagg till en `compact`-prop som minskar pill-storlek (h-7, text-xs) for mobilt.
 
-Dessa 2D-specifika config-overrides appliceras automatiskt via `updateViewMode('2d')` som redan anropas.
-
-**Fil**: `src/hooks/useRoomLabels.ts` -- lägg till 2D-specifika config-overrides i `updateViewMode`
-
----
-
-### 3. Startposition per byggnad (2D och 3D)
-
-**Problem**: Varje gång man öppnar en byggnad startar kameran från en generisk position. Användaren vill kunna spara en förvald kameraposition.
-
-**Lösning**: Tabellen `building_settings` har redan en kolumn `start_view_id` (FK till `saved_views`). Flödet blir:
-
-1. Användaren skapar en sparad vy (redan finns) och väljer den som "Startposition" i byggnads-inställningar
-2. Vid laddning av viewern: hämta `start_view_id` från `building_settings`, ladda den sparade vyns kameradata, och applicera den som initialt kameraläge
-3. Den sparade vyn innehåller redan `camera_eye`, `camera_look`, `camera_up`, `camera_projection`, `view_mode` och `clip_height`
-
-**Filer**:
-- `src/hooks/useBuildingViewerData.ts` -- hämta `start_view_id` och joinad vy-data
-- `src/components/viewer/AssetPlusViewer.tsx` -- applicera startvy efter modell-laddning
-- `src/components/settings/CreateBuildingPanel.tsx` eller `ViewerRightPanel.tsx` -- UI för att välja startvy
+**Filer**: 
+- `src/components/viewer/FloatingFloorSwitcher.tsx` -- lagg till `compact`-prop
+- `src/pages/UnifiedViewer.tsx` -- rendera FloatingFloorSwitcher i MobileUnifiedViewer for 2D
 
 ---
 
-### 4. Kamerasynk vid byte mellan 2D och 3D
+### 3. Dolda objekt (slabs) pa mobil i 2D
 
-**Problem**: När man byter från 3D till 2D (eller tvärtom) hoppar kameran till en generisk position istället för att behålla platsen.
+**Problem**: Pa mobil dols inte IfcSlab/IfcRoof-objekt i 2D-laget korrekt.
 
-**Lösning**: I `handleViewModeChange`:
-- **3D till 2D**: Spara nuvarande `camera.look` (XZ-planet). Beräkna ortho-kameran centrerad på samma XZ-position med `eye = [lookX, lookY + height, lookZ]`, `look = [lookX, lookY, lookZ]`, `up = [0, 0, -1]`. Beräkna `ortho.scale` från nuvarande avstånd (eye-to-look).
-- **2D till 3D**: Spara nuvarande `camera.look` (center i planvyn). Placera perspektiv-kameran snett ovanför samma position med en rimlig vinkel (45 grader).
+**Orsak**: `VIEW_MODE_2D_TOGGLED_EVENT` dispatchas korrekt fran UnifiedViewer, och `ViewerToolbar` lyssnar pa det. Men i mobilversionen renderas `AssetPlusViewer` utan den fulla toolbar-kontexten -- `ViewerToolbar` renderas inuti `AssetPlusViewer` (rad 4041-4049), sa den borde ta emot eventet. 
 
-**Fil**: `src/components/viewer/ViewerToolbar.tsx` -- modifiera `handleViewModeChange` för att bevara position
+Trolig orsak: Timingproblem -- eventet dispatchas innan ViewerToolbar ar mountad/redo. Losningen ar att lata ViewerToolbar kontrollera sin `viewMode`-state mot det faktiska laget vid mount, och om den missar eventet, applicera 2D-stilen retroaktivt.
 
----
+**Losning**: I `ViewerToolbar.tsx`, lagg till en effect som vid `isViewerReady` kollar om externt 2D-lage ar aktivt (via en global flag eller genom att lyssna pa `VIEW_MODE_2D_TOGGLED_EVENT` med en ref som sparar senaste state). Om viewer blir redo medan 2D ar aktivt, kor `handleViewModeChange('2d')` automatiskt.
 
-### 5. Snittplan/Slicer-verktyget i 2D
-
-**Status**: Slicer-verktyget (`useTool('slicer')`) skapar interaktiva snittplan via Asset+-API:et. Det fungerar tekniskt i 2D men kan konfliktera med de automatiska klippplanen (`applyFloorPlanClipping`).
-
-**Rekommendation**: 
-- Dölj slicer-knappen i toolbaren när `viewMode === '2d'` eftersom höjd-klippningen redan hanteras av `CLIP_HEIGHT_CHANGED_EVENT` via höjd-slidern i ViewerRightPanel
-- Höjd-slidern i ViewerRightPanel styr redan `updateFloorCutHeight()` som justerar klipp-höjden i 2D -- den funktionen fungerar redan
-- Visa slicer-knappen igen vid byte till 3D
-
-**Fil**: `src/components/viewer/ViewerToolbar.tsx` -- villkorligt dölja slicer-knappen i 2D
+**Fil**: `src/components/viewer/ViewerToolbar.tsx`
 
 ---
 
-### Implementationsordning
+### 4. Dubblerad 3D ModeButton
 
-1. **Kontrast och fyllda väggar** -- Mest synlig förbättring, rent toolbar-tillägg
-2. **Slicer i 2D** -- Liten ändring, dölj knappen
-3. **Kamerasynk 2D/3D** -- Modifiera handleViewModeChange
-4. **Room labels 2D-optimering** -- Justera useRoomLabels
-5. **Startposition** -- Kräver DB-query + UI, mest arbete
+**Bug**: I mode-switchern pa desktop (rad 417-418) finns tva identiska `ModeButton mode="3d"`. Den ena ska vara `mode="2d"` men bada ar `3d`. 
 
-### Filer som ändras
+```
+<ModeButton mode="3d" ... label="3D" />   // rad 417 -- borde vara 2D-knappen?
+<ModeButton mode="3d" ... label="3D" />   // rad 418 -- duplikat
+```
 
-| Fil | Ändring |
+Rad 416 har redan en 2D-knapp, sa rad 417-418 har en extra dubblerad 3D-knapp.
+
+**Losning**: Ta bort den dubblerade raden 418.
+
+**Fil**: `src/pages/UnifiedViewer.tsx`
+
+---
+
+### Sammanfattning av filandringar
+
+| Fil | Andring |
 |---|---|
-| `src/components/viewer/ViewerToolbar.tsx` | Väggkontrast, slicer-döljning, kamerasynk |
-| `src/hooks/useRoomLabels.ts` | 2D-specifika label-overrides |
-| `src/hooks/useBuildingViewerData.ts` | Hämta start_view_id data |
-| `src/components/viewer/AssetPlusViewer.tsx` | Applicera startvy vid laddning |
-| `src/components/viewer/ViewerRightPanel.tsx` | UI för att välja startvy |
+| `src/pages/UnifiedViewer.tsx` | (1) Dispatcha floor-selection vid 2D-start med floor-param, (2) FloatingFloorSwitcher i MobileUnifiedViewer, (3) Ta bort dubblerad 3D ModeButton |
+| `src/components/viewer/ViewerToolbar.tsx` | (3) Retroaktiv 2D-applicering vid viewer-ready, sakerstall att slabs doljs pa mobil |
+| `src/components/viewer/FloatingFloorSwitcher.tsx` | (2) Lagg till `compact`-prop for mindre pills pa mobil |
+
