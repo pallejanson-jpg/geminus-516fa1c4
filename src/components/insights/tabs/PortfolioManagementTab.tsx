@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { MapColoringMode } from '@/lib/map-coloring-utils';
+import { CHART_COLORS, RISK_COLORS, ICON_COLOR_CLASSES } from '@/lib/chart-theme';
 
 interface PortfolioManagementTabProps {
     onColorMap?: (mode: MapColoringMode) => void;
@@ -43,7 +44,6 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
         return navigatorTreeData.map((building) => {
             const hash = hashString(building.fmGuid || '');
             
-            // Count spaces for area estimation
             let totalArea = 0;
             building.children?.forEach(storey => {
                 storey.children?.forEach(space => {
@@ -83,9 +83,9 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
         const medium = portfolioData.filter(b => b.riskLevel === 'Medium').length;
         const high = portfolioData.filter(b => b.riskLevel === 'High').length;
         return [
-            { name: 'Low Risk', value: low, color: 'hsl(142, 71%, 45%)' },
-            { name: 'Medium Risk', value: medium, color: 'hsl(48, 96%, 53%)' },
-            { name: 'High Risk', value: high, color: 'hsl(var(--destructive))' },
+            { name: 'Low Risk', value: low, color: RISK_COLORS.Low },
+            { name: 'Medium Risk', value: medium, color: RISK_COLORS.Medium },
+            { name: 'High Risk', value: high, color: RISK_COLORS.High },
         ];
     }, [portfolioData]);
 
@@ -125,28 +125,28 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
             title: isMobile ? 'Rent/yr' : 'Annual Rental Income', 
             value: `${(totals.totalRent / 1000000).toFixed(1)} MSEK`, 
             icon: Briefcase, 
-            color: 'text-green-500'
+            color: ICON_COLOR_CLASSES.green
         },
         { 
             title: isMobile ? 'ROI' : 'Average ROI', 
             value: `${totals.avgRoi.toFixed(1)}%`, 
             icon: TrendingUp, 
-            color: 'text-blue-500'
+            color: ICON_COLOR_CLASSES.blue
         },
         { 
             title: isMobile ? 'Occupancy' : 'Avg. Occupancy Rate', 
             value: `${totals.avgOccupancy}%`, 
             icon: Building2, 
-            color: 'text-yellow-500'
+            color: ICON_COLOR_CLASSES.amber
         },
     ];
 
     const getRiskBadge = (risk: string) => {
         switch (risk) {
             case 'Low':
-                return <Badge className="bg-green-600">Low</Badge>;
+                return <Badge style={{ backgroundColor: RISK_COLORS.Low }} className="text-white">Low</Badge>;
             case 'Medium':
-                return <Badge className="bg-yellow-600">Medium</Badge>;
+                return <Badge style={{ backgroundColor: RISK_COLORS.Medium }} className="text-white">Medium</Badge>;
             case 'High':
                 return <Badge variant="destructive">High</Badge>;
             default:
@@ -216,7 +216,7 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Shield className="h-4 w-4 text-blue-500" />
+                            <Shield className={`h-4 w-4 ${ICON_COLOR_CLASSES.blue}`} />
                             Risk Profile
                         </CardTitle>
                         <CardDescription>Buildings by risk level</CardDescription>
@@ -252,7 +252,7 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-green-500" />
+                        <TrendingUp className={`h-4 w-4 ${ICON_COLOR_CLASSES.green}`} />
                         Portfolio Valuation Over Time
                     </CardTitle>
                     <CardDescription>Last 6 months (MSEK)</CardDescription>
