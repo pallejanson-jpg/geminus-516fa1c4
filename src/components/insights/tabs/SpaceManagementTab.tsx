@@ -22,12 +22,6 @@ const hashString = (str: string) => {
 const truncateName = (name: string, maxLen = 12) => 
     name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
 
-// Mockup indicator badge
-const MockBadge = () => (
-    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
-        Demo
-    </Badge>
-);
 
 interface SpaceManagementTabProps {
     onNavigateToRooms?: (buildingFmGuid?: string) => void;
@@ -166,9 +160,9 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center gap-1.5 mb-2">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
-                                {kpi.isMock && <MockBadge />}
+                                
                             </div>
-                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className="text-xl sm:text-2xl font-bold truncate text-foreground">
                                 {kpi.value}
                             </p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
@@ -184,8 +178,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Users className="h-4 w-4 text-primary" />
-                            <span className="text-purple-400">Occupancy per Building</span>
-                            <MockBadge />
+                            Occupancy per Building
                         </CardTitle>
                         <CardDescription>Percent of available space</CardDescription>
                     </CardHeader>
@@ -272,7 +265,7 @@ export default function SpaceManagementTab({ onNavigateToRooms }: SpaceManagemen
                                             {building.spaceCount} rooms
                                         </span>
                                         <span className="text-foreground">{building.totalArea.toLocaleString()} m²</span>
-                                        <Badge variant={building.occupancy >= 80 ? "default" : "secondary"} className="text-purple-400 bg-purple-500/20 border-purple-500/30">
+                                        <Badge variant={building.occupancy >= 80 ? "default" : "secondary"}>
                                             {building.occupancy}%
                                         </Badge>
                                     </div>

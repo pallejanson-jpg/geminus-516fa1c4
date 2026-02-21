@@ -27,12 +27,6 @@ const hashString = (str: string) => {
 // Hierarchy categories to exclude when counting "assets"
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
-// Mockup indicator badge
-const MockBadge = () => (
-    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
-        Demo
-    </Badge>
-);
 
 interface AssetManagementTabProps {
     onNavigateToAssets?: (buildingFmGuid?: string) => void;
@@ -215,9 +209,9 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center gap-1.5 mb-2">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
-                                {kpi.isMock && <MockBadge />}
+                                
                             </div>
-                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className="text-xl sm:text-2xl font-bold truncate text-foreground">
                                 {kpi.value}
                             </p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
@@ -321,15 +315,9 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                 <TableRow>
                                     <TableHead>Building</TableHead>
                                     <TableHead className="text-right">Count</TableHead>
-                                    <TableHead className="text-right">
-                                        <span className="text-purple-400">Avg. Age</span>
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        <span className="text-purple-400">Value</span>
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        <span className="text-purple-400">Status</span>
-                                    </TableHead>
+                                    <TableHead className="text-right">Avg. Age</TableHead>
+                                    <TableHead className="text-right">Value</TableHead>
+                                    <TableHead className="text-right">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -344,10 +332,10 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                                                 {building.assetCount}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-right text-purple-400">
+                                        <TableCell className="text-right text-foreground">
                                             {building.avgAge} years
                                         </TableCell>
-                                        <TableCell className="text-right text-purple-400">
+                                        <TableCell className="text-right text-foreground">
                                             {(building.replacementValue / 1000).toFixed(0)} kSEK
                                         </TableCell>
                                         <TableCell className="text-right">
