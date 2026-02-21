@@ -23,6 +23,8 @@ interface FloatingFloorSwitcherProps {
   buildingFmGuid?: string;
   isViewerReady?: boolean;
   className?: string;
+  /** Compact mode for mobile — smaller pills */
+  compact?: boolean;
 }
 
 // Event for visibility toggle from settings
@@ -42,6 +44,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   buildingFmGuid,
   isViewerReady = true,
   className,
+  compact = false,
 }) => {
   const isMobile = useIsMobile();
   const [floors, setFloors] = useState<FloorPillInfo[]>([]);
@@ -537,7 +540,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
+                  compact ? 'h-6 w-7 p-0 text-[9px] font-medium rounded-full' : 'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
                   'transition-all duration-150',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
@@ -554,7 +557,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                   ],
                 )}
               >
-                <span className="text-[10px] sm:text-xs">
+                <span className={compact ? "text-[9px]" : "text-[10px] sm:text-xs"}>
                   {floor.shortName}
                 </span>
               </Button>
