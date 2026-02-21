@@ -72,15 +72,15 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
 
   return (
     <>
-      {/* Floating Menu FAB */}
+      {/* Floating Menu FAB — compact pill */}
       <button
         onClick={() => setIsMobileMenuOpen(true)}
-        className="fixed z-40 flex items-center gap-1 bg-card/80 backdrop-blur-md border border-border rounded-full px-3 py-1.5 shadow-lg left-1/2 -translate-x-1/2"
-        style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+        className="fixed z-40 flex items-center gap-1 bg-card/80 backdrop-blur-md border border-border rounded-full px-2.5 py-1 shadow-md left-1/2 -translate-x-1/2"
+        style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
         aria-label="Öppna meny"
       >
-        <Menu className="h-4 w-4 text-foreground" />
-        <span className="text-sm font-medium text-foreground hidden xs:inline">Meny</span>
+        <Menu className="h-3.5 w-3.5 text-foreground" />
+        <span className="text-xs font-medium text-foreground hidden xs:inline">Meny</span>
       </button>
 
       {/* App Drawer — opens from bottom */}
