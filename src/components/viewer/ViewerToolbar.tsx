@@ -208,14 +208,35 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   }, []);
 
   // ── External 2D toggle (from UnifiedViewer mode-switcher) ─────────────────
+  const pending2dRef = useRef(false);
   useEffect(() => {
     const handler = (e: CustomEvent<ViewMode2DToggledDetail>) => {
-      handleViewModeChange(e.detail.enabled ? '2d' : '3d');
+      if (e.detail.enabled) {
+        // If viewer isn't ready yet, mark as pending and apply when ready
+        if (!getXeokitViewer()?.scene) {
+          pending2dRef.current = true;
+          setViewMode('2d');
+        } else {
+          handleViewModeChange('2d');
+        }
+      } else {
+        pending2dRef.current = false;
+        handleViewModeChange('3d');
+      }
     };
     window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Retroactive 2D application when viewer becomes ready ─────────────────
+  useEffect(() => {
+    if (isViewerReady && pending2dRef.current) {
+      pending2dRef.current = false;
+      handleViewModeChange('2d');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isViewerReady]);
 
   // ── Navigation handlers ───────────────────────────────────────────────────
 
