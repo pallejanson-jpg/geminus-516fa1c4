@@ -107,6 +107,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const toolDebounceRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(viewMode);
   const hiddenFor2dRef = useRef<string[]>([]);
+  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
@@ -389,27 +390,77 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
         'ifcroof', 'ifccovering', 'ifcplate',
       ]);
+      const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
+      const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
       const metaObjects = scene?.metaScene?.metaObjects || {};
       const idsToHide: string[] = [];
+      const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean }>();
+
+      // Save original edge material values
+      const edgeMat = scene.edgeMaterial;
+      const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
+      const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
+      const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
+
       Object.values(metaObjects).forEach((mo: any) => {
-        if (HIDDEN_2D_TYPES.has(mo.type?.toLowerCase())) idsToHide.push(mo.id);
+        const typeLower = mo.type?.toLowerCase() || '';
+        if (HIDDEN_2D_TYPES.has(typeLower)) {
+          idsToHide.push(mo.id);
+        } else if (WALL_TYPES.has(typeLower)) {
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges });
+            entity.colorize = [0.2, 0.2, 0.2];
+            entity.opacity = 1.0;
+            entity.edges = true;
+          }
+        } else if (SUBDUED_TYPES.has(typeLower)) {
+          const entity = scene.objects?.[mo.id];
+          if (entity) {
+            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges });
+            entity.colorize = [0.75, 0.75, 0.75];
+            entity.opacity = 0.6;
+          }
+        }
       });
+
+      // Apply stronger edge styling for 2D
+      if (edgeMat) {
+        edgeMat.edgeColor = [0.15, 0.15, 0.15];
+        edgeMat.edgeAlpha = 1.0;
+        edgeMat.edgeWidth = 2;
+      }
+
       if (idsToHide.length > 0) {
         scene.setObjectsVisible(idsToHide, false);
         hiddenFor2dRef.current = idsToHide;
         console.log(`[2D Mode] Hidden ${idsToHide.length} obstructing IFC objects`);
       }
+      colorizedFor2dRef.current = colorized;
+      // Store original edge values for restore
+      (viewerRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
+      console.log(`[2D Mode] Colorized ${colorized.size} entities (walls dark, doors/windows subdued)`);
 
-      // 5. Set camera to ortho BEFORE flying (critical fix)
-      if (!targetBounds) targetBounds = scene?.getAABB?.();
-      if (viewer.camera && targetBounds) {
-        const cx = (targetBounds[0] + targetBounds[3]) / 2;
-        const cy = lookHeight || (targetBounds[1] + targetBounds[4]) / 2;
-        const cz = (targetBounds[2] + targetBounds[5]) / 2;
-        const h = Math.max(targetBounds[3] - targetBounds[0], targetBounds[5] - targetBounds[2]) * 1.5;
-        viewer.camera.projection = 'ortho';
-        viewer.camera.ortho.scale = h;
-        viewer.cameraFlight.flyTo({ eye: [cx, cy + h, cz], look: [cx, cy, cz], up: [0, 0, -1], duration: 0.5 });
+      // 5. Set camera — preserve current look position for smooth transition
+      const camera = viewer.camera;
+      if (camera) {
+        const lookX = camera.look[0];
+        const lookY = camera.look[1];
+        const lookZ = camera.look[2];
+        const dx = camera.eye[0] - lookX;
+        const dy = camera.eye[1] - lookY;
+        const dz = camera.eye[2] - lookZ;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const orthoScale = dist * 1.2;
+
+        camera.projection = 'ortho';
+        camera.ortho.scale = orthoScale;
+        viewer.cameraFlight.flyTo({
+          eye: [lookX, lookY + dist, lookZ],
+          look: [lookX, lookY, lookZ],
+          up: [0, 0, -1],
+          duration: 0.5,
+        });
       }
     } else {
       // Back to 3D -- disable Asset+ floor plan mode
@@ -427,11 +478,54 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         hiddenFor2dRef.current = [];
       }
 
+      // Restore colorized entities
+      if (colorizedFor2dRef.current.size > 0) {
+        colorizedFor2dRef.current.forEach((orig, id) => {
+          const entity = viewer.scene.objects?.[id];
+          if (entity) {
+            if (orig.colorize) entity.colorize = orig.colorize;
+            else entity.colorize = null;
+            entity.opacity = orig.opacity;
+            entity.edges = orig.edges;
+          }
+        });
+        console.log(`[3D Mode] Restored ${colorizedFor2dRef.current.size} colorized entities`);
+        colorizedFor2dRef.current.clear();
+      }
+
+      // Restore original edge material
+      const origEdge = (viewerRef.current as any)?.__orig2dEdge;
+      if (origEdge) {
+        const edgeMat = viewer.scene.edgeMaterial;
+        if (edgeMat) {
+          edgeMat.edgeColor = origEdge.origEdgeColor;
+          edgeMat.edgeAlpha = origEdge.origEdgeAlpha;
+          edgeMat.edgeWidth = origEdge.origEdgeWidth;
+        }
+        delete (viewerRef.current as any).__orig2dEdge;
+      }
+
       removeSectionPlane();
       if (currentFloorId) applyCeilingClipping(currentFloorId);
-      if (viewer.camera) {
-        viewer.camera.projection = 'perspective';
-        assetView?.viewFit(undefined, true);
+
+      // Camera sync: preserve look position from 2D
+      const camera = viewer.camera;
+      if (camera) {
+        const lookX = camera.look[0];
+        const lookY = camera.look[1];
+        const lookZ = camera.look[2];
+        const scale = camera.ortho?.scale || 50;
+        const dist = scale * 0.8;
+        // Place camera at 45° angle above the current look point
+        const offset = dist / Math.sqrt(2);
+
+        camera.projection = 'perspective';
+        viewer.cameraFlight.flyTo({
+          eye: [lookX - offset, lookY + offset, lookZ - offset],
+          look: [lookX, lookY, lookZ],
+          up: [0, 1, 0],
+          duration: 0.5,
+        });
       }
     }
   }, [getXeokitViewer, viewerRef, currentFloorId, currentFloorBounds, calculateFloorBounds, applyFloorPlanClipping, applyGlobalFloorPlanClipping, applyCeilingClipping, removeSectionPlane]);
@@ -506,20 +600,24 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           active={activeTool === 'measure'}
           disabled={disabled}
         />
-        <ToolButton
-          icon={<Scissors className="h-4 w-4" />}
-          label="Snittplan"
-          onClick={() => handleToolChange('slicer')}
-          active={activeTool === 'slicer'}
-          disabled={disabled}
-        />
-        {activeTool === 'slicer' && (
-          <ToolButton
-            icon={<RotateCcw className="h-3.5 w-3.5" />}
-            label="Rensa snitt"
-            onClick={handleClearSlices}
-            disabled={disabled}
-          />
+        {viewMode !== '2d' && (
+          <>
+            <ToolButton
+              icon={<Scissors className="h-4 w-4" />}
+              label="Snittplan"
+              onClick={() => handleToolChange('slicer')}
+              active={activeTool === 'slicer'}
+              disabled={disabled}
+            />
+            {activeTool === 'slicer' && (
+              <ToolButton
+                icon={<RotateCcw className="h-3.5 w-3.5" />}
+                label="Rensa snitt"
+                onClick={handleClearSlices}
+                disabled={disabled}
+              />
+            )}
+          </>
         )}
 
         <Separator orientation="vertical" className="h-6 mx-1" />
