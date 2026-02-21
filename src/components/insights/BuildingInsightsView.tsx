@@ -563,10 +563,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             {/* KPI Cards - REAL counts */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4 sm:mb-6">
                 {[
-                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-[hsl(var(--chart-2))]', isMock: false, onView: () => setActiveTab('space') },
-                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-[hsl(var(--chart-3))]', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
-                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-[hsl(var(--chart-7))]', isMock: false, onView: () => navigateTo3D() },
-                    { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
+                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-[hsl(var(--chart-2))]', onView: () => setActiveTab('space') },
+                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-[hsl(var(--chart-3))]', onView: () => navigateTo3D({ visualization: 'area' }) },
+                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-[hsl(var(--chart-7))]', onView: () => navigateTo3D() },
+                    { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', onView: () => navigateTo3D({ visualization: 'area' }) },
                     { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-[hsl(var(--chart-4))]' },
                     { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary' },
                 ].map((kpi, index) => (
@@ -897,12 +897,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                      <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
                                          <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
                                          <span>Live-data från Senslinc · {buildingIoT.machines.length} sensorer</span>
-                                     </div>
-                                 )}
-                                 {!iotLoading && !iotLive && (
-                                     <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
-                                         <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                         <span>Ingen live-koppling till Senslinc – visar demodata.</span>
                                      </div>
                                  )}
 

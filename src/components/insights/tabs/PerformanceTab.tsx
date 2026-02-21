@@ -17,12 +17,6 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '@
 import type { MapColoringMode } from '@/lib/map-coloring-utils';
 import { CHART_COLORS, SEQUENTIAL_PALETTE, ENERGY_RATING_COLORS, ICON_COLOR_CLASSES } from '@/lib/chart-theme';
 
-// Mockup indicator badge
-const MockBadge = () => (
-    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
-        Demo
-    </Badge>
-);
 
 const energyDistribution = [
     { name: 'Heating', value: 45, color: 'hsl(var(--destructive))' },
@@ -135,7 +129,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             trend: '+2', 
             trendUp: true,
             color: 'text-primary',
-            isMock: false,
+            
         },
         { 
             title: isMobile ? 'Energy' : 'Avg. Energy (kWh/m²)', 
@@ -146,7 +140,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             trend: '-8%', 
             trendUp: false,
             color: ICON_COLOR_CLASSES.amber,
-            isMock: true,
+            
         },
         { 
             title: isMobile ? 'CO₂ (tons)' : 'CO₂ Emissions (tons)', 
@@ -155,7 +149,6 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             trend: '-12%', 
             trendUp: false,
             color: ICON_COLOR_CLASSES.green,
-            isMock: true,
         },
         { 
             title: isMobile ? 'Rating' : 'Avg. Energy Rating', 
@@ -164,7 +157,6 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             trend: 'Improved', 
             trendUp: true,
             color: 'text-primary',
-            isMock: true,
         },
     ];
 
@@ -192,18 +184,17 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-1">
                                     <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
-                                    {kpi.isMock && <MockBadge />}
                                 </div>
                                 <Badge 
                                     variant={kpi.trendUp ? "default" : "secondary"} 
-                                    className={`text-[10px] sm:text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-[hsl(var(--chart-8))]' : 'bg-[hsl(var(--chart-2))]'}`}
+                                    className={`text-[10px] sm:text-xs ${kpi.trendUp ? 'bg-[hsl(var(--chart-8))]' : 'bg-[hsl(var(--chart-2))]'}`}
                                 >
                                     {kpi.trendUp ? <TrendingUp className="h-3 w-3 mr-0.5 sm:mr-1" /> : <TrendingDown className="h-3 w-3 mr-0.5 sm:mr-1" />}
                                     <span className="hidden sm:inline">{kpi.trend}</span>
                                     <span className="sm:hidden">{kpi.trend.replace('%', '')}</span>
                                 </Badge>
                             </div>
-                            <p className={`text-xl sm:text-2xl font-bold truncate ${kpi.isMock ? 'text-purple-400' : 'text-foreground'}`}>
+                            <p className="text-xl sm:text-2xl font-bold truncate text-foreground">
                                 {kpi.value}
                             </p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
@@ -243,7 +234,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                                     <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                                                         <Badge 
                                                             variant="secondary" 
-                                                            className="text-[10px] px-1.5 text-purple-300 bg-purple-500/20 border-purple-500/30"
+                                                            className="text-[10px] px-1.5 text-muted-foreground bg-muted border-border"
                                                         >
                                                             {energyData?.rating || 'C'}
                                                         </Badge>
@@ -269,8 +260,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Zap className={`h-4 w-4 ${ICON_COLOR_CLASSES.amber}`} />
-                            <span className="text-purple-400">Energy Consumption per Building</span>
-                            <MockBadge />
+                            Energy Consumption per Building
                         </CardTitle>
                         <CardDescription>kWh per m² (lower is better)</CardDescription>
                     </CardHeader>
@@ -309,8 +299,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <ThermometerSun className={`h-4 w-4 ${ICON_COLOR_CLASSES.amber}`} />
-                            <span className="text-purple-400">Energy Distribution by Category</span>
-                            <MockBadge />
+                            Energy Distribution by Category
                         </CardTitle>
                         <CardDescription>Breakdown of energy usage</CardDescription>
                     </CardHeader>
@@ -347,8 +336,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Droplets className={`h-4 w-4 ${ICON_COLOR_CLASSES.blue}`} />
-                            <span className="text-purple-400">Monthly Energy Trend</span>
-                            <MockBadge />
+                            Monthly Energy Trend
                         </CardTitle>
                         <CardDescription>Actual vs Target consumption (MWh)</CardDescription>
                     </CardHeader>

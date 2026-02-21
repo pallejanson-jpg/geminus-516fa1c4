@@ -99,11 +99,7 @@ const StatusBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolea
       <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse inline-block" />LIVE
     </Badge>
   );
-  return (
-    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-purple-500/50 text-purple-400 bg-purple-500/10">
-      Demo
-    </Badge>
-  );
+  return null;
 };
 
 // ── Gauge card ──
@@ -442,12 +438,6 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
           )}
 
           {/* Status row */}
-          {!isLoading && error && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-purple-500/20 px-3 py-2 bg-purple-500/5">
-              <WifiOff className="h-3.5 w-3.5 shrink-0 text-purple-400" />
-              <span>Ingen live-koppling – visar demodata.</span>
-            </div>
-          )}
           {!isLoading && isLive && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-green-500/20 px-3 py-2 bg-green-500/5">
               <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
