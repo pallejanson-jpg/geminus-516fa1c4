@@ -12,6 +12,19 @@ import { buildTransformFromSettings, IDENTITY_TRANSFORM, type IvionBimTransform 
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 
+export interface StartViewData {
+  cameraEye: number[] | null;
+  cameraLook: number[] | null;
+  cameraUp: number[] | null;
+  cameraProjection: string | null;
+  viewMode: string | null;
+  clipHeight: number | null;
+  showSpaces: boolean | null;
+  showAnnotations: boolean | null;
+  visibleFloorIds: string[] | null;
+  visibleModelIds: string[] | null;
+}
+
 export interface BuildingViewerData {
   fmGuid: string;
   name: string;
@@ -30,6 +43,8 @@ export interface BuildingViewerData {
   startVlat?: number;
   /** FM Access building GUID (for 2D drawing resolution) */
   fmAccessBuildingGuid?: string;
+  /** Start view data (from saved_views via start_view_id) */
+  startView?: StartViewData | null;
 }
 
 interface UseBuildingViewerDataResult {
@@ -81,7 +96,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
       try {
         const { data: settings, error: settingsError } = await supabase
           .from('building_settings')
-          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat, ivion_bim_offset_x, ivion_bim_offset_y, ivion_bim_offset_z, ivion_bim_rotation, fm_access_building_guid')
+          .select('ivion_site_id, latitude, longitude, rotation, ivion_start_vlon, ivion_start_vlat, ivion_bim_offset_x, ivion_bim_offset_y, ivion_bim_offset_z, ivion_bim_rotation, fm_access_building_guid, start_view_id')
           .eq('fm_guid', buildingFmGuid)
           .maybeSingle();
 
@@ -114,6 +129,31 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
 
         const transform = settings ? buildTransformFromSettings(settings) : IDENTITY_TRANSFORM;
 
+        // Fetch start view data if start_view_id is set
+        let startView: StartViewData | null = null;
+        const startViewId = (settings as any)?.start_view_id;
+        if (startViewId) {
+          const { data: viewData } = await supabase
+            .from('saved_views')
+            .select('camera_eye, camera_look, camera_up, camera_projection, view_mode, clip_height, show_spaces, show_annotations, visible_floor_ids, visible_model_ids')
+            .eq('id', startViewId)
+            .maybeSingle();
+          if (viewData) {
+            startView = {
+              cameraEye: viewData.camera_eye,
+              cameraLook: viewData.camera_look,
+              cameraUp: viewData.camera_up,
+              cameraProjection: viewData.camera_projection,
+              viewMode: viewData.view_mode,
+              clipHeight: viewData.clip_height,
+              showSpaces: viewData.show_spaces,
+              showAnnotations: viewData.show_annotations,
+              visibleFloorIds: viewData.visible_floor_ids,
+              visibleModelIds: viewData.visible_model_ids,
+            };
+          }
+        }
+
         setBuildingData({
           fmGuid: buildingFmGuid,
           name: building.commonName || building.name || 'Byggnad',
@@ -125,6 +165,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
           startVlon: settings?.ivion_start_vlon ?? undefined,
           startVlat: settings?.ivion_start_vlat ?? undefined,
           fmAccessBuildingGuid: (settings as any)?.fm_access_building_guid ?? undefined,
+          startView,
         });
       } catch (err) {
         console.error('[BuildingViewerData] Error:', err);
