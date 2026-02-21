@@ -1,136 +1,132 @@
 
-## Gunnar Smartness Upgrade -- Strategisk Plan
 
-### Nuvarande Tillstand
+## Nytt Fargtema: "Nordic Pro" -- Enhetlig Diagrampalett
 
-Gunnar ar idag en solid tool-calling-assistent med:
-- 14 verktyg (assets, work orders, issues, documents, IoT-data, byggnadsinformation)
-- 5 rundors iterativ tool-calling-loop
-- Streaming-svar med action-knappar i markdown
-- Kontextmedvetenhet (aktiv byggnad, vaning, rum, viewer-state)
-- google/gemini-2.5-flash som modell
+### Problem
 
-### Forbattringsstrategi -- 3 Nivaer
+Appen har 4+ separata fargpaletter for diagram, KPI-kort och kartor som inte ar koordinerade. Harkodade vardan som `hsl(48, 96%, 53%)` (skrikig gul), `hsl(142, 71%, 45%)` (neongrn) och `text-yellow-500` (Tailwind default) ger ett "gratis dashboard-template"-intryck snarare an premium PropTech.
 
----
+### Designprincip
 
-### Niva 1: Smartare Systemprompt (Storst Effekt, Minst Arbete)
+Inspirerat av Autodesk Tandem, Linear och Vercel:
+- **En enda palett med 8 farger** som alla harleds fran primarkfargen (lila/indigo) och dess komplementarer
+- **Daempade, mattade toner** istallet for neon -- hogre professionalism
+- **Semantiska farger** (bra/daligt) har kvar men i mattade varianter
+- Paletten fungerar pa bade ljust och morkt tema
 
-Systemprompten ar bra men saknar flera saker som drastiskt okar kvalitet:
+### Ny Palett: "Nordic Pro"
 
-**A. Few-shot-exempel i prompten**
-Lagg till 3-4 konkreta fraga-svar-exempel som visar Gunnar *hur* ett perfekt svar ser ut. Modeller presterar 30-50% battre med few-shot. Exempel:
+**Ljust tema (`:root`):**
 
-```
-EXAMPLE INTERACTION:
-User: "Hur manga rum finns det pa plan 3 i Tornet?"
-Assistant thinking: I need to first find the building "Tornet", then find floor 3, then count rooms.
-1. Call get_building_summary(fm_guid for Tornet) -> get floors list
-2. Call get_floor_details(floor 3 fm_guid) -> get rooms
-3. Synthesize: "Plan 3 i Tornet har **12 rum** med en totalyta pa **485 m2**..."
-```
-
-**B. Domankompetens i prompten**
-Lagg till svensk fastighetsterminologi direkt i systemprompten:
-- NTA (nettoarea), BTA (bruttoarea), BOA, LOA definitioner
-- Vanliga asset-typer och deras svenska/engelska namn
-- SIS-standarder for fastighetsforvaltning (SS 876001)
-- Vanliga nyckeltal (energiforbrukning per kvm, drift- och underhallskostnad)
-
-**C. Resoneringsanvisningar**
-Lagg till "chain-of-thought"-instruktioner: "Before answering, think step by step about what data you need. If the question requires combining data from multiple sources, plan your tool calls first."
-
----
-
-### Niva 2: Fler och Smartare Verktyg
-
-**A. Aggregerings-verktyg** (ny)
-Skapa `aggregate_assets` som gor GROUP BY-liknande operationer direkt i databasen istallet for att hamta 1000 rader och lata modellen rakna:
-
-```
-aggregate_assets:
-  - group_by: "asset_type" | "category" | "level_fm_guid"
-  - metric: "count" | "sum_area" | "avg_area"
-  - building_fm_guid: filter
-```
-
-Idag maste Gunnar hamta alla assets och rakna manuellt. Med aggregering far den svaret direkt.
-
-**B. Jamforelse-verktyg** (ny)
-`compare_buildings` -- hamtar sammanfattning for 2+ byggnader i ett anrop istallet for att gora separata get_building_summary-anrop.
-
-**C. Tidsserie-analys for arbetsordrar** (ny)
-`work_order_trends` -- grupperar arbetsordrar per manad/vecka for att svara pa "Okar felanmalningarna?" utan att hamta hundratals rader.
-
-**D. Attribut-sokning** (forbattra befintlig)
-Lagg till sokning i `attributes`-JSONB-kolumnen i assets-tabellen. Manga intressanta fastighetsdata (NTA-yta, materialval, installationsar) ligger dar men ar idag osokbara for Gunnar.
-
----
-
-### Niva 3: Battre Modell och Konversationsminne
-
-**A. Uppgradera till google/gemini-2.5-pro**
-Pro-modellen ar markant battre pa:
-- Komplex resonering (jamforelser, trendanalys)
-- Att folja instruktioner exakt (action-knappar, format)
-- Att hantera stora tool-resultat utan att tappa sammanhanget
-
-Risk: Gemini 2.5 Pro kan ge 500-fel vid stora tool-definitioner (historiskt problem). Losning: testa noggrant, ha fallback till Flash.
-
-**B. Konversationsminne over sessioner**
-Idag aterstartar Gunnar vid varje kontextbyte. Lagg till:
-- Spara konversationer i en `gunnar_conversations`-tabell
-- Hamta de senaste 3-5 meddelandena fran forra sessionen som kontext
-- Lat Gunnar referera till tidigare fragor: "Du fragade om Tornet forut..."
-
-**C. Anvandarprofil i prompten**
-Hamta anvandarprofilen (roll, namn) fran `profiles`-tabellen och inkludera i systemprompten. En forvaltare vill ha annat an en drifttekniker.
-
----
-
-### Niva 4: Proaktiv och Handlingskraftig Gunnar
-
-**A. Proaktiva insikter**
-Nar Gunnar oppnas i kontexten av en byggnad, gor en snabb analys automatiskt:
-- "Jag ser att det finns 3 oppna felanmalningar med hog prioritet i Tornet"
-- "Temperaturen i rum 201 har legat over 26C de senaste 24h"
-
-Implementera genom att gora initiala tool-anrop *innan* anvandaren stallert sin forsta fraga.
-
-**B. Atgardsverktyg (write-tools)**
-Lat Gunnar inte bara lasa utan aven agera:
-- `create_work_order` -- skapa felanmalan direkt fran chatten
-- `update_issue_status` -- stang/oppna arenden
-- `add_bcf_comment` -- kommentera pa arenden
-
-Dessa kopplas med bekraftelse-steg: Gunnar foreslsr, anvandaren klickar "Bekrafta".
-
----
-
-### Prioriterad Implementationsordning
-
-| Prioritet | Atgard | Effekt | Arbetsinsats |
+| Variabel | HSL | Hex (approx) | Anvandning |
 |---|---|---|---|
-| 1 | Few-shot-exempel + domankompetens i systemprompt | Hog | Lag |
-| 2 | Aggregerings-verktyg (aggregate_assets) | Hog | Medel |
-| 3 | Attribut-sokning i assets | Medel | Lag |
-| 4 | Proaktiva insikter vid oppning | Hog | Medel |
-| 5 | Konversationsminne (DB-tabell) | Medel | Medel |
-| 6 | Jamforelse- och trendverktyg | Medel | Medel |
-| 7 | Uppgradera till gemini-2.5-pro (med fallback) | Medel | Lag |
-| 8 | Write-tools (skapa felanmalan etc.) | Hog | Hog |
-| 9 | Anvandarprofil i prompten | Lag | Lag |
+| `--chart-1` | `252 56% 57%` | #7C5CCA | Primar dataserie (lila -- app-primar) |
+| `--chart-2` | `199 72% 48%` | #2298C9 | Sekundar (kall bla -- kontrast) |
+| `--chart-3` | `166 52% 46%` | #38A88C | Positiv/tillvaxt (mattad teal) |
+| `--chart-4` | `32 70% 56%` | #D4913B | Varning/medel (varm amber) |
+| `--chart-5` | `348 58% 56%` | #C94F6D | Negativ/risk (mattad rosa) |
+| `--chart-6` | `220 50% 62%` | #6F8DC0 | Stodfarger (ljus bla-gra) |
+| `--chart-7` | `280 42% 58%` | #9F6DB8 | Stodfarger (lavendel) |
+| `--chart-8` | `142 40% 42%` | #408F5E | Positiv stark (mork gron) |
 
----
+**Morkt tema (`.dark`):**
 
-### Tekniska Andringar
+Samma nyanser med +10% ljusstyrka och -5% mattning for bra kontrast mot morka bakgrunder.
 
-**Filer som andras:**
-- `supabase/functions/gunnar-chat/index.ts` -- systemprompt, nya verktyg, modell-uppgradering
-- `src/components/chat/GunnarChat.tsx` -- bekraftelse-UI for write-tools, proaktiva insikter
-- `src/components/chat/GunnarButton.tsx` -- trigga proaktiv analys vid oppning
+| Variabel | HSL |
+|---|---|
+| `--chart-1` | `252 62% 68%` |
+| `--chart-2` | `199 68% 58%` |
+| `--chart-3` | `166 48% 56%` |
+| `--chart-4` | `32 65% 62%` |
+| `--chart-5` | `348 54% 62%` |
+| `--chart-6` | `220 45% 68%` |
+| `--chart-7` | `280 38% 65%` |
+| `--chart-8` | `142 36% 52%` |
 
-**Ny databas-tabell (for konversationsminne):**
-- `gunnar_conversations` (user_id, messages JSONB, building_fm_guid, created_at, updated_at)
+**SWG-tema (`.swg`):**
 
-**Inga nya beroenden kravs.** Allt bygger pa befintlig infrastruktur (Lovable AI Gateway, Supabase, befintliga tabeller).
+Anpassat till teal-primart med chart-1 som teal:
+
+| Variabel | HSL |
+|---|---|
+| `--chart-1` | `186 56% 52%` |
+| `--chart-2` | `220 55% 58%` |
+| `--chart-3` | `166 48% 50%` |
+| `--chart-4` | `32 60% 58%` |
+| `--chart-5` | `348 50% 58%` |
+| `--chart-6` | `199 45% 62%` |
+| `--chart-7` | `280 35% 60%` |
+| `--chart-8` | `142 36% 48%` |
+
+### Semantiska Fargkonstanter
+
+Skapa en `CHART_COLORS`-konstant i `src/lib/chart-theme.ts` som alla diagram importerar:
+
+```text
+CHART_COLORS = {
+  primary:   'hsl(var(--chart-1))',
+  secondary: 'hsl(var(--chart-2))',
+  positive:  'hsl(var(--chart-3))',
+  warning:   'hsl(var(--chart-4))',
+  negative:  'hsl(var(--chart-5))',
+  support1:  'hsl(var(--chart-6))',
+  support2:  'hsl(var(--chart-7))',
+  success:   'hsl(var(--chart-8))',
+}
+
+SEQUENTIAL_PALETTE = [
+  primary, secondary, positive, warning,
+  negative, support1, support2, success,
+]
+
+ENERGY_RATING_COLORS = {
+  A: 'hsl(var(--chart-8))',   -- mork gron
+  B: 'hsl(var(--chart-3))',   -- teal
+  C: 'hsl(var(--chart-4))',   -- amber
+  D: 'hsl(var(--chart-5))',   -- rosa
+  E: 'hsl(var(--destructive))', -- rod (befintlig)
+}
+
+RISK_COLORS = {
+  Low:    'hsl(var(--chart-3))',
+  Medium: 'hsl(var(--chart-4))',
+  High:   'hsl(var(--chart-5))',
+}
+```
+
+### KPI-ikonfarger
+
+Ersatt alla `text-green-500`, `text-blue-500`, `text-yellow-500` med semantiska fargklasser kopplade till chart-variablerna:
+
+| Nuvarande | Nytt |
+|---|---|
+| `text-green-500` | `text-[hsl(var(--chart-3))]` |
+| `text-blue-500` | `text-[hsl(var(--chart-2))]` |
+| `text-yellow-500` | `text-[hsl(var(--chart-4))]` |
+| `text-orange-500` | `text-[hsl(var(--chart-4))]` |
+| `text-red-500` | `text-[hsl(var(--chart-5))]` |
+| `text-purple-500` | `text-[hsl(var(--chart-7))]` |
+
+### Kart-fargpalett
+
+Uppdatera `src/lib/map-coloring-utils.ts` COLORS-objektet till att anvanda samma hex-varden som chart-paletten for visuell enhet mellan diagram och karta.
+
+### Filer som andras
+
+1. **`src/index.css`** -- Uppdatera `--chart-1` till `--chart-8` i alla 3 teman
+2. **`src/lib/chart-theme.ts`** (ny) -- Exporterar `CHART_COLORS`, `SEQUENTIAL_PALETTE`, `ENERGY_RATING_COLORS`, `RISK_COLORS`
+3. **`src/components/insights/tabs/PerformanceTab.tsx`** -- Byt harkodade `hsl(...)` till `CHART_COLORS`
+4. **`src/components/insights/tabs/PortfolioManagementTab.tsx`** -- Byt harkodade farger
+5. **`src/components/insights/tabs/AssetManagementTab.tsx`** -- Byt harkodade farger
+6. **`src/components/insights/BuildingInsightsView.tsx`** -- Byt `FLOOR_COLORS` och paj-farger
+7. **`src/components/insights/RoomSensorDetailSheet.tsx`** -- Byt stroke-farger
+8. **`src/lib/map-coloring-utils.ts`** -- Synka COLORS-objekt med nya paletten
+
+### Resultat
+
+- Alla diagram, KPI-kort och kartor anvander en enda harmonisk palett
+- Temat foljer automatiskt ljust/morkt/SWG via CSS-variabler
+- Inga fler harkodade `hsl(...)` eller `text-green-500` i diagram-komponenter
+- Professionellt, mattad, "Nordic design"-estetik istallet for neon-dashboard
+
