@@ -55,10 +55,10 @@ function calculateAirQualityScore(current: { temperature: number | null; co2: nu
   if (count === 0) return { score: 0, label: 'Okänd', color: 'hsl(var(--muted-foreground))' };
 
   const score = Math.round(total / count);
-  if (score >= 80) return { score, label: 'Utmärkt', color: '#22c55e' };
-  if (score >= 60) return { score, label: 'Bra', color: '#84cc16' };
-  if (score >= 40) return { score, label: 'Acceptabelt', color: '#eab308' };
-  return { score, label: 'Dålig', color: '#ef4444' };
+  if (score >= 80) return { score, label: 'Utmärkt', color: 'hsl(var(--chart-3))' };
+  if (score >= 60) return { score, label: 'Bra', color: 'hsl(var(--chart-8))' };
+  if (score >= 40) return { score, label: 'Acceptabelt', color: 'hsl(var(--chart-4))' };
+  return { score, label: 'Dålig', color: 'hsl(var(--chart-5))' };
 }
 
 // ── Comfort explanation ──
@@ -183,11 +183,11 @@ const SensorChart: React.FC<{
   availableFields: string[];
 }> = ({ timeSeries, isLive, availableFields }) => {
   const allLines = [
-    { key: 'temperature' as const, label: 'Temp (°C)',    color: '#22c55e' },
-    { key: 'co2'         as const, label: 'CO₂ (ppm)',   color: '#60a5fa' },
-    { key: 'humidity'    as const, label: 'Fukt (%)',     color: '#a78bfa' },
-    { key: 'light'       as const, label: 'Ljus (lux)',   color: '#fbbf24' },
-    { key: 'occupancy'   as const, label: 'Belägg. (%)', color: '#f97316' },
+    { key: 'temperature' as const, label: 'Temp (°C)',    color: 'hsl(var(--chart-3))' },
+    { key: 'co2'         as const, label: 'CO₂ (ppm)',   color: 'hsl(var(--chart-2))' },
+    { key: 'humidity'    as const, label: 'Fukt (%)',     color: 'hsl(var(--chart-7))' },
+    { key: 'light'       as const, label: 'Ljus (lux)',   color: 'hsl(var(--chart-4))' },
+    { key: 'occupancy'   as const, label: 'Belägg. (%)', color: 'hsl(var(--chart-5))' },
   ];
 
   const lines = allLines.filter(l => availableFields.includes(l.key));

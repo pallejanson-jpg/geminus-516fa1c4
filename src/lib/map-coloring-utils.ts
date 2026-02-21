@@ -15,14 +15,14 @@ export interface BuildingMetrics {
   energyRating: EnergyRating;
 }
 
-// Color scales for each mode
+// Color scales — synchronized with Nordic Pro chart palette
 const COLORS = {
-  green: '#22c55e',
-  lightGreen: '#84cc16',
-  yellow: '#eab308',
-  orange: '#f97316',
-  red: '#ef4444',
-  darkGreen: '#15803d',
+  green: '#38A88C',     // chart-3 positive/teal
+  lightGreen: '#408F5E', // chart-8 success/dark green
+  yellow: '#D4913B',    // chart-4 warning/amber
+  orange: '#C94F6D',    // chart-5 negative/rose
+  red: '#dc2626',       // destructive
+  darkGreen: '#408F5E', // chart-8 success
 };
 
 export function getBuildingColor(

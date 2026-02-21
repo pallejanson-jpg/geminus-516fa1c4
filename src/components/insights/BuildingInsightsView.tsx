@@ -31,15 +31,16 @@ import { INSIGHTS_COLOR_UPDATE_EVENT, ALARM_ANNOTATIONS_SHOW_EVENT } from '@/lib
 
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
 
+// Floor colors — derived from Nordic Pro chart palette
 const FLOOR_COLORS = [
-  'hsl(220, 80%, 55%)',  // Blue
-  'hsl(142, 71%, 45%)',  // Green
-  'hsl(48, 96%, 53%)',   // Yellow
-  'hsl(262, 83%, 58%)',  // Purple
-  'hsl(16, 85%, 55%)',   // Orange
-  'hsl(340, 75%, 55%)',  // Pink
-  'hsl(180, 60%, 45%)',  // Teal
-  'hsl(0, 72%, 51%)',    // Red
+  'hsl(var(--chart-2))',  // Blue
+  'hsl(var(--chart-3))',  // Teal
+  'hsl(var(--chart-4))',  // Amber
+  'hsl(var(--chart-1))',  // Purple
+  'hsl(var(--chart-5))',  // Rose
+  'hsl(var(--chart-7))',  // Lavender
+  'hsl(var(--chart-6))',  // Blue-grey
+  'hsl(var(--chart-8))',  // Green
 ];
 
 interface BuildingInsightsViewProps {
@@ -66,12 +67,12 @@ const ViewerLink = () => {
     );
 };
 
-// Energy distribution (building-specific mock)
+// Energy distribution (building-specific mock) — uses chart theme
 const energyDistribution = [
     { name: 'Heating', value: 42, color: 'hsl(var(--destructive))' },
-    { name: 'Cooling', value: 22, color: 'hsl(220, 80%, 55%)' },
-    { name: 'Lighting', value: 20, color: 'hsl(48, 96%, 53%)' },
-    { name: 'Equipment', value: 12, color: 'hsl(262, 83%, 58%)' },
+    { name: 'Cooling', value: 22, color: 'hsl(var(--chart-2))' },
+    { name: 'Lighting', value: 20, color: 'hsl(var(--chart-4))' },
+    { name: 'Equipment', value: 12, color: 'hsl(var(--chart-7))' },
     { name: 'Other', value: 4, color: 'hsl(var(--muted-foreground))' },
 ];
 
@@ -319,10 +320,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     }, [buildingStoreys]);
 
     const SENSOR_METRICS = [
-        { key: 'temperature' as VisualizationType, label: 'Temp', unit: '°C', icon: Thermometer, color: '#22c55e' },
-        { key: 'co2' as VisualizationType, label: 'CO₂', unit: 'ppm', icon: Wind, color: '#60a5fa' },
-        { key: 'humidity' as VisualizationType, label: 'Fukt', unit: '%', icon: Droplets, color: '#a78bfa' },
-        { key: 'occupancy' as VisualizationType, label: 'Beläggning', unit: '%', icon: Users, color: '#f97316' },
+        { key: 'temperature' as VisualizationType, label: 'Temp', unit: '°C', icon: Thermometer, color: 'hsl(var(--chart-3))' },
+        { key: 'co2' as VisualizationType, label: 'CO₂', unit: 'ppm', icon: Wind, color: 'hsl(var(--chart-2))' },
+        { key: 'humidity' as VisualizationType, label: 'Fukt', unit: '%', icon: Droplets, color: 'hsl(var(--chart-7))' },
+        { key: 'occupancy' as VisualizationType, label: 'Beläggning', unit: '%', icon: Users, color: 'hsl(var(--chart-5))' },
     ] as const;
 
     // Deduplicated floor list for Space tab filter
@@ -519,8 +520,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Prepare asset category pie data (REAL)
     const assetCategoryPie = useMemo(() => {
         const colors = [
-            'hsl(220, 80%, 55%)', 'hsl(48, 96%, 53%)', 'hsl(var(--primary))',
-            'hsl(var(--destructive))', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)',
+            'hsl(var(--chart-2))', 'hsl(var(--chart-4))', 'hsl(var(--chart-1))',
+            'hsl(var(--chart-5))', 'hsl(var(--chart-3))', 'hsl(var(--chart-7))',
         ];
         return Object.entries(stats.assetCategories)
             .sort((a, b) => b[1] - a[1])
@@ -531,8 +532,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Prepare space type pie data (REAL)
     const spaceTypePie = useMemo(() => {
         const colors = [
-            'hsl(var(--primary))', 'hsl(220, 80%, 55%)', 'hsl(142, 71%, 45%)',
-            'hsl(48, 96%, 53%)', 'hsl(262, 83%, 58%)', 'hsl(var(--muted-foreground))',
+            'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
+            'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
         ];
         return Object.entries(stats.spaceTypes)
             .sort((a, b) => b[1] - a[1])
@@ -562,11 +563,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             {/* KPI Cards - REAL counts */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-4 sm:mb-6">
                 {[
-                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-blue-500', isMock: false, onView: () => setActiveTab('space') },
-                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-green-500', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
-                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-purple-500', isMock: false, onView: () => navigateTo3D() },
+                    { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-[hsl(var(--chart-2))]', isMock: false, onView: () => setActiveTab('space') },
+                    { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-[hsl(var(--chart-3))]', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
+                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-[hsl(var(--chart-7))]', isMock: false, onView: () => navigateTo3D() },
                     { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', isMock: false, onView: () => navigateTo3D({ visualization: 'area' }) },
-                    { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-yellow-500' },
+                    { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-[hsl(var(--chart-4))]' },
                     { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary' },
                 ].map((kpi, index) => (
                     <Card key={index} className={kpi.onView ? 'group cursor-pointer border-primary/20 hover:border-primary/50 transition-colors touch-action-manipulation' : ''} onClick={kpi.onView}>
@@ -620,7 +621,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">
                                         <CardHeader className="pb-2">
                                             <CardTitle className="text-base flex items-center gap-2">
-                                                <Zap className="h-4 w-4 text-yellow-500" />
+                                                <Zap className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                                 Energy per Floor
                                                 <span className="ml-auto cursor-pointer" onClick={() => {
                                                     const colorMap: Record<string, [number, number, number]> = {};
@@ -661,7 +662,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-base flex items-center gap-2">
-                                            <ThermometerSun className="h-4 w-4 text-orange-500" />
+                                            <ThermometerSun className="h-4 w-4 text-[hsl(var(--chart-4))]" />
                                             Energy Distribution
                                             <span className="ml-auto cursor-pointer" onClick={() => {
                                                 // Navigate with all floor colors (energy doesn't map to objects directly)
@@ -699,7 +700,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                             <Card>
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
-                                        <Droplets className="h-4 w-4 text-blue-500" />
+                                        <Droplets className="h-4 w-4 text-[hsl(var(--chart-2))]" />
                                         Monthly Energy Trend
                                     </CardTitle>
                                 </CardHeader>
@@ -712,7 +713,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                                                 <Legend formatter={(value: string) => <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>} />
                                                 <Line type="monotone" dataKey="consumption" name="Actual" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} />
-                                                <Line type="monotone" dataKey="target" name="Target" stroke="hsl(142, 71%, 45%)" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(142, 71%, 45%)' }} />
+                                                <Line type="monotone" dataKey="target" name="Target" stroke="hsl(var(--chart-3))" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: 'hsl(var(--chart-3))' }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -727,7 +728,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <Card className="border-primary/20 hover:border-primary/50 transition-colors">
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-base flex items-center gap-2">
-                                            <DoorOpen className="h-4 w-4 text-green-500" />
+                                            <DoorOpen className="h-4 w-4 text-[hsl(var(--chart-3))]" />
                                             Room Types
                                             <span className="ml-auto cursor-pointer" onClick={() => {
                                                 const colorMap: Record<string, [number, number, number]> = {};

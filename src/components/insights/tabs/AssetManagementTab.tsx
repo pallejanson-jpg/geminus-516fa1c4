@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
+import { SEQUENTIAL_PALETTE, CHART_COLORS, STATUS_COLORS, ICON_COLOR_CLASSES } from '@/lib/chart-theme';
 
 // Truncate name for chart display
 const truncateName = (name: string, maxLen = 12) => 
@@ -51,7 +52,6 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
         const fetchAssetCounts = async () => {
             setIsLoadingDb(true);
             try {
-                // Total count
                 const { count: totalCount } = await supabase
                     .from('assets')
                     .select('*', { count: 'exact', head: true })
@@ -59,7 +59,6 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
 
                 setDbAssetCount(totalCount || 0);
 
-                // Per building counts
                 const { data: buildingCounts } = await supabase
                     .from('assets')
                     .select('building_fm_guid')
@@ -76,7 +75,6 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                     setDbPerBuilding(perBuilding);
                 }
 
-                // Category distribution
                 const { data: categoryCounts } = await supabase
                     .from('assets')
                     .select('asset_type')
@@ -111,37 +109,26 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                 fmGuid: building.fmGuid,
                 name: truncateName(fullName),
                 fullName,
-                assetCount: realCount, // REAL from DB
-                avgAge: 3 + (hash % 12), // MOCK
-                replacementValue: 500000 + (hash % 2000000), // MOCK
-                maintenanceStatus: hash % 100 > 70 ? 'Critical' : hash % 100 > 40 ? 'Planned' : 'OK', // MOCK
+                assetCount: realCount,
+                avgAge: 3 + (hash % 12),
+                replacementValue: 500000 + (hash % 2000000),
+                maintenanceStatus: hash % 100 > 70 ? 'Critical' : hash % 100 > 40 ? 'Planned' : 'OK',
             };
         });
     }, [navigatorTreeData, dbPerBuilding]);
 
     // REAL: Category distribution from database
     const categoryDistribution = useMemo(() => {
-        const colors = [
-            'hsl(220, 80%, 55%)',
-            'hsl(48, 96%, 53%)',
-            'hsl(var(--primary))',
-            'hsl(var(--destructive))',
-            'hsl(142, 71%, 45%)',
-            'hsl(262, 83%, 58%)',
-            'hsl(var(--muted-foreground))',
-        ];
-
         const entries = Object.entries(dbCategories)
             .sort((a, b) => b[1] - a[1]);
 
-        // Take top 6 and group rest as "Other"
         const top = entries.slice(0, 6);
         const otherCount = entries.slice(6).reduce((sum, [, count]) => sum + count, 0);
 
-        const result = top.map(([name, value], index) => ({
-            name: name.replace('Ifc', ''), // Clean up IFC prefix for display
+        const result: { name: string; value: number; color: string }[] = top.map(([name, value], index) => ({
+            name: name.replace('Ifc', ''),
             value,
-            color: colors[index % colors.length],
+            color: SEQUENTIAL_PALETTE[index % SEQUENTIAL_PALETTE.length] as string,
         }));
 
         if (otherCount > 0) {
@@ -157,9 +144,9 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
         const planned = assetsByBuilding.filter(b => b.maintenanceStatus === 'Planned').length;
         const critical = assetsByBuilding.filter(b => b.maintenanceStatus === 'Critical').length;
         return [
-            { name: 'OK', value: ok, color: 'hsl(142, 71%, 45%)' },
-            { name: 'Planned', value: planned, color: 'hsl(48, 96%, 53%)' },
-            { name: 'Critical', value: critical, color: 'hsl(var(--destructive))' },
+            { name: 'OK', value: ok, color: STATUS_COLORS.OK },
+            { name: 'Planned', value: planned, color: STATUS_COLORS.Planned },
+            { name: 'Critical', value: critical, color: STATUS_COLORS.Critical },
         ];
     }, [assetsByBuilding]);
 
@@ -178,21 +165,21 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                 ? Math.round(assetsByBuilding.reduce((s, b) => s + b.avgAge, 0) / assetsByBuilding.length) 
                 : 'N/A', 
             icon: Clock, 
-            color: 'text-blue-500',
+            color: ICON_COLOR_CLASSES.blue,
             isMock: true,
         },
         { 
             title: isMobile ? 'Value' : 'Replacement Value', 
             value: `${(assetsByBuilding.reduce((s, b) => s + b.replacementValue, 0) / 1000000).toFixed(1)} MSEK`, 
             icon: CircleDollarSign, 
-            color: 'text-green-500',
+            color: ICON_COLOR_CLASSES.green,
             isMock: true,
         },
         { 
             title: isMobile ? 'Maint.' : 'Needs Maintenance', 
             value: assetsByBuilding.filter(b => b.maintenanceStatus !== 'OK').length, 
             icon: Wrench, 
-            color: 'text-yellow-500',
+            color: ICON_COLOR_CLASSES.amber,
             isMock: true,
         },
     ];
@@ -200,9 +187,9 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'OK':
-                return <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />OK</Badge>;
+                return <Badge style={{ backgroundColor: STATUS_COLORS.OK }} className="text-white"><CheckCircle2 className="h-3 w-3 mr-1" />OK</Badge>;
             case 'Planned':
-                return <Badge className="bg-yellow-600"><Clock className="h-3 w-3 mr-1" />Planned</Badge>;
+                return <Badge style={{ backgroundColor: STATUS_COLORS.Planned }} className="text-white"><Clock className="h-3 w-3 mr-1" />Planned</Badge>;
             case 'Critical':
                 return <Badge variant="destructive"><AlertCircle className="h-3 w-3 mr-1" />Critical</Badge>;
             default:
@@ -286,7 +273,7 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-blue-500" />
+                            <Building2 className={`h-4 w-4 ${ICON_COLOR_CLASSES.blue}`} />
                             Assets per Building
                         </CardTitle>
                         <CardDescription>Registered asset count (real data)</CardDescription>
