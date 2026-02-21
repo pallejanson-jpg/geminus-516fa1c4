@@ -71,6 +71,15 @@ export interface AlarmAnnotationsShowDetail {
   flyTo?: boolean;
 }
 
+/** Event dispatched when floor changes in split 2D/3D mode */
+export const SPLIT_2D_FLOOR_SYNC_EVENT = 'SPLIT_2D_FLOOR_SYNC';
+
+/** Type for split 2D floor sync event detail */
+export interface Split2DFloorSyncDetail {
+  floorFmGuid: string;
+  floorName: string;
+}
+
 /** Type for load saved view event detail */
 export interface LoadSavedViewDetail {
   viewId: string;
