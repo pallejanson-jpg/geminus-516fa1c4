@@ -35,7 +35,7 @@ import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
-import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail } from '@/lib/viewer-events';
+import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
@@ -139,6 +139,40 @@ const UnifiedViewerContent: React.FC<{
       setTransform(buildingData.transform);
     }
   }, [buildingData?.transform]);
+
+  // ─── Apply start view when building data is ready ──────────────────
+  const startViewAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sv = buildingData?.startView;
+    if (!sv || !buildingData) return;
+    // Only apply once per building
+    if (startViewAppliedRef.current === buildingData.fmGuid) return;
+    startViewAppliedRef.current = buildingData.fmGuid;
+
+    // Dispatch after a delay to allow model loading
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<LoadSavedViewDetail>(LOAD_SAVED_VIEW_EVENT, {
+        detail: {
+          viewId: 'start-view',
+          cameraEye: sv.cameraEye || [0, 0, 0],
+          cameraLook: sv.cameraLook || [0, 0, 0],
+          cameraUp: sv.cameraUp || [0, 1, 0],
+          cameraProjection: sv.cameraProjection || 'perspective',
+          viewMode: (sv.viewMode as '2d' | '3d') || '3d',
+          clipHeight: sv.clipHeight || 1.2,
+          visibleModelIds: sv.visibleModelIds || [],
+          visibleFloorIds: sv.visibleFloorIds || [],
+          showSpaces: sv.showSpaces || false,
+          showAnnotations: sv.showAnnotations || false,
+          visualizationType: 'none',
+          visualizationMockData: false,
+        },
+      }));
+      // If start view is 2D, also switch mode
+      if (sv.viewMode === '2d') setViewMode('2d');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [buildingData]);
 
   // ─── Viewer instance ref (for xeokit) ──────────────────────────────
   const viewerInstanceRef = useRef<any>(null);

@@ -540,15 +540,33 @@ export function useRoomLabels(
     }
   }, [createLabels, destroyLabels]);
 
-  // Update view mode (2D/3D) and recreate labels with appropriate height
+  // Store original config so we can restore on 3D switch
+  const origConfigRef = useRef<RoomLabelsConfigDetail | null>(null);
+
+  // Update view mode (2D/3D) and recreate labels with appropriate height + 2D overrides
   const updateViewMode = useCallback((mode: '2d' | '3d') => {
     if (viewModeRef.current === mode) return;
     
     console.log(`Room labels: Updating view mode to ${mode}`);
     viewModeRef.current = mode;
+
+    if (mode === '2d') {
+      // Save original config and apply 2D-optimized overrides
+      origConfigRef.current = { ...configRef.current };
+      configRef.current = {
+        ...configRef.current,
+        scaleWithDistance: false,
+        occlusionEnabled: false,
+        fontSize: Math.max(configRef.current.fontSize, 12),
+      };
+    } else if (origConfigRef.current) {
+      // Restore original config when switching back to 3D
+      configRef.current = origConfigRef.current;
+      origConfigRef.current = null;
+    }
     
     if (enabledRef.current) {
-      // Destroy and recreate labels with new height
+      // Destroy and recreate labels with new height + config
       destroyLabels();
       createLabels();
     }
