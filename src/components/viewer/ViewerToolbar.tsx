@@ -328,9 +328,28 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
     if (mode === '2d') {
       const scene = viewer.scene;
+      const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+      const assetView = assetViewer?.$refs?.assetView;
       let targetBounds: number[] | null = null;
       let lookHeight = 0;
 
+      // 1. Use Asset+ built-in floor plan mode (primary method)
+      try {
+        assetViewer?.setShowFloorplan?.(true);
+        console.log('[2D Mode] setShowFloorplan(true) called');
+      } catch (e) {
+        console.warn('[2D Mode] setShowFloorplan not available:', e);
+      }
+
+      // 2. Set ortho top-down nav mode via Asset+ API
+      try {
+        assetView?.setNavMode?.('planView');
+        console.log('[2D Mode] setNavMode("planView") called');
+      } catch (e) {
+        console.warn('[2D Mode] setNavMode not available:', e);
+      }
+
+      // 3. Calculate bounds and apply clipping as backup
       if (currentFloorId && currentFloorBounds) {
         const floorBounds = calculateFloorBounds(currentFloorId);
         if (floorBounds) {
@@ -352,21 +371,30 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         if (targetBounds) applyGlobalFloorPlanClipping(targetBounds[1]);
       }
 
+      // 4. Set camera to ortho BEFORE flying (critical fix)
       if (!targetBounds) targetBounds = scene?.getAABB?.();
       if (viewer.camera && targetBounds) {
         const cx = (targetBounds[0] + targetBounds[3]) / 2;
         const cy = lookHeight || (targetBounds[1] + targetBounds[4]) / 2;
         const cz = (targetBounds[2] + targetBounds[5]) / 2;
         const h = Math.max(targetBounds[3] - targetBounds[0], targetBounds[5] - targetBounds[2]) * 1.5;
-        viewer.cameraFlight.flyTo({ eye: [cx, cy + h, cz], look: [cx, cy, cz], up: [0, 0, -1], duration: 0.5, orthoScale: h });
         viewer.camera.projection = 'ortho';
+        viewer.camera.ortho.scale = h;
+        viewer.cameraFlight.flyTo({ eye: [cx, cy + h, cz], look: [cx, cy, cz], up: [0, 0, -1], duration: 0.5 });
       }
     } else {
+      // Back to 3D -- disable Asset+ floor plan mode
+      const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+      const assetView = assetViewer?.$refs?.assetView;
+      try {
+        assetViewer?.setShowFloorplan?.(false);
+        console.log('[3D Mode] setShowFloorplan(false) called');
+      } catch (e) { /* ignore */ }
+
       removeSectionPlane();
       if (currentFloorId) applyCeilingClipping(currentFloorId);
       if (viewer.camera) {
         viewer.camera.projection = 'perspective';
-        const assetView = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView;
         assetView?.viewFit(undefined, true);
       }
     }
