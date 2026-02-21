@@ -692,7 +692,7 @@ function MobileUnifiedViewer({
               buildingFmGuid={buildingData.fmGuid}
               isViewerReady={true}
               compact
-              className="!fixed !left-auto !top-auto !bottom-20 !right-2 !flex-row !h-auto !w-auto"
+              className="!fixed !left-auto !top-auto !bottom-16 !right-2 !flex-row !h-auto !w-auto !z-50"
             />
           )}
         </div>
