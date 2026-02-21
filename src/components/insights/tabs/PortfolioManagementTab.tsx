@@ -19,12 +19,6 @@ interface PortfolioManagementTabProps {
     onColorMap?: (mode: MapColoringMode) => void;
 }
 
-// Mockup indicator badge
-const MockBadge = () => (
-    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-purple-500/20 text-purple-400 border-purple-500/30 ml-1">
-        Demo
-    </Badge>
-);
 
 // Helper for deterministic pseudo-random based on string
 const hashString = (str: string) => {
@@ -168,9 +162,9 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center gap-1.5 mb-2">
                                 <kpi.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${kpi.color} flex-shrink-0`} />
-                                <MockBadge />
+                                
                             </div>
-                            <p className="text-xl sm:text-2xl font-bold text-purple-400 truncate">{kpi.value}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{kpi.value}</p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{kpi.title}</p>
                         </CardContent>
                     </Card>
@@ -309,16 +303,16 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
                                 {portfolioData.slice(0, 10).map((building) => (
                                     <TableRow key={building.fmGuid}>
                                         <TableCell className="font-medium text-foreground">{building.fullName}</TableCell>
-                                        <TableCell className="text-right text-purple-400">
+                                        <TableCell className="text-right text-foreground">
                                             {(building.marketValue / 1000000).toFixed(1)} MSEK
                                         </TableCell>
-                                        <TableCell className="text-right text-purple-400">
+                                        <TableCell className="text-right text-foreground">
                                             {(building.annualRent / 1000).toFixed(0)} kSEK
                                         </TableCell>
-                                        <TableCell className="text-right text-purple-400">
+                                        <TableCell className="text-right text-foreground">
                                             {building.roi.toFixed(1)}%
                                         </TableCell>
-                                        <TableCell className="text-right text-purple-400">{building.occupancy}%</TableCell>
+                                        <TableCell className="text-right text-foreground">{building.occupancy}%</TableCell>
                                         <TableCell className="text-right">
                                             {getRiskBadge(building.riskLevel)}
                                         </TableCell>
