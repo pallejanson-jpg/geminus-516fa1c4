@@ -226,6 +226,17 @@ export function useSectionPlaneClipping(
       try { existing.destroy?.(); } catch (e) { /* ignore */ }
     }
 
+    // Method 0: Use scene.createSectionPlane() if available (some xeokit builds expose it)
+    if (typeof scene.createSectionPlane === 'function') {
+      try {
+        const plane = scene.createSectionPlane({ id, pos, dir, active: true });
+        console.log(`✅ SectionPlane via scene.createSectionPlane: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
+        return plane;
+      } catch (e) {
+        console.warn('[SectionPlane] scene.createSectionPlane failed:', e);
+      }
+    }
+
     // Method 1: Use extracted SectionPlane constructor
     const SectionPlaneClass = extractSectionPlaneClass(viewer);
     if (SectionPlaneClass) {
@@ -297,10 +308,13 @@ export function useSectionPlaneClipping(
               state.sectionPlanes.splice(idx, 1);
               state.numSectionPlanes = state.sectionPlanes.length;
             }
+            try { scene.fire?.("sectionPlaneDestroyed", { id }); } catch { /* ignore */ }
             scene.glRedraw?.();
           }
         };
 
+        // Fire event to trigger xeokit's internal GPU clipping pipeline
+        try { scene.fire?.("sectionPlaneCreated", plane); } catch { /* ignore */ }
         scene.glRedraw?.();
         console.log(`✅ SectionPlane via _sectionPlanesState: ${id} at Y=${pos[1].toFixed(2)}`);
         return plane;
@@ -309,7 +323,15 @@ export function useSectionPlaneClipping(
       }
     }
 
-    console.error('❌ Could not create SectionPlane - no method available. Run diagnoseXeokitScene() for details.');
+    // All methods exhausted — log diagnostic summary
+    console.error(
+      `❌ Could not create SectionPlane "${id}" — all methods failed.\n` +
+      `  scene.createSectionPlane: ${typeof scene.createSectionPlane}\n` +
+      `  SectionPlaneClass: ${!!extractSectionPlaneClass(viewer)}\n` +
+      `  Plugins: ${Object.keys(viewer.plugins || {}).join(', ') || 'none'}\n` +
+      `  _sectionPlanesState: ${!!scene._sectionPlanesState}\n` +
+      `  Run diagnoseXeokitScene() for full details.`
+    );
     return null;
   }, [getXeokitViewer]);
 
