@@ -700,6 +700,36 @@ export type Database = {
         }
         Relationships: []
       }
+      gunnar_conversations: {
+        Row: {
+          building_fm_guid: string | null
+          created_at: string
+          id: string
+          messages: Json
+          summary: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          summary?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          building_fm_guid?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          summary?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       onboarding_sessions: {
         Row: {
           completed_at: string | null
