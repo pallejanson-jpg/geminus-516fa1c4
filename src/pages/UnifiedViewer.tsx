@@ -35,11 +35,11 @@ import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
-import { VIEWER_TOOL_CHANGED_EVENT, type ViewerToolChangedDetail } from '@/lib/viewer-events';
+import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail } from '@/lib/viewer-events';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
-export type ViewMode = '2d' | 'split2d' | '3d' | 'split' | 'vt' | '360';
+export type ViewMode = '2d' | '3d' | 'split' | 'vt' | '360';
 
 interface UnifiedViewerProps {
   initialMode?: ViewMode;
@@ -89,10 +89,22 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData?.fmGuid, buildingData?.fmAccessBuildingGuid]);
 
   useEffect(() => {
-    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d' && viewMode !== 'split2d') {
+    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d') {
       setViewMode('3d');
     }
   }, [buildingData, viewMode]);
+
+  // ─── Dispatch 2D toggle event when viewMode changes ────────────────
+  const prevViewModeRef = useRef<ViewMode>(viewMode);
+  useEffect(() => {
+    const prev = prevViewModeRef.current;
+    prevViewModeRef.current = viewMode;
+    if (viewMode === '2d' && prev !== '2d') {
+      window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
+    } else if (viewMode !== '2d' && prev === '2d') {
+      window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
+    }
+  }, [viewMode]);
 
   // ─── SDK (shared, one instance) ────────────────────────────────────
   const sdkContainerRef = useRef<HTMLDivElement>(null);
@@ -187,14 +199,13 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData, setBuildingContext]);
 
   const handle3DCameraChange = useCallback((position: LocalCoords, heading: number, pitch: number) => {
-    if (!syncLocked || (viewMode !== 'split' && viewMode !== 'split2d')) return;
+    if (!syncLocked || viewMode !== 'split') return;
     updateFrom3D(position, heading, pitch);
   }, [syncLocked, updateFrom3D, viewMode]);
 
   // ─── Ivion camera sync for split mode (polls SDK position) ─────────
   const dummyIframeRef = useRef<HTMLIFrameElement>(null);
   const isSplitMode = viewMode === 'split';
-  const isSplit2DMode = viewMode === 'split2d';
 
   useIvionCameraSync({
     iframeRef: dummyIframeRef,
@@ -319,22 +330,20 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── Compute AssetPlusViewer container style per mode ──────────────
   const is2DMode = viewMode === '2d';
-  const needs3D = viewMode !== '360' && viewMode !== '2d';
+  const needs3D = viewMode !== '360'; // 2D now uses xeokit too
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
-  // isSplitMode / isSplit2DMode already declared above for sync hook
-  const isAnySplit = isSplitMode || isSplit2DMode;
+  const isAnySplit = isSplitMode;
 
   const viewerContainerStyle: React.CSSProperties = {
     position: 'absolute',
     top: 0,
-    left: isSplit2DMode ? undefined : 0,
-    right: isSplit2DMode ? 0 : undefined,
+    left: 0,
     height: '100%',
     display: needs3D ? 'flex' : 'none',
     flexDirection: 'column',
     width: isAnySplit ? '50%' : '100%',
-    zIndex: is3DMode ? 10 : isVTMode ? 10 : 5,
+    zIndex: is3DMode || is2DMode ? 10 : isVTMode ? 10 : 5,
     pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
   };
 
@@ -361,9 +370,8 @@ const UnifiedViewerContent: React.FC<{
               <p className="text-[10px] text-white/60">
                 {viewMode === 'vt' ? 'Virtual Twin' :
                  viewMode === 'split' ? 'Split 3D/360°' :
-                 viewMode === 'split2d' ? 'Split 2D/3D' :
                  viewMode === '360' ? '360° Panorama' :
-                 viewMode === '2d' ? '2D Ritning' : '3D Viewer'}
+                 viewMode === '2d' ? '2D Planvy' : '3D Viewer'}
               </p>
             </div>
           </div>
@@ -371,12 +379,8 @@ const UnifiedViewerContent: React.FC<{
 
         {/* Center: Mode switcher */}
         <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
-          {(hasFmAccess || floorFmGuid) && (
-            <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
-          )}
-          {(hasFmAccess || floorFmGuid) && (
-            <ModeButton mode="split2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split 2D/3D" />
-          )}
+          <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
+          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split 3D/360" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
@@ -490,43 +494,15 @@ const UnifiedViewerContent: React.FC<{
             suppressOverlay={isVTMode}
             onClose={is3DMode ? handleGoBack : undefined}
             syncEnabled={isSplitMode ? syncLocked : false}
-            onCameraChange={(isSplitMode || isSplit2DMode) ? handle3DCameraChange : undefined}
+            onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
             syncPosition={isSplitMode ? sync3DPosition : undefined}
             syncHeading={isSplitMode ? sync3DHeading : undefined}
             syncPitch={isSplitMode ? sync3DPitch : undefined}
           />
         </div>
 
-        {/* ── Split 2D/3D: FM Access panel on the left half ── */}
-        {isSplit2DMode && (hasFmAccess || floorFmGuid) && buildingData && (
-          <div className="absolute top-0 left-0 h-full z-10" style={{ width: '50%' }}>
-            <FmAccess2DPanel
-              buildingFmGuid={buildingData.fmGuid}
-              floorId={floorFmGuid || undefined}
-              floorName={floorName || undefined}
-              fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
-              buildingName={buildingData.name}
-              onChangeFloor={() => setViewMode('3d')}
-            />
-          </div>
-        )}
-
         {/* ── Split: 360° panel on the right half ── */}
         {/* Split mode: SDK container above handles the 360° panel */}
-
-        {/* 2D mode: FM Access panel */}
-        {is2DMode && (hasFmAccess || floorFmGuid) && buildingData && (
-          <div className="absolute inset-0 z-10">
-            <FmAccess2DPanel
-              buildingFmGuid={buildingData.fmGuid}
-              floorId={floorFmGuid || undefined}
-              floorName={floorName || undefined}
-              fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
-              buildingName={buildingData.name}
-              onChangeFloor={() => setViewMode('3d')}
-            />
-          </div>
-        )}
 
         {/* Crosshair overlay for alignment in VT mode */}
         {isVTMode && showAlignment && showCrosshair && (
@@ -600,9 +576,8 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
         {disabled ? 'Kräver Ivion-konfiguration' :
          mode === '3d' ? 'Enbart 3D BIM-modell' :
          mode === 'split' ? '3D + 360° sida vid sida' :
-         mode === 'split2d' ? '2D-ritning + 3D sida vid sida' :
          mode === 'vt' ? 'Virtual Twin — 3D overlay på 360°' :
-         mode === '2d' ? 'FM Access 2D-ritning' :
+         mode === '2d' ? 'Xeokit 2D planvy' :
          'Enbart 360° panorama'}
       </TooltipContent>
     </Tooltip>
@@ -637,13 +612,14 @@ function MobileUnifiedViewer({
   forceXray: boolean;
   onGoBack: () => void;
 }) {
-  const activePanel = viewMode === '2d' ? '2d' : viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
+  // 2D now uses xeokit, so activePanel is '3d' for both '2d' and '3d' modes
+  const activePanel = viewMode === '360' || viewMode === 'vt' ? '360' : '3d';
 
   return (
     <div className="fixed inset-0 bg-black z-40 overflow-hidden">
       {/* Canvas layer — fills entire screen, behind header */}
       <div className="absolute inset-0">
-        {/* 3D viewer — always mounted, hidden when 360 active */}
+        {/* 3D/2D viewer — always mounted, hidden when 360 active */}
         <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
@@ -658,20 +634,6 @@ function MobileUnifiedViewer({
             syncPitch={sync3DPitch}
           />
         </div>
-
-        {/* 2D panel — FM Access */}
-        {(hasFmAccess || floorFmGuid) && (
-          <div style={{ display: activePanel === '2d' ? 'block' : 'none', position: 'absolute', inset: 0, height: '100%' }}>
-              <FmAccess2DPanel
-                buildingFmGuid={buildingData.fmGuid}
-                floorId={floorFmGuid || undefined}
-                floorName={floorName || undefined}
-                fmAccessBuildingGuid={buildingData.fmAccessBuildingGuid}
-                buildingName={buildingData.name}
-                onChangeFloor={() => setViewMode('3d')}
-              />
-            </div>
-        )}
 
         {/* 360 SDK container */}
         {hasIvion && (
@@ -697,12 +659,10 @@ function MobileUnifiedViewer({
         </Button>
 
         <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
-          <Button size="sm" variant={activePanel === '3d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('3d')}>3D</Button>
+          <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
+          <Button size="sm" variant={viewMode === '3d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('3d')}>3D</Button>
           {hasIvion && (
             <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('360')}>360°</Button>
-          )}
-          {(hasFmAccess || floorFmGuid) && (
-            <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
           )}
         </div>
 
