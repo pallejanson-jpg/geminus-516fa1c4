@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useContext, useRef } from "react";
 import {
   Layers, MessageSquare, MessageSquarePlus, Palette, Plus, X, Scissors,
-  Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2,
+  Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2, Home,
   Pin, PinOff
 } from "lucide-react";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
@@ -330,6 +330,57 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       setIsSavingView(false);
     }
   }, [pendingViewState]);
+
+  // Save current view as start view for the building
+  const [isSavingStartView, setIsSavingStartView] = useState(false);
+  const handleSetStartView = useCallback(async () => {
+    const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer || !buildingFmGuid) {
+      toast({ title: "Kan inte spara startvy", description: "Viewer är inte redo", variant: "destructive" });
+      return;
+    }
+    setIsSavingStartView(true);
+    try {
+      const camera = xeokitViewer.camera;
+      const viewId = crypto.randomUUID();
+      const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      
+      // Create saved view
+      const { error: insertError } = await supabase.from('saved_views').insert({
+        id: viewId,
+        name: `Startvy – ${resolvedBuildingName}`,
+        building_fm_guid: buildingFmGuid,
+        building_name: resolvedBuildingName,
+        camera_eye: [...camera.eye],
+        camera_look: [...camera.look],
+        camera_up: [...camera.up],
+        camera_projection: camera.projection,
+        view_mode: is2DMode ? '2d' : '3d',
+        clip_height: clipHeight,
+        visible_model_ids: visibleModelIds,
+        visible_floor_ids: visibleFloorIds,
+        show_spaces: showSpaces,
+        show_annotations: showAnnotations,
+      });
+      if (insertError) throw insertError;
+
+      // Link as start view in building_settings
+      const { error: updateError } = await supabase
+        .from('building_settings')
+        .update({ start_view_id: viewId })
+        .eq('fm_guid', buildingFmGuid);
+      if (updateError) throw updateError;
+
+      toast({ title: "Startvy sparad!", description: "Denna vy används nu som standard vid öppning" });
+      window.dispatchEvent(new CustomEvent('building-settings-changed'));
+    } catch (err) {
+      console.error('Failed to set start view:', err);
+      toast({ title: "Fel", description: "Kunde inte spara startvy", variant: "destructive" });
+    } finally {
+      setIsSavingStartView(false);
+    }
+  }, [viewerRef, buildingFmGuid, buildingName, allData, is2DMode, clipHeight, visibleModelIds, visibleFloorIds, showSpaces, showAnnotations]);
 
   // Issue creation
   const captureIssueState = useCallback(() => {
@@ -763,6 +814,10 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureViewState} disabled={!isViewerReady}>
                     <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
                     <span className="text-sm">Skapa vy</span>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={handleSetStartView} disabled={!isViewerReady || isSavingStartView}>
+                    <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Home className="h-4 w-4" /></div>
+                    <span className="text-sm">{isSavingStartView ? 'Sparar…' : 'Sätt som startvy'}</span>
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureIssueState} disabled={!isViewerReady}>
                     <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
