@@ -1,117 +1,70 @@
 
+## Dölj obstruerande BIM-objekt i 2D-läge
 
-## Fix 2D Mode in 3D Viewer
+### Problem
 
-### Root Cause Analysis
+I 2D-läget (planlösningsvy) ligger ett grått/vitt objekt -- troligtvis ett `IfcSlab` (bjälklag/tak) från den bärande konstruktionsmodellen (Be-modell) -- ovanpå de gröna rumsytorna och blockerar interaktion. Koden som isolerar våningar (Solo-läge i FloorVisibilitySelector) döljer redan `IfcCovering`-objekt, men 2D-knappen i verktygsfältet gör det inte. Dessutom döljs inte `IfcSlab`, `IfcRoof` eller `IfcPlate` -- vilka alla typiskt täcker planlösningen ovanifrån.
 
-The current 2D mode implementation manually creates xeokit `SectionPlane` objects via 4 fallback strategies in `useSectionPlaneClipping.ts`. This is fragile because:
+### Lösning
 
-1. The Asset+ UMD bundle does NOT expose the `SectionPlane` constructor on `window.xeokit`
-2. No existing `SectionPlane` instances exist to copy the constructor from (Strategy 2-4 fail)
-3. The low-level `_sectionPlanesState` fallback (Method 4) creates a fake object that does not trigger the GPU clipping pipeline
-4. Result: the clipping planes are "created" but nothing actually clips in the scene
+Lägg till ett steg i 2D-togglen (ViewerToolbar) som döljer obstruerande IFC-typer och återställer dem vid byte tillbaka till 3D.
 
-Meanwhile, the Asset+ viewer **already has built-in APIs** that handle this correctly:
-- `assetViewer.setShowFloorplan(true/false)` -- toggles 2D floor plan mode
-- `assetViewer.cutOutFloorsByFmGuid(fmGuid, includeRelated)` -- clips to a specific floor
-- `assetView.setNavMode('planView')` -- sets ortho top-down camera
-- `assetView.clearSlices()` -- removes all section planes
+### IFC-typer att dölja i 2D
 
-These APIs are already used elsewhere in the codebase (e.g., `AssetPlusViewer.tsx` line 2445 uses `cutOutFloorsByFmGuid` successfully for floor navigation).
+| IFC-typ | Beskrivning |
+|---|---|
+| `IfcSlab` | Bjälklag och takplattor |
+| `IfcSlabStandardCase` | Variant av bjälklag |
+| `IfcSlabElementedCase` | Variant av bjälklag |
+| `IfcRoof` | Tak |
+| `IfcCovering` | Ytbeklädnad (undertak etc.) |
+| `IfcPlate` | Plattor/skivor |
 
-### Solution: Use Built-in Asset+ APIs
+### Teknisk implementation
 
-Replace the manual SectionPlane creation with calls to the Asset+ viewer's own 2D mode APIs.
+**Fil: `src/components/viewer/ViewerToolbar.tsx`**
 
-### Changes
-
-**1. `src/components/viewer/ViewerToolbar.tsx` -- `handleViewModeChange`**
-
-Replace the current 2D toggle logic (lines 329-372) with:
+I `handleViewModeChange`, efter steg 2 (setNavMode) och före steg 3 (bounds/clipping), lägg till:
 
 ```text
-if (mode === '2d') {
-  // Use Asset+ built-in floor plan mode
-  const assetViewer = viewerRef.current?.$refs?.AssetViewer;
-  const assetView = assetViewer?.$refs?.assetView;
+// 2b. Hide obstructing IFC types in 2D plan view
+const HIDDEN_2D_TYPES = new Set([
+  'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+  'ifcroof', 'ifccovering', 'ifcplate'
+]);
 
-  if (currentFloorId && currentFloorBounds) {
-    // If a floor is selected, cut to it + enable floor plan view
-    const floorBounds = calculateFloorBounds(currentFloorId);
-    if (floorBounds) {
-      // Use built-in setShowFloorplan if available
-      assetViewer?.setShowFloorplan?.(true);
-    }
+const metaObjects = viewer.scene?.metaScene?.metaObjects || {};
+const idsToHide: string[] = [];
+Object.values(metaObjects).forEach((mo: any) => {
+  if (HIDDEN_2D_TYPES.has(mo.type?.toLowerCase())) {
+    idsToHide.push(mo.id);
   }
-
-  // Set ortho top-down camera
-  assetView?.setNavMode?.('planView');
-
-  // Also apply our clipping as backup for models
-  // that don't support setShowFloorplan
-  if (currentFloorId) {
-    applyFloorPlanClipping(currentFloorId);
-  } else {
-    const sceneAABB = viewer.scene?.getAABB?.();
-    if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
-  }
-
-  viewer.camera.projection = 'ortho';
-  // ... camera positioning (keep existing bounds calculation)
-} else {
-  // Back to 3D
-  const assetViewer = viewerRef.current?.$refs?.AssetViewer;
-  assetViewer?.setShowFloorplan?.(false);
-  removeSectionPlane();
-  if (currentFloorId) applyCeilingClipping(currentFloorId);
-  viewer.camera.projection = 'perspective';
-  assetView?.viewFit(undefined, true);
-}
-```
-
-**2. `src/hooks/useSectionPlaneClipping.ts` -- Improve SectionPlane creation reliability**
-
-Add a new Strategy 0 before the existing ones: use the Asset+ viewer's own `clearSlices` to first clear, then use the xeokit viewer's `scene.createSectionPlane` if available:
-
-```text
-// Method 0: Use viewer.scene.createSectionPlane() if available (some xeokit builds expose it)
-if (typeof scene.createSectionPlane === 'function') {
-  try {
-    const plane = scene.createSectionPlane({ id, pos, dir, active: true });
-    return plane;
-  } catch (e) { /* fall through */ }
-}
-```
-
-Also improve Method 4 (_sectionPlanesState) to call `scene.fire("sectionPlaneCreated", ...)` which triggers xeokit's internal clipping pipeline.
-
-**3. `src/components/viewer/ViewerToolbar.tsx` -- Camera positioning fix**
-
-Set `viewer.camera.projection = 'ortho'` BEFORE `cameraFlight.flyTo` (not after), so the ortho projection is active during the fly animation. Also set the ortho scale explicitly:
-
-```text
-viewer.camera.projection = 'ortho';
-viewer.camera.ortho.scale = h;
-viewer.cameraFlight.flyTo({
-  eye: [cx, cy + h, cz],
-  look: [cx, cy, cz],
-  up: [0, 0, -1],
-  duration: 0.5
 });
+if (idsToHide.length > 0) {
+  viewer.scene.setObjectsVisible(idsToHide, false);
+  // Store IDs so we can restore them on 3D switch
+  hiddenFor2dRef.current = idsToHide;
+}
 ```
 
-**4. Add diagnostic logging**
+Vid byte tillbaka till 3D:
 
-Add a console warning when all SectionPlane creation methods fail, including which methods were attempted and what was found, so we can debug more easily if it still fails for specific models.
+```text
+// Restore objects hidden for 2D mode
+if (hiddenFor2dRef.current.length > 0) {
+  viewer.scene.setObjectsVisible(hiddenFor2dRef.current, true);
+  hiddenFor2dRef.current = [];
+}
+```
 
-### Files Changed
+En ny `useRef` (`hiddenFor2dRef`) spårar vilka objekt-ID:n som dolts, så att exakt samma objekt visas igen vid 3D-byte utan att påverka annan synlighetsstyrning.
 
-1. **`src/components/viewer/ViewerToolbar.tsx`** -- Use `setShowFloorplan` + `setNavMode('planView')` for 2D toggle; fix camera projection ordering
-2. **`src/hooks/useSectionPlaneClipping.ts`** -- Add `scene.createSectionPlane` method; improve `_sectionPlanesState` fallback to fire events; better diagnostics
+### Filer som ändras
 
-### Expected Result
+1. **`src/components/viewer/ViewerToolbar.tsx`** -- Lägg till döljning av obstruerande IFC-typer vid 2D och återställning vid 3D
 
-- 2D mode will use the Asset+ viewer's proven built-in floor plan clipping
-- Camera switches to ortho top-down correctly
-- Manual SectionPlane creation serves as backup, not primary method
-- Switching back to 3D properly restores perspective and clears clipping
+### Förväntat resultat
+
+- Bjälklag, tak och beklädnader döljs automatiskt vid 2D-vy
+- De gröna rumsytorna blir fullt synliga och klickbara
+- Vid byte tillbaka till 3D återställs alla dolda objekt
