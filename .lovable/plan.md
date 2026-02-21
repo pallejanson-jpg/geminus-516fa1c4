@@ -1,95 +1,62 @@
 
 
-## Ny Split 2D/3D-vy + Omordnad Mode-switcher
+## Ändra 2D-läget till Xeokit 2D + Ta bort Split 2D/3D
 
-### Sammanfattning
+### Vad ändras
 
-1. Flytta 2D-fliken till vänster om 3D i mode-switchern
-2. Lägg till ett nytt "Split 2D/3D"-läge som visar FM Access 2D-ritning bredvid xeokit 3D-modell med synkroniserade kameror
-3. Visningsmeny (rum-labels, visualiseringar) aktiv i 3D-panelen i split-läget
+1. **2D-knappen i mode-switchern** visar nu xeokit-viewern i 2D-läge (ortografisk planvy med dolda bjälklag) istället för FM Access 2D-ritning
+2. **Split 2D/3D-knappen** tas bort helt
+3. FM Access 2D-ritningen finns kvar i koden men visas inte längre via mode-switchern (kan användas på andra ställen i framtiden)
 
-### Tekniskt beslut: Vilken 2D?
-
-En xeokit-canvas kan bara visa EN projektion (ortho ELLER perspektiv) samtidigt. Att visa xeokit i 2D-läge OCH 3D-läge kräver två separata viewer-instanser, vilket är tungt och bryter mot arkitekturen ("only ONE AssetPlusViewer instance").
-
-Lösningen: **FM Access 2D-ritning** (vänster) + **xeokit 3D** (höger) -- exakt samma mönster som befintlig Split 3D/360 men med 2D-panelen istället för Ivion SDK.
-
-### Ny flikordning i mode-switchern
+### Ny flikordning
 
 ```text
-Nuvarande:  [ 3D ] [ Split ] [ VT ] [ 360° ] [ 2D ]
-Ny:         [ 2D ] [ Split 2D/3D ] [ 3D ] [ Split 3D/360 ] [ VT ] [ 360° ]
+[ 2D ] [ 3D ] [ Split 3D/360 ] [ VT ] [ 360° ]
 ```
 
-- **2D** -- FM Access 2D-ritning (befintlig)
-- **Split 2D/3D** -- NY: 2D + 3D sida vid sida
-- **3D** -- xeokit 3D (befintlig)
-- **Split 3D/360** -- Befintlig split (omdöpt för tydlighet)
-- **VT** -- Virtual Twin (befintlig)
-- **360°** -- Enbart panorama (befintlig)
+### Teknisk implementation
 
-### Kamerasynk i Split 2D/3D
+**Fil: `src/pages/UnifiedViewer.tsx`**
 
-- **3D till 2D**: När användaren navigerar i 3D (byter våning, klickar rum), skickas `floorFmGuid` till FM Access 2D-panelen som växlar till rätt våning
-- **2D till 3D**: När användaren klickar ett rum i FM Access 2D, dispatchar vi en event som 3D-viewern lyssnar på för att flyga till rummet (`flyToCoordinates` eller `lookAtInstanceFromAngle`)
-- Synk sker via `ViewerSyncContext` som redan finns och redan hanterar 3D/360-synk
+- Ta bort `'split2d'` från `ViewMode`-typen: `'2d' | '3d' | 'split' | 'vt' | '360'`
+- Ta bort `isSplit2DMode`-variabeln och all logik kopplad till den
+- Ta bort Split 2D/3D `ModeButton`
+- Ta bort FM Access 2D-panel-renderingen för `isSplit2DMode` (rad 500-512)
+- Ta bort FM Access 2D-panel-renderingen för `is2DMode` (rad 517-529)
+- Ändra `needs3D`: ta bort `viewMode !== '2d'`-villkoret -- 2D behöver nu 3D-viewern (xeokit) synlig
+- När `viewMode` sätts till `'2d'`, dispatcha en custom event som triggar ViewerToolbar att aktivera 2D-läget (ortho + dolda bjälklag)
+- När `viewMode` lämnar `'2d'`, dispatcha en event som återställer till 3D-läge
 
-### Visningsmeny i split-läget
+**Fil: `src/lib/viewer-events.ts`**
 
-ViewerToolbar (rum-labels, visualiseringar, x-ray etc.) renderas inuti AssetPlusViewer och är redan aktiv i befintliga split-lägen. Den kommer automatiskt vara tillgänglig i 3D-panelen av Split 2D/3D. FM Access 2D-panelen har sin egen inbyggda kontrollpanel.
+- Lägg till `VIEW_MODE_2D_TOGGLED_EVENT` med detail `{ enabled: boolean }` för kommunikation mellan UnifiedViewer och ViewerToolbar
+- Ta bort `SPLIT_2D_FLOOR_SYNC_EVENT` (oanvänd nu)
 
-### Implementation -- Filer som ändras
+**Fil: `src/components/viewer/ViewerToolbar.tsx`**
 
-**1. `src/pages/UnifiedViewer.tsx`**
+- Lyssna på `VIEW_MODE_2D_TOGGLED_EVENT` -- när `enabled: true`, kör samma logik som 2D-knappen i toolbaren (setShowFloorplan, setNavMode, dolda IFC-typer, ortho-projektion)
+- När `enabled: false`, återställ till 3D (perspektiv, visa dolda objekt)
+- Dölj den inbyggda 2D/3D-toggle-knappen i toolbaren om den triggas externt (valfritt -- kan också behållas för konsistens)
 
-- Lägg till `ViewMode`-typ: `'split2d'`
-- Uppdatera mode-switchern (rad 371-378):
-  - Flytta 2D-knappen först
-  - Lägg till ny Split 2D/3D-knapp
-  - Omdöp befintlig Split till "Split 3D/360"
-- Lägg till `isSplit2DMode = viewMode === 'split2d'` logik
-- Uppdatera `viewerContainerStyle`: width 50% för `split2d`
-- Rendera FM Access 2D-panel på vänster halva när `split2d` aktiv
-- Uppdatera `needs3D` att inkludera `split2d`
-- Uppdatera subtitle-text och tooltip
-- Mobilvy: lägg till Split 2D/3D som alternativ
-
-**2. `src/components/viewer/FmAccess2DPanel.tsx`**
-
-- Lägg till en `onRoomClick`-callback-prop som dispatchar rum-navigering till 3D
-- Exponera `floorId` som dynamisk prop (redan finns) för synk från 3D
-
-**3. `src/components/viewer/ViewerToolbar.tsx`**
-
-- Exportera `ViewMode`-typen uppdaterad med `'split2d'`
-- Inga andra ändringar behövs -- toolbaren fungerar redan i split-lägen
-
-**4. `src/lib/viewer-events.ts`**
-
-- Lägg till `SPLIT_2D_FLOOR_SYNC_EVENT` för att synka våningsval mellan panelerna
-
-### Desktop-layout för Split 2D/3D
+### Flöde
 
 ```text
-+-----------------------------+-----------------------------+
-|                             |                             |
-|   FM Access 2D-ritning      |   xeokit 3D-modell          |
-|   (50% bredd)               |   (50% bredd)               |
-|                             |   [ViewerToolbar aktiv]     |
-|                             |   [RoomLabels, X-ray etc.]  |
-|                             |                             |
-+-----------------------------+-----------------------------+
+Användare klickar "2D" i mode-switcher
+  -> UnifiedViewer sätter viewMode = '2d'
+  -> xeokit-containern förblir synlig (needs3D = true)
+  -> Dispatchar VIEW_MODE_2D_TOGGLED_EVENT { enabled: true }
+  -> ViewerToolbar tar emot eventet
+  -> Aktiverar ortho-projektion, setShowFloorplan, döljer bjälklag/tak
+  
+Användare klickar "3D" i mode-switcher
+  -> UnifiedViewer sätter viewMode = '3d'
+  -> Dispatchar VIEW_MODE_2D_TOGGLED_EVENT { enabled: false }
+  -> ViewerToolbar återställer perspektiv, visar dolda objekt
 ```
 
-### Mobil-layout
+### Filer som ändras
 
-På mobil visas inte split-läget (för liten skärm). Användaren kan växla mellan 2D och 3D via tabbar som idag.
-
-### Implementationsordning
-
-1. Uppdatera `ViewMode`-typ och mode-switcher i UnifiedViewer
-2. Lägg till split2d-layout (CSS: 50/50 med FmAccess2DPanel + AssetPlusViewer)
-3. Implementera våningssynk (3D floor-change dispatchar event, 2D lyssnar)
-4. Implementera rum-klick-synk (2D rum-klick navigerar 3D)
-5. Testa på desktop och mobil
+1. `src/pages/UnifiedViewer.tsx` -- Ta bort split2d, ändra 2D till xeokit-baserat
+2. `src/lib/viewer-events.ts` -- Lägg till VIEW_MODE_2D_TOGGLED_EVENT, ta bort SPLIT_2D_FLOOR_SYNC_EVENT
+3. `src/components/viewer/ViewerToolbar.tsx` -- Lyssna på externt 2D-toggle-event
 
