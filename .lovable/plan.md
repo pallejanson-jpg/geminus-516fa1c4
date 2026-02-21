@@ -1,72 +1,91 @@
 
 
-## 2D-lagesfoerrbattringar -- 4 deluppgifter
+## Fix: Slabs blockerar 2D-vy och dolda slabs gor rum oklickbara
 
-### 1. Ren 2D: Isolera vald vaning vid start
+### Rotorsak
 
-**Problem**: Nar man navigerar fran en byggnad med en specifik vaning (?building=X&floor=Y), visas hela byggnaden i 2D istallet for att isolera den valda vaningen.
+I xeokit ar `scene.pick()` beroende av att entity ar `visible = true`. Det finns tva problem:
 
-**Orsak**: `UnifiedViewer` laser `floorFmGuid` fran URL-parametern `floor`, men nar 2D-laget aktiveras skickas den aldrig vidare till `ViewerToolbar.handleViewModeChange('2d')`. Toolbaren kollar `currentFloorId` som ar null vid forsta start.
+1. **Slabs blockerar**: Nar slabs ar synliga i 2D ligger de ovanfor rummen och tar emot alla klick istallet for rummen under
+2. **Dolda slabs = oklickbara rum**: Nar slabs doljs (`visible = false`) passerar pick-stralen rakt igenom, men IfcSpace-entities ar OCKSA dolda (`showSpaces` startar som `false`) -- sa det finns inget att klicka pa
 
-**Losning**: 
-- I `UnifiedViewer.tsx`: Nar `viewMode` satts till `'2d'` OCH `floorFmGuid` finns i URL:en, dispatcha ett `FLOOR_SELECTION_CHANGED_EVENT` med `visibleFloorFmGuids: [floorFmGuid]` och `isSoloFloor: true` kort efter 2D-toggle-eventet (med 500ms delay). Detta synkar ViewerToolbar och FloorVisibilitySelector.
-- I `ViewerToolbar.tsx`: Se till att `handleViewModeChange('2d')` respekterar det inkommande floor-selection-eventet for klippning.
+### Losning -- tva delar
 
-**Fil**: `src/pages/UnifiedViewer.tsx`
+**A) Slabs i 2D: Osynliga MEN inte pick-blockerande**
 
----
+Istallet for att bara satta `visible = false` pa slabs, anvand `pickable = false` PLUS extremt lag opacity:
 
-### 2. Flytande vaningsvaljare i 2D-lage
-
-**Problem**: FloatingFloorSwitcher (pill-knappar) togs bort fran 2D-flode men behovs for att byta vaning i planvy.
-
-**Losning**: 
-- FloatingFloorSwitcher ar redan renderad i `AssetPlusViewer.tsx` (rad 4028-4036) men enbart for desktop (`!isMobile`). 
-- For mobilt: Lagg till `FloatingFloorSwitcher` aven i `MobileUnifiedViewer` nar `viewMode === '2d'`, med kompakt styling (mindre pills, horisontellt langst ner).
-- Gor komponentens styling responsiv: lagg till en `compact`-prop som minskar pill-storlek (h-7, text-xs) for mobilt.
-
-**Filer**: 
-- `src/components/viewer/FloatingFloorSwitcher.tsx` -- lagg till `compact`-prop
-- `src/pages/UnifiedViewer.tsx` -- rendera FloatingFloorSwitcher i MobileUnifiedViewer for 2D
-
----
-
-### 3. Dolda objekt (slabs) pa mobil i 2D
-
-**Problem**: Pa mobil dols inte IfcSlab/IfcRoof-objekt i 2D-laget korrekt.
-
-**Orsak**: `VIEW_MODE_2D_TOGGLED_EVENT` dispatchas korrekt fran UnifiedViewer, och `ViewerToolbar` lyssnar pa det. Men i mobilversionen renderas `AssetPlusViewer` utan den fulla toolbar-kontexten -- `ViewerToolbar` renderas inuti `AssetPlusViewer` (rad 4041-4049), sa den borde ta emot eventet. 
-
-Trolig orsak: Timingproblem -- eventet dispatchas innan ViewerToolbar ar mountad/redo. Losningen ar att lata ViewerToolbar kontrollera sin `viewMode`-state mot det faktiska laget vid mount, och om den missar eventet, applicera 2D-stilen retroaktivt.
-
-**Losning**: I `ViewerToolbar.tsx`, lagg till en effect som vid `isViewerReady` kollar om externt 2D-lage ar aktivt (via en global flag eller genom att lyssna pa `VIEW_MODE_2D_TOGGLED_EVENT` med en ref som sparar senaste state). Om viewer blir redo medan 2D ar aktivt, kor `handleViewModeChange('2d')` automatiskt.
-
-**Fil**: `src/components/viewer/ViewerToolbar.tsx`
-
----
-
-### 4. Dubblerad 3D ModeButton
-
-**Bug**: I mode-switchern pa desktop (rad 417-418) finns tva identiska `ModeButton mode="3d"`. Den ena ska vara `mode="2d"` men bada ar `3d`. 
-
-```
-<ModeButton mode="3d" ... label="3D" />   // rad 417 -- borde vara 2D-knappen?
-<ModeButton mode="3d" ... label="3D" />   // rad 418 -- duplikat
+```text
+entity.visible = true       (behalls synlig for xeokit-rendering)
+entity.pickable = false     (blockerar inte picks pa objekt under)
+entity.opacity = 0.0        (helt transparent -- syns inte visuellt)
+entity.edges = false        (inga kanter syns heller)
 ```
 
-Rad 416 har redan en 2D-knapp, sa rad 417-418 har en extra dubblerad 3D-knapp.
+Detta gor att slabs inte syns och inte blockerar klick, men xeokit behover inte hantera dem som "borta".
 
-**Losning**: Ta bort den dubblerade raden 418.
+**B) IfcSpace i 2D: Gor rum klickbara automatiskt**
 
-**Fil**: `src/pages/UnifiedViewer.tsx`
+Nar 2D-laget aktiveras, gor IfcSpace-entities synliga med extremt lag opacity (0.02) sa de fungerar som osynliga klickytor:
 
----
+```text
+entity.visible = true
+entity.pickable = true  
+entity.opacity = 0.02       (nastan osynligt men pickable)
+entity.colorize = [0.5, 0.7, 0.9]  (ljusbla om nagot syns)
+```
 
-### Sammanfattning av filandringar
+Nar anvandaren sedan aktiverar "Visa rum" (showSpaces) far rummen full opacitet som vanligt.
+
+### Implementation
+
+**Fil: `src/components/viewer/ViewerToolbar.tsx`**
+
+I `handleViewModeChange('2d')`:
+
+1. Andra slab-doljningen fran:
+   - `scene.setObjectsVisible(idsToHide, false)` 
+   - Till: iterera och satt `entity.pickable = false; entity.opacity = 0; entity.edges = false` (behall `visible = true`)
+
+2. Lagg till ny loop for IfcSpace-entities:
+   - Hitta alla metaObjects med `type === 'ifcspace'`
+   - Satt `entity.visible = true; entity.pickable = true; entity.opacity = 0.02`
+   - Spara originalvarden i `colorizedFor2dRef` for aterställning
+
+3. I `handleViewModeChange('3d')` (aterställning):
+   - Aterställ slab-entities: `entity.pickable = true; entity.opacity = originalOpacity; entity.edges = originalEdges`
+   - Aterställ IfcSpace-entities till sina originalvarden (vanligtvis `visible = false` om showSpaces ar av)
+
+**Fil: `src/components/viewer/AssetPlusViewer.tsx`**
+
+Ingen andring kravs -- `selectedFmGuidsChangedCallback` och `selectionChangedCallback` fungerar automatiskt nar entities ar pickable.
+
+### Flode
+
+```text
+2D aktiveras:
+  -> Slabs: visible=true, pickable=false, opacity=0, edges=false
+     (osynliga, blockerar inte klick)
+  -> IfcSpace: visible=true, pickable=true, opacity=0.02
+     (nastan osynliga men klickbara)
+  -> Vaggar: colorize=[0.2,0.2,0.2], opacity=1.0, edges=true
+     (tydliga, mörka, fyllda)
+
+Anvandare klickar i 2D:
+  -> Pick-stralen passerar genom transparenta slabs
+  -> Traffar IfcSpace-ytan
+  -> Asset+ selectionChangedCallback avfyras
+  -> Rum identifieras och kan visas
+
+3D aterställs:
+  -> Slabs: aterställ pickable=true, opacity=original, edges=original
+  -> IfcSpace: aterställ till showSpaces-status
+  -> Vaggar: aterställ colorize, opacity, edges
+```
+
+### Filer som andras
 
 | Fil | Andring |
 |---|---|
-| `src/pages/UnifiedViewer.tsx` | (1) Dispatcha floor-selection vid 2D-start med floor-param, (2) FloatingFloorSwitcher i MobileUnifiedViewer, (3) Ta bort dubblerad 3D ModeButton |
-| `src/components/viewer/ViewerToolbar.tsx` | (3) Retroaktiv 2D-applicering vid viewer-ready, sakerstall att slabs doljs pa mobil |
-| `src/components/viewer/FloatingFloorSwitcher.tsx` | (2) Lagg till `compact`-prop for mindre pills pa mobil |
+| `src/components/viewer/ViewerToolbar.tsx` | Andra slab-doljning till pickable=false + opacity=0, lagg till IfcSpace-aktivering i 2D |
 
