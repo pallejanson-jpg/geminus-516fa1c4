@@ -71,13 +71,12 @@ export interface AlarmAnnotationsShowDetail {
   flyTo?: boolean;
 }
 
-/** Event dispatched when floor changes in split 2D/3D mode */
-export const SPLIT_2D_FLOOR_SYNC_EVENT = 'SPLIT_2D_FLOOR_SYNC';
+/** Event dispatched when external mode-switcher toggles xeokit 2D mode */
+export const VIEW_MODE_2D_TOGGLED_EVENT = 'VIEW_MODE_2D_TOGGLED';
 
-/** Type for split 2D floor sync event detail */
-export interface Split2DFloorSyncDetail {
-  floorFmGuid: string;
-  floorName: string;
+/** Type for view mode 2D toggle event detail */
+export interface ViewMode2DToggledDetail {
+  enabled: boolean;
 }
 
 /** Type for load saved view event detail */
