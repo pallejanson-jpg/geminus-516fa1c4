@@ -104,6 +104,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
   const toolDebounceRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(viewMode);
+  const hiddenFor2dRef = useRef<string[]>([]);
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
@@ -371,7 +372,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         if (targetBounds) applyGlobalFloorPlanClipping(targetBounds[1]);
       }
 
-      // 4. Set camera to ortho BEFORE flying (critical fix)
+      // 4. Hide obstructing IFC types (slabs, roofs, coverings) in 2D plan view
+      const HIDDEN_2D_TYPES = new Set([
+        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+        'ifcroof', 'ifccovering', 'ifcplate',
+      ]);
+      const metaObjects = scene?.metaScene?.metaObjects || {};
+      const idsToHide: string[] = [];
+      Object.values(metaObjects).forEach((mo: any) => {
+        if (HIDDEN_2D_TYPES.has(mo.type?.toLowerCase())) idsToHide.push(mo.id);
+      });
+      if (idsToHide.length > 0) {
+        scene.setObjectsVisible(idsToHide, false);
+        hiddenFor2dRef.current = idsToHide;
+        console.log(`[2D Mode] Hidden ${idsToHide.length} obstructing IFC objects`);
+      }
+
+      // 5. Set camera to ortho BEFORE flying (critical fix)
       if (!targetBounds) targetBounds = scene?.getAABB?.();
       if (viewer.camera && targetBounds) {
         const cx = (targetBounds[0] + targetBounds[3]) / 2;
@@ -390,6 +407,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         assetViewer?.setShowFloorplan?.(false);
         console.log('[3D Mode] setShowFloorplan(false) called');
       } catch (e) { /* ignore */ }
+
+      // Restore objects hidden for 2D mode
+      if (hiddenFor2dRef.current.length > 0) {
+        viewer.scene.setObjectsVisible(hiddenFor2dRef.current, true);
+        console.log(`[3D Mode] Restored ${hiddenFor2dRef.current.length} hidden IFC objects`);
+        hiddenFor2dRef.current = [];
+      }
 
       removeSectionPlane();
       if (currentFloorId) applyCeilingClipping(currentFloorId);
