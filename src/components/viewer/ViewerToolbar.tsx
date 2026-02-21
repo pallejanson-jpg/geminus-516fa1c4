@@ -107,7 +107,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const toolDebounceRef = useRef(false);
   const viewModeRef = useRef<ViewMode>(viewMode);
   const hiddenFor2dRef = useRef<string[]>([]);
-  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean }>>(new Map());
+  const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
 
@@ -406,42 +406,55 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         if (targetBounds) applyGlobalFloorPlanClipping(targetBounds[1]);
       }
 
-      // 4. Hide obstructing IFC types (slabs, roofs, coverings) in 2D plan view
-      const HIDDEN_2D_TYPES = new Set([
-        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
-        'ifcroof', 'ifccovering', 'ifcplate',
-      ]);
-      const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
-      const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
-      const metaObjects = scene?.metaScene?.metaObjects || {};
-      const idsToHide: string[] = [];
-      const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean }>();
-
       // Save original edge material values
       const edgeMat = scene.edgeMaterial;
       const origEdgeColor = edgeMat?.edgeColor ? [...edgeMat.edgeColor] : [0.2, 0.2, 0.2];
       const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
       const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
+      // 4. Handle IFC types for 2D plan view
+      const SLAB_TYPES = new Set([
+        'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+        'ifcroof', 'ifccovering', 'ifcplate',
+      ]);
+      const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase']);
+      const SUBDUED_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcfurnishingelement', 'ifcrailing', 'ifcstair', 'ifcstairflight']);
+      const SPACE_TYPES = new Set(['ifcspace']);
+      const metaObjects = scene?.metaScene?.metaObjects || {};
+      const colorized = new Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>();
+      let slabCount = 0;
+      let spaceCount = 0;
+
       Object.values(metaObjects).forEach((mo: any) => {
         const typeLower = mo.type?.toLowerCase() || '';
-        if (HIDDEN_2D_TYPES.has(typeLower)) {
-          idsToHide.push(mo.id);
+        const entity = scene.objects?.[mo.id];
+        if (!entity) return;
+
+        if (SLAB_TYPES.has(typeLower)) {
+          // Slabs: keep visible=true but unpickable + fully transparent (click passes through)
+          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          entity.visible = true;
+          entity.pickable = false;
+          entity.opacity = 0;
+          entity.edges = false;
+          slabCount++;
+        } else if (SPACE_TYPES.has(typeLower)) {
+          // IfcSpace: make visible + pickable with near-zero opacity as invisible click targets
+          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          entity.visible = true;
+          entity.pickable = true;
+          entity.opacity = 0.02;
+          entity.colorize = [0.5, 0.7, 0.9];
+          spaceCount++;
         } else if (WALL_TYPES.has(typeLower)) {
-          const entity = scene.objects?.[mo.id];
-          if (entity) {
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges });
-            entity.colorize = [0.2, 0.2, 0.2];
-            entity.opacity = 1.0;
-            entity.edges = true;
-          }
+          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          entity.colorize = [0.2, 0.2, 0.2];
+          entity.opacity = 1.0;
+          entity.edges = true;
         } else if (SUBDUED_TYPES.has(typeLower)) {
-          const entity = scene.objects?.[mo.id];
-          if (entity) {
-            colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges });
-            entity.colorize = [0.75, 0.75, 0.75];
-            entity.opacity = 0.6;
-          }
+          colorized.set(mo.id, { colorize: entity.colorize ? [...entity.colorize] : null, opacity: entity.opacity, edges: entity.edges, pickable: entity.pickable !== false, visible: entity.visible });
+          entity.colorize = [0.75, 0.75, 0.75];
+          entity.opacity = 0.6;
         }
       });
 
@@ -452,15 +465,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         edgeMat.edgeWidth = 2;
       }
 
-      if (idsToHide.length > 0) {
-        scene.setObjectsVisible(idsToHide, false);
-        hiddenFor2dRef.current = idsToHide;
-        console.log(`[2D Mode] Hidden ${idsToHide.length} obstructing IFC objects`);
-      }
+      hiddenFor2dRef.current = []; // No longer hiding via setObjectsVisible
       colorizedFor2dRef.current = colorized;
       // Store original edge values for restore
       (viewerRef.current as any).__orig2dEdge = { origEdgeColor, origEdgeAlpha, origEdgeWidth };
-      console.log(`[2D Mode] Colorized ${colorized.size} entities (walls dark, doors/windows subdued)`);
+      console.log(`[2D Mode] Slabs transparent+unpickable: ${slabCount}, Spaces as click targets: ${spaceCount}, Colorized: ${colorized.size}`);
 
       // 5. Set camera — preserve current look position for smooth transition
       const camera = viewer.camera;
@@ -499,7 +508,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         hiddenFor2dRef.current = [];
       }
 
-      // Restore colorized entities
+      // Restore colorized entities (including slabs and spaces)
       if (colorizedFor2dRef.current.size > 0) {
         colorizedFor2dRef.current.forEach((orig, id) => {
           const entity = viewer.scene.objects?.[id];
@@ -508,9 +517,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             else entity.colorize = null;
             entity.opacity = orig.opacity;
             entity.edges = orig.edges;
+            entity.pickable = orig.pickable;
+            entity.visible = orig.visible;
           }
         });
-        console.log(`[3D Mode] Restored ${colorizedFor2dRef.current.size} colorized entities`);
+        console.log(`[3D Mode] Restored ${colorizedFor2dRef.current.size} entities (slabs, spaces, walls)`);
         colorizedFor2dRef.current.clear();
       }
 
