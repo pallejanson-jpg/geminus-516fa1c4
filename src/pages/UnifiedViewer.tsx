@@ -36,6 +36,8 @@ import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
+import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
+import FloatingFloorSwitcher from '@/components/viewer/FloatingFloorSwitcher';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
@@ -101,10 +103,27 @@ const UnifiedViewerContent: React.FC<{
     prevViewModeRef.current = viewMode;
     if (viewMode === '2d' && prev !== '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
+      // If a floor was specified in URL, dispatch floor selection after a short delay
+      // so that ViewerToolbar and FloatingFloorSwitcher can pick it up
+      if (floorFmGuid) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+            detail: {
+              floorId: null,
+              floorName: null,
+              bounds: null,
+              visibleMetaFloorIds: [],
+              visibleFloorFmGuids: [floorFmGuid],
+              isAllFloorsVisible: false,
+              isSoloFloor: true,
+            },
+          }));
+        }, 500);
+      }
     } else if (viewMode !== '2d' && prev === '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: false } }));
     }
-  }, [viewMode]);
+  }, [viewMode, floorFmGuid]);
 
   // ─── SDK (shared, one instance) ────────────────────────────────────
   const sdkContainerRef = useRef<HTMLDivElement>(null);
@@ -415,7 +434,6 @@ const UnifiedViewerContent: React.FC<{
         <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
           <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
           <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
-          <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
           <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split 3D/360" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
           <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
@@ -654,7 +672,7 @@ function MobileUnifiedViewer({
       {/* Canvas layer — fills entire screen, behind header */}
       <div className="absolute inset-0">
         {/* 3D/2D viewer — always mounted, hidden when 360 active */}
-        <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+        <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
           <AssetPlusViewer
             fmGuid={buildingData.fmGuid}
             initialFmGuidToFocus={entityFmGuid || undefined}
@@ -667,6 +685,16 @@ function MobileUnifiedViewer({
             syncHeading={sync3DHeading}
             syncPitch={sync3DPitch}
           />
+          {/* Floating floor switcher for mobile 2D mode */}
+          {viewMode === '2d' && (
+            <FloatingFloorSwitcher
+              viewerRef={{ current: (window as any).__assetPlusViewerInstance }}
+              buildingFmGuid={buildingData.fmGuid}
+              isViewerReady={true}
+              compact
+              className="!fixed !left-auto !top-auto !bottom-20 !right-2 !flex-row !h-auto !w-auto"
+            />
+          )}
         </div>
 
         {/* 360 SDK container */}
