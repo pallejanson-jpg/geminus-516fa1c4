@@ -27,8 +27,10 @@ import {
 import {
   VIEW_MODE_REQUESTED_EVENT,
   VIEWER_TOOL_CHANGED_EVENT,
+  VIEW_MODE_2D_TOGGLED_EVENT,
   type ViewModeRequestedDetail,
   type ViewerToolChangedDetail,
+  type ViewMode2DToggledDetail,
 } from '@/lib/viewer-events';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -201,6 +203,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     };
     window.addEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
     return () => window.removeEventListener(VIEW_MODE_REQUESTED_EVENT, handler as EventListener);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── External 2D toggle (from UnifiedViewer mode-switcher) ─────────────────
+  useEffect(() => {
+    const handler = (e: CustomEvent<ViewMode2DToggledDetail>) => {
+      handleViewModeChange(e.detail.enabled ? '2d' : '3d');
+    };
+    window.addEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(VIEW_MODE_2D_TOGGLED_EVENT, handler as EventListener);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
