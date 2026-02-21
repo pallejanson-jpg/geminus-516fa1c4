@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers, MapPin, Search } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Navigation, Compass, Eye, Layers, MapPin, Search, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -50,7 +50,6 @@ interface GunnarAction {
 
 /** Extract follow-up suggestions from the AI response (numbered list after "Förslag:" or "Suggestions:") */
 function extractFollowups(content: string): string[] {
-  // Match a block starting with **Förslag:** or **Suggestions:** followed by numbered items
   const blockMatch = content.match(/\*\*(?:Förslag|Suggestions):\*\*\s*([\s\S]*?)$/i);
   if (!blockMatch) return [];
   const block = blockMatch[1];
@@ -70,18 +69,18 @@ function stripFollowups(content: string): string {
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
-    return `Hi! I can see you're viewing **${context.currentBuilding.name}**. Ask me about floors, rooms, area, assets, work orders, or issues!`;
+    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om våningar, rum, ytor, tillgångar, arbetsordrar eller ärenden!`;
   }
   if (context?.activeApp === 'assetplus_viewer') {
-    return `Hi! You're in the 3D viewer. I can help you navigate, explore floors, or find specific objects. Try asking "How many rooms are there?" or "Show me floor 2".`;
+    return `Hej! Du är i 3D-viewern. Jag kan hjälpa dig navigera, utforska våningar eller hitta specifika objekt. Prova att fråga "Hur många rum finns det?" eller "Visa plan 2".`;
   }
   if (context?.activeApp === 'navigator') {
-    return `Hi! You're in the Navigator. I can help you find rooms, assets, or building parts. What are you looking for?`;
+    return `Hej! Du är i Navigatorn. Jag kan hjälpa dig hitta rum, tillgångar eller byggnadsdelar. Vad letar du efter?`;
   }
   if (context?.activeApp === 'portfolio') {
-    return `Hi! I'm Gunnar, your property assistant. I can tell you about all buildings in the portfolio — ask about rooms, area, floors, or specific assets!`;
+    return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar eller specifika tillgångar!`;
   }
-  return `Hi! I'm Gunnar, your AI assistant for property data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Work orders and issues\n• Navigation in the 3D model\n\nWhat would you like to know?`;
+  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Arbetsordrar och ärenden\n• Navigation i 3D-modellen\n• Skapa felanmälningar\n\nVad vill du veta?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
@@ -92,10 +91,45 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
+  const [proactiveInsights, setProactiveInsights] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast: toastHook } = useToast();
   const prevContextRef = useRef<string>("");
+  const proactiveFetchedRef = useRef<string>("");
+
+  // Fetch proactive insights when context has a building
+  useEffect(() => {
+    const buildingKey = context?.currentBuilding?.fmGuid || "";
+    if (!buildingKey || proactiveFetchedRef.current === buildingKey) return;
+    proactiveFetchedRef.current = buildingKey;
+
+    const fetchInsights = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ messages: [], context, proactive: true }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.proactive_insights?.length) {
+            setProactiveInsights(data.proactive_insights);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch proactive insights:", e);
+      }
+    };
+    fetchInsights();
+  }, [context?.currentBuilding?.fmGuid]);
 
   useEffect(() => {
     const contextKey = JSON.stringify(context);
@@ -103,12 +137,14 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
       prevContextRef.current = contextKey;
       setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
       setSuggestedFollowups([]);
+      setProactiveInsights([]);
+      proactiveFetchedRef.current = "";
     }
   }, [context]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, proactiveInsights]);
 
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
@@ -118,7 +154,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     async (userMessages: Message[], currentContext?: GunnarContext) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error("You must be logged in to use Gunnar.");
+        throw new Error("Du måste vara inloggad för att använda Gunnar.");
       }
 
       const resp = await fetch(CHAT_URL, {
@@ -132,11 +168,11 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({}));
-        if (resp.status === 429) throw new Error("Too many requests. Please wait a moment.");
-        if (resp.status === 402) throw new Error("AI credits exhausted. Contact administrator.");
-        throw new Error(errorData.error || `Request failed with status ${resp.status}`);
+        if (resp.status === 429) throw new Error("För många förfrågningar. Vänta en stund.");
+        if (resp.status === 402) throw new Error("AI-krediter slut. Kontakta administratören.");
+        throw new Error(errorData.error || `Begäran misslyckades med status ${resp.status}`);
       }
-      if (!resp.body) throw new Error("No response body");
+      if (!resp.body) throw new Error("Inget svar");
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
@@ -189,17 +225,15 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     setInput("");
     setIsLoading(true);
     setSuggestedFollowups([]);
+    setProactiveInsights([]); // Clear insights once user starts chatting
 
     try {
-      // Send all messages except the initial greeting
       const apiMessages = newMessages.filter((_, i) => i > 0);
       const response = await streamChat(apiMessages, context);
 
-      // Extract follow-ups and clean the displayed message
       const followups = extractFollowups(response);
       if (followups.length > 0) {
         setSuggestedFollowups(followups);
-        // Update the last assistant message to strip the follow-up block
         const cleaned = stripFollowups(response);
         setMessages((prev) => {
           const copy = [...prev];
@@ -213,8 +247,8 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
       console.error("Chat error:", error);
       toastHook({
         variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Could not get response",
+        title: "Fel",
+        description: error instanceof Error ? error.message : "Kunde inte få svar",
       });
       setMessages(messages);
     } finally {
@@ -235,39 +269,39 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           setAiSelectedFmGuids(action.fmGuids);
           setActiveApp('navigator');
           onClose();
-          toast.success(`Showing ${action.fmGuids.length} objects in Navigator`);
+          toast.success(`Visar ${action.fmGuids.length} objekt i Navigatorn`);
         }
         break;
       case "showFloor":
         if (action.floorFmGuid) {
           window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
-          toast.success('Switching floor');
+          toast.success('Byter våning');
         }
         break;
       case "highlight":
         if (action.fmGuids?.length) {
           window.dispatchEvent(new CustomEvent('GUNNAR_HIGHLIGHT', { detail: { fmGuids: action.fmGuids } }));
-          toast.success(`Highlighting ${action.fmGuids.length} objects`);
+          toast.success(`Markerar ${action.fmGuids.length} objekt`);
         }
         break;
       case "switchTo2D":
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
-        toast.success('Switching to 2D');
+        toast.success('Byter till 2D');
         break;
       case "switchTo3D":
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
-        toast.success('Switching to 3D');
+        toast.success('Byter till 3D');
         break;
       case "flyTo":
         if (action.fmGuid) {
           window.dispatchEvent(new CustomEvent('GUNNAR_FLY_TO', { detail: { fmGuid: action.fmGuid } }));
-          toast.success('Flying to object');
+          toast.success('Flyger till objekt');
         }
         break;
       case "openViewer":
         if (action.fmGuid) {
           setViewer3dFmGuid(action.fmGuid);
-          toast.success('Opening 3D viewer');
+          toast.success('Öppnar 3D-viewer');
         }
         break;
     }
@@ -339,7 +373,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           <div>
             <h2 className="font-semibold">Gunnar</h2>
             <p className="text-xs text-muted-foreground">
-              {context?.currentBuilding?.name || "AI Property Assistant"}
+              {context?.currentBuilding?.name || "AI Fastighetsassistent"}
             </p>
           </div>
         </div>
@@ -369,11 +403,25 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               </div>
             </div>
           ))}
+
+          {/* Proactive insights banner */}
+          {proactiveInsights.length > 0 && messages.length <= 1 && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                <Info className="h-3.5 w-3.5" />
+                Aktuell status
+              </div>
+              {proactiveInsights.map((insight, i) => (
+                <p key={i} className="text-sm text-foreground">{insight}</p>
+              ))}
+            </div>
+          )}
+
           {isLoading && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Thinking...</span>
+                <span>Tänker...</span>
               </div>
             </div>
           )}
@@ -397,7 +445,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about your properties..."
+            placeholder="Fråga om dina fastigheter..."
             disabled={isLoading}
             className="flex-1"
           />
@@ -406,7 +454,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enter to send • Gunnar understands Swedish and English
+          Enter för att skicka • Gunnar förstår svenska och engelska
         </p>
       </div>
     </>
