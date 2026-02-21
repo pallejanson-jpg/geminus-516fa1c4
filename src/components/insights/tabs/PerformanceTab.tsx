@@ -15,6 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '@/components/ui/command';
 import type { MapColoringMode } from '@/lib/map-coloring-utils';
+import { CHART_COLORS, SEQUENTIAL_PALETTE, ENERGY_RATING_COLORS, ICON_COLOR_CLASSES } from '@/lib/chart-theme';
 
 // Mockup indicator badge
 const MockBadge = () => (
@@ -25,9 +26,9 @@ const MockBadge = () => (
 
 const energyDistribution = [
     { name: 'Heating', value: 45, color: 'hsl(var(--destructive))' },
-    { name: 'Cooling', value: 20, color: 'hsl(220, 80%, 55%)' },
-    { name: 'Lighting', value: 18, color: 'hsl(48, 96%, 53%)' },
-    { name: 'Equipment', value: 12, color: 'hsl(262, 83%, 58%)' },
+    { name: 'Cooling', value: 20, color: CHART_COLORS.secondary },
+    { name: 'Lighting', value: 18, color: CHART_COLORS.warning },
+    { name: 'Equipment', value: 12, color: CHART_COLORS.support2 },
     { name: 'Other', value: 5, color: 'hsl(var(--muted-foreground))' },
 ];
 
@@ -91,13 +92,13 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             const hash = building.fmGuid?.split('').reduce((a, c) => a + c.charCodeAt(0), 0) || 0;
             const kwhPerSqm = 80 + (hash % 70);
             let rating = 'C';
-            let color = 'hsl(48, 96%, 53%)';
+            let color = ENERGY_RATING_COLORS['C'];
             
-            if (kwhPerSqm < 90) { rating = 'A'; color = 'hsl(142, 76%, 36%)'; }
-            else if (kwhPerSqm < 100) { rating = 'B'; color = 'hsl(142, 71%, 45%)'; }
-            else if (kwhPerSqm < 120) { rating = 'C'; color = 'hsl(48, 96%, 53%)'; }
-            else if (kwhPerSqm < 140) { rating = 'D'; color = 'hsl(24, 95%, 53%)'; }
-            else { rating = 'E'; color = 'hsl(var(--destructive))'; }
+            if (kwhPerSqm < 90) { rating = 'A'; color = ENERGY_RATING_COLORS['A']; }
+            else if (kwhPerSqm < 100) { rating = 'B'; color = ENERGY_RATING_COLORS['B']; }
+            else if (kwhPerSqm < 120) { rating = 'C'; color = ENERGY_RATING_COLORS['C']; }
+            else if (kwhPerSqm < 140) { rating = 'D'; color = ENERGY_RATING_COLORS['D']; }
+            else { rating = 'E'; color = ENERGY_RATING_COLORS['E']; }
             
             const fullName = building.commonName || building.name || 'Building';
             return {
@@ -118,11 +119,11 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             counts[b.rating] = (counts[b.rating] || 0) + 1;
         });
         return [
-            { rating: 'A', count: counts.A, color: 'hsl(142, 76%, 36%)' },
-            { rating: 'B', count: counts.B, color: 'hsl(142, 71%, 45%)' },
-            { rating: 'C', count: counts.C, color: 'hsl(48, 96%, 53%)' },
-            { rating: 'D', count: counts.D, color: 'hsl(24, 95%, 53%)' },
-            { rating: 'E', count: counts.E, color: 'hsl(var(--destructive))' },
+            { rating: 'A', count: counts.A, color: ENERGY_RATING_COLORS['A'] },
+            { rating: 'B', count: counts.B, color: ENERGY_RATING_COLORS['B'] },
+            { rating: 'C', count: counts.C, color: ENERGY_RATING_COLORS['C'] },
+            { rating: 'D', count: counts.D, color: ENERGY_RATING_COLORS['D'] },
+            { rating: 'E', count: counts.E, color: ENERGY_RATING_COLORS['E'] },
         ];
     }, [energyByBuilding]);
 
@@ -144,7 +145,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Zap, 
             trend: '-8%', 
             trendUp: false,
-            color: 'text-yellow-500',
+            color: ICON_COLOR_CLASSES.amber,
             isMock: true,
         },
         { 
@@ -153,7 +154,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
             icon: Leaf, 
             trend: '-12%', 
             trendUp: false,
-            color: 'text-green-500',
+            color: ICON_COLOR_CLASSES.green,
             isMock: true,
         },
         { 
@@ -195,7 +196,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                 </div>
                                 <Badge 
                                     variant={kpi.trendUp ? "default" : "secondary"} 
-                                    className={`text-[10px] sm:text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-green-600' : 'bg-blue-600'}`}
+                                    className={`text-[10px] sm:text-xs ${kpi.isMock ? 'bg-purple-600' : kpi.trendUp ? 'bg-[hsl(var(--chart-8))]' : 'bg-[hsl(var(--chart-2))]'}`}
                                 >
                                     {kpi.trendUp ? <TrendingUp className="h-3 w-3 mr-0.5 sm:mr-1" /> : <TrendingDown className="h-3 w-3 mr-0.5 sm:mr-1" />}
                                     <span className="hidden sm:inline">{kpi.trend}</span>
@@ -267,7 +268,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-yellow-500" />
+                            <Zap className={`h-4 w-4 ${ICON_COLOR_CLASSES.amber}`} />
                             <span className="text-purple-400">Energy Consumption per Building</span>
                             <MockBadge />
                         </CardTitle>
@@ -307,7 +308,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <ThermometerSun className="h-4 w-4 text-orange-500" />
+                            <ThermometerSun className={`h-4 w-4 ${ICON_COLOR_CLASSES.amber}`} />
                             <span className="text-purple-400">Energy Distribution by Category</span>
                             <MockBadge />
                         </CardTitle>
@@ -345,7 +346,7 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                 <Card className="lg:col-span-2">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <Droplets className="h-4 w-4 text-blue-500" />
+                            <Droplets className={`h-4 w-4 ${ICON_COLOR_CLASSES.blue}`} />
                             <span className="text-purple-400">Monthly Energy Trend</span>
                             <MockBadge />
                         </CardTitle>
@@ -358,75 +359,50 @@ export default function PerformanceTab({ onSelectBuilding }: PerformanceTabProps
                                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                                     <XAxis 
                                         dataKey="month" 
-                                        className="text-xs"
-                                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }}
                                     />
-                                    <YAxis 
-                                        className="text-xs"
-                                        tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                                    />
+                                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                                    <Line type="monotone" dataKey="consumption" stroke={CHART_COLORS.negative} strokeWidth={2} dot={{ fill: CHART_COLORS.negative }} name="Actual" />
+                                    <Line type="monotone" dataKey="target" stroke={CHART_COLORS.positive} strokeWidth={2} dot={{ fill: CHART_COLORS.positive }} strokeDasharray="5 5" name="Target" />
                                     <Legend />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="consumption" 
-                                        name="Actual"
-                                        stroke="hsl(var(--primary))" 
-                                        strokeWidth={2}
-                                        dot={{ fill: 'hsl(var(--primary))' }}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="target" 
-                                        name="Target"
-                                        stroke="hsl(142, 71%, 45%)" 
-                                        strokeWidth={2}
-                                        strokeDasharray="5 5"
-                                        dot={{ fill: 'hsl(142, 71%, 45%)' }}
-                                    />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Rating Distribution */}
+                {/* Energy Ratings */}
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center gap-2">
                             <Gauge className="h-4 w-4 text-primary" />
-                            <span className="text-purple-400">Energy Ratings</span>
-                            <MockBadge />
+                            Energy Ratings
                         </CardTitle>
                         <CardDescription>Buildings per rating</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-3">
+                        <div className="space-y-3 pt-2">
                             {ratingDistribution.map((item) => (
                                 <div key={item.rating} className="flex items-center gap-3">
-                                    <div 
-                                        className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
+                                    <span 
+                                        className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold text-white" 
                                         style={{ backgroundColor: item.color }}
                                     >
                                         {item.rating}
-                                    </div>
-                                    <div className="flex-1">
+                                    </span>
+                                    <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
                                         <div 
-                                            className="h-6 rounded-md flex items-center px-2 text-xs font-medium text-white"
+                                            className="h-full rounded-full transition-all" 
                                             style={{ 
+                                                width: `${energyByBuilding.length > 0 ? (item.count / energyByBuilding.length) * 100 : 0}%`,
                                                 backgroundColor: item.color,
-                                                width: item.count > 0 ? `${Math.max((item.count / Math.max(...ratingDistribution.map(r => r.count), 1)) * 100, 20)}%` : '20%',
-                                                minWidth: '40px'
                                             }}
-                                        >
-                                            {item.count} {item.count === 1 ? 'building' : 'buildings'}
-                                        </div>
+                                        />
                                     </div>
+                                    <span className="text-sm font-medium text-foreground w-6 text-right">{item.count}</span>
                                 </div>
                             ))}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-4">
-                            Goal: All buildings rating B or better by 2030
-                        </p>
                     </CardContent>
                 </Card>
             </div>
