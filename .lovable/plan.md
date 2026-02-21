@@ -1,132 +1,117 @@
 
 
-## Nytt Fargtema: "Nordic Pro" -- Enhetlig Diagrampalett
+## Fix 2D Mode in 3D Viewer
 
-### Problem
+### Root Cause Analysis
 
-Appen har 4+ separata fargpaletter for diagram, KPI-kort och kartor som inte ar koordinerade. Harkodade vardan som `hsl(48, 96%, 53%)` (skrikig gul), `hsl(142, 71%, 45%)` (neongrn) och `text-yellow-500` (Tailwind default) ger ett "gratis dashboard-template"-intryck snarare an premium PropTech.
+The current 2D mode implementation manually creates xeokit `SectionPlane` objects via 4 fallback strategies in `useSectionPlaneClipping.ts`. This is fragile because:
 
-### Designprincip
+1. The Asset+ UMD bundle does NOT expose the `SectionPlane` constructor on `window.xeokit`
+2. No existing `SectionPlane` instances exist to copy the constructor from (Strategy 2-4 fail)
+3. The low-level `_sectionPlanesState` fallback (Method 4) creates a fake object that does not trigger the GPU clipping pipeline
+4. Result: the clipping planes are "created" but nothing actually clips in the scene
 
-Inspirerat av Autodesk Tandem, Linear och Vercel:
-- **En enda palett med 8 farger** som alla harleds fran primarkfargen (lila/indigo) och dess komplementarer
-- **Daempade, mattade toner** istallet for neon -- hogre professionalism
-- **Semantiska farger** (bra/daligt) har kvar men i mattade varianter
-- Paletten fungerar pa bade ljust och morkt tema
+Meanwhile, the Asset+ viewer **already has built-in APIs** that handle this correctly:
+- `assetViewer.setShowFloorplan(true/false)` -- toggles 2D floor plan mode
+- `assetViewer.cutOutFloorsByFmGuid(fmGuid, includeRelated)` -- clips to a specific floor
+- `assetView.setNavMode('planView')` -- sets ortho top-down camera
+- `assetView.clearSlices()` -- removes all section planes
 
-### Ny Palett: "Nordic Pro"
+These APIs are already used elsewhere in the codebase (e.g., `AssetPlusViewer.tsx` line 2445 uses `cutOutFloorsByFmGuid` successfully for floor navigation).
 
-**Ljust tema (`:root`):**
+### Solution: Use Built-in Asset+ APIs
 
-| Variabel | HSL | Hex (approx) | Anvandning |
-|---|---|---|---|
-| `--chart-1` | `252 56% 57%` | #7C5CCA | Primar dataserie (lila -- app-primar) |
-| `--chart-2` | `199 72% 48%` | #2298C9 | Sekundar (kall bla -- kontrast) |
-| `--chart-3` | `166 52% 46%` | #38A88C | Positiv/tillvaxt (mattad teal) |
-| `--chart-4` | `32 70% 56%` | #D4913B | Varning/medel (varm amber) |
-| `--chart-5` | `348 58% 56%` | #C94F6D | Negativ/risk (mattad rosa) |
-| `--chart-6` | `220 50% 62%` | #6F8DC0 | Stodfarger (ljus bla-gra) |
-| `--chart-7` | `280 42% 58%` | #9F6DB8 | Stodfarger (lavendel) |
-| `--chart-8` | `142 40% 42%` | #408F5E | Positiv stark (mork gron) |
+Replace the manual SectionPlane creation with calls to the Asset+ viewer's own 2D mode APIs.
 
-**Morkt tema (`.dark`):**
+### Changes
 
-Samma nyanser med +10% ljusstyrka och -5% mattning for bra kontrast mot morka bakgrunder.
+**1. `src/components/viewer/ViewerToolbar.tsx` -- `handleViewModeChange`**
 
-| Variabel | HSL |
-|---|---|
-| `--chart-1` | `252 62% 68%` |
-| `--chart-2` | `199 68% 58%` |
-| `--chart-3` | `166 48% 56%` |
-| `--chart-4` | `32 65% 62%` |
-| `--chart-5` | `348 54% 62%` |
-| `--chart-6` | `220 45% 68%` |
-| `--chart-7` | `280 38% 65%` |
-| `--chart-8` | `142 36% 52%` |
-
-**SWG-tema (`.swg`):**
-
-Anpassat till teal-primart med chart-1 som teal:
-
-| Variabel | HSL |
-|---|---|
-| `--chart-1` | `186 56% 52%` |
-| `--chart-2` | `220 55% 58%` |
-| `--chart-3` | `166 48% 50%` |
-| `--chart-4` | `32 60% 58%` |
-| `--chart-5` | `348 50% 58%` |
-| `--chart-6` | `199 45% 62%` |
-| `--chart-7` | `280 35% 60%` |
-| `--chart-8` | `142 36% 48%` |
-
-### Semantiska Fargkonstanter
-
-Skapa en `CHART_COLORS`-konstant i `src/lib/chart-theme.ts` som alla diagram importerar:
+Replace the current 2D toggle logic (lines 329-372) with:
 
 ```text
-CHART_COLORS = {
-  primary:   'hsl(var(--chart-1))',
-  secondary: 'hsl(var(--chart-2))',
-  positive:  'hsl(var(--chart-3))',
-  warning:   'hsl(var(--chart-4))',
-  negative:  'hsl(var(--chart-5))',
-  support1:  'hsl(var(--chart-6))',
-  support2:  'hsl(var(--chart-7))',
-  success:   'hsl(var(--chart-8))',
-}
+if (mode === '2d') {
+  // Use Asset+ built-in floor plan mode
+  const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+  const assetView = assetViewer?.$refs?.assetView;
 
-SEQUENTIAL_PALETTE = [
-  primary, secondary, positive, warning,
-  negative, support1, support2, success,
-]
+  if (currentFloorId && currentFloorBounds) {
+    // If a floor is selected, cut to it + enable floor plan view
+    const floorBounds = calculateFloorBounds(currentFloorId);
+    if (floorBounds) {
+      // Use built-in setShowFloorplan if available
+      assetViewer?.setShowFloorplan?.(true);
+    }
+  }
 
-ENERGY_RATING_COLORS = {
-  A: 'hsl(var(--chart-8))',   -- mork gron
-  B: 'hsl(var(--chart-3))',   -- teal
-  C: 'hsl(var(--chart-4))',   -- amber
-  D: 'hsl(var(--chart-5))',   -- rosa
-  E: 'hsl(var(--destructive))', -- rod (befintlig)
-}
+  // Set ortho top-down camera
+  assetView?.setNavMode?.('planView');
 
-RISK_COLORS = {
-  Low:    'hsl(var(--chart-3))',
-  Medium: 'hsl(var(--chart-4))',
-  High:   'hsl(var(--chart-5))',
+  // Also apply our clipping as backup for models
+  // that don't support setShowFloorplan
+  if (currentFloorId) {
+    applyFloorPlanClipping(currentFloorId);
+  } else {
+    const sceneAABB = viewer.scene?.getAABB?.();
+    if (sceneAABB) applyGlobalFloorPlanClipping(sceneAABB[1]);
+  }
+
+  viewer.camera.projection = 'ortho';
+  // ... camera positioning (keep existing bounds calculation)
+} else {
+  // Back to 3D
+  const assetViewer = viewerRef.current?.$refs?.AssetViewer;
+  assetViewer?.setShowFloorplan?.(false);
+  removeSectionPlane();
+  if (currentFloorId) applyCeilingClipping(currentFloorId);
+  viewer.camera.projection = 'perspective';
+  assetView?.viewFit(undefined, true);
 }
 ```
 
-### KPI-ikonfarger
+**2. `src/hooks/useSectionPlaneClipping.ts` -- Improve SectionPlane creation reliability**
 
-Ersatt alla `text-green-500`, `text-blue-500`, `text-yellow-500` med semantiska fargklasser kopplade till chart-variablerna:
+Add a new Strategy 0 before the existing ones: use the Asset+ viewer's own `clearSlices` to first clear, then use the xeokit viewer's `scene.createSectionPlane` if available:
 
-| Nuvarande | Nytt |
-|---|---|
-| `text-green-500` | `text-[hsl(var(--chart-3))]` |
-| `text-blue-500` | `text-[hsl(var(--chart-2))]` |
-| `text-yellow-500` | `text-[hsl(var(--chart-4))]` |
-| `text-orange-500` | `text-[hsl(var(--chart-4))]` |
-| `text-red-500` | `text-[hsl(var(--chart-5))]` |
-| `text-purple-500` | `text-[hsl(var(--chart-7))]` |
+```text
+// Method 0: Use viewer.scene.createSectionPlane() if available (some xeokit builds expose it)
+if (typeof scene.createSectionPlane === 'function') {
+  try {
+    const plane = scene.createSectionPlane({ id, pos, dir, active: true });
+    return plane;
+  } catch (e) { /* fall through */ }
+}
+```
 
-### Kart-fargpalett
+Also improve Method 4 (_sectionPlanesState) to call `scene.fire("sectionPlaneCreated", ...)` which triggers xeokit's internal clipping pipeline.
 
-Uppdatera `src/lib/map-coloring-utils.ts` COLORS-objektet till att anvanda samma hex-varden som chart-paletten for visuell enhet mellan diagram och karta.
+**3. `src/components/viewer/ViewerToolbar.tsx` -- Camera positioning fix**
 
-### Filer som andras
+Set `viewer.camera.projection = 'ortho'` BEFORE `cameraFlight.flyTo` (not after), so the ortho projection is active during the fly animation. Also set the ortho scale explicitly:
 
-1. **`src/index.css`** -- Uppdatera `--chart-1` till `--chart-8` i alla 3 teman
-2. **`src/lib/chart-theme.ts`** (ny) -- Exporterar `CHART_COLORS`, `SEQUENTIAL_PALETTE`, `ENERGY_RATING_COLORS`, `RISK_COLORS`
-3. **`src/components/insights/tabs/PerformanceTab.tsx`** -- Byt harkodade `hsl(...)` till `CHART_COLORS`
-4. **`src/components/insights/tabs/PortfolioManagementTab.tsx`** -- Byt harkodade farger
-5. **`src/components/insights/tabs/AssetManagementTab.tsx`** -- Byt harkodade farger
-6. **`src/components/insights/BuildingInsightsView.tsx`** -- Byt `FLOOR_COLORS` och paj-farger
-7. **`src/components/insights/RoomSensorDetailSheet.tsx`** -- Byt stroke-farger
-8. **`src/lib/map-coloring-utils.ts`** -- Synka COLORS-objekt med nya paletten
+```text
+viewer.camera.projection = 'ortho';
+viewer.camera.ortho.scale = h;
+viewer.cameraFlight.flyTo({
+  eye: [cx, cy + h, cz],
+  look: [cx, cy, cz],
+  up: [0, 0, -1],
+  duration: 0.5
+});
+```
 
-### Resultat
+**4. Add diagnostic logging**
 
-- Alla diagram, KPI-kort och kartor anvander en enda harmonisk palett
-- Temat foljer automatiskt ljust/morkt/SWG via CSS-variabler
-- Inga fler harkodade `hsl(...)` eller `text-green-500` i diagram-komponenter
-- Professionellt, mattad, "Nordic design"-estetik istallet for neon-dashboard
+Add a console warning when all SectionPlane creation methods fail, including which methods were attempted and what was found, so we can debug more easily if it still fails for specific models.
 
+### Files Changed
+
+1. **`src/components/viewer/ViewerToolbar.tsx`** -- Use `setShowFloorplan` + `setNavMode('planView')` for 2D toggle; fix camera projection ordering
+2. **`src/hooks/useSectionPlaneClipping.ts`** -- Add `scene.createSectionPlane` method; improve `_sectionPlanesState` fallback to fire events; better diagnostics
+
+### Expected Result
+
+- 2D mode will use the Asset+ viewer's proven built-in floor plan clipping
+- Camera switches to ortho top-down correctly
+- Manual SectionPlane creation serves as backup, not primary method
+- Switching back to 3D properly restores perspective and clears clipping
