@@ -157,7 +157,27 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
   useEffect(() => {
     const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
-      const { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
+      let { floorId, bounds, isAllFloorsVisible, visibleMetaFloorIds } = e.detail;
+      const visibleFloorFmGuids = (e.detail as any).visibleFloorFmGuids as string[] | undefined;
+
+      // If no metaScene floorId but we have FM GUIDs, resolve from metaScene
+      if (!floorId && visibleFloorFmGuids?.length && !visibleMetaFloorIds?.length) {
+        const viewer = getXeokitViewer();
+        const metaObjects = viewer?.scene?.metaScene?.metaObjects || {};
+        const fmGuidSet = new Set(visibleFloorFmGuids.map((g: string) => g.toLowerCase()));
+        for (const mo of Object.values(metaObjects) as any[]) {
+          const t = mo.type?.toLowerCase() || '';
+          if (t === 'ifcbuildingstorey' && mo.attributes) {
+            const fmAttr = mo.attributes?.FmGuid || mo.attributes?.fmGuid || mo.attributes?.fmguid;
+            if (fmAttr && fmGuidSet.has(String(fmAttr).toLowerCase())) {
+              floorId = mo.id;
+              visibleMetaFloorIds = [mo.id];
+              break;
+            }
+          }
+        }
+      }
+
       setCurrentFloorId(floorId);
       setCurrentFloorBounds(bounds || null);
 
