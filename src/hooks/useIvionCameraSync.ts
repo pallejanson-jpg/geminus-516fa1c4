@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
 import { resolveMainView, resolveMoveTo } from '@/lib/ivion-sdk';
-import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 
 export interface IvionImage {
   id: number;
@@ -171,7 +171,7 @@ export function useIvionCameraSync({
   // SDK: Poll Ivion position (360° → 3D)
   useEffect(() => {
     const ivApi = ivApiRef?.current;
-    if (!ivApi || !enabled || !syncLocked) {
+    if (!ivApi || !enabled || !syncLocked || isIdentityTransform(transform)) {
       setSdkSyncActive(false);
       return;
     }
@@ -436,6 +436,7 @@ export function useIvionCameraSync({
   // Auto-sync when 3D camera changes (both modes)
   useEffect(() => {
     if (!enabled || !syncLocked) return;
+    if (isIdentityTransform(transform)) return; // No alignment — don't sync
     if (syncState.source !== '3d' || !syncState.position) return;
     if (isSyncingRef.current) return;
     if (imageCache.length === 0) return;
