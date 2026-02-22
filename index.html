@@ -31,6 +31,11 @@
   <body>
     <div id="root"></div>
     <script>
+      // Polyfill Node.js globals needed by web-ifc / xeokit-convert
+      if (typeof globalThis.global === 'undefined') { globalThis.global = globalThis; }
+      if (typeof globalThis.process === 'undefined') { globalThis.process = { env: {} }; }
+    </script>
+    <script>
       // Auto-recover from stale module chunk failures (Safari/iPhone cache issue)
       function _mrCheck(msg) {
         if (msg && msg.includes('Importing a module script failed') && !sessionStorage.getItem('_mr')) {
