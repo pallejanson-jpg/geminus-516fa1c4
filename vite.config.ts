@@ -56,4 +56,8 @@ export default defineConfig(({ mode }) => ({
   },
   // Ensure WASM files from web-ifc are served correctly
   assetsInclude: ['**/*.wasm'],
+  // Polyfill Node.js globals referenced by web-ifc / xeokit-convert
+  define: {
+    global: 'globalThis',
+  },
 }));
