@@ -35,6 +35,11 @@ export const IDENTITY_TRANSFORM: IvionBimTransform = {
   rotation: 0,
 };
 
+/** Check if a transform is identity (no alignment set) */
+export function isIdentityTransform(t: IvionBimTransform): boolean {
+  return t.offsetX === 0 && t.offsetY === 0 && t.offsetZ === 0 && t.rotation === 0;
+}
+
 /** Convert degrees to radians */
 function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
