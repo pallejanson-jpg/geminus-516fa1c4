@@ -120,22 +120,54 @@ export async function convertToXktWithMetadata(
 
   if (format === 'ifc') {
     logger('Parsing IFC into XKTModel via web-ifc WASM...');
-    const mod = await import('@xeokit/xeokit-convert');
-    const WebIFC = await import('web-ifc');
-    if (typeof (mod as any).parseIFCIntoXKTModel === 'function') {
-      await (mod as any).parseIFCIntoXKTModel({
-        WebIFC,
-        data: new Uint8Array(glbData),
-        xktModel,
-        autoNormals: true,
-        wasmPath: '/lib/xeokit/',
-        log: logger,
-      });
-    } else {
+    const fileSizeMB = glbData.byteLength / 1024 / 1024;
+    const timeoutMs = Math.max(5 * 60_000, fileSizeMB * 1500); // min 5 min, ~1.5s per MB
+    logger(`IFC file size: ${fileSizeMB.toFixed(1)} MB, timeout: ${(timeoutMs / 60_000).toFixed(1)} min`);
+
+    let mod: any;
+    let WebIFC: any;
+    try {
+      mod = await import('@xeokit/xeokit-convert');
+      logger('xeokit-convert loaded');
+    } catch (e: any) {
+      throw new Error(`Kunde inte ladda xeokit-convert: ${e?.message || e}`);
+    }
+    try {
+      WebIFC = await import('web-ifc');
+      logger('web-ifc loaded');
+    } catch (e: any) {
+      throw new Error(`Kunde inte ladda web-ifc WASM: ${e?.message || e}. Kontrollera att WASM-filer finns i /lib/xeokit/`);
+    }
+
+    if (typeof (mod as any).parseIFCIntoXKTModel !== 'function') {
       throw new Error(
         'IFC-konvertering kräver parseIFCIntoXKTModel som inte finns i den installerade versionen av @xeokit/xeokit-convert. ' +
         'Kontrollera att web-ifc WASM-filer finns i /lib/xeokit/.'
       );
+    }
+
+    logger('Using parser: parseIFCIntoXKTModel');
+    const parsePromise = (mod as any).parseIFCIntoXKTModel({
+      WebIFC,
+      data: new Uint8Array(glbData),
+      xktModel,
+      autoNormals: true,
+      wasmPath: '/lib/xeokit/',
+      log: logger,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(
+        `IFC-parsning tog för lång tid (timeout efter ${(timeoutMs / 60_000).toFixed(0)} min). ` +
+        `Filen är ${fileSizeMB.toFixed(0)} MB — prova att dela upp den i mindre delar eller konvertera den externt.`
+      )), timeoutMs)
+    );
+
+    try {
+      await Promise.race([parsePromise, timeoutPromise]);
+      logger('IFC parsing completed successfully');
+    } catch (e: any) {
+      throw new Error(`IFC-parsning misslyckades: ${e?.message || e}`);
     }
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
