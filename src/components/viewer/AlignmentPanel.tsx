@@ -7,12 +7,13 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info, Crosshair } from 'lucide-react';
+import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info, Crosshair, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
@@ -55,7 +56,9 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   canPointPick,
 }) => {
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [fineOpen, setFineOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [showPointPicker, setShowPointPicker] = useState(false);
 
   const updateField = useCallback(
@@ -107,6 +110,32 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
     }
   }, [transform, buildingFmGuid, onSaved]);
 
+  const handleDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('building_settings')
+        .update({
+          ivion_bim_offset_x: 0,
+          ivion_bim_offset_y: 0,
+          ivion_bim_offset_z: 0,
+          ivion_bim_rotation: 0,
+        })
+        .eq('fm_guid', buildingFmGuid);
+
+      if (error) throw error;
+
+      onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
+      toast.success('Alignment borttagen');
+      onSaved?.();
+    } catch (err: any) {
+      console.error('Failed to delete alignment:', err);
+      toast.error('Kunde inte ta bort alignment', { description: err.message });
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [buildingFmGuid, onChange, onSaved]);
+
   return (
     <div className="w-80 bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-lg p-4 space-y-3 text-foreground">
       {/* Header */}
@@ -116,6 +145,25 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
           <span className="text-sm font-semibold">Alignment</span>
         </div>
         <div className="flex items-center gap-1">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Ta bort alignment" disabled={isDeleting}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Ta bort alignment?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Befintlig kalibrering raderas från databasen. Du kan sedan göra en ny punktkalibrering.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>Ta bort</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Återställ">
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
@@ -136,8 +184,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
         <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Navigera i 360° till en plats med tydliga element (dörr, vägg, pelare). 
-          Justera värdena tills 3D-modellen överlappar panoramabilden.
+          Använd punktkalibrering för att matcha 360° och 3D. Klicka samma punkt i båda vyerna.
         </p>
       </div>
 
@@ -164,109 +211,26 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
         />
       )}
 
-      {/* Coarse sliders */}
-      <div className="space-y-2.5">
-        <CoarseSliderField
-          label="Offset X"
-          value={transform.offsetX}
-          min={-COARSE_OFFSET_RANGE}
-          max={COARSE_OFFSET_RANGE}
-          step={COARSE_OFFSET_STEP}
-          unit="m"
-          nudgeStep={NUDGE_OFFSET}
-          onChange={(v) => updateField('offsetX', v)}
-          onNudge={(d) => nudge('offsetX', d)}
-        />
-        <CoarseSliderField
-          label="Offset Y"
-          value={transform.offsetY}
-          min={-COARSE_OFFSET_RANGE}
-          max={COARSE_OFFSET_RANGE}
-          step={COARSE_OFFSET_STEP}
-          unit="m"
-          nudgeStep={NUDGE_OFFSET}
-          onChange={(v) => updateField('offsetY', v)}
-          onNudge={(d) => nudge('offsetY', d)}
-        />
-        <CoarseSliderField
-          label="Offset Z"
-          value={transform.offsetZ}
-          min={-COARSE_OFFSET_RANGE}
-          max={COARSE_OFFSET_RANGE}
-          step={COARSE_OFFSET_STEP}
-          unit="m"
-          nudgeStep={NUDGE_OFFSET}
-          onChange={(v) => updateField('offsetZ', v)}
-          onNudge={(d) => nudge('offsetZ', d)}
-        />
-        <CoarseSliderField
-          label="Rotation"
-          value={transform.rotation}
-          min={-180}
-          max={180}
-          step={0.5}
-          unit="°"
-          nudgeStep={NUDGE_ROTATION}
-          onChange={(v) => updateField('rotation', v)}
-          onNudge={(d) => nudge('rotation', d)}
-        />
-      </div>
-
-      {/* Fine-tuning section */}
-      <Collapsible open={fineOpen} onOpenChange={setFineOpen}>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="sm" className="w-full justify-between h-7 text-xs text-muted-foreground hover:text-foreground px-1">
-            Finjustera
-            {fineOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-2.5 pt-2">
-          <FineSliderField
-            label="Fine X"
-            value={transform.offsetX}
-            min={transform.offsetX - FINE_OFFSET_RANGE}
-            max={transform.offsetX + FINE_OFFSET_RANGE}
-            step={FINE_OFFSET_STEP}
-            unit="m"
-            nudgeStep={FINE_OFFSET_STEP}
-            onChange={(v) => updateField('offsetX', v)}
-            onNudge={(d) => nudge('offsetX', d)}
-          />
-          <FineSliderField
-            label="Fine Y"
-            value={transform.offsetY}
-            min={transform.offsetY - FINE_OFFSET_RANGE}
-            max={transform.offsetY + FINE_OFFSET_RANGE}
-            step={FINE_OFFSET_STEP}
-            unit="m"
-            nudgeStep={FINE_OFFSET_STEP}
-            onChange={(v) => updateField('offsetY', v)}
-            onNudge={(d) => nudge('offsetY', d)}
-          />
-          <FineSliderField
-            label="Fine Z"
-            value={transform.offsetZ}
-            min={transform.offsetZ - FINE_OFFSET_RANGE}
-            max={transform.offsetZ + FINE_OFFSET_RANGE}
-            step={FINE_OFFSET_STEP}
-            unit="m"
-            nudgeStep={FINE_OFFSET_STEP}
-            onChange={(v) => updateField('offsetZ', v)}
-            onNudge={(d) => nudge('offsetZ', d)}
-          />
-          <FineSliderField
-            label="Fine Rot"
-            value={transform.rotation}
-            min={transform.rotation - 10}
-            max={transform.rotation + 10}
-            step={0.1}
-            unit="°"
-            nudgeStep={0.1}
-            onChange={(v) => updateField('rotation', v)}
-            onNudge={(d) => nudge('rotation', d)}
-          />
-        </CollapsibleContent>
-      </Collapsible>
+      {/* Manual controls — collapsed by default when point-pick is available */}
+      {canPointPick ? (
+        <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-between h-7 text-xs text-muted-foreground hover:text-foreground px-1">
+              Avancerat / Manuella reglage
+              {manualOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2.5 pt-2">
+            <CoarseSliders transform={transform} updateField={updateField} nudge={nudge} />
+            <FineSection transform={transform} updateField={updateField} nudge={nudge} fineOpen={fineOpen} setFineOpen={setFineOpen} />
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <>
+          <CoarseSliders transform={transform} updateField={updateField} nudge={nudge} />
+          <FineSection transform={transform} updateField={updateField} nudge={nudge} fineOpen={fineOpen} setFineOpen={setFineOpen} />
+        </>
+      )}
 
       {/* Crosshair toggle */}
       {onToggleCrosshair && (
@@ -283,6 +247,38 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
     </div>
   );
 };
+
+/** Grouped coarse sliders */
+function CoarseSliders({ transform, updateField, nudge }: { transform: IvionBimTransform; updateField: (f: keyof IvionBimTransform, v: number) => void; nudge: (f: keyof IvionBimTransform, d: number) => void }) {
+  return (
+    <div className="space-y-2.5">
+      <CoarseSliderField label="Offset X" value={transform.offsetX} min={-COARSE_OFFSET_RANGE} max={COARSE_OFFSET_RANGE} step={COARSE_OFFSET_STEP} unit="m" nudgeStep={NUDGE_OFFSET} onChange={(v) => updateField('offsetX', v)} onNudge={(d) => nudge('offsetX', d)} />
+      <CoarseSliderField label="Offset Y" value={transform.offsetY} min={-COARSE_OFFSET_RANGE} max={COARSE_OFFSET_RANGE} step={COARSE_OFFSET_STEP} unit="m" nudgeStep={NUDGE_OFFSET} onChange={(v) => updateField('offsetY', v)} onNudge={(d) => nudge('offsetY', d)} />
+      <CoarseSliderField label="Offset Z" value={transform.offsetZ} min={-COARSE_OFFSET_RANGE} max={COARSE_OFFSET_RANGE} step={COARSE_OFFSET_STEP} unit="m" nudgeStep={NUDGE_OFFSET} onChange={(v) => updateField('offsetZ', v)} onNudge={(d) => nudge('offsetZ', d)} />
+      <CoarseSliderField label="Rotation" value={transform.rotation} min={-180} max={180} step={0.5} unit="°" nudgeStep={NUDGE_ROTATION} onChange={(v) => updateField('rotation', v)} onNudge={(d) => nudge('rotation', d)} />
+    </div>
+  );
+}
+
+/** Grouped fine-tuning section */
+function FineSection({ transform, updateField, nudge, fineOpen, setFineOpen }: { transform: IvionBimTransform; updateField: (f: keyof IvionBimTransform, v: number) => void; nudge: (f: keyof IvionBimTransform, d: number) => void; fineOpen: boolean; setFineOpen: (o: boolean) => void }) {
+  return (
+    <Collapsible open={fineOpen} onOpenChange={setFineOpen}>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between h-7 text-xs text-muted-foreground hover:text-foreground px-1">
+          Finjustera
+          {fineOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2.5 pt-2">
+        <FineSliderField label="Fine X" value={transform.offsetX} min={transform.offsetX - FINE_OFFSET_RANGE} max={transform.offsetX + FINE_OFFSET_RANGE} step={FINE_OFFSET_STEP} unit="m" nudgeStep={FINE_OFFSET_STEP} onChange={(v) => updateField('offsetX', v)} onNudge={(d) => nudge('offsetX', d)} />
+        <FineSliderField label="Fine Y" value={transform.offsetY} min={transform.offsetY - FINE_OFFSET_RANGE} max={transform.offsetY + FINE_OFFSET_RANGE} step={FINE_OFFSET_STEP} unit="m" nudgeStep={FINE_OFFSET_STEP} onChange={(v) => updateField('offsetY', v)} onNudge={(d) => nudge('offsetY', d)} />
+        <FineSliderField label="Fine Z" value={transform.offsetZ} min={transform.offsetZ - FINE_OFFSET_RANGE} max={transform.offsetZ + FINE_OFFSET_RANGE} step={FINE_OFFSET_STEP} unit="m" nudgeStep={FINE_OFFSET_STEP} onChange={(v) => updateField('offsetZ', v)} onNudge={(d) => nudge('offsetZ', d)} />
+        <FineSliderField label="Fine Rot" value={transform.rotation} min={transform.rotation - 10} max={transform.rotation + 10} step={0.1} unit="°" nudgeStep={0.1} onChange={(v) => updateField('rotation', v)} onNudge={(d) => nudge('rotation', d)} />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 /** Coarse slider with nudge buttons */
 function CoarseSliderField({

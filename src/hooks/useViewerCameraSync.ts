@@ -121,10 +121,25 @@ export function useViewerCameraSync({
       // Ensure isSyncing is always cleared even if callback doesn't handle it
       setTimeout(() => { isSyncing.current = false; }, 1000);
     } else {
-      // Default behavior: fly to the position
+      // Default behavior: fly to the position with offset for better perspective
       const camera = xeokitViewer.scene.camera;
-      const eye = [syncState.position.x, syncState.position.y, syncState.position.z];
-      const look = calculateLookFromHeadingPitch(eye, syncState.heading, syncState.pitch);
+
+      // Calculate look direction as unit vector from heading
+      const headingRad = syncState.heading * (Math.PI / 180);
+      const dirX = Math.sin(headingRad);
+      const dirZ = Math.cos(headingRad);
+
+      // Offset eye: +0.8m upward, -1.5m backward along viewing direction
+      const eye = [
+        syncState.position.x - dirX * 1.5,
+        syncState.position.y + 0.8,
+        syncState.position.z - dirZ * 1.5,
+      ];
+
+      // Clamp pitch to [-20, 90] to avoid looking straight into the floor
+      const clampedPitch = Math.max(-20, Math.min(90, syncState.pitch));
+
+      const look = calculateLookFromHeadingPitch(eye, syncState.heading, clampedPitch);
 
       // Use CameraFlightAnimation if available
       const cameraFlight = xeokitViewer.cameraFlight;
