@@ -73,6 +73,7 @@ const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
           size="icon"
           className={cn(
             compact ? 'h-8 w-8' : 'h-9 w-9',
+            'text-white hover:text-white',
             active && 'ring-2 ring-primary bg-primary/10 text-primary',
             disabled && 'opacity-50 cursor-not-allowed',
           )}
@@ -592,7 +593,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         className={cn(
           'absolute bottom-4 left-1/2 -translate-x-1/2 z-20',
           'flex items-center gap-0.5 px-2 py-1.5 rounded-xl',
-          'bg-card/95 backdrop-blur-sm border shadow-lg',
+          'bg-black/80 backdrop-blur-sm border border-white/10 shadow-lg text-white',
           className,
         )}
         style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 24px)' }}
@@ -613,7 +614,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
 
         {/* Group 2 — Zoom / Fit */}
         <ToolButton
@@ -635,7 +636,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
 
         {/* Group 3 — Interaction tools */}
         <ToolButton
@@ -672,7 +673,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           </>
         )}
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
 
         {/* Group 4 — X-ray */}
         <ToolButton
@@ -683,7 +684,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
 
         {/* Group 5 — View mode */}
         <ToolButton
