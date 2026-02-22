@@ -723,8 +723,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           <div
             className={cn(
               "fixed z-[60] border rounded-lg shadow-xl",
-              // Enhanced semi-transparent frosted glass effect
-              "bg-card/60 backdrop-blur-md",
+              // Solid dark frosted glass — must stay readable over bright 360° panos in split mode
+              "bg-card/95 backdrop-blur-xl text-foreground",
               // Mobile: allow more height for scrolling
               "max-h-[85vh] sm:max-h-[80vh]",
               "flex flex-col overflow-hidden",
