@@ -384,8 +384,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      // Auto-enable level labels in 2D mode
-      window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
+      // Auto-disable level labels in 2D mode (FloatingFloorSwitcher handles floor navigation)
+      window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: false } }));
       const scene = viewer.scene;
       const assetViewer = viewerRef.current?.$refs?.AssetViewer;
       const assetView = assetViewer?.$refs?.assetView;
