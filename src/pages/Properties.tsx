@@ -54,9 +54,9 @@ const properties = [
 ];
 
 const statusConfig = {
-  active: { label: "Aktiv", variant: "default" as const },
-  maintenance: { label: "Underhåll", variant: "secondary" as const },
-  pending: { label: "Väntande", variant: "outline" as const },
+  active: { label: "Active", variant: "default" as const },
+  maintenance: { label: "Maintenance", variant: "secondary" as const },
+  pending: { label: "Pending", variant: "outline" as const },
 };
 
 export default function Properties() {
@@ -65,14 +65,14 @@ export default function Properties() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Fastigheter</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Properties</h1>
           <p className="text-muted-foreground">
-            Hantera din fastighetsportfölj
+            Manage your property portfolio
           </p>
         </div>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Lägg till fastighet
+          Add property
         </Button>
       </div>
 
@@ -82,7 +82,7 @@ export default function Properties() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Sök fastigheter..."
+            placeholder="Search properties..."
             className="pl-9"
           />
         </div>
@@ -116,17 +116,17 @@ export default function Properties() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>Visa detaljer</DropdownMenuItem>
-                  <DropdownMenuItem>Redigera</DropdownMenuItem>
-                  <DropdownMenuItem>3D-visning</DropdownMenuItem>
-                  <DropdownMenuItem>Dokument</DropdownMenuItem>
+                  <DropdownMenuItem>View details</DropdownMenuItem>
+                  <DropdownMenuItem>Edit</DropdownMenuItem>
+                  <DropdownMenuItem>3D View</DropdownMenuItem>
+                  <DropdownMenuItem>Documents</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Typ</p>
+                  <p className="text-xs text-muted-foreground">Type</p>
                   <p className="text-sm font-medium">{property.type}</p>
                 </div>
                 <div className="space-y-1 text-right">

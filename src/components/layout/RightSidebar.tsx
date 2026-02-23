@@ -29,42 +29,42 @@ interface HelpArticle {
 const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'getting-started',
-    title: 'Kom igång med Geminus',
-    category: 'Grundläggande',
+    title: 'Getting started with Geminus',
+    category: 'Basics',
     app: 'Geminus',
-    content: 'Geminus är en plattform för fastighetsförvaltning som samlar alla dina FM-verktyg på ett ställe.',
-    keywords: ['start', 'introduktion', 'översikt'],
+    content: 'Geminus is a facility management platform that brings all your FM tools together in one place.',
+    keywords: ['start', 'introduction', 'overview'],
   },
   {
     id: 'navigator',
-    title: 'Använda Navigator',
+    title: 'Using the Navigator',
     category: 'Navigation',
     app: 'Geminus',
-    content: 'Navigator visar en hierarkisk vy av alla dina fastigheter, våningar och rum.',
-    keywords: ['navigator', 'träd', 'hierarki', 'sök'],
+    content: 'The Navigator displays a hierarchical view of all your properties, floors, and rooms.',
+    keywords: ['navigator', 'tree', 'hierarchy', 'search'],
   },
   {
     id: '3d-viewer',
-    title: '3D-visaren',
+    title: '3D Viewer',
     category: '3D',
     app: 'Asset+',
-    content: 'Använd 3D-visaren för att utforska byggnadsmodeller, mäta avstånd och visa rumsdata.',
-    keywords: ['3d', 'viewer', 'modell', 'bim'],
+    content: 'Use the 3D viewer to explore building models, measure distances, and view room data.',
+    keywords: ['3d', 'viewer', 'model', 'bim'],
   },
   {
     id: 'fma-plus',
     title: 'FM Access Plus',
     category: 'Integration',
     app: 'FM Access',
-    content: 'FM Access Plus ger dig tillgång till underhållsplanering och arbetsordrar.',
-    keywords: ['fma', 'underhåll', 'arbetsorder'],
+    content: 'FM Access Plus provides access to maintenance planning and work orders.',
+    keywords: ['fma', 'maintenance', 'work order'],
   },
   {
     id: 'ivion',
     title: 'Ivion 360',
     category: 'Integration',
     app: 'Ivion',
-    content: 'Ivion möjliggör 360-graders visning av byggnader och utrymmen.',
+    content: 'Ivion enables 360-degree views of buildings and spaces.',
     keywords: ['ivion', '360', 'panorama'],
   },
   {
@@ -72,67 +72,67 @@ const HELP_ARTICLES: HelpArticle[] = [
     title: 'Senslink IoT',
     category: 'Integration',
     app: 'Senslink',
-    content: 'Senslink samlar in och visualiserar data från IoT-sensorer i dina fastigheter.',
-    keywords: ['senslink', 'iot', 'sensorer', 'data'],
+    content: 'Senslink collects and visualizes data from IoT sensors in your properties.',
+    keywords: ['senslink', 'iot', 'sensors', 'data'],
   },
 ];
 
 // API Documentation categories
 const API_CATEGORIES = [
   {
-    name: 'Asset+ Objekthantering',
+    name: 'Asset+ Object Management',
     endpoints: [
-      { method: 'POST', path: '/AddObject', description: 'Skapa nytt objekt' },
-      { method: 'PUT', path: '/EditObject', description: 'Redigera befintligt objekt' },
-      { method: 'DELETE', path: '/DeleteObject', description: 'Ta bort objekt' },
-      { method: 'POST', path: '/AddObjectList', description: 'Skapa flera objekt' },
+      { method: 'POST', path: '/AddObject', description: 'Create new object' },
+      { method: 'PUT', path: '/EditObject', description: 'Edit existing object' },
+      { method: 'DELETE', path: '/DeleteObject', description: 'Delete object' },
+      { method: 'POST', path: '/AddObjectList', description: 'Create multiple objects' },
     ],
   },
   {
-    name: 'Asset+ Datainhämtning',
+    name: 'Asset+ Data Retrieval',
     endpoints: [
-      { method: 'GET', path: '/GetObjectsByPage', description: 'Hämta objekt paginerat' },
-      { method: 'POST', path: '/GetObjectByFmGuid', description: 'Hämta objekt via FMGUID' },
-      { method: 'POST', path: '/PublishDataServiceGetMerged', description: 'Hämta sammanslagen data' },
+      { method: 'GET', path: '/GetObjectsByPage', description: 'Get objects paginated' },
+      { method: 'POST', path: '/GetObjectByFmGuid', description: 'Get object by FMGUID' },
+      { method: 'POST', path: '/PublishDataServiceGetMerged', description: 'Get merged data' },
     ],
   },
   {
-    name: 'Asset+ Revisioner',
+    name: 'Asset+ Revisions',
     endpoints: [
-      { method: 'POST', path: '/PublishRevision', description: 'Publicera revision' },
-      { method: 'POST', path: '/RestoreRevisionAndXktData', description: 'Återställ revision' },
+      { method: 'POST', path: '/PublishRevision', description: 'Publish revision' },
+      { method: 'POST', path: '/RestoreRevisionAndXktData', description: 'Restore revision' },
     ],
   },
   {
     name: 'Asset+ 3D Viewer',
     endpoints: [
-      { method: '-', path: 'cutOutFloorByFmGuid', description: 'Klipp ut våningsplan' },
-      { method: '-', path: 'selectFmGuidAndViewFit', description: 'Välj och zooma till objekt' },
-      { method: '-', path: 'useTool', description: 'Aktivera verktyg (measure, slicer)' },
+      { method: '-', path: 'cutOutFloorByFmGuid', description: 'Cut out floor plan' },
+      { method: '-', path: 'selectFmGuidAndViewFit', description: 'Select and zoom to object' },
+      { method: '-', path: 'useTool', description: 'Activate tool (measure, slicer)' },
     ],
   },
   {
-    name: 'FM Access - Autentisering',
+    name: 'FM Access - Authentication',
     endpoints: [
-      { method: 'POST', path: '/auth/realms/{realm}/protocol/openid-connect/token', description: 'Hämta access token' },
-      { method: '-', path: 'X-Hdc-Version-Id', description: 'Obligatorisk header för de flesta anrop' },
-      { method: 'GET', path: '/api/version', description: 'Hämta aktuell systemversion' },
+      { method: 'POST', path: '/auth/realms/{realm}/protocol/openid-connect/token', description: 'Get access token' },
+      { method: '-', path: 'X-Hdc-Version-Id', description: 'Required header for most calls' },
+      { method: 'GET', path: '/api/version', description: 'Get current system version' },
     ],
   },
   {
-    name: 'FM Access - Ritningar',
+    name: 'FM Access - Drawings',
     endpoints: [
-      { method: 'GET', path: '/api/drawings', description: 'Hämta ritningar för byggnad' },
-      { method: 'GET', path: '/api/drawings/{id}/pdf', description: 'Hämta ritning som PDF' },
-      { method: 'GET', path: '/api/drawings/{id}/dwg', description: 'Hämta ritning som DWG' },
+      { method: 'GET', path: '/api/drawings', description: 'Get drawings for building' },
+      { method: 'GET', path: '/api/drawings/{id}/pdf', description: 'Get drawing as PDF' },
+      { method: 'GET', path: '/api/drawings/{id}/dwg', description: 'Get drawing as DWG' },
     ],
   },
   {
-    name: 'FM Access - Dokument',
+    name: 'FM Access - Documents',
     endpoints: [
-      { method: 'GET', path: '/api/documents', description: 'Hämta dokument för byggnad' },
-      { method: 'GET', path: '/api/documents/{id}', description: 'Hämta specifikt dokument' },
-      { method: 'POST', path: '/api/documents', description: 'Ladda upp dokument' },
+      { method: 'GET', path: '/api/documents', description: 'Get documents for building' },
+      { method: 'GET', path: '/api/documents/{id}', description: 'Get specific document' },
+      { method: 'POST', path: '/api/documents', description: 'Upload document' },
     ],
   },
 ];
@@ -144,7 +144,7 @@ const RightSidebar: React.FC = () => {
   const [helpSearch, setHelpSearch] = useState('');
   const [chatMessage, setChatMessage] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([
-    { role: 'assistant', content: 'Hej! Jag är din hjälpassistent. Ställ gärna frågor om plattformen, API:er eller integrationer.' }
+    { role: 'assistant', content: 'Hi! I\'m your help assistant. Feel free to ask questions about the platform, APIs, or integrations.' }
   ]);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
@@ -172,7 +172,7 @@ const RightSidebar: React.FC = () => {
     setTimeout(() => {
       setChatMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Tack för din fråga! Chat-funktionen är under utveckling. Snart kommer du kunna prata med våra supporttekniker och AI-assistenter här.' 
+        content: 'Thanks for your question! The chat feature is under development. Soon you\'ll be able to talk to our support team and AI assistants here.' 
       }]);
       setIsChatLoading(false);
     }, 1000);
@@ -188,7 +188,7 @@ const RightSidebar: React.FC = () => {
       <div className={`p-3 sm:p-4 ${t.bg} flex justify-between items-center border-b ${t.border} shrink-0`}>
         <h2 className="font-bold text-base sm:text-lg flex items-center gap-2">
           <HelpCircle size={18} className="text-primary" />
-          Hjälpcenter
+          Help Center
         </h2>
         <AppButton variant="ghost" className="h-8 w-8 p-0" onClick={toggleRightSidebar}>
           <X size={18}/>
@@ -202,17 +202,17 @@ const RightSidebar: React.FC = () => {
             <LifeBuoy size={14} />
             Support
           </TabsTrigger>
-          <TabsTrigger value="docs" className="text-xs gap-1 data-[state=active]:bg-muted">
+            <TabsTrigger value="docs" className="text-xs gap-1 data-[state=active]:bg-muted">
             <BookOpen size={14} />
-            Dokumentation
+            Documentation
           </TabsTrigger>
           <TabsTrigger value="api" className="text-xs gap-1 data-[state=active]:bg-muted">
             <Code size={14} />
             API
           </TabsTrigger>
-          <TabsTrigger value="chat" className="text-xs gap-1 data-[state=active]:bg-muted">
+            <TabsTrigger value="chat" className="text-xs gap-1 data-[state=active]:bg-muted">
             <MessageSquare size={14} />
-            Chatt
+            Chat
           </TabsTrigger>
         </TabsList>
 
@@ -222,7 +222,7 @@ const RightSidebar: React.FC = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Sök i hjälptexter..."
+                placeholder="Search help articles..."
                 value={helpSearch}
                 onChange={(e) => setHelpSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -235,7 +235,7 @@ const RightSidebar: React.FC = () => {
               {filteredArticles.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Inga artiklar hittades</p>
+                  <p className="text-sm">No articles found</p>
                 </div>
               ) : (
                 filteredArticles.map(article => (
@@ -269,11 +269,11 @@ const RightSidebar: React.FC = () => {
           <div className="p-3 border-t space-y-2 shrink-0">
             <Button variant="outline" size="sm" className="w-full justify-start gap-2">
               <Bot size={14} />
-              Fråga AI-assistenten
+              Ask AI assistant
             </Button>
             <Button variant="outline" size="sm" className="w-full justify-start gap-2">
               <ExternalLink size={14} />
-              Öppna fullständig dokumentation
+              Open full documentation
             </Button>
           </div>
         </TabsContent>
@@ -297,7 +297,7 @@ const RightSidebar: React.FC = () => {
                       </div>
                     ))}
                     {HELP_ARTICLES.filter(a => a.app === app).length === 0 && (
-                      <p className="text-xs text-muted-foreground italic">Dokumentation kommer snart...</p>
+                      <p className="text-xs text-muted-foreground italic">Documentation coming soon...</p>
                     )}
                   </div>
                 </div>
@@ -310,7 +310,7 @@ const RightSidebar: React.FC = () => {
         <TabsContent value="api" className="flex-1 flex flex-col overflow-hidden mt-0">
           <div className="p-3 border-b shrink-0">
             <p className="text-xs text-muted-foreground">
-              Asset+ API v1.0 - RESTful endpoints för integration och utveckling
+              Asset+ API v1.0 - RESTful endpoints for integration and development
             </p>
           </div>
           <ScrollArea className="flex-1">
@@ -388,7 +388,7 @@ const RightSidebar: React.FC = () => {
           <div className="p-3 border-t shrink-0">
             <div className="flex gap-2">
               <Textarea
-                placeholder="Skriv ditt meddelande..."
+                placeholder="Type your message..."
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -408,7 +408,7 @@ const RightSidebar: React.FC = () => {
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Tryck Enter för att skicka, Shift+Enter för ny rad
+              Press Enter to send, Shift+Enter for new line
             </p>
           </div>
         </TabsContent>
@@ -428,8 +428,8 @@ const RightSidebar: React.FC = () => {
               <AccordionContent className="px-3 pb-3 text-xs">
                 <div className="space-y-1">
                   <div><span className="font-medium">FMGUID:</span> <span className="break-all text-muted-foreground">{viewerDiagnostics.fmGuid}</span></div>
-                  <div><span className="font-medium">Steg:</span> {viewerDiagnostics.initStep}</div>
-                  <div><span className="font-medium">Modeller:</span> {viewerDiagnostics.modelCount ?? '—'}</div>
+                  <div><span className="font-medium">Step:</span> {viewerDiagnostics.initStep}</div>
+                  <div><span className="font-medium">Models:</span> {viewerDiagnostics.modelCount ?? '—'}</div>
                   <div><span className="font-medium">XKT:</span> {viewerDiagnostics.xkt.attempted}/{viewerDiagnostics.xkt.ok}/{viewerDiagnostics.xkt.fail}</div>
                 </div>
               </AccordionContent>
