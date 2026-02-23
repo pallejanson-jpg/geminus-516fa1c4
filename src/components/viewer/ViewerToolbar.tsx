@@ -85,7 +85,7 @@ const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">
-        {disabled ? 'Väntar på viewer…' : label}
+        {disabled ? 'Waiting for viewer…' : label}
       </TooltipContent>
     </Tooltip>
   ),

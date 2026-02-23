@@ -69,6 +69,8 @@ interface AssetPlusViewerProps {
   forceXray?: boolean;
   /** Direct color map prop (for inline desktop viewer, avoids sessionStorage) */
   insightsColorMap?: Record<string, [number, number, number]>;
+  /** When true, hides toolbar, NavCube, and floor switcher (used in small Insights panel) */
+  compactMode?: boolean;
 }
 
 interface ViewerState {
@@ -125,6 +127,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   insightsColorMode,
   forceXray,
   insightsColorMap: insightsColorMapProp,
+  compactMode = false,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -3892,7 +3895,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none bg-background/30">
               <Spinner 
                 size="xl" 
-                label={xktSyncStatus === 'syncing' ? 'Synkar 3D-modeller...' : undefined} 
+                label={xktSyncStatus === 'syncing' ? 'Syncing 3D models...' : undefined} 
               />
             </div>
           )}
@@ -3920,7 +3923,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                     size="icon"
                     onClick={onClose} 
                     className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                    aria-label="Stäng 3D-vy"
+                    aria-label="Close 3D view"
                   >
                     <X className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
@@ -3930,7 +3933,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   size="icon"
                   onClick={() => setIsFullscreen(!isFullscreen)} 
                   className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                  aria-label={isFullscreen ? "Avsluta helskärm" : "Helskärm"}
+                  aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                 >
                   {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </Button>
@@ -3939,8 +3942,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   size="icon"
                   onClick={() => setShowTreePanel(!showTreePanel)} 
                   className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                  aria-label="Modellträd"
-                  title="Modellträd"
+                   aria-label="Model tree"
+                   title="Model tree"
                 >
                   <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
@@ -3954,8 +3957,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   size="icon"
                   onClick={() => setRightPanelOpen(!rightPanelOpen)}
                   className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                  aria-label="Visning"
-                  title="Visning"
+                  aria-label="Settings"
+                  title="Settings"
                 >
                   <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
@@ -3964,7 +3967,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             </div>
           )}
 
-          {/* NavCube canvas - positioned in bottom-right corner, responsive size */}
+          {/* NavCube canvas - positioned in bottom-right corner, responsive size — hidden in compactMode */}
           <canvas 
             id="navCubeCanvas" 
             width={typeof window !== 'undefined' && window.innerWidth < 640 ? 60 : 80}
@@ -3976,7 +3979,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 : 'calc(env(safe-area-inset-bottom, 12px) + 74px)',
               width: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
               height: typeof window !== 'undefined' && window.innerWidth < 640 ? '60px' : '80px',
-              display: showNavCube && !isMobile ? 'block' : 'none',
+              display: showNavCube && !isMobile && !compactMode ? 'block' : 'none',
               background: 'rgba(20, 20, 20, 0.5)',
               borderRadius: '6px',
               backdropFilter: 'blur(6px)',
@@ -3988,8 +3991,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           {isPickMode && !pendingPickCoords && (
             <div className="absolute inset-0 pointer-events-none z-10 border-4 border-dashed border-accent/50 animate-pulse">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
-                <p className="text-sm font-medium text-center">
-                  🎯 Klicka på en yta för att välja position
+                 <p className="text-sm font-medium text-center">
+                  🎯 Click on a surface to select position
                 </p>
               </div>
             </div>
@@ -3999,7 +4002,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           {pendingPickCoords && (
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 bg-card/95 backdrop-blur-md p-4 rounded-xl shadow-2xl border flex flex-col gap-3 min-w-[280px]">
               <div className="text-center">
-                <p className="font-medium text-sm mb-1">📍 Position markerad</p>
+                <p className="font-medium text-sm mb-1">📍 Position marked</p>
                 <p className="text-xs text-muted-foreground font-mono">
                   X: {pendingPickCoords.x.toFixed(2)} Y: {pendingPickCoords.y.toFixed(2)} Z: {pendingPickCoords.z.toFixed(2)}
                 </p>
@@ -4010,20 +4013,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   onClick={handleRepickPosition}
                   className="flex-1"
                 >
-                  Välj om
+                  Re-pick
                 </Button>
                 <Button 
                   onClick={handleConfirmPosition}
                   className="flex-1"
                 >
-                  Bekräfta ✓
+                  Confirm ✓
                 </Button>
               </div>
             </div>
           )}
 
           {/* Custom toolbar - centered at bottom */}
-          {state.isInitialized && initStep === 'ready' && (
+          {state.isInitialized && initStep === 'ready' && !compactMode && (
             <>
               {/* Floating Floor Switcher - always visible pills above toolbar */}
               {!isMobile && (
