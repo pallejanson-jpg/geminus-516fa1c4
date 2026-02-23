@@ -1,105 +1,120 @@
 
 
-## Fix: Obstructing Objects, Auto-Color Default, Context Menu Merge, IFC Categories, Space Selection
+## Level Labels, Click-to-Isolate, and Shadows in the 3D Viewer
 
-Five issues identified and their fixes:
+### Overview
+
+Three new features inspired by the Tandem viewer reference:
+
+1. **Level labels** floating beside each floor in the 3D scene (like Tandem's "Plan 09", "Plan 10"...)
+2. **Click-to-isolate** on level/room labels with a close (X) button to restore
+3. **Shadows (SAO)** for visual depth, matching the high-quality rendering seen in the reference
 
 ---
 
-### 1. Green objects still obstructing the 3D view
+### 1. Level Labels (new "storey labels" system)
 
-The current code excludes `IfcSpace` and `IfcSlab`/`IfcSlabStandardCase` from solidIds (lines 520-533), but the green objects in the screenshot are likely **IfcRoof** and/or **IfcCovering** entities, which are NOT excluded. These large surface objects block the view just like slabs.
+Currently, the `useRoomLabels` hook only creates labels for `IfcSpace` entities. We need a parallel system for `IfcBuildingStorey` labels that:
 
-**Fix**: Expand the `obstructTypes` set (line 523) to also include `IfcRoof`, `IfcCovering`, and `IfcPlate`. These will be hidden when a floor filter is active, matching the behavior in the 2D mode logic.
+- Appear **to the left** of the building model, stacked vertically by floor elevation
+- Show the floor name (e.g., "Plan 10", "Plan 18")
+- Are always visible when the model is loaded (no toggle needed -- they serve as navigation aids)
+- Use the same `worldToCanvas` projection technique as room labels
+- Have a distinctive visual style: pill-shaped, slightly larger text, semi-transparent background
 
-**File: `src/components/viewer/ViewerFilterPanel.tsx`, lines 523-524**
+**Implementation**: A new hook `useLevelLabels` in `src/hooks/useLevelLabels.ts`:
 
-```typescript
-// Before
-const obstructTypes = new Set(['IfcSpace']);
-const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase']);
+- Scans `metaScene.metaObjects` for `IfcBuildingStorey` type
+- For each storey, computes the **center Y** from the AABB of all child entities, and positions the label at `(minX - offset, centerY, centerZ)` -- placing it to the left of the building geometry
+- Creates DOM elements in a container overlaid on the canvas (same pattern as `useRoomLabels`)
+- Resolves friendly names from the database floor names (same approach as `FloatingFloorSwitcher`)
+- Updates positions on camera changes using `requestAnimationFrame` throttling
 
-// After
-const obstructTypes = new Set(['IfcSpace', 'IfcRoof', 'IfcCovering']);
-const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
+**Visual style**:
+- Pill-shaped (`rounded-full`, `px-3 py-1`)
+- Semi-transparent dark background (`bg-card/80 backdrop-blur-sm`)
+- White text, `font-size: 12px`, `font-weight: 500`
+- Pointer events enabled (clickable)
+- When isolated: highlight color + X close button appended
+
+---
+
+### 2. Click-to-Isolate with Close Button
+
+When clicking a level label or room label:
+
+**Level label click**:
+- Isolates that floor (same as clicking a floor pill in `FloatingFloorSwitcher`)
+- Dispatches `FLOOR_SELECTION_CHANGED_EVENT` with the storey data
+- The label gets a visual "active" state: highlighted border, and an **X close button** appears next to it
+- Clicking the X button restores all floors (dispatches `isAllFloorsVisible: true`)
+
+**Room label click** (enhancement to existing `useRoomLabels`):
+- When `clickAction` is set to a new mode `'isolate'` (or we add this alongside existing modes):
+  - Hides all objects except the clicked room's entities
+  - Shows an X button on the label
+  - Clicking X restores full visibility
+
+**Implementation details**:
+- In `useLevelLabels`: each label element gets an `onclick` handler that calls isolation logic and appends an X span element
+- The X click handler calls a restore function that shows all floors and removes the X element
+- In `useRoomLabels`: extend the `handleLabelClick` to support an `'isolate'` click action (optional, can be added in a follow-up)
+- Both hooks share the `FLOOR_SELECTION_CHANGED_EVENT` for coordination
+
+---
+
+### 3. Shadows via SAO (Scalable Ambient Obscurance)
+
+Xeokit has built-in **SAO** (Scalable Ambient Obscurance) support -- a screen-space ambient occlusion technique that adds soft contact shadows similar to the Tandem screenshot. This is NOT traditional shadow mapping but achieves a very similar visual effect for architectural models.
+
+**Xeokit SAO API** (available on `scene.sao`):
+- `scene.sao.enabled = true` -- enables SAO
+- `scene.sao.intensity = 0.25` -- shadow darkness (0-1)
+- `scene.sao.bias = 0.5` -- depth bias to reduce artifacts
+- `scene.sao.scale = 1000` -- scale factor for the effect
+- `scene.sao.minResolution = 0` -- minimum resolution
+- `scene.sao.kernelRadius = 100` -- radius of the effect
+
+The `FastNavPlugin` already hides SAO during camera movement (`hideSAO: true`) for performance, which is the correct approach -- SAO is expensive but only needs to render when the camera stops.
+
+**Implementation**: Add SAO activation in `usePerformancePlugins.ts` after the viewer is ready:
+
+```
+xeokitViewer.scene.sao.enabled = true;
+xeokitViewer.scene.sao.intensity = 0.15;
+xeokitViewer.scene.sao.bias = 0.5;
+xeokitViewer.scene.sao.scale = 1000;
+xeokitViewer.scene.sao.kernelRadius = 100;
 ```
 
----
-
-### 2. Auto-coloring should be OFF by default
-
-Currently `autoColorEnabled` starts as `true` (line 109). The user wants no coloring until they opt in.
-
-**Fix**: Change default to `false`.
-
-**File: `src/components/viewer/ViewerFilterPanel.tsx`, line 109**
-
-```typescript
-const [autoColorEnabled, setAutoColorEnabled] = useState(false);
-```
+The `FastNavPlugin` already handles hiding SAO during navigation, so performance should be acceptable. On mobile, we can skip SAO entirely or use lower settings.
 
 ---
 
-### 3. Context menu: merge Asset+ commands into the Geminus menu
+### Technical Changes
 
-The CSS override hides the Asset+ DevExtreme menu, but the Asset+ viewer also captures `contextmenu` events internally before our React handler fires. This causes the old menu to sometimes appear.
-
-**Fix**: Add a native DOM `contextmenu` listener directly on the canvas element (not the React wrapper) with `capture: true` to intercept before Asset+. This ensures our menu always wins. The existing `onContextMenu` React handler stays as fallback.
+**New file: `src/hooks/useLevelLabels.ts`**
+- New hook following the same pattern as `useRoomLabels`
+- Scans metaScene for `IfcBuildingStorey`, computes world positions
+- Creates clickable DOM labels with isolation behavior
+- Dispatches `FLOOR_SELECTION_CHANGED_EVENT` on click
+- Appends/removes X close button on active label
+- Accepts `viewerRef` and `buildingFmGuid` props
+- Returns `{ setLabelsEnabled, refreshLabels }`
 
 **File: `src/components/viewer/AssetPlusViewer.tsx`**
-- After viewer initialization (in `handleAllModelsLoaded`), attach a capturing `contextmenu` listener on the xeokit canvas element that calls `preventDefault()` and `stopImmediatePropagation()`, then dispatches our custom context menu state.
+- Import and initialize `useLevelLabels` hook
+- Enable level labels after model load (in `handleAllModelsLoaded`)
+- Pass `buildingFmGuid` for name resolution
 
----
+**File: `src/hooks/usePerformancePlugins.ts`**
+- After installing FastNavPlugin, enable SAO on the scene with tuned parameters
+- Skip SAO on mobile (`isMobile`) for performance
 
-### 4. Categories should show IFC types (Door, Window, Wall...) instead of Asset+ categories
+**File: `src/hooks/useRoomLabels.ts`** (minor)
+- No changes needed for this phase; room label isolation can be added later as an enhancement
 
-The user wants granular IFC-level categories (Door, Window, Wall, Slab, Stair, Column, Beam, etc.) listed individually -- not the coarse Asset+ groupings (Instance, Space, Building Storey).
+### No database changes needed
 
-**Fix**: Replace the `categories` useMemo that counts Asset+ `category` field with one that scans the xeokit `metaScene` for actual IFC types, groups them, and counts entities per type. Remove the Supabase Instance count query (no longer needed). The `categoryToIfcTypes` mapping already has the right IFC types defined, so we reuse it in reverse to build the list.
-
-**File: `src/components/viewer/ViewerFilterPanel.tsx`**
-
-| Lines | Change |
-|---|---|
-| 202-234 | Replace Asset+ category counting with xeokit metaScene IFC type scanning. Build categories from `metaScene.metaObjects` by grouping IFC types into human-readable names using the reverse of `categoryToIfcTypes`. |
-| 212-224 | Remove the Supabase `instanceCount` query and state -- no longer needed. |
-| 491-504 | Update category filter logic: when a category checkbox is checked, use `categoryToIfcTypes` to find matching IFC types (already works correctly). |
-
-The categories list will show entries like: Wall (2340), Door (890), Window (650), Slab (120), Space (807), Building Storey (10), Column (45), etc.
-
----
-
-### 5. Selecting a Space in the filter panel blanks the 3D view
-
-When a space checkbox is toggled, `checkedSpaces` changes trigger `applyFilterVisibility`. The space filter uses `entityMapRef` which maps space fmGuids to xeokit IDs. The issue is that when `spaceIds` is computed (lines 483-489), it only contains the direct descendants of the IfcSpace meta-object. In the intersect step (line 508), if `levelIds` is also active, the intersection of level descendants and space descendants may produce an empty set (since space entities are children of the storey and already included in level descendants).
-
-**Fix**: When spaces are checked, automatically include their parent level in the filter to avoid empty intersections. Also, if ONLY spaces are checked (no levels), use the space IDs directly without intersecting with an empty level set. The current code at line 508 already handles this correctly via the `filter` for non-null sets, but the issue is that space checkbox + level checkbox creates conflicting intersections.
-
-The real fix: when a space is checked, ensure its parent level is automatically added to `checkedLevels` (or skip the level filter when spaces are active). This mirrors the floor selection behavior.
-
-**File: `src/components/viewer/ViewerFilterPanel.tsx`**
-- In the intersect logic (lines 507-518): if `checkedSpaces.size > 0`, skip `levelIds` from the intersection (spaces already imply their parent level). This prevents the empty-intersection problem.
-
----
-
-### Technical Summary
-
-**File: `src/components/viewer/ViewerFilterPanel.tsx`**
-
-| Change | Lines |
-|---|---|
-| Expand obstructTypes to include IfcRoof, IfcCovering; slabTypes to include IfcPlate | 523-524 |
-| Default autoColorEnabled to false | 109 |
-| Replace Asset+ category counting with xeokit metaScene IFC type scan | 202-234 |
-| Remove instanceCount Supabase query | 212-224 |
-| Skip levelIds in intersection when spaces are checked | 507-518 |
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-
-| Change | Lines |
-|---|---|
-| Add capturing contextmenu listener on xeokit canvas to block Asset+ menu | Post-init (~handleAllModelsLoaded) |
-
-**File: `src/index.css`**
-- Strengthen CSS overrides to also target `.dx-overlay-content .dx-context-menu` and any popup wrappers.
+Level names are already stored in the `assets` table and resolved by the existing `FloatingFloorSwitcher` pattern.
 
