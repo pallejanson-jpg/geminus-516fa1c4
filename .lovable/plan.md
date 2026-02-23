@@ -1,37 +1,59 @@
 
 
-## Fix: Asset+ Categories Instead of IFC Types + Performance Improvements
+## Custom Right-Click Context Menu for 3D Viewer
 
-### Problem 1: Wrong Categories
-The Categories section currently scans the xeokit `metaScene` for raw IFC types (`IfcDoor`, `IfcWindow`, `IfcWall`, etc.). Per previous agreement, it should show **Asset+ categories** from the database: `Instance`, `Space`, `Building Storey`, `Building`, `Complex`.
+### Background
+The Asset+ viewer package renders its own right-click context menu using DevExtreme (`dx-context-menu`). It currently shows only built-in Asset+ commands (e.g. "View in space", object details). This menu looks visually different from Geminus AI's design language and cannot be extended with Geminus-specific actions like "Egenskaper" (properties), "Skapa arende" (create issue), or "Skapa arbetsorder" (create work order).
 
-The database confirms these are the only Asset+ categories available (Instance: 144k, Space: 3187, Building Storey: 67, Building: 14, Complex: 1).
+### Approach: Intercept + Replace
+Instead of fighting the Asset+ DevExtreme menu, we will:
+1. **Suppress the Asset+ context menu** via CSS (`display: none` on `.dx-context-menu`)
+2. **Intercept right-click** on the `#AssetPlusViewer` container with our own `onContextMenu` handler
+3. **Render a Geminus-styled context menu** using the existing Radix `ContextMenu` or a simple positioned div (matching the dark `bg-card/95 backdrop-blur` style used elsewhere in the app)
+4. **Pass custom items via `externalCustomObjectContextMenuItems`** to Asset+ for items that need the viewer's internal context (like the clicked entity), while also adding pure Geminus items
 
-### Fix
-Replace the `metaScene` IFC-type scanning (lines 200-230) with a simple `useMemo` that counts categories from `buildingData` (already loaded from Asset+). This also eliminates the polling interval (`setInterval`) that retries up to 15 times waiting for metaScene -- a performance win.
+### Context Menu Items
+The menu will show these items when right-clicking an object in the 3D viewer:
 
-The `categoryToIfcTypes` mapping (lines 378-401) stays, since it's needed to translate Asset+ categories to IFC types for the 3D filter logic.
+| Item | Action |
+|---|---|
+| **Egenskaper** (Properties) | Opens `UniversalPropertiesDialog` for the clicked object's FM GUID |
+| **Skapa arende** (Create issue) | Triggers the existing `captureIssueState` flow (screenshot + viewpoint + CreateIssueDialog) |
+| **Skapa arbetsorder** (Create work order) | Opens a new work order dialog pre-filled with building/object context, saves to `work_orders` table |
+| **Visa i rummet** (View in space) | Calls `assetView.viewInSpace(entityId)` -- the original Asset+ "View in space" action |
+| **Valj objekt** (Select) | Calls `assetView.selectItems([entityId])` |
+| **Zoom till objekt** (Zoom to fit) | Calls `assetView.viewFit([entityId])` |
 
-### Problem 2: Performance
-Several performance issues identified:
-
-1. **Category polling**: The `setInterval` retry loop (up to 15x at 500ms) scanning all metaObjects is unnecessary if we use Asset+ data directly.
-2. **Entity map rebuild**: `buildEntityMap` has `spaces` in its dependency array. Since `spaces` is recomputed when `checkedLevels` changes, the entity map rebuilds on every level toggle -- expensive O(n*m) matching with `find()` on arrays.
-3. **`applyFilterVisibility`** calls `scene.setObjectsXRayed(scene.objectIds, true)` on every filter change -- touching every entity in the scene. For large models (100k+ objects) this is slow.
-
-### Fixes
-- Remove the `setInterval` category scanner entirely.
-- Memoize `buildEntityMap` to only rebuild when `levels` or `spaces` data actually changes (not on checkbox toggles). Remove `spaces` from the rebuild trigger by caching space data separately.
-- Add a `requestAnimationFrame` wrapper around `applyFilterVisibility` to debounce rapid checkbox toggles.
+### Visual Design
+- Dark card background (`bg-card/95 backdrop-blur-md`) with `border-border` and `shadow-xl`
+- Rounded corners (`rounded-lg`)
+- Each item: icon (16px, colored) + label, with `hover:bg-muted` transition
+- Separator lines between groups (Geminus actions / Viewer actions)
+- Matches the style already used in `CesiumGlobeView.tsx` context menu (lines 332-370)
 
 ### Technical Changes
 
-**File: `src/components/viewer/ViewerFilterPanel.tsx`**
+**File: `src/index.css`**
+- Add CSS rule to hide the Asset+ DevExtreme context menu: `#AssetPlusViewer .dx-context-menu-container, .dx-overlay-wrapper .dx-context-menu { display: none !important; }`
 
-| Lines | Change |
-|---|---|
-| 200-230 | Replace IFC metaScene scanner with `useMemo` counting `buildingData` categories |
-| 360-374 | Remove `spaces` from `buildEntityMap` dependency; build space map only once when panel opens |
-| 405-551 | Wrap `applyFilterVisibility` body in `requestAnimationFrame`; skip redundant resets if state hasn't changed |
+**File: `src/components/viewer/ViewerContextMenu.tsx`** (NEW)
+- New component that renders a positioned context menu overlay
+- Props: `position: {x, y}`, `entityId`, `fmGuid`, `buildingFmGuid`, `onClose`, callbacks for each action
+- Renders the menu items with icons (Info, MessageSquarePlus, Wrench, Eye, MousePointer, ZoomIn from lucide)
+- Closes on click-outside or Escape key
 
-No other files need changes.
+**File: `src/components/viewer/AssetPlusViewer.tsx`**
+- Add `onContextMenu` handler on the viewer container div
+- Detect clicked entity using xeokit's `scene.pick()` at the mouse coordinates
+- Resolve the entity's FM GUID from the metaScene
+- Show `ViewerContextMenu` at the click position with the resolved data
+- Add state for context menu visibility, position, and entity data
+- Wire up action callbacks: open properties dialog, trigger issue creation, create work order, call viewer API methods
+
+**File: `src/components/viewer/CreateWorkOrderDialog.tsx`** (NEW)
+- Simple dialog for creating a work order (similar to `CreateIssueDialog`)
+- Fields: title, description, category, priority
+- Pre-filled with building name and object info from context
+- Saves to the `work_orders` table with `external_id` = `FR-{timestamp}` and source metadata
+
+No database changes needed -- the `work_orders` table already exists with the right schema and RLS policies.
