@@ -1,28 +1,27 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import { ChevronDown, ChevronRight, Search, RotateCcw, Eye, X, Filter } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface BimSource {
-  guid: string; // parentBimObjectId
-  name: string; // parentCommonName e.g. "A-modell"
+  guid: string;
+  name: string;
   storeyCount: number;
 }
 
 interface LevelItem {
   fmGuid: string;
   name: string;
-  sourceGuid: string; // which BIM source it belongs to
+  sourceGuid: string;
   spaceCount: number;
 }
 
@@ -45,26 +44,31 @@ interface ViewerFilterPanelProps {
   onNodeSelect?: (fmGuid: string) => void;
 }
 
+// ─── Color palette (Tandem-style rainbow) ─────────────────────────────────────
+
+const LEVEL_PALETTE = [
+  '#FF6B6B', '#4ECB71', '#9B59B6', '#F1C40F', '#3498DB',
+  '#E67E22', '#1ABC9C', '#E91E63', '#00BCD4', '#8BC34A',
+  '#FF9800', '#673AB7', '#009688', '#CDDC39', '#FF5722',
+  '#795548', '#607D8B', '#9C27B0', '#2196F3', '#4CAF50',
+];
+
+const hexToRgb01 = (hex: string): [number, number, number] => {
+  const c = hex.replace('#', '');
+  return [
+    parseInt(c.slice(0, 2), 16) / 255,
+    parseInt(c.slice(2, 4), 16) / 255,
+    parseInt(c.slice(4, 6), 16) / 255,
+  ];
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const isGuid = (str: string): boolean => {
-  if (!str || str.length < 20) return false;
-  return /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
-};
+const isGuid = (str: string): boolean =>
+  !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
 
-const getXeokitIdsForFmGuid = (xeokitViewer: any, fmGuid: string): string[] => {
-  if (!xeokitViewer?.metaScene?.metaObjects) return [];
-  const fmLower = fmGuid.toLowerCase();
-  const ids: string[] = [];
-  Object.values(xeokitViewer.metaScene.metaObjects).forEach((obj: any) => {
-    const sysId = (obj.originalSystemId || '').toLowerCase();
-    if (sysId === fmLower) ids.push(obj.id);
-  });
-  return ids;
-};
-
-const getDescendantIds = (xeokitViewer: any, rootId: string): string[] => {
-  const metaObj = xeokitViewer?.metaScene?.metaObjects?.[rootId];
+const getDescendantIds = (viewer: any, rootId: string): string[] => {
+  const metaObj = viewer?.metaScene?.metaObjects?.[rootId];
   if (!metaObj) return [rootId];
   const ids: string[] = [rootId];
   const collect = (obj: any) => {
@@ -77,43 +81,35 @@ const getDescendantIds = (xeokitViewer: any, rootId: string): string[] => {
   return ids;
 };
 
-const getAllXeokitIdsForStorey = (xeokitViewer: any, storeyFmGuid: string): string[] => {
-  const rootIds = getXeokitIdsForFmGuid(xeokitViewer, storeyFmGuid);
-  const all = new Set<string>();
-  rootIds.forEach(id => {
-    getDescendantIds(xeokitViewer, id).forEach(descId => all.add(descId));
-  });
-  return [...all];
-};
-
-const HIGHLIGHT_COLOR: [number, number, number] = [0.25, 0.55, 0.95]; // Blue highlight for selected spaces
+const HIGHLIGHT_COLOR: [number, number, number] = [0.25, 0.55, 0.95];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
-  viewerRef,
-  buildingFmGuid,
-  isVisible,
-  onClose,
-  onNodeSelect,
+  viewerRef, buildingFmGuid, isVisible, onClose, onNodeSelect,
 }) => {
   const { allData } = useContext(AppContext);
 
-  // Section open/close state
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [levelsOpen, setLevelsOpen] = useState(true);
   const [spacesOpen, setSpacesOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
 
-  // Checked state per section
   const [checkedSources, setCheckedSources] = useState<Set<string>>(new Set());
   const [checkedLevels, setCheckedLevels] = useState<Set<string>>(new Set());
   const [checkedSpaces, setCheckedSpaces] = useState<Set<string>>(new Set());
   const [checkedCategories, setCheckedCategories] = useState<Set<string>>(new Set());
 
-  // Search per section
   const [spacesSearch, setSpacesSearch] = useState('');
   const [levelsSearch, setLevelsSearch] = useState('');
+
+  // Per-level colors
+  const [levelColors, setLevelColors] = useState<Map<string, string>>(new Map());
+  const [autoColorEnabled, setAutoColorEnabled] = useState(true);
+
+  // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
+  const entityMapRef = useRef<Map<string, string[]>>(new Map());
+  const entityMapBuilt = useRef(false);
 
   // ── Derived data from Asset+ ────────────────────────────────────────────
 
@@ -124,7 +120,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     );
   }, [allData, buildingFmGuid]);
 
-  // Sources: unique BIM models from Building Storey parentBimObjectId
   const sources: BimSource[] = useMemo(() => {
     const map = new Map<string, { name: string; count: number }>();
     buildingData
@@ -144,7 +139,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   }, [buildingData]);
 
-  // Levels: Building Storeys
   const levels: LevelItem[] = useMemo(() => {
     return buildingData
       .filter((a: any) => a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
@@ -165,15 +159,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         };
       })
       .sort((a, b) => {
-        const extract = (n: string) => {
-          const m = n.match(/(-?\d+)/);
-          return m ? parseInt(m[1], 10) : 0;
-        };
+        const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
         return extract(a.name) - extract(b.name);
       });
   }, [buildingData]);
 
-  // Spaces: rooms, filtered by checked levels
   const spaces: SpaceItem[] = useMemo(() => {
     const visibleLevelGuids = checkedLevels.size > 0 ? checkedLevels : new Set(levels.map(l => l.fmGuid));
     return buildingData
@@ -192,7 +182,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
   }, [buildingData, checkedLevels, levels]);
 
-  // Categories: from Asset+ category field
   const categories: CategoryItem[] = useMemo(() => {
     const map = new Map<string, number>();
     buildingData.forEach((a: any) => {
@@ -204,18 +193,119 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .sort((a, b) => b.count - a.count);
   }, [buildingData]);
 
+  // Auto-assign palette colors to levels
+  useEffect(() => {
+    const colors = new Map<string, string>();
+    levels.forEach((level, idx) => {
+      colors.set(level.fmGuid, LEVEL_PALETTE[idx % LEVEL_PALETTE.length]);
+    });
+    setLevelColors(colors);
+  }, [levels]);
+
   // ── XEOKit accessor ─────────────────────────────────────────────────────
 
   const getXeokitViewer = useCallback(() => {
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // ── Apply X-ray + highlight logic ───────────────────────────────────────
+  // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
-  // Build a map from Asset+ category to IFC types for category filtering
+  const buildEntityMap = useCallback(() => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.metaScene?.metaObjects) return false;
+
+    const metaObjects = viewer.metaScene.metaObjects;
+    const map = new Map<string, string[]>();
+
+    // Build a lookup: originalSystemId (lowercase, no hyphens) → metaObject
+    const sysIdIndex = new Map<string, any[]>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      const sysId = (mo.originalSystemId || '').toLowerCase().replace(/-/g, '');
+      if (sysId) {
+        if (!sysIdIndex.has(sysId)) sysIdIndex.set(sysId, []);
+        sysIdIndex.get(sysId)!.push(mo);
+      }
+    });
+
+    // Also build name-based lookup for IfcBuildingStorey
+    const storeyByName = new Map<string, any[]>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      if (mo.type === 'IfcBuildingStorey' && mo.name) {
+        const key = mo.name.toLowerCase().trim();
+        if (!storeyByName.has(key)) storeyByName.set(key, []);
+        storeyByName.get(key)!.push(mo);
+      }
+    });
+
+    // Map levels
+    levels.forEach(level => {
+      const fmNorm = level.fmGuid.toLowerCase().replace(/-/g, '');
+
+      // Try originalSystemId match
+      let matches = sysIdIndex.get(fmNorm);
+
+      // Try name match for storeys
+      if (!matches || matches.length === 0) {
+        matches = storeyByName.get(level.name.toLowerCase().trim());
+      }
+
+      if (matches && matches.length > 0) {
+        const ids: string[] = [];
+        matches.forEach(mo => getDescendantIds(viewer, mo.id).forEach(id => ids.push(id)));
+        map.set(level.fmGuid, ids);
+      }
+    });
+
+    // Map spaces
+    const spaceByName = new Map<string, any[]>();
+    Object.values(metaObjects).forEach((mo: any) => {
+      if (mo.type === 'IfcSpace' && mo.name) {
+        const key = mo.name.toLowerCase().trim();
+        if (!spaceByName.has(key)) spaceByName.set(key, []);
+        spaceByName.get(key)!.push(mo);
+      }
+    });
+
+    spaces.forEach(space => {
+      const fmNorm = space.fmGuid.toLowerCase().replace(/-/g, '');
+      let matches = sysIdIndex.get(fmNorm);
+      if (!matches || matches.length === 0) {
+        matches = spaceByName.get(space.name.toLowerCase().trim());
+      }
+      if (matches && matches.length > 0) {
+        const ids: string[] = [];
+        matches.forEach(mo => getDescendantIds(viewer, mo.id).forEach(id => ids.push(id)));
+        map.set(space.fmGuid, ids);
+      }
+    });
+
+    entityMapRef.current = map;
+    entityMapBuilt.current = true;
+    console.debug('[FilterPanel] Entity map built:', map.size, 'entries. Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length);
+    return true;
+  }, [getXeokitViewer, levels, spaces]);
+
+  // Build map when viewer is ready
+  useEffect(() => {
+    if (!isVisible) return;
+    entityMapBuilt.current = false;
+    const tryBuild = () => {
+      if (buildEntityMap()) return;
+      // Retry a few times
+      let attempts = 0;
+      const interval = setInterval(() => {
+        if (buildEntityMap() || attempts++ > 15) clearInterval(interval);
+      }, 500);
+      return () => clearInterval(interval);
+    };
+    const cleanup = tryBuild();
+    return cleanup;
+  }, [isVisible, buildEntityMap]);
+
+  // ── IFC type mapping for categories ─────────────────────────────────────
+
   const categoryToIfcTypes = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    // Common mappings
     const mappings: Record<string, string[]> = {
       'Building': ['IfcBuilding'],
       'Building Storey': ['IfcBuildingStorey'],
@@ -239,20 +329,40 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return map;
   }, []);
 
+  // ── Apply filter + coloring ─────────────────────────────────────────────
+
   const applyFilterVisibility = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
+    const eMap = entityMapRef.current;
 
-    const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 || checkedSpaces.size > 0 || checkedCategories.size > 0;
+    const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
+      checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — everything visible, no x-ray, no colorization
+    // Step 0: Clean slate
     scene.setObjectsVisible(scene.objectIds, true);
     if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
     if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
 
+    // Step 1: Apply level auto-colors (always, if enabled)
+    if (autoColorEnabled && eMap.size > 0) {
+      levels.forEach(level => {
+        const color = levelColors.get(level.fmGuid);
+        const entityIds = eMap.get(level.fmGuid);
+        if (color && entityIds) {
+          const rgb = hexToRgb01(color);
+          entityIds.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) {
+              entity.colorize = rgb;
+            }
+          });
+        }
+      });
+    }
+
     if (!hasAnyFilter) {
-      // Dispatch all floors visible
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
           floorId: null, floorName: null, bounds: null,
@@ -263,70 +373,53 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       return;
     }
 
-    // Step 1: Collect the set of "selected" xeokit entity IDs per active filter
-    // Then intersect across active filters so only objects matching ALL filters remain solid.
-
-    // --- Sources filter: collect IDs belonging to checked source storeys ---
-    let sourceSelectedIds: Set<string> | null = null;
+    // Step 2: Collect solid IDs per active filter, then intersect
+    let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
-      sourceSelectedIds = new Set<string>();
-      const matchingLevels = levels.filter(l => checkedSources.has(l.sourceGuid));
-      matchingLevels.forEach(l => {
-        getAllXeokitIdsForStorey(viewer, l.fmGuid).forEach(id => sourceSelectedIds!.add(id));
+      sourceIds = new Set<string>();
+      levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
+        eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
     }
 
-    // --- Levels filter: collect IDs belonging to checked levels ---
-    let levelSelectedIds: Set<string> | null = null;
+    let levelIds: Set<string> | null = null;
     if (checkedLevels.size > 0) {
-      levelSelectedIds = new Set<string>();
+      levelIds = new Set<string>();
       checkedLevels.forEach(fmGuid => {
-        getAllXeokitIdsForStorey(viewer, fmGuid).forEach(id => levelSelectedIds!.add(id));
+        eMap.get(fmGuid)?.forEach(id => levelIds!.add(id));
       });
     }
 
-    // --- Spaces filter: collect IDs of checked spaces ---
-    let spaceSelectedIds: Set<string> | null = null;
+    let spaceIds: Set<string> | null = null;
     if (checkedSpaces.size > 0) {
-      spaceSelectedIds = new Set<string>();
-      checkedSpaces.forEach(spaceFmGuid => {
-        const ids = getXeokitIdsForFmGuid(viewer, spaceFmGuid);
-        ids.forEach(id => {
-          getDescendantIds(viewer, id).forEach(descId => spaceSelectedIds!.add(descId));
-        });
+      spaceIds = new Set<string>();
+      checkedSpaces.forEach(fmGuid => {
+        eMap.get(fmGuid)?.forEach(id => spaceIds!.add(id));
       });
     }
 
-    // --- Categories filter: collect IDs matching checked IFC types ---
-    let categorySelectedIds: Set<string> | null = null;
+    let categoryIds: Set<string> | null = null;
     if (checkedCategories.size > 0) {
-      categorySelectedIds = new Set<string>();
+      categoryIds = new Set<string>();
       const allowedIfcTypes = new Set<string>();
       checkedCategories.forEach(cat => {
         const ifcTypes = categoryToIfcTypes.get(cat);
         if (ifcTypes) ifcTypes.forEach(t => allowedIfcTypes.add(t));
-        // Also allow exact category name as IFC type
         allowedIfcTypes.add(cat);
       });
-
       if (viewer.metaScene?.metaObjects) {
-        Object.values(viewer.metaScene.metaObjects).forEach((metaObj: any) => {
-          if (allowedIfcTypes.has(metaObj.type)) {
-            categorySelectedIds!.add(metaObj.id);
-          }
+        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+          if (allowedIfcTypes.has(mo.type)) categoryIds!.add(mo.id);
         });
       }
     }
 
-    // Step 2: Intersect all active filter sets
-    const filterSets = [sourceSelectedIds, levelSelectedIds, spaceSelectedIds, categorySelectedIds]
-      .filter((s): s is Set<string> => s !== null);
-
+    // Intersect active filters
+    const filterSets = [sourceIds, levelIds, spaceIds, categoryIds].filter((s): s is Set<string> => s !== null);
     let solidIds: Set<string>;
     if (filterSets.length === 1) {
       solidIds = filterSets[0];
     } else {
-      // Intersection: start with smallest set for efficiency
       const sorted = [...filterSets].sort((a, b) => a.size - b.size);
       solidIds = new Set<string>();
       for (const id of sorted[0]) {
@@ -334,22 +427,33 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Step 3: X-ray everything, then un-x-ray the selected set
+    // Step 3: X-ray everything, then un-x-ray solid set
+    // Configure xray material
+    const xrayMat = scene.xrayMaterial;
+    if (xrayMat) {
+      xrayMat.fill = true;
+      xrayMat.fillAlpha = 0.12;
+      xrayMat.fillColor = [0.55, 0.55, 0.6];
+      xrayMat.edges = true;
+      xrayMat.edgeAlpha = 0.3;
+      xrayMat.edgeColor = [0.4, 0.4, 0.45];
+    }
     scene.setObjectsXRayed(scene.objectIds, true);
+
     if (solidIds.size > 0) {
-      scene.setObjectsXRayed([...solidIds], false);
+      const arr = [...solidIds];
+      scene.setObjectsXRayed(arr, false);
     }
 
-    // Step 4: If spaces are checked, colorize them blue
-    if (checkedSpaces.size > 0 && spaceSelectedIds) {
-      scene.setObjectsColorized([...spaceSelectedIds], true);
-      spaceSelectedIds.forEach(id => {
+    // Step 4: If spaces checked, colorize them blue (override level color)
+    if (checkedSpaces.size > 0 && spaceIds) {
+      spaceIds.forEach(id => {
         const entity = scene.objects?.[id];
         if (entity) entity.colorize = HIGHLIGHT_COLOR;
       });
     }
 
-    // Step 5: Dispatch floor visibility event for label sync
+    // Step 5: Floor visibility event for labels
     const visibleFmGuids: string[] = [];
     if (checkedLevels.size > 0) {
       checkedLevels.forEach(g => visibleFmGuids.push(g));
@@ -357,69 +461,59 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => visibleFmGuids.push(l.fmGuid));
     }
 
-    const isSolo = visibleFmGuids.length === 1;
-    const soloFmGuid = isSolo ? visibleFmGuids[0] : null;
-    const soloMetaId = soloFmGuid ? (getXeokitIdsForFmGuid(viewer, soloFmGuid)[0] || null) : null;
-
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
-        floorId: soloMetaId,
-        floorName: null,
-        bounds: null,
-        visibleMetaFloorIds: [],
-        visibleFloorFmGuids: visibleFmGuids,
+        floorId: visibleFmGuids.length === 1 ? visibleFmGuids[0] : null,
+        floorName: null, bounds: null,
+        visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
       } as FloorSelectionEventDetail,
     }));
-  }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories, levels, categoryToIfcTypes]);
 
-  // Apply whenever filters change
+    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
+  }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
+    levels, categoryToIfcTypes, levelColors, autoColorEnabled]);
+
+  // Apply whenever filters or colors change
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
-  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, applyFilterVisibility, isVisible]);
+  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories,
+    levelColors, autoColorEnabled, applyFilterVisibility, isVisible]);
+
+  // Cleanup when panel closes: reset viewer state
+  useEffect(() => {
+    if (isVisible) return;
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
+    if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
+    if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+  }, [isVisible, getXeokitViewer]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
   const handleSourceToggle = useCallback((guid: string, checked: boolean) => {
-    setCheckedSources(prev => {
-      const next = new Set(prev);
-      if (checked) next.add(guid); else next.delete(guid);
-      return next;
-    });
+    setCheckedSources(prev => { const n = new Set(prev); checked ? n.add(guid) : n.delete(guid); return n; });
   }, []);
 
   const handleLevelToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedLevels(prev => {
-      const next = new Set(prev);
-      if (checked) next.add(fmGuid); else next.delete(fmGuid);
-      return next;
-    });
+    setCheckedLevels(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
   }, []);
 
   const handleSpaceToggle = useCallback((fmGuid: string, checked: boolean) => {
-    setCheckedSpaces(prev => {
-      const next = new Set(prev);
-      if (checked) next.add(fmGuid); else next.delete(fmGuid);
-      return next;
-    });
+    setCheckedSpaces(prev => { const n = new Set(prev); checked ? n.add(fmGuid) : n.delete(fmGuid); return n; });
   }, []);
 
   const handleCategoryToggle = useCallback((name: string, checked: boolean) => {
-    setCheckedCategories(prev => {
-      const next = new Set(prev);
-      if (checked) next.add(name); else next.delete(name);
-      return next;
-    });
+    setCheckedCategories(prev => { const n = new Set(prev); checked ? n.add(name) : n.delete(name); return n; });
   }, []);
 
   const handleSpaceClick = useCallback((fmGuid: string) => {
     onNodeSelect?.(fmGuid);
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
-    
-    // Fly to space
-    const ids = getXeokitIdsForFmGuid(viewer, fmGuid);
+    const ids = entityMapRef.current.get(fmGuid) || [];
     if (ids.length > 0) {
       viewer.scene.setObjectsSelected(viewer.scene.selectedObjectIds, false);
       ids.forEach((id: string) => {
@@ -449,7 +543,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setCheckedCategories(new Set());
   }, []);
 
-  // ── Filtered spaces by search ───────────────────────────────────────────
+  const handleLevelColorChange = useCallback((fmGuid: string, color: string) => {
+    setLevelColors(prev => {
+      const n = new Map(prev);
+      n.set(fmGuid, color);
+      return n;
+    });
+  }, []);
+
+  // ── Filtered items ──────────────────────────────────────────────────────
 
   const filteredSpaces = useMemo(() => {
     if (!spacesSearch) return spaces;
@@ -484,9 +586,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           <Filter className="h-4 w-4 text-primary" />
           <span className="font-semibold text-sm">Filter</span>
           {totalFilters > 0 && (
-            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4">
-              {totalFilters}
-            </Badge>
+            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4">{totalFilters}</Badge>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -503,7 +603,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
       <ScrollArea className="flex-1">
         <div className="py-1">
-          {/* ── Sources Section ──────────────────────────────────────────── */}
+          {/* Sources */}
           <FilterSection
             title="Sources"
             count={sources.length}
@@ -526,7 +626,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             )}
           </FilterSection>
 
-          {/* ── Levels Section ──────────────────────────────────────────── */}
+          {/* Levels */}
           <FilterSection
             title="Levels"
             count={levels.length}
@@ -537,6 +637,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             searchValue={levelsSearch}
             onSearchChange={setLevelsSearch}
             showSearch={levels.length > 6}
+            rightAction={
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-5 w-5", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
+                title={autoColorEnabled ? "Turn off auto-colors" : "Turn on auto-colors"}
+                onClick={(e) => { e.stopPropagation(); setAutoColorEnabled(!autoColorEnabled); }}
+              >
+                <Paintbrush className="h-3 w-3" />
+              </Button>
+            }
           >
             {filteredLevels.map(level => (
               <FilterRow
@@ -547,11 +658,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 onCheckedChange={(checked) => handleLevelToggle(level.fmGuid, checked)}
                 onClick={() => handleSpaceClick(level.fmGuid)}
                 dimmed={checkedSources.size > 0 && !checkedSources.has(level.sourceGuid)}
+                color={autoColorEnabled ? levelColors.get(level.fmGuid) : undefined}
+                onColorChange={(color) => handleLevelColorChange(level.fmGuid, color)}
               />
             ))}
           </FilterSection>
 
-          {/* ── Spaces Section ──────────────────────────────────────────── */}
+          {/* Spaces */}
           <FilterSection
             title="Spaces"
             count={spaces.length}
@@ -584,7 +697,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             )}
           </FilterSection>
 
-          {/* ── Categories Section ──────────────────────────────────────── */}
+          {/* Categories */}
           <FilterSection
             title="Categories"
             count={categories.length}
@@ -621,12 +734,13 @@ interface FilterSectionProps {
   showSearch?: boolean;
   searchValue?: string;
   onSearchChange?: (v: string) => void;
+  rightAction?: React.ReactNode;
   children: React.ReactNode;
 }
 
 const FilterSection: React.FC<FilterSectionProps> = ({
   title, count, selectedCount, isOpen, onToggle, onReset,
-  showSearch, searchValue, onSearchChange, children,
+  showSearch, searchValue, onSearchChange, rightAction, children,
 }) => (
   <div className="border-b last:border-b-0">
     <button
@@ -640,14 +754,17 @@ const FilterSection: React.FC<FilterSectionProps> = ({
           {selectedCount > 0 ? `${selectedCount}/${count}` : count}
         </Badge>
       </div>
-      {selectedCount > 0 && (
-        <button
-          className="text-[10px] text-primary hover:underline"
-          onClick={(e) => { e.stopPropagation(); onReset(); }}
-        >
-          Reset
-        </button>
-      )}
+      <div className="flex items-center gap-1">
+        {rightAction}
+        {selectedCount > 0 && (
+          <button
+            className="text-[10px] text-primary hover:underline"
+            onClick={(e) => { e.stopPropagation(); onReset(); }}
+          >
+            Reset
+          </button>
+        )}
+      </div>
     </button>
     {isOpen && (
       <div className="pb-1">
@@ -655,12 +772,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
           <div className="px-3 pb-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-              <Input
-                value={searchValue || ''}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search..."
-                className="h-6 pl-7 text-xs"
-              />
+              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="h-6 pl-7 text-xs" />
             </div>
           </div>
         )}
@@ -677,9 +789,13 @@ interface FilterRowProps {
   onCheckedChange: (checked: boolean) => void;
   onClick?: () => void;
   dimmed?: boolean;
+  color?: string;
+  onColorChange?: (color: string) => void;
 }
 
-const FilterRow: React.FC<FilterRowProps> = ({ label, badge, checked, onCheckedChange, onClick, dimmed }) => (
+const FilterRow: React.FC<FilterRowProps> = ({
+  label, badge, checked, onCheckedChange, onClick, dimmed, color, onColorChange,
+}) => (
   <div
     className={cn(
       "flex items-center gap-2 px-3 py-1 hover:bg-accent/30 transition-colors cursor-pointer group",
@@ -693,9 +809,41 @@ const FilterRow: React.FC<FilterRowProps> = ({ label, badge, checked, onCheckedC
       onClick={(e) => e.stopPropagation()}
       onCheckedChange={(v) => onCheckedChange(!!v)}
     />
-    <span className="text-xs truncate flex-1">{label}</span>
-    {badge && (
-      <span className="text-[10px] text-muted-foreground shrink-0">{badge}</span>
+    <span className={cn("text-xs truncate flex-1", checked && "text-primary font-medium")}>{label}</span>
+    {badge && <span className="text-[10px] text-muted-foreground shrink-0">{badge}</span>}
+    {color && onColorChange && (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            className="h-3 w-3 rounded-full shrink-0 border border-border/50 hover:scale-125 transition-transform"
+            style={{ backgroundColor: color }}
+            onClick={(e) => e.stopPropagation()}
+            title="Change color"
+          />
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-3" side="right" align="center" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium">{label}</span>
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => onColorChange(e.target.value)}
+              className="w-32 h-8 cursor-pointer border rounded"
+            />
+            {/* Quick palette */}
+            <div className="flex flex-wrap gap-1">
+              {LEVEL_PALETTE.slice(0, 10).map(c => (
+                <button
+                  key={c}
+                  className={cn("h-4 w-4 rounded-full border", c === color && "ring-2 ring-primary ring-offset-1")}
+                  style={{ backgroundColor: c }}
+                  onClick={() => onColorChange(c)}
+                />
+              ))}
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
     )}
   </div>
 );
