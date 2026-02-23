@@ -1,120 +1,51 @@
 
 
-## Level Labels, Click-to-Isolate, and Shadows in the 3D Viewer
+## Fix Level Labels: Isolation + Dynamic Positioning
 
-### Overview
+### Problem 1: Click-to-isolate does not work
 
-Three new features inspired by the Tandem viewer reference:
+The `useLevelLabels` hook only dispatches a `FLOOR_SELECTION_CHANGED_EVENT` when a label is clicked, but it does **not actually change object visibility** in the scene. The `FloatingFloorSwitcher` listens for this event but only updates its pill UI state -- it does NOT call `applyFloorVisibility` from the event handler. The `FloorVisibilitySelector` does apply visibility from its event handler, but only when it is mounted (right panel open).
 
-1. **Level labels** floating beside each floor in the 3D scene (like Tandem's "Plan 09", "Plan 10"...)
-2. **Click-to-isolate** on level/room labels with a close (X) button to restore
-3. **Shadows (SAO)** for visual depth, matching the high-quality rendering seen in the reference
+**Fix**: `useLevelLabels` must directly apply visibility changes to the xeokit scene, the same way `FloatingFloorSwitcher.applyFloorVisibility` does. Specifically, when a label is clicked:
 
----
+1. Hide all scene objects: `scene.setObjectsVisible(scene.objectIds, false)`
+2. Collect all child entity IDs of the clicked storey's metaObject (recursively)
+3. Show those IDs: `scene.setObjectsVisible(childIds, true)`
+4. Hide obstructing types (IfcCovering, IfcRoof) on the isolated floor
+5. Then dispatch `FLOOR_SELECTION_CHANGED_EVENT` so other components (floor pills, clipping, room labels) stay in sync
 
-### 1. Level Labels (new "storey labels" system)
+When the X close button is clicked (restore all):
+1. Show all objects: `scene.setObjectsVisible(scene.objectIds, true)`
+2. Then dispatch the restore event
 
-Currently, the `useRoomLabels` hook only creates labels for `IfcSpace` entities. We need a parallel system for `IfcBuildingStorey` labels that:
+### Problem 2: Labels too close to building / don't move with camera
 
-- Appear **to the left** of the building model, stacked vertically by floor elevation
-- Show the floor name (e.g., "Plan 10", "Plan 18")
-- Are always visible when the model is loaded (no toggle needed -- they serve as navigation aids)
-- Use the same `worldToCanvas` projection technique as room labels
-- Have a distinctive visual style: pill-shaped, slightly larger text, semi-transparent background
+Currently, labels use a **fixed world position** at `(buildingMinX - 3, centerY, centerZ)`. This means:
+- They sit at a fixed point in 3D space to the left of the building
+- When the camera rotates, they can end up overlapping or behind the building
+- The offset of 3 units is arbitrary and doesn't scale
 
-**Implementation**: A new hook `useLevelLabels` in `src/hooks/useLevelLabels.ts`:
+**Fix**: Replace the fixed world-position approach with a **hybrid screen-space approach**:
 
-- Scans `metaScene.metaObjects` for `IfcBuildingStorey` type
-- For each storey, computes the **center Y** from the AABB of all child entities, and positions the label at `(minX - offset, centerY, centerZ)` -- placing it to the left of the building geometry
-- Creates DOM elements in a container overlaid on the canvas (same pattern as `useRoomLabels`)
-- Resolves friendly names from the database floor names (same approach as `FloatingFloorSwitcher`)
-- Updates positions on camera changes using `requestAnimationFrame` throttling
+- Keep the world Y position (floor elevation) for vertical placement -- this ensures labels align with their floor
+- On each camera update, instead of projecting a fixed world point, compute the **screen-space left edge** of the building:
+  1. Project the building AABB corners to screen space
+  2. Find the minimum screen X across all projected corners (the leftmost pixel of the building)
+  3. Place all labels at `screenX = leftEdge - 20px` (constant pixel offset from building edge)
+  4. Each label's screen Y comes from projecting `[any X, floorCenterY, any Z]` through the camera
 
-**Visual style**:
-- Pill-shaped (`rounded-full`, `px-3 py-1`)
-- Semi-transparent dark background (`bg-card/80 backdrop-blur-sm`)
-- White text, `font-size: 12px`, `font-weight: 500`
-- Pointer events enabled (clickable)
-- When isolated: highlight color + X close button appended
-
----
-
-### 2. Click-to-Isolate with Close Button
-
-When clicking a level label or room label:
-
-**Level label click**:
-- Isolates that floor (same as clicking a floor pill in `FloatingFloorSwitcher`)
-- Dispatches `FLOOR_SELECTION_CHANGED_EVENT` with the storey data
-- The label gets a visual "active" state: highlighted border, and an **X close button** appears next to it
-- Clicking the X button restores all floors (dispatches `isAllFloorsVisible: true`)
-
-**Room label click** (enhancement to existing `useRoomLabels`):
-- When `clickAction` is set to a new mode `'isolate'` (or we add this alongside existing modes):
-  - Hides all objects except the clicked room's entities
-  - Shows an X button on the label
-  - Clicking X restores full visibility
-
-**Implementation details**:
-- In `useLevelLabels`: each label element gets an `onclick` handler that calls isolation logic and appends an X span element
-- The X click handler calls a restore function that shows all floors and removes the X element
-- In `useRoomLabels`: extend the `handleLabelClick` to support an `'isolate'` click action (optional, can be added in a follow-up)
-- Both hooks share the `FLOOR_SELECTION_CHANGED_EVENT` for coordination
-
----
-
-### 3. Shadows via SAO (Scalable Ambient Obscurance)
-
-Xeokit has built-in **SAO** (Scalable Ambient Obscurance) support -- a screen-space ambient occlusion technique that adds soft contact shadows similar to the Tandem screenshot. This is NOT traditional shadow mapping but achieves a very similar visual effect for architectural models.
-
-**Xeokit SAO API** (available on `scene.sao`):
-- `scene.sao.enabled = true` -- enables SAO
-- `scene.sao.intensity = 0.25` -- shadow darkness (0-1)
-- `scene.sao.bias = 0.5` -- depth bias to reduce artifacts
-- `scene.sao.scale = 1000` -- scale factor for the effect
-- `scene.sao.minResolution = 0` -- minimum resolution
-- `scene.sao.kernelRadius = 100` -- radius of the effect
-
-The `FastNavPlugin` already hides SAO during camera movement (`hideSAO: true`) for performance, which is the correct approach -- SAO is expensive but only needs to render when the camera stops.
-
-**Implementation**: Add SAO activation in `usePerformancePlugins.ts` after the viewer is ready:
-
-```
-xeokitViewer.scene.sao.enabled = true;
-xeokitViewer.scene.sao.intensity = 0.15;
-xeokitViewer.scene.sao.bias = 0.5;
-xeokitViewer.scene.sao.scale = 1000;
-xeokitViewer.scene.sao.kernelRadius = 100;
-```
-
-The `FastNavPlugin` already handles hiding SAO during navigation, so performance should be acceptable. On mobile, we can skip SAO entirely or use lower settings.
-
----
+This means labels always float to the left of the building regardless of camera rotation, with consistent pixel-based spacing.
 
 ### Technical Changes
 
-**New file: `src/hooks/useLevelLabels.ts`**
-- New hook following the same pattern as `useRoomLabels`
-- Scans metaScene for `IfcBuildingStorey`, computes world positions
-- Creates clickable DOM labels with isolation behavior
-- Dispatches `FLOOR_SELECTION_CHANGED_EVENT` on click
-- Appends/removes X close button on active label
-- Accepts `viewerRef` and `buildingFmGuid` props
-- Returns `{ setLabelsEnabled, refreshLabels }`
+**File: `src/hooks/useLevelLabels.ts`**
 
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-- Import and initialize `useLevelLabels` hook
-- Enable level labels after model load (in `handleAllModelsLoaded`)
-- Pass `buildingFmGuid` for name resolution
+| Section | Change |
+|---|---|
+| `isolateFloor` function (lines 152-189) | Add direct scene visibility logic: hide all objects, show only the storey's children, hide IfcCovering/IfcRoof. Keep the event dispatch for syncing other components. |
+| `restoreAllFloors` function (lines 137-149) | Add `scene.setObjectsVisible(scene.objectIds, true)` before dispatching the restore event. |
+| `createLabels` (lines 192-323) | Remove the fixed `labelX`/`labelZ` world position. Store only `worldY` (floor center elevation) per label instead of a full `worldPos`. |
+| `updateLabelPositions` (lines 121-134) | Replace with hybrid approach: (1) project all 8 AABB corners of the scene to screen, find min screen-X; (2) for each label, project a point at the label's worldY to get screen-Y; (3) position label at `(minScreenX - offset, screenY)`. |
+| `LevelLabel` interface (lines 14-22) | Change `worldPos: number[]` to `worldY: number` since we only need the elevation. |
 
-**File: `src/hooks/usePerformancePlugins.ts`**
-- After installing FastNavPlugin, enable SAO on the scene with tuned parameters
-- Skip SAO on mobile (`isMobile`) for performance
-
-**File: `src/hooks/useRoomLabels.ts`** (minor)
-- No changes needed for this phase; room label isolation can be added later as an enhancement
-
-### No database changes needed
-
-Level names are already stored in the `assets` table and resolved by the existing `FloatingFloorSwitcher` pattern.
-
+No other files need changes -- the event dispatch already syncs FloatingFloorSwitcher and FloorVisibilitySelector correctly.
