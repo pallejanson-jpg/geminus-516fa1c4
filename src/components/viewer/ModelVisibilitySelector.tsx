@@ -44,10 +44,11 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     // Use shared hook for model name resolution
     const { modelNamesMap, isLoading: isLoadingNames } = useModelNames(buildingFmGuid);
 
-    // Build storey fmGuid → parentCommonName lookup from Asset+ data
-    const storeySourceNames = useMemo(() => {
-      if (!allData || !buildingFmGuid) return new Map<string, string>();
-      const map = new Map<string, string>();
+    // Build storey lookups from Asset+ data for model name resolution
+    const { storeyByGuid, storeyByName } = useMemo(() => {
+      const byGuid = new Map<string, string>();
+      const byName = new Map<string, string>();
+      if (!allData || !buildingFmGuid) return { storeyByGuid: byGuid, storeyByName: byName };
       allData
         .filter((a: any) =>
           (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid &&
@@ -56,12 +57,15 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         .forEach((a: any) => {
           const attrs = a.attributes || {};
           const fmGuid = (a.fmGuid || a.fm_guid || '').toLowerCase();
+          const name = (a.commonName || a.common_name || a.name || '').toLowerCase().trim();
           const parentName = attrs.parentCommonName;
-          if (fmGuid && parentName && !/^[0-9a-f]{8}-/i.test(parentName)) {
-            map.set(fmGuid, parentName);
+          if (parentName && !/^[0-9a-f]{8}-/i.test(parentName)) {
+            if (fmGuid) byGuid.set(fmGuid, parentName);
+            if (fmGuid) byGuid.set(fmGuid.replace(/-/g, ''), parentName);
+            if (name) byName.set(name, parentName);
           }
         });
-      return map;
+      return { storeyByGuid: byGuid, storeyByName: byName };
     }, [allData, buildingFmGuid]);
     
     // Stable refs to preserve selection across re-renders
@@ -180,8 +184,8 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         }
         
         // Strategy 6: Match via xeokit metaScene — find IfcBuildingStorey in this model,
-        // then look up parentCommonName from Asset+ data
-        if (!matchedName && storeySourceNames.size > 0) {
+        // then look up parentCommonName from Asset+ data (by guid AND name)
+        if (!matchedName && (storeyByGuid.size > 0 || storeyByName.size > 0)) {
           const viewer = getXeokitViewer();
           const metaObjects = viewer?.metaScene?.metaObjects;
           if (metaObjects && model.objects) {
@@ -189,14 +193,12 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             for (let k = 0; k < Math.min(modelObjKeys.length, 500); k++) {
               const mo = metaObjects[modelObjKeys[k]];
               if (mo?.type === 'IfcBuildingStorey') {
-                const sysId = (mo.originalSystemId || '').toLowerCase().replace(/-/g, '');
-                // Try matching sysId to any storey fmGuid
-                for (const [fmGuid, name] of storeySourceNames) {
-                  if (fmGuid.replace(/-/g, '') === sysId) {
-                    matchedName = name;
-                    break;
-                  }
-                }
+                const sysId = (mo.originalSystemId || '').toLowerCase();
+                const moName = (mo.name || '').toLowerCase().trim();
+                // Try by guid
+                matchedName = storeyByGuid.get(sysId) || storeyByGuid.get(sysId.replace(/-/g, ''));
+                // Try by name
+                if (!matchedName) matchedName = storeyByName.get(moName);
                 if (matchedName) break;
               }
             }
@@ -241,7 +243,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
-    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeySourceNames]);
+    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyByGuid, storeyByName]);
 
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {

@@ -212,76 +212,126 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   const buildEntityMap = useCallback(() => {
     const viewer = getXeokitViewer();
-    if (!viewer?.metaScene?.metaObjects) return false;
+    if (!viewer?.metaScene?.metaObjects || !viewer?.scene) return false;
 
     const metaObjects = viewer.metaScene.metaObjects;
     const map = new Map<string, string[]>();
 
-    // Build a lookup: originalSystemId (lowercase, no hyphens) → metaObject
-    const sysIdIndex = new Map<string, any[]>();
+    // Step 1: Collect ALL IfcBuildingStorey and IfcSpace from xeokit metaScene
+    const xeokitStoreys: { id: string; sysId: string; name: string }[] = [];
+    const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
+
     Object.values(metaObjects).forEach((mo: any) => {
-      const sysId = (mo.originalSystemId || '').toLowerCase().replace(/-/g, '');
-      if (sysId) {
-        if (!sysIdIndex.has(sysId)) sysIdIndex.set(sysId, []);
-        sysIdIndex.get(sysId)!.push(mo);
+      const type = (mo.type || '').toLowerCase();
+      if (type === 'ifcbuildingstorey') {
+        xeokitStoreys.push({
+          id: mo.id,
+          sysId: (mo.originalSystemId || mo.id || ''),
+          name: (mo.name || ''),
+        });
+      } else if (type === 'ifcspace') {
+        xeokitSpaces.push({
+          id: mo.id,
+          sysId: (mo.originalSystemId || mo.id || ''),
+          name: (mo.name || ''),
+        });
       }
     });
 
-    // Also build name-based lookup for IfcBuildingStorey
-    const storeyByName = new Map<string, any[]>();
-    Object.values(metaObjects).forEach((mo: any) => {
-      if (mo.type === 'IfcBuildingStorey' && mo.name) {
-        const key = mo.name.toLowerCase().trim();
-        if (!storeyByName.has(key)) storeyByName.set(key, []);
-        storeyByName.get(key)!.push(mo);
-      }
-    });
+    if (xeokitStoreys.length === 0) {
+      console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
+      return false;
+    }
 
-    // Map levels
+    // Step 2: Match Asset+ levels → xeokit storeys (try sysId first, then name)
+    const usedStoreyIds = new Set<string>();
     levels.forEach(level => {
-      const fmNorm = level.fmGuid.toLowerCase().replace(/-/g, '');
+      const fmLower = level.fmGuid.toLowerCase();
+      const nameLower = level.name.toLowerCase().trim();
 
-      // Try originalSystemId match
-      let matches = sysIdIndex.get(fmNorm);
+      let matched = xeokitStoreys.find(xs =>
+        !usedStoreyIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
+      );
+      if (!matched) matched = xeokitStoreys.find(xs =>
+        !usedStoreyIds.has(xs.id) &&
+        xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
+      );
+      if (!matched) matched = xeokitStoreys.find(xs =>
+        !usedStoreyIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
+      );
+      // Fuzzy name: contains match
+      if (!matched) matched = xeokitStoreys.find(xs =>
+        !usedStoreyIds.has(xs.id) && (
+          xs.name.toLowerCase().includes(nameLower) ||
+          nameLower.includes(xs.name.toLowerCase().trim())
+        )
+      );
 
-      // Try name match for storeys
-      if (!matches || matches.length === 0) {
-        matches = storeyByName.get(level.name.toLowerCase().trim());
-      }
-
-      if (matches && matches.length > 0) {
-        const ids: string[] = [];
-        matches.forEach(mo => getDescendantIds(viewer, mo.id).forEach(id => ids.push(id)));
-        map.set(level.fmGuid, ids);
+      if (matched) {
+        usedStoreyIds.add(matched.id);
+        const descendants = getDescendantIds(viewer, matched.id);
+        map.set(level.fmGuid, descendants);
       }
     });
 
-    // Map spaces
-    const spaceByName = new Map<string, any[]>();
-    Object.values(metaObjects).forEach((mo: any) => {
-      if (mo.type === 'IfcSpace' && mo.name) {
-        const key = mo.name.toLowerCase().trim();
-        if (!spaceByName.has(key)) spaceByName.set(key, []);
-        spaceByName.get(key)!.push(mo);
-      }
-    });
-
+    // Step 3: Match Asset+ spaces → xeokit spaces
+    const usedSpaceIds = new Set<string>();
     spaces.forEach(space => {
-      const fmNorm = space.fmGuid.toLowerCase().replace(/-/g, '');
-      let matches = sysIdIndex.get(fmNorm);
-      if (!matches || matches.length === 0) {
-        matches = spaceByName.get(space.name.toLowerCase().trim());
+      const fmLower = space.fmGuid.toLowerCase();
+      const nameLower = space.name.toLowerCase().trim();
+
+      let matched = xeokitSpaces.find(xs =>
+        !usedSpaceIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
+      );
+      if (!matched) matched = xeokitSpaces.find(xs =>
+        !usedSpaceIds.has(xs.id) &&
+        xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
+      );
+      if (!matched) matched = xeokitSpaces.find(xs =>
+        !usedSpaceIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
+      );
+
+      if (matched) {
+        usedSpaceIds.add(matched.id);
+        const descendants = getDescendantIds(viewer, matched.id);
+        map.set(space.fmGuid, descendants);
       }
-      if (matches && matches.length > 0) {
-        const ids: string[] = [];
-        matches.forEach(mo => getDescendantIds(viewer, mo.id).forEach(id => ids.push(id)));
-        map.set(space.fmGuid, ids);
+    });
+
+    // Step 4: Also build a source → model objects map using scene.models
+    // For Sources filtering: map each xeokit model to a source guid
+    const sceneModels = viewer.scene.models || {};
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+      const modelObjKeys = Object.keys((model as any).objects || {});
+      // Find an IfcBuildingStorey in this model to determine which source it belongs to
+      for (const objId of modelObjKeys) {
+        const mo = metaObjects[objId];
+        if (mo?.type === 'IfcBuildingStorey') {
+          const sysId = (mo.originalSystemId || '').toLowerCase();
+          const moName = (mo.name || '').toLowerCase().trim();
+          // Find matching Asset+ level
+          const matchedLevel = levels.find(l =>
+            l.fmGuid.toLowerCase() === sysId ||
+            l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '') ||
+            l.name.toLowerCase().trim() === moName
+          );
+          if (matchedLevel) {
+            // Store model objects under a source key: "source::{guid}"
+            const sourceKey = `source::${matchedLevel.sourceGuid}`;
+            const existing = map.get(sourceKey) || [];
+            map.set(sourceKey, [...existing, ...modelObjKeys]);
+          }
+          break; // Only need first storey per model
+        }
       }
     });
 
     entityMapRef.current = map;
     entityMapBuilt.current = true;
-    console.debug('[FilterPanel] Entity map built:', map.size, 'entries. Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length);
+    console.log('[FilterPanel] Entity map built:', map.size, 'entries.',
+      'Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length,
+      'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
+      'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
     return true;
   }, [getXeokitViewer, levels, spaces]);
 
@@ -377,8 +427,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
+      // Method 1: via level descendants
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
+      });
+      // Method 2: via source::guid model objects map (direct from scene.models)
+      checkedSources.forEach(guid => {
+        eMap.get(`source::${guid}`)?.forEach(id => sourceIds!.add(id));
       });
     }
 
