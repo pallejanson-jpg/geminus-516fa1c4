@@ -38,6 +38,7 @@ import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
+import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels";
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -146,6 +147,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [showFloorPills, setShowFloorPills] = useState(() => {
     return localStorage.getItem('viewer-show-floor-pills') !== 'false';
   });
+  const [showLevelLabels, setShowLevelLabels] = useState(true);
   
   // Room label configs from database
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
@@ -1026,6 +1028,26 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                           : "Aktiveras när en våning är isolerad i 3D"}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Level Labels Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={cn(
+                        "p-1 sm:p-1.5 rounded-md",
+                        showLevelLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </div>
+                      <span className="text-xs sm:text-sm">Våningsetiketter</span>
+                    </div>
+                    <Switch
+                      checked={showLevelLabels}
+                      onCheckedChange={(checked) => {
+                        setShowLevelLabels(checked);
+                        window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: checked } }));
+                      }}
+                    />
                   </div>
 
                   {/* Room Labels Selector - Dropdown matching other selectors */}
