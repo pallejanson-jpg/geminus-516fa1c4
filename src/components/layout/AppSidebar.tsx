@@ -31,22 +31,22 @@ import {
 
 const mainNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Fastigheter", url: "/properties", icon: Building2 },
-  { title: "3D-visning", url: "/viewer", icon: Box },
+  { title: "Properties", url: "/properties", icon: Building2 },
+  { title: "3D Viewer", url: "/viewer", icon: Box },
   { title: "FM Access", url: "/fm-access", icon: Square },
-  { title: "Dokument", url: "/documents", icon: FileText },
-  { title: "Kartor", url: "/maps", icon: Map },
+  { title: "Documents", url: "/documents", icon: FileText },
+  { title: "Maps", url: "/maps", icon: Map },
 ];
 
 const managementItems = [
-  { title: "Rapporter", url: "/reports", icon: BarChart3 },
-  { title: "Projekt", url: "/projects", icon: FolderOpen },
-  { title: "Användare", url: "/users", icon: Users },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Projects", url: "/projects", icon: FolderOpen },
+  { title: "Users", url: "/users", icon: Users },
 ];
 
 const bottomItems = [
-  { title: "Inställningar", url: "/settings", icon: Settings },
-  { title: "Hjälp", url: "/help", icon: HelpCircle },
+  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Help", url: "/help", icon: HelpCircle },
 ];
 
 export function AppSidebar() {
@@ -70,7 +70,7 @@ export function AppSidebar() {
                 Asset Manager
               </span>
               <span className="text-xs text-sidebar-foreground/60">
-                Fastighetshantering
+                Property Management
               </span>
             </div>
           )}
@@ -81,7 +81,7 @@ export function AppSidebar() {
         {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/50">
-            Huvudmeny
+            Main menu
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -111,7 +111,7 @@ export function AppSidebar() {
         {/* Management */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/50">
-            Hantering
+            Management
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

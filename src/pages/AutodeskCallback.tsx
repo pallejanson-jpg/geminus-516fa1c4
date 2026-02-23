@@ -8,7 +8,7 @@ import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
  */
 const AutodeskCallback = () => {
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
-  const [message, setMessage] = useState("Bearbetar Autodesk-inloggning...");
+  const [message, setMessage] = useState("Processing Autodesk login...");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -18,8 +18,7 @@ const AutodeskCallback = () => {
 
     if (error) {
       setStatus("error");
-      setMessage(errorDescription || error || "Autodesk-inloggningen misslyckades.");
-      // Notify parent window
+      setMessage(errorDescription || error || "Autodesk login failed.");
       if (window.opener) {
         window.opener.postMessage({ type: "autodesk-oauth-error", error: errorDescription || error }, "*");
       }
@@ -28,7 +27,7 @@ const AutodeskCallback = () => {
 
     if (!code) {
       setStatus("error");
-      setMessage("Ingen auktoriseringskod mottogs.");
+      setMessage("No authorization code received.");
       return;
     }
 
@@ -36,12 +35,11 @@ const AutodeskCallback = () => {
     if (window.opener) {
       window.opener.postMessage({ type: "autodesk-oauth-callback", code }, "*");
       setStatus("success");
-      setMessage("Inloggning lyckades! Du kan stänga detta fönster.");
-      // Auto-close after a short delay
+      setMessage("Login successful! You can close this window.");
       setTimeout(() => window.close(), 1500);
     } else {
       setStatus("error");
-      setMessage("Kunde inte kommunicera med huvudfönstret. Stäng detta fönster och försök igen.");
+      setMessage("Could not communicate with the main window. Close this window and try again.");
     }
   }, []);
 
