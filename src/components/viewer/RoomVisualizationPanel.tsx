@@ -286,7 +286,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   useEffect(() => {
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-    if (!xeokitViewer?.metaScene?.metaObjects) return;
+    if (!xeokitViewer?.metaScene?.metaObjects) {
+      // Retry after a delay if viewer isn't ready yet
+      const retryTimer = setTimeout(() => {
+        setCacheKey(prev => prev + '-retry');
+      }, 500);
+      return () => clearTimeout(retryTimer);
+    }
 
     const metaObjects = xeokitViewer.metaScene.metaObjects;
     const cache = new Map<string, string[]>();
@@ -523,18 +529,17 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
 
   // Cleanup on unmount - reset ALL tracked colorized rooms
+  // Use a ref for colorizeSpace to avoid stale closure
+  const colorizeSpaceRef = useRef(colorizeSpace);
+  colorizeSpaceRef.current = colorizeSpace;
+  
   useEffect(() => {
     return () => {
       // Reset all rooms in the tracking ref
       colorizedRoomGuidsRef.current.forEach((fmGuid) => {
-        colorizeSpace(fmGuid, null);
+        colorizeSpaceRef.current(fmGuid, null);
       });
       colorizedRoomGuidsRef.current.clear();
-      
-      // Also reset current rooms state
-      rooms.forEach((room) => {
-        colorizeSpace(room.fmGuid, null);
-      });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

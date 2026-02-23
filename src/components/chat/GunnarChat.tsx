@@ -439,6 +439,20 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             ))}
           </div>
         )}
+        {/* Quick action: FM Advisor */}
+        {messages.length <= 2 && !isLoading && (
+          <div className="mb-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7 border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => sendMessage("Ge mig råd om den här byggnaden baserat på FM-standarder och best practice. Analysera underhållsstatus, energi, brandskydd och eventuella risker.")}
+            >
+              <Sparkles className="h-3 w-3" />
+              Ge mig råd
+            </Button>
+          </div>
+        )}
         <div className="flex gap-2">
           <Input
             ref={inputRef}
