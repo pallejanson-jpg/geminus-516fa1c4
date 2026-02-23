@@ -216,6 +216,15 @@ const UnifiedViewerContent: React.FC<{
     return () => clearInterval(interval);
   }, [buildingData]);
 
+  // ─── Re-dispatch 2D event once viewer is ready (fixes mobile init) ─
+  useEffect(() => {
+    if (viewerReady && viewMode === '2d') {
+      window.dispatchEvent(
+        new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
+      );
+    }
+  }, [viewerReady, viewMode]);
+
   // ─── Pointer-events toggle for VT overlay ──────────────────────────
   const [overlayInteractive, setOverlayInteractive] = useState(false);
 
