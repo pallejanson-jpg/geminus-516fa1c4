@@ -159,6 +159,14 @@
   }
 }
 
+/* Hide Asset+ DevExtreme context menu - we use our custom context menu */
+#AssetPlusViewer .dx-context-menu-container,
+.dx-overlay-wrapper .dx-context-menu {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Hide built-in Asset+ toolbars - we use our custom toolbar */
 #AssetPlusViewer.asset-plus-hide-builtin-toolbar .viewer-toolbar,
 #AssetPlusViewer.asset-plus-hide-builtin-toolbar .asset-viewer-toolbar,
