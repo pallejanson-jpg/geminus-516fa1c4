@@ -212,19 +212,46 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Apply X-ray + highlight logic ───────────────────────────────────────
 
+  // Build a map from Asset+ category to IFC types for category filtering
+  const categoryToIfcTypes = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    // Common mappings
+    const mappings: Record<string, string[]> = {
+      'Building': ['IfcBuilding'],
+      'Building Storey': ['IfcBuildingStorey'],
+      'Space': ['IfcSpace'],
+      'Instance': ['IfcFurnishingElement', 'IfcFlowTerminal', 'IfcFlowSegment', 'IfcFlowFitting', 'IfcFlowController', 'IfcFlowMovingDevice', 'IfcFlowStorageDevice', 'IfcFlowTreatmentDevice', 'IfcEnergyConversionDevice', 'IfcDistributionFlowElement'],
+      'Wall': ['IfcWall', 'IfcWallStandardCase'],
+      'Door': ['IfcDoor'],
+      'Window': ['IfcWindow'],
+      'Slab': ['IfcSlab'],
+      'Roof': ['IfcRoof'],
+      'Stair': ['IfcStairFlight', 'IfcStair'],
+      'Column': ['IfcColumn'],
+      'Beam': ['IfcBeam'],
+      'Covering': ['IfcCovering'],
+      'Railing': ['IfcRailing'],
+      'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
+    };
+    for (const [cat, types] of Object.entries(mappings)) {
+      map.set(cat, new Set(types));
+    }
+    return map;
+  }, []);
+
   const applyFilterVisibility = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
 
-    const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 || checkedSpaces.size > 0;
+    const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 || checkedSpaces.size > 0 || checkedCategories.size > 0;
+
+    // Step 0: Clean slate — everything visible, no x-ray, no colorization
+    scene.setObjectsVisible(scene.objectIds, true);
+    if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
+    if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
 
     if (!hasAnyFilter) {
-      // Reset: show all, remove xray
-      scene.setObjectsVisible(scene.objectIds, true);
-      scene.setObjectsXRayed(scene.xrayedObjectIds, false);
-      scene.setObjectsColorized(scene.colorizedObjectIds, false);
-
       // Dispatch all floors visible
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
@@ -236,61 +263,102 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       return;
     }
 
-    // Step 1: Determine which storeys are visible based on sources + levels filters
-    let visibleStoreyGuids: Set<string>;
-    if (checkedLevels.size > 0) {
-      visibleStoreyGuids = new Set(checkedLevels);
-    } else if (checkedSources.size > 0) {
-      // Show only levels belonging to checked sources
-      visibleStoreyGuids = new Set(
-        levels.filter(l => checkedSources.has(l.sourceGuid)).map(l => l.fmGuid)
-      );
-    } else {
-      visibleStoreyGuids = new Set(levels.map(l => l.fmGuid));
+    // Step 1: Collect the set of "selected" xeokit entity IDs per active filter
+    // Then intersect across active filters so only objects matching ALL filters remain solid.
+
+    // --- Sources filter: collect IDs belonging to checked source storeys ---
+    let sourceSelectedIds: Set<string> | null = null;
+    if (checkedSources.size > 0) {
+      sourceSelectedIds = new Set<string>();
+      const matchingLevels = levels.filter(l => checkedSources.has(l.sourceGuid));
+      matchingLevels.forEach(l => {
+        getAllXeokitIdsForStorey(viewer, l.fmGuid).forEach(id => sourceSelectedIds!.add(id));
+      });
     }
 
-    // Step 2: Hide all, then show visible storeys
-    scene.setObjectsVisible(scene.objectIds, false);
-    
-    const visibleFmGuids: string[] = [];
-    visibleStoreyGuids.forEach(storeyFmGuid => {
-      const ids = getAllXeokitIdsForStorey(viewer, storeyFmGuid);
-      ids.forEach(id => {
-        const entity = scene.objects?.[id];
-        if (entity) entity.visible = true;
+    // --- Levels filter: collect IDs belonging to checked levels ---
+    let levelSelectedIds: Set<string> | null = null;
+    if (checkedLevels.size > 0) {
+      levelSelectedIds = new Set<string>();
+      checkedLevels.forEach(fmGuid => {
+        getAllXeokitIdsForStorey(viewer, fmGuid).forEach(id => levelSelectedIds!.add(id));
       });
-      visibleFmGuids.push(storeyFmGuid);
-    });
+    }
 
-    // Step 3: If spaces are checked, X-ray everything visible and highlight checked spaces
+    // --- Spaces filter: collect IDs of checked spaces ---
+    let spaceSelectedIds: Set<string> | null = null;
     if (checkedSpaces.size > 0) {
-      // X-ray all visible objects
-      const visibleIds = scene.visibleObjectIds;
-      scene.setObjectsXRayed(visibleIds, true);
-
-      // Un-xray and colorize checked spaces
+      spaceSelectedIds = new Set<string>();
       checkedSpaces.forEach(spaceFmGuid => {
         const ids = getXeokitIdsForFmGuid(viewer, spaceFmGuid);
         ids.forEach(id => {
-          const allIds = getDescendantIds(viewer, id);
-          allIds.forEach(descId => {
-            const entity = scene.objects?.[descId];
-            if (entity) {
-              entity.xrayed = false;
-              entity.colorize = HIGHLIGHT_COLOR;
-            }
-          });
+          getDescendantIds(viewer, id).forEach(descId => spaceSelectedIds!.add(descId));
         });
       });
-    } else {
-      // No space filter: remove xray
-      scene.setObjectsXRayed(scene.xrayedObjectIds, false);
-      scene.setObjectsColorized(scene.colorizedObjectIds, false);
     }
 
-    // Step 4: Dispatch floor visibility event
-    const isSolo = visibleStoreyGuids.size === 1;
-    const soloFmGuid = isSolo ? [...visibleStoreyGuids][0] : null;
+    // --- Categories filter: collect IDs matching checked IFC types ---
+    let categorySelectedIds: Set<string> | null = null;
+    if (checkedCategories.size > 0) {
+      categorySelectedIds = new Set<string>();
+      const allowedIfcTypes = new Set<string>();
+      checkedCategories.forEach(cat => {
+        const ifcTypes = categoryToIfcTypes.get(cat);
+        if (ifcTypes) ifcTypes.forEach(t => allowedIfcTypes.add(t));
+        // Also allow exact category name as IFC type
+        allowedIfcTypes.add(cat);
+      });
+
+      if (viewer.metaScene?.metaObjects) {
+        Object.values(viewer.metaScene.metaObjects).forEach((metaObj: any) => {
+          if (allowedIfcTypes.has(metaObj.type)) {
+            categorySelectedIds!.add(metaObj.id);
+          }
+        });
+      }
+    }
+
+    // Step 2: Intersect all active filter sets
+    const filterSets = [sourceSelectedIds, levelSelectedIds, spaceSelectedIds, categorySelectedIds]
+      .filter((s): s is Set<string> => s !== null);
+
+    let solidIds: Set<string>;
+    if (filterSets.length === 1) {
+      solidIds = filterSets[0];
+    } else {
+      // Intersection: start with smallest set for efficiency
+      const sorted = [...filterSets].sort((a, b) => a.size - b.size);
+      solidIds = new Set<string>();
+      for (const id of sorted[0]) {
+        if (sorted.every(s => s.has(id))) solidIds.add(id);
+      }
+    }
+
+    // Step 3: X-ray everything, then un-x-ray the selected set
+    scene.setObjectsXRayed(scene.objectIds, true);
+    if (solidIds.size > 0) {
+      scene.setObjectsXRayed([...solidIds], false);
+    }
+
+    // Step 4: If spaces are checked, colorize them blue
+    if (checkedSpaces.size > 0 && spaceSelectedIds) {
+      scene.setObjectsColorized([...spaceSelectedIds], true);
+      spaceSelectedIds.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) entity.colorize = HIGHLIGHT_COLOR;
+      });
+    }
+
+    // Step 5: Dispatch floor visibility event for label sync
+    const visibleFmGuids: string[] = [];
+    if (checkedLevels.size > 0) {
+      checkedLevels.forEach(g => visibleFmGuids.push(g));
+    } else if (checkedSources.size > 0) {
+      levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => visibleFmGuids.push(l.fmGuid));
+    }
+
+    const isSolo = visibleFmGuids.length === 1;
+    const soloFmGuid = isSolo ? visibleFmGuids[0] : null;
     const soloMetaId = soloFmGuid ? (getXeokitIdsForFmGuid(viewer, soloFmGuid)[0] || null) : null;
 
     window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
@@ -300,16 +368,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         bounds: null,
         visibleMetaFloorIds: [],
         visibleFloorFmGuids: visibleFmGuids,
-        isAllFloorsVisible: false,
+        isAllFloorsVisible: !hasAnyFilter,
       } as FloorSelectionEventDetail,
     }));
-  }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, levels]);
+  }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories, levels, categoryToIfcTypes]);
 
   // Apply whenever filters change
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
-  }, [checkedSources, checkedLevels, checkedSpaces, applyFilterVisibility, isVisible]);
+  }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories, applyFilterVisibility, isVisible]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
