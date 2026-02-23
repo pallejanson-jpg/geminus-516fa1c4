@@ -11,6 +11,7 @@ const xktMemoryCache = new Map<string, ArrayBuffer>();
 // Track total memory usage (approximate)
 let totalMemoryBytes = 0;
 const MAX_MEMORY_BYTES = 200 * 1024 * 1024; // 200 MB limit
+const MAX_SINGLE_MODEL_BYTES = 30 * 1024 * 1024; // Skip memory caching for models > 30MB
 
 /**
  * Check if a model is already loaded in memory
@@ -36,6 +37,12 @@ export function storeModelInMemory(modelId: string, buildingFmGuid: string, data
   
   // Skip if already cached
   if (xktMemoryCache.has(key)) {
+    return;
+  }
+
+  // Skip very large models to avoid cache thrashing
+  if (data.byteLength > MAX_SINGLE_MODEL_BYTES) {
+    console.log(`XKT Memory: Skipping ${modelId} — too large (${(data.byteLength / 1024 / 1024).toFixed(1)} MB > ${MAX_SINGLE_MODEL_BYTES / 1024 / 1024} MB limit)`);
     return;
   }
   
