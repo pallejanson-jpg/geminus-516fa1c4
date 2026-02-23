@@ -2,8 +2,8 @@
  * useLevelLabels — Floating level (storey) labels beside the 3D model.
  *
  * - Scans metaScene for IfcBuildingStorey objects
- * - Positions pill-shaped labels to the LEFT of the building geometry
- * - Click-to-isolate: clicking a label dispatches FLOOR_SELECTION_CHANGED_EVENT
+ * - Positions labels using hybrid screen-space approach (always left of building)
+ * - Click-to-isolate: clicking a label directly applies scene visibility + dispatches event
  * - Active label shows an X close button to restore all floors
  * - Resolves friendly names from the database (same pattern as FloatingFloorSwitcher)
  */
@@ -15,11 +15,15 @@ interface LevelLabel {
   storeyId: string;          // metaObject id
   fmGuid: string;            // originalSystemId
   name: string;              // display name
-  worldPos: number[];        // label world position (left of building)
+  worldY: number;            // floor center elevation (world Y)
   element: HTMLDivElement;
   metaObjectIds: string[];   // all child meta-object ids for this storey
+  childEntityIds: string[];  // all child entity ids (for visibility)
   databaseFmGuids: string[]; // matching database fm_guids
 }
+
+/** IFC types to hide when isolating a floor */
+const OBSTRUCTING_TYPES = new Set(['ifccovering', 'ifcroof']);
 
 export const LEVEL_LABELS_TOGGLE_EVENT = 'LEVEL_LABELS_TOGGLE';
 
@@ -33,6 +37,8 @@ export function useLevelLabels(
   const cameraListenerRef = useRef<(() => void) | null>(null);
   const activeStoreyIdRef = useRef<string | null>(null);
   const floorNamesRef = useRef<Map<string, string>>(new Map());
+  /** Cached scene AABB for screen-space projection */
+  const sceneAABBRef = useRef<number[] | null>(null);
 
   const getXeokitViewer = useCallback(() => {
     try {
@@ -62,8 +68,11 @@ export function useLevelLabels(
     return container;
   }, [getCanvas]);
 
-  // Project 3D → 2D (same as useRoomLabels)
-  const worldToCanvas = useCallback((worldPos: number[], viewer: any): [number, number] | null => {
+  /**
+   * Project a 3D point → 2D canvas pixel coords.
+   * Returns null if behind camera or far outside viewport.
+   */
+  const worldToScreen = useCallback((worldPos: number[], viewer: any): [number, number] | null => {
     if (!viewer?.scene?.canvas?.canvas) return null;
     const camera = viewer.camera;
     const canvas = viewer.scene.canvas.canvas;
@@ -86,7 +95,7 @@ export function useLevelLabels(
     if (pp[3] <= 0) return null;
     const ndcX = pp[0] / pp[3];
     const ndcY = pp[1] / pp[3];
-    if (ndcX < -1.5 || ndcX > 1.5 || ndcY < -1.5 || ndcY > 1.5) return null;
+    if (ndcX < -2 || ndcX > 2 || ndcY < -2 || ndcY > 2) return null;
     return [
       ((ndcX + 1) / 2) * canvas.clientWidth,
       ((1 - ndcY) / 2) * canvas.clientHeight,
@@ -117,39 +126,115 @@ export function useLevelLabels(
     })();
   }, [buildingFmGuid]);
 
-  // Update label positions
+  /**
+   * Compute the screen-space left edge of the building by projecting
+   * all 8 AABB corners and finding the minimum screen X.
+   */
+  const getBuildingLeftScreenX = useCallback((viewer: any): number | null => {
+    const aabb = sceneAABBRef.current;
+    if (!aabb) return null;
+
+    const [xMin, yMin, zMin, xMax, yMax, zMax] = aabb;
+    const corners = [
+      [xMin, yMin, zMin], [xMax, yMin, zMin],
+      [xMin, yMax, zMin], [xMax, yMax, zMin],
+      [xMin, yMin, zMax], [xMax, yMin, zMax],
+      [xMin, yMax, zMax], [xMax, yMax, zMax],
+    ];
+
+    let minScreenX = Infinity;
+    let anyProjected = false;
+    for (const c of corners) {
+      const sp = worldToScreen(c, viewer);
+      if (sp) {
+        minScreenX = Math.min(minScreenX, sp[0]);
+        anyProjected = true;
+      }
+    }
+    return anyProjected ? minScreenX : null;
+  }, [worldToScreen]);
+
+  /**
+   * Update label positions using hybrid screen-space approach:
+   * - X position: constant pixel offset left of building's screen-space left edge
+   * - Y position: project the label's worldY to get screen Y
+   */
   const updateLabelPositions = useCallback(() => {
     const viewer = getXeokitViewer();
     if (!viewer || !enabledRef.current) return;
 
+    const leftEdge = getBuildingLeftScreenX(viewer);
+    if (leftEdge === null) {
+      // Can't project — hide all
+      labelsRef.current.forEach(l => { l.element.style.display = 'none'; });
+      return;
+    }
+
+    const labelScreenX = leftEdge - 20; // 20px offset from building edge
+
+    // Use the center of the scene AABB for X and Z when projecting worldY
+    const aabb = sceneAABBRef.current!;
+    const centerX = (aabb[0] + aabb[3]) / 2;
+    const centerZ = (aabb[2] + aabb[5]) / 2;
+
     labelsRef.current.forEach(label => {
-      const pos = worldToCanvas(label.worldPos, viewer);
-      if (pos) {
-        label.element.style.transform = `translate3d(${pos[0]}px, ${pos[1]}px, 0) translate(-100%, -50%)`;
+      const sp = worldToScreen([centerX, label.worldY, centerZ], viewer);
+      if (sp) {
+        // Position: fixed pixel offset left of building, Y from world projection
+        label.element.style.transform = `translate3d(${labelScreenX}px, ${sp[1]}px, 0) translate(-100%, -50%)`;
         if (label.element.style.display === 'none') label.element.style.display = 'flex';
       } else {
         if (label.element.style.display !== 'none') label.element.style.display = 'none';
       }
     });
-  }, [getXeokitViewer, worldToCanvas]);
+  }, [getXeokitViewer, worldToScreen, getBuildingLeftScreenX]);
+
+  /**
+   * Recursively collect all child entity IDs of a metaObject.
+   */
+  const collectChildEntityIds = useCallback((metaObj: any, scene: any): string[] => {
+    const ids: string[] = [];
+    const walk = (parent: any) => {
+      if (parent.children) {
+        parent.children.forEach((child: any) => {
+          ids.push(child.id);
+          walk(child);
+        });
+      }
+    };
+    walk(metaObj);
+    return ids;
+  }, []);
 
   // Restore all floors (clear isolation)
   const restoreAllFloors = useCallback(() => {
     activeStoreyIdRef.current = null;
+
+    // Restore scene visibility
+    const viewer = getXeokitViewer();
+    if (viewer?.scene) {
+      viewer.scene.setObjectsVisible(viewer.scene.objectIds, true);
+    }
+
     // Remove active states from all labels
     labelsRef.current.forEach(label => {
       label.element.classList.remove('level-label--active');
       const closeBtn = label.element.querySelector('.level-label-close');
       if (closeBtn) closeBtn.remove();
     });
+
     // Dispatch restore event
     window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: { floorId: null, isAllFloorsVisible: true },
     }));
-  }, []);
+  }, [getXeokitViewer]);
 
   // Isolate a single floor
   const isolateFloor = useCallback((label: LevelLabel) => {
+    const viewer = getXeokitViewer();
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
+
     // Clear any previous active label
     labelsRef.current.forEach(l => {
       l.element.classList.remove('level-label--active');
@@ -159,6 +244,35 @@ export function useLevelLabels(
 
     activeStoreyIdRef.current = label.storeyId;
     label.element.classList.add('level-label--active');
+
+    // --- Direct scene visibility ---
+    // 1. Hide all objects
+    scene.setObjectsVisible(scene.objectIds, false);
+
+    // 2. Show only this storey's children
+    const visibleIds = label.childEntityIds.filter(id => scene.objects?.[id]);
+    if (visibleIds.length === 0) {
+      // Safety: no geometry found, restore
+      scene.setObjectsVisible(scene.objectIds, true);
+      console.warn('[level-labels] No geometry found for floor, aborting isolation');
+      return;
+    }
+    scene.setObjectsVisible(visibleIds, true);
+
+    // 3. Hide obstructing types (IfcCovering, IfcRoof)
+    const metaObjects = viewer.metaScene?.metaObjects;
+    if (metaObjects) {
+      const obstructingIds: string[] = [];
+      visibleIds.forEach(id => {
+        const mo = metaObjects[id];
+        if (mo && OBSTRUCTING_TYPES.has(mo.type?.toLowerCase())) {
+          obstructingIds.push(id);
+        }
+      });
+      if (obstructingIds.length > 0) {
+        scene.setObjectsVisible(obstructingIds, false);
+      }
+    }
 
     // Add close button
     const closeBtn = document.createElement('span');
@@ -174,7 +288,7 @@ export function useLevelLabels(
     });
     label.element.appendChild(closeBtn);
 
-    // Dispatch floor isolation event
+    // Dispatch floor isolation event (sync other components)
     window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
       detail: {
         floorId: label.storeyId,
@@ -186,7 +300,7 @@ export function useLevelLabels(
         soloFloorName: label.name,
       },
     }));
-  }, [restoreAllFloors]);
+  }, [getXeokitViewer, restoreAllFloors]);
 
   // Create labels
   const createLabels = useCallback(() => {
@@ -203,13 +317,8 @@ export function useLevelLabels(
     const metaObjects = viewer.metaScene.metaObjects;
     const scene = viewer.scene;
 
-    // Compute building AABB for positioning labels to the left
-    const sceneAABB = scene.aabb;
-    const buildingMinX = sceneAABB ? sceneAABB[0] : 0;
-    const buildingMinZ = sceneAABB ? sceneAABB[2] : 0;
-    const buildingMaxZ = sceneAABB ? sceneAABB[5] : 0;
-    const labelX = buildingMinX - 3; // 3 units to the left of building
-    const labelZ = (buildingMinZ + buildingMaxZ) / 2;
+    // Cache scene AABB
+    sceneAABBRef.current = scene.aabb ? [...scene.aabb] : null;
 
     // Collect storeys
     const storeys: { metaObj: any; minY: number; maxY: number; childIds: string[] }[] = [];
@@ -217,7 +326,6 @@ export function useLevelLabels(
     Object.values(metaObjects).forEach((metaObj: any) => {
       if (metaObj.type?.toLowerCase() !== 'ifcbuildingstorey') return;
 
-      // Collect all child entity AABBs to compute storey vertical range
       let minY = Infinity, maxY = -Infinity;
       const childIds: string[] = [];
 
@@ -253,8 +361,7 @@ export function useLevelLabels(
       const dbName = floorNamesRef.current.get(fmGuidLower);
       const displayName = dbName || metaObj.name || fmGuid.substring(0, 8);
 
-      // Database fm guids for floor isolation event
-      const databaseFmGuids = floorNamesRef.current.has(fmGuidLower) ? [fmGuid] : [fmGuid];
+      const databaseFmGuids = [fmGuid];
 
       // Create DOM element
       const el = document.createElement('div');
@@ -284,9 +391,10 @@ export function useLevelLabels(
         storeyId: metaObj.id,
         fmGuid,
         name: displayName,
-        worldPos: [labelX, centerY, labelZ],
+        worldY: centerY,
         element: el,
         metaObjectIds: [metaObj.id, ...childIds],
+        childEntityIds: childIds,
         databaseFmGuids,
       };
 
