@@ -197,37 +197,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // Categories: scan xeokit metaScene for actual IFC types present in the model
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
-  useEffect(() => {
-    if (!isVisible) return;
-    const tryBuild = () => {
-      const viewer = getXeokitViewer();
-      const metaObjects = viewer?.metaScene?.metaObjects;
-      if (metaObjects && Object.keys(metaObjects).length > 0) {
-        const map = new Map<string, number>();
-        Object.values(metaObjects).forEach((mo: any) => {
-          const type = mo.type;
-          if (type && type !== 'Default' && type !== 'IfcProject' && type !== 'IfcSite') {
-            map.set(type, (map.get(type) || 0) + 1);
-          }
-        });
-        setCategories(
-          Array.from(map.entries())
-            .map(([name, count]) => ({ name, count }))
-            .sort((a, b) => b.count - a.count)
-        );
-        return true;
-      }
-      return false;
-    };
-    if (tryBuild()) return;
-    let attempts = 0;
-    const interval = setInterval(() => {
-      if (tryBuild() || attempts++ > 15) clearInterval(interval);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isVisible, getXeokitViewer]);
+  // Categories: derived from Asset+ data (not IFC metaScene)
+  const categories: CategoryItem[] = useMemo(() => {
+    const map = new Map<string, number>();
+    buildingData.forEach((a: any) => {
+      const cat = a.category;
+      if (cat) map.set(cat, (map.get(cat) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [buildingData]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
@@ -295,9 +275,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     });
 
-    // Step 3: Match Asset+ spaces → xeokit spaces
+    // Step 3: Match Asset+ spaces → xeokit spaces (use cached ref)
     const usedSpaceIds = new Set<string>();
-    spaces.forEach(space => {
+    spacesRef.current.forEach(space => {
       const fmLower = space.fmGuid.toLowerCase();
       const nameLower = space.name.toLowerCase().trim();
 
@@ -354,23 +334,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
       'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
     return true;
-  }, [getXeokitViewer, levels, spaces]);
+  }, [getXeokitViewer, levels]);
 
-  // Build map when viewer is ready
+  // Cached spaces ref for entity map (avoids rebuild on checkbox toggle)
+  const spacesRef = useRef(spaces);
+  useEffect(() => { spacesRef.current = spaces; }, [spaces]);
+
+  // Build map when viewer is ready (only depends on levels, not spaces via checkbox)
   useEffect(() => {
     if (!isVisible) return;
     entityMapBuilt.current = false;
-    const tryBuild = () => {
-      if (buildEntityMap()) return;
-      // Retry a few times
-      let attempts = 0;
-      const interval = setInterval(() => {
-        if (buildEntityMap() || attempts++ > 15) clearInterval(interval);
-      }, 500);
-      return () => clearInterval(interval);
-    };
-    const cleanup = tryBuild();
-    return cleanup;
+    if (buildEntityMap()) return;
+    let attempts = 0;
+    const interval = setInterval(() => {
+      if (buildEntityMap() || attempts++ > 10) clearInterval(interval);
+    }, 500);
+    return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
   // ── IFC type mapping for categories ─────────────────────────────────────
@@ -402,7 +381,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // ── Apply filter + coloring ─────────────────────────────────────────────
 
+  const rafRef = useRef<number>(0);
   const applyFilterVisibility = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
     const scene = viewer.scene;
@@ -547,6 +529,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }));
 
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
+    }); // end requestAnimationFrame
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
     levels, categoryToIfcTypes, levelColors, autoColorEnabled]);
 
