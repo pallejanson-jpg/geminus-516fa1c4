@@ -1,51 +1,71 @@
 
 
-## Fix Level Labels: Isolation + Dynamic Positioning
+## Level Labels: Visual Refinements, Floor-Aware Visibility, and Toggle
 
-### Problem 1: Click-to-isolate does not work
+### Changes Overview
 
-The `useLevelLabels` hook only dispatches a `FLOOR_SELECTION_CHANGED_EVENT` when a label is clicked, but it does **not actually change object visibility** in the scene. The `FloatingFloorSwitcher` listens for this event but only updates its pill UI state -- it does NOT call `applyFloorVisibility` from the event handler. The `FloorVisibilitySelector` does apply visibility from its event handler, but only when it is mounted (right panel open).
+Three improvements to the level labels system:
 
-**Fix**: `useLevelLabels` must directly apply visibility changes to the xeokit scene, the same way `FloatingFloorSwitcher.applyFloorVisibility` does. Specifically, when a label is clicked:
+1. **Smaller, more delicate styling** -- grey background with dark text, zoom-aware scaling
+2. **Floor-aware visibility** -- only show labels for currently visible/selected floors
+3. **Toggle switch** in VisualizationToolbar alongside room labels
 
-1. Hide all scene objects: `scene.setObjectsVisible(scene.objectIds, false)`
-2. Collect all child entity IDs of the clicked storey's metaObject (recursively)
-3. Show those IDs: `scene.setObjectsVisible(childIds, true)`
-4. Hide obstructing types (IfcCovering, IfcRoof) on the isolated floor
-5. Then dispatch `FLOOR_SELECTION_CHANGED_EVENT` so other components (floor pills, clipping, room labels) stay in sync
+---
 
-When the X close button is clicked (restore all):
-1. Show all objects: `scene.setObjectsVisible(scene.objectIds, true)`
-2. Then dispatch the restore event
+### 1. Visual Refinements (useLevelLabels.ts)
 
-### Problem 2: Labels too close to building / don't move with camera
+Current style: dark card background (`hsl(var(--card) / 0.85)`) with card-foreground text, `font-size: 11px`, `padding: 3px 10px`.
 
-Currently, labels use a **fixed world position** at `(buildingMinX - 3, centerY, centerZ)`. This means:
-- They sit at a fixed point in 3D space to the left of the building
-- When the camera rotates, they can end up overlapping or behind the building
-- The offset of 3 units is arbitrary and doesn't scale
+New style:
+- Background: light grey semi-transparent (`rgba(180, 180, 180, 0.45)`, `backdrop-filter: blur(4px)`)
+- Text: dark/black (`color: rgba(0, 0, 0, 0.75)`)
+- Smaller padding: `2px 8px`
+- Font size: `10px`
+- Border: subtle (`rgba(0, 0, 0, 0.08)`)
+- Lighter shadow
 
-**Fix**: Replace the fixed world-position approach with a **hybrid screen-space approach**:
+**Zoom-aware scaling**: In `updateLabelPositions`, calculate a scale factor based on the ratio of the building's screen-space height to the canvas height. When zoomed out (building small on screen), labels shrink proportionally. Clamp between 0.5 and 1.0 to keep them readable. Apply via `scale()` in the transform.
 
-- Keep the world Y position (floor elevation) for vertical placement -- this ensures labels align with their floor
-- On each camera update, instead of projecting a fixed world point, compute the **screen-space left edge** of the building:
-  1. Project the building AABB corners to screen space
-  2. Find the minimum screen X across all projected corners (the leftmost pixel of the building)
-  3. Place all labels at `screenX = leftEdge - 20px` (constant pixel offset from building edge)
-  4. Each label's screen Y comes from projecting `[any X, floorCenterY, any Z]` through the camera
+### 2. Floor-Aware Label Visibility (useLevelLabels.ts)
 
-This means labels always float to the left of the building regardless of camera rotation, with consistent pixel-based spacing.
+When floors are filtered/isolated (via filter panel, floor pills, or label click), only the labels for visible floors should appear. Labels for hidden floors should be hidden.
+
+Implementation:
+- In the `FLOOR_SELECTION_CHANGED_EVENT` listener: when `isAllFloorsVisible === false`, hide all labels except the one matching the active floor. When `isAllFloorsVisible === true`, show all labels.
+- In `isolateFloor`: after setting active state, hide all non-active labels (`display: none`).
+- In `restoreAllFloors`: show all labels again.
+
+### 3. Toggle Switch in VisualizationToolbar (VisualizationToolbar.tsx)
+
+Add a simple Switch toggle for "Vaningsetiketter" (Level Labels) placed directly before the existing "Rumsetiketter" section (~line 1031).
+
+- New state: `showLevelLabels`, defaulting to `true`
+- On toggle: dispatch `LEVEL_LABELS_TOGGLE_EVENT` with `{ enabled }`
+- Import `LEVEL_LABELS_TOGGLE_EVENT` from `useLevelLabels`
+- Visual style: same pattern as other toggles (icon + label + Switch)
+- Use `Layers` or `Building` icon (Layers is already imported)
+
+---
 
 ### Technical Changes
 
 **File: `src/hooks/useLevelLabels.ts`**
 
-| Section | Change |
+| Area | Change |
 |---|---|
-| `isolateFloor` function (lines 152-189) | Add direct scene visibility logic: hide all objects, show only the storey's children, hide IfcCovering/IfcRoof. Keep the event dispatch for syncing other components. |
-| `restoreAllFloors` function (lines 137-149) | Add `scene.setObjectsVisible(scene.objectIds, true)` before dispatching the restore event. |
-| `createLabels` (lines 192-323) | Remove the fixed `labelX`/`labelZ` world position. Store only `worldY` (floor center elevation) per label instead of a full `worldPos`. |
-| `updateLabelPositions` (lines 121-134) | Replace with hybrid approach: (1) project all 8 AABB corners of the scene to screen, find min screen-X; (2) for each label, project a point at the label's worldY to get screen-Y; (3) position label at `(minScreenX - offset, screenY)`. |
-| `LevelLabel` interface (lines 14-22) | Change `worldPos: number[]` to `worldY: number` since we only need the elevation. |
+| Label styling (lines 370-388) | Update `background`, `color`, `padding`, `font-size`, `border`, `box-shadow` to lighter/smaller values |
+| Hover style (lines 412-423) | Adjust hover colors to match new lighter scheme |
+| `updateLabelPositions` (lines 162-190) | Add scale factor calculation: compute building screen height from AABB projection, derive scale (clamped 0.5-1.0), apply `scale(factor)` in transform |
+| `isolateFloor` (lines 233-303) | After setting active label, hide all other labels with `display: none` |
+| `restoreAllFloors` (lines 210-230) | Restore `display` to empty string for all labels |
+| `FLOOR_SELECTION_CHANGED_EVENT` listener (lines 494-507) | When `isAllFloorsVisible === false`, hide non-matching labels. When true, show all. |
 
-No other files need changes -- the event dispatch already syncs FloatingFloorSwitcher and FloorVisibilitySelector correctly.
+**File: `src/components/viewer/VisualizationToolbar.tsx`**
+
+| Area | Change |
+|---|---|
+| Imports (~line 1) | Add `LEVEL_LABELS_TOGGLE_EVENT` from `@/hooks/useLevelLabels` |
+| State (~line 80) | Add `showLevelLabels` state, default `true` |
+| Handler | Add `handleLevelLabelsToggle` that dispatches `LEVEL_LABELS_TOGGLE_EVENT` |
+| UI (~line 1031, before "Rumsetiketter") | Add Switch toggle with Layers icon and label "Vaningsetiketter" |
+
