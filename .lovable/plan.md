@@ -1,60 +1,92 @@
 
 
-## Tillagg: Responsiv mobilverktygsfalt i 3D
+## Two Changes: Gunnar Performance + English Language Consistency
 
-### Problem
+### 1. Gunnar — Speed Optimization and "Ge mig rad" Button
 
-Verktygsfaltets knappar (`h-9 w-9` = 36px) plus 4 separatorer gor att det blir bredare an mobilskarmen. Oselekterade knappar syns daligt — de ar `ghost`-varianten utan tydlig farg pa mork bakgrund.
+**Problem A: Gunnar is too slow**
 
-### Losning
+The primary model is `google/gemini-2.5-pro` which is the most expensive and slowest model. Combined with up to 7 tool-calling rounds (each a separate API call), a single query can take 30-60 seconds. The proactive insights fetch on mount adds further delay.
 
-**A. Mindre knappar pa mobil**
+**Fix:**
+- Switch primary model from `google/gemini-2.5-pro` to `google/gemini-2.5-flash` (3-5x faster, still strong reasoning)
+- Keep `google/gemini-2.5-flash-lite` as fallback (instead of flash)
+- Reduce `MAX_TOOL_ROUNDS` from 7 to 4 (most queries resolve in 1-2 rounds)
+- Add a timeout on the streaming response (client-side) with an abort controller
 
-I `ToolButton`-komponenten: anvand `h-7 w-7` pa mobil istallet for `h-9 w-9`:
-```text
-className: 'h-7 w-7 sm:h-9 sm:w-9'
-```
+**Problem B: "Ge mig rad" button showing the prompt text**
 
-Ikoner i render-sektionen andras fran `h-4 w-4` till `h-3.5 w-3.5 sm:h-4 sm:w-4`.
+The button currently sends a long Swedish prompt visible in the chat. The button itself should remain but the prompt text should not be displayed in the UI as a user message. Instead it should be sent as a hidden system-level instruction.
 
-Toolbarens container far ocksa tatare padding pa mobil:
-```text
-'gap-0 px-1 py-1 sm:gap-0.5 sm:px-2 sm:py-1.5'
-```
+**Fix:**
+- Hide the advisor prompt from the chat message list: when the advisor button is clicked, send a special flag (`advisor: true`) to the edge function instead of injecting the prompt as a visible user message
+- The edge function will detect `advisor: true` and inject the advisor instructions internally
+- The user sees only a clean "Analyzing..." state, not the raw prompt
 
-Separatorerna gors kortare pa mobil:
-```text
-'h-4 sm:h-6 mx-0.5 sm:mx-1'
-```
+**Problem C: Red toast / error**
 
-**B. Tydligare kontrast — vita ikoner**
+Likely caused by the pro model timing out or returning a 500 error. The fallback logic exists but may not handle all edge cases. The switch to flash will largely eliminate this.
 
-Oselekterade knappar far `text-white/90` (inte `text-white` som kan blandas med aktiv). Aktiva knappar behallar `text-primary` (lila) men far ocksa en tydligare bakgrund:
+### 2. English Language Consistency
 
-```text
-Ej aktiv:  'text-white/90 hover:text-white hover:bg-white/10'
-Aktiv:     'ring-2 ring-primary bg-white/15 text-primary'
-```
+**Problem:** Many UI strings are in Swedish. Per the localization strategy, all system text must be in English while data values (room names, etc.) remain in their source language.
 
-Detta ger tydlig visuell skillnad: vita ikoner i normalst, lila med ljusare bakgrund nar aktiv.
+**Scope of changes** (files with Swedish UI text to convert to English):
 
-### Teknisk detaljplan
+| File | Swedish text to change |
+|---|---|
+| `src/components/chat/GunnarChat.tsx` | "Hej!", greetings, "Tanker...", "Fraga om dina fastigheter...", "Enter for att skicka", "Aktuell status", "Ge mig rad" |
+| `src/pages/Properties.tsx` | "Fastigheter", "Hantera din fastighetsportfolj", "Sok fastigheter...", "Lagg till fastighet", status labels (Aktiv, Underhall, Vantande), type labels, dropdown items |
+| `src/pages/Dashboard.tsx` | Stats titles, "Senaste aktivitet", "Snabbatgarder", button labels |
+| `src/components/layout/AppSidebar.tsx` | "Fastigheter", "3D-visning" navigation labels |
+| `src/components/fault-report/*.tsx` | "Felanmalan skickad!", toast messages, button labels |
+| `src/components/viewer/CreateIssueDialog.tsx` | Issue type labels, placeholder text, submit button |
+| `src/components/ai-scan/DetectionReviewQueue.tsx` | "Vantande", "Godkanda", "Avvisade", "Stang" |
+| `src/components/settings/SymbolSettings.tsx` | "Redigera", "Ny annotationssymbol" |
+| `src/components/settings/RoomLabelSettings.tsx` | "Redigera" buttons |
+| `src/components/viewer/AssetPropertiesDialog.tsx` | "Redigera" button |
+| `src/components/layout/RightSidebar.tsx` | Help articles content, "Tryck Enter..." |
+| `src/pages/AutodeskCallback.tsx` | "Inloggning lyckades!" |
+| `src/components/settings/ProfileModal.tsx` | "Profil", "AI-assistenter", "Stang" |
+| `supabase/functions/gunnar-chat/index.ts` | Proactive insight messages ("oppna arenden", "arbetsordrar"), system prompt Swedish examples, action button labels |
 
-**Fil: `src/components/viewer/ViewerToolbar.tsx`**
+**Important:** The term "Properties" refers to the page/section name and must never be translated — it stays as "Properties" in English.
 
-1. `ToolButton` (rad 74-78) — andra className:
-   - `compact ? 'h-8 w-8' : 'h-7 w-7 sm:h-9 sm:w-9'`
-   - `'text-white/90 hover:text-white hover:bg-white/10'`
-   - Active: `'ring-2 ring-primary bg-white/15 text-primary'`
+### Technical Detail
 
-2. Toolbar-container (rad 593-596) — andra gap/padding:
-   - `'flex items-center gap-0 px-1 py-1 sm:gap-0.5 sm:px-2 sm:py-1.5 rounded-xl'`
+**File: `supabase/functions/gunnar-chat/index.ts`**
+- Change `AI_MODEL_PRIMARY` from `google/gemini-2.5-pro` to `google/gemini-2.5-flash`
+- Change `AI_MODEL_FALLBACK` to `google/gemini-2.5-flash-lite`
+- Change `MAX_TOOL_ROUNDS` from 7 to 4
+- Translate proactive insight strings to English
+- Update system prompt guideline #1 to: "Always respond in English unless the user explicitly writes in another language"
+- Translate action button labels and example text to English
+- Add advisor mode handling: detect `advisor: true` flag and inject advisor prompt internally
 
-3. Alla `Separator` (rad 617, 639, 676, 687) — responsiv hojd:
-   - `'h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20'`
+**File: `src/components/chat/GunnarChat.tsx`**
+- Translate all greeting strings to English
+- Change "Tanker..." to "Thinking..."
+- Change placeholder to "Ask about your properties..."
+- Change "Enter for att skicka" to "Enter to send"
+- Change "Aktuell status" to "Current status"
+- Change "Ge mig rad" button: instead of sending visible message, send `{ messages, context, advisor: true }`
+- Show "Analyzing your building..." while advisor mode is loading
+- Add AbortController with 60s timeout on fetch calls
 
-4. Alla ikon-storlekar i render-sektionen (rad 601-696) — responsiva ikoner:
-   - `className="h-3.5 w-3.5 sm:h-4 sm:w-4"` pa alla `<Icon>`-komponenter
+**File: `src/pages/Properties.tsx`**
+- "Fastigheter" -> "Properties"
+- "Hantera din fastighetsportfolj" -> "Manage your property portfolio"
+- "Sok fastigheter..." -> "Search properties..."
+- "Lagg till fastighet" -> "Add property"
+- Status: "Aktiv" -> "Active", "Underhall" -> "Maintenance", "Vantande" -> "Pending"
+- Dropdown: "Visa detaljer" -> "View details", "Redigera" -> "Edit", etc.
 
-Dessa andringar gor verktygsfalt kompakt pa mobil (ca 280px brett istallet for 400px+) och ger tydlig kontrast mellan aktiva (lila) och inaktiva (vita) verktyg.
+**File: `src/pages/Dashboard.tsx`**
+- Translate all stat titles, descriptions, activity labels, and button text to English
+
+**File: `src/components/layout/AppSidebar.tsx`**
+- "Fastigheter" -> "Properties"
+- "3D-visning" -> "3D Viewer"
+
+**All other files listed above** — systematic translation of button labels, toast messages, placeholder text, and status labels from Swedish to English.
 
