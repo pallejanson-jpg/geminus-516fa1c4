@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { supabase } from '@/integrations/supabase/client';
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // Per-level colors
   const [levelColors, setLevelColors] = useState<Map<string, string>>(new Map());
-  const [autoColorEnabled, setAutoColorEnabled] = useState(true);
+  const [autoColorEnabled, setAutoColorEnabled] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
 
   // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
@@ -199,39 +199,59 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // Categories: derived from Asset+ data + lazy Instance count from DB
-  const baseCategories = useMemo(() => {
-    const map = new Map<string, number>();
-    buildingData.forEach((a: any) => {
-      const cat = a.category;
-      if (cat) map.set(cat, (map.get(cat) || 0) + 1);
-    });
-    return map;
-  }, [buildingData]);
-
-  const [instanceCount, setInstanceCount] = useState<number | null>(null);
-  useEffect(() => {
-    if (!buildingFmGuid || !isVisible) return;
-    // Lightweight count query for Instance category (not in allData at startup)
-    supabase
-      .from('assets')
-      .select('fm_guid', { count: 'exact', head: true })
-      .eq('building_fm_guid', buildingFmGuid)
-      .eq('category', 'Instance')
-      .then(({ count }) => {
-        if (count != null && count > 0) setInstanceCount(count);
-      });
-  }, [buildingFmGuid, isVisible]);
-
+  // Categories: derived from xeokit metaScene IFC types (granular)
   const categories: CategoryItem[] = useMemo(() => {
-    const map = new Map(baseCategories);
-    if (instanceCount != null && instanceCount > 0 && !map.has('Instance')) {
-      map.set('Instance', instanceCount);
+    const viewer = getXeokitViewer();
+    if (!viewer?.metaScene?.metaObjects) return [];
+
+    // Build reverse map: IFC type → human-readable category name
+    const ifcTypeToCategory = new Map<string, string>();
+    const mappings: Record<string, string[]> = {
+      'Wall': ['IfcWall', 'IfcWallStandardCase'],
+      'Door': ['IfcDoor'],
+      'Window': ['IfcWindow'],
+      'Slab': ['IfcSlab', 'IfcSlabStandardCase'],
+      'Roof': ['IfcRoof'],
+      'Stair': ['IfcStairFlight', 'IfcStair'],
+      'Column': ['IfcColumn'],
+      'Beam': ['IfcBeam'],
+      'Covering': ['IfcCovering'],
+      'Railing': ['IfcRailing'],
+      'Curtain Wall': ['IfcCurtainWall', 'IfcPlate'],
+      'Space': ['IfcSpace'],
+      'Building Storey': ['IfcBuildingStorey'],
+      'Furnishing': ['IfcFurnishingElement'],
+      'Flow Terminal': ['IfcFlowTerminal'],
+      'Flow Segment': ['IfcFlowSegment'],
+      'Flow Fitting': ['IfcFlowFitting'],
+      'Flow Controller': ['IfcFlowController'],
+      'Pipe': ['IfcPipeSegment', 'IfcPipeFitting'],
+      'Duct': ['IfcDuctSegment', 'IfcDuctFitting'],
+      'Member': ['IfcMember'],
+      'Proxy': ['IfcBuildingElementProxy'],
+    };
+    for (const [cat, types] of Object.entries(mappings)) {
+      types.forEach(t => ifcTypeToCategory.set(t, cat));
     }
-    return Array.from(map.entries())
+
+    // Count entities per category from metaScene
+    const counts = new Map<string, number>();
+    Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+      if (!mo.type) return;
+      const cat = ifcTypeToCategory.get(mo.type) || mo.type.replace(/^Ifc/, '');
+      counts.set(cat, (counts.get(cat) || 0) + 1);
+    });
+
+    // Remove Building (single root node, not useful)
+    counts.delete('Building');
+    counts.delete('Project');
+    counts.delete('Site');
+
+    return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
+      .filter(c => c.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [baseCategories, instanceCount]);
+  }, [getXeokitViewer, isVisible]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
@@ -505,9 +525,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Intersect active filters
-    const filterSets = [sourceIds, levelIds, spaceIds, categoryIds].filter((s): s is Set<string> => s !== null);
+    // When spaces are checked, skip levelIds from intersection (spaces already imply their parent level)
+    const filterSets = [sourceIds, checkedSpaces.size > 0 ? null : levelIds, spaceIds, categoryIds].filter((s): s is Set<string> => s !== null);
     let solidIds: Set<string>;
-    if (filterSets.length === 1) {
+    if (filterSets.length === 0) {
+      solidIds = new Set(scene.objectIds);
+    } else if (filterSets.length === 1) {
       solidIds = filterSets[0];
     } else {
       const sorted = [...filterSets].sort((a, b) => a.size - b.size);
@@ -520,8 +543,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Step 2b: Exclude IfcSpace and IfcSlab from solidIds (they obstruct the view)
     const hideIds: string[] = [];   // IfcSpace — hide entirely
     const fadeIds: string[] = [];   // IfcSlab/IfcSlabStandardCase — transparent + unpickable
-    const obstructTypes = new Set(['IfcSpace']);
-    const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase']);
+    const obstructTypes = new Set(['IfcSpace', 'IfcRoof', 'IfcCovering']);
+    const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     if (viewer.metaScene?.metaObjects) {
       for (const id of solidIds) {
         const mo = viewer.metaScene.metaObjects[id];
