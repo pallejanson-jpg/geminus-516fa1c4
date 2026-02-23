@@ -23,7 +23,14 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
     const fetchNames = async () => {
       setIsLoading(true);
       try {
-        // 1. Try database first
+        // Strategy 0: Try to derive names from assets table (Building Storey names)
+        const { data: storeys } = await supabase
+          .from('assets')
+          .select('fm_guid, name, common_name')
+          .eq('building_fm_guid', buildingFmGuid)
+          .eq('category', 'Building Storey');
+
+        // 1. Try xkt_models database table
         const { data: dbData, error: dbError } = await supabase
           .from('xkt_models')
           .select('model_id, model_name, file_name')
@@ -42,6 +49,87 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
             }
             return;
           }
+          
+          // Strategy 0: Try to match models to storey names via namespace patterns
+          if (storeys && storeys.length > 0) {
+            const storeyNameMap = new Map<string, string>();
+            storeys.forEach((s: any) => {
+              const name = s.common_name || s.name;
+              if (name) storeyNameMap.set(s.fm_guid.toLowerCase(), name);
+            });
+            
+            // Extract unique namespace prefixes from storey names (e.g. "A", "K", "V")
+            // to try to match model files to discipline names
+            const namespacePattern = /^([A-Z])-/i;
+            const disciplines = new Set<string>();
+            storeys.forEach((s: any) => {
+              const name = s.common_name || s.name || '';
+              // Look for patterns like "01 - A-modell" or model names embedded in storey names
+              const match = name.match(namespacePattern);
+              if (match) disciplines.add(match[1].toUpperCase());
+            });
+            
+            // If we can derive names from discipline codes in model IDs
+            if (disciplines.size > 0 || dbData.length > 0) {
+              const derivedEntries: [string, string][] = [];
+              const DISCIPLINE_NAMES: Record<string, string> = {
+                'A': 'A-modell (Arkitektur)',
+                'K': 'K-modell (Konstruktion)',
+                'V': 'V-modell (VVS)',
+                'E': 'E-modell (El)',
+                'S': 'S-modell (Styr)',
+                'B': 'B-modell (Brand)',
+              };
+              
+              dbData.forEach((m, idx) => {
+                const fileId = m.file_name.replace(/\.xkt$/i, '');
+                // Try to find a discipline letter in the model_id or file_name
+                let friendlyName: string | null = null;
+                
+                for (const [letter, fullName] of Object.entries(DISCIPLINE_NAMES)) {
+                  if (m.model_id.toUpperCase().includes(`-${letter}-`) ||
+                      m.model_id.toUpperCase().startsWith(`${letter}-`) ||
+                      m.file_name.toUpperCase().includes(`-${letter}-`) ||
+                      m.file_name.toUpperCase().startsWith(`${letter}-`)) {
+                    friendlyName = fullName;
+                    break;
+                  }
+                }
+                
+                if (!friendlyName) {
+                  friendlyName = `Modell ${idx + 1}`;
+                }
+                
+                derivedEntries.push([m.model_id, friendlyName]);
+                derivedEntries.push([m.model_id.toLowerCase(), friendlyName]);
+                derivedEntries.push([m.file_name, friendlyName]);
+                derivedEntries.push([m.file_name.toLowerCase(), friendlyName]);
+                derivedEntries.push([fileId, friendlyName]);
+                derivedEntries.push([fileId.toLowerCase(), friendlyName]);
+              });
+              
+              if (derivedEntries.length > 0 && !cancelled) {
+                setNameEntries(derivedEntries);
+                setIsLoading(false);
+                
+                // Persist derived names back to DB
+                for (const m of dbData) {
+                  const matchEntry = derivedEntries.find(([key]) => key === m.model_id);
+                  if (matchEntry) {
+                    supabase.from('xkt_models')
+                      .update({ model_name: matchEntry[1] })
+                      .eq('building_fm_guid', buildingFmGuid)
+                      .eq('model_id', m.model_id)
+                      .then(({ error: e }) => {
+                        if (e) console.debug('Failed to persist derived name:', e.message);
+                      });
+                  }
+                }
+                return;
+              }
+            }
+          }
+          
           // Names are GUIDs - fall through to API to get real names
           console.debug('Model names in DB are GUIDs, fetching from Asset+ API...');
         }
