@@ -48,7 +48,7 @@ interface GunnarAction {
   fmGuid?: string;
 }
 
-/** Extract follow-up suggestions from the AI response (numbered list after "Förslag:" or "Suggestions:") */
+/** Extract follow-up suggestions from the AI response */
 function extractFollowups(content: string): string[] {
   const blockMatch = content.match(/\*\*(?:Förslag|Suggestions):\*\*\s*([\s\S]*?)$/i);
   if (!blockMatch) return [];
@@ -69,18 +69,18 @@ function stripFollowups(content: string): string {
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
-    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om våningar, rum, ytor, tillgångar, arbetsordrar eller ärenden!`;
+    return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about floors, rooms, areas, assets, work orders, or issues!`;
   }
   if (context?.activeApp === 'assetplus_viewer') {
-    return `Hej! Du är i 3D-viewern. Jag kan hjälpa dig navigera, utforska våningar eller hitta specifika objekt. Prova att fråga "Hur många rum finns det?" eller "Visa plan 2".`;
+    return `Hi! You're in the 3D viewer. I can help you navigate, explore floors, or find specific objects. Try asking "How many rooms are there?" or "Show floor 2".`;
   }
   if (context?.activeApp === 'navigator') {
-    return `Hej! Du är i Navigatorn. Jag kan hjälpa dig hitta rum, tillgångar eller byggnadsdelar. Vad letar du efter?`;
+    return `Hi! You're in the Navigator. I can help you find rooms, assets, or building components. What are you looking for?`;
   }
   if (context?.activeApp === 'portfolio') {
-    return `Hej! Jag är Gunnar, din fastighetsassistent. Jag kan berätta om alla byggnader i portföljen — fråga om rum, ytor, våningar eller specifika tillgångar!`;
+    return `Hi! I'm Gunnar, your property assistant. I can tell you about all buildings in the portfolio — ask about rooms, areas, floors, or specific assets!`;
   }
-  return `Hej! Jag är Gunnar, din AI-assistent för fastighetsdata. Fråga mig om:\n\n• Byggnader, våningar, rum och ytor\n• Utrustning och tillgångar\n• Arbetsordrar och ärenden\n• Navigation i 3D-modellen\n• Skapa felanmälningar\n\nVad vill du veta?`;
+  return `Hi! I'm Gunnar, your AI assistant for property data. Ask me about:\n\n• Buildings, floors, rooms, and areas\n• Equipment and assets\n• Work orders and issues\n• 3D model navigation\n• Fault reports\n\nWhat would you like to know?`;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gunnar-chat`;
@@ -97,6 +97,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   const { toast: toastHook } = useToast();
   const prevContextRef = useRef<string>("");
   const proactiveFetchedRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
 
   // Fetch proactive insights when context has a building
   useEffect(() => {
@@ -151,85 +152,100 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
   }, [open]);
 
   const streamChat = useCallback(
-    async (userMessages: Message[], currentContext?: GunnarContext) => {
+    async (userMessages: Message[], currentContext?: GunnarContext, advisorMode?: boolean) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error("Du måste vara inloggad för att använda Gunnar.");
+        throw new Error("You must be logged in to use Gunnar.");
       }
 
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ messages: userMessages, context: currentContext }),
-      });
+      // Create abort controller with 60s timeout
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const timeout = setTimeout(() => controller.abort(), 60000);
 
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        if (resp.status === 429) throw new Error("För många förfrågningar. Vänta en stund.");
-        if (resp.status === 402) throw new Error("AI-krediter slut. Kontakta administratören.");
-        throw new Error(errorData.error || `Begäran misslyckades med status ${resp.status}`);
-      }
-      if (!resp.body) throw new Error("Inget svar");
+      try {
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            messages: userMessages,
+            context: currentContext,
+            ...(advisorMode ? { advisor: true } : {}),
+          }),
+          signal: controller.signal,
+        });
 
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let assistantContent = "";
+        if (!resp.ok) {
+          const errorData = await resp.json().catch(() => ({}));
+          if (resp.status === 429) throw new Error("Too many requests. Please wait a moment.");
+          if (resp.status === 402) throw new Error("AI credits exhausted. Contact your administrator.");
+          throw new Error(errorData.error || `Request failed with status ${resp.status}`);
+        }
+        if (!resp.body) throw new Error("No response");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let textBuffer = "";
+        let assistantContent = "";
 
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
-                }
-                return [...prev, { role: "assistant", content: assistantContent }];
-              });
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          textBuffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex: number;
+          while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+            let line = textBuffer.slice(0, newlineIndex);
+            textBuffer = textBuffer.slice(newlineIndex + 1);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            if (line.startsWith(":") || line.trim() === "") continue;
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+              if (content) {
+                assistantContent += content;
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant") {
+                    return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
+                  }
+                  return [...prev, { role: "assistant", content: assistantContent }];
+                });
+              }
+            } catch {
+              textBuffer = line + "\n" + textBuffer;
+              break;
             }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
           }
         }
+        return assistantContent;
+      } finally {
+        clearTimeout(timeout);
+        abortRef.current = null;
       }
-      return assistantContent;
     },
     []
   );
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return;
-    const userMessage: Message = { role: "user", content: text.trim() };
+  const sendMessage = async (text: string, advisorMode?: boolean) => {
+    if ((!text.trim() && !advisorMode) || isLoading) return;
+    const userMessage: Message = { role: "user", content: advisorMode ? "Analyze this building and give me advice" : text.trim() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
     setSuggestedFollowups([]);
-    setProactiveInsights([]); // Clear insights once user starts chatting
+    setProactiveInsights([]);
 
     try {
       const apiMessages = newMessages.filter((_, i) => i > 0);
-      const response = await streamChat(apiMessages, context);
+      const response = await streamChat(apiMessages, context, advisorMode);
 
       const followups = extractFollowups(response);
       if (followups.length > 0) {
@@ -245,10 +261,11 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
       }
     } catch (error) {
       console.error("Chat error:", error);
+      const isAbort = error instanceof DOMException && error.name === "AbortError";
       toastHook({
         variant: "destructive",
-        title: "Fel",
-        description: error instanceof Error ? error.message : "Kunde inte få svar",
+        title: "Error",
+        description: isAbort ? "Request timed out. Please try again." : (error instanceof Error ? error.message : "Could not get a response"),
       });
       setMessages(messages);
     } finally {
@@ -269,39 +286,39 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           setAiSelectedFmGuids(action.fmGuids);
           setActiveApp('navigator');
           onClose();
-          toast.success(`Visar ${action.fmGuids.length} objekt i Navigatorn`);
+          toast.success(`Showing ${action.fmGuids.length} objects in Navigator`);
         }
         break;
       case "showFloor":
         if (action.floorFmGuid) {
           window.dispatchEvent(new CustomEvent('GUNNAR_SHOW_FLOOR', { detail: { floorFmGuid: action.floorFmGuid } }));
-          toast.success('Byter våning');
+          toast.success('Switching floor');
         }
         break;
       case "highlight":
         if (action.fmGuids?.length) {
           window.dispatchEvent(new CustomEvent('GUNNAR_HIGHLIGHT', { detail: { fmGuids: action.fmGuids } }));
-          toast.success(`Markerar ${action.fmGuids.length} objekt`);
+          toast.success(`Highlighting ${action.fmGuids.length} objects`);
         }
         break;
       case "switchTo2D":
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
-        toast.success('Byter till 2D');
+        toast.success('Switching to 2D');
         break;
       case "switchTo3D":
         window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '3d' } }));
-        toast.success('Byter till 3D');
+        toast.success('Switching to 3D');
         break;
       case "flyTo":
         if (action.fmGuid) {
           window.dispatchEvent(new CustomEvent('GUNNAR_FLY_TO', { detail: { fmGuid: action.fmGuid } }));
-          toast.success('Flyger till objekt');
+          toast.success('Flying to object');
         }
         break;
       case "openViewer":
         if (action.fmGuid) {
           setViewer3dFmGuid(action.fmGuid);
-          toast.success('Öppnar 3D-viewer');
+          toast.success('Opening 3D viewer');
         }
         break;
     }
@@ -373,7 +390,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           <div>
             <h2 className="font-semibold">Gunnar</h2>
             <p className="text-xs text-muted-foreground">
-              {context?.currentBuilding?.name || "AI Fastighetsassistent"}
+              {context?.currentBuilding?.name || "AI Property Assistant"}
             </p>
           </div>
         </div>
@@ -409,7 +426,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                 <Info className="h-3.5 w-3.5" />
-                Aktuell status
+                Current status
               </div>
               {proactiveInsights.map((insight, i) => (
                 <p key={i} className="text-sm text-foreground">{insight}</p>
@@ -421,7 +438,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Tänker...</span>
+                <span>Thinking...</span>
               </div>
             </div>
           )}
@@ -446,10 +463,10 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs h-7 border-primary/30 text-primary hover:bg-primary/10"
-              onClick={() => sendMessage("Ge mig råd om den här byggnaden baserat på FM-standarder och best practice. Analysera underhållsstatus, energi, brandskydd och eventuella risker.")}
+              onClick={() => sendMessage("", true)}
             >
               <Sparkles className="h-3 w-3" />
-              Ge mig råd
+              Get advice
             </Button>
           </div>
         )}
@@ -459,7 +476,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Fråga om dina fastigheter..."
+            placeholder="Ask about your properties..."
             disabled={isLoading}
             className="flex-1"
           />
@@ -468,7 +485,7 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Enter för att skicka • Gunnar förstår svenska och engelska
+          Enter to send • Gunnar understands Swedish and English
         </p>
       </div>
     </>
