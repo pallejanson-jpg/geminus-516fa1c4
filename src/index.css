@@ -161,10 +161,17 @@
 
 /* Hide Asset+ DevExtreme context menu - we use our custom context menu */
 #AssetPlusViewer .dx-context-menu-container,
-.dx-overlay-wrapper .dx-context-menu {
+.dx-overlay-wrapper .dx-context-menu,
+.dx-overlay-content .dx-context-menu,
+.dx-context-menu.dx-menu-base,
+.dx-overlay-wrapper.dx-context-menu-container-wrapper {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* Hide built-in Asset+ toolbars - we use our custom toolbar */
