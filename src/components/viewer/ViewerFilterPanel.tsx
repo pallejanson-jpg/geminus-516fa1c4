@@ -182,17 +182,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
   }, [buildingData, checkedLevels, levels]);
 
-  const categories: CategoryItem[] = useMemo(() => {
-    const map = new Map<string, number>();
-    buildingData.forEach((a: any) => {
-      const cat = a.category;
-      if (cat) map.set(cat, (map.get(cat) || 0) + 1);
-    });
-    return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [buildingData]);
-
   // Auto-assign palette colors to levels
   useEffect(() => {
     const colors = new Map<string, string>();
@@ -207,6 +196,38 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const getXeokitViewer = useCallback(() => {
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
+
+  // Categories: scan xeokit metaScene for actual IFC types present in the model
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  useEffect(() => {
+    if (!isVisible) return;
+    const tryBuild = () => {
+      const viewer = getXeokitViewer();
+      const metaObjects = viewer?.metaScene?.metaObjects;
+      if (metaObjects && Object.keys(metaObjects).length > 0) {
+        const map = new Map<string, number>();
+        Object.values(metaObjects).forEach((mo: any) => {
+          const type = mo.type;
+          if (type && type !== 'Default' && type !== 'IfcProject' && type !== 'IfcSite') {
+            map.set(type, (map.get(type) || 0) + 1);
+          }
+        });
+        setCategories(
+          Array.from(map.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+        );
+        return true;
+      }
+      return false;
+    };
+    if (tryBuild()) return;
+    let attempts = 0;
+    const interval = setInterval(() => {
+      if (tryBuild() || attempts++ > 15) clearInterval(interval);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isVisible, getXeokitViewer]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
@@ -711,7 +732,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 badge={level.spaceCount > 0 ? `${level.spaceCount}` : undefined}
                 checked={checkedLevels.has(level.fmGuid)}
                 onCheckedChange={(checked) => handleLevelToggle(level.fmGuid, checked)}
-                onClick={() => handleSpaceClick(level.fmGuid)}
                 dimmed={checkedSources.size > 0 && !checkedSources.has(level.sourceGuid)}
                 color={autoColorEnabled ? levelColors.get(level.fmGuid) : undefined}
                 onColorChange={(color) => handleLevelColorChange(level.fmGuid, color)}
@@ -864,7 +884,7 @@ const FilterRow: React.FC<FilterRowProps> = ({
       onClick={(e) => e.stopPropagation()}
       onCheckedChange={(v) => onCheckedChange(!!v)}
     />
-    <span className={cn("text-xs truncate flex-1", checked && "text-primary font-medium")}>{label}</span>
+    <span className="text-xs truncate flex-1">{label}</span>
     {badge && <span className="text-[10px] text-muted-foreground shrink-0">{badge}</span>}
     {color && onColorChange && (
       <Popover>

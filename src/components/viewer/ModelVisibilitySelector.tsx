@@ -10,6 +10,9 @@ import { useModelNames } from '@/hooks/useModelNames';
 import { MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
 import { AppContext } from '@/context/AppContext';
 
+const isGuid = (str: string): boolean =>
+  !!str && str.length >= 20 && /^[0-9a-f]{8}[-]?[0-9a-f]{4}/i.test(str);
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -44,11 +47,32 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
     // Use shared hook for model name resolution
     const { modelNamesMap, isLoading: isLoadingNames } = useModelNames(buildingFmGuid);
 
-    // Build storey lookups from Asset+ data for model name resolution
-    const { storeyByGuid, storeyByName } = useMemo(() => {
-      const byGuid = new Map<string, string>();
-      const byName = new Map<string, string>();
-      if (!allData || !buildingFmGuid) return { storeyByGuid: byGuid, storeyByName: byName };
+    // Build source name map from Asset+ data (same logic as ViewerFilterPanel sources)
+    // Maps parentBimObjectId → parentCommonName (the BIM model name)
+    const assetPlusSources = useMemo(() => {
+      const map = new Map<string, string>(); // parentBimObjectId → parentCommonName
+      if (!allData || !buildingFmGuid) return map;
+      allData
+        .filter((a: any) =>
+          (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid &&
+          (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
+        )
+        .forEach((a: any) => {
+          const attrs = a.attributes || {};
+          const guid = attrs.parentBimObjectId;
+          const name = attrs.parentCommonName;
+          if (guid && name && !isGuid(name)) {
+            map.set(guid, name);
+          }
+        });
+      return map;
+    }, [allData, buildingFmGuid]);
+
+    // Also build storey fmGuid/name → parentCommonName for xeokit matching
+    const storeyLookup = useMemo(() => {
+      const byGuid = new Map<string, { parentName: string; sourceGuid: string }>();
+      const byName = new Map<string, { parentName: string; sourceGuid: string }>();
+      if (!allData || !buildingFmGuid) return { byGuid, byName };
       allData
         .filter((a: any) =>
           (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid &&
@@ -59,13 +83,14 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           const fmGuid = (a.fmGuid || a.fm_guid || '').toLowerCase();
           const name = (a.commonName || a.common_name || a.name || '').toLowerCase().trim();
           const parentName = attrs.parentCommonName;
-          if (parentName && !/^[0-9a-f]{8}-/i.test(parentName)) {
-            if (fmGuid) byGuid.set(fmGuid, parentName);
-            if (fmGuid) byGuid.set(fmGuid.replace(/-/g, ''), parentName);
-            if (name) byName.set(name, parentName);
+          const sourceGuid = attrs.parentBimObjectId || '';
+          if (parentName && !isGuid(parentName)) {
+            if (fmGuid) byGuid.set(fmGuid, { parentName, sourceGuid });
+            if (fmGuid) byGuid.set(fmGuid.replace(/-/g, ''), { parentName, sourceGuid });
+            if (name) byName.set(name, { parentName, sourceGuid });
           }
         });
-      return { storeyByGuid: byGuid, storeyByName: byName };
+      return { byGuid, byName };
     }, [allData, buildingFmGuid]);
     
     // Stable refs to preserve selection across re-renders
@@ -185,7 +210,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         
         // Strategy 6: Match via xeokit metaScene — find IfcBuildingStorey in this model,
         // then look up parentCommonName from Asset+ data (by guid AND name)
-        if (!matchedName && (storeyByGuid.size > 0 || storeyByName.size > 0)) {
+        if (!matchedName && (storeyLookup.byGuid.size > 0 || storeyLookup.byName.size > 0)) {
           const viewer = getXeokitViewer();
           const metaObjects = viewer?.metaScene?.metaObjects;
           if (metaObjects && model.objects) {
@@ -196,9 +221,13 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
                 const sysId = (mo.originalSystemId || '').toLowerCase();
                 const moName = (mo.name || '').toLowerCase().trim();
                 // Try by guid
-                matchedName = storeyByGuid.get(sysId) || storeyByGuid.get(sysId.replace(/-/g, ''));
+                const byGuid = storeyLookup.byGuid.get(sysId) || storeyLookup.byGuid.get(sysId.replace(/-/g, ''));
+                if (byGuid) matchedName = byGuid.parentName;
                 // Try by name
-                if (!matchedName) matchedName = storeyByName.get(moName);
+                if (!matchedName) {
+                  const byName = storeyLookup.byName.get(moName);
+                  if (byName) matchedName = byName.parentName;
+                }
                 if (matchedName) break;
               }
             }
@@ -243,7 +272,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
-    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyByGuid, storeyByName]);
+    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyLookup]);
 
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
