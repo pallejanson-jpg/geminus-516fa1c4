@@ -71,6 +71,14 @@ export interface AlarmAnnotationsShowDetail {
   flyTo?: boolean;
 }
 
+/** Event dispatched when annotation category filter changes in ViewerFilterPanel */
+export const ANNOTATION_FILTER_EVENT = 'ANNOTATION_FILTER';
+
+/** Type for annotation filter event detail */
+export interface AnnotationFilterDetail {
+  visibleCategories: string[];
+}
+
 /** Event dispatched when external mode-switcher toggles xeokit 2D mode */
 export const VIEW_MODE_2D_TOGGLED_EVENT = 'VIEW_MODE_2D_TOGGLED';
 
