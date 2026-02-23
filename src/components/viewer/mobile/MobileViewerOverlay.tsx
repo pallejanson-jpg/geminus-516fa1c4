@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ArrowLeft, TreeDeciduous, Settings2, X } from 'lucide-react';
+import { ArrowLeft, TreeDeciduous, Settings2, X, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ViewerTreePanel from '../ViewerTreePanel';
 
@@ -10,6 +10,9 @@ interface MobileViewerOverlayProps {
   buildingFmGuid?: string;
   isViewerReady: boolean;
   onOpenSettings?: () => void;
+  // Filter panel
+  showFilterPanel?: boolean;
+  onToggleFilterPanel?: () => void;
   // Tree state
   treeSelectedId?: string | null;
   onTreeSelectedIdChange?: (id: string | null) => void;
@@ -29,6 +32,8 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   buildingFmGuid,
   isViewerReady,
   onOpenSettings,
+  showFilterPanel,
+  onToggleFilterPanel,
   treeSelectedId,
   onTreeSelectedIdChange,
   treeExpandedIds,
@@ -68,6 +73,16 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
 
         {/* Right: Tree + Settings */}
         <div className="flex gap-1.5">
+          <Button
+            variant={showFilterPanel ? 'default' : 'secondary'}
+            size="icon"
+            className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
+            onClick={onToggleFilterPanel}
+            disabled={!isViewerReady}
+          >
+            <Filter className="h-4 w-4" />
+          </Button>
+
           <Button
             variant={showTreeOverlay ? 'default' : 'secondary'}
             size="icon"
