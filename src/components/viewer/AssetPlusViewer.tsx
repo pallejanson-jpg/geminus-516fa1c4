@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
-import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous, Menu } from 'lucide-react';
+import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous, Menu, Filter } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
 import AssetPropertiesDialog from './AssetPropertiesDialog';
 
 import ViewerTreePanel from './ViewerTreePanel';
+import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerRightPanel from './ViewerRightPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import MobileViewerOverlay from './mobile/MobileViewerOverlay';
@@ -204,6 +205,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [selectedFmGuids, setSelectedFmGuids] = useState<string[]>([]);
   
   const [showTreePanel, setShowTreePanel] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -3947,6 +3949,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 >
                   <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
+                <Button 
+                  variant={showFilterPanel ? "default" : "secondary"}
+                  size="icon"
+                  onClick={() => setShowFilterPanel(!showFilterPanel)} 
+                  className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
+                  aria-label="Filter panel"
+                  title="Filter"
+                >
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
               </div>
             
             {/* Right side: Hamburger menu for right panel */}
@@ -4074,6 +4086,30 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   />
                 </div>
               )}
+              
+              {/* Tandem-style Filter Panel - fixed left sidebar */}
+              {showFilterPanel && (
+                <div className="pointer-events-auto">
+                  <ViewerFilterPanel
+                    viewerRef={viewerInstanceRef}
+                    buildingFmGuid={buildingFmGuid}
+                    isVisible={showFilterPanel}
+                    onClose={() => setShowFilterPanel(false)}
+                    onNodeSelect={(fmGuid) => {
+                      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                      if (xeokitViewer?.scene) {
+                        flashEntityById(xeokitViewer.scene, fmGuid, {
+                          color1: [0.3, 1, 0.3],
+                          color2: [1, 1, 1],
+                          interval: 200,
+                          duration: 2000,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
               <div className="pointer-events-auto">
                 <MinimapPanel
                   viewerRef={viewerInstanceRef}

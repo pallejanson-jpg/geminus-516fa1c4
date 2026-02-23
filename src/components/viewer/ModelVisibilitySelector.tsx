@@ -229,9 +229,9 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           }
         }
         
-        // Improved fallback: show "Laddar..." if still fetching names, otherwise format nicely
+        // Improved fallback: show "Loading..." if still fetching names, otherwise format nicely
         const friendlyName = matchedName || 
-          (isLoadingNames ? 'Laddar...' : fileNameWithoutExt.replace(/-/g, ' '));
+          (isLoadingNames ? 'Loading...' : fileNameWithoutExt.replace(/-/g, ' '));
         const shortName = friendlyName.length > 30 ? friendlyName.substring(0, 30) + '...' : friendlyName;
 
         if (!matchedName && modelNamesMap.size > 0) {

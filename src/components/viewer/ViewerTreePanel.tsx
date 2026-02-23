@@ -259,7 +259,7 @@ const StoreyRow = React.memo<{
         <Layers className="h-4 w-4 text-primary/70 shrink-0" />
         <span className="truncate flex-1 font-medium text-sm">{storey.name}</span>
         {storey.spaces.length > 0 && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">{storey.spaces.length} rum</Badge>
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">{storey.spaces.length} rooms</Badge>
         )}
       </div>
 
@@ -380,7 +380,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       // Build storey → space → asset hierarchy
       const builtStoreys: StoreyTreeNode[] = storeysData.map((storey: any) => {
         const storeyFmGuid = storey.fmGuid || storey.fm_guid;
-        const storeyName = storey.commonName || storey.common_name || storey.name || `Våning ${storeyFmGuid?.slice(0, 8)}`;
+        const storeyName = storey.commonName || storey.common_name || storey.name || `Level ${storeyFmGuid?.slice(0, 8)}`;
 
         // Find spaces for this storey
         const spacesRaw = dataSource.filter((a: any) =>
@@ -391,7 +391,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
         const spaces: SpaceTreeNode[] = spacesRaw.map((space: any, idx: number) => {
           const spaceFmGuid = space.fmGuid || space.fm_guid;
           const spaceName = space.commonName || space.common_name || space.name;
-          const displayName = (spaceName && !isGuid(spaceName)) ? spaceName : `Rum ${idx + 1}`;
+          const displayName = (spaceName && !isGuid(spaceName)) ? spaceName : `Room ${idx + 1}`;
 
           // Find assets in this space
           const assetsRaw = dataSource.filter((a: any) =>
@@ -422,7 +422,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
 
         return {
           fmGuid: storeyFmGuid,
-          name: (storeyName && !isGuid(storeyName)) ? storeyName : `Våning ${storeyFmGuid?.slice(0, 8)}`,
+          name: (storeyName && !isGuid(storeyName)) ? storeyName : `Level ${storeyFmGuid?.slice(0, 8)}`,
           spaces,
         };
       }).sort(sortStoreys);
@@ -611,7 +611,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       return (
         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-2">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Laddar modellträd...</span>
+          <span>Loading model tree...</span>
         </div>
       );
     }
@@ -620,9 +620,9 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       return (
         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm gap-1.5">
           <TreeDeciduous className="h-8 w-8 opacity-40" />
-          <span>{debouncedSearch ? 'Ingen träff' : 'Inga våningsplan hittades'}</span>
+          <span>{debouncedSearch ? 'No match' : 'No floors found'}</span>
           {!debouncedSearch && (
-            <span className="text-xs text-center px-4">Modelldata laddas från Asset+</span>
+            <span className="text-xs text-center px-4">Model data loading from Asset+</span>
           )}
         </div>
       );
@@ -663,7 +663,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Sök våning, rum..."
+              placeholder="Search floor, room..."
               className="h-7 pl-7 text-xs"
             />
           </div>
@@ -672,7 +672,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
         {/* Hint if storeys are checked */}
         {checkedStoreyFmGuids.size > 0 && (
           <div className="px-2 py-1 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
-            <span>Solo: {checkedStoreyFmGuids.size} våning(ar) valda</span>
+            <span>Solo: {checkedStoreyFmGuids.size} level(s) selected</span>
             <button
               className="underline text-[10px]"
               onClick={() => {
@@ -680,7 +680,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
                 applyStoreyVisibility(new Set());
               }}
             >
-              Rensa
+              Clear
             </button>
           </div>
         )}
@@ -715,9 +715,9 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
         <div className="flex items-center gap-2">
           <GripVertical className="h-4 w-4 text-muted-foreground" />
           <TreeDeciduous className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Modellträd</span>
+          <span className="font-medium text-sm">Model Tree</span>
           {storeys.length > 0 && (
-            <Badge variant="secondary" className="text-xs">{storeys.length} våningar</Badge>
+            <Badge variant="secondary" className="text-xs">{storeys.length} levels</Badge>
           )}
         </div>
         <Button
@@ -737,7 +737,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Sök våning, rum..."
+            placeholder="Search floor, room..."
             className="h-8 pl-7 text-sm"
           />
         </div>
@@ -746,7 +746,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       {/* Solo hint */}
       {checkedStoreyFmGuids.size > 0 && (
         <div className="px-3 py-1.5 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
-          <span>Solo: {checkedStoreyFmGuids.size} våning(ar)</span>
+          <span>Solo: {checkedStoreyFmGuids.size} level(s)</span>
           <button
             className="underline text-[10px]"
             onClick={() => {
@@ -754,7 +754,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
               applyStoreyVisibility(new Set());
             }}
           >
-            Visa alla
+            Show all
           </button>
         </div>
       )}
