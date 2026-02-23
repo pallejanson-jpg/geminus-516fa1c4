@@ -1,59 +1,37 @@
 
 
-## Custom Right-Click Context Menu for 3D Viewer
+## Fix: Hide Obstructing Objects + Make X-ray Opt-in
 
-### Background
-The Asset+ viewer package renders its own right-click context menu using DevExtreme (`dx-context-menu`). It currently shows only built-in Asset+ commands (e.g. "View in space", object details). This menu looks visually different from Geminus AI's design language and cannot be extended with Geminus-specific actions like "Egenskaper" (properties), "Skapa arende" (create issue), or "Skapa arbetsorder" (create work order).
+### Problem 1: Green IfcSpace objects blocking the view
+When selecting a floor in the filter panel, all objects on that floor become "solid" -- including IfcSpace entities. These render as large opaque green surfaces that block the view of the actual building geometry (see screenshot). The ViewerToolbar's 2D mode already solves this by making IfcSpace near-transparent and IfcSlab invisible. The filter panel needs the same treatment.
 
-### Approach: Intercept + Replace
-Instead of fighting the Asset+ DevExtreme menu, we will:
-1. **Suppress the Asset+ context menu** via CSS (`display: none` on `.dx-context-menu`)
-2. **Intercept right-click** on the `#AssetPlusViewer` container with our own `onContextMenu` handler
-3. **Render a Geminus-styled context menu** using the existing Radix `ContextMenu` or a simple positioned div (matching the dark `bg-card/95 backdrop-blur` style used elsewhere in the app)
-4. **Pass custom items via `externalCustomObjectContextMenuItems`** to Asset+ for items that need the viewer's internal context (like the clicked entity), while also adding pure Geminus items
+**Fix**: After computing `solidIds`, exclude IfcSpace and IfcSlab entities from the solid set. IfcSpace gets hidden (`visible = false`), and IfcSlab gets made transparent (`opacity = 0, pickable = false`). This matches the established pattern in `ViewerToolbar.tsx` lines 454-461.
 
-### Context Menu Items
-The menu will show these items when right-clicking an object in the 3D viewer:
+### Problem 2: X-ray kills performance
+Currently, the filter panel **always** applies X-ray to all non-selected objects (Step 3, lines 513-528). For a model with 100k+ objects, xeokit must render each ghosted object with transparency blending, which dramatically slows orbit/pan/zoom -- especially when zoomed out and all floors are visible.
 
-| Item | Action |
-|---|---|
-| **Egenskaper** (Properties) | Opens `UniversalPropertiesDialog` for the clicked object's FM GUID |
-| **Skapa arende** (Create issue) | Triggers the existing `captureIssueState` flow (screenshot + viewpoint + CreateIssueDialog) |
-| **Skapa arbetsorder** (Create work order) | Opens a new work order dialog pre-filled with building/object context, saves to `work_orders` table |
-| **Visa i rummet** (View in space) | Calls `assetView.viewInSpace(entityId)` -- the original Asset+ "View in space" action |
-| **Valj objekt** (Select) | Calls `assetView.selectItems([entityId])` |
-| **Zoom till objekt** (Zoom to fit) | Calls `assetView.viewFit([entityId])` |
+**Fix**: Change the default filter behavior from X-ray to **visibility hiding**. Non-selected objects are simply hidden (`visible = false`) instead of xrayed. This is much faster because xeokit doesn't need to render hidden objects at all.
 
-### Visual Design
-- Dark card background (`bg-card/95 backdrop-blur-md`) with `border-border` and `shadow-xl`
-- Rounded corners (`rounded-lg`)
-- Each item: icon (16px, colored) + label, with `hover:bg-muted` transition
-- Separator lines between groups (Geminus actions / Viewer actions)
-- Matches the style already used in `CesiumGlobeView.tsx` context menu (lines 332-370)
+### Problem 3: X-ray should be opt-in
+Add an X-ray toggle to the filter panel header so users can switch from "hide" mode to "xray" mode when they want the transparent ghost context. The existing `XrayToggle` in the right panel (VisualizationToolbar) stays as-is.
 
 ### Technical Changes
 
-**File: `src/index.css`**
-- Add CSS rule to hide the Asset+ DevExtreme context menu: `#AssetPlusViewer .dx-context-menu-container, .dx-overlay-wrapper .dx-context-menu { display: none !important; }`
+**File: `src/components/viewer/ViewerFilterPanel.tsx`**
 
-**File: `src/components/viewer/ViewerContextMenu.tsx`** (NEW)
-- New component that renders a positioned context menu overlay
-- Props: `position: {x, y}`, `entityId`, `fmGuid`, `buildingFmGuid`, `onClose`, callbacks for each action
-- Renders the menu items with icons (Info, MessageSquarePlus, Wrench, Eye, MousePointer, ZoomIn from lucide)
-- Closes on click-outside or Escape key
+| Section | Change |
+|---|---|
+| State (top of component) | Add `xrayMode` state (`useState(false)`) controlling whether filters use X-ray or visibility hiding |
+| Step 2 (solidIds computation, ~line 500) | After computing `solidIds`, remove IfcSpace and IfcSlab entity IDs from the set. Collect them separately as `excludeIds`. |
+| Step 3 (X-ray application, lines 513-528) | Replace with conditional logic: if `xrayMode` is ON, apply X-ray as before; if OFF (default), use `scene.setObjectsVisible(nonSolidIds, false)` instead |
+| IfcSpace/Slab handling (new, after Step 3) | Hide IfcSpace entities and make IfcSlab transparent+unpickable, matching the ViewerToolbar 2D approach |
+| Step 0 (clean slate, lines 419-424) | Also reset visibility: `scene.setObjectsVisible(scene.objectIds, true)` (already there) -- ensure it also clears opacity/pickable for slabs |
+| UI (filter panel header area) | Add an X-ray toggle button (Box icon) next to the existing controls, wired to `xrayMode` state |
+| Dependencies of `applyFilterVisibility` | Add `xrayMode` to the dependency array |
 
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-- Add `onContextMenu` handler on the viewer container div
-- Detect clicked entity using xeokit's `scene.pick()` at the mouse coordinates
-- Resolve the entity's FM GUID from the metaScene
-- Show `ViewerContextMenu` at the click position with the resolved data
-- Add state for context menu visibility, position, and entity data
-- Wire up action callbacks: open properties dialog, trigger issue creation, create work order, call viewer API methods
+The IFC types to exclude from solid rendering:
+- `IfcSpace` -- hidden entirely (large floor surfaces)
+- `IfcSlab`, `IfcSlabStandardCase` -- made transparent + unpickable (floor/ceiling slabs block clicks)
 
-**File: `src/components/viewer/CreateWorkOrderDialog.tsx`** (NEW)
-- Simple dialog for creating a work order (similar to `CreateIssueDialog`)
-- Fields: title, description, category, priority
-- Pre-filled with building name and object info from context
-- Saves to the `work_orders` table with `external_id` = `FR-{timestamp}` and source metadata
-
-No database changes needed -- the `work_orders` table already exists with the right schema and RLS policies.
+### No other files need changes
+The existing XrayToggle in the right panel and ViewerToolbar remain unchanged -- they operate independently on the global scene. The filter panel's new behavior only affects what happens when filters are active.
