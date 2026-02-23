@@ -392,6 +392,13 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     setShowCreateIssueDialog(true);
   }, [captureScreenshot, captureViewpoint, getSelectedObjectIds]);
 
+  // Listen for context menu issue creation trigger
+  useEffect(() => {
+    const handler = () => captureIssueState();
+    window.addEventListener('CONTEXT_MENU_CREATE_ISSUE', handler);
+    return () => window.removeEventListener('CONTEXT_MENU_CREATE_ISSUE', handler);
+  }, [captureIssueState]);
+
   const handleSubmitIssue = useCallback(async (data: { title: string; description: string; issueType: string; priority: string }) => {
     if (!pendingIssueState || !user || !buildingFmGuid) {
       toast({ title: "Kan inte skapa ärende", variant: "destructive" }); return;
