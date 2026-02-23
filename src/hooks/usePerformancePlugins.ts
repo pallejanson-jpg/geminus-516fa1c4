@@ -73,6 +73,25 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
         console.warn('[perf-plugins] Could not load xeokit SDK plugins:', e);
       }
 
+      // 3. SAO (Scalable Ambient Obscurance) — soft contact shadows
+      try {
+        const sao = xeokitViewer.scene?.sao;
+        if (sao && !isMobile) {
+          sao.enabled = true;
+          sao.intensity = 0.15;
+          sao.bias = 0.5;
+          sao.scale = 1000;
+          sao.kernelRadius = 100;
+          sao.minResolution = 0;
+          console.log('[perf-plugins] SAO enabled (desktop)');
+        } else if (sao && isMobile) {
+          sao.enabled = false;
+          console.log('[perf-plugins] SAO skipped (mobile)');
+        }
+      } catch (e) {
+        console.debug('[perf-plugins] SAO setup error:', e);
+      }
+
       // 3. LOD distance culling — hide small entities when camera is far
       if (!pluginsRef.current.lodInterval) {
         const scene = xeokitViewer.scene;
