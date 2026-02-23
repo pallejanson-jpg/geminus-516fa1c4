@@ -1,108 +1,68 @@
 
+## Fix Plan: Filter Panel Logic, Model Names, and Performance Analysis
 
-## Fix Plan: Småviken 3D, Insights Viewer Performance, and Chart Coloring
+### 1. Fix Reversed Filter Behavior in ViewerFilterPanel
 
-### Issues Identified
+The core problem is that the filter logic uses **hide/show** (visibility toggling) instead of **solid/x-ray** (ghosting). This causes checked items to disappear when xeokit ID matching fails.
 
-1. **3D viewer remounts on every chart click / tab switch** (critical performance bug)
-2. **Toolbar and NavCube too large in Insights inline viewer**
-3. **Chart click no longer colors 3D model** (caused by issue #1)
-4. **Småviken 3D loading regression** (needs investigation -- likely fetch interceptor or memory)
-5. **Remaining Swedish text** in several components
+**Correct behavior (matching Tandem):**
+- Nothing checked: all objects visible, no x-ray, no colorization
+- Sources checked: objects belonging to unchecked sources become x-ray; checked sources stay solid
+- Levels checked: objects on unchecked levels become x-ray; checked levels stay solid
+- Spaces checked: all objects become x-ray; checked spaces become solid AND get blue highlight color
+- Categories checked: objects not in checked categories become x-ray
 
----
+**Changes to `applyFilterVisibility` in `ViewerFilterPanel.tsx`:**
 
-### 1. Stop Remounting the 3D Viewer on Chart Interaction
+1. Remove all `setObjectsVisible(objectIds, false)` calls -- never hide objects, only x-ray them
+2. New logic flow:
+   - Start by making everything visible, un-x-rayed, un-colorized (clean slate)
+   - If any filter is active, collect the set of "selected" xeokit entity IDs across all active filters (intersection logic)
+   - X-ray everything, then un-x-ray the selected set
+   - If spaces are checked, additionally colorize them blue
+3. Fix Categories: actually implement category filtering by matching `checkedCategories` against metaScene object types (IFC types map to Asset+ categories)
 
-**Root cause:** In `BuildingInsightsView.tsx` line 1215, the `InsightsInlineViewer` uses `key={inlineUpdateKey}` and `handleInsightsClick` bumps this key on every chart click (line 470). This **destroys and recreates** the entire `AssetPlusViewer` component, including the WebGL context, model loading, and all initialization.
+**File: `src/components/viewer/ViewerFilterPanel.tsx`**
+- Rewrite `applyFilterVisibility` (lines 215-306) with the corrected x-ray-based logic
+- Add category filtering using xeokit metaScene type matching
+- Ensure room labels sync: dispatch a custom event so only checked spaces show labels
 
-**Fix:**
-- Remove `key={inlineUpdateKey}` from the `InsightsInlineViewer` mount
-- Instead of remounting, dispatch an `INSIGHTS_COLOR_UPDATE_EVENT` to the existing viewer instance (same mechanism already used in `drawerMode`)
-- Update `handleInsightsClick` for the desktop path: instead of setting state that triggers remount, dispatch the event directly to the already-mounted viewer
-- The viewer already has a listener for `INSIGHTS_COLOR_UPDATE_EVENT` (line 452) that handles coloring without remount
+### 2. Consistent Model Names in Right-Side Visningsmenyn
 
-**File: `src/components/insights/BuildingInsightsView.tsx`**
-- Remove `inlineUpdateKey` state and its increment in `handleInsightsClick`
-- Change the desktop path in `handleInsightsClick` to dispatch `INSIGHTS_COLOR_UPDATE_EVENT` (same as drawerMode path)
-- Change `InsightsInlineViewer` to not use a dynamic key, mount once with just the `fmGuid`
-- The `InsightsInlineViewer` still receives `insightsColorMode` and `insightsColorMap` as initial props for the first load
+The `ModelVisibilitySelector` already uses `useModelNames` but has an 8-strategy fallback chain (lines 131-229) that often fails to match, falling back to raw file names.
 
-### 2. Compact Toolbar and NavCube in Insights Viewer
+**Fix:** Simplify the matching to prioritize `parentCommonName` from the Asset+ data (the same source the filter panel uses successfully).
 
-**Root cause:** The `AssetPlusViewer` always renders the full toolbar and NavCube even when embedded as a small inline panel. The `suppressOverlay` prop only hides the top bar and mobile overlay -- not the bottom toolbar or NavCube.
+**File: `src/components/viewer/ModelVisibilitySelector.tsx`**
+- After Strategy 2 (file name without extension), add a direct lookup against `parentCommonName` from the assets data
+- Remove excessive debug logging (Strategies 6-8 console.debug calls)
+- Ensure the display name in the right panel matches the filter panel exactly
 
-**Fix:**
-- Add a new `compactMode` prop to `AssetPlusViewer` (set by `InsightsInlineViewer`)
-- When `compactMode` is true:
-  - Hide the bottom `ViewerToolbar` completely (or show a minimal version)
-  - Hide the NavCube canvas
-  - Hide `FloatingFloorSwitcher`, `FloorCarousel`, and `VisualizationLegendBar`
-- When the viewer is expanded or maximized, `compactMode` should be false (showing full controls)
+### 3. Performance Analysis: Tandem and Dalux vs Geminus
 
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-- Add `compactMode?: boolean` prop
-- Guard the toolbar render block (line 4026) with `!compactMode`
-- Guard the NavCube canvas (line 3968) with `!compactMode`
-- Guard `FloatingFloorSwitcher` (line 4029) with `!compactMode`
+To provide actionable recommendations, I propose fetching the Tandem and Dalux viewers to analyze their loading strategies.
 
-**File: `src/components/insights/BuildingInsightsView.tsx`**
-- Pass `compactMode={!expanded}` to the `AssetPlusViewer` in `InsightsInlineViewer`
-- When `expanded` is true, show full controls including NavCube
+**Analysis approach:**
+- Fetch Tandem's viewer page to examine their 3D loading architecture (format, streaming, compression)
+- Fetch Dalux FM-viewer similarly
+- Compare against Geminus's XKT-based approach
 
-### 3. Fix Chart-to-3D Coloring
+**Key areas to investigate:**
+- File format (glTF+DRACO vs XKT vs proprietary)
+- Progressive/streaming loading (do they show partial models while loading?)
+- Texture handling and compression
+- WebGL vs WebGPU usage
+- Network request patterns (single large file vs many small chunks)
+- Worker thread usage for parsing
 
-This is automatically fixed by issue #1. Once the viewer is no longer remounted on every click, the `INSIGHTS_COLOR_UPDATE_EVENT` dispatch will reach the already-initialized viewer and apply colors correctly. The event handler at line 452 already implements the complete coloring logic for all modes (`room_types`, `room_spaces`, `energy_floors`, `asset_categories`, etc.).
-
-### 4. Småviken 3D Loading
-
-The models exist in storage (A-modell: 43MB, KV-modell: 2.2MB). Potential causes:
-- The 43MB A-modell may exceed in-memory cache limits (MAX_MEMORY_BYTES) in `useXktPreload`
-- The fetch interceptor may be interfering with cached URL resolution
-- The large model may cause a parser timeout
-
-**Investigation and fix:**
-- Check `useXktPreload.ts` MAX_MEMORY_BYTES constant -- if it's too low for 43MB models, skip memory caching for large models
-- Ensure the fetch interceptor's allowedModelIds whitelist includes Småviken's model IDs
-- Add error logging to the model loading path to capture the specific failure
-
-**File: `src/hooks/useXktPreload.ts`**
-- Increase MAX_MEMORY_BYTES or add a per-model size guard to skip caching models larger than 30MB
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-- Ensure `allowedModelIdsRef` is properly cleared when building changes (already done per memory notes, but verify)
-
-### 5. Remaining Swedish Text
-
-Translate remaining Swedish strings found during exploration:
-
-| File | Swedish | English |
-|---|---|---|
-| `BuildingInsightsView.tsx` | "Visa", "Tryck pa stapel for 3D", "Vaning:", "Alla", "Laddar...", "Rumsheatmap", "Visa rum i 3D", "Inga rum hittades", "Larm-objekt fran databasen", "Visa alla i 3D", "Hantera larm", "Senaste 50 larm", "Sok rumsnamn...", "Visa alla vaningar", "Rumsnamn", "Rumsnr", "Vaning", "Datum", various more | English equivalents |
-| `ViewerToolbar.tsx` | "Vantar pa viewer..." | "Waiting for viewer..." |
-| `AssetPlusViewer.tsx` | "Synkar 3D-modeller...", "Stang 3D-vy", "Helskarm", "Modelltrad", "Visning", Swedish pick-mode text | English equivalents |
+This analysis will be presented as findings and concrete recommendations -- no code changes for this part, just research.
 
 ---
 
-### Technical Detail: File Changes
+### Technical Summary of Changes
 
-**`src/components/insights/BuildingInsightsView.tsx`**
-1. Remove `inlineUpdateKey` state (line 165) and its setter calls
-2. Update `handleInsightsClick` desktop path (lines 467-471): dispatch `INSIGHTS_COLOR_UPDATE_EVENT` instead of setting state that bumps key
-3. Remove `key={inlineUpdateKey}` from `InsightsInlineViewer` (line 1215)
-4. Pass `compactMode={!expanded}` to `AssetPlusViewer` inside `InsightsInlineViewer`
-5. Translate all Swedish UI strings to English
-
-**`src/components/viewer/AssetPlusViewer.tsx`**
-1. Add `compactMode?: boolean` prop to `AssetPlusViewerProps`
-2. Guard toolbar block (line 4026): `!compactMode && state.isInitialized && initStep === 'ready'`
-3. Guard NavCube canvas (line 3968): add `!compactMode` to display condition
-4. Guard `FloatingFloorSwitcher` (line 4029): `!compactMode && !isMobile`
-5. Translate Swedish UI strings to English
-
-**`src/hooks/useXktPreload.ts`**
-1. Add per-model size guard: skip memory caching for models > 30MB to avoid cache eviction thrashing
-
-**`src/components/viewer/ViewerToolbar.tsx`**
-1. Translate "Vantar pa viewer..." to "Waiting for viewer..."
-
+| File | Change |
+|---|---|
+| `ViewerFilterPanel.tsx` | Rewrite `applyFilterVisibility`: x-ray unchecked instead of hiding; implement category filtering; fix label sync |
+| `ModelVisibilitySelector.tsx` | Simplify name matching to use `parentCommonName` consistently; remove debug logging |
+| Research | Fetch and analyze Tandem + Dalux F12 network patterns for performance recommendations |
