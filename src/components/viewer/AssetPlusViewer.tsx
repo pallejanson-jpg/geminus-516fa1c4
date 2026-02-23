@@ -3995,6 +3995,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               buildingFmGuid={buildingFmGuid}
               isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
               onOpenSettings={() => setRightPanelOpen(true)}
+              showFilterPanel={showFilterPanel}
+              onToggleFilterPanel={() => setShowFilterPanel(!showFilterPanel)}
             />
           )}
           
