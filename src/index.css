@@ -292,3 +292,10 @@
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* Level label active state */
+.level-label--active {
+  background: hsl(var(--primary) / 0.2) !important;
+  border-color: hsl(var(--primary) / 0.6) !important;
+  font-weight: 600 !important;
+}
