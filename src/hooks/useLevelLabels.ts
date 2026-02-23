@@ -165,24 +165,32 @@ export function useLevelLabels(
 
     const leftEdge = getBuildingLeftScreenX(viewer);
     if (leftEdge === null) {
-      // Can't project — hide all
       labelsRef.current.forEach(l => { l.element.style.display = 'none'; });
       return;
     }
 
-    const labelScreenX = leftEdge - 20; // 20px offset from building edge
+    const labelScreenX = leftEdge - 12; // 12px offset from building edge
 
-    // Use the center of the scene AABB for X and Z when projecting worldY
     const aabb = sceneAABBRef.current!;
     const centerX = (aabb[0] + aabb[3]) / 2;
     const centerZ = (aabb[2] + aabb[5]) / 2;
+    const canvas = viewer.scene.canvas.canvas as HTMLCanvasElement;
+
+    // Zoom-aware scaling: compute building screen height ratio
+    const topSp = worldToScreen([centerX, aabb[4], centerZ], viewer);
+    const botSp = worldToScreen([centerX, aabb[1], centerZ], viewer);
+    let scale = 1;
+    if (topSp && botSp) {
+      const buildingScreenH = Math.abs(topSp[1] - botSp[1]);
+      const ratio = buildingScreenH / canvas.clientHeight;
+      scale = Math.max(0.5, Math.min(1.0, ratio * 1.5));
+    }
 
     labelsRef.current.forEach(label => {
       const sp = worldToScreen([centerX, label.worldY, centerZ], viewer);
       if (sp) {
-        // Position: fixed pixel offset left of building, Y from world projection
-        label.element.style.transform = `translate3d(${labelScreenX}px, ${sp[1]}px, 0) translate(-100%, -50%)`;
-        if (label.element.style.display === 'none') label.element.style.display = 'flex';
+        label.element.style.transform = `translate3d(${labelScreenX}px, ${sp[1]}px, 0) translate(-100%, -50%) scale(${scale.toFixed(3)})`;
+        if (label.element.style.display === 'none' && !label.element.dataset.hiddenByFloor) label.element.style.display = 'flex';
       } else {
         if (label.element.style.display !== 'none') label.element.style.display = 'none';
       }
@@ -221,6 +229,9 @@ export function useLevelLabels(
       label.element.classList.remove('level-label--active');
       const closeBtn = label.element.querySelector('.level-label-close');
       if (closeBtn) closeBtn.remove();
+      // Show all labels again
+      delete label.element.dataset.hiddenByFloor;
+      label.element.style.display = 'flex';
     });
 
     // Dispatch restore event
@@ -287,6 +298,16 @@ export function useLevelLabels(
       restoreAllFloors();
     });
     label.element.appendChild(closeBtn);
+
+    // Hide non-active labels
+    labelsRef.current.forEach(l => {
+      if (l.storeyId !== label.storeyId) {
+        l.element.style.display = 'none';
+        l.element.dataset.hiddenByFloor = '1';
+      } else {
+        delete l.element.dataset.hiddenByFloor;
+      }
+    });
 
     // Dispatch floor isolation event (sync other components)
     window.dispatchEvent(new CustomEvent<FloorSelectionEventDetail>(FLOOR_SELECTION_CHANGED_EVENT, {
@@ -370,18 +391,18 @@ export function useLevelLabels(
       el.style.cssText = `
         position: absolute; left: 0; top: 0;
         display: none; align-items: center; gap: 2px;
-        background: hsl(var(--card) / 0.85);
-        backdrop-filter: blur(6px);
-        color: hsl(var(--card-foreground));
-        padding: 3px 10px;
+        background: rgba(200, 200, 200, 0.4);
+        backdrop-filter: blur(4px);
+        color: rgba(0, 0, 0, 0.72);
+        padding: 2px 7px;
         border-radius: 9999px;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 500;
         white-space: nowrap;
         pointer-events: auto;
         cursor: pointer;
-        border: 1px solid hsl(var(--border) / 0.4);
-        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         will-change: transform;
         transition: background 0.15s, border-color 0.15s;
         z-index: 11;
@@ -411,14 +432,14 @@ export function useLevelLabels(
       // Hover effect
       el.addEventListener('mouseenter', () => {
         if (activeStoreyIdRef.current !== metaObj.id) {
-          el.style.background = 'hsl(var(--primary) / 0.15)';
-          el.style.borderColor = 'hsl(var(--primary) / 0.5)';
+          el.style.background = 'rgba(160, 160, 160, 0.55)';
+          el.style.borderColor = 'rgba(0, 0, 0, 0.18)';
         }
       });
       el.addEventListener('mouseleave', () => {
         if (activeStoreyIdRef.current !== metaObj.id) {
-          el.style.background = 'hsl(var(--card) / 0.85)';
-          el.style.borderColor = 'hsl(var(--border) / 0.4)';
+          el.style.background = 'rgba(200, 200, 200, 0.4)';
+          el.style.borderColor = 'rgba(0, 0, 0, 0.08)';
         }
       });
 
@@ -499,6 +520,20 @@ export function useLevelLabels(
           l.element.classList.remove('level-label--active');
           const closeBtn = l.element.querySelector('.level-label-close');
           if (closeBtn) closeBtn.remove();
+          delete l.element.dataset.hiddenByFloor;
+          l.element.style.display = 'flex';
+        });
+      } else if (e.detail.floorId) {
+        // External isolation — hide non-matching labels
+        activeStoreyIdRef.current = e.detail.floorId;
+        labelsRef.current.forEach(l => {
+          if (l.storeyId === e.detail.floorId) {
+            delete l.element.dataset.hiddenByFloor;
+            l.element.style.display = 'flex';
+          } else {
+            l.element.style.display = 'none';
+            l.element.dataset.hiddenByFloor = '1';
+          }
         });
       }
     };
