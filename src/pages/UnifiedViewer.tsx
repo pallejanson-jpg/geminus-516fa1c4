@@ -97,7 +97,8 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData, viewMode]);
 
   // ─── Dispatch 2D toggle event when viewMode changes ────────────────
-  const prevViewModeRef = useRef<ViewMode>(viewMode);
+  // Use a sentinel so the first render always fires the event when starting in 2D
+  const prevViewModeRef = useRef<ViewMode | '__init__'>(viewMode === '2d' ? '__init__' : viewMode);
   useEffect(() => {
     const prev = prevViewModeRef.current;
     prevViewModeRef.current = viewMode;
