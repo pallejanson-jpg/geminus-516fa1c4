@@ -15,17 +15,17 @@ import {
 import { cn } from "@/lib/utils";
 
 const ISSUE_TYPES = [
-  { value: 'fault', label: 'Fel/Problem', icon: AlertCircle, color: 'text-destructive' },
-  { value: 'improvement', label: 'Förbättring', icon: Lightbulb, color: 'text-amber-500' },
-  { value: 'question', label: 'Fråga', icon: HelpCircle, color: 'text-blue-500' },
+  { value: 'fault', label: 'Fault / Problem', icon: AlertCircle, color: 'text-destructive' },
+  { value: 'improvement', label: 'Improvement', icon: Lightbulb, color: 'text-amber-500' },
+  { value: 'question', label: 'Question', icon: HelpCircle, color: 'text-blue-500' },
   { value: 'observation', label: 'Observation', icon: Eye, color: 'text-muted-foreground' },
 ] as const;
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Låg', color: 'bg-slate-400' },
-  { value: 'medium', label: 'Medel', color: 'bg-amber-500' },
-  { value: 'high', label: 'Hög', color: 'bg-orange-500' },
-  { value: 'critical', label: 'Kritisk', color: 'bg-destructive' },
+  { value: 'low', label: 'Low', color: 'bg-slate-400' },
+  { value: 'medium', label: 'Medium', color: 'bg-amber-500' },
+  { value: 'high', label: 'High', color: 'bg-orange-500' },
+  { value: 'critical', label: 'Critical', color: 'bg-destructive' },
 ] as const;
 
 interface CreateIssueDialogProps {
@@ -170,7 +170,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
         >
           <GripHorizontal className="h-4 w-4 text-muted-foreground" />
           <MessageSquarePlus className="h-5 w-5 text-primary" />
-          <span className="font-semibold flex-1">Skapa ärende</span>
+          <span className="font-semibold flex-1">Create issue</span>
           <Button 
             variant="ghost" 
             size="icon" 
@@ -183,7 +183,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
         </div>
 
         <p className="text-sm text-muted-foreground px-4 pt-3">
-          Rapportera ett problem eller förslag kopplat till modellen.
+          Report a problem or suggestion related to the model.
         </p>
 
         {/* Form content */}
@@ -193,7 +193,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
             <div className="rounded-md overflow-hidden border bg-muted/50">
               <img
                 src={screenshotUrl}
-                alt="Skärmdump"
+                alt="Screenshot"
                 className="w-full h-32 object-cover"
               />
             </div>
@@ -202,7 +202,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
           {/* Building info */}
           {buildingName && (
             <div className="text-sm text-muted-foreground">
-              <span className="font-medium">Byggnad:</span> {buildingName}
+              <span className="font-medium">Building:</span> {buildingName}
             </div>
           )}
 
@@ -211,14 +211,14 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
             <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 text-sm">
               <Box className="h-4 w-4 text-primary" />
               <span>
-                {selectedObjectIds.length} {selectedObjectIds.length === 1 ? 'objekt valt' : 'objekt valda'}
+                {selectedObjectIds.length} {selectedObjectIds.length === 1 ? 'object selected' : 'objects selected'}
               </span>
             </div>
           )}
 
           {/* Issue Type */}
           <div className="space-y-2">
-            <Label>Typ *</Label>
+            <Label>Type *</Label>
             <Select value={issueType} onValueChange={setIssueType}>
               <SelectTrigger>
                 <SelectValue />
@@ -241,7 +241,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
 
           {/* Priority */}
           <div className="space-y-2">
-            <Label>Prioritet</Label>
+            <Label>Priority</Label>
             <RadioGroup
               value={priority}
               onValueChange={setPriority}
@@ -276,10 +276,10 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
 
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="issue-title">Rubrik *</Label>
+            <Label htmlFor="issue-title">Title *</Label>
             <Input
               id="issue-title"
-              placeholder="Beskriv problemet kortfattat"
+              placeholder="Describe the issue briefly"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
@@ -289,10 +289,10 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="issue-description">Beskrivning</Label>
+            <Label htmlFor="issue-description">Description</Label>
             <Textarea
               id="issue-description"
-              placeholder="Lägg till mer information om ärendet..."
+              placeholder="Add more information about the issue..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -309,14 +309,14 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
             onClick={handleClose}
             disabled={isSubmitting}
           >
-            Avbryt
+            Cancel
           </Button>
           <Button 
             type="submit" 
             form="issue-form"
             disabled={!title.trim() || isSubmitting}
           >
-            {isSubmitting ? "Skickar..." : "Skicka ärende"}
+            {isSubmitting ? "Submitting..." : "Submit issue"}
           </Button>
         </div>
       </div>

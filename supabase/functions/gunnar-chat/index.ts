@@ -2,9 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
-const MAX_TOOL_ROUNDS = 7;
-const AI_MODEL_PRIMARY = "google/gemini-2.5-pro";
-const AI_MODEL_FALLBACK = "google/gemini-2.5-flash";
+const MAX_TOOL_ROUNDS = 4;
+const AI_MODEL_PRIMARY = "google/gemini-2.5-flash";
+const AI_MODEL_FALLBACK = "google/gemini-2.5-flash-lite";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 /* ─────────────────────────────────────────────
@@ -910,7 +910,7 @@ PROBLEM-SOLVING APPROACH:
 
 WRITE OPERATIONS (create_work_order, update_issue_status):
 - ALWAYS present what you're about to do and ask the user to confirm BEFORE calling the write tool.
-- Format the confirmation as: "Jag föreslår att [action]. **Ska jag göra detta?** (svara ja/nej)"
+- Format the confirmation as: "I suggest [action]. **Should I proceed?** (yes/no)"
 - Only call the write tool after the user explicitly confirms.
 - After a successful write, summarize what was created/updated.
 
@@ -927,28 +927,28 @@ When the user asks for advice ("ge mig råd", "vad bör jag göra", "advisor"), 
    - Fire safety: check for brandslackare, brandlarmsknapp, branddorr coverage
    - Ventilation: verify presence of IfcFan, IfcAirTerminal per floor
 5. Present findings as a structured FM advisory report with:
-   - 🟢 Styrkor (strengths)
-   - 🟡 Förbättringsområden (improvement areas)
-   - 🔴 Risker/brister (risks/deficiencies)
-   - 📋 Rekommenderade åtgärder (recommended actions) with priority
+   - 🟢 Strengths
+   - 🟡 Improvement areas
+   - 🔴 Risks / deficiencies
+   - 📋 Recommended actions with priority
 
 GUIDELINES:
-1. Answer in the same language as the user (Swedish or English).
+1. Always respond in English unless the user explicitly writes in another language.
 2. When the user has an active building, scope queries to that building by default.
 3. Be concise but thorough. Use markdown formatting: **bold** for key numbers, bullet lists for multiple items, tables for comparisons.
-4. After every answer, suggest 2-3 relevant follow-up questions. Write them as a numbered list at the very end, prefixed with "**Förslag:**" or "**Suggestions:**".
+4. After every answer, suggest 2-3 relevant follow-up questions. Write them as a numbered list at the very end, prefixed with "**Suggestions:**".
 5. When referencing specific assets, floors, or rooms, ALWAYS include ACTION BUTTONS using this exact syntax:
-   [🔍 Visa](action:flyTo:FM_GUID)  — fly the camera to an object
-   [📍 Öppna](action:openViewer:FM_GUID) — open the 3D viewer for a building
-   [🏢 Visa våning](action:showFloor:FM_GUID) — switch to a specific floor
-   [🔎 Hitta i träd](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
-   [📋 Byt till 2D](action:switchTo2D:) — switch viewer to 2D mode
-   [🧊 Byt till 3D](action:switchTo3D:) — switch viewer to 3D mode
-6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Rum **Kontor 201** [🔍 Visa](action:flyTo:abc-123)"
+   [🔍 View](action:flyTo:FM_GUID)  — fly the camera to an object
+   [📍 Open](action:openViewer:FM_GUID) — open the 3D viewer for a building
+   [🏢 Show floor](action:showFloor:FM_GUID) — switch to a specific floor
+   [🔎 Find in tree](action:selectInTree:FM_GUID1,FM_GUID2) — highlight objects in navigator
+   [📋 Switch to 2D](action:switchTo2D:) — switch viewer to 2D mode
+   [🧊 Switch to 3D](action:switchTo3D:) — switch viewer to 3D mode
+6. ALWAYS add action buttons when listing specific assets, rooms, or floors. For example: "Room **Office 201** [🔍 View](action:flyTo:abc-123)"
 7. When listing multiple items in a table or list, add an action button next to each one.
 8. When you receive data from tools, analyze it and provide insights, not just raw data. Calculate percentages, spot trends, highlight anomalies.
 9. If the user asks something you can't answer with the available tools, say so clearly and suggest what they could do instead.
-10. If the user previously discussed something (see PREVIOUS CONVERSATION), you can reference it naturally: "Som vi pratade om förut..."
+10. If the user previously discussed something (see PREVIOUS CONVERSATION), you can reference it naturally: "As we discussed earlier..."
 
 SENSLINC (IoT / SENSOR DATA):
 You have tools to query IoT sensor data from the Senslinc system.
@@ -1052,7 +1052,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, context, proactive } = await req.json();
+    const { messages, context, proactive, advisor } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -1094,18 +1094,18 @@ serve(async (req) => {
       if (issueCount > 0) {
         const highPriority = (openIssues.data || []).filter((i: any) => i.priority === "high" || i.priority === "critical");
         if (highPriority.length > 0) {
-          insights.push(`⚠️ **${highPriority.length} högt prioriterade ärenden** i ${buildingName}`);
+          insights.push(`⚠️ **${highPriority.length} high-priority issues** in ${buildingName}`);
         } else {
-          insights.push(`📋 **${issueCount} öppna ärenden** i ${buildingName}`);
+          insights.push(`📋 **${issueCount} open issues** in ${buildingName}`);
         }
       }
 
       if (woCount > 0) {
-        insights.push(`🔧 **${woCount} öppna arbetsordrar** att hantera`);
+        insights.push(`🔧 **${woCount} open work orders** to handle`);
       }
 
       if (insights.length === 0) {
-        insights.push(`✅ Inga öppna ärenden eller arbetsordrar i ${buildingName} just nu.`);
+        insights.push(`✅ No open issues or work orders in ${buildingName} right now.`);
       }
 
       return new Response(JSON.stringify({ proactive_insights: insights }), {
@@ -1113,7 +1113,12 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
+    let systemPrompt = await buildSystemPrompt(supabase, context, userProfile, previousConversation);
+
+    // If advisor mode, inject advisor instructions internally
+    if (advisor && context?.currentBuilding) {
+      systemPrompt += `\n\nADVISOR MODE ACTIVATED: The user clicked the "Get advice" button. Perform a comprehensive FM analysis of the current building "${context.currentBuilding.name}" (fm_guid: ${context.currentBuilding.fmGuid}). Follow the FM ADVISOR MODE instructions in your system prompt. Start by calling get_building_summary, then query_work_orders and query_issues, then aggregate_assets. Present a structured advisory report.`;
+    }
 
     // Build conversation with system prompt
     const conversation: any[] = [{ role: "system", content: systemPrompt }, ...messages];
