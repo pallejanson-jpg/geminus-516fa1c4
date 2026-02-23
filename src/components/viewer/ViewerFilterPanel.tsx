@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
-import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box, MapPin } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-
+import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [autoColorEnabled, setAutoColorEnabled] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
 
+  // Annotations state
+  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [checkedAnnotations, setCheckedAnnotations] = useState<Set<string>>(new Set());
+  const [annotationCategories, setAnnotationCategories] = useState<Array<{ category: string; count: number; color: string }>>([]);
   // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
   const entityMapBuilt = useRef(false);
@@ -396,6 +401,53 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
+  // ── Fetch annotation categories (non-modeled assets) ────────────────────
+  useEffect(() => {
+    if (!isVisible || !buildingFmGuid) return;
+    const fetchAnnotations = async () => {
+      // Fetch non-modeled assets grouped by asset_type
+      const { data: assets } = await supabase
+        .from('assets')
+        .select('asset_type, symbol_id')
+        .eq('building_fm_guid', buildingFmGuid)
+        .or('created_in_model.eq.false,asset_type.eq.IfcAlarm');
+
+      if (!assets || assets.length === 0) { setAnnotationCategories([]); return; }
+
+      // Fetch symbols for colors
+      const { data: symbols } = await supabase
+        .from('annotation_symbols')
+        .select('id, color, category');
+      const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
+
+      // Group by asset_type
+      const groups = new Map<string, { count: number; color: string }>();
+      assets.forEach(a => {
+        const cat = a.asset_type || 'Övrigt';
+        const existing = groups.get(cat);
+        const sym = a.symbol_id ? symbolMap.get(a.symbol_id) : null;
+        const color = sym?.color || '#3B82F6';
+        if (existing) { existing.count++; }
+        else { groups.set(cat, { count: 1, color }); }
+      });
+
+      setAnnotationCategories(
+        Array.from(groups.entries())
+          .map(([category, { count, color }]) => ({ category, count, color }))
+          .sort((a, b) => b.count - a.count)
+      );
+    };
+    fetchAnnotations();
+  }, [isVisible, buildingFmGuid]);
+
+  // Dispatch annotation filter event when checked annotations change
+  useEffect(() => {
+    if (checkedAnnotations.size === 0) return;
+    window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
+      detail: { visibleCategories: Array.from(checkedAnnotations) },
+    }));
+  }, [checkedAnnotations]);
+
   // ── IFC type mapping for categories ─────────────────────────────────────
 
   const categoryToIfcTypes = useMemo(() => {
@@ -681,12 +733,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
   }, [getXeokitViewer, onNodeSelect]);
 
-  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories') => {
+  const handleResetSection = useCallback((section: 'sources' | 'levels' | 'spaces' | 'categories' | 'annotations') => {
     switch (section) {
       case 'sources': setCheckedSources(new Set()); break;
       case 'levels': setCheckedLevels(new Set()); break;
       case 'spaces': setCheckedSpaces(new Set()); break;
       case 'categories': setCheckedCategories(new Set()); break;
+      case 'annotations': 
+        setCheckedAnnotations(new Set());
+        // Clear annotation filter
+        window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+        break;
     }
   }, []);
 
@@ -695,6 +752,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     setCheckedLevels(new Set());
     setCheckedSpaces(new Set());
     setCheckedCategories(new Set());
+    setCheckedAnnotations(new Set());
+    window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
+  }, []);
+
+  const handleAnnotationToggle = useCallback((category: string, checked: boolean) => {
+    setCheckedAnnotations(prev => {
+      const n = new Set(prev);
+      checked ? n.add(category) : n.delete(category);
+      return n;
+    });
   }, []);
 
   const handleLevelColorChange = useCallback((fmGuid: string, color: string) => {
@@ -719,7 +786,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return levels.filter(l => l.name.toLowerCase().includes(q));
   }, [levels, levelsSearch]);
 
-  const totalFilters = checkedSources.size + checkedLevels.size + checkedSpaces.size + checkedCategories.size;
+  const totalFilters = checkedSources.size + checkedLevels.size + checkedSpaces.size + checkedCategories.size + checkedAnnotations.size;
 
   if (!isVisible) return null;
 
@@ -878,6 +945,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
           </FilterSection>
+
+          {/* Annotations (non-modeled assets) */}
+          {annotationCategories.length > 0 && (
+            <FilterSection
+              title="Annotations"
+              count={annotationCategories.reduce((s, c) => s + c.count, 0)}
+              selectedCount={checkedAnnotations.size}
+              isOpen={annotationsOpen}
+              onToggle={() => setAnnotationsOpen(!annotationsOpen)}
+              onReset={() => handleResetSection('annotations')}
+              rightAction={<MapPin className="h-3 w-3 text-muted-foreground" />}
+            >
+              {annotationCategories.map(cat => (
+                <div
+                  key={cat.category}
+                  className="flex items-center gap-2 px-3 py-1 hover:bg-accent/30 transition-colors cursor-pointer"
+                >
+                  <Checkbox
+                    checked={checkedAnnotations.has(cat.category)}
+                    className="h-3.5 w-3.5 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                    onCheckedChange={(v) => handleAnnotationToggle(cat.category, !!v)}
+                  />
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: cat.color }}
+                  />
+                  <span className="text-xs truncate flex-1">{cat.category}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{cat.count}</span>
+                </div>
+              ))}
+            </FilterSection>
+          )}
         </div>
       </ScrollArea>
     </div>
