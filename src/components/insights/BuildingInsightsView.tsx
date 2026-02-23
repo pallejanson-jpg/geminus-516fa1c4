@@ -62,7 +62,7 @@ const ViewerLink = () => {
     return (
         <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary text-primary-foreground text-xs font-medium shadow-md shrink-0 ${pulse ? 'ring-2 ring-primary/50 animate-pulse' : ''}`}>
             <Eye className="h-3.5 w-3.5" />
-            <span>Visa</span>
+            <span>View</span>
         </div>
     );
 };
@@ -119,6 +119,7 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     <AssetPlusViewer
                         fmGuid={fmGuid}
                         suppressOverlay
+                        compactMode={!expanded}
                         insightsColorMode={insightsColorMode}
                         insightsColorMap={insightsColorMap}
                         forceXray={!!insightsColorMode}
@@ -132,7 +133,7 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     size="icon"
                     className="h-8 w-8 bg-background/80 backdrop-blur-sm border border-border shadow-lg"
                     onClick={onToggleExpand}
-                    title={expanded ? 'Förminska' : 'Förstora'}
+                    title={expanded ? 'Shrink' : 'Expand'}
                 >
                     {expanded ? <Shrink className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
                 </Button>
@@ -141,7 +142,7 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
                     size="icon"
                     className="h-8 w-8 bg-background/80 backdrop-blur-sm border border-border shadow-lg"
                     onClick={onFullscreen}
-                    title="Visa i fullskärm"
+                    title="View in fullscreen"
                 >
                     <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
@@ -158,11 +159,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Preload XKT models in background so 3D viewer loads fast
     useXktPreload(facility.fmGuid);
 
-    // Desktop inline viewer state — updateKey forces re-render even when mode/colorMap look the same
+    // Desktop inline viewer state
     const [inlineInsightsMode, setInlineInsightsMode] = useState<string | undefined>(undefined);
     const [inlineColorMap, setInlineColorMap] = useState<Record<string, [number, number, number]> | undefined>(undefined);
     const [inlineExpanded, setInlineExpanded] = useState(false);
-    const [inlineUpdateKey, setInlineUpdateKey] = useState(0);
 
     // Sensors tab state
     const [sensorMetric, setSensorMetric] = useState<VisualizationType>('temperature');
@@ -220,7 +220,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             const levelMap = new Map<string, string>();
             let unkIdx = 1;
             (levelAssets || []).forEach((l: any) => {
-                levelMap.set(l.fm_guid, l.common_name || l.name || `Våning (okänd ${unkIdx++})`);
+                levelMap.set(l.fm_guid, l.common_name || l.name || `Floor (unknown ${unkIdx++})`);
             });
 
             const { data: alarmLevels } = await supabase
@@ -239,7 +239,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 const mapped = Object.entries(lvlCounts)
                     .map(([g, cnt]) => ({
                         levelGuid: g,
-                        levelName: g === '__none__' ? 'Okänd' : (levelMap.get(g) || 'Våning (okänd)'),
+                        levelName: g === '__none__' ? 'Unknown' : (levelMap.get(g) || 'Floor (unknown)'),
                         count: cnt,
                     }))
                     .sort((a, b) => b.count - a.count)
@@ -313,7 +313,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         let unknownIndex = 1;
         buildingStoreys.forEach((s: any) => {
             const name = s.commonName || s.name;
-            map.set(s.fmGuid?.toLowerCase(), name || `Våning (okänd ${unknownIndex++})`);
+            map.set(s.fmGuid?.toLowerCase(), name || `Floor (unknown ${unknownIndex++})`);
         });
         levelNamesRef.current = map;
         return map;
@@ -322,8 +322,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const SENSOR_METRICS = [
         { key: 'temperature' as VisualizationType, label: 'Temp', unit: '°C', icon: Thermometer, color: 'hsl(var(--chart-3))' },
         { key: 'co2' as VisualizationType, label: 'CO₂', unit: 'ppm', icon: Wind, color: 'hsl(var(--chart-2))' },
-        { key: 'humidity' as VisualizationType, label: 'Fukt', unit: '%', icon: Droplets, color: 'hsl(var(--chart-7))' },
-        { key: 'occupancy' as VisualizationType, label: 'Beläggning', unit: '%', icon: Users, color: 'hsl(var(--chart-5))' },
+        { key: 'humidity' as VisualizationType, label: 'Humidity', unit: '%', icon: Droplets, color: 'hsl(var(--chart-7))' },
+        { key: 'occupancy' as VisualizationType, label: 'Occupancy', unit: '%', icon: Users, color: 'hsl(var(--chart-5))' },
     ] as const;
 
     // Deduplicated floor list for Space tab filter
@@ -464,10 +464,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         } else if (isMobile) {
             navigateToInsights3D(opts);
         } else {
-            // Update inline viewer reactively — bump key to force re-render even if mode is the same
+            // Update inline viewer via event (same as drawerMode) — no remount needed
             setInlineInsightsMode(opts.mode);
             setInlineColorMap(opts.colorMap);
-            setInlineUpdateKey(k => k + 1);
+            window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, {
+                detail: { mode: opts.mode, colorMap: opts.colorMap },
+            }));
         }
     }, [isMobile, drawerMode, navigateToInsights3D]);
 
@@ -629,7 +631,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     handleInsightsClick({ mode: 'energy_floors', colorMap });
                                                 }}><ViewerLink /></span>
                                             </CardTitle>
-                                            <CardDescription>kWh per m² by floor level · Tryck på stapel för 3D</CardDescription>
+                                            <CardDescription>kWh per m² by floor level · Click bar for 3D</CardDescription>
                                         </CardHeader>
                                         <CardContent>
                                             <div className="h-64 cursor-pointer">
@@ -736,7 +738,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 handleInsightsClick({ mode: 'room_types', colorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
-                                        <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Tryck för att visa i 3D</CardDescription>
+                                        <CardDescription>{stats.roomCount} rooms · {stats.totalArea.toLocaleString()} m² · Click to view in 3D</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="h-64">
@@ -769,14 +771,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                  {/* Floor filter pills */}
                                  {spaceFloorOptions.length > 1 && (
                                      <div className="flex flex-wrap gap-1.5 items-center">
-                                         <span className="text-xs text-muted-foreground mr-1">Våning:</span>
+                                         <span className="text-xs text-muted-foreground mr-1">Floor:</span>
                                          <Button
                                              size="sm"
                                              variant={spaceFloorFilter === '' ? 'default' : 'outline'}
                                              className="h-6 px-2 text-[10px]"
                                              onClick={() => setSpaceFloorFilter('')}
                                          >
-                                             Alla
+                                             All
                                          </Button>
                                          {spaceFloorOptions.map(opt => (
                                              <Button
@@ -797,7 +799,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                      <div className="flex items-center gap-2">
                                          {iotLoading && (
                                              <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground">
-                                                 <Loader2 className="h-2.5 w-2.5 animate-spin" />Laddar…
+                                                 <Loader2 className="h-2.5 w-2.5 animate-spin" />Loading…
                                              </span>
                                          )}
                                          {!iotLoading && iotLive && (
@@ -828,7 +830,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                          <div className="flex items-center justify-between">
                                              <CardTitle className="text-sm flex items-center gap-2">
                                                  <sensorMetricDef.icon className="h-4 w-4" style={{ color: sensorMetricDef.color }} />
-                                                 Rumsheatmap – {sensorMetricDef.label}
+                                                 Room Heatmap – {sensorMetricDef.label}
                                              </CardTitle>
                                              <Button
                                                  variant="outline"
@@ -849,16 +851,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                  }}
                                              >
                                                  <Eye className="h-3 w-3" />
-                                                 Visa rum i 3D
+                                                  View rooms in 3D
                                              </Button>
                                          </div>
                                          <CardDescription>
-                                             {sensorRooms.length} av {spaceFloorFilter ? `rum på ${spaceFloorFilter}` : `${buildingSpaces.length} rum`} · klicka för sensordetaljer
+                                             {sensorRooms.length} of {spaceFloorFilter ? `rooms on ${spaceFloorFilter}` : `${buildingSpaces.length} rooms`} · click for sensor details
                                          </CardDescription>
                                      </CardHeader>
                                      <CardContent>
                                          {sensorRooms.length === 0 ? (
-                                             <p className="text-sm text-muted-foreground text-center py-8">Inga rum hittades</p>
+                                             <p className="text-sm text-muted-foreground text-center py-8">No rooms found</p>
                                          ) : (
                                              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
                                                  {sensorRoomValues.map(room => {
@@ -896,7 +898,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                  {!iotLoading && iotLive && buildingIoT && (
                                      <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
                                          <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-                                         <span>Live-data från Senslinc · {buildingIoT.machines.length} sensorer</span>
+                                         <span>Live data from Senslinc · {buildingIoT.machines.length} sensors</span>
                                      </div>
                                  )}
 
@@ -925,7 +927,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 handleInsightsClick({ mode: 'asset_categories', colorMap });
                                             }}><ViewerLink /></span>
                                         </CardTitle>
-                                        <CardDescription>{stats.assetCount} assets (real data) · Tryck på segment för 3D</CardDescription>
+                                        <CardDescription>{stats.assetCount} assets (real data) · Click segment for 3D</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="h-64">
@@ -962,7 +964,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 <span className="inline-flex items-center gap-1 text-[9px] text-green-400 border border-green-500/40 rounded-full px-1.5 py-0.5 bg-green-500/10">
                                     <span className="h-1.5 w-1.5 rounded-full bg-green-400 inline-block" />LIVE
                                 </span>
-                                <span className="text-xs text-muted-foreground">Larm-objekt från databasen</span>
+                                <span className="text-xs text-muted-foreground">Alarm objects from database</span>
                                 {!showAlarmManagement && (
                                     <>
                                         <Button
@@ -978,7 +980,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             }}
                                         >
                                             <Eye className="h-3.5 w-3.5" />
-                                            Visa alla i 3D
+                                             View all in 3D
                                         </Button>
                                         <Button
                                             variant="outline"
@@ -987,7 +989,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             onClick={() => setShowAlarmManagement(true)}
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
-                                            Hantera larm
+                                            Manage alarms
                                         </Button>
                                     </>
                                 )}
@@ -998,7 +1000,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                         className="ml-auto"
                                         onClick={() => setShowAlarmManagement(false)}
                                     >
-                                        ← Översikt
+                                        ← Overview
                                     </Button>
                                 )}
                             </div>
@@ -1022,7 +1024,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Bell className="h-4 w-4 text-destructive" />
                                                 </div>
                                                 <p className="text-2xl font-bold">{alarmCount.toLocaleString()}</p>
-                                                <p className="text-xs text-muted-foreground">Totalt antal larm</p>
+                                                <p className="text-xs text-muted-foreground">Total alarms</p>
                                             </CardContent>
                                         </Card>
                                         <Card>
@@ -1031,7 +1033,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     <Layers className="h-4 w-4 text-primary" />
                                                 </div>
                                                 <p className="text-2xl font-bold">{alarmsByLevel.length}</p>
-                                                <p className="text-xs text-muted-foreground">Våningar med larm</p>
+                                                <p className="text-xs text-muted-foreground">Floors with alarms</p>
                                             </CardContent>
                                         </Card>
                                         <Card>
@@ -1044,7 +1046,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         ? Math.round(alarmCount / Math.max(alarmsByLevel.length, 1))
                                                         : 0}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">Snitt per våning</p>
+                                                <p className="text-xs text-muted-foreground">Avg. per floor</p>
                                             </CardContent>
                                         </Card>
                                     </div>
@@ -1055,9 +1057,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <CardHeader className="pb-2">
                                                 <CardTitle className="text-base flex items-center gap-2">
                                                     <Bell className="h-4 w-4 text-destructive" />
-                                                    Larm per våningsplan
+                                                     Alarms per Floor
                                                 </CardTitle>
-                                                <CardDescription>Antal alarm per våning (riktiga data) · Klicka stapel för att filtrera</CardDescription>
+                                                <CardDescription>Alarm count per floor (real data) · Click bar to filter</CardDescription>
                                             </CardHeader>
                                             <CardContent className="space-y-3">
                                                 <div className="flex gap-2">
@@ -1068,7 +1070,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                                                                 <YAxis dataKey="levelName" type="category" width={isMobile ? 60 : 100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isMobile ? 10 : 12 }} />
                                                                 
-                                                                <Bar dataKey="count" name="Larm" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
+                                                                <Bar dataKey="count" name="Alarms" radius={[0, 4, 4, 0]} style={{ cursor: 'pointer' }}>
                                                                     {alarmsByLevel.map((entry, index) => (
                                                                         <Cell
                                                                             key={`cell-${index}`}
@@ -1088,7 +1090,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 className="h-6 w-6 text-primary hover:bg-primary/10"
-                                                                title={`Visa ${level.count} larm för ${level.levelName}`}
+                                                                title={`Show ${level.count} alarms for ${level.levelName}`}
                                                                 onClick={() => {
                                                                     const levelAlarms = alarmList
                                                                         .filter((a: any) => a.level_fm_guid === level.levelGuid)
@@ -1104,7 +1106,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 </div>
                                                 {alarmLevelFilter && (
                                                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setAlarmLevelFilter('')}>
-                                                        <X className="h-3 w-3" /> Visa alla våningar
+                                                        <X className="h-3 w-3" /> Show all floors
                                                     </Button>
                                                 )}
                                             </CardContent>
@@ -1117,14 +1119,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                             <CardTitle className="text-base flex items-center gap-2">
                                                 <Bell className="h-4 w-4 text-destructive" />
                                                 {alarmLevelFilter
-                                                    ? `Larm — ${alarmsByLevel.find(l => l.levelGuid === alarmLevelFilter)?.levelName || 'Vald våning'}`
-                                                    : 'Senaste 50 larm'
+                                                     ? `Alarms — ${alarmsByLevel.find(l => l.levelGuid === alarmLevelFilter)?.levelName || 'Selected floor'}`
+                                                     : 'Latest 50 alarms'
                                                 }
                                             </CardTitle>
                                             <div className="relative mt-2">
                                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                                                 <Input
-                                                    placeholder="Sök rumsnamn, nummer, våning…"
+                                                    placeholder="Search room name, number, floor…"
                                                     value={alarmSearch}
                                                     onChange={(e) => setAlarmSearch(e.target.value)}
                                                     className="h-8 pl-8 text-xs"
@@ -1141,10 +1143,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 <Table>
                                                     <TableHeader>
                                                         <TableRow>
-                                                            <TableHead>Rumsnamn</TableHead>
-                                                            <TableHead>Rumsnr</TableHead>
-                                                            <TableHead>Våning</TableHead>
-                                                            <TableHead>Datum</TableHead>
+                                                             <TableHead>Room Name</TableHead>
+                                                             <TableHead>Room No.</TableHead>
+                                                             <TableHead>Floor</TableHead>
+                                                             <TableHead>Date</TableHead>
                                                             <TableHead className="w-10">3D</TableHead>
                                                             <TableHead className="w-10"></TableHead>
                                                         </TableRow>
@@ -1157,14 +1159,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 <TableRow key={alarm.id}>
                                                                     <TableCell className="text-xs">{room?.commonName || '—'}</TableCell>
                                                                     <TableCell className="text-xs font-mono text-muted-foreground">{room?.name || '—'}</TableCell>
-                                                                    <TableCell className="text-xs text-muted-foreground">{lvlName || 'Våning (okänd)'}</TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">{lvlName || 'Floor (unknown)'}</TableCell>
                                                                     <TableCell className="text-xs text-muted-foreground">{new Date(alarm.updated_at).toLocaleDateString('sv-SE')}</TableCell>
                                                                     <TableCell>
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
                                                                             className="h-7 w-7 text-primary hover:bg-primary/10"
-                                                                            title="Visa annotation och zooma till larm"
+                                                                            title="Show annotation and zoom to alarm"
                                                                             onClick={() => {
                                                                                 const alarms = [{ fmGuid: alarm.fm_guid, roomFmGuid: alarm.in_room_fm_guid }];
                                                                                 // Always dispatch event (works in both drawer and desktop inline viewer)
@@ -1179,7 +1181,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             variant="ghost"
                                                                             size="icon"
                                                                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                                                            title="Radera larm"
+                                                                            title="Delete alarm"
                                                                             onClick={async () => {
                                                                                 await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
                                                                                 setAlarmRefreshKey(k => k + 1);
@@ -1194,7 +1196,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         {filteredAlarmList.length === 0 && (
                                                             <TableRow>
                                                                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                                                    {alarmSearch || alarmLevelFilter ? 'Inga matchande larm' : 'Inga larm hittades'}
+                                                                    {alarmSearch || alarmLevelFilter ? 'No matching alarms' : 'No alarms found'}
                                                                 </TableCell>
                                                             </TableRow>
                                                         )}
@@ -1212,7 +1214,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 {/* Desktop inline 3D viewer — hidden in drawerMode (already inside the 3D viewer) */}
                 {!isMobile && !drawerMode && (
                     <InsightsInlineViewer
-                        key={inlineUpdateKey}
                         fmGuid={facility.fmGuid}
                         insightsColorMode={inlineInsightsMode}
                         insightsColorMap={inlineColorMap}
