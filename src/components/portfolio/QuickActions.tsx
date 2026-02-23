@@ -83,27 +83,20 @@ const QuickActions: React.FC<QuickActionsProps> = ({
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
           {/* ===== VISUALIZATION TOOLS ===== */}
           
-          {/* 2D - Only for Storey */}
-          {isStorey && onToggle2D && (
-            <Button variant="ghost" onClick={() => onToggle2D(facility)} className={btnClass}>
-              <Square size={iconSize} className="text-primary" />
-              <span className={labelClass}>2D</span>
-            </Button>
-          )}
-
-          {/* 2D FMA - Only for Storey */}
-          {isStorey && (
+          {/* 2D - Building, Storey, Space */}
+          {(isBuilding || isStorey || isSpace) && (
             <Button 
               variant="ghost" 
               onClick={() => {
-                const buildingGuid = (facility as any).buildingFmGuid || facility.fmGuid;
-                const floorName = facility.commonName || facility.name || '';
-                navigate(`/split-viewer?building=${buildingGuid}&mode=2d&floor=${facility.fmGuid}&floorName=${encodeURIComponent(floorName)}`);
+                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
+                const floorParam = isStorey ? `&floor=${facility.fmGuid}&floorName=${encodeURIComponent(facility.commonName || facility.name || '')}` : '';
+                const entityParam = isSpace ? `&entity=${facility.fmGuid}` : '';
+                navigate(`/split-viewer?building=${buildingGuid}&mode=2d${floorParam}${entityParam}`);
               }}
               className={btnClass}
             >
-              <Square size={iconSize} className="text-accent" />
-              <span className={labelClass}>2D FMA</span>
+              <Square size={iconSize} className="text-primary" />
+              <span className={labelClass}>2D</span>
             </Button>
           )}
 
@@ -149,18 +142,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             >
               <SplitSquareHorizontal size={iconSize} className="text-accent" />
               <span className={labelClass}>3D+360°</span>
-            </Button>
-          )}
-
-          {/* 2D Ritning - Building only */}
-          {isBuilding && (
-            <Button 
-              variant="ghost" 
-              onClick={() => { if (has2D) navigate(`/split-viewer?building=${facility.fmGuid}&mode=2d`); }}
-              className={`${btnClass} ${!has2D ? disabledClass : ''}`}
-            >
-              <Square size={iconSize} className="text-primary" />
-              <span className={labelClass}>2D Ritning</span>
             </Button>
           )}
 
