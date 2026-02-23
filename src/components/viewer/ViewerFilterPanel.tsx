@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { AppContext } from '@/context/AppContext';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -197,17 +198,39 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // Categories: derived from Asset+ data (not IFC metaScene)
-  const categories: CategoryItem[] = useMemo(() => {
+  // Categories: derived from Asset+ data + lazy Instance count from DB
+  const baseCategories = useMemo(() => {
     const map = new Map<string, number>();
     buildingData.forEach((a: any) => {
       const cat = a.category;
       if (cat) map.set(cat, (map.get(cat) || 0) + 1);
     });
+    return map;
+  }, [buildingData]);
+
+  const [instanceCount, setInstanceCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!buildingFmGuid || !isVisible) return;
+    // Lightweight count query for Instance category (not in allData at startup)
+    supabase
+      .from('assets')
+      .select('fm_guid', { count: 'exact', head: true })
+      .eq('building_fm_guid', buildingFmGuid)
+      .eq('category', 'Instance')
+      .then(({ count }) => {
+        if (count != null && count > 0) setInstanceCount(count);
+      });
+  }, [buildingFmGuid, isVisible]);
+
+  const categories: CategoryItem[] = useMemo(() => {
+    const map = new Map(baseCategories);
+    if (instanceCount != null && instanceCount > 0 && !map.has('Instance')) {
+      map.set('Instance', instanceCount);
+    }
     return Array.from(map.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-  }, [buildingData]);
+  }, [baseCategories, instanceCount]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
@@ -393,10 +416,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate
+    // Step 0: Clean slate — only reset what was previously changed (perf)
     scene.setObjectsVisible(scene.objectIds, true);
-    if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
-    if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    const prevXrayed = scene.xrayedObjectIds;
+    if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
+    const prevColorized = scene.colorizedObjectIds;
+    if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
 
     // Step 1: Apply level auto-colors (always, if enabled)
     if (autoColorEnabled && eMap.size > 0) {
@@ -485,7 +510,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Step 3: X-ray everything, then un-x-ray solid set
+    // Step 3: X-ray non-solid objects only (perf: avoid touching ALL objects)
     // Configure xray material
     const xrayMat = scene.xrayMaterial;
     if (xrayMat) {
@@ -496,12 +521,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       xrayMat.edgeAlpha = 0.3;
       xrayMat.edgeColor = [0.4, 0.4, 0.45];
     }
-    scene.setObjectsXRayed(scene.objectIds, true);
-
-    if (solidIds.size > 0) {
-      const arr = [...solidIds];
-      scene.setObjectsXRayed(arr, false);
-    }
+    // Only xray IDs that are NOT in solidIds (avoids touching all scene.objectIds)
+    const xrayIds = scene.objectIds.filter((id: string) => !solidIds.has(id));
+    if (xrayIds.length > 0) scene.setObjectsXRayed(xrayIds, true);
+    // Ensure solid set is explicitly un-xrayed
+    if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
 
     // Step 4: If spaces checked, colorize them blue (override level color)
     if (checkedSpaces.size > 0 && spaceIds) {
@@ -511,9 +535,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Step 5: Floor visibility event for labels
+    // Step 5: Floor/space visibility event for labels and clipping
     const visibleFmGuids: string[] = [];
-    if (checkedLevels.size > 0) {
+    if (checkedSpaces.size > 0) {
+      // When spaces are selected, resolve their parent level for clipping
+      const parentLevelGuids = new Set<string>();
+      spacesRef.current.forEach(space => {
+        if (checkedSpaces.has(space.fmGuid) && space.levelFmGuid) {
+          parentLevelGuids.add(space.levelFmGuid);
+        }
+      });
+      parentLevelGuids.forEach(g => visibleFmGuids.push(g));
+    } else if (checkedLevels.size > 0) {
       checkedLevels.forEach(g => visibleFmGuids.push(g));
     } else if (checkedSources.size > 0) {
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => visibleFmGuids.push(l.fmGuid));
@@ -525,6 +558,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         floorName: null, bounds: null,
         visibleMetaFloorIds: [], visibleFloorFmGuids: visibleFmGuids,
         isAllFloorsVisible: !hasAnyFilter,
+        isSoloFloor: visibleFmGuids.length === 1,
       } as FloorSelectionEventDetail,
     }));
 
