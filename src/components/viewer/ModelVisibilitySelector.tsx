@@ -145,7 +145,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         if (!matchedName) matchedName = modelNamesMap.get(modelId);
         if (!matchedName) matchedName = modelNamesMap.get(modelId.toLowerCase());
         
-        // Strategy 5: Partial match search for complex URLs
+        // Strategy 5: Partial match search
         if (!matchedName && modelNamesMap.size > 0) {
           for (const [key, value] of modelNamesMap.entries()) {
             const keyClean = key.replace(/\.xkt$/i, '').toLowerCase();
@@ -157,86 +157,10 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           }
         }
         
-        // Strategy 6: Extract name from metaScene IfcProject root
-        if (!matchedName && viewer?.metaScene) {
-          try {
-            const metaModel = viewer.metaScene.metaModels?.[modelId];
-            console.debug("[ModelNames] Strategy 6: metaModels keys:", Object.keys(viewer.metaScene.metaModels || {}));
-            console.debug("[ModelNames] Strategy 6: metaModel for", modelId, "=", metaModel ? 'found' : 'undefined');
-            if (metaModel?.rootMetaObject) {
-              const rootObj = metaModel.rootMetaObject;
-              if (rootObj.type === 'IfcProject' && rootObj.name && !rootObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                matchedName = rootObj.name;
-                console.debug("Strategy 6 (metaScene IfcProject) matched:", modelId, "->", matchedName);
-              }
-            }
-            // Strategy 6b: search all metaObjects for IfcProject belonging to this model
-            if (!matchedName) {
-              const metaObjects = viewer.metaScene.metaObjects || {};
-              const ifcProjects = Object.values(metaObjects).filter((m: any) => m.type === 'IfcProject') as any[];
-              console.debug("[ModelNames] Strategy 6b/7/8: Found", ifcProjects.length, "IfcProject objects:", ifcProjects.map((p: any) => ({ id: p.id, name: p.name, metaModelId: p.metaModel?.id })));
-              
-              for (const metaObj of ifcProjects) {
-                // Check by metaModel reference
-                if (metaObj.metaModel?.id === modelId) {
-                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                    matchedName = metaObj.name;
-                    console.debug("Strategy 6b matched:", modelId, "->", matchedName);
-                  }
-                  break;
-                }
-                // Strategy 7: Check by ID namespace (modelId#objectId pattern)
-                const objId = metaObj.id || '';
-                if (objId.startsWith(modelId + '#') || objId.startsWith(modelId + '.')) {
-                  if (metaObj.name && !metaObj.name.match(/^[0-9A-Fa-f-]{30,}$/)) {
-                    matchedName = metaObj.name;
-                    console.debug("Strategy 7 (namespace) matched:", modelId, "->", matchedName);
-                  }
-                  break;
-                }
-              }
-              
-              // Strategy 8: Position-based matching — assign IfcProject names in order to unnamed models
-              if (!matchedName && ifcProjects.length > 0) {
-                const unclaimedProjects = ifcProjects.filter(p => 
-                  p.name && !p.name.match(/^[0-9A-Fa-f-]{30,}$/)
-                );
-                console.debug("[ModelNames] Strategy 8: unclaimed IfcProjects with valid names:", unclaimedProjects.map((p: any) => p.name));
-                // Find the index of this model among all scene models
-                const sceneModelIds = Object.keys(sceneModels);
-                const myIndex = sceneModelIds.indexOf(modelId);
-                console.debug("[ModelNames] Strategy 8: modelId", modelId, "at index", myIndex, "of", sceneModelIds.length, "scene models");
-                if (myIndex >= 0 && myIndex < unclaimedProjects.length) {
-                  matchedName = unclaimedProjects[myIndex].name;
-                  console.debug("Strategy 8 (position-based) matched:", modelId, "->", matchedName);
-                }
-              }
-            }
-            
-            // Write-back: persist discovered name to DB for next time
-            if (matchedName && buildingFmGuid) {
-              const cleanId = modelId.replace(/\.xkt$/i, '');
-              supabase.from('xkt_models')
-                .update({ model_name: matchedName })
-                .eq('building_fm_guid', buildingFmGuid)
-                .or(`model_id.eq.${cleanId},file_name.eq.${cleanId}.xkt`)
-                .then(({ error }) => {
-                  if (!error) console.debug("Write-back model name to DB:", cleanId, "->", matchedName);
-                });
-            }
-          } catch (e) {
-            console.debug("Strategy 6/7/8 failed for model:", modelId, e);
-          }
-        }
-        
-        // Improved fallback: show "Loading..." if still fetching names, otherwise format nicely
+        // Fallback: show "Loading..." if still fetching names, otherwise format nicely
         const friendlyName = matchedName || 
           (isLoadingNames ? 'Loading...' : fileNameWithoutExt.replace(/-/g, ' '));
         const shortName = friendlyName.length > 30 ? friendlyName.substring(0, 30) + '...' : friendlyName;
-
-        if (!matchedName && modelNamesMap.size > 0) {
-          console.debug("No name match for model:", modelId, "tried:", fileName, fileNameWithoutExt);
-        }
 
         extractedModels.push({
           id: modelId,
