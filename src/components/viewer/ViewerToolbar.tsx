@@ -32,6 +32,7 @@ import {
   type ViewerToolChangedDetail,
   type ViewMode2DToggledDetail,
 } from '@/lib/viewer-events';
+import { LEVEL_LABELS_TOGGLE_EVENT } from '@/hooks/useLevelLabels';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -383,6 +384,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
+      // Auto-enable level labels in 2D mode
+      window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: true } }));
       const scene = viewer.scene;
       const assetViewer = viewerRef.current?.$refs?.AssetViewer;
       const assetView = assetViewer?.$refs?.assetView;
