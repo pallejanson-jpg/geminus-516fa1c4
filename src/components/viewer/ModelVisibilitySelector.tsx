@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, forwardRef } from 'react';
 import { Box, ChevronDown, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useModelNames } from '@/hooks/useModelNames';
 import { MODEL_LOAD_REQUESTED_EVENT } from '@/lib/viewer-events';
+import { AppContext } from '@/context/AppContext';
 
 export interface ModelInfo {
   id: string;
@@ -33,6 +34,7 @@ interface ModelVisibilitySelectorProps {
  */
 const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelectorProps>(
   ({ viewerRef, buildingFmGuid, onVisibleModelsChange, className, listOnly = false }, ref) => {
+    const { allData } = useContext(AppContext);
     const [models, setModels] = useState<ModelInfo[]>([]);
     const [visibleModelIds, setVisibleModelIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
@@ -41,6 +43,26 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
 
     // Use shared hook for model name resolution
     const { modelNamesMap, isLoading: isLoadingNames } = useModelNames(buildingFmGuid);
+
+    // Build storey fmGuid → parentCommonName lookup from Asset+ data
+    const storeySourceNames = useMemo(() => {
+      if (!allData || !buildingFmGuid) return new Map<string, string>();
+      const map = new Map<string, string>();
+      allData
+        .filter((a: any) =>
+          (a.buildingFmGuid || a.building_fm_guid) === buildingFmGuid &&
+          (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
+        )
+        .forEach((a: any) => {
+          const attrs = a.attributes || {};
+          const fmGuid = (a.fmGuid || a.fm_guid || '').toLowerCase();
+          const parentName = attrs.parentCommonName;
+          if (fmGuid && parentName && !/^[0-9a-f]{8}-/i.test(parentName)) {
+            map.set(fmGuid, parentName);
+          }
+        });
+      return map;
+    }, [allData, buildingFmGuid]);
     
     // Stable refs to preserve selection across re-renders
     const visibleModelIdsRef = React.useRef<Set<string>>(new Set());
@@ -157,6 +179,30 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           }
         }
         
+        // Strategy 6: Match via xeokit metaScene — find IfcBuildingStorey in this model,
+        // then look up parentCommonName from Asset+ data
+        if (!matchedName && storeySourceNames.size > 0) {
+          const viewer = getXeokitViewer();
+          const metaObjects = viewer?.metaScene?.metaObjects;
+          if (metaObjects && model.objects) {
+            const modelObjKeys = Object.keys(model.objects);
+            for (let k = 0; k < Math.min(modelObjKeys.length, 500); k++) {
+              const mo = metaObjects[modelObjKeys[k]];
+              if (mo?.type === 'IfcBuildingStorey') {
+                const sysId = (mo.originalSystemId || '').toLowerCase().replace(/-/g, '');
+                // Try matching sysId to any storey fmGuid
+                for (const [fmGuid, name] of storeySourceNames) {
+                  if (fmGuid.replace(/-/g, '') === sysId) {
+                    matchedName = name;
+                    break;
+                  }
+                }
+                if (matchedName) break;
+              }
+            }
+          }
+        }
+        
         // Fallback: show "Loading..." if still fetching names, otherwise format nicely
         const friendlyName = matchedName || 
           (isLoadingNames ? 'Loading...' : fileNameWithoutExt.replace(/-/g, ' '));
@@ -195,7 +241,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
       extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
-    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames]);
+    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeySourceNames]);
 
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
