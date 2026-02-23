@@ -2052,6 +2052,43 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.debug("Could not initialize NavCube:", e);
     }
 
+    // Intercept Asset+ DevExtreme context menu at the capture phase
+    // This ensures our custom Geminus context menu always wins
+    try {
+      const xViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const canvas = xViewer?.scene?.canvas?.canvas;
+      if (canvas && !(canvas as any).__geminusContextMenuAttached) {
+        canvas.addEventListener('contextmenu', (ev: MouseEvent) => {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+
+          // Pick entity at mouse position
+          const rect = canvas.getBoundingClientRect();
+          const canvasPos = [ev.clientX - rect.left, ev.clientY - rect.top];
+          const hit = xViewer.scene.pick({ canvasPos });
+
+          let entityId: string | null = null;
+          let fmGuid: string | null = null;
+          let entityName: string | null = null;
+
+          if (hit?.entity) {
+            entityId = hit.entity.id;
+            const metaObj = xViewer.metaScene?.metaObjects?.[entityId];
+            if (metaObj) {
+              fmGuid = metaObj.originalSystemId || null;
+              entityName = metaObj.name || null;
+            }
+          }
+
+          setContextMenu({ position: { x: ev.clientX, y: ev.clientY }, entityId, fmGuid, entityName });
+        }, { capture: true });
+        (canvas as any).__geminusContextMenuAttached = true;
+        console.log('[ContextMenu] Capturing listener attached to xeokit canvas');
+      }
+    } catch (e) {
+      console.debug('Could not attach context menu interceptor:', e);
+    }
+
     if (deferredFmGuidForDisplayRef.current) {
       console.log("allModelsLoadedCallback - got an FMGUID to look at");
       const fmGuidToShow = deferredFmGuidForDisplayRef.current;
