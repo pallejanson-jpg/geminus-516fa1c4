@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
-import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -107,6 +107,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   // Per-level colors
   const [levelColors, setLevelColors] = useState<Map<string, string>>(new Map());
   const [autoColorEnabled, setAutoColorEnabled] = useState(true);
+  const [xrayMode, setXrayMode] = useState(false);
 
   // Cache: level fmGuid → xeokit entity IDs (built once when viewer ready)
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
@@ -416,12 +417,18 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const hasAnyFilter = checkedSources.size > 0 || checkedLevels.size > 0 ||
       checkedSpaces.size > 0 || checkedCategories.size > 0;
 
-    // Step 0: Clean slate — only reset what was previously changed (perf)
+    // Step 0: Clean slate — reset visibility, xray, colorize, opacity, pickable
     scene.setObjectsVisible(scene.objectIds, true);
+    scene.setObjectsPickable(scene.objectIds, true);
     const prevXrayed = scene.xrayedObjectIds;
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     const prevColorized = scene.colorizedObjectIds;
     if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
+    // Reset opacity for any previously transparent slabs
+    scene.objectIds.forEach((id: string) => {
+      const entity = scene.objects?.[id];
+      if (entity && entity.opacity < 1) entity.opacity = 1.0;
+    });
 
     // Step 1: Apply level auto-colors (always, if enabled)
     if (autoColorEnabled && eMap.size > 0) {
@@ -510,22 +517,47 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Step 3: X-ray non-solid objects only (perf: avoid touching ALL objects)
-    // Configure xray material
-    const xrayMat = scene.xrayMaterial;
-    if (xrayMat) {
-      xrayMat.fill = true;
-      xrayMat.fillAlpha = 0.12;
-      xrayMat.fillColor = [0.55, 0.55, 0.6];
-      xrayMat.edges = true;
-      xrayMat.edgeAlpha = 0.3;
-      xrayMat.edgeColor = [0.4, 0.4, 0.45];
+    // Step 2b: Exclude IfcSpace and IfcSlab from solidIds (they obstruct the view)
+    const hideIds: string[] = [];   // IfcSpace — hide entirely
+    const fadeIds: string[] = [];   // IfcSlab/IfcSlabStandardCase — transparent + unpickable
+    const obstructTypes = new Set(['IfcSpace']);
+    const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase']);
+    if (viewer.metaScene?.metaObjects) {
+      for (const id of solidIds) {
+        const mo = viewer.metaScene.metaObjects[id];
+        if (mo) {
+          if (obstructTypes.has(mo.type)) { hideIds.push(id); solidIds.delete(id); }
+          else if (slabTypes.has(mo.type)) { fadeIds.push(id); solidIds.delete(id); }
+        }
+      }
     }
-    // Only xray IDs that are NOT in solidIds (avoids touching all scene.objectIds)
-    const xrayIds = scene.objectIds.filter((id: string) => !solidIds.has(id));
-    if (xrayIds.length > 0) scene.setObjectsXRayed(xrayIds, true);
-    // Ensure solid set is explicitly un-xrayed
-    if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
+
+    // Step 3: Apply visibility or X-ray for non-solid objects
+    const nonSolidIds = scene.objectIds.filter((id: string) => !solidIds.has(id));
+    if (xrayMode) {
+      // X-ray mode: ghost non-solid objects
+      const xrayMat = scene.xrayMaterial;
+      if (xrayMat) {
+        xrayMat.fill = true;
+        xrayMat.fillAlpha = 0.12;
+        xrayMat.fillColor = [0.55, 0.55, 0.6];
+        xrayMat.edges = true;
+        xrayMat.edgeAlpha = 0.3;
+        xrayMat.edgeColor = [0.4, 0.4, 0.45];
+      }
+      if (nonSolidIds.length > 0) scene.setObjectsXRayed(nonSolidIds, true);
+      if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
+    } else {
+      // Hide mode (default): simply hide non-solid objects for better performance
+      if (nonSolidIds.length > 0) scene.setObjectsVisible(nonSolidIds, false);
+    }
+
+    // Step 3b: Hide IfcSpace, make IfcSlab transparent + unpickable
+    if (hideIds.length > 0) scene.setObjectsVisible(hideIds, false);
+    fadeIds.forEach(id => {
+      const entity = scene.objects?.[id];
+      if (entity) { entity.opacity = 0; entity.pickable = false; }
+    });
 
     // Step 4: If spaces checked, colorize them blue (override level color)
     if (checkedSpaces.size > 0 && spaceIds) {
@@ -565,7 +597,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, categoryToIfcTypes, levelColors, autoColorEnabled]);
+    levels, categoryToIfcTypes, levelColors, autoColorEnabled, xrayMode]);
 
   // Apply whenever filters or colors change
   useEffect(() => {
@@ -582,6 +614,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const scene = viewer.scene;
     if (scene.xrayedObjectIds?.length > 0) scene.setObjectsXRayed(scene.xrayedObjectIds, false);
     if (scene.colorizedObjectIds?.length > 0) scene.setObjectsColorized(scene.colorizedObjectIds, false);
+    scene.setObjectsVisible(scene.objectIds, true);
+    scene.setObjectsPickable(scene.objectIds, true);
+    scene.objectIds.forEach((id: string) => {
+      const entity = scene.objects?.[id];
+      if (entity && entity.opacity < 1) entity.opacity = 1.0;
+    });
   }, [isVisible, getXeokitViewer]);
 
   // ── Handlers ────────────────────────────────────────────────────────────
@@ -683,6 +721,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           )}
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant={xrayMode ? "default" : "ghost"}
+            size="icon"
+            className={cn("h-6 w-6", xrayMode && "bg-primary text-primary-foreground")}
+            onClick={() => setXrayMode(!xrayMode)}
+            title={xrayMode ? "X-ray på (klicka för att dölja)" : "Visa X-ray"}
+          >
+            <Box className="h-3.5 w-3.5" />
+          </Button>
           {totalFilters > 0 && (
             <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={handleResetAll}>
               Reset
