@@ -13,6 +13,8 @@ import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import VisualizationLegendBarOverlay from './VisualizationLegendOverlay';
 // AnnotationToggleMenu removed - consolidated into VisualizationToolbar flyout
 import AssetPropertiesDialog from './AssetPropertiesDialog';
+import ViewerContextMenu from './ViewerContextMenu';
+import CreateWorkOrderDialog from './CreateWorkOrderDialog';
 
 import ViewerTreePanel from './ViewerTreePanel';
 import ViewerFilterPanel from './ViewerFilterPanel';
@@ -232,6 +234,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   
   // XKT sync status for visual feedback
   const [xktSyncStatus, setXktSyncStatus] = useState<'idle' | 'checking' | 'syncing' | 'done' | 'error'>('idle');
+  
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    position: { x: number; y: number };
+    entityId: string | null;
+    fmGuid: string | null;
+    entityName: string | null;
+  } | null>(null);
+  const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
+  const [workOrderContext, setWorkOrderContext] = useState<{ objectName?: string; objectFmGuid?: string }>({});
   
   // Whitelist of model IDs allowed during initial load (null = allow all)
   const allowedModelIdsRef = useRef<Set<string> | null>(null);
@@ -1002,6 +1014,40 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     } catch (e) {
       console.debug('Could not toggle annotations:', e);
     }
+  }, []);
+
+  // ─── Right-click context menu handler ───
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) {
+      setContextMenu({ position: { x: e.clientX, y: e.clientY }, entityId: null, fmGuid: null, entityName: null });
+      return;
+    }
+
+    // Pick entity at mouse position
+    const canvasRect = xeokitViewer.scene.canvas.canvas.getBoundingClientRect();
+    const canvasPos = [e.clientX - canvasRect.left, e.clientY - canvasRect.top];
+    const hit = xeokitViewer.scene.pick({ canvasPos });
+
+    let entityId: string | null = null;
+    let fmGuid: string | null = null;
+    let entityName: string | null = null;
+
+    if (hit?.entity) {
+      entityId = hit.entity.id;
+      // Resolve FM GUID from metaScene
+      const metaObj = xeokitViewer.metaScene?.metaObjects?.[entityId];
+      if (metaObj) {
+        fmGuid = metaObj.originalSystemId || null;
+        entityName = metaObj.name || null;
+      }
+    }
+
+    setContextMenu({ position: { x: e.clientX, y: e.clientY }, entityId, fmGuid, entityName });
   }, []);
 
   // Sync local annotation marker visibility when showAnnotations state changes
@@ -3874,6 +3920,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           <div 
             ref={viewerContainerRef}
             className="w-full h-full"
+            onContextMenu={handleContextMenu}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -4206,6 +4253,65 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               onPendingPositionConsumed={() => setInventoryPendingPosition(null)}
             />
           </div>
+
+          {/* Custom right-click context menu */}
+          {contextMenu && (
+            <ViewerContextMenu
+              position={contextMenu.position}
+              entityId={contextMenu.entityId}
+              fmGuid={contextMenu.fmGuid}
+              entityName={contextMenu.entityName}
+              onClose={() => setContextMenu(null)}
+              onProperties={() => {
+                if (contextMenu.fmGuid) {
+                  setSelectedFmGuids([contextMenu.fmGuid]);
+                  setPropertiesDialogOpen(true);
+                }
+              }}
+              onCreateIssue={() => {
+                // Dispatch to VisualizationToolbar / ViewerRightPanel's captureIssueState
+                window.dispatchEvent(new CustomEvent('CONTEXT_MENU_CREATE_ISSUE'));
+              }}
+              onCreateWorkOrder={() => {
+                setWorkOrderContext({
+                  objectName: contextMenu.entityName || undefined,
+                  objectFmGuid: contextMenu.fmGuid || undefined,
+                });
+                setWorkOrderDialogOpen(true);
+              }}
+              onViewInSpace={() => {
+                if (contextMenu.entityId) {
+                  const viewer = viewerInstanceRef.current;
+                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+                  assetView?.viewInSpace?.(contextMenu.entityId);
+                }
+              }}
+              onSelect={() => {
+                if (contextMenu.entityId) {
+                  const viewer = viewerInstanceRef.current;
+                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+                  assetView?.selectItems?.([contextMenu.entityId]);
+                }
+              }}
+              onZoomToFit={() => {
+                if (contextMenu.entityId) {
+                  const viewer = viewerInstanceRef.current;
+                  const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
+                  assetView?.viewFit?.([contextMenu.entityId]);
+                }
+              }}
+            />
+          )}
+
+          {/* Work Order Dialog */}
+          <CreateWorkOrderDialog
+            open={workOrderDialogOpen}
+            onClose={() => setWorkOrderDialogOpen(false)}
+            buildingName={assetData?.commonName || assetData?.name}
+            buildingFmGuid={buildingFmGuid}
+            objectName={workOrderContext.objectName}
+            objectFmGuid={workOrderContext.objectFmGuid}
+          />
           
         </div>
       </div>
