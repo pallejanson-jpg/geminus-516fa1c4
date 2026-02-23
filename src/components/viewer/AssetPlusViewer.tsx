@@ -28,7 +28,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -1076,6 +1076,53 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [showAnnotations]);
 
+  // Floor-aware annotation filtering: hide markers not on visible floor(s)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const plugin = localAnnotationsPluginRef.current;
+      if (!plugin?.annotations) return;
+      const detail = (e as CustomEvent<FloorSelectionEventDetail>).detail;
+      const isAll = detail.isAllFloorsVisible;
+      const visibleGuids = detail.visibleFloorFmGuids || [];
+      const singleFloor = detail.floorId;
+
+      Object.values(plugin.annotations).forEach((ann: any) => {
+        if (!ann.markerElement) return;
+        if (isAll) {
+          ann.markerElement.style.display = ann.markerShown ? 'flex' : 'none';
+        } else {
+          const levelGuid = ann.levelFmGuid || ann.markerElement?.dataset?.levelFmGuid || '';
+          const isOnFloor = (singleFloor && levelGuid === singleFloor) ||
+                            (visibleGuids.length > 0 && visibleGuids.includes(levelGuid));
+          ann.markerElement.style.display = (ann.markerShown && isOnFloor) ? 'flex' : 'none';
+        }
+      });
+      if (plugin.updatePositions) plugin.updatePositions();
+    };
+    window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler);
+  }, []);
+
+  // Annotation category filtering from ViewerFilterPanel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const plugin = localAnnotationsPluginRef.current;
+      if (!plugin?.annotations) return;
+      const detail = (e as CustomEvent<AnnotationFilterDetail>).detail;
+      const visibleCats = new Set(detail.visibleCategories);
+
+      Object.values(plugin.annotations).forEach((ann: any) => {
+        if (!ann.markerElement) return;
+        const category = ann.category || ann.markerElement?.dataset?.category || '';
+        const catVisible = visibleCats.size === 0 || visibleCats.has(category);
+        ann.markerElement.style.display = (ann.markerShown && catVisible) ? 'flex' : 'none';
+      });
+      if (plugin.updatePositions) plugin.updatePositions();
+    };
+    window.addEventListener(ANNOTATION_FILTER_EVENT, handler);
+    return () => window.removeEventListener(ANNOTATION_FILTER_EVENT, handler);
+  }, []);
+
   // Handler for individual model visibility toggle from mobile overlay
   const handleModelToggle = useCallback((modelId: string, visible: boolean) => {
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -1434,7 +1481,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Fetch assets with placed annotations for this building
       const { data: assets, error: assetsError } = await supabase
         .from('assets')
-        .select('fm_guid, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id')
+        .select('fm_guid, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id, level_fm_guid')
         .eq('building_fm_guid', resolvedBuildingGuid)
         .eq('annotation_placed', true)
         .not('coordinate_x', 'is', null);
@@ -1459,12 +1506,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Create a simple annotation manager object
       const annotationsData: Array<{
         id: string;
+        fmGuid: string;
         worldPos: [number, number, number];
         category: string;
         name: string;
         color: string;
         iconUrl: string;
         markerShown: boolean;
+        levelFmGuid: string | null;
       }> = [];
 
       // Build annotation data array
@@ -1475,6 +1524,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
         annotationsData.push({
           id: `local-${asset.fm_guid}`,
+          fmGuid: asset.fm_guid,
           worldPos: [
             Number(asset.coordinate_x),
             Number(asset.coordinate_y),
@@ -1485,6 +1535,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           color,
           iconUrl,
           markerShown: showAnnotations,
+          levelFmGuid: asset.level_fm_guid,
         });
       });
 
@@ -1505,14 +1556,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         
         updatePositions: () => {
           const canvas = xeokitViewer.scene?.canvas?.canvas;
-          if (!canvas) return;
+          const camera = xeokitViewer.scene?.camera;
+          if (!canvas || !camera) return;
           
           Object.values(localAnnotationsManager.annotations).forEach(ann => {
             if (!ann.markerElement || !ann.markerShown) return;
             
-            // Project world position to canvas position
-            const canvasPos = xeokitViewer.scene.camera.projectWorldPos(ann.worldPos);
-            if (canvasPos && canvasPos[2] > 0 && canvasPos[2] < 1) {
+            // Use camera.project() — the standard xeokit pattern (returns [canvasX, canvasY, depth])
+            const canvasPos = camera.project(ann.worldPos);
+            if (canvasPos &&
+                canvasPos[0] >= -50 && canvasPos[0] <= canvas.clientWidth + 50 &&
+                canvasPos[1] >= -50 && canvasPos[1] <= canvas.clientHeight + 50 &&
+                canvasPos[2] > 0) {
               ann.markerElement.style.display = 'flex';
               ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
               ann.markerElement.style.top = `${canvasPos[1] - 14}px`;
@@ -1541,6 +1596,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         const marker = document.createElement('div');
         marker.id = ann.id;
         marker.className = 'local-annotation-marker';
+        marker.dataset.category = ann.category;
+        marker.dataset.levelFmGuid = ann.levelFmGuid || '';
         marker.style.cssText = `
           position: absolute;
           width: 28px;
@@ -1567,6 +1624,22 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
         
         marker.title = ann.name;
+        
+        // Click handler: fly to + open properties
+        marker.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const camera = xeokitViewer.scene?.camera;
+          if (camera) {
+            xeokitViewer.cameraFlight?.flyTo({
+              eye: [ann.worldPos[0] - 3, ann.worldPos[1] + 2, ann.worldPos[2] + 3],
+              look: ann.worldPos,
+              duration: 0.6,
+            });
+          }
+          setSelectedFmGuids([ann.fmGuid]);
+          setPropertiesDialogOpen(true);
+        });
+        
         container.appendChild(marker);
         
         localAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
@@ -1704,11 +1777,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           container: null as HTMLElement | null,
           updatePositions: () => {
             const canvas = xeokitViewer.scene?.canvas?.canvas;
-            if (!canvas) return;
+            const camera = xeokitViewer.scene?.camera;
+            if (!canvas || !camera) return;
             Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
               if (!ann.markerElement || !ann.markerShown) return;
-              const canvasPos = xeokitViewer.scene.camera.projectWorldPos(ann.worldPos);
-              if (canvasPos && canvasPos[2] > 0 && canvasPos[2] < 1) {
+              const canvasPos = camera.project(ann.worldPos);
+              if (canvasPos &&
+                  canvasPos[0] >= -50 && canvasPos[0] <= canvas.clientWidth + 50 &&
+                  canvasPos[1] >= -50 && canvasPos[1] <= canvas.clientHeight + 50 &&
+                  canvasPos[2] > 0) {
                 ann.markerElement.style.display = 'flex';
                 ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
                 ann.markerElement.style.top = `${canvasPos[1] - 14}px`;
@@ -1740,6 +1817,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         const marker = document.createElement('div');
         marker.id = ann.id;
         marker.className = 'local-annotation-marker alarm-marker';
+        marker.dataset.category = ann.category;
+        marker.dataset.levelFmGuid = ann.levelFmGuid || '';
         marker.style.cssText = `
           position: absolute;
           width: 28px;
@@ -1766,6 +1845,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
 
         marker.title = ann.name;
+        
+        // Click handler: fly to + open properties
+        const fmGuidForClick = ann.id.replace('alarm-', '');
+        marker.addEventListener('click', (e) => {
+          e.stopPropagation();
+          xeokitViewer.cameraFlight?.flyTo({
+            eye: [ann.worldPos[0] - 3, ann.worldPos[1] + 2, ann.worldPos[2] + 3],
+            look: ann.worldPos,
+            duration: 0.6,
+          });
+          setSelectedFmGuids([fmGuidForClick]);
+          setPropertiesDialogOpen(true);
+        });
+        
         container!.appendChild(marker);
 
         localAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
