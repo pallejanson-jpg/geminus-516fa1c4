@@ -72,9 +72,9 @@ const ToolButton = React.forwardRef<HTMLButtonElement, ToolButtonProps>(
           variant={active ? 'secondary' : 'ghost'}
           size="icon"
           className={cn(
-            compact ? 'h-8 w-8' : 'h-9 w-9',
-            'text-white hover:text-white',
-            active && 'ring-2 ring-primary bg-primary/10 text-primary',
+            compact ? 'h-8 w-8' : 'h-7 w-7 sm:h-9 sm:w-9',
+            'text-white/90 hover:text-white hover:bg-white/10',
+            active && 'ring-2 ring-primary bg-white/15 text-primary',
             disabled && 'opacity-50 cursor-not-allowed',
           )}
           onClick={disabled ? undefined : onClick}
@@ -592,7 +592,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       <div
         className={cn(
           'absolute bottom-4 left-1/2 -translate-x-1/2 z-20',
-          'flex items-center gap-0.5 px-2 py-1.5 rounded-xl',
+          'flex items-center gap-0 px-1 py-1 sm:gap-0.5 sm:px-2 sm:py-1.5 rounded-xl',
           'bg-black/80 backdrop-blur-sm border border-white/10 shadow-lg text-white',
           className,
         )}
@@ -600,54 +600,54 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
       >
         {/* Group 1 — Navigation mode */}
         <ToolButton
-          icon={<RotateCcw className="h-4 w-4" />}
+          icon={<RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Orbit (rotera)"
           onClick={() => handleNavModeChange('orbit')}
           active={navMode === 'orbit'}
           disabled={disabled}
         />
         <ToolButton
-          icon={<Move className="h-4 w-4" />}
+          icon={<Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Första person (gå)"
           onClick={() => handleNavModeChange('firstPerson')}
           active={navMode === 'firstPerson'}
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
+        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
         {/* Group 2 — Zoom / Fit */}
         <ToolButton
-          icon={<ZoomIn className="h-4 w-4" />}
+          icon={<ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Zooma in"
           onClick={handleZoomIn}
           disabled={disabled}
         />
         <ToolButton
-          icon={<ZoomOut className="h-4 w-4" />}
+          icon={<ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Zooma ut"
           onClick={handleZoomOut}
           disabled={disabled}
         />
         <ToolButton
-          icon={<Focus className="h-4 w-4" />}
+          icon={<Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Anpassa vy (urval eller hela scenen)"
           onClick={handleViewFit}
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
+        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
         {/* Group 3 — Interaction tools */}
         <ToolButton
-          icon={<MousePointer2 className="h-4 w-4" />}
+          icon={<MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Välj objekt (CTRL för multi-select)"
           onClick={() => handleToolChange('select')}
           active={activeTool === 'select'}
           disabled={disabled}
         />
         <ToolButton
-          icon={<Ruler className="h-4 w-4" />}
+          icon={<Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="Mätverktyg"
           onClick={() => handleToolChange('measure')}
           active={activeTool === 'measure'}
@@ -656,7 +656,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
         {viewMode !== '2d' && (
           <>
             <ToolButton
-              icon={<Scissors className="h-4 w-4" />}
+              icon={<Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
               label="Snittplan"
               onClick={() => handleToolChange('slicer')}
               active={activeTool === 'slicer'}
@@ -664,7 +664,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             />
             {activeTool === 'slicer' && (
               <ToolButton
-                icon={<RotateCcw className="h-3.5 w-3.5" />}
+                icon={<RotateCcw className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
                 label="Rensa snitt"
                 onClick={handleClearSlices}
                 disabled={disabled}
@@ -673,22 +673,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           </>
         )}
 
-        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
+        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
         {/* Group 4 — X-ray */}
         <ToolButton
-          icon={<Box className="h-4 w-4" />}
+          icon={<Box className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label="X-ray (genomsiktlig vy)"
           onClick={handleXrayToggle}
           active={isXrayActive}
           disabled={disabled}
         />
 
-        <Separator orientation="vertical" className="h-6 mx-1 bg-white/20" />
+        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
         {/* Group 5 — View mode */}
         <ToolButton
-          icon={viewMode === '3d' ? <SquareDashed className="h-4 w-4" /> : <Cuboid className="h-4 w-4" />}
+          icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
           label={viewMode === '3d' ? 'Byt till 2D-vy' : 'Byt till 3D-vy'}
           onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
           active={viewMode === '2d'}
