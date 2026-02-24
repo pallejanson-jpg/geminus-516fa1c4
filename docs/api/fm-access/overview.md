@@ -45,6 +45,8 @@ All API calls require two custom headers:
 
 ## Available Endpoints (via edge function)
 
+### Read Operations
+
 | Action | Description | Required Params |
 |--------|-------------|-----------------|
 | `test-connection` | Test authentication and get version ID | - |
@@ -55,9 +57,33 @@ All API calls require two custom headers:
 | `get-document` | Get single document details | `documentId` |
 | `get-drawing-pdf` | Get PDF download URL for a drawing | `drawingId` |
 | `get-viewer-url` | Get authenticated 2D viewer URL | `buildingId`, `floorId` |
+| `get-object-by-guid` | Get object details by GUID | `guid` |
+| `get-hierarchy` | Get full subtree for a building | `buildingFmGuid` |
+| `get-perspective-tree` | Get subtree by GUID | `guid`, `perspectiveId` |
+| `search-objects` | Quick search | `query` |
+
+### Write Operations (CRUD)
+
+| Action | Description | Required Params |
+|--------|-------------|-----------------|
+| `create-object` | Create object under parent | `parentGuid`, `name`, optional `classId`, `properties` |
+| `update-object` | Update object name/properties | `guid` or `objectId`, optional `name`, `properties` |
+| `delete-object` | Delete object | `guid` or `objectId` |
+| `proxy` | Generic proxy to any HDC endpoint | `path`, optional `method`, `body` |
+
+### HDC Class IDs
+
+| ClassId | Object Type |
+|---------|-------------|
+| 102 | Fastighet (Estate) |
+| 103 | Byggnad (Building) |
+| 105 | Plan (Floor) |
+| 106 | Ritning (Drawing) |
+| 107 | Rum (Room) |
 
 ## Important Notes
 - The HDC API uses `X-Authorization` instead of the standard `Authorization` header
 - The `X-Hdc-Version-Id` header is mandatory for most endpoints
 - Token is cached with a 60-second buffer before expiry
 - Version ID is cached for 5 minutes
+- FMGUID is the primary key for cross-system mapping between Geminus, Asset+, and FM Access
