@@ -632,6 +632,162 @@ serve(async (req) => {
         );
       }
 
+      // ── CRUD operations for FM Access objects ──────────────────────
+
+      case 'create-object': {
+        const { parentGuid, name, classId, properties } = params;
+        if (!parentGuid || !name) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'parentGuid and name are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Build object payload for HDC API
+        const objectPayload: any = {
+          objectName: name,
+          parentGuid: parentGuid,
+        };
+        if (classId) objectPayload.classId = classId;
+        if (properties && typeof properties === 'object') {
+          objectPayload.properties = properties;
+        }
+
+        try {
+          const response = await fmAccessFetch(config, '/api/object', {
+            method: 'POST',
+            body: JSON.stringify(objectPayload),
+          });
+          const text = await response.text();
+          let data;
+          try { data = JSON.parse(text); } catch { data = text; }
+
+          if (!response.ok) {
+            return new Response(
+              JSON.stringify({ success: false, error: `FM Access returned ${response.status}`, data }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, data }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'update-object': {
+        const { guid, objectId, name: objName, properties: objProps } = params;
+        const targetId = objectId || guid;
+        if (!targetId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'guid or objectId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const updatePayload: any = {};
+        if (objName) updatePayload.objectName = objName;
+        if (objProps && typeof objProps === 'object') {
+          updatePayload.properties = objProps;
+        }
+
+        try {
+          // Try by GUID first, fall back to objectId
+          const path = guid
+            ? `/api/object/byguid/${encodeURIComponent(guid)}`
+            : `/api/object/${encodeURIComponent(targetId)}`;
+
+          const response = await fmAccessFetch(config, path, {
+            method: 'PUT',
+            body: JSON.stringify(updatePayload),
+          });
+          const text = await response.text();
+          let data;
+          try { data = JSON.parse(text); } catch { data = text; }
+
+          return new Response(
+            JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'delete-object': {
+        const { guid: delGuid, objectId: delObjectId } = params;
+        const delTarget = delObjectId || delGuid;
+        if (!delTarget) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'guid or objectId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const path = delGuid
+            ? `/api/object/byguid/${encodeURIComponent(delGuid)}`
+            : `/api/object/${encodeURIComponent(delTarget)}`;
+
+          const response = await fmAccessFetch(config, path, {
+            method: 'DELETE',
+          });
+          const text = await response.text();
+          let data;
+          try { data = JSON.parse(text); } catch { data = text; }
+
+          return new Response(
+            JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get-hierarchy': {
+        const { buildingFmGuid, perspectiveId = '8' } = params;
+        if (!buildingFmGuid) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'buildingFmGuid is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          // Get full subtree: Fastighet → Byggnad → Plan → Rum → Objekt
+          const response = await fmAccessFetch(
+            config,
+            `/api/perspective/byguid/subtree/json/${encodeURIComponent(perspectiveId)}/${encodeURIComponent(buildingFmGuid)}`
+          );
+          const text = await response.text();
+          let data;
+          try { data = JSON.parse(text); } catch { data = text; }
+
+          return new Response(
+            JSON.stringify({ success: response.ok, data, error: !response.ok ? `FM Access returned ${response.status}` : undefined }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       case 'proxy': {
         const { path: apiPath, method: apiMethod, body: apiBody } = params;
         if (!apiPath) {
