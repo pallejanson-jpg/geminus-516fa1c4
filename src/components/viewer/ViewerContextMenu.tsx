@@ -1,6 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Info, MessageSquarePlus, Wrench, Eye, MousePointer, ZoomIn, EyeOff, Focus } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { getContextMenuSettings, CONTEXT_MENU_SETTINGS_CHANGED_EVENT } from './ContextMenuSettings';
+
+const ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
+  properties: Info,
+  createIssue: MessageSquarePlus,
+  createWorkOrder: Wrench,
+  viewInSpace: Eye,
+  select: MousePointer,
+  zoomToFit: ZoomIn,
+  isolate: Focus,
+  hideSelected: EyeOff,
+  showAll: Eye,
+};
+
+const COLOR_MAP: Record<string, string> = {
+  properties: 'text-primary',
+  createIssue: 'text-amber-500',
+  createWorkOrder: 'text-accent',
+};
 
 interface ViewerContextMenuProps {
   position: { x: number; y: number };
@@ -19,21 +38,6 @@ interface ViewerContextMenuProps {
   onShowAll?: () => void;
 }
 
-const MENU_ITEMS_GEMINUS = [
-  { key: 'properties', label: 'Properties', icon: Info, color: 'text-primary' },
-  { key: 'createIssue', label: 'Create issue', icon: MessageSquarePlus, color: 'text-amber-500' },
-  { key: 'createWorkOrder', label: 'Create work order', icon: Wrench, color: 'text-accent' },
-] as const;
-
-const MENU_ITEMS_VIEWER = [
-  { key: 'viewInSpace', label: 'View in space', icon: Eye, color: 'text-muted-foreground' },
-  { key: 'select', label: 'Select object', icon: MousePointer, color: 'text-muted-foreground' },
-  { key: 'zoomToFit', label: 'Zoom to fit', icon: ZoomIn, color: 'text-muted-foreground' },
-  { key: 'isolate', label: 'Isolate object', icon: Focus, color: 'text-muted-foreground' },
-  { key: 'hideSelected', label: 'Hide object', icon: EyeOff, color: 'text-muted-foreground' },
-  { key: 'showAll', label: 'Show all', icon: Eye, color: 'text-muted-foreground' },
-] as const;
-
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   position,
   entityId,
@@ -50,6 +54,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onShowAll,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [settings] = useState(() => getContextMenuSettings());
 
   // Close on click-outside or Escape
   useEffect(() => {
@@ -108,44 +113,62 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       )}
 
       {/* Geminus actions */}
-      <div className="py-1">
-        {MENU_ITEMS_GEMINUS.map((item) => {
-          const Icon = item.icon;
-          const disabled = item.key === 'properties' && !hasEntity;
-          return (
-            <button
-              key={item.key}
-              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => handleClick(item.key)}
-              disabled={disabled}
-            >
-              <Icon className={`h-4 w-4 ${item.color}`} />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      {(() => {
+        const gItems = settings.filter((s) => s.group === 'geminus' && s.visible);
+        if (!gItems.length) return null;
+        return (
+          <div className="py-1">
+            {gItems.map((item) => {
+              const Icon = ICON_MAP[item.id] || Info;
+              const color = COLOR_MAP[item.id] || 'text-muted-foreground';
+              const disabled = item.id === 'properties' && !hasEntity;
+              return (
+                <button
+                  key={item.id}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => handleClick(item.id)}
+                  disabled={disabled}
+                >
+                  <Icon className={`h-4 w-4 ${color}`} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
-      <Separator />
+      {(() => {
+        const gItems = settings.filter((s) => s.group === 'geminus' && s.visible);
+        const vItems = settings.filter((s) => s.group === 'viewer' && s.visible);
+        return gItems.length > 0 && vItems.length > 0 ? <Separator /> : null;
+      })()}
 
       {/* Viewer actions */}
-      <div className="py-1">
-        {MENU_ITEMS_VIEWER.map((item) => {
-          const Icon = item.icon;
-          const needsEntity = item.key !== 'showAll';
-          return (
-            <button
-              key={item.key}
-              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => handleClick(item.key)}
-              disabled={needsEntity && !hasEntity}
-            >
-              <Icon className={`h-4 w-4 ${item.color}`} />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      {(() => {
+        const vItems = settings.filter((s) => s.group === 'viewer' && s.visible);
+        if (!vItems.length) return null;
+        return (
+          <div className="py-1">
+            {vItems.map((item) => {
+              const Icon = ICON_MAP[item.id] || Eye;
+              const color = COLOR_MAP[item.id] || 'text-muted-foreground';
+              const needsEntity = item.id !== 'showAll';
+              return (
+                <button
+                  key={item.id}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => handleClick(item.id)}
+                  disabled={needsEntity && !hasEntity}
+                >
+                  <Icon className={`h-4 w-4 ${color}`} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 };
