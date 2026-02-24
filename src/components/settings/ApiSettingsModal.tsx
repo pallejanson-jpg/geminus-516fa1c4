@@ -1798,16 +1798,34 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     // FM Access: Count inventoried assets (created_in_model=false) with FM link
     useEffect(() => {
+        if (activeTab !== 'sync') return;
         const countFmAssets = async () => {
-            const { count } = await supabase
-                .from('assets')
-                .select('*', { count: 'exact', head: true })
-                .not('building_fm_guid', 'is', null)
-                .eq('created_in_model', false);
-            setFmAccessLocalCount(count || 0);
+            try {
+                // Use a simpler count query - head:true with count:'exact'
+                const { count, error } = await supabase
+                    .from('assets')
+                    .select('fm_guid', { count: 'exact', head: true })
+                    .not('building_fm_guid', 'is', null)
+                    .eq('created_in_model', false);
+                console.log('[FM Access] Inventoried asset count:', count, 'error:', error);
+                if (!error) {
+                    setFmAccessLocalCount(count ?? 0);
+                } else {
+                    // Fallback: do a regular query and count rows
+                    const { data } = await supabase
+                        .from('assets')
+                        .select('fm_guid')
+                        .not('building_fm_guid', 'is', null)
+                        .eq('created_in_model', false)
+                        .limit(5000);
+                    setFmAccessLocalCount(data?.length ?? 0);
+                }
+            } catch (e) {
+                console.error('[FM Access] Count error:', e);
+            }
         };
         countFmAssets();
-    }, []);
+    }, [activeTab]);
 
     const handleSaveConfig = async () => {
         setIsSaving(true);
