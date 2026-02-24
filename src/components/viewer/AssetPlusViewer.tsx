@@ -77,6 +77,34 @@ interface AssetPlusViewerProps {
   compactMode?: boolean;
 }
 
+/**
+ * Manual world→canvas projection (replaces camera.project which doesn't exist in this xeokit build).
+ * Returns [canvasX, canvasY, clipDepth] or null if behind camera.
+ */
+function projectWorldToCanvas(
+  worldPos: number[],
+  viewMatrix: Float64Array | number[],
+  projMatrix: Float64Array | number[],
+  canvasWidth: number,
+  canvasHeight: number,
+): [number, number, number] | null {
+  // view transform
+  const vx = viewMatrix[0] * worldPos[0] + viewMatrix[4] * worldPos[1] + viewMatrix[8] * worldPos[2] + viewMatrix[12];
+  const vy = viewMatrix[1] * worldPos[0] + viewMatrix[5] * worldPos[1] + viewMatrix[9] * worldPos[2] + viewMatrix[13];
+  const vz = viewMatrix[2] * worldPos[0] + viewMatrix[6] * worldPos[1] + viewMatrix[10] * worldPos[2] + viewMatrix[14];
+  const vw = viewMatrix[3] * worldPos[0] + viewMatrix[7] * worldPos[1] + viewMatrix[11] * worldPos[2] + viewMatrix[15];
+  // projection transform
+  const px = projMatrix[0] * vx + projMatrix[4] * vy + projMatrix[8] * vz + projMatrix[12] * vw;
+  const py = projMatrix[1] * vx + projMatrix[5] * vy + projMatrix[9] * vz + projMatrix[13] * vw;
+  const pw = projMatrix[3] * vx + projMatrix[7] * vy + projMatrix[11] * vz + projMatrix[15] * vw;
+  if (pw === 0) return null;
+  const ndcX = px / pw;
+  const ndcY = py / pw;
+  const canvasX = (ndcX + 1) * 0.5 * canvasWidth;
+  const canvasY = (1 - ndcY) * 0.5 * canvasHeight;
+  return [canvasX, canvasY, -vz]; // positive depth = in front of camera
+}
+
 interface ViewerState {
   isLoading: boolean;
   isInitialized: boolean;
@@ -1560,14 +1588,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const camera = xeokitViewer.scene?.camera;
           if (!canvas || !camera) return;
           
+          const viewMatrix = camera.viewMatrix;
+          const projMatrix = camera.projMatrix;
+          if (!viewMatrix || !projMatrix) return;
+          const cw = canvas.clientWidth;
+          const ch = canvas.clientHeight;
+          
           Object.values(localAnnotationsManager.annotations).forEach(ann => {
             if (!ann.markerElement || !ann.markerShown) return;
             
-            // Use camera.project() — the standard xeokit pattern (returns [canvasX, canvasY, depth])
-            const canvasPos = camera.project(ann.worldPos);
+            const canvasPos = projectWorldToCanvas(ann.worldPos, viewMatrix, projMatrix, cw, ch);
             if (canvasPos &&
-                canvasPos[0] >= -50 && canvasPos[0] <= canvas.clientWidth + 50 &&
-                canvasPos[1] >= -50 && canvasPos[1] <= canvas.clientHeight + 50 &&
+                canvasPos[0] >= -50 && canvasPos[0] <= cw + 50 &&
+                canvasPos[1] >= -50 && canvasPos[1] <= ch + 50 &&
                 canvasPos[2] > 0) {
               ann.markerElement.style.display = 'flex';
               ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
@@ -1780,12 +1813,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             const canvas = xeokitViewer.scene?.canvas?.canvas;
             const camera = xeokitViewer.scene?.camera;
             if (!canvas || !camera) return;
+            const viewMatrix = camera.viewMatrix;
+            const projMatrix = camera.projMatrix;
+            if (!viewMatrix || !projMatrix) return;
+            const cw = canvas.clientWidth;
+            const ch = canvas.clientHeight;
             Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
               if (!ann.markerElement || !ann.markerShown) return;
-              const canvasPos = camera.project(ann.worldPos);
+              const canvasPos = projectWorldToCanvas(ann.worldPos, viewMatrix, projMatrix, cw, ch);
               if (canvasPos &&
-                  canvasPos[0] >= -50 && canvasPos[0] <= canvas.clientWidth + 50 &&
-                  canvasPos[1] >= -50 && canvasPos[1] <= canvas.clientHeight + 50 &&
+                  canvasPos[0] >= -50 && canvasPos[0] <= cw + 50 &&
+                  canvasPos[1] >= -50 && canvasPos[1] <= ch + 50 &&
                   canvasPos[2] > 0) {
                 ann.markerElement.style.display = 'flex';
                 ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
