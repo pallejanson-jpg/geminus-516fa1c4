@@ -204,7 +204,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
   }, [viewerRef]);
 
-  // Categories: derived from xeokit metaScene IFC types (granular)
+  // Categories: derived from xeokit metaScene IFC types, filtered by selected floor/space
   const categories: CategoryItem[] = useMemo(() => {
     const viewer = getXeokitViewer();
     if (!viewer?.metaScene?.metaObjects) return [];
@@ -239,10 +239,27 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       types.forEach(t => ifcTypeToCategory.set(t, cat));
     }
 
-    // Count entities per category from metaScene
+    // Determine which entity IDs are in scope based on level/space filters
+    const eMap = entityMapRef.current;
+    let scopeIds: Set<string> | null = null;
+    if (checkedSpaces.size > 0) {
+      scopeIds = new Set<string>();
+      checkedSpaces.forEach(fmGuid => {
+        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
+      });
+    } else if (checkedLevels.size > 0) {
+      scopeIds = new Set<string>();
+      checkedLevels.forEach(fmGuid => {
+        eMap.get(fmGuid)?.forEach(id => scopeIds!.add(id));
+      });
+    }
+
+    // Count entities per category from metaScene (filtered to scope)
     const counts = new Map<string, number>();
     Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
       if (!mo.type) return;
+      // If scope filter is active, only count entities within scope
+      if (scopeIds && !scopeIds.has(mo.id)) return;
       const cat = ifcTypeToCategory.get(mo.type) || mo.type.replace(/^Ifc/, '');
       counts.set(cat, (counts.get(cat) || 0) + 1);
     });
@@ -258,7 +275,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .map(([name, count]) => ({ name, count }))
       .filter(c => c.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [getXeokitViewer, isVisible]);
+  }, [getXeokitViewer, isVisible, checkedLevels, checkedSpaces]);
 
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
@@ -599,8 +616,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const obstructTypes = new Set(['IfcRoof', 'IfcCovering']);
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
     const hideIds: string[] = []; // IfcRoof/IfcCovering — hide entirely
+    // Collect ALL slab IDs from metaScene (even outside solidIds) so floors always show
+    const allSlabIds: string[] = [];
     
     if (viewer.metaScene?.metaObjects) {
+      // First pass: collect all slabs in the scene for floor visibility
+      Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+        if (slabTypes.has(mo.type)) {
+          allSlabIds.push(mo.id);
+        }
+      });
+
       for (const id of solidIds) {
         const mo = viewer.metaScene.metaObjects[id];
         if (mo) {
@@ -617,6 +643,29 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           }
           // Checked spaces stay in solidIds (visible, solid, pickable)
         }
+      }
+
+      // Add slabs from active levels that weren't already in solidIds
+      // This ensures floors are always visible when filtering by level
+      if (checkedLevels.size > 0 && levelIds) {
+        allSlabIds.forEach(slabId => {
+          if (!fadeIds.includes(slabId) && !solidIds.has(slabId)) {
+            // Check if this slab belongs to a visible level by checking ancestry
+            const slabMo = viewer.metaScene.metaObjects[slabId];
+            if (slabMo) {
+              let parent = slabMo.parent;
+              while (parent) {
+                if (parent.type?.toLowerCase() === 'ifcbuildingstorey') {
+                  const parentGuid = (parent.originalSystemId || parent.id || '').toLowerCase();
+                  const isVisible = Array.from(checkedLevels).some(lg => lg.toLowerCase() === parentGuid || lg.toLowerCase().replace(/-/g, '') === parentGuid.replace(/-/g, ''));
+                  if (isVisible) fadeIds.push(slabId);
+                  break;
+                }
+                parent = parent.parent ? viewer.metaScene.metaObjects[parent.parent.id || parent.parent] : null;
+              }
+            }
+          }
+        });
       }
     }
 
@@ -642,12 +691,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (hideIds.length > 0) scene.setObjectsVisible(hideIds, false);
     fadeIds.forEach(id => {
       const entity = scene.objects?.[id];
-      if (entity) { entity.opacity = 0.3; entity.pickable = false; }
+      if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
     // Unchecked spaces: semi-transparent but still pickable
     spaceTransparentIds.forEach(id => {
       const entity = scene.objects?.[id];
-      if (entity) { entity.opacity = 0.15; entity.pickable = true; }
+      if (entity) { entity.visible = true; entity.opacity = 0.15; entity.pickable = true; }
     });
 
     // Step 4: If spaces checked, colorize them blue (override level color)

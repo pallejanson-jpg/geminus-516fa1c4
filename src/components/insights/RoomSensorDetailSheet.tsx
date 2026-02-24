@@ -276,7 +276,7 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
   return (
     <Sheet open={open} onOpenChange={open => !open && onClose()}>
       <SheetContent
-        side="right"
+        side="left"
         className="w-full sm:max-w-md flex flex-col p-0 gap-0"
       >
         {/* Header */}
