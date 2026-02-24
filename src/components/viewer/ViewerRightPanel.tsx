@@ -31,7 +31,7 @@ import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
-import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
+import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, MINIMAP_TOGGLE_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,7 +41,7 @@ import { useBcfViewpoints } from "@/hooks/useBcfViewpoints";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
-import { MINIMAP_TOGGLE_EVENT } from "@/lib/viewer-events";
+
 import { Map } from "lucide-react";
 
 interface ViewerRightPanelProps {
@@ -459,6 +459,23 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     setShowIssueDetail(true);
     if (issue.viewpoint_json) handleGoToIssueViewpoint(issue.viewpoint_json);
   }, [handleGoToIssueViewpoint]);
+
+  // Listen for issue marker clicks from 3D viewer annotations
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { issueId } = (e as CustomEvent<IssueMarkerClickedDetail>).detail;
+      const { data: issue } = await supabase
+        .from('bcf_issues')
+        .select('*')
+        .eq('id', issueId)
+        .maybeSingle();
+      if (issue) {
+        handleSelectIssue(issue as BcfIssue);
+      }
+    };
+    window.addEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+    return () => window.removeEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+  }, [handleSelectIssue]);
 
   return (
     <>
