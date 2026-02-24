@@ -12,6 +12,7 @@ import { NavigatorNode } from '@/components/navigator/TreeNode';
 import { AddAssetDialog } from '@/components/navigator/AddAssetDialog';
 import FacilityCard from './FacilityCard';
 import FacilityLandingPage from './FacilityLandingPage';
+import { trackRecentBuilding } from '@/components/home/HomeLanding';
 import RoomsView from './RoomsView';
 import DocumentsView from './DocumentsView';
 import AssetsView from './AssetsView';
@@ -143,6 +144,14 @@ const PortfolioView: React.FC = () => {
     if (facility && selectedFacility) {
       // Push current facility onto history stack before navigating to child
       setFacilityHistory(prev => [...prev, selectedFacility]);
+    }
+    // Track recent building visits for home page
+    if (facility && (facility.category === 'Building' || !facility.category)) {
+      trackRecentBuilding({
+        fmGuid: facility.fmGuid || '',
+        name: facility.commonName || facility.name || '',
+        image: (facility as any).image,
+      });
     }
     setSelectedFacility(facility);
   };

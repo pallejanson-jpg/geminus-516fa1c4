@@ -12,6 +12,7 @@ import { User, Bot } from 'lucide-react';
 import ProfileSettings from './ProfileSettings';
 import GunnarSettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
+import VoiceSettings from './VoiceSettings';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
             </TabsTrigger>
             <TabsTrigger value="assistants" className="gap-2">
               <Bot className="h-4 w-4" />
-              AI Assistants
+              My Assistants
             </TabsTrigger>
           </TabsList>
 
@@ -59,6 +60,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
               <GunnarSettings />
               <div className="border-t pt-6">
                 <IleanSettings />
+              </div>
+              <div className="border-t pt-6">
+                <VoiceSettings />
               </div>
             </TabsContent>
           </div>

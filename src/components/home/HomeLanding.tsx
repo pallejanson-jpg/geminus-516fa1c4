@@ -58,6 +58,24 @@ function readRecentBuildings(): RecentBuilding[] {
   } catch { return []; }
 }
 
+export function trackRecentBuilding(building: { fmGuid: string; name: string; image?: string }) {
+  try {
+    const existing = readRecentBuildings();
+    const filtered = existing.filter(b => b.fmGuid !== building.fmGuid);
+    const entry: RecentBuilding = {
+      fmGuid: building.fmGuid,
+      name: building.name,
+      image: building.image || '',
+      timestamp: Date.now(),
+      numberOfLevels: 0,
+      numberOfSpaces: 0,
+      area: 0,
+    };
+    const updated = [entry, ...filtered].slice(0, 6);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+  } catch { /* quota exceeded */ }
+}
+
 function CardSkeleton() {
   return (
     <div className="rounded-xl border border-border bg-card/80 overflow-hidden">
@@ -78,8 +96,13 @@ export default function HomeLanding() {
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
 
-  // Recent buildings from localStorage
-  const [recentBuildings] = useState<RecentBuilding[]>(() => readRecentBuildings());
+  // Recent buildings from localStorage - re-read on each mount
+  const [recentBuildings, setRecentBuildings] = useState<RecentBuilding[]>(() => readRecentBuildings());
+
+  // Refresh recent list when component mounts (in case user navigated back)
+  useEffect(() => {
+    setRecentBuildings(readRecentBuildings());
+  }, []);
 
   // Saved views from DB
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
