@@ -136,7 +136,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
   if (categories.length === 0) {
     return (
       <p className="text-xs text-muted-foreground text-center py-4">
-        Inga annotationer i denna byggnad
+        No annotations in this building
       </p>
     );
   }
@@ -148,7 +148,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
       {/* Show/Hide All button */}
       <div className="flex items-center justify-between pb-2 border-b">
         <span className="text-xs text-muted-foreground">
-          {visibleCount}/{categories.length} synliga
+          {visibleCount}/{categories.length} visible
         </span>
         <Button
           variant="ghost"
@@ -159,12 +159,12 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
           {allVisible ? (
             <>
               <EyeOff className="h-3 w-3" />
-              Dölj alla
+              Hide all
             </>
           ) : (
             <>
               <Eye className="h-3 w-3" />
-              Visa alla
+              Show all
             </>
           )}
         </Button>
