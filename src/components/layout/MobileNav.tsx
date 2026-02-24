@@ -6,7 +6,7 @@ import {
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { AppContext } from '@/context/AppContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT } from '@/lib/constants';
+import { SIDEBAR_ORDER_STORAGE_KEY, SIDEBAR_SETTINGS_CHANGED_EVENT, IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import type { SidebarItem } from '@/lib/constants';
 import { getSidebarOrder } from '@/components/settings/AppMenuSettings';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ interface MobileNavProps {
 }
 
 const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
-  const { activeApp, setActiveApp, appConfigs } = useContext(AppContext);
+  const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
@@ -53,6 +53,24 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
   }, [setActiveApp]);
 
   const handleAppClick = useCallback((id: string) => {
+    // Special handling for 360/radar — pass building context
+    if (id === 'radar') {
+      const radarConfig = appConfigs?.radar || {};
+      const ivionUrl = radarConfig.url || IVION_DEFAULT_BASE_URL;
+      if (selectedFacility?.fmGuid) {
+        open360WithContext({
+          buildingFmGuid: selectedFacility.fmGuid,
+          buildingName: selectedFacility.commonName || selectedFacility.name || '',
+          ivionSiteId: '', // User account controls access
+          ivionUrl,
+        });
+      } else {
+        setActiveApp('radar');
+      }
+      setIsMobileMenuOpen(false);
+      return;
+    }
+
     const meta = SIDEBAR_ITEM_META[id];
     if (!meta) return;
     if (meta.type === 'config') {
@@ -66,7 +84,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
       setActiveApp(id);
     }
     setIsMobileMenuOpen(false);
-  }, [appConfigs, setActiveApp, setIsMobileMenuOpen]);
+  }, [appConfigs, setActiveApp, setIsMobileMenuOpen, selectedFacility, open360WithContext]);
 
   if (!isMobile) return null;
 

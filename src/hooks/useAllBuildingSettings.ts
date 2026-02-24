@@ -13,17 +13,35 @@ interface BuildingSettingsMap {
   };
 }
 
+const CACHE_KEY = 'all-building-settings-cache';
+
+function readCache(): BuildingSettingsMap | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function writeCache(map: BuildingSettingsMap) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(map));
+  } catch { /* quota exceeded */ }
+}
+
 /**
  * Hook to fetch ALL building_settings from the database.
- * Provides a map for quick lookup of hero images and other settings by fmGuid.
- * Call refetch() after mutations to invalidate the cache.
+ * Uses stale-while-revalidate: returns cached data instantly, then refreshes in background.
  */
 export function useAllBuildingSettings() {
-  const [settingsMap, setSettingsMap] = useState<BuildingSettingsMap>({});
+  const [settingsMap, setSettingsMap] = useState<BuildingSettingsMap>(() => readCache() || {});
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    setIsLoading(true);
+    // Only show loading spinner if we have no cached data
+    const hasCached = Object.keys(settingsMap).length > 0 || readCache() !== null;
+    setIsLoading(!hasCached);
+
     try {
       const { data, error } = await supabase
         .from('building_settings')
@@ -44,6 +62,7 @@ export function useAllBuildingSettings() {
         };
       });
       setSettingsMap(map);
+      writeCache(map);
     } catch (error) {
       console.error('Failed to fetch all building settings:', error);
     } finally {
@@ -54,13 +73,11 @@ export function useAllBuildingSettings() {
   useEffect(() => {
     fetchAll();
     
-    // Listen for custom event to refetch (triggered when settings change)
     const handleRefetch = () => fetchAll();
     window.addEventListener('building-settings-changed', handleRefetch);
     return () => window.removeEventListener('building-settings-changed', handleRefetch);
   }, [fetchAll]);
 
-  // Get hero image for a building, with fallback
   const getHeroImage = useCallback((fmGuid: string, fallback?: string): string => {
     const settings = settingsMap[fmGuid];
     if (settings?.heroImageUrl) {
@@ -69,7 +86,6 @@ export function useAllBuildingSettings() {
     return fallback || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop';
   }, [settingsMap]);
 
-  // Get favorites list
   const getFavorites = useCallback((): string[] => {
     return Object.values(settingsMap)
       .filter(s => s.isFavorite)
