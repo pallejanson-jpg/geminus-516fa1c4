@@ -254,20 +254,20 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     const viewer = viewerRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer || !buildingFmGuid) {
-      toast({ title: "Kan inte skapa vy", description: "Viewer är inte redo", variant: "destructive" });
+      toast({ title: "Cannot create view", description: "Viewer is not ready", variant: "destructive" });
       return;
     }
     try {
       const canvas = xeokitViewer.scene?.canvas?.canvas;
       if (!canvas) {
-        toast({ title: "Kan inte skapa vy", description: "Canvas inte tillgängligt", variant: "destructive" });
+        toast({ title: "Cannot create view", description: "Canvas not available", variant: "destructive" });
         return;
       }
       xeokitViewer.scene?.render?.(true);
       const screenshotDataUrl = canvas.toDataURL('image/png');
       const camera = xeokitViewer.camera;
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
       const viewState = {
         buildingFmGuid,
         buildingName: resolvedBuildingName,
@@ -289,7 +289,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       setShowCreateViewDialog(true);
     } catch (err) {
       console.error('Failed to capture view state:', err);
-      toast({ title: "Fel", description: "Kunde inte fånga vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not capture view", variant: "destructive" });
     }
   }, [viewerRef, buildingFmGuid, buildingName, allData, is2DMode, clipHeight, visibleModelIds, visibleFloorIds, showSpaces, showAnnotations]);
 
@@ -319,12 +319,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         visualization_type: pendingViewState.visualizationType, visualization_mock_data: pendingViewState.visualizationMockData,
       });
       if (insertError) throw insertError;
-      toast({ title: "Vy sparad!", description: `"${name}" har sparats` });
+      toast({ title: "View saved!", description: `"${name}" has been saved` });
       setShowCreateViewDialog(false);
       setPendingViewState(null);
     } catch (err) {
       console.error('Failed to save view:', err);
-      toast({ title: "Fel", description: "Kunde inte spara vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not save view", variant: "destructive" });
       throw err;
     } finally {
       setIsSavingView(false);
@@ -336,7 +336,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const handleSetStartView = useCallback(async () => {
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer || !buildingFmGuid) {
-      toast({ title: "Kan inte spara startvy", description: "Viewer är inte redo", variant: "destructive" });
+      toast({ title: "Cannot save start view", description: "Viewer is not ready", variant: "destructive" });
       return;
     }
     setIsSavingStartView(true);
@@ -344,12 +344,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
       const camera = xeokitViewer.camera;
       const viewId = crypto.randomUUID();
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
       
       // Create saved view
       const { error: insertError } = await supabase.from('saved_views').insert({
         id: viewId,
-        name: `Startvy – ${resolvedBuildingName}`,
+        name: `Start view – ${resolvedBuildingName}`,
         building_fm_guid: buildingFmGuid,
         building_name: resolvedBuildingName,
         camera_eye: [...camera.eye],
@@ -372,11 +372,11 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
         .eq('fm_guid', buildingFmGuid);
       if (updateError) throw updateError;
 
-      toast({ title: "Startvy sparad!", description: "Denna vy används nu som standard vid öppning" });
+      toast({ title: "Start view saved!", description: "This view will now be used as default on open" });
       window.dispatchEvent(new CustomEvent('building-settings-changed'));
     } catch (err) {
       console.error('Failed to set start view:', err);
-      toast({ title: "Fel", description: "Kunde inte spara startvy", variant: "destructive" });
+      toast({ title: "Error", description: "Could not save start view", variant: "destructive" });
     } finally {
       setIsSavingStartView(false);
     }
@@ -387,7 +387,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
     const screenshot = captureScreenshot();
     const viewpoint = captureViewpoint();
     const selectedObjects = getSelectedObjectIds();
-    if (!screenshot) { toast({ title: "Kunde inte ta skärmdump", variant: "destructive" }); return; }
+    if (!screenshot) { toast({ title: "Could not capture screenshot", variant: "destructive" }); return; }
     setPendingIssueState({ screenshot, viewpoint, selectedObjects });
     setShowCreateIssueDialog(true);
   }, [captureScreenshot, captureViewpoint, getSelectedObjectIds]);
@@ -508,7 +508,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <Button variant="ghost" className="w-full justify-between h-10 px-2">
                     <div className="flex items-center gap-2">
                       <Layers className="h-4 w-4" />
-                      <span className="font-medium text-sm">Våningsplan</span>
+                      <span className="font-medium text-sm">Floors</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", floorsOpen && "rotate-180")} />
                   </Button>
@@ -534,7 +534,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <Button variant="ghost" className="w-full justify-between h-10 px-2">
                     <div className="flex items-center gap-2">
                       <Box className="h-4 w-4" />
-                      <span className="font-medium text-sm">BIM-modeller</span>
+                      <span className="font-medium text-sm">BIM Models</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", modelsOpen && "rotate-180")} />
                   </Button>
@@ -554,7 +554,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <Button variant="ghost" className="w-full justify-between h-10 px-2">
                     <div className="flex items-center gap-2">
                       <Eye className="h-4 w-4" />
-                      <span className="font-medium text-sm">Visa</span>
+                      <span className="font-medium text-sm">Display</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", displayOpen && "rotate-180")} />
                   </Button>
@@ -580,7 +580,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       <div className={cn("p-1.5 rounded-md", showSpaces ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                         {showSpaces ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                       </div>
-                      <span className="text-sm">Visa rum</span>
+                      <span className="text-sm">Show spaces</span>
                     </div>
                     <Switch checked={showSpaces} onCheckedChange={handleToggleSpaces} />
                   </div>
@@ -611,7 +611,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                           <div className={cn("p-1.5 rounded-md", showAnnotations ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                             <MessageSquare className="h-4 w-4" />
                           </div>
-                          <span className="text-sm">Annotationer</span>
+                          <span className="text-sm">Annotations</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
@@ -642,7 +642,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <Button variant="ghost" className="w-full justify-between h-10 px-2">
                       <div className="flex items-center gap-2">
                         <Palette className="h-4 w-4" />
-                        <span className="font-medium text-sm">Rumsvisualisering</span>
+                        <span className="font-medium text-sm">Room Visualization</span>
                       </div>
                       <ChevronDown className={cn("h-4 w-4 transition-transform", roomVizOpen && "rotate-180")} />
                     </Button>
@@ -671,7 +671,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                        <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Settings className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-medium">Visningsinställningar</span>
+                      <span className="text-sm font-medium">Viewer Settings</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
@@ -681,12 +681,12 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Scissors className="h-4 w-4" /></div>
-                      <span className="text-sm">Klipphöjd (2D-vy)</span>
+                      <span className="text-sm">Clip height (2D view)</span>
                       <span className="text-xs font-medium ml-auto">{clipHeight.toFixed(1)}m</span>
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-                      <p className="text-xs text-foreground/70 mt-1">Höjd ovanför golv</p>
+                      <p className="text-xs text-foreground/70 mt-1">Height above floor</p>
                     </div>
                   </div>
 
@@ -696,14 +696,14 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       <div className={cn("p-1.5 rounded-md", isSoloFloor && !is2DMode ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Box className="h-4 w-4" />
                       </div>
-                      <span className="text-sm">Takklipp (3D Solo)</span>
+                      <span className="text-sm">Ceiling clip (3D Solo)</span>
                       <span className="text-xs font-medium ml-auto">{clipHeight3D >= 0 ? '+' : ''}{clipHeight3D.toFixed(1)}m</span>
                     </div>
                     <div className="pl-10">
                       <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
                        <p className="text-xs text-foreground/70 mt-1">
-                        {isSoloFloor && !is2DMode ? "Offset från nästa vånings golv" : "Aktiveras när en våning är isolerad i 3D"}
-                      </p>
+                        {isSoloFloor && !is2DMode ? "Offset from next floor's slab" : "Enabled when a floor is isolated in 3D"}
+                       </p>
                     </div>
                   </div>
 
@@ -713,17 +713,17 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       <div className={cn("p-1.5 rounded-md", showRoomLabels ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Type className="h-4 w-4" />
                       </div>
-                      <span className="text-sm">Rumsetiketter</span>
+                      <span className="text-sm">Room labels</span>
                     </div>
                     <div className="pl-10">
                       {loadingRoomLabelConfigs ? (
-                        <div className="text-xs text-foreground/70">Laddar...</div>
+                        <div className="text-xs text-foreground/70">Loading...</div>
                       ) : (
                         <div className="space-y-1">
                           <button
                             className={cn("w-full text-left px-2 py-1 rounded text-xs transition-colors", !showRoomLabels ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50")}
                             onClick={() => handleRoomLabelConfigSelect('off')}
-                          >Av</button>
+                          >Off</button>
                           {roomLabelConfigs.map((config) => (
                             <button
                               key={config.id}
@@ -735,7 +735,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                             </button>
                           ))}
                           {roomLabelConfigs.length === 0 && (
-                            <div className="text-xs text-foreground/70 py-1">Inga konfigurationer. Skapa i Inställningar.</div>
+                            <div className="text-xs text-foreground/70 py-1">No configurations. Create in Settings.</div>
                           )}
                         </div>
                       )}
@@ -749,7 +749,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <div className="py-1.5">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="p-1.5 rounded-md bg-muted text-foreground/70"><Palette className="h-4 w-4" /></div>
-                      <span className="text-sm">Bakgrundsfärg</span>
+                      <span className="text-sm">Background color</span>
                     </div>
                     <div className="pl-10">
                       <div className="grid grid-cols-5 gap-1.5">
@@ -775,7 +775,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       <div className={cn("p-1.5 rounded-md", showFloorPills ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <Layers className="h-4 w-4" />
                       </div>
-                      <span className="text-sm">Våningsväljare (pills)</span>
+                      <span className="text-sm">Floor switcher (pills)</span>
                     </div>
                     <Switch
                       checked={showFloorPills}
@@ -800,7 +800,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   <Button variant="ghost" className="w-full justify-between h-10 px-2">
                     <div className="flex items-center gap-2">
                       <Camera className="h-4 w-4" />
-                      <span className="font-medium text-sm">Åtgärder</span>
+                      <span className="font-medium text-sm">Actions</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 transition-transform", actionsOpen && "rotate-180")} />
                   </Button>
@@ -809,15 +809,15 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                 <div className="space-y-1 pt-2">
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureViewState} disabled={!isViewerReady}>
                     <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Camera className="h-4 w-4" /></div>
-                    <span className="text-sm">Skapa vy</span>
+                    <span className="text-sm">Create view</span>
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={handleSetStartView} disabled={!isViewerReady || isSavingStartView}>
                     <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Home className="h-4 w-4" /></div>
-                    <span className="text-sm">{isSavingStartView ? 'Sparar…' : 'Sätt som startvy'}</span>
+                    <span className="text-sm">{isSavingStartView ? 'Saving…' : 'Set as start view'}</span>
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureIssueState} disabled={!isViewerReady}>
                     <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
-                    <span className="text-sm">Skapa ärende</span>
+                    <span className="text-sm">Create issue</span>
                   </Button>
                   <Button
                     variant={showIssueList ? "secondary" : "outline"}
@@ -828,13 +828,13 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       <div className={cn("p-1.5 rounded-md", showIssueList ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
                         <MessageSquare className="h-4 w-4" />
                       </div>
-                      <span className="text-sm">Visa ärenden</span>
+                      <span className="text-sm">View issues</span>
                     </div>
                   </Button>
                   {isToolVisible('addAsset') && onAddAsset && (
                     <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={() => { onOpenChange(false); onAddAsset(); }}>
                       <div className="p-1.5 rounded-md bg-primary/10 text-primary"><Plus className="h-4 w-4" /></div>
-                      <span className="text-sm">Registrera tillgång</span>
+                      <span className="text-sm">Register asset</span>
                     </Button>
                   )}
                 </div>

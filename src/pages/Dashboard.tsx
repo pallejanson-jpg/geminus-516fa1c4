@@ -3,40 +3,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const stats = [
   {
-    title: "Totalt fastigheter",
+    title: "Total Properties",
     value: "24",
-    description: "+2 denna månad",
+    description: "+2 this month",
     icon: Building2,
     trend: "up",
   },
   {
-    title: "Aktiva dokument",
+    title: "Active Documents",
     value: "156",
-    description: "12 väntar på godkännande",
+    description: "12 pending approval",
     icon: FileText,
     trend: "up",
   },
   {
-    title: "Användare",
+    title: "Users",
     value: "18",
-    description: "3 inbjudna",
+    description: "3 invited",
     icon: Users,
     trend: "neutral",
   },
   {
-    title: "Portföljvärde",
+    title: "Portfolio Value",
     value: "847 MSEK",
-    description: "+12% ÅöÅ",
+    description: "+12% YoY",
     icon: TrendingUp,
     trend: "up",
   },
 ];
 
 const recentActivities = [
-  { id: 1, action: "Dokument uppladdat", property: "Kontorshus Centrum", time: "2 min sedan" },
-  { id: 2, action: "3D-modell uppdaterad", property: "Lagerlokaler Syd", time: "15 min sedan" },
-  { id: 3, action: "Ny användare tillagd", property: "System", time: "1 timme sedan" },
-  { id: 4, action: "Rapport genererad", property: "Kv. Björken", time: "2 timmar sedan" },
+  { id: 1, action: "Document uploaded", property: "Office Center", time: "2 min ago" },
+  { id: 2, action: "3D model updated", property: "Warehouse South", time: "15 min ago" },
+  { id: 3, action: "New user added", property: "System", time: "1 hour ago" },
+  { id: 4, action: "Report generated", property: "Block Birch", time: "2 hours ago" },
 ];
 
 export default function Dashboard() {
@@ -44,9 +44,9 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Översikt</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Overview</h1>
         <p className="text-muted-foreground">
-          Överblick av din fastighetsportfölj
+          Overview of your property portfolio
         </p>
       </div>
 
@@ -73,9 +73,9 @@ export default function Dashboard() {
         {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Senaste aktivitet</CardTitle>
+            <CardTitle>Recent Activity</CardTitle>
             <CardDescription>
-              Aktivitet i dina fastigheter och projekt
+              Activity in your properties and projects
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -103,9 +103,9 @@ export default function Dashboard() {
         {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle>Snabbåtgärder</CardTitle>
+            <CardTitle>Quick Actions</CardTitle>
             <CardDescription>
-              Vanliga uppgifter och genvägar
+              Common tasks and shortcuts
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -113,27 +113,27 @@ export default function Dashboard() {
               <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
                 <Building2 className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="text-sm font-medium">Lägg till fastighet</p>
+                  <p className="text-sm font-medium">Add property</p>
                   <p className="text-xs text-muted-foreground">
-                    Registrera en ny fastighet
+                    Register a new property
                   </p>
                 </div>
               </button>
               <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
                 <FileText className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="text-sm font-medium">Ladda upp dokument</p>
+                  <p className="text-sm font-medium">Upload document</p>
                   <p className="text-xs text-muted-foreground">
-                    Lägg till ritningar eller dokument
+                    Add drawings or documents
                   </p>
                 </div>
               </button>
               <button className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted">
                 <Users className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="text-sm font-medium">Bjud in användare</p>
+                  <p className="text-sm font-medium">Invite user</p>
                   <p className="text-xs text-muted-foreground">
-                    Lägg till teammedlemmar
+                    Add team members
                   </p>
                 </div>
               </button>

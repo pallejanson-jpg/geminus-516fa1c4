@@ -32,7 +32,7 @@ import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, 
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
-import { useLevelLabels } from '@/hooks/useLevelLabels';
+// import { useLevelLabels } from '@/hooks/useLevelLabels'; // disabled
 import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
 import { useModelNames } from '@/hooks/useModelNames';
 import type { LocalCoords } from '@/context/ViewerSyncContext';
@@ -268,8 +268,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   // Room labels hook
   const { setLabelsEnabled: setRoomLabelsEnabled, updateViewMode: updateLabelsViewMode, updateFloorFilter } = useRoomLabels(viewerInstanceRef);
 
-  // Level (storey) labels hook
-  const { setLabelsEnabled: setLevelLabelsEnabled } = useLevelLabels(viewerInstanceRef, fmGuid);
+  // Level (storey) labels hook — disabled for now
+  // const { setLabelsEnabled: setLevelLabelsEnabled } = useLevelLabels(viewerInstanceRef, fmGuid);
 
   // Performance plugins (FastNav, ViewCull, LOD)
   usePerformancePlugins({
@@ -277,13 +277,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     ready: modelLoadState === 'loaded' && initStep === 'ready',
     isMobile: !!isMobile,
   });
-
-  // Auto-enable level labels when model is ready (not in compact/transparent mode)
-  useEffect(() => {
-    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
-    if (compactMode || transparentBackground) return;
-    setLevelLabelsEnabled(true);
-  }, [modelLoadState, initStep, compactMode, transparentBackground, setLevelLabelsEnabled]);
 
   const initialVisAppliedRef = useRef(false);
   useEffect(() => {

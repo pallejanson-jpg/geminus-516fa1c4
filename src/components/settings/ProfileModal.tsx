@@ -32,10 +32,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
         <DialogHeader className="pr-8">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Profil & Assistenter
+            Profile & Assistants
           </DialogTitle>
           <DialogDescription>
-            Dina personliga inställningar, tema och AI-assistenter.
+            Your personal settings, theme, and AI assistants.
           </DialogDescription>
         </DialogHeader>
 
@@ -43,11 +43,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
-              Profil
+              Profile
             </TabsTrigger>
             <TabsTrigger value="assistants" className="gap-2">
               <Bot className="h-4 w-4" />
-              Mina assistenter
+              My Assistants
             </TabsTrigger>
           </TabsList>
 
