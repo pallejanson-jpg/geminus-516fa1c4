@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
-import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, RefreshCw } from 'lucide-react';
+import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, RefreshCw, Building2, Layers, DoorOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { getIleanSettings, saveIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT, type IleanSettingsData } from '@/components/settings/IleanSettings';
 import { AppContext } from '@/context/AppContext';
+import { useIleanContext } from '@/hooks/useIleanContext';
 
 const BUTTON_SIZE = 56; // h-14 w-14
 
@@ -16,6 +17,7 @@ const BUTTON_SIZE = 56; // h-14 w-14
  */
 export default function IleanButton() {
   const { selectedFacility, allData } = useContext(AppContext);
+  const { data: ileanContext, isLoading: ileanContextLoading, contextLevel } = useIleanContext();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,11 +70,16 @@ export default function IleanButton() {
     }
   }, [isOpen, position.x, panelHeight, isMobile]);
 
-  // Extract Ilean URL from selected facility or global config
+  // Use context-aware Ilean URL from Senslinc, with fallback to facility attributes/config
   useEffect(() => {
+    // Priority 1: Context-aware URL from Senslinc
+    if (ileanContext.ileanUrl) {
+      setIleanUrl(ileanContext.ileanUrl);
+      return;
+    }
+
+    // Priority 2: Facility attribute
     let url: string | null = null;
-    
-    // Try to find ilean URL from selected facility attributes
     if (selectedFacility) {
       const attrs = (selectedFacility as any).attributes || {};
       const ileanKey = Object.keys(attrs).find(k => 
@@ -83,7 +90,7 @@ export default function IleanButton() {
       }
     }
     
-    // If no URL from facility, try to get from global settings
+    // Priority 3: Global settings
     if (!url) {
       const savedConfigs = localStorage.getItem('appConfigs');
       if (savedConfigs) {
@@ -94,15 +101,13 @@ export default function IleanButton() {
       }
     }
     
-    // Fallback to Senslinc portal URL if available
+    // Priority 4: Derive from Senslinc API URL
     if (!url) {
       const savedConfigs = localStorage.getItem('appConfigs');
       if (savedConfigs) {
         const appConfigs = JSON.parse(savedConfigs);
         const senslincApiUrl = appConfigs.iot?.url;
         if (senslincApiUrl) {
-          // Transform API URL to potential Ilean URL
-          // e.g., https://api.swg-group.productinuse.com -> https://swg-group.productinuse.com/ilean
           const cleanUrl = senslincApiUrl.replace('/api', '').replace('api.', '');
           url = `${cleanUrl}/ilean`;
         }
@@ -110,7 +115,7 @@ export default function IleanButton() {
     }
     
     setIleanUrl(url);
-  }, [selectedFacility]);
+  }, [selectedFacility, ileanContext.ileanUrl]);
 
   // Drag handlers for panel
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -388,6 +393,14 @@ export default function IleanButton() {
               <div className="flex items-center gap-1.5">
                 <FileQuestion className="h-4 w-4 text-cyan-500" />
                 <span className="font-medium text-sm">Ilean AI</span>
+                {ileanContext.entityName && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 ml-1">
+                    {ileanContext.entityType === 'building' && <Building2 className="h-3 w-3" />}
+                    {ileanContext.entityType === 'floor' && <Layers className="h-3 w-3" />}
+                    {ileanContext.entityType === 'room' && <DoorOpen className="h-3 w-3" />}
+                    <span className="max-w-24 truncate">{ileanContext.entityName}</span>
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1">

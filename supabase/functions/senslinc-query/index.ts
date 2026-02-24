@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data' | 'get-machine-air-quality';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data' | 'get-machine-air-quality' | 'get-ilean-context';
   fmGuid?: string;
   siteCode?: string;
   sitePk?: number;
@@ -15,6 +15,7 @@ interface SenslincRequest {
   workspaceKey?: string;
   query?: Record<string, unknown>;
   days?: number;
+  contextLevel?: 'building' | 'floor' | 'room';
 }
 
 // ── Token cache (55-minute TTL) ──
@@ -257,7 +258,7 @@ serve(async (req) => {
     });
 
   try {
-    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days } = await req.json() as SenslincRequest;
+    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days, contextLevel } = await req.json() as SenslincRequest;
 
     const apiUrl = Deno.env.get('SENSLINC_API_URL');
     const email = Deno.env.get('SENSLINC_EMAIL');
@@ -289,6 +290,7 @@ serve(async (req) => {
       'get-machine-data',
       'get-building-sensor-data',
       'get-machine-air-quality',
+      'get-ilean-context',
     ]);
 
     let token: string | null = null;
@@ -651,6 +653,86 @@ serve(async (req) => {
             machines: machineSlim,
           }
         });
+      }
+
+      // ── get-ilean-context: resolve Ilean URL for a given fmGuid + context level ──
+      case 'get-ilean-context': {
+        if (!fmGuid) return jsonResponse({ success: false, error: 'fmGuid required' }, 400);
+        const authToken = token as string;
+        const level = contextLevel || 'room';
+
+        // Strip api. subdomain to get portal base URL
+        let portalUrl = cleanApiUrl
+          .replace(/^(https?:\/\/)api\./, '$1')
+          .replace(/\/api\/?$/, '')
+          .replace(/\/$/, '');
+
+        if (level === 'building') {
+          // Find site by code = fmGuid
+          try {
+            const sites = await senslincFetchWithRetry(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+            const sitesArr = Array.isArray(sites) ? sites : (sites?.results ?? []);
+            if (sitesArr.length > 0) {
+              const site = sitesArr[0];
+              return jsonResponse({
+                success: true,
+                data: {
+                  ileanUrl: `${portalUrl}/site/${site.pk}/ilean/`,
+                  dashboardUrl: site.dashboard_url || `${portalUrl}/site/${site.pk}/home/`,
+                  entityName: site.name,
+                  entityType: 'building',
+                  pk: site.pk,
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('[Senslinc] get-ilean-context building lookup failed:', e);
+          }
+        } else if (level === 'floor') {
+          // Find line by code = fmGuid
+          try {
+            const lines = await senslincFetchWithRetry(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+            const linesArr = Array.isArray(lines) ? lines : (lines?.results ?? []);
+            if (linesArr.length > 0) {
+              const line = linesArr[0];
+              return jsonResponse({
+                success: true,
+                data: {
+                  ileanUrl: `${portalUrl}/line/${line.pk}/ilean/`,
+                  dashboardUrl: line.dashboard_url || `${portalUrl}/line/${line.pk}/home/`,
+                  entityName: line.name,
+                  entityType: 'floor',
+                  pk: line.pk,
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('[Senslinc] get-ilean-context floor lookup failed:', e);
+          }
+        } else {
+          // Room: find machine by code = fmGuid
+          try {
+            const machines = await senslincFetchWithRetry(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+            const machinesArr = Array.isArray(machines) ? machines : (machines?.results ?? []);
+            if (machinesArr.length > 0) {
+              const machine = machinesArr[0];
+              return jsonResponse({
+                success: true,
+                data: {
+                  ileanUrl: `${portalUrl}/machine/${machine.pk}/ilean/`,
+                  dashboardUrl: machine.dashboard_url || `${portalUrl}/machine/${machine.pk}/room_analysis/`,
+                  entityName: machine.name,
+                  entityType: 'room',
+                  pk: machine.pk,
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('[Senslinc] get-ilean-context room lookup failed:', e);
+          }
+        }
+
+        return jsonResponse({ success: false, error: `No Senslinc entity found for fmGuid at level: ${level}` });
       }
 
       default:
