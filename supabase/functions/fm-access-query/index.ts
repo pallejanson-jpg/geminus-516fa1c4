@@ -788,6 +788,138 @@ serve(async (req) => {
         }
       }
 
+      case 'sync-object': {
+        // Smart sync: check if object exists by GUID, create or update accordingly
+        const { fmGuid, name: syncName, parentGuid: syncParentGuid, properties: syncProps, localUpdatedAt } = params;
+        if (!fmGuid) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'fmGuid is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          // 1. Check if object exists in FM Access
+          const checkResp = await fmAccessFetch(config, `/api/object/byguid/json/${encodeURIComponent(fmGuid)}`);
+          const checkText = await checkResp.text();
+          let existingObj: any = null;
+          try { existingObj = JSON.parse(checkText); } catch { existingObj = null; }
+
+          const objectExists = checkResp.ok && existingObj && !existingObj.error && (existingObj.objectId || existingObj.ObjectId || existingObj.objectName || existingObj.ObjectName);
+
+          if (objectExists) {
+            // Object exists — compare and decide direction
+            const remoteUpdated = existingObj.modifiedDate || existingObj.ModifiedDate || existingObj.updatedDate || existingObj.UpdatedDate || null;
+            const remoteProps: Record<string, any> = {};
+            
+            // Extract properties from FM Access object
+            const propArray = existingObj.properties || existingObj.Properties || [];
+            if (Array.isArray(propArray)) {
+              for (const p of propArray) {
+                const pName = p.name || p.Name || p.propertyName || p.PropertyName || '';
+                const pValue = p.value ?? p.Value ?? p.propertyValue ?? p.PropertyValue ?? null;
+                if (pName) remoteProps[pName] = pValue;
+              }
+            }
+
+            // Determine sync direction based on timestamps
+            let direction: 'push' | 'pull' | 'none' = 'none';
+            if (localUpdatedAt && remoteUpdated) {
+              const localTime = new Date(localUpdatedAt).getTime();
+              const remoteTime = new Date(remoteUpdated).getTime();
+              direction = localTime > remoteTime ? 'push' : (remoteTime > localTime ? 'pull' : 'none');
+            } else if (syncProps && Object.keys(syncProps).length > 0) {
+              direction = 'push'; // default to push if no timestamps available
+            }
+
+            if (direction === 'push' && syncProps && Object.keys(syncProps).length > 0) {
+              // Push local changes to FM Access
+              const updatePayload: any = {};
+              if (syncName) updatePayload.objectName = syncName;
+              updatePayload.properties = syncProps;
+
+              const updateResp = await fmAccessFetch(config, `/api/object/byguid/${encodeURIComponent(fmGuid)}`, {
+                method: 'PUT',
+                body: JSON.stringify(updatePayload),
+              });
+              const updateText = await updateResp.text();
+              let updateData: any;
+              try { updateData = JSON.parse(updateText); } catch { updateData = updateText; }
+
+              return new Response(
+                JSON.stringify({ 
+                  success: updateResp.ok, 
+                  action: 'updated', 
+                  direction: 'push',
+                  data: updateData,
+                  error: !updateResp.ok ? `FM Access returned ${updateResp.status}` : undefined 
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            } else if (direction === 'pull') {
+              // Return remote data so client can update local DB
+              return new Response(
+                JSON.stringify({ 
+                  success: true, 
+                  action: 'pull', 
+                  direction: 'pull',
+                  remoteObject: existingObj,
+                  remoteProperties: remoteProps,
+                  remoteName: existingObj.objectName || existingObj.ObjectName || null,
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            } else {
+              return new Response(
+                JSON.stringify({ success: true, action: 'none', direction: 'none', message: 'Object in sync' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+          } else {
+            // Object does NOT exist — create it
+            if (!syncParentGuid || !syncName) {
+              return new Response(
+                JSON.stringify({ success: false, error: 'Object not found in FM Access and parentGuid+name required for creation', action: 'skip' }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+
+            const createPayload: any = {
+              objectName: syncName,
+              parentGuid: syncParentGuid,
+              systemGuid: fmGuid,
+            };
+            if (syncProps && Object.keys(syncProps).length > 0) {
+              createPayload.properties = syncProps;
+            }
+
+            const createResp = await fmAccessFetch(config, '/api/object', {
+              method: 'POST',
+              body: JSON.stringify(createPayload),
+            });
+            const createText = await createResp.text();
+            let createData: any;
+            try { createData = JSON.parse(createText); } catch { createData = createText; }
+
+            return new Response(
+              JSON.stringify({ 
+                success: createResp.ok, 
+                action: 'created', 
+                direction: 'push',
+                data: createData,
+                error: !createResp.ok ? `FM Access returned ${createResp.status}` : undefined 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       case 'proxy': {
         const { path: apiPath, method: apiMethod, body: apiBody } = params;
         if (!apiPath) {
