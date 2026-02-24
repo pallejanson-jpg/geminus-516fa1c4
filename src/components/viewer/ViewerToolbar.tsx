@@ -32,7 +32,7 @@ import {
   type ViewerToolChangedDetail,
   type ViewMode2DToggledDetail,
 } from '@/lib/viewer-events';
-import { LEVEL_LABELS_TOGGLE_EVENT } from '@/hooks/useLevelLabels';
+// import { LEVEL_LABELS_TOGGLE_EVENT } from '@/hooks/useLevelLabels'; // disabled
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -384,8 +384,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     window.dispatchEvent(new CustomEvent(VIEW_MODE_CHANGED_EVENT, { detail: { mode, floorId: currentFloorId } }));
 
     if (mode === '2d') {
-      // Auto-disable level labels in 2D mode (FloatingFloorSwitcher handles floor navigation)
-      window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: false } }));
+      // Level labels disabled
+      // window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: false } }));
       const scene = viewer.scene;
       const assetViewer = viewerRef.current?.$refs?.AssetViewer;
       const assetView = assetViewer?.$refs?.assetView;
