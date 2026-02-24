@@ -1107,8 +1107,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       Object.values(plugin.annotations).forEach((ann: any) => {
         if (!ann.markerElement) return;
         const category = ann.category || ann.markerElement?.dataset?.category || '';
-        const catVisible = visibleCats.size === 0 || visibleCats.has(category);
-        ann.markerElement.style.display = (ann.markerShown && catVisible) ? 'flex' : 'none';
+        if (visibleCats.size > 0) {
+          // Filter is active: show matching categories, hide rest
+          const catVisible = visibleCats.has(category);
+          ann.markerElement.style.display = catVisible ? 'flex' : 'none';
+          // Also set markerShown so floor filtering respects it
+          if (catVisible) ann.markerShown = true;
+        } else {
+          // No filter: restore to default (show based on markerShown)
+          ann.markerElement.style.display = ann.markerShown ? 'flex' : 'none';
+        }
       });
       if (plugin.updatePositions) plugin.updatePositions();
     };
