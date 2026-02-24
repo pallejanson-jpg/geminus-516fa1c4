@@ -2197,6 +2197,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       if (!displayAction) {
         console.log("allModelsLoadedCallback - just select + zoom");
         viewerInstanceRef.current?.selectFmGuidAndViewFit(fmGuidToShow);
+        // Fallback: if selection yielded 0 items (building GUID not in model), zoom to all geometry
+        setTimeout(() => {
+          const assetView = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView;
+          const scene = assetView?.viewer?.scene;
+          if (scene && (!scene.selectedObjectIds || Object.keys(scene.selectedObjectIds).length === 0)) {
+            console.log("allModelsLoadedCallback - selection empty, falling back to viewFitAll");
+            assetView?.viewFit?.(undefined, true);
+          }
+        }, 300);
       } else {
         console.log("allModelsLoadedCallback - display action + select");
         executeDisplayAction(displayAction);
