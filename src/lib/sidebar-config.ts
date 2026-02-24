@@ -18,12 +18,12 @@ export interface SidebarItemMeta {
 export const SIDEBAR_ITEM_META: Record<string, SidebarItemMeta> = {
   inventory:        { icon: ClipboardList, color: 'text-orange-500',  label: 'Inventering',                        type: 'internal' },
   fault_report:     { icon: AlertTriangle, color: 'text-destructive', label: 'Felanmälan',                         type: 'internal' },
-  insights:         { icon: BarChart2,     color: 'text-accent',      label: 'Insights',                           type: 'internal' },
+  insights:         { icon: BarChart2,     color: 'text-accent',      label: 'Insikter',                           type: 'internal' },
   fma_plus:         { icon: Building2,     color: 'text-primary',     label: DEFAULT_APP_CONFIGS.fma_plus.label,    type: 'config' },
   asset_plus:       { icon: Box,           color: 'text-primary',     label: DEFAULT_APP_CONFIGS.asset_plus.label,  type: 'config' },
   iot:              { icon: Zap,           color: 'text-accent',      label: DEFAULT_APP_CONFIGS.iot.label,         type: 'config' },
   original_archive: { icon: Archive,       color: 'text-muted-foreground', label: DEFAULT_APP_CONFIGS.original_archive.label, type: 'config' },
   radar:            { icon: Radar,         color: 'text-primary',     label: DEFAULT_APP_CONFIGS.radar.label,       type: 'config' },
-  ai_scan:          { icon: Scan,          color: 'text-accent',      label: 'AI Scan',                            type: 'internal' },
-  globe:            { icon: Globe,         color: 'text-primary',     label: 'Globe',                              type: 'internal' },
+  ai_scan:          { icon: Scan,          color: 'text-accent',      label: 'AI-skanning',                        type: 'internal' },
+  globe:            { icon: Globe,         color: 'text-primary',     label: 'Glob',                               type: 'internal' },
 };

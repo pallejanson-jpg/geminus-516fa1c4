@@ -222,9 +222,9 @@ export default function HomeLanding() {
               <CardHeader className="pb-2 sm:pb-4">
                 <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-primary" />
-                  Recent
+                  Senaste
                 </CardTitle>
-                <CardDescription className="text-[11px] sm:text-xs">Buildings you've worked with recently</CardDescription>
+                <CardDescription className="text-[11px] sm:text-xs">Byggnader du nyligen arbetat med</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 {enrichedRecent.length === 0 ? (
@@ -232,8 +232,8 @@ export default function HomeLanding() {
                     <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
                       <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
-                        <p className="text-xs sm:text-sm font-medium">No recent buildings</p>
-                        <p className="text-[11px] sm:text-xs">Open a building from Portfolio to see it here.</p>
+                        <p className="text-xs sm:text-sm font-medium">Inga senaste byggnader</p>
+                        <p className="text-[11px] sm:text-xs">Öppna en byggnad från Portfölj för att se den här.</p>
                       </div>
                     </div>
                   </div>
@@ -266,9 +266,9 @@ export default function HomeLanding() {
               <CardHeader className="pb-2 sm:pb-4">
                 <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
                   <Eye className="h-4 w-4 text-primary" />
-                  Views
+                  Sparade vyer
                 </CardTitle>
-                <CardDescription className="text-[11px] sm:text-xs">Your recently saved views</CardDescription>
+                <CardDescription className="text-[11px] sm:text-xs">Dina senast sparade vyer</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 {loadingViews ? (
@@ -282,8 +282,8 @@ export default function HomeLanding() {
                     <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
                       <Eye className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
-                        <p className="text-xs sm:text-sm font-medium">No saved views</p>
-                        <p className="text-[11px] sm:text-xs">Save a view from the 3D viewer to see it here.</p>
+                        <p className="text-xs sm:text-sm font-medium">Inga sparade vyer</p>
+                        <p className="text-[11px] sm:text-xs">Spara en vy från 3D-visningen för att se den här.</p>
                       </div>
                     </div>
                   </div>

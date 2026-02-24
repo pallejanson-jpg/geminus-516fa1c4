@@ -116,10 +116,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, []);
 
     const viewButtons = [
-        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
-        { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
+        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfölj' },
+        { key: 'map', mode: undefined, icon: Globe, label: 'Karta' },
         { key: 'navigation', mode: undefined, icon: Network, label: 'Navigator' },
-        { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D Viewer' },
+        { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D-vy' },
     ];
 
     return (
@@ -140,7 +140,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     className="hidden md:flex gap-2"
                 >
                     <Home size={18} />
-                    <span className="hidden lg:inline">Home</span>
+                    <span className="hidden lg:inline">Hem</span>
                 </AppButton>
 
                 <div className="hidden md:flex items-center gap-1 ml-2">
@@ -194,7 +194,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={toggleRightSidebar}
                     variant="ghost"
                     className="h-9 w-9 sm:h-10 sm:w-10"
-                    title="Help Center"
+                    title="Hjälpcenter"
                 >
                     <HelpCircle size={18} />
                 </AppButton>

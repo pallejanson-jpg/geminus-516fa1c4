@@ -671,7 +671,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                        <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Settings className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-medium">Viewer settings</span>
+                      <span className="text-sm font-medium">Visningsinställningar</span>
                     </div>
                     <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", viewerSettingsOpen && "rotate-180")} />
                   </button>
