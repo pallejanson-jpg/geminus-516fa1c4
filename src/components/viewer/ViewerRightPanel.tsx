@@ -471,7 +471,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
           )}
         >
           <SheetHeader className="p-4 pb-2 border-b">
-            <SheetTitle className="flex items-center justify-between text-base">
+            <SheetTitle className="flex items-center justify-between text-base text-foreground">
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4" />
                 Visning
@@ -572,18 +572,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <Switch checked={is2DMode} onCheckedChange={handle2DModeToggle} />
                   </div>
 
-                  {/* Model Tree Toggle */}
-                  {onToggleTreeView && (
-                    <div className="flex items-center justify-between py-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("p-1.5 rounded-md", showTreeView ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
-                          <TreeDeciduous className="h-4 w-4" />
-                        </div>
-                        <span className="text-sm">Modellträd</span>
-                      </div>
-                      <Switch checked={showTreeView} onCheckedChange={(checked) => onToggleTreeView(checked)} />
-                    </div>
-                  )}
+                  {/* Model Tree Toggle - removed, replaced by FilterPanel */}
 
                   {/* Show Spaces Toggle - always visible */}
                   <div className="flex items-center justify-between py-1.5">
