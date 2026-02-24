@@ -215,7 +215,16 @@ export default function Ivion360View({
 
     const style = document.createElement('style');
     style.id = styleId;
-    style.textContent = `
+    const mobileRules = isMobile ? `
+      ivion .iv-sidebar { display: none !important; }
+      ivion .iv-sidebar-toggle { transform: scale(0.7); transform-origin: top left; }
+      ivion .iv-floor-selector { transform: scale(0.7); transform-origin: bottom left; max-height: 40vh !important; }
+      ivion .iv-controls { transform: scale(0.65); transform-origin: bottom right; }
+      ivion .iv-minimap { display: none !important; }
+      ivion .iv-toolbar { transform: scale(0.7); transform-origin: bottom center; }
+      ivion .iv-button { font-size: 10px !important; padding: 4px 6px !important; }
+      ivion .iv-navigation { transform: scale(0.65); transform-origin: bottom right; }
+    ` : `
       ivion .iv-sidebar { max-width: 220px !important; }
       ivion .iv-sidebar-toggle { transform: scale(0.85); transform-origin: top left; }
       ivion .iv-floor-selector { transform: scale(0.85); transform-origin: bottom left; }
@@ -224,13 +233,14 @@ export default function Ivion360View({
       ivion .iv-toolbar { transform: scale(0.85); transform-origin: bottom center; }
       ivion .iv-button { font-size: 12px !important; }
     `;
+    style.textContent = mobileRules;
     container.appendChild(style);
 
     return () => {
       const el = container.querySelector(`#${styleId}`);
       if (el) el.remove();
     };
-  }, [sdkStatus]);
+  }, [sdkStatus, isMobile]);
 
   // Token refresh loop — keep SDK authenticated
   useEffect(() => {
