@@ -732,7 +732,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardHeader className="pb-3 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Eye size={14} className="sm:w-4 sm:h-4 text-primary" />
-                  Saved Views
+                  Sparade vyer
                 </CardTitle>
               </CardHeader>
               <CardContent>

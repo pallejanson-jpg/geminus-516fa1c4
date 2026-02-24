@@ -754,7 +754,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
               applyStoreyVisibility(new Set());
             }}
           >
-            Show all
+            Visa alla
           </button>
         </div>
       )}

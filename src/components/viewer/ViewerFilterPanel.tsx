@@ -904,7 +904,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         <div className="py-1">
           {/* Sources */}
           <FilterSection
-            title="Sources"
+            title="Källor"
             count={sources.length}
             selectedCount={checkedSources.size}
             isOpen={sourcesOpen}
@@ -921,13 +921,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
             {sources.length === 0 && (
-              <p className="text-sm text-muted-foreground px-3 py-2">No sources found</p>
+              <p className="text-sm text-muted-foreground px-3 py-2">Inga källor hittades</p>
             )}
           </FilterSection>
 
           {/* Levels */}
           <FilterSection
-            title="Levels"
+            title="Våningar"
             count={levels.length}
             selectedCount={checkedLevels.size}
             isOpen={levelsOpen}
@@ -941,7 +941,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 className={cn("h-6 w-6", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
-                title={autoColorEnabled ? "Turn off auto-colors" : "Turn on auto-colors"}
+                title={autoColorEnabled ? "Stäng av autofärger" : "Slå på autofärger"}
                 onClick={(e) => { e.stopPropagation(); setAutoColorEnabled(!autoColorEnabled); }}
               >
                 <Paintbrush className="h-3.5 w-3.5" />
@@ -964,7 +964,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Spaces */}
           <FilterSection
-            title="Spaces"
+            title="Rum"
             count={spaces.length}
             selectedCount={checkedSpaces.size}
             isOpen={spacesOpen}
@@ -985,19 +985,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             ))}
             {filteredSpaces.length > 200 && (
               <p className="text-sm text-muted-foreground px-3 py-1">
-                Showing 200 of {filteredSpaces.length} spaces
+                Visar 200 av {filteredSpaces.length} rum
               </p>
             )}
             {filteredSpaces.length === 0 && (
               <p className="text-sm text-muted-foreground px-3 py-2">
-                {spacesSearch ? 'No match' : 'No spaces on selected levels'}
+                {spacesSearch ? 'Ingen träff' : 'Inga rum på vald våning'}
               </p>
             )}
           </FilterSection>
 
           {/* Categories */}
           <FilterSection
-            title="Categories"
+            title="Kategorier"
             count={categories.length}
             selectedCount={checkedCategories.size}
             isOpen={categoriesOpen}
@@ -1018,7 +1018,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           {/* Annotations (non-modeled assets) */}
           {annotationCategories.length > 0 && (
             <FilterSection
-              title="Annotations"
+              title="Annotationer"
               count={annotationCategories.reduce((s, c) => s + c.count, 0)}
               selectedCount={checkedAnnotations.size}
               isOpen={annotationsOpen}
@@ -1080,7 +1080,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
     >
       <div className="flex items-center gap-2">
         {isOpen ? <ChevronDown className="h-4 w-4 text-foreground" /> : <ChevronRight className="h-4 w-4 text-foreground" />}
-        <span className="text-sm font-semibold uppercase tracking-wider text-foreground">{title}</span>
+            <span className="text-sm font-semibold uppercase tracking-wider text-foreground">{title}</span>
         <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal">
           {selectedCount > 0 ? `${selectedCount}/${count}` : count}
         </Badge>
@@ -1092,7 +1092,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
             className="text-xs text-primary hover:underline"
             onClick={(e) => { e.stopPropagation(); onReset(); }}
           >
-            Reset
+            Återställ
           </button>
         )}
       </div>
@@ -1103,7 +1103,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
           <div className="px-3 pb-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="h-7 pl-7 text-sm" />
+              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Sök..." className="h-7 pl-7 text-sm" />
             </div>
           </div>
         )}
@@ -1149,7 +1149,7 @@ const FilterRow: React.FC<FilterRowProps> = ({
             className="h-3.5 w-3.5 rounded-full shrink-0 border border-border/50 hover:scale-125 transition-transform"
             style={{ backgroundColor: color }}
             onClick={(e) => e.stopPropagation()}
-            title="Change color"
+            title="Ändra färg"
           />
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" side="right" align="center" onClick={(e) => e.stopPropagation()}>

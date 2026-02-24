@@ -54,9 +54,9 @@ const properties = [
 ];
 
 const statusConfig = {
-  active: { label: "Active", variant: "default" as const },
-  maintenance: { label: "Maintenance", variant: "secondary" as const },
-  pending: { label: "Pending", variant: "outline" as const },
+  active: { label: "Aktiv", variant: "default" as const },
+  maintenance: { label: "Underhåll", variant: "secondary" as const },
+  pending: { label: "Väntande", variant: "outline" as const },
 };
 
 export default function Properties() {
@@ -65,14 +65,14 @@ export default function Properties() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Properties</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Fastigheter</h1>
           <p className="text-muted-foreground">
-            Manage your property portfolio
+            Hantera din fastighetsportfölj
           </p>
         </div>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Add property
+          Lägg till fastighet
         </Button>
       </div>
 
@@ -82,7 +82,7 @@ export default function Properties() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search properties..."
+            placeholder="Sök fastigheter..."
             className="pl-9"
           />
         </div>
@@ -116,21 +116,21 @@ export default function Properties() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>View details</DropdownMenuItem>
-                  <DropdownMenuItem>Edit</DropdownMenuItem>
-                  <DropdownMenuItem>3D View</DropdownMenuItem>
-                  <DropdownMenuItem>Documents</DropdownMenuItem>
+                  <DropdownMenuItem>Visa detaljer</DropdownMenuItem>
+                  <DropdownMenuItem>Redigera</DropdownMenuItem>
+                  <DropdownMenuItem>3D-vy</DropdownMenuItem>
+                  <DropdownMenuItem>Dokument</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Type</p>
+                  <p className="text-xs text-muted-foreground">Typ</p>
                   <p className="text-sm font-medium">{property.type}</p>
                 </div>
                 <div className="space-y-1 text-right">
-                  <p className="text-xs text-muted-foreground">Area</p>
+                  <p className="text-xs text-muted-foreground">Yta</p>
                   <p className="text-sm font-medium">{property.area}</p>
                 </div>
               </div>
