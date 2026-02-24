@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { sv } from "date-fns/locale";
 
 interface BcfIssue {
   id: string;
@@ -29,10 +28,10 @@ const ISSUE_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon?: React.ElementType }> = {
-  open: { label: 'Ny', color: 'bg-destructive' },
-  in_progress: { label: 'Pågående', color: 'bg-amber-500' },
-  resolved: { label: 'Löst', color: 'bg-emerald-500', icon: CheckCircle },
-  closed: { label: 'Stängd', color: 'bg-muted-foreground' },
+  open: { label: 'New', color: 'bg-destructive' },
+  in_progress: { label: 'In Progress', color: 'bg-amber-500' },
+  resolved: { label: 'Resolved', color: 'bg-emerald-500', icon: CheckCircle },
+  closed: { label: 'Closed', color: 'bg-muted-foreground' },
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -85,7 +84,6 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
 
     fetchIssues();
 
-    // Subscribe to realtime updates
     const channel = supabase
       .channel('bcf_issues_changes')
       .on(
@@ -122,14 +120,13 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
-      {/* Header */}
       <div className="flex items-center justify-between p-3 border-b">
         <div className="flex items-center gap-2">
           <MessageSquarePlus className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Ärenden</span>
+          <span className="font-medium text-sm">Issues</span>
           {issues.length > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {openIssues.length} öppna
+              {openIssues.length} open
             </Badge>
           )}
         </div>
@@ -140,7 +137,6 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
         )}
       </div>
 
-      {/* Content */}
       <ScrollArea className="flex-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -149,30 +145,27 @@ const IssueListPanel: React.FC<IssueListPanelProps> = ({
         ) : issues.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
             <MessageSquarePlus className="h-8 w-8 text-muted-foreground/50 mb-2" />
-            <p className="text-sm text-muted-foreground">Inga ärenden än</p>
+            <p className="text-sm text-muted-foreground">No issues yet</p>
             {onCreateIssue && (
               <Button variant="outline" size="sm" className="mt-3" onClick={onCreateIssue}>
-                Skapa första ärendet
+                Create first issue
               </Button>
             )}
           </div>
         ) : (
           <div className="p-2 space-y-2">
-            {/* Open issues */}
             {openIssues.map((issue) => (
               <IssueCard key={issue.id} issue={issue} onClick={() => onSelectIssue?.(issue)} />
             ))}
 
-            {/* Divider if both open and resolved */}
             {openIssues.length > 0 && resolvedIssues.length > 0 && (
               <div className="py-2">
                 <div className="text-xs text-muted-foreground uppercase tracking-wide px-2">
-                  Lösta ärenden
+                  Resolved issues
                 </div>
               </div>
             )}
 
-            {/* Resolved issues (collapsed look) */}
             {resolvedIssues.map((issue) => (
               <IssueCard
                 key={issue.id}
@@ -202,7 +195,6 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, compact }) => {
 
   const timeAgo = formatDistanceToNow(new Date(issue.created_at), {
     addSuffix: true,
-    locale: sv,
   });
 
   return (
