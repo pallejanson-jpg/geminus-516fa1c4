@@ -59,7 +59,7 @@ function writeCachedFavorites(buildings: FavoriteBuilding[]) {
 function FavoriteBuildingSkeleton() {
   return (
     <div className="rounded-xl border border-border bg-card/80 overflow-hidden">
-      <Skeleton className="h-24 sm:h-28 w-full" />
+      <Skeleton className="h-32 sm:h-36 w-full" />
       <div className="p-2.5 sm:p-3 flex items-center justify-between">
         <Skeleton className="h-3 w-10" />
         <Skeleton className="h-3 w-10" />
@@ -230,7 +230,7 @@ export default function HomeLanding() {
                         onClick={() => handleBuildingClick(building)}
                         className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
                       >
-                        <div className="h-24 sm:h-28 relative overflow-hidden">
+                        <div className="h-32 sm:h-36 relative overflow-hidden">
                           <img
                             src={building.image}
                             alt={building.commonName || building.name}
