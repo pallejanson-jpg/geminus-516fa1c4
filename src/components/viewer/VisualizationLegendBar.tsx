@@ -114,13 +114,17 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
   const barHeight = isMobile ? 180 : 260;
 
   return (
-    <div
-      className={cn(
-        'absolute left-3 top-1/2 -translate-y-1/2 z-[52] flex gap-1.5',
-        'pointer-events-auto',
-        className
-      )}
-    >
+      <div
+        className={cn(
+          'absolute z-[52] flex gap-1.5',
+          'pointer-events-auto',
+          // Mobile: position at bottom-right to avoid floor switcher on the left
+          isMobile
+            ? 'right-3 bottom-24'
+            : 'left-3 top-1/2 -translate-y-1/2',
+          className
+        )}
+      >
       {/* Gradient bar */}
       <div
         className="rounded-md border border-white/20 shadow-lg"
