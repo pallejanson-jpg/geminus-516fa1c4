@@ -1723,7 +1723,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // FM Access: Sync local assets to FM Access
+    // FM Access: Smart bidirectional sync for inventoried objects (created_in_model = false)
     const handleSyncToFmAccess = async () => {
         setIsSyncingFmAccess(true);
         try {
@@ -1738,11 +1738,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
             setFmAccessStatus('success');
 
-            // 2. Find local assets with building_fm_guid (FM-linked)
+            // 2. Find inventoried assets (created_in_model = false) with building_fm_guid
             const { data: assets, error: assetError } = await supabase
                 .from('assets')
                 .select('fm_guid, building_fm_guid')
-                .not('building_fm_guid', 'is', null);
+                .not('building_fm_guid', 'is', null)
+                .eq('created_in_model', false);
 
             if (assetError) throw assetError;
 
@@ -1750,28 +1751,43 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setFmAccessLocalCount(fmAssets.length);
 
             if (fmAssets.length === 0) {
-                toast({ title: 'Inga objekt att synka', description: 'Det finns inga lokala objekt med FM Access-koppling.' });
+                toast({ title: 'Inga objekt att synka', description: 'Det finns inga inventerade objekt (ej i modell) med FM Access-koppling.' });
                 return;
             }
 
-            // 3. Push each asset
-            const { pushAssetToFmAccess } = await import('@/services/fm-access-service');
-            let success = 0;
+            // 3. Smart sync each asset (check existence, bidirectional)
+            const { syncAssetWithFmAccess } = await import('@/services/fm-access-service');
+            let created = 0;
+            let updated = 0;
+            let pulled = 0;
+            let skipped = 0;
             let failed = 0;
             for (const asset of fmAssets) {
                 try {
-                    const result = await pushAssetToFmAccess(asset.fm_guid);
-                    if (result.success) success++; else failed++;
+                    const result = await syncAssetWithFmAccess(asset.fm_guid);
+                    if (!result.success) { failed++; continue; }
+                    if (result.action === 'created') created++;
+                    else if (result.action === 'updated') updated++;
+                    else if (result.action === 'pull' || result.pulled) pulled++;
+                    else skipped++;
                 } catch {
                     failed++;
                 }
             }
 
             const now = new Date().toISOString();
-            setFmAccessSyncResult({ success, failed, lastSync: now });
+            setFmAccessSyncResult({ success: created + updated + pulled, failed, lastSync: now });
+
+            const parts: string[] = [];
+            if (created > 0) parts.push(`${created} skapade`);
+            if (updated > 0) parts.push(`${updated} uppdaterade (push)`);
+            if (pulled > 0) parts.push(`${pulled} uppdaterade (pull)`);
+            if (skipped > 0) parts.push(`${skipped} redan synkade`);
+            if (failed > 0) parts.push(`${failed} misslyckades`);
+
             toast({
                 title: 'FM Access-synk klar',
-                description: `${success} lyckades, ${failed} misslyckades av ${fmAssets.length} objekt.`,
+                description: parts.join(', ') + ` av ${fmAssets.length} objekt.`,
             });
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Synkfel', description: error.message });
@@ -1780,13 +1796,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // FM Access: Count local assets with FM link (on mount / tab switch)
+    // FM Access: Count inventoried assets (created_in_model=false) with FM link
     useEffect(() => {
         const countFmAssets = async () => {
             const { count } = await supabase
                 .from('assets')
                 .select('*', { count: 'exact', head: true })
-                .not('building_fm_guid', 'is', null);
+                .not('building_fm_guid', 'is', null)
+                .eq('created_in_model', false);
             setFmAccessLocalCount(count || 0);
         };
         countFmAssets();
@@ -2938,7 +2955,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <Building2 className="h-5 w-5 text-primary" />
                                         <div>
                                             <h4 className="font-medium">FM Access</h4>
-                                            <p className="text-xs text-muted-foreground">Push lokala objekt till FM Access</p>
+                                            <p className="text-xs text-muted-foreground">Synka inventerade objekt (ej i modell) med FM Access</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5">
@@ -2949,7 +2966,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                 <div className="space-y-2 text-sm">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Lokala objekt med FM-koppling:</span>
+                                        <span className="text-muted-foreground">Inventerade objekt med FM-koppling:</span>
                                         <span className="font-medium">{fmAccessLocalCount}</span>
                                     </div>
                                     {fmAccessSyncResult && (
@@ -2987,7 +3004,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         disabled={isSyncingFmAccess || isTestingFmAccess || fmAccessLocalCount === 0}
                                     >
                                         {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
-                                        {isSyncingFmAccess ? 'Synkar...' : 'Synka till FM Access →'}
+                                        {isSyncingFmAccess ? 'Synkar...' : 'Synka med FM Access ↔'}
                                     </Button>
                                 </div>
                             </div>
