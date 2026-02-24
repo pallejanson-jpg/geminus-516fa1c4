@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,6 +67,25 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const { allData, setActiveApp, setViewer3dFmGuid, startInventory, startFaultReport, openEntityInsights } = useContext(AppContext);
   const [showStoreys, setShowStoreys] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Saved views for this building
+  const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string; screenshot_url: string | null; created_at: string | null }>>([]);
+  const [loadingViews, setLoadingViews] = useState(false);
+
+  useEffect(() => {
+    if (!facility.fmGuid || facility.category !== 'Building') return;
+    setLoadingViews(true);
+    supabase
+      .from('saved_views')
+      .select('id, name, screenshot_url, created_at')
+      .eq('building_fm_guid', facility.fmGuid)
+      .order('created_at', { ascending: false })
+      .limit(6)
+      .then(({ data }) => {
+        setSavedViews(data || []);
+        setLoadingViews(false);
+      });
+  }, [facility.fmGuid, facility.category]);
   const [ivionSiteIdInput, setIvionSiteIdInput] = useState('');
   const [latitudeInput, setLatitudeInput] = useState('');
   const [longitudeInput, setLongitudeInput] = useState('');
@@ -706,6 +725,44 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               });
             }}
           />
+
+          {/* Saved Views */}
+          {isBuilding && savedViews.length > 0 && (
+            <Card className="mt-4 sm:mt-6">
+              <CardHeader className="pb-3 sm:pb-4">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Eye size={14} className="sm:w-4 sm:h-4 text-primary" />
+                  Saved Views
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                  {savedViews.map(view => (
+                    <button
+                      key={view.id}
+                      type="button"
+                      onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=3d`)}
+                      className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
+                    >
+                      <div className="h-24 sm:h-28 relative overflow-hidden bg-muted">
+                        {view.screenshot_url ? (
+                          <img src={view.screenshot_url} alt={view.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Eye className="h-6 w-6 text-muted-foreground/30" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                        <div className="absolute bottom-1.5 left-2 right-2">
+                          <h4 className="font-semibold text-white text-xs truncate">{view.name}</h4>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </ScrollArea>
 
