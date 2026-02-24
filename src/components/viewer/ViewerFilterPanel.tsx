@@ -118,6 +118,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const entityMapRef = useRef<Map<string, string[]>>(new Map());
   const entityMapBuilt = useRef(false);
 
+  // Cache: IfcSpace IDs with name "Area" to auto-hide
+  const areaSpaceIdsRef = useRef<string[]>([]);
+
   // ── Derived data from Asset+ ────────────────────────────────────────────
 
   const buildingData = useMemo(() => {
@@ -289,6 +292,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Step 1: Collect ALL IfcBuildingStorey and IfcSpace from xeokit metaScene
     const xeokitStoreys: { id: string; sysId: string; name: string }[] = [];
     const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
+    const areaSpaceIds: string[] = [];
 
     Object.values(metaObjects).forEach((mo: any) => {
       const type = (mo.type || '').toLowerCase();
@@ -304,8 +308,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           sysId: (mo.originalSystemId || mo.id || ''),
           name: (mo.name || ''),
         });
+        // Detect "Area" spaces that cover entire floors
+        const spaceName = (mo.name || '').trim().toLowerCase();
+        if (spaceName === 'area' || spaceName.startsWith('area ') || spaceName.startsWith('area:')) {
+          areaSpaceIds.push(mo.id);
+        }
       }
     });
+
+    // Store area space IDs for auto-hiding
+    areaSpaceIdsRef.current = areaSpaceIds;
+    if (areaSpaceIds.length > 0) {
+      console.log(`[FilterPanel] Found ${areaSpaceIds.length} "Area" spaces to auto-hide`);
+    }
 
     if (xeokitStoreys.length === 0) {
       console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
@@ -435,7 +450,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
       const groups = new Map<string, { count: number; color: string }>();
       assets.forEach(a => {
-        const cat = a.asset_type || 'Övrigt';
+        const cat = a.asset_type || 'Other';
         const existing = groups.get(cat);
         const sym = a.symbol_id ? symbolMap.get(a.symbol_id) : null;
         const color = sym?.color || '#3B82F6';
@@ -454,7 +469,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
   // Dispatch annotation filter event when checked annotations change
   useEffect(() => {
-    if (checkedAnnotations.size === 0) return;
+    // Always dispatch - empty means show none when filter was explicitly used
     window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, {
       detail: { visibleCategories: Array.from(checkedAnnotations) },
     }));
@@ -508,11 +523,23 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     if (prevXrayed?.length > 0) scene.setObjectsXRayed(prevXrayed, false);
     const prevColorized = scene.colorizedObjectIds;
     if (prevColorized?.length > 0) scene.setObjectsColorized(prevColorized, false);
-    // Reset opacity for any previously transparent slabs
-    scene.objectIds.forEach((id: string) => {
+    // Reset opacity for any previously transparent slabs (batch operation)
+    const resetOpacityIds = scene.objectIds.filter((id: string) => {
       const entity = scene.objects?.[id];
-      if (entity && entity.opacity < 1) entity.opacity = 1.0;
+      return entity && entity.opacity < 1;
     });
+    resetOpacityIds.forEach((id: string) => {
+      const entity = scene.objects?.[id];
+      if (entity) entity.opacity = 1.0;
+    });
+
+    // Step 0b: Always hide "Area" IfcSpace entities (full-floor coverage objects)
+    if (areaSpaceIdsRef.current.length > 0) {
+      areaSpaceIdsRef.current.forEach(id => {
+        const entity = scene.objects?.[id];
+        if (entity) { entity.visible = false; entity.pickable = false; }
+      });
+    }
 
     // Step 1: Apply level auto-colors (always, if enabled)
     if (autoColorEnabled && eMap.size > 0) {
@@ -532,6 +559,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     if (!hasAnyFilter) {
+      // No filter active: hide all IfcSpace entities by default (don't auto-show spaces)
+      if (viewer.metaScene?.metaObjects) {
+        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+          if (mo.type === 'IfcSpace') {
+            const entity = scene.objects?.[mo.id];
+            if (entity) { entity.visible = false; entity.pickable = false; }
+          }
+        });
+      }
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
         detail: {
           floorId: null, floorName: null, bounds: null,
@@ -562,12 +598,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    let spaceIds: Set<string> | null = null;
+    // Space filtering: collect space-only IDs AND parent level context separately
+    let spaceAndContextIds: Set<string> | null = null;
+    let spaceOnlyEntityIds: Set<string> | null = null; // Only the IfcSpace entity IDs, for highlighting
     if (checkedSpaces.size > 0) {
-      spaceIds = new Set<string>();
+      spaceAndContextIds = new Set<string>();
+      spaceOnlyEntityIds = new Set<string>();
       // Add the space entities themselves
       checkedSpaces.forEach(fmGuid => {
-        eMap.get(fmGuid)?.forEach(id => spaceIds!.add(id));
+        const ids = eMap.get(fmGuid);
+        if (ids) {
+          ids.forEach(id => {
+            spaceAndContextIds!.add(id);
+            spaceOnlyEntityIds!.add(id);
+          });
+        }
       });
       // ALSO add all entities from parent levels so context (walls, doors, etc.) stays visible
       const parentLevelGuids = new Set<string>();
@@ -577,7 +622,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
       });
       parentLevelGuids.forEach(levelGuid => {
-        eMap.get(levelGuid)?.forEach(id => spaceIds!.add(id));
+        eMap.get(levelGuid)?.forEach(id => spaceAndContextIds!.add(id));
       });
     }
 
@@ -598,8 +643,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Intersect active filters
-    // When spaces are checked, skip levelIds from intersection (spaces already imply their parent level)
-    const filterSets = [sourceIds, checkedSpaces.size > 0 ? null : levelIds, spaceIds, categoryIds].filter((s): s is Set<string> => s !== null);
+    // When spaces are checked, skip levelIds from intersection (spaces already include their parent level)
+    const filterSets = [sourceIds, checkedSpaces.size > 0 ? null : levelIds, spaceAndContextIds, categoryIds].filter((s): s is Set<string> => s !== null);
     let solidIds: Set<string>;
     if (filterSets.length === 0) {
       solidIds = new Set(scene.objectIds);
@@ -614,22 +659,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Step 2b: Handle IfcSpace and IfcSlab visibility
-    // Checked spaces stay visible and pickable
-    // Unchecked IfcSpace: semi-transparent + pickable (so user can click rooms)
-    // IfcSlab/IfcRoof/IfcCovering: semi-transparent + unpickable (visible floor)
-    const checkedSpaceEntityIds = new Set<string>();
-    if (checkedSpaces.size > 0 && spaceIds) {
-      spaceIds.forEach(id => checkedSpaceEntityIds.add(id));
-    }
-
     const fadeIds: string[] = [];   // IfcSlab — semi-transparent + unpickable
-    const spaceTransparentIds: string[] = []; // Unchecked IfcSpace — semi-transparent + pickable
+    const hideIds: string[] = []; // IfcRoof/IfcCovering — hide entirely
     const obstructTypes = new Set(['IfcRoof', 'IfcCovering']);
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
-    const hideIds: string[] = []; // IfcRoof/IfcCovering — hide entirely
-    // Collect ALL slab IDs from metaScene (even outside solidIds) so floors always show
+    // Collect ALL slab IDs from metaScene for floor visibility
     const allSlabIds: string[] = [];
-    
+    // Track which area space IDs to ensure they stay hidden
+    const areaSet = new Set(areaSpaceIdsRef.current);
+
     if (viewer.metaScene?.metaObjects) {
       // First pass: collect all slabs in the scene for floor visibility
       Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
@@ -647,21 +685,22 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           } else if (slabTypes.has(mo.type)) { 
             fadeIds.push(id); 
             solidIds.delete(id); 
-          } else if (mo.type === 'IfcSpace' && !checkedSpaceEntityIds.has(id)) {
-            // Unchecked space in solidIds: make transparent but pickable
-            spaceTransparentIds.push(id);
+          } else if (mo.type === 'IfcSpace') {
+            // Always remove IfcSpace from solidIds — they should not be "solid"
+            // If this space is a checked space, it will be highlighted separately
+            // If it's an "Area" space, it stays hidden
+            if (areaSet.has(id)) {
+              hideIds.push(id);
+            }
             solidIds.delete(id);
           }
-          // Checked spaces stay in solidIds (visible, solid, pickable)
         }
       }
 
       // Add slabs from active levels that weren't already in solidIds
-      // This ensures floors are always visible when filtering by level
       if (checkedLevels.size > 0 && levelIds) {
         allSlabIds.forEach(slabId => {
           if (!fadeIds.includes(slabId) && !solidIds.has(slabId)) {
-            // Check if this slab belongs to a visible level by checking ancestry
             const slabMo = viewer.metaScene.metaObjects[slabId];
             if (slabMo) {
               let parent = slabMo.parent;
@@ -698,27 +737,34 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (nonSolidIds.length > 0) scene.setObjectsVisible(nonSolidIds, false);
     }
 
-    // Step 3b: Hide obstructions, make slabs semi-transparent, make unchecked spaces semi-transparent + pickable
+    // Step 3b: Hide obstructions, make slabs semi-transparent
     if (hideIds.length > 0) scene.setObjectsVisible(hideIds, false);
     fadeIds.forEach(id => {
       const entity = scene.objects?.[id];
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
-    // Unchecked spaces: semi-transparent but still pickable
-    spaceTransparentIds.forEach(id => {
-      const entity = scene.objects?.[id];
-      if (entity) { entity.visible = true; entity.opacity = 0.15; entity.pickable = true; }
-    });
 
-    // Step 4: If spaces checked, colorize them blue (override level color)
-    if (checkedSpaces.size > 0 && spaceIds) {
-      spaceIds.forEach(id => {
+    // Step 4: Handle checked spaces — show and highlight ONLY the space entities
+    if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
+      spaceOnlyEntityIds.forEach(id => {
+        if (areaSet.has(id)) return; // Never show area spaces
         const entity = scene.objects?.[id];
-        if (entity) entity.colorize = HIGHLIGHT_COLOR;
+        if (entity) {
+          entity.visible = true;
+          entity.pickable = true;
+          entity.opacity = 0.4;
+          entity.colorize = HIGHLIGHT_COLOR;
+        }
       });
     }
 
-    // Step 5: Floor/space visibility event for labels and clipping
+    // Step 5: Ensure "Area" spaces stay hidden always
+    areaSpaceIdsRef.current.forEach(id => {
+      const entity = scene.objects?.[id];
+      if (entity) { entity.visible = false; entity.pickable = false; }
+    });
+
+    // Step 6: Floor/space visibility event for labels and clipping
     const visibleFmGuids: string[] = [];
     if (checkedSpaces.size > 0) {
       const parentLevelGuids = new Set<string>();
@@ -891,17 +937,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             size="sm"
             className="h-7 text-xs px-2 gap-1 text-foreground"
             onClick={handleResetAll}
-            title="Visa alla objekt"
+            title="Show all objects"
           >
             <Eye className="h-3.5 w-3.5" />
-            Visa alla
+            Show all
           </Button>
           <Button
             variant={xrayMode ? "default" : "ghost"}
             size="icon"
             className={cn("h-7 w-7", xrayMode && "bg-primary text-primary-foreground")}
             onClick={() => setXrayMode(!xrayMode)}
-            title={xrayMode ? "X-ray på (klicka för att dölja)" : "Visa X-ray"}
+            title={xrayMode ? "X-ray on (click to hide)" : "Show X-ray"}
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
@@ -915,7 +961,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         <div className="py-1">
           {/* Sources */}
           <FilterSection
-            title="Källor"
+            title="Sources"
             count={sources.length}
             selectedCount={checkedSources.size}
             isOpen={sourcesOpen}
@@ -932,13 +978,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
             {sources.length === 0 && (
-              <p className="text-sm text-muted-foreground px-3 py-2">Inga källor hittades</p>
+              <p className="text-sm text-muted-foreground px-3 py-2">No sources found</p>
             )}
           </FilterSection>
 
           {/* Levels */}
           <FilterSection
-            title="Våningar"
+            title="Levels"
             count={levels.length}
             selectedCount={checkedLevels.size}
             isOpen={levelsOpen}
@@ -952,7 +998,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 className={cn("h-6 w-6", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
-                title={autoColorEnabled ? "Stäng av autofärger" : "Slå på autofärger"}
+                title={autoColorEnabled ? "Disable auto colors" : "Enable auto colors"}
                 onClick={(e) => { e.stopPropagation(); setAutoColorEnabled(!autoColorEnabled); }}
               >
                 <Paintbrush className="h-3.5 w-3.5" />
@@ -975,7 +1021,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
           {/* Spaces */}
           <FilterSection
-            title="Rum"
+            title="Spaces"
             count={spaces.length}
             selectedCount={checkedSpaces.size}
             isOpen={spacesOpen}
@@ -996,19 +1042,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             ))}
             {filteredSpaces.length > 200 && (
               <p className="text-sm text-muted-foreground px-3 py-1">
-                Visar 200 av {filteredSpaces.length} rum
+                Showing 200 of {filteredSpaces.length} spaces
               </p>
             )}
             {filteredSpaces.length === 0 && (
               <p className="text-sm text-muted-foreground px-3 py-2">
-                {spacesSearch ? 'Ingen träff' : 'Inga rum på vald våning'}
+                {spacesSearch ? 'No match' : 'No spaces on selected level'}
               </p>
             )}
           </FilterSection>
 
           {/* Categories */}
           <FilterSection
-            title="Kategorier"
+            title="Categories"
             count={categories.length}
             selectedCount={checkedCategories.size}
             isOpen={categoriesOpen}
@@ -1029,7 +1075,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           {/* Annotations (non-modeled assets) */}
           {annotationCategories.length > 0 && (
             <FilterSection
-              title="Annotationer"
+              title="Annotations"
               count={annotationCategories.reduce((s, c) => s + c.count, 0)}
               selectedCount={checkedAnnotations.size}
               isOpen={annotationsOpen}
@@ -1103,7 +1149,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
             className="text-xs text-primary hover:underline"
             onClick={(e) => { e.stopPropagation(); onReset(); }}
           >
-            Återställ
+            Reset
           </button>
         )}
       </div>
@@ -1114,7 +1160,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
           <div className="px-3 pb-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Sök..." className="h-7 pl-7 text-sm" />
+              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search…" className="h-7 pl-7 text-sm" />
             </div>
           </div>
         )}
@@ -1160,7 +1206,7 @@ const FilterRow: React.FC<FilterRowProps> = ({
             className="h-3.5 w-3.5 rounded-full shrink-0 border border-border/50 hover:scale-125 transition-transform"
             style={{ backgroundColor: color }}
             onClick={(e) => e.stopPropagation()}
-            title="Ändra färg"
+            title="Change color"
           />
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" side="right" align="center" onClick={(e) => e.stopPropagation()}>
