@@ -1247,51 +1247,63 @@ export type Database = {
         Row: {
           building_fm_guid: string
           building_name: string | null
+          chunk_order: number | null
           created_at: string
           file_name: string
           file_size: number | null
           file_url: string | null
           format: string
           id: string
+          is_chunk: boolean | null
           model_id: string
           model_name: string | null
+          parent_model_id: string | null
           source_updated_at: string | null
           source_url: string | null
           storage_path: string
+          storey_fm_guid: string | null
           synced_at: string
           updated_at: string
         }
         Insert: {
           building_fm_guid: string
           building_name?: string | null
+          chunk_order?: number | null
           created_at?: string
           file_name: string
           file_size?: number | null
           file_url?: string | null
           format?: string
           id?: string
+          is_chunk?: boolean | null
           model_id: string
           model_name?: string | null
+          parent_model_id?: string | null
           source_updated_at?: string | null
           source_url?: string | null
           storage_path: string
+          storey_fm_guid?: string | null
           synced_at?: string
           updated_at?: string
         }
         Update: {
           building_fm_guid?: string
           building_name?: string | null
+          chunk_order?: number | null
           created_at?: string
           file_name?: string
           file_size?: number | null
           file_url?: string | null
           format?: string
           id?: string
+          is_chunk?: boolean | null
           model_id?: string
           model_name?: string | null
+          parent_model_id?: string | null
           source_updated_at?: string | null
           source_url?: string | null
           storage_path?: string
+          storey_fm_guid?: string | null
           synced_at?: string
           updated_at?: string
         }

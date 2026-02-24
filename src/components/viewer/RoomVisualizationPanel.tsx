@@ -364,7 +364,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         if (entity) {
           if (color) {
             entity.colorize = rgbToFloat(color);
-            entity.opacity = 0.6; // Match BIM model transparency
+            entity.opacity = 0.15; // Tandem-style: nearly transparent, color visible on floor without blocking view
           } else {
             entity.colorize = null; // Reset to default
             entity.opacity = 1.0; // Reset opacity
