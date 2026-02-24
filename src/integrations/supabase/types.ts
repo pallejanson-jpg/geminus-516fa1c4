@@ -393,6 +393,53 @@ export type Database = {
           },
         ]
       }
+      bcf_issue_assignments: {
+        Row: {
+          assigned_by_user_id: string
+          assigned_to_user_id: string
+          created_at: string | null
+          id: string
+          issue_id: string
+          responded_at: string | null
+          response_status: string | null
+          sent_at: string | null
+          token: string
+          viewed_at: string | null
+        }
+        Insert: {
+          assigned_by_user_id: string
+          assigned_to_user_id: string
+          created_at?: string | null
+          id?: string
+          issue_id: string
+          responded_at?: string | null
+          response_status?: string | null
+          sent_at?: string | null
+          token?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          assigned_by_user_id?: string
+          assigned_to_user_id?: string
+          created_at?: string | null
+          id?: string
+          issue_id?: string
+          responded_at?: string | null
+          response_status?: string | null
+          sent_at?: string | null
+          token?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bcf_issue_assignments_issue_id_fkey"
+            columns: ["issue_id"]
+            isOneToOne: false
+            referencedRelation: "bcf_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bcf_issues: {
         Row: {
           assigned_to: string | null
