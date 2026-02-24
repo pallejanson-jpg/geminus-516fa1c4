@@ -26,7 +26,7 @@ import ViewerThemeSelector from "./ViewerThemeSelector";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
-import { VIEW_MODE_REQUESTED_EVENT } from "@/lib/viewer-events";
+import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -599,6 +599,24 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       handleGoToIssueViewpoint(issue.viewpoint_json);
     }
   }, [handleGoToIssueViewpoint]);
+
+  // Listen for issue marker clicks from 3D viewer annotations
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { issueId } = (e as CustomEvent<IssueMarkerClickedDetail>).detail;
+      // Fetch the full issue
+      const { data: issue } = await supabase
+        .from('bcf_issues')
+        .select('*')
+        .eq('id', issueId)
+        .maybeSingle();
+      if (issue) {
+        handleSelectIssue(issue as BcfIssue);
+      }
+    };
+    window.addEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+    return () => window.removeEventListener(ISSUE_MARKER_CLICKED_EVENT, handler);
+  }, [handleSelectIssue]);
 
   // isAdmin now provided by useAuth() above
 
