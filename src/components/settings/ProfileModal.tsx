@@ -8,11 +8,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Bot } from 'lucide-react';
+import { User, Bot, MousePointer } from 'lucide-react';
 import ProfileSettings from './ProfileSettings';
 import GunnarSettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
 import VoiceSettings from './VoiceSettings';
+import ContextMenuSettingsPanel from './ContextMenuSettingsPanel';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -40,14 +41,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               Profile
             </TabsTrigger>
             <TabsTrigger value="assistants" className="gap-2">
               <Bot className="h-4 w-4" />
-              My Assistants
+              Assistants
+            </TabsTrigger>
+            <TabsTrigger value="contextmenu" className="gap-2">
+              <MousePointer className="h-4 w-4" />
+              Context Menu
             </TabsTrigger>
           </TabsList>
 
@@ -64,6 +69,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
               <div className="border-t pt-6">
                 <VoiceSettings />
               </div>
+            </TabsContent>
+
+            <TabsContent value="contextmenu" className="m-0">
+              <ContextMenuSettingsPanel />
             </TabsContent>
           </div>
         </Tabs>
