@@ -113,7 +113,7 @@ const FloatingIssueListPanel: React.FC<FloatingIssueListPanelProps> = ({
       >
         <div className="flex items-center gap-2">
           <GripHorizontal className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Ärenden</span>
+          <span className="text-sm font-medium">Issues</span>
         </div>
         <Button 
           variant="ghost" 

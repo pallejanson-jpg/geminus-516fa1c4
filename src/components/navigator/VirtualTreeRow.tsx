@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { ChevronRight, Plus, Eye, Box, Square, ClipboardList, AlertCircle, RefreshCw } from 'lucide-react';
+import { ChevronRight, Plus, Eye, Box, Square, ClipboardList, AlertCircle, RefreshCw, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,6 +17,7 @@ interface VirtualTreeRowProps {
   onOpen2D?: (node: NavigatorNode) => void;
   onInventory?: (node: NavigatorNode) => void;
   onSyncToAssetPlus?: (node: NavigatorNode) => void;
+  onCreateWorkOrder?: (node: NavigatorNode) => void;
 }
 
 /**
@@ -34,6 +35,7 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
   onOpen2D,
   onInventory,
   onSyncToAssetPlus,
+  onCreateWorkOrder,
 }: VirtualTreeRowProps) {
   const { node, depth, hasChildren, isExpanded } = flatNode;
   const label = node.commonName || node.name || '(unnamed)';
@@ -42,6 +44,7 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
   const canAddChild = node.category === 'Space';
   const canOpen2D = node.category === 'Building Storey';
   const canInventory = ['Building', 'Building Storey', 'Space'].includes(node.category || '');
+  const canCreateWorkOrder = ['Building', 'Building Storey', 'Space', 'Instance'].includes(node.category || '');
   const canSyncToAssetPlus = node.category === 'Instance' && node.isLocal === true && node.inRoomFmGuid;
   const childCount = node.children?.length || 0;
 
@@ -113,6 +116,23 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
 
       {/* Action buttons */}
       <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
+        {canCreateWorkOrder && onCreateWorkOrder && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={(e) => { e.stopPropagation(); onCreateWorkOrder(node); }}
+                className="h-6 w-6"
+                aria-label="Work Order"
+              >
+                <Wrench className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-600" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Create Work Order</TooltipContent>
+          </Tooltip>
+        )}
         {canInventory && onInventory && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -122,12 +142,12 @@ export const VirtualTreeRow = memo(function VirtualTreeRow({
                 size="icon"
                 onClick={(e) => { e.stopPropagation(); onInventory(node); }}
                 className="h-6 w-6"
-                aria-label="Inventera"
+                aria-label="Inventory"
               >
                 <ClipboardList className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-orange-500" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Inventera</TooltipContent>
+            <TooltipContent side="top">Inventory</TooltipContent>
           </Tooltip>
         )}
         

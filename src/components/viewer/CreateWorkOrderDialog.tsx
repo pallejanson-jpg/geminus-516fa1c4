@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Wrench, GripHorizontal, X } from "lucide-react";
+import { Wrench, GripHorizontal, X, Camera, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -17,17 +18,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const CATEGORIES = [
-  { value: "corrective", label: "Avhjälpande" },
-  { value: "preventive", label: "Förebyggande" },
-  { value: "inspection", label: "Inspektion" },
-  { value: "other", label: "Övrigt" },
+  { value: "corrective", label: "Corrective" },
+  { value: "preventive", label: "Preventive" },
+  { value: "inspection", label: "Inspection" },
+  { value: "other", label: "Other" },
 ];
 
 const PRIORITY_OPTIONS = [
-  { value: "low", label: "Låg", color: "bg-slate-400" },
+  { value: "low", label: "Low", color: "bg-slate-400" },
   { value: "medium", label: "Medium", color: "bg-amber-500" },
-  { value: "high", label: "Hög", color: "bg-orange-500" },
-  { value: "critical", label: "Kritisk", color: "bg-destructive" },
+  { value: "high", label: "High", color: "bg-orange-500" },
+  { value: "critical", label: "Critical", color: "bg-destructive" },
 ];
 
 interface CreateWorkOrderDialogProps {
@@ -37,6 +38,17 @@ interface CreateWorkOrderDialogProps {
   buildingFmGuid?: string;
   objectName?: string;
   objectFmGuid?: string;
+  /** Enhanced hierarchy context */
+  levelName?: string;
+  levelFmGuid?: string;
+  roomName?: string;
+  roomFmGuid?: string;
+  assetName?: string;
+  assetFmGuid?: string;
+  /** BCF viewpoint data */
+  screenshotUrl?: string;
+  viewpointJson?: any;
+  selectedObjectIds?: string[];
 }
 
 const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
@@ -46,12 +58,22 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
   buildingFmGuid,
   objectName,
   objectFmGuid,
+  levelName,
+  levelFmGuid,
+  roomName,
+  roomFmGuid,
+  assetName,
+  assetFmGuid,
+  screenshotUrl,
+  viewpointJson,
+  selectedObjectIds,
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("corrective");
   const [priority, setPriority] = useState("medium");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attachBcf, setAttachBcf] = useState(false);
 
   // Drag state
   const panelWidth = 440;
@@ -69,11 +91,12 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
       setDescription("");
       setCategory("corrective");
       setPriority("medium");
+      setAttachBcf(!!viewpointJson);
     }
   }, [open]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button, input, select, textarea")) return;
+    if ((e.target as HTMLElement).closest("button, input, select, textarea, label")) return;
     setIsDragging(true);
     setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
   }, [position]);
@@ -102,6 +125,32 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
 
     try {
       const externalId = `FR-${Date.now()}`;
+      
+      // Build attributes with optional BCF data
+      const attributes: Record<string, any> = {
+        source: "geminus_3d_viewer",
+        created_from_context_menu: true,
+      };
+
+      // Add hierarchy context
+      if (levelFmGuid) attributes.level_fm_guid = levelFmGuid;
+      if (levelName) attributes.level_name = levelName;
+      if (roomFmGuid) attributes.room_fm_guid = roomFmGuid;
+      if (roomName) attributes.room_name = roomName;
+      if (assetFmGuid) attributes.asset_fm_guid = assetFmGuid;
+      if (assetName) attributes.asset_name = assetName;
+
+      // Attach BCF viewpoint if enabled
+      if (attachBcf && viewpointJson) {
+        attributes.bcf_viewpoint = viewpointJson;
+        if (screenshotUrl) attributes.bcf_screenshot = screenshotUrl;
+        if (selectedObjectIds?.length) attributes.bcf_selected_objects = selectedObjectIds;
+      }
+
+      // Use the most specific space context available
+      const spaceFmGuid = roomFmGuid || objectFmGuid || null;
+      const spaceName = roomName || objectName || null;
+
       const { error } = await supabase.from("work_orders").insert({
         external_id: externalId,
         title: title.trim(),
@@ -111,20 +160,17 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
         status: "open",
         building_fm_guid: buildingFmGuid || null,
         building_name: buildingName || null,
-        space_fm_guid: objectFmGuid || null,
-        space_name: objectName || null,
-        attributes: {
-          source: "geminus_3d_viewer",
-          created_from_context_menu: true,
-        },
+        space_fm_guid: spaceFmGuid,
+        space_name: spaceName,
+        attributes,
       });
 
       if (error) throw error;
-      toast.success("Arbetsorder skapad!", { description: `"${title.trim()}"` });
+      toast.success("Work order created!", { description: `"${title.trim()}"` });
       onClose();
     } catch (err: any) {
       console.error("Failed to create work order:", err);
-      toast.error("Kunde inte skapa arbetsorder", { description: err.message });
+      toast.error("Failed to create work order", { description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -153,26 +199,53 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
         >
           <GripHorizontal className="h-4 w-4 text-muted-foreground" />
           <Wrench className="h-5 w-5 text-primary" />
-          <span className="font-semibold flex-1">Skapa arbetsorder</span>
+          <span className="font-semibold flex-1">Create Work Order</span>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} disabled={isSubmitting}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
         <form id="wo-form" onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
-          {buildingName && (
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium">Byggnad:</span> {buildingName}
+          {/* Hierarchy context */}
+          <div className="text-sm text-muted-foreground space-y-0.5">
+            {buildingName && (
+              <div><span className="font-medium">Building:</span> {buildingName}</div>
+            )}
+            {levelName && (
+              <div><span className="font-medium">Floor:</span> {levelName}</div>
+            )}
+            {roomName && (
+              <div><span className="font-medium">Room:</span> {roomName}</div>
+            )}
+            {(assetName || objectName) && (
+              <div><span className="font-medium">Object:</span> {assetName || objectName}</div>
+            )}
+          </div>
+
+          {/* BCF attachment */}
+          {viewpointJson && (
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Attach BCF viewpoint</span>
+              </div>
+              <Switch checked={attachBcf} onCheckedChange={setAttachBcf} />
             </div>
           )}
-          {objectName && (
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium">Objekt:</span> {objectName}
+
+          {/* BCF screenshot preview */}
+          {attachBcf && screenshotUrl && (
+            <div className="rounded-lg overflow-hidden border">
+              <img src={screenshotUrl} alt="Viewpoint" className="w-full h-28 object-cover" />
+              <div className="bg-muted/80 p-1.5 text-xs text-center flex items-center justify-center gap-1">
+                <Camera className="h-3 w-3" />
+                BCF viewpoint attached
+              </div>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label>Kategori</Label>
+            <Label>Category</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -184,7 +257,7 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Prioritet</Label>
+            <Label>Priority</Label>
             <RadioGroup value={priority} onValueChange={setPriority} className="flex flex-wrap gap-2">
               {PRIORITY_OPTIONS.map((opt) => (
                 <div key={opt.value} className="flex items-center">
@@ -207,20 +280,20 @@ const CreateWorkOrderDialog: React.FC<CreateWorkOrderDialogProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="wo-title">Titel *</Label>
-            <Input id="wo-title" placeholder="Beskriv arbetet" value={title} onChange={(e) => setTitle(e.target.value)} required disabled={isSubmitting} />
+            <Label htmlFor="wo-title">Title *</Label>
+            <Input id="wo-title" placeholder="Describe the work" value={title} onChange={(e) => setTitle(e.target.value)} required disabled={isSubmitting} />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="wo-desc">Beskrivning</Label>
-            <Textarea id="wo-desc" placeholder="Ytterligare information..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} disabled={isSubmitting} />
+            <Label htmlFor="wo-desc">Description</Label>
+            <Textarea id="wo-desc" placeholder="Additional information..." value={description} onChange={(e) => setDescription(e.target.value)} rows={3} disabled={isSubmitting} />
           </div>
         </form>
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Avbryt</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
           <Button type="submit" form="wo-form" disabled={!title.trim() || isSubmitting}>
-            {isSubmitting ? "Skapar..." : "Skapa arbetsorder"}
+            {isSubmitting ? "Creating..." : "Create Work Order"}
           </Button>
         </div>
       </div>

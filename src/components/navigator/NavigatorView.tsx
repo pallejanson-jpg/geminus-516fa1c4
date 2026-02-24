@@ -10,6 +10,7 @@ import { X, List, Network } from "lucide-react";
 import { useSearchResults, SearchResult } from "@/hooks/useSearchResults";
 import { SearchResultsList } from "@/components/common/SearchResultsList";
 import { useXktPreload } from "@/hooks/useXktPreload";
+import CreateWorkOrderDialog from "@/components/viewer/CreateWorkOrderDialog";
 
 function filterTree(nodes: NavigatorNode[], q: string): NavigatorNode[] {
   if (!q.trim()) return nodes;
@@ -99,6 +100,19 @@ export default function NavigatorView() {
 
   // Track last expanded building for preloading
   const [lastExpandedBuilding, setLastExpandedBuilding] = useState<string | null>(null);
+  
+  // Work order dialog state
+  const [woDialogOpen, setWoDialogOpen] = useState(false);
+  const [woContext, setWoContext] = useState<{
+    buildingName?: string;
+    buildingFmGuid?: string;
+    levelName?: string;
+    levelFmGuid?: string;
+    roomName?: string;
+    roomFmGuid?: string;
+    assetName?: string;
+    assetFmGuid?: string;
+  }>({});
   
   // Preload XKT models when a building is expanded
   useXktPreload(lastExpandedBuilding);
@@ -208,6 +222,38 @@ export default function NavigatorView() {
     startInventory(prefill);
   }, [allData, startInventory]);
 
+  const handleCreateWorkOrder = useCallback((node: NavigatorNode) => {
+    const assetData = allData.find((a: any) => a.fmGuid === node.fmGuid);
+    
+    const ctx: typeof woContext = {};
+
+    if (node.category === 'Building') {
+      ctx.buildingFmGuid = node.fmGuid;
+      ctx.buildingName = node.commonName || node.name;
+    } else if (node.category === 'Building Storey') {
+      ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
+      ctx.buildingName = assetData?.buildingName;
+      ctx.levelFmGuid = node.fmGuid;
+      ctx.levelName = node.commonName || node.name;
+    } else if (node.category === 'Space') {
+      ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
+      ctx.buildingName = assetData?.buildingName;
+      ctx.levelFmGuid = assetData?.levelFmGuid || node.levelFmGuid;
+      ctx.roomFmGuid = node.fmGuid;
+      ctx.roomName = node.commonName || node.name;
+    } else if (node.category === 'Instance') {
+      ctx.buildingFmGuid = assetData?.buildingFmGuid || node.buildingFmGuid;
+      ctx.buildingName = assetData?.buildingName;
+      ctx.levelFmGuid = assetData?.levelFmGuid || node.levelFmGuid;
+      ctx.roomFmGuid = assetData?.inRoomFmGuid;
+      ctx.assetFmGuid = node.fmGuid;
+      ctx.assetName = node.commonName || node.name;
+    }
+
+    setWoContext(ctx);
+    setWoDialogOpen(true);
+  }, [allData]);
+
   const handleSearchResultSelect = useCallback((result: SearchResult) => {
     // Navigate based on category
     if (result.category === 'Building') {
@@ -296,11 +342,25 @@ export default function NavigatorView() {
                 onOpen3D={handleOpen3D}
                 onOpen2D={handleOpen2D}
                 onInventory={handleInventory}
+                onCreateWorkOrder={handleCreateWorkOrder}
               />
             </div>
           )}
         </div>
       </section>
+      
+      <CreateWorkOrderDialog
+        open={woDialogOpen}
+        onClose={() => setWoDialogOpen(false)}
+        buildingName={woContext.buildingName}
+        buildingFmGuid={woContext.buildingFmGuid}
+        levelName={woContext.levelName}
+        levelFmGuid={woContext.levelFmGuid}
+        roomName={woContext.roomName}
+        roomFmGuid={woContext.roomFmGuid}
+        assetName={woContext.assetName}
+        assetFmGuid={woContext.assetFmGuid}
+      />
     </TooltipProvider>
   );
 }
