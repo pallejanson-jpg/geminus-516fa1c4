@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Info, MessageSquarePlus, Wrench, Eye, MousePointer, ZoomIn } from 'lucide-react';
+import { Info, MessageSquarePlus, Wrench, Eye, MousePointer, ZoomIn, EyeOff, Focus } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 interface ViewerContextMenuProps {
@@ -14,6 +14,9 @@ interface ViewerContextMenuProps {
   onViewInSpace: () => void;
   onSelect: () => void;
   onZoomToFit: () => void;
+  onIsolate?: () => void;
+  onHideSelected?: () => void;
+  onShowAll?: () => void;
 }
 
 const MENU_ITEMS_GEMINUS = [
@@ -26,6 +29,9 @@ const MENU_ITEMS_VIEWER = [
   { key: 'viewInSpace', label: 'Visa i rummet', icon: Eye, color: 'text-muted-foreground' },
   { key: 'select', label: 'Välj objekt', icon: MousePointer, color: 'text-muted-foreground' },
   { key: 'zoomToFit', label: 'Zoom till objekt', icon: ZoomIn, color: 'text-muted-foreground' },
+  { key: 'isolate', label: 'Isolera objekt', icon: Focus, color: 'text-muted-foreground' },
+  { key: 'hideSelected', label: 'Dölj objekt', icon: EyeOff, color: 'text-muted-foreground' },
+  { key: 'showAll', label: 'Visa alla', icon: Eye, color: 'text-muted-foreground' },
 ] as const;
 
 const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
@@ -39,6 +45,9 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   onViewInSpace,
   onSelect,
   onZoomToFit,
+  onIsolate,
+  onHideSelected,
+  onShowAll,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,17 +71,20 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
 
   // Clamp position to viewport
   const menuWidth = 220;
-  const menuHeight = 280;
+  const menuHeight = 340;
   const x = Math.min(position.x, window.innerWidth - menuWidth - 8);
   const y = Math.min(position.y, window.innerHeight - menuHeight - 8);
 
-  const actionMap: Record<string, () => void> = {
+  const actionMap: Record<string, (() => void) | undefined> = {
     properties: onProperties,
     createIssue: onCreateIssue,
     createWorkOrder: onCreateWorkOrder,
     viewInSpace: onViewInSpace,
     select: onSelect,
     zoomToFit: onZoomToFit,
+    isolate: onIsolate,
+    hideSelected: onHideSelected,
+    showAll: onShowAll,
   };
 
   const handleClick = (key: string) => {
@@ -120,12 +132,13 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       <div className="py-1">
         {MENU_ITEMS_VIEWER.map((item) => {
           const Icon = item.icon;
+          const needsEntity = item.key !== 'showAll';
           return (
             <button
               key={item.key}
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={() => handleClick(item.key)}
-              disabled={!hasEntity}
+              disabled={needsEntity && !hasEntity}
             >
               <Icon className={`h-4 w-4 ${item.color}`} />
               {item.label}
