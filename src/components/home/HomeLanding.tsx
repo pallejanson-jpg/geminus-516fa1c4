@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useContext, useMemo, useEffect } from "react";
-import { Database, FileQuestion, Sparkles, Building2 } from "lucide-react";
+import { Database, FileQuestion, Sparkles, Building2, Eye, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +10,9 @@ import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
 import { BUILDING_IMAGES } from "@/lib/constants";
 import { extractNtaFromAttributes } from "@/lib/building-utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
 
 type AssistantType = "gunnar" | "ilean" | "doris";
 
@@ -26,37 +29,36 @@ const ASSISTANTS: Array<{
   { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration med FM Access", icon: Sparkles, available: false },
 ];
 
-const FAV_CACHE_KEY = 'geminus-fav-buildings-cache';
+const RECENT_KEY = 'geminus-recent-buildings';
 
-interface FavoriteBuilding {
+interface RecentBuilding {
   fmGuid: string;
   name: string;
-  commonName?: string | null;
-  category: 'Building';
   image: string;
+  timestamp: number;
   numberOfLevels: number;
   numberOfSpaces: number;
   area: number;
-  address?: string;
-  complexCommonName?: string;
 }
 
-function readCachedFavorites(): FavoriteBuilding[] {
+interface SavedView {
+  id: string;
+  name: string;
+  screenshot_url: string | null;
+  building_name: string | null;
+  building_fm_guid: string;
+  created_at: string | null;
+}
+
+function readRecentBuildings(): RecentBuilding[] {
   try {
-    const raw = localStorage.getItem(FAV_CACHE_KEY);
+    const raw = localStorage.getItem(RECENT_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return parsed.buildings || [];
+    return JSON.parse(raw) || [];
   } catch { return []; }
 }
 
-function writeCachedFavorites(buildings: FavoriteBuilding[]) {
-  try {
-    localStorage.setItem(FAV_CACHE_KEY, JSON.stringify({ buildings, timestamp: Date.now() }));
-  } catch { /* quota exceeded etc */ }
-}
-
-function FavoriteBuildingSkeleton() {
+function CardSkeleton() {
   return (
     <div className="rounded-xl border border-border bg-card/80 overflow-hidden">
       <Skeleton className="h-32 sm:h-36 w-full" />
@@ -71,96 +73,81 @@ function FavoriteBuildingSkeleton() {
 
 export default function HomeLanding() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [gunnarOpen, setGunnarOpen] = useState(false);
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
-  const { navigatorTreeData, setSelectedFacility, setActiveApp, allData, activeApp } = useContext(AppContext);
+  const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
 
-  // Cached favorites from localStorage for instant display
-  const [cachedBuildings] = useState<FavoriteBuilding[]>(() => readCachedFavorites());
+  // Recent buildings from localStorage
+  const [recentBuildings] = useState<RecentBuilding[]>(() => readRecentBuildings());
 
-  const favorites = useMemo(() => getFavorites(), [getFavorites]);
+  // Saved views from DB
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [loadingViews, setLoadingViews] = useState(true);
 
-  // Determine if tree data has loaded (non-empty means loaded)
+  useEffect(() => {
+    const fetchViews = async () => {
+      setLoadingViews(true);
+      const { data } = await supabase
+        .from('saved_views')
+        .select('id, name, screenshot_url, building_name, building_fm_guid, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      setSavedViews(data || []);
+      setLoadingViews(false);
+    };
+    fetchViews();
+  }, []);
+
   const treeDataReady = navigatorTreeData.length > 0;
 
-  // Compute favorite buildings from live data
-  const favoriteBuildings = useMemo(() => {
-    if (!treeDataReady) return [];
-    return navigatorTreeData
-      .filter(building => favorites.includes(building.fmGuid))
-      .map((building, index) => {
-        const buildingSpaces = allData.filter(
-          (a: any) => a.category === 'Space' && a.buildingFmGuid === building.fmGuid
-        );
-        const buildingStoreys = allData.filter(
-          (a: any) => a.category === 'Building Storey' && a.buildingFmGuid === building.fmGuid
-        );
-        const totalArea = buildingSpaces.reduce((sum: number, space: any) => {
-          return sum + extractNtaFromAttributes(space.attributes);
-        }, 0);
-        const heroImage = getHeroImage(building.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
-
-        return {
-          fmGuid: building.fmGuid,
-          name: building.name,
-          commonName: building.commonName,
-          category: 'Building' as const,
-          image: heroImage,
-          numberOfLevels: buildingStoreys.length,
-          numberOfSpaces: buildingSpaces.length,
-          area: Math.round(totalArea),
-          address: building.attributes?.address || undefined,
-          complexCommonName: building.complexCommonName || undefined,
-        };
-      });
-  }, [navigatorTreeData, favorites, allData, getHeroImage, treeDataReady]);
-
-  // Write to cache when live data changes
-  useEffect(() => {
-    if (favoriteBuildings.length > 0) {
-      writeCachedFavorites(favoriteBuildings);
-    }
-  }, [favoriteBuildings]);
-
-  // Decide what to display: live data > cached data
-  const displayBuildings = favoriteBuildings.length > 0 ? favoriteBuildings : cachedBuildings;
-  const isStillLoading = !treeDataReady || isLoadingSettings;
-  const showSkeleton = isStillLoading && displayBuildings.length === 0;
-  const showEmpty = !isStillLoading && displayBuildings.length === 0;
+  // Build recent from live data, enriched with tree info
+  const enrichedRecent = useMemo(() => {
+    if (!treeDataReady) return recentBuildings.slice(0, 6);
+    return recentBuildings.slice(0, 6).map((rb, index) => {
+      const liveBuilding = navigatorTreeData.find(b => b.fmGuid === rb.fmGuid);
+      if (!liveBuilding) return rb;
+      const buildingSpaces = allData.filter((a: any) => a.category === 'Space' && a.buildingFmGuid === rb.fmGuid);
+      const buildingStoreys = allData.filter((a: any) => a.category === 'Building Storey' && a.buildingFmGuid === rb.fmGuid);
+      const totalArea = buildingSpaces.reduce((sum: number, space: any) => sum + extractNtaFromAttributes(space.attributes), 0);
+      const heroImage = getHeroImage(rb.fmGuid, BUILDING_IMAGES[index % BUILDING_IMAGES.length]);
+      return {
+        ...rb,
+        name: liveBuilding.commonName || liveBuilding.name || rb.name,
+        image: heroImage,
+        numberOfLevels: buildingStoreys.length,
+        numberOfSpaces: buildingSpaces.length,
+        area: Math.round(totalArea),
+      };
+    });
+  }, [recentBuildings, treeDataReady, navigatorTreeData, allData, getHeroImage]);
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
-      if (type === "gunnar") {
-        setGunnarOpen(true);
-        return;
-      }
-      toast({
-        title: "AI Assistant (coming soon)",
-        description: `You clicked on ${type}. This assistant is not yet implemented.`,
-      });
+      if (type === "gunnar") { setGunnarOpen(true); return; }
+      toast({ title: "AI Assistant (coming soon)", description: `${type} is not yet implemented.` });
     },
     [toast],
   );
 
   const handleBuildingClick = (building: any) => {
-    setSelectedFacility(building);
+    setSelectedFacility({ fmGuid: building.fmGuid, name: building.name, commonName: building.name, category: 'Building' });
     setActiveApp('portfolio');
+  };
+
+  const handleViewClick = (view: SavedView) => {
+    navigate(`/split-viewer?building=${view.building_fm_guid}&mode=3d`);
   };
 
   return (
     <div className="relative min-h-full text-foreground">
       {/* Full-page background */}
-      <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${chicagoHero})` }}
-        aria-hidden="true"
-      />
+      <div className="pointer-events-none absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${chicagoHero})` }} aria-hidden="true" />
       <div className="pointer-events-none absolute inset-0 bg-background/70" aria-hidden="true" />
 
       {/* Main layout */}
       <div className="relative z-10 min-h-full flex flex-col items-center gap-4 sm:gap-6 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
-
-        <div className="flex flex-col items-center w-full max-w-2xl">
+        <div className="flex flex-col items-center w-full max-w-4xl">
 
           <header className="space-y-1 sm:space-y-2 text-center mb-4 sm:mb-6 w-full">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground">Welcome to My Geminus</h1>
@@ -173,7 +160,6 @@ export default function HomeLanding() {
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
               <p className="text-[11px] sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
-
             <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
               {ASSISTANTS.map((a) => {
                 const Icon = a.icon;
@@ -207,72 +193,161 @@ export default function HomeLanding() {
             </div>
           </section>
 
-          {/* My Favorites */}
-          <section className="w-full flex-1">
+          {/* Recent Buildings */}
+          <section className="w-full mb-4 sm:mb-6">
             <Card className="bg-card/60">
               <CardHeader className="pb-2 sm:pb-4">
-                <CardTitle className="text-base sm:text-lg text-foreground">My Favorites</CardTitle>
-                <CardDescription className="text-[11px] sm:text-xs">Quick access to your most used buildings</CardDescription>
+                <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  Recent
+                </CardTitle>
+                <CardDescription className="text-[11px] sm:text-xs">Buildings you've worked with recently</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                {showSkeleton ? (
-                  <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2">
-                    <FavoriteBuildingSkeleton />
-                    <FavoriteBuildingSkeleton />
-                    <FavoriteBuildingSkeleton />
-                  </div>
-                ) : displayBuildings.length > 0 ? (
-                  <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2">
-                    {displayBuildings.map((building) => (
-                      <button
-                        key={building.fmGuid}
-                        type="button"
-                        onClick={() => handleBuildingClick(building)}
-                        className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
-                      >
-                        <div className="h-32 sm:h-36 relative overflow-hidden">
-                          <img
-                            src={building.image}
-                            alt={building.commonName || building.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <div className="absolute bottom-1.5 sm:bottom-2 left-2 sm:left-3 right-2 sm:right-3">
-                            <h3 className="font-semibold text-white text-xs sm:text-sm truncate">
-                              {building.commonName || building.name}
-                            </h3>
-                          </div>
-                        </div>
-                        <div className="p-2.5 sm:p-3 flex items-center justify-between text-[11px] sm:text-xs text-muted-foreground">
-                          <span>{building.numberOfLevels || 0} fl</span>
-                          <span>{building.numberOfSpaces || 0} rm</span>
-                          <span>{building.area?.toLocaleString() || 0} m²</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : showEmpty ? (
+                {enrichedRecent.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border p-3 sm:p-4">
                     <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
                       <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
-                        <p className="text-xs sm:text-sm font-medium">No favorites yet</p>
-                        <p className="text-[11px] sm:text-xs">Mark buildings as favorites from Portfolio.</p>
+                        <p className="text-xs sm:text-sm font-medium">No recent buildings</p>
+                        <p className="text-[11px] sm:text-xs">Open a building from Portfolio to see it here.</p>
                       </div>
                     </div>
                   </div>
-                ) : null}
+                ) : enrichedRecent.length <= 3 ? (
+                  <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
+                    {enrichedRecent.map((building) => (
+                      <BuildingCard key={building.fmGuid} building={building} onClick={() => handleBuildingClick(building)} />
+                    ))}
+                  </div>
+                ) : (
+                  <Carousel opts={{ align: 'start' }} className="w-full">
+                    <CarouselContent className="-ml-2">
+                      {enrichedRecent.map((building) => (
+                        <CarouselItem key={building.fmGuid} className="pl-2 basis-full sm:basis-1/3">
+                          <BuildingCard building={building} onClick={() => handleBuildingClick(building)} />
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="hidden sm:flex -left-4" />
+                    <CarouselNext className="hidden sm:flex -right-4" />
+                  </Carousel>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Saved Views */}
+          <section className="w-full flex-1">
+            <Card className="bg-card/60">
+              <CardHeader className="pb-2 sm:pb-4">
+                <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-primary" />
+                  Views
+                </CardTitle>
+                <CardDescription className="text-[11px] sm:text-xs">Your recently saved views</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {loadingViews ? (
+                  <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
+                    <CardSkeleton />
+                    <CardSkeleton />
+                    <CardSkeleton />
+                  </div>
+                ) : savedViews.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-3 sm:p-4">
+                    <div className="flex items-center gap-2 sm:gap-3 text-muted-foreground">
+                      <Eye className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
+                      <div>
+                        <p className="text-xs sm:text-sm font-medium">No saved views</p>
+                        <p className="text-[11px] sm:text-xs">Save a view from the 3D viewer to see it here.</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : savedViews.length <= 3 ? (
+                  <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
+                    {savedViews.map((view) => (
+                      <ViewCard key={view.id} view={view} onClick={() => handleViewClick(view)} />
+                    ))}
+                  </div>
+                ) : (
+                  <Carousel opts={{ align: 'start' }} className="w-full">
+                    <CarouselContent className="-ml-2">
+                      {savedViews.map((view) => (
+                        <CarouselItem key={view.id} className="pl-2 basis-full sm:basis-1/3">
+                          <ViewCard view={view} onClick={() => handleViewClick(view)} />
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    <CarouselPrevious className="hidden sm:flex -left-4" />
+                    <CarouselNext className="hidden sm:flex -right-4" />
+                  </Carousel>
+                )}
               </CardContent>
             </Card>
           </section>
         </div>
       </div>
 
-      <GunnarChat
-        open={gunnarOpen}
-        onClose={() => setGunnarOpen(false)}
-        context={{ activeApp: 'home' }}
-      />
+      <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} context={{ activeApp: 'home' }} />
     </div>
+  );
+}
+
+function BuildingCard({ building, onClick }: { building: RecentBuilding; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
+    >
+      <div className="h-32 sm:h-36 relative overflow-hidden">
+        <img
+          src={building.image}
+          alt={building.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute bottom-1.5 sm:bottom-2 left-2 sm:left-3 right-2 sm:right-3">
+          <h3 className="font-semibold text-white text-xs sm:text-sm truncate">{building.name}</h3>
+        </div>
+      </div>
+      <div className="p-2.5 sm:p-3 flex items-center justify-between text-[11px] sm:text-xs text-muted-foreground">
+        <span>{building.numberOfLevels || 0} fl</span>
+        <span>{building.numberOfSpaces || 0} rm</span>
+        <span>{building.area?.toLocaleString() || 0} m²</span>
+      </div>
+    </button>
+  );
+}
+
+function ViewCard({ view, onClick }: { view: SavedView; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
+    >
+      <div className="h-32 sm:h-36 relative overflow-hidden bg-muted">
+        {view.screenshot_url ? (
+          <img
+            src={view.screenshot_url}
+            alt={view.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Eye className="h-8 w-8 text-muted-foreground/30" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute bottom-1.5 sm:bottom-2 left-2 sm:left-3 right-2 sm:right-3">
+          <h3 className="font-semibold text-white text-xs sm:text-sm truncate">{view.name}</h3>
+        </div>
+      </div>
+      <div className="p-2.5 sm:p-3 text-[11px] sm:text-xs text-muted-foreground truncate">
+        {view.building_name || 'Unknown building'}
+      </div>
+    </button>
   );
 }

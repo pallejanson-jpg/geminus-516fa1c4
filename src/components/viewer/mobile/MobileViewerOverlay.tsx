@@ -1,7 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { ArrowLeft, TreeDeciduous, Settings2, X, Filter } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, Settings2, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import ViewerTreePanel from '../ViewerTreePanel';
 
 interface MobileViewerOverlayProps {
   onClose?: () => void;
@@ -13,38 +12,21 @@ interface MobileViewerOverlayProps {
   // Filter panel
   showFilterPanel?: boolean;
   onToggleFilterPanel?: () => void;
-  // Tree state
-  treeSelectedId?: string | null;
-  onTreeSelectedIdChange?: (id: string | null) => void;
-  treeExpandedIds?: Set<string>;
-  onTreeExpandedIdsChange?: (ids: Set<string>) => void;
 }
 
 /**
  * Slim mobile overlay for the 3D viewer.
- * Only renders the header bar with back/tree/settings buttons.
- * All visualization settings are delegated to ViewerRightPanel via onOpenSettings.
+ * Only renders the header bar with back/filter/settings buttons.
+ * The old model tree has been removed — FilterPanel replaces it.
  */
 const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   onClose,
-  viewerInstanceRef,
   buildingName,
-  buildingFmGuid,
   isViewerReady,
   onOpenSettings,
   showFilterPanel,
   onToggleFilterPanel,
-  treeSelectedId,
-  onTreeSelectedIdChange,
-  treeExpandedIds,
-  onTreeExpandedIdsChange,
 }) => {
-  const [showTreeOverlay, setShowTreeOverlay] = useState(false);
-
-  const handleTreeNodeSelect = useCallback((nodeId: string) => {
-    onTreeSelectedIdChange?.(nodeId);
-  }, [onTreeSelectedIdChange]);
-
   return (
     <>
       {/* Compact Header - absolute positioned over the canvas */}
@@ -71,7 +53,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           </h1>
         </div>
 
-        {/* Right: Tree + Settings */}
+        {/* Right: Filter + Settings */}
         <div className="flex gap-1.5">
           <Button
             variant={showFilterPanel ? 'default' : 'secondary'}
@@ -81,16 +63,6 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             disabled={!isViewerReady}
           >
             <Filter className="h-4 w-4" />
-          </Button>
-
-          <Button
-            variant={showTreeOverlay ? 'default' : 'secondary'}
-            size="icon"
-            className="h-9 w-9 bg-card/95 backdrop-blur-sm shadow-md border"
-            onClick={() => setShowTreeOverlay(!showTreeOverlay)}
-            disabled={!isViewerReady}
-          >
-            <TreeDeciduous className="h-4 w-4" />
           </Button>
 
           <Button
@@ -104,48 +76,6 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           </Button>
         </div>
       </div>
-
-      {/* TreeView sliding overlay from left */}
-      {showTreeOverlay && (
-        <>
-          <div
-            className="absolute inset-0 bg-black/40 z-40"
-            onClick={() => setShowTreeOverlay(false)}
-          />
-          <div className="absolute inset-y-0 left-0 w-[85%] max-w-80 z-50 bg-card/98 backdrop-blur-md border-r shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between p-3 border-b">
-              <div className="flex items-center gap-2">
-                <TreeDeciduous className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Model Tree</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setShowTreeOverlay(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <ViewerTreePanel
-                viewerRef={viewerInstanceRef}
-                buildingFmGuid={buildingFmGuid}
-                isVisible={showTreeOverlay}
-                onClose={() => setShowTreeOverlay(false)}
-                onNodeSelect={handleTreeNodeSelect}
-                embedded={true}
-                showVisibilityCheckboxes={true}
-                startFromStoreys={true}
-                selectedId={treeSelectedId}
-                onSelectedIdChange={onTreeSelectedIdChange}
-                expandedIds={treeExpandedIds}
-                onExpandedIdsChange={onTreeExpandedIdsChange}
-              />
-            </div>
-          </div>
-        </>
-      )}
     </>
   );
 };
