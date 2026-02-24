@@ -87,6 +87,14 @@ export interface ViewMode2DToggledDetail {
   enabled: boolean;
 }
 
+/** Event dispatched when an issue annotation marker is clicked in the 3D viewer */
+export const ISSUE_MARKER_CLICKED_EVENT = 'ISSUE_MARKER_CLICKED';
+
+/** Type for issue marker click event detail */
+export interface IssueMarkerClickedDetail {
+  issueId: string;
+}
+
 /** Type for load saved view event detail */
 export interface LoadSavedViewDetail {
   viewId: string;

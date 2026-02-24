@@ -431,7 +431,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     return () => clearInterval(interval);
   }, [isVisible, buildEntityMap]);
 
-  // ── Fetch annotation categories (non-modeled assets) ────────────────────
+  // ── Fetch annotation categories (non-modeled assets + issues) ────────────
   useEffect(() => {
     if (!isVisible || !buildingFmGuid) return;
     const fetchAnnotations = async () => {
@@ -441,27 +441,42 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .or('created_in_model.eq.false,asset_type.eq.IfcAlarm');
 
-      if (!assets || assets.length === 0) { setAnnotationCategories([]); return; }
+      // Also fetch issue count for this building
+      const { count: issueCount } = await supabase
+        .from('bcf_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('building_fm_guid', buildingFmGuid)
+        .in('status', ['open', 'in_progress'])
+        .not('viewpoint_json', 'is', null);
 
-      const { data: symbols } = await supabase
-        .from('annotation_symbols')
-        .select('id, color, category');
-      const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
+      const categories: Array<{ category: string; count: number; color: string }> = [];
 
-      const groups = new Map<string, { count: number; color: string }>();
-      assets.forEach(a => {
-        const cat = a.asset_type || 'Other';
-        const existing = groups.get(cat);
-        const sym = a.symbol_id ? symbolMap.get(a.symbol_id) : null;
-        const color = sym?.color || '#3B82F6';
-        if (existing) { existing.count++; }
-        else { groups.set(cat, { count: 1, color }); }
-      });
+      if (assets && assets.length > 0) {
+        const { data: symbols } = await supabase
+          .from('annotation_symbols')
+          .select('id, color, category');
+        const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
+
+        const groups = new Map<string, { count: number; color: string }>();
+        assets.forEach(a => {
+          const cat = a.asset_type || 'Other';
+          const existing = groups.get(cat);
+          const sym = a.symbol_id ? symbolMap.get(a.symbol_id) : null;
+          const color = sym?.color || '#3B82F6';
+          if (existing) { existing.count++; }
+          else { groups.set(cat, { count: 1, color }); }
+        });
+
+        groups.forEach((val, key) => categories.push({ category: key, count: val.count, color: val.color }));
+      }
+
+      // Add Issues category
+      if (issueCount && issueCount > 0) {
+        categories.push({ category: 'Issues', count: issueCount, color: '#EF4444' });
+      }
 
       setAnnotationCategories(
-        Array.from(groups.entries())
-          .map(([category, { count, color }]) => ({ category, count, color }))
-          .sort((a, b) => b.count - a.count)
+        categories.sort((a, b) => b.count - a.count)
       );
     };
     fetchAnnotations();

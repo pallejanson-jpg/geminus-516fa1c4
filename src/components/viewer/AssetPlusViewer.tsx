@@ -28,7 +28,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -206,6 +206,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const showNavCubeRef = useRef(showNavCube);
   const loadLocalAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const loadIssueAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const assetDataRef = useRef<any>(null);
   const allDataRef = useRef<any[]>(allData);
   const insightsColorModeRef = useRef(insightsColorMode);
@@ -1927,9 +1928,232 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [resolveBuildingFmGuid, showAnnotations]);
 
+  // Load issue annotations (BCF issues with viewpoints as 3D markers)
+  const loadIssueAnnotations = useCallback(async () => {
+    const resolvedBuildingGuid = resolveBuildingFmGuid();
+    if (!resolvedBuildingGuid) return;
+
+    const viewer = viewerInstanceRef.current;
+    const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (!xeokitViewer?.scene) {
+      console.debug('loadIssueAnnotations: xeokit viewer not ready');
+      return;
+    }
+
+    try {
+      // Fetch open/in_progress BCF issues for this building that have viewpoints
+      const { data: issues, error } = await supabase
+        .from('bcf_issues')
+        .select('id, title, issue_type, priority, status, viewpoint_json, selected_object_ids, screenshot_url')
+        .eq('building_fm_guid', resolvedBuildingGuid)
+        .in('status', ['open', 'in_progress'])
+        .not('viewpoint_json', 'is', null);
+
+      if (error || !issues || issues.length === 0) {
+        console.log('No issue annotations to load for building:', resolvedBuildingGuid);
+        return;
+      }
+
+      console.log(`Loading ${issues.length} issue annotations...`);
+
+      // Get or create the annotations manager and container
+      let localAnnotationsManager = localAnnotationsPluginRef.current;
+      let container = document.getElementById('local-annotations-container');
+
+      if (!localAnnotationsManager) {
+        localAnnotationsManager = {
+          annotations: {} as Record<string, any>,
+          container: null as HTMLElement | null,
+          updatePositions: () => {
+            const canvas = xeokitViewer.scene?.canvas?.canvas;
+            const camera = xeokitViewer.scene?.camera;
+            if (!canvas || !camera) return;
+            const viewMatrix = camera.viewMatrix;
+            const projMatrix = camera.projMatrix;
+            if (!viewMatrix || !projMatrix) return;
+            const cw = canvas.clientWidth;
+            const ch = canvas.clientHeight;
+            Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
+              if (!ann.markerElement || !ann.markerShown) return;
+              const canvasPos = projectWorldToCanvas(ann.worldPos, viewMatrix, projMatrix, cw, ch);
+              if (canvasPos &&
+                  canvasPos[0] >= -50 && canvasPos[0] <= cw + 50 &&
+                  canvasPos[1] >= -50 && canvasPos[1] <= ch + 50 &&
+                  canvasPos[2] > 0) {
+                ann.markerElement.style.display = 'flex';
+                ann.markerElement.style.left = `${canvasPos[0] - 14}px`;
+                ann.markerElement.style.top = `${canvasPos[1] - 14}px`;
+              } else {
+                ann.markerElement.style.display = 'none';
+              }
+            });
+          },
+        };
+        localAnnotationsPluginRef.current = localAnnotationsManager;
+        if (viewerInstanceRef.current) {
+          viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsManager;
+        }
+      }
+
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'local-annotations-container';
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;overflow:hidden;';
+        viewerContainerRef.current?.appendChild(container);
+      }
+      localAnnotationsManager.container = container;
+
+      // Issue type color map
+      const issueColors: Record<string, string> = {
+        fault: '#EF4444',       // red
+        improvement: '#F59E0B', // amber
+        observation: '#6366F1', // indigo
+        safety: '#DC2626',     // dark red
+      };
+
+      let createdCount = 0;
+
+      issues.forEach(issue => {
+        const markerId = `issue-${issue.id}`;
+        // Skip if already exists
+        if (localAnnotationsManager.annotations[markerId]) return;
+
+        // Extract world position from viewpoint_json
+        const vp = issue.viewpoint_json as any;
+        if (!vp) return;
+
+        let worldPos: [number, number, number] | null = null;
+
+        // Strategy 1: Use first selected object's bounding box center
+        if (issue.selected_object_ids?.length) {
+          const firstObjId = issue.selected_object_ids[0];
+          const entity = xeokitViewer.scene.objects?.[firstObjId];
+          if (entity?.aabb) {
+            const aabb = entity.aabb;
+            worldPos = [
+              (aabb[0] + aabb[3]) / 2,
+              (aabb[1] + aabb[4]) / 2 + 0.3,
+              (aabb[2] + aabb[5]) / 2,
+            ];
+          }
+        }
+
+        // Strategy 2: Calculate look-at point from camera viewpoint + direction
+        if (!worldPos) {
+          const cam = vp.perspective_camera || vp.orthogonal_camera;
+          if (cam?.camera_view_point && cam?.camera_direction) {
+            const eye = cam.camera_view_point;
+            const dir = cam.camera_direction;
+            const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+            if (len > 0) {
+              const dist = 5; // 5 meters along direction
+              worldPos = [
+                eye.x + (dir.x / len) * dist,
+                eye.y + (dir.y / len) * dist,
+                eye.z + (dir.z / len) * dist,
+              ];
+            }
+          }
+        }
+
+        if (!worldPos) return;
+
+        const color = issueColors[issue.issue_type] || '#EF4444';
+
+        // Create marker DOM element
+        const marker = document.createElement('div');
+        marker.id = markerId;
+        marker.className = 'local-annotation-marker issue-marker';
+        marker.dataset.category = 'Issues';
+        marker.style.cssText = `
+          position: absolute;
+          width: 28px;
+          height: 28px;
+          background: ${color};
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 3px ${color}40;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform 0.15s;
+          pointer-events: auto;
+          z-index: 1;
+        `;
+
+        // SVG exclamation icon (!) for issues
+        marker.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="white"/></svg>`;
+
+        marker.title = `${issue.issue_type}: ${issue.title}`;
+
+        // Click handler: dispatch event to open IssueDetailSheet
+        marker.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent(ISSUE_MARKER_CLICKED_EVENT, {
+            detail: { issueId: issue.id },
+          }));
+        });
+
+        container!.appendChild(marker);
+
+        localAnnotationsManager.annotations[markerId] = {
+          id: markerId,
+          worldPos,
+          category: 'Issues',
+          name: issue.title,
+          color,
+          markerShown: true,
+          markerElement: marker,
+          levelFmGuid: null, // Issues don't have floor context directly
+        };
+
+        createdCount++;
+      });
+
+      // Set up camera listener if not already
+      if (!localAnnotationsManager._cameraListenerSet) {
+        const updateHandler = () => localAnnotationsManager.updatePositions();
+        xeokitViewer.scene.camera.on('viewMatrix', updateHandler);
+        xeokitViewer.scene.camera.on('projMatrix', updateHandler);
+        localAnnotationsManager._cameraListenerSet = true;
+        setTimeout(updateHandler, 100);
+      } else {
+        setTimeout(() => localAnnotationsManager.updatePositions(), 100);
+      }
+
+      console.log(`Created ${createdCount} issue annotations for building:`, resolvedBuildingGuid);
+
+      // Subscribe to realtime changes on bcf_issues for this building
+      const channel = supabase
+        .channel(`issue-annotations-${resolvedBuildingGuid}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'bcf_issues',
+          filter: `building_fm_guid=eq.${resolvedBuildingGuid}`,
+        }, (payload) => {
+          console.log('[IssueAnnotations] Realtime update:', payload.eventType);
+          // On any change, reload issue annotations
+          loadIssueAnnotationsRef.current?.().catch(e => {
+            console.debug('Issue annotations reload failed:', e);
+          });
+        })
+        .subscribe();
+
+      // Store channel ref for cleanup
+      if (viewerInstanceRef.current) {
+        viewerInstanceRef.current._issueAnnotationsChannel = channel;
+      }
+    } catch (e) {
+      console.error('Error loading issue annotations:', e);
+    }
+  }, [resolveBuildingFmGuid]);
+
   // Keep annotation function refs in sync so handleAllModelsLoaded can call latest versions
   useEffect(() => { loadLocalAnnotationsRef.current = loadLocalAnnotations; }, [loadLocalAnnotations]);
   useEffect(() => { loadAlarmAnnotationsRef.current = loadAlarmAnnotations; }, [loadAlarmAnnotations]);
+  useEffect(() => { loadIssueAnnotationsRef.current = loadIssueAnnotations; }, [loadIssueAnnotations]);
 
   // Load ACC models (GLB/OBJ) directly via xeokit loader plugins (bypasses XKT conversion)
   const loadAccDirectModels = useCallback(async () => {
@@ -2160,6 +2384,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Load alarm annotations from BIM geometry
       loadAlarmAnnotationsRef.current?.().catch(e => {
         console.error('loadAlarmAnnotations failed:', e);
+      });
+
+      // Load issue annotations (BCF issues as 3D markers)
+      loadIssueAnnotationsRef.current?.().catch(e => {
+        console.error('loadIssueAnnotations failed:', e);
       });
 
     // Initialize NavCube using custom plugin
@@ -3976,6 +4205,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
       } catch (e) {
         console.debug('Viewer cleanup (expected during teardown):', e);
+      }
+      
+      // Cleanup issue annotations realtime channel
+      const issueChannel = viewerInstanceRef.current?._issueAnnotationsChannel;
+      if (issueChannel) {
+        supabase.removeChannel(issueChannel);
       }
       
       viewerInstanceRef.current = null;
