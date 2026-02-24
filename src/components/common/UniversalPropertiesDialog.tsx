@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { updateAssetProperties, UpdatePropertyItem, deleteAssets, syncAssetToAssetPlus } from '@/services/asset-plus-service';
+import { pushAssetToFmAccess, pushPropertyChangesToFmAccess } from '@/services/fm-access-service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -100,6 +101,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   // Delete/Push state
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const [isPushingFma, setIsPushingFma] = useState(false);
   
   // Form data for editing
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -517,6 +519,21 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           toast.success(`${response.summary.success} items updated (${response.summary.syncedToAssetPlus} synced to Asset+)`);
         }
 
+        // Also push to FM Access (best-effort, don't block)
+        try {
+          const fmaProps: Record<string, any> = {};
+          assetPlusProperties.forEach(p => { fmaProps[p.name] = p.value; });
+          if (Object.keys(fmaProps).length > 0) {
+            for (const guid of fmGuids) {
+              pushPropertyChangesToFmAccess(guid, fmaProps).catch(e => 
+                console.warn('FM Access property sync failed for', guid, e)
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('FM Access property push skipped:', e);
+        }
+
         // Update remaining local-only fields (coordinates, asset_type) directly
         const localOnlyPayload: Record<string, any> = {};
         if (updatePayload.coordinate_x !== undefined) localOnlyPayload.coordinate_x = updatePayload.coordinate_x;
@@ -629,6 +646,34 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       toast.error('Push failed: ' + error.message);
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  const handlePushToFmAccess = async () => {
+    if (assets.length === 0) return;
+    setIsPushingFma(true);
+    try {
+      let succeeded = 0;
+      let failed = 0;
+      for (const fmGuid of fmGuids) {
+        const result = await pushAssetToFmAccess(fmGuid);
+        if (result.success) succeeded++;
+        else {
+          failed++;
+          console.warn(`FM Access push failed for ${fmGuid}:`, result.error);
+        }
+      }
+      if (succeeded > 0) {
+        toast.success(`${succeeded} object(s) pushed to FM Access`);
+        onUpdate?.();
+      }
+      if (failed > 0) {
+        toast.error(`${failed} object(s) failed to push to FM Access`);
+      }
+    } catch (error: any) {
+      toast.error('FM Access push failed: ' + error.message);
+    } finally {
+      setIsPushingFma(false);
     }
   };
   
@@ -877,9 +922,17 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               
               {/* Push to Asset+ button - only for local objects */}
               {syncStatus?.allLocal && syncStatus?.isInstance && (
-                <Button variant="outline" size="sm" onClick={handlePushToAssetPlus} disabled={isPushing}>
+                <Button variant="outline" size="sm" onClick={handlePushToAssetPlus} disabled={isPushing || isPushingFma}>
                   {isPushing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
                   Push to Asset+
+                </Button>
+              )}
+              
+              {/* Push to FM Access button */}
+              {syncStatus?.isInstance && (
+                <Button variant="outline" size="sm" onClick={handlePushToFmAccess} disabled={isPushingFma || isPushing}>
+                  {isPushingFma ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                  Push to FM Access
                 </Button>
               )}
             </div>
