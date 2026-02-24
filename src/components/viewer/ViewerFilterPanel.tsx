@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
-import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box, MapPin } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X, Filter, Paintbrush, Box, MapPin, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -247,10 +247,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       counts.set(cat, (counts.get(cat) || 0) + 1);
     });
 
-    // Remove Building (single root node, not useful)
+    // Remove non-useful categories (they have their own sections)
     counts.delete('Building');
     counts.delete('Project');
     counts.delete('Site');
+    counts.delete('Building Storey');
+    counts.delete('Space');
 
     return Array.from(counts.entries())
       .map(([name, count]) => ({ name, count }))
@@ -349,29 +351,25 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Step 4: Also build a source → model objects map using scene.models
-    // For Sources filtering: map each xeokit model to a source guid
     const sceneModels = viewer.scene.models || {};
     Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
       const modelObjKeys = Object.keys((model as any).objects || {});
-      // Find an IfcBuildingStorey in this model to determine which source it belongs to
       for (const objId of modelObjKeys) {
         const mo = metaObjects[objId];
         if (mo?.type === 'IfcBuildingStorey') {
           const sysId = (mo.originalSystemId || '').toLowerCase();
           const moName = (mo.name || '').toLowerCase().trim();
-          // Find matching Asset+ level
           const matchedLevel = levels.find(l =>
             l.fmGuid.toLowerCase() === sysId ||
             l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '') ||
             l.name.toLowerCase().trim() === moName
           );
           if (matchedLevel) {
-            // Store model objects under a source key: "source::{guid}"
             const sourceKey = `source::${matchedLevel.sourceGuid}`;
             const existing = map.get(sourceKey) || [];
             map.set(sourceKey, [...existing, ...modelObjKeys]);
           }
-          break; // Only need first storey per model
+          break;
         }
       }
     });
@@ -405,7 +403,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   useEffect(() => {
     if (!isVisible || !buildingFmGuid) return;
     const fetchAnnotations = async () => {
-      // Fetch non-modeled assets grouped by asset_type
       const { data: assets } = await supabase
         .from('assets')
         .select('asset_type, symbol_id')
@@ -414,13 +411,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 
       if (!assets || assets.length === 0) { setAnnotationCategories([]); return; }
 
-      // Fetch symbols for colors
       const { data: symbols } = await supabase
         .from('annotation_symbols')
         .select('id, color, category');
       const symbolMap = new Map(symbols?.map(s => [s.id, s]) || []);
 
-      // Group by asset_type
       const groups = new Map<string, { count: number; color: string }>();
       assets.forEach(a => {
         const cat = a.asset_type || 'Övrigt';
@@ -534,11 +529,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
-      // Method 1: via level descendants
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
-      // Method 2: via source::guid model objects map (direct from scene.models)
       checkedSources.forEach(guid => {
         eMap.get(`source::${guid}`)?.forEach(id => sourceIds!.add(id));
       });
@@ -592,17 +585,37 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
     }
 
-    // Step 2b: Exclude IfcSpace and IfcSlab from solidIds (they obstruct the view)
-    const hideIds: string[] = [];   // IfcSpace — hide entirely
-    const fadeIds: string[] = [];   // IfcSlab/IfcSlabStandardCase — transparent + unpickable
-    const obstructTypes = new Set(['IfcSpace', 'IfcRoof', 'IfcCovering']);
+    // Step 2b: Handle IfcSpace and IfcSlab visibility
+    // Checked spaces stay visible and pickable
+    // Unchecked IfcSpace: semi-transparent + pickable (so user can click rooms)
+    // IfcSlab/IfcRoof/IfcCovering: semi-transparent + unpickable (visible floor)
+    const checkedSpaceEntityIds = new Set<string>();
+    if (checkedSpaces.size > 0 && spaceIds) {
+      spaceIds.forEach(id => checkedSpaceEntityIds.add(id));
+    }
+
+    const fadeIds: string[] = [];   // IfcSlab — semi-transparent + unpickable
+    const spaceTransparentIds: string[] = []; // Unchecked IfcSpace — semi-transparent + pickable
+    const obstructTypes = new Set(['IfcRoof', 'IfcCovering']);
     const slabTypes = new Set(['IfcSlab', 'IfcSlabStandardCase', 'IfcPlate']);
+    const hideIds: string[] = []; // IfcRoof/IfcCovering — hide entirely
+    
     if (viewer.metaScene?.metaObjects) {
       for (const id of solidIds) {
         const mo = viewer.metaScene.metaObjects[id];
         if (mo) {
-          if (obstructTypes.has(mo.type)) { hideIds.push(id); solidIds.delete(id); }
-          else if (slabTypes.has(mo.type)) { fadeIds.push(id); solidIds.delete(id); }
+          if (obstructTypes.has(mo.type)) { 
+            hideIds.push(id); 
+            solidIds.delete(id); 
+          } else if (slabTypes.has(mo.type)) { 
+            fadeIds.push(id); 
+            solidIds.delete(id); 
+          } else if (mo.type === 'IfcSpace' && !checkedSpaceEntityIds.has(id)) {
+            // Unchecked space in solidIds: make transparent but pickable
+            spaceTransparentIds.push(id);
+            solidIds.delete(id);
+          }
+          // Checked spaces stay in solidIds (visible, solid, pickable)
         }
       }
     }
@@ -610,7 +623,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Step 3: Apply visibility or X-ray for non-solid objects
     const nonSolidIds = scene.objectIds.filter((id: string) => !solidIds.has(id));
     if (xrayMode) {
-      // X-ray mode: ghost non-solid objects
       const xrayMat = scene.xrayMaterial;
       if (xrayMat) {
         xrayMat.fill = true;
@@ -623,15 +635,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (nonSolidIds.length > 0) scene.setObjectsXRayed(nonSolidIds, true);
       if (solidIds.size > 0) scene.setObjectsXRayed([...solidIds], false);
     } else {
-      // Hide mode (default): simply hide non-solid objects for better performance
       if (nonSolidIds.length > 0) scene.setObjectsVisible(nonSolidIds, false);
     }
 
-    // Step 3b: Hide IfcSpace, make IfcSlab transparent + unpickable
+    // Step 3b: Hide obstructions, make slabs semi-transparent, make unchecked spaces semi-transparent + pickable
     if (hideIds.length > 0) scene.setObjectsVisible(hideIds, false);
     fadeIds.forEach(id => {
       const entity = scene.objects?.[id];
-      if (entity) { entity.opacity = 0; entity.pickable = false; }
+      if (entity) { entity.opacity = 0.3; entity.pickable = false; }
+    });
+    // Unchecked spaces: semi-transparent but still pickable
+    spaceTransparentIds.forEach(id => {
+      const entity = scene.objects?.[id];
+      if (entity) { entity.opacity = 0.15; entity.pickable = true; }
     });
 
     // Step 4: If spaces checked, colorize them blue (override level color)
@@ -645,7 +661,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Step 5: Floor/space visibility event for labels and clipping
     const visibleFmGuids: string[] = [];
     if (checkedSpaces.size > 0) {
-      // When spaces are selected, resolve their parent level for clipping
       const parentLevelGuids = new Set<string>();
       spacesRef.current.forEach(space => {
         if (checkedSpaces.has(space.fmGuid) && space.levelFmGuid) {
@@ -741,7 +756,6 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       case 'categories': setCheckedCategories(new Set()); break;
       case 'annotations': 
         setCheckedAnnotations(new Set());
-        // Clear annotation filter
         window.dispatchEvent(new CustomEvent(ANNOTATION_FILTER_EVENT, { detail: { visibleCategories: [] } }));
         break;
     }
@@ -795,8 +809,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   return (
     <div
       className={cn(
-        "fixed left-0 top-0 bottom-0 z-40 w-[85%] max-w-[300px] sm:w-[300px]",
-        "bg-card/95 backdrop-blur-xl border-r shadow-2xl",
+        "fixed left-0 top-0 bottom-0 z-40 w-[85%] max-w-[320px] sm:w-[320px]",
+        "bg-card/95 backdrop-blur-xl border-r shadow-2xl text-foreground",
         "flex flex-col",
         "animate-in slide-in-from-left duration-200"
       )}
@@ -805,28 +819,34 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       <div className="flex items-center justify-between px-3 py-2.5 border-b">
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-sm">Filter</span>
+          <span className="font-semibold text-sm text-foreground">Filter</span>
           {totalFilters > 0 && (
-            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4">{totalFilters}</Badge>
+            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-5">{totalFilters}</Badge>
           )}
         </div>
         <div className="flex items-center gap-1">
+          {/* Show All button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs px-2 gap-1 text-foreground"
+            onClick={handleResetAll}
+            title="Visa alla objekt"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Visa alla
+          </Button>
           <Button
             variant={xrayMode ? "default" : "ghost"}
             size="icon"
-            className={cn("h-6 w-6", xrayMode && "bg-primary text-primary-foreground")}
+            className={cn("h-7 w-7", xrayMode && "bg-primary text-primary-foreground")}
             onClick={() => setXrayMode(!xrayMode)}
             title={xrayMode ? "X-ray på (klicka för att dölja)" : "Visa X-ray"}
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
-          {totalFilters > 0 && (
-            <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={handleResetAll}>
-              Reset
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-            <X className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground" onClick={onClose}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -852,7 +872,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
             {sources.length === 0 && (
-              <p className="text-xs text-muted-foreground px-3 py-2">No sources found</p>
+              <p className="text-sm text-muted-foreground px-3 py-2">No sources found</p>
             )}
           </FilterSection>
 
@@ -871,11 +891,11 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("h-5 w-5", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
+                className={cn("h-6 w-6", autoColorEnabled ? "text-primary" : "text-muted-foreground")}
                 title={autoColorEnabled ? "Turn off auto-colors" : "Turn on auto-colors"}
                 onClick={(e) => { e.stopPropagation(); setAutoColorEnabled(!autoColorEnabled); }}
               >
-                <Paintbrush className="h-3 w-3" />
+                <Paintbrush className="h-3.5 w-3.5" />
               </Button>
             }
           >
@@ -915,12 +935,12 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               />
             ))}
             {filteredSpaces.length > 200 && (
-              <p className="text-xs text-muted-foreground px-3 py-1">
+              <p className="text-sm text-muted-foreground px-3 py-1">
                 Showing 200 of {filteredSpaces.length} spaces
               </p>
             )}
             {filteredSpaces.length === 0 && (
-              <p className="text-xs text-muted-foreground px-3 py-2">
+              <p className="text-sm text-muted-foreground px-3 py-2">
                 {spacesSearch ? 'No match' : 'No spaces on selected levels'}
               </p>
             )}
@@ -955,25 +975,25 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               isOpen={annotationsOpen}
               onToggle={() => setAnnotationsOpen(!annotationsOpen)}
               onReset={() => handleResetSection('annotations')}
-              rightAction={<MapPin className="h-3 w-3 text-muted-foreground" />}
+              rightAction={<MapPin className="h-3.5 w-3.5 text-muted-foreground" />}
             >
               {annotationCategories.map(cat => (
                 <div
                   key={cat.category}
-                  className="flex items-center gap-2 px-3 py-1 hover:bg-accent/30 transition-colors cursor-pointer"
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer"
                 >
                   <Checkbox
                     checked={checkedAnnotations.has(cat.category)}
-                    className="h-3.5 w-3.5 shrink-0"
+                    className="h-4 w-4 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                     onCheckedChange={(v) => handleAnnotationToggle(cat.category, !!v)}
                   />
                   <span
-                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    className="h-3 w-3 rounded-full shrink-0"
                     style={{ backgroundColor: cat.color }}
                   />
-                  <span className="text-xs truncate flex-1">{cat.category}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{cat.count}</span>
+                  <span className="text-sm truncate flex-1 text-foreground">{cat.category}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{cat.count}</span>
                 </div>
               ))}
             </FilterSection>
@@ -1006,13 +1026,13 @@ const FilterSection: React.FC<FilterSectionProps> = ({
 }) => (
   <div className="border-b last:border-b-0">
     <button
-      className="flex items-center justify-between w-full px-3 py-2 hover:bg-accent/30 transition-colors"
+      className="flex items-center justify-between w-full px-3 py-2.5 hover:bg-accent/30 transition-colors"
       onClick={onToggle}
     >
       <div className="flex items-center gap-2">
-        {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
-        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-normal">
+        {isOpen ? <ChevronDown className="h-4 w-4 text-foreground" /> : <ChevronRight className="h-4 w-4 text-foreground" />}
+        <span className="text-sm font-semibold uppercase tracking-wider text-foreground">{title}</span>
+        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal">
           {selectedCount > 0 ? `${selectedCount}/${count}` : count}
         </Badge>
       </div>
@@ -1020,7 +1040,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({
         {rightAction}
         {selectedCount > 0 && (
           <button
-            className="text-[10px] text-primary hover:underline"
+            className="text-xs text-primary hover:underline"
             onClick={(e) => { e.stopPropagation(); onReset(); }}
           >
             Reset
@@ -1033,8 +1053,8 @@ const FilterSection: React.FC<FilterSectionProps> = ({
         {showSearch && onSearchChange && (
           <div className="px-3 pb-1.5">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="h-6 pl-7 text-xs" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input value={searchValue || ''} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="h-7 pl-7 text-sm" />
             </div>
           </div>
         )}
@@ -1060,24 +1080,24 @@ const FilterRow: React.FC<FilterRowProps> = ({
 }) => (
   <div
     className={cn(
-      "flex items-center gap-2 px-3 py-1 hover:bg-accent/30 transition-colors cursor-pointer group",
+      "flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors cursor-pointer group",
       dimmed && "opacity-40"
     )}
     onClick={onClick}
   >
     <Checkbox
       checked={checked}
-      className="h-3.5 w-3.5 shrink-0"
+      className="h-4 w-4 shrink-0"
       onClick={(e) => e.stopPropagation()}
       onCheckedChange={(v) => onCheckedChange(!!v)}
     />
-    <span className="text-xs truncate flex-1">{label}</span>
-    {badge && <span className="text-[10px] text-muted-foreground shrink-0">{badge}</span>}
+    <span className="text-sm truncate flex-1 text-foreground">{label}</span>
+    {badge && <span className="text-xs text-muted-foreground shrink-0">{badge}</span>}
     {color && onColorChange && (
       <Popover>
         <PopoverTrigger asChild>
           <button
-            className="h-3 w-3 rounded-full shrink-0 border border-border/50 hover:scale-125 transition-transform"
+            className="h-3.5 w-3.5 rounded-full shrink-0 border border-border/50 hover:scale-125 transition-transform"
             style={{ backgroundColor: color }}
             onClick={(e) => e.stopPropagation()}
             title="Change color"
@@ -1085,19 +1105,18 @@ const FilterRow: React.FC<FilterRowProps> = ({
         </PopoverTrigger>
         <PopoverContent className="w-auto p-3" side="right" align="center" onClick={(e) => e.stopPropagation()}>
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium">{label}</span>
+            <span className="text-sm font-medium text-foreground">{label}</span>
             <input
               type="color"
               value={color}
               onChange={(e) => onColorChange(e.target.value)}
               className="w-32 h-8 cursor-pointer border rounded"
             />
-            {/* Quick palette */}
             <div className="flex flex-wrap gap-1">
               {LEVEL_PALETTE.slice(0, 10).map(c => (
                 <button
                   key={c}
-                  className={cn("h-4 w-4 rounded-full border", c === color && "ring-2 ring-primary ring-offset-1")}
+                  className={cn("h-5 w-5 rounded-full border", c === color && "ring-2 ring-primary ring-offset-1")}
                   style={{ backgroundColor: c }}
                   onClick={() => onColorChange(c)}
                 />

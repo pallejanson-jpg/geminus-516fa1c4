@@ -216,12 +216,15 @@ const UnifiedViewerContent: React.FC<{
     return () => clearInterval(interval);
   }, [buildingData]);
 
-  // ─── Re-dispatch 2D event once viewer is ready (fixes mobile init) ─
+  // ─── Re-dispatch 2D event once viewer is ready (fixes mobile + desktop init) ─
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
-      window.dispatchEvent(
-        new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
-      );
+      const timer = setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
+        );
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [viewerReady, viewMode]);
 
