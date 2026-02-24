@@ -565,8 +565,19 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     let spaceIds: Set<string> | null = null;
     if (checkedSpaces.size > 0) {
       spaceIds = new Set<string>();
+      // Add the space entities themselves
       checkedSpaces.forEach(fmGuid => {
         eMap.get(fmGuid)?.forEach(id => spaceIds!.add(id));
+      });
+      // ALSO add all entities from parent levels so context (walls, doors, etc.) stays visible
+      const parentLevelGuids = new Set<string>();
+      spacesRef.current.forEach(space => {
+        if (checkedSpaces.has(space.fmGuid) && space.levelFmGuid) {
+          parentLevelGuids.add(space.levelFmGuid);
+        }
+      });
+      parentLevelGuids.forEach(levelGuid => {
+        eMap.get(levelGuid)?.forEach(id => spaceIds!.add(id));
       });
     }
 
