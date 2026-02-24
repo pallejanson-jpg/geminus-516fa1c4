@@ -34,6 +34,8 @@ const AutodeskCallback = lazy(() => import("@/pages/AutodeskCallback"));
 const Presentation = lazy(() => import("@/pages/Presentation"));
 // FM Access dashboard
 const FmAccessDashboard = lazy(() => import("@/pages/FmAccessDashboard"));
+// Issue resolution page (public, accessed via token link)
+const IssueResolution = lazy(() => import("@/pages/IssueResolution"));
 
 const queryClient = new QueryClient();
 
@@ -194,6 +196,16 @@ const App = () => {
             element={
               <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black">Loading...</div>}>
                 <Presentation />
+              </Suspense>
+            } 
+          />
+          
+          {/* Public Issue Resolution page - accessed via email token */}
+          <Route 
+            path="/issue/:token" 
+            element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+                <IssueResolution />
               </Suspense>
             } 
           />
