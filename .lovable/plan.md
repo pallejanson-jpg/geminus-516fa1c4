@@ -1,45 +1,143 @@
 
 
-## Fix: 2D Mode Initialization from Portfolio (Mobile) + FloatingFloorSwitcher Visibility
+## Plan: UI/UX Improvements -- 7 Changes
 
-### Root Cause Analysis
+### 1. Replace X with ArrowLeft on FacilityLandingPage
 
-**Problem 1 -- 2D never activates on mobile from Portfolio:**
+**File:** `src/components/portfolio/FacilityLandingPage.tsx`
 
-The `VIEW_MODE_2D_TOGGLED_EVENT` is dispatched in `UnifiedViewerContent`'s useEffect immediately on mount (thanks to the sentinel logic). However, `ViewerToolbar` -- the component that *listens* for this event -- is only rendered when `state.isInitialized && initStep === 'ready'` (line 4230 of AssetPlusViewer). This means ViewerToolbar isn't even mounted when the event fires, so the event is lost entirely. The `pending2dRef` fallback only helps if ViewerToolbar is mounted but the xeokit scene isn't ready yet -- it doesn't help when the component itself doesn't exist yet.
+- Line 4: Add `ArrowLeft` to the lucide import, remove `X` if unused elsewhere
+- Lines 290-301: Replace the `<X>` icon with `<ArrowLeft>` in the close button
+- Update the `aria-label` / title to "Tillbaka" instead of close semantics
 
-**Problem 2 -- FloatingFloorSwitcher not visible on mobile:**
+### 2. Add Breadcrumb Navigation in FacilityLandingPage
 
-In `MobileUnifiedViewer`, the FloatingFloorSwitcher is conditionally rendered with `{viewMode === '2d' && ...}` (line 690). Since 2D mode never actually activates (Problem 1), the switcher never appears. Once Problem 1 is fixed, this should work.
+**File:** `src/components/portfolio/FacilityLandingPage.tsx`
 
-### Solution
+- Add new prop `breadcrumbs?: Array<{ label: string; onClick: () => void }>` to `FacilityLandingPageProps`
+- Render a compact breadcrumb bar below the header (after line ~315), showing the navigation path (e.g., "Portfolio > Byggnad > Våning > Rum")
+- Style: `text-xs text-white/70` with `>` separators, clickable items except the last (current)
 
-**File: `src/pages/UnifiedViewer.tsx`**
+**File:** `src/components/portfolio/PortfolioView.tsx`
 
-Re-dispatch the `VIEW_MODE_2D_TOGGLED_EVENT` when `viewerReady` becomes `true`, if the current `viewMode` is still `'2d'`. This ensures that ViewerToolbar (which is now mounted) receives the event:
+- Build the breadcrumbs array from `facilityHistory` + `selectedFacility`:
+  ```typescript
+  const breadcrumbs = [
+    { label: 'Portfolio', onClick: () => { setFacilityHistory([]); setSelectedFacility(null); } },
+    ...facilityHistory.map((f, i) => ({
+      label: f.commonName || f.name || f.category,
+      onClick: () => { setFacilityHistory(prev => prev.slice(0, i)); setSelectedFacility(facilityHistory[i]); }
+    })),
+    { label: selectedFacility.commonName || selectedFacility.name || selectedFacility.category, onClick: () => {} }
+  ];
+  ```
+- Pass `breadcrumbs` prop to `FacilityLandingPage`
 
-```typescript
-// After the existing viewerReady useEffect (line ~201-217), add:
-useEffect(() => {
-  if (viewerReady && viewMode === '2d') {
-    // Re-dispatch so the now-mounted ViewerToolbar picks it up
-    window.dispatchEvent(
-      new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
+### 3. Add Loading Skeleton to QuickActions
+
+**File:** `src/components/portfolio/QuickActions.tsx`
+
+- Add new prop `isLoading?: boolean`
+- Import `Skeleton` from `@/components/ui/skeleton`
+- When `isLoading` is true, render 6-8 skeleton rectangles in the grid instead of real buttons:
+  ```tsx
+  if (isLoading) {
+    return (
+      <Card className="mt-4 sm:mt-6">
+        <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 rounded-lg" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
-}, [viewerReady, viewMode]);
+  ```
+
+**File:** `src/components/portfolio/FacilityLandingPage.tsx`
+
+- Pass `isLoading={isLoadingSettings}` to the `QuickActions` component
+
+### 4. Improve HomeLanding Favorites Touch Targets
+
+**File:** `src/components/home/HomeLanding.tsx`
+
+- Line 233: Change `h-24 sm:h-28` to `h-32 sm:h-36` for the image container
+- This gives mobile users a larger tap area and more visible hero image
+
+### 5. Fix MobileNav 360 Context (Simplified -- No Ivion Site ID Check)
+
+**File:** `src/components/layout/MobileNav.tsx`
+
+Per your instruction, the user account controls site access so no Ivion site ID lookup is needed. The fix is simpler:
+
+- Destructure `selectedFacility` and `open360WithContext` from `AppContext`
+- In `handleAppClick`, add a special case for `id === 'radar'`:
+  ```typescript
+  if (id === 'radar') {
+    const radarConfig = appConfigs?.radar || {};
+    const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
+    if (selectedFacility?.fmGuid) {
+      open360WithContext({
+        buildingFmGuid: selectedFacility.fmGuid,
+        buildingName: selectedFacility.commonName || selectedFacility.name || '',
+        ivionSiteId: '', // User account controls access
+        ivionUrl,
+      });
+    } else {
+      setActiveApp('radar');
+    }
+    setIsMobileMenuOpen(false);
+    return;
+  }
+  ```
+
+### 6. Bottom-sheet for ViewerRightPanel on Mobile
+
+**No changes needed.** The current code already uses `side={isMobile ? "bottom" : "right"}` with `max-h-[75vh]` and `rounded-t-2xl` on mobile (line 467-470). This is already the correct bottom-sheet pattern.
+
+### 7. Offline-first Favorites (Stale-While-Revalidate)
+
+**File:** `src/hooks/useAllBuildingSettings.ts`
+
+- Add localStorage caching with a stale-while-revalidate pattern:
+  - On mount, immediately return cached data from localStorage (instant render)
+  - Then fetch fresh data from the database in the background
+  - When fresh data arrives, update state AND localStorage
+  - This eliminates the loading spinner for returning users
+
+```typescript
+const CACHE_KEY = 'all-building-settings-cache';
+
+const fetchAll = useCallback(async () => {
+  // 1. Read cache first (instant)
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached) {
+    try { setSettingsMap(JSON.parse(cached)); } catch {}
+  }
+  // 2. Fetch fresh (background)
+  setIsLoading(!cached);
+  const { data } = await supabase.from('building_settings').select('*');
+  if (data) {
+    const map = /* build map */;
+    setSettingsMap(map);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(map));
+  }
+  setIsLoading(false);
+}, []);
 ```
 
-This is a minimal, safe fix -- it only fires when the viewer is ready AND we're supposed to be in 2D mode. The existing `pending2dRef` logic in ViewerToolbar will also catch it as a secondary safety net.
+### Summary of Files to Modify
 
-### Files to Modify
-
-| File | Change |
+| File | Changes |
 |---|---|
-| `src/pages/UnifiedViewer.tsx` | Add a useEffect that re-dispatches `VIEW_MODE_2D_TOGGLED_EVENT` when `viewerReady` becomes true and `viewMode === '2d'` |
+| `src/components/portfolio/FacilityLandingPage.tsx` | ArrowLeft icon, breadcrumb rendering, pass `isLoading` to QuickActions |
+| `src/components/portfolio/QuickActions.tsx` | Add `isLoading` prop + skeleton state |
+| `src/components/portfolio/PortfolioView.tsx` | Build and pass breadcrumbs array |
+| `src/components/home/HomeLanding.tsx` | Increase favorite card image height |
+| `src/components/layout/MobileNav.tsx` | Add radar/360 context handling |
+| `src/hooks/useAllBuildingSettings.ts` | Add stale-while-revalidate caching |
 
-### What Already Works (No Changes Needed)
-
-- FloatingFloorSwitcher in MobileUnifiedViewer -- already rendered for `viewMode === '2d'`, will appear once 2D activates
-- ViewerToolbar's `pending2dRef` fallback -- provides additional safety
-- Level labels toggle -- already disabled for 2D in the existing code
