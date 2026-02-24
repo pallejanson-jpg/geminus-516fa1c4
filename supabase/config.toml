@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.asset-plus-create-hierarchy]
 verify_jwt = false
+
+[functions.send-issue-email]
+verify_jwt = false

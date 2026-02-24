@@ -16,6 +16,7 @@ interface VirtualTreeProps {
   onOpen2D?: (node: NavigatorNode) => void;
   onInventory?: (node: NavigatorNode) => void;
   onSyncToAssetPlus?: (node: NavigatorNode) => void;
+  onCreateWorkOrder?: (node: NavigatorNode) => void;
 }
 
 const ROW_HEIGHT = 36;
@@ -37,6 +38,7 @@ export function VirtualTree({
   onOpen2D,
   onInventory,
   onSyncToAssetPlus,
+  onCreateWorkOrder,
 }: VirtualTreeProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -118,6 +120,7 @@ export function VirtualTree({
               onOpen2D={onOpen2D}
               onInventory={onInventory}
               onSyncToAssetPlus={onSyncToAssetPlus}
+              onCreateWorkOrder={onCreateWorkOrder}
             />
           );
         })}
