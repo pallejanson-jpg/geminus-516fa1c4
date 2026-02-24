@@ -747,10 +747,10 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               "bg-card/95 backdrop-blur-xl text-foreground",
               // Mobile: allow more height for scrolling
               "max-h-[85vh] sm:max-h-[80vh]",
-              "flex flex-col overflow-hidden",
+             "flex flex-col overflow-hidden",
               "transition-all duration-150",
-              // Mobile: bottom sheet style with safe area
-              "left-2 right-2 bottom-16 sm:inset-auto",
+              // Mobile: bottom sheet style with safe area + extra bottom padding
+              "left-2 right-2 bottom-16 sm:inset-auto pb-[env(safe-area-inset-bottom)]",
               // Desktop: fixed-width draggable panel (narrower for side-pop architecture)
               "sm:w-72 md:w-80",
               isDragging && "cursor-grabbing opacity-90"

@@ -219,12 +219,14 @@ const UnifiedViewerContent: React.FC<{
   // ─── Re-dispatch 2D event once viewer is ready (fixes mobile + desktop init) ─
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
-      const timer = setTimeout(() => {
+      // Fire at 1.5s and again at 3s as fallback for slow mobile loads
+      const dispatch2D = () =>
         window.dispatchEvent(
           new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
         );
-      }, 500);
-      return () => clearTimeout(timer);
+      const t1 = setTimeout(dispatch2D, 1500);
+      const t2 = setTimeout(dispatch2D, 3000);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [viewerReady, viewMode]);
 
@@ -697,17 +699,16 @@ function MobileUnifiedViewer({
             syncPosition={sync3DPosition}
             syncHeading={sync3DHeading}
             syncPitch={sync3DPitch}
+            suppressOverlay
           />
-          {/* Floating floor switcher for mobile 2D mode */}
-          {viewMode === '2d' && (
-            <FloatingFloorSwitcher
-              viewerRef={{ current: (window as any).__assetPlusViewerInstance }}
-              buildingFmGuid={buildingData.fmGuid}
-              isViewerReady={true}
-              compact
-              className="!fixed !left-auto !top-auto !bottom-16 !right-2 !flex-row !h-auto !w-auto !z-50"
-            />
-          )}
+          {/* Floating floor switcher — always render, component self-manages visibility */}
+          <FloatingFloorSwitcher
+            viewerRef={{ current: (window as any).__assetPlusViewerInstance }}
+            buildingFmGuid={buildingData.fmGuid}
+            isViewerReady={true}
+            compact
+            className="!fixed !left-auto !top-auto !bottom-16 !right-2 !flex-row !h-auto !w-auto !z-50"
+          />
         </div>
 
         {/* 360 SDK container */}
@@ -732,6 +733,11 @@ function MobileUnifiedViewer({
         <Button variant="ghost" size="icon" onClick={onGoBack} className="h-9 w-9 text-white hover:bg-white/20">
           <ArrowLeft className="h-5 w-5" />
         </Button>
+
+        {/* Building name — truncated */}
+        <span className="text-white text-xs font-medium truncate max-w-[100px]">
+          {buildingData.name}
+        </span>
 
         <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
           <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
