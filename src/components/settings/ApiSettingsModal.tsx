@@ -323,6 +323,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [isTestingFmAccess, setIsTestingFmAccess] = useState(false);
     const [fmAccessStatus, setFmAccessStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [fmAccessMessage, setFmAccessMessage] = useState('');
+    const [isSyncingFmAccess, setIsSyncingFmAccess] = useState(false);
+    const [fmAccessSyncResult, setFmAccessSyncResult] = useState<{ success: number; failed: number; lastSync: string | null } | null>(null);
+    const [fmAccessLocalCount, setFmAccessLocalCount] = useState(0);
 
     // Congeria state
     const [congeriaLinks, setCongeriaLinks] = useState<Record<string, string>>({});
@@ -1720,6 +1723,75 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
+    // FM Access: Sync local assets to FM Access
+    const handleSyncToFmAccess = async () => {
+        setIsSyncingFmAccess(true);
+        try {
+            // 1. Test connection first
+            const { data: connData, error: connError } = await supabase.functions.invoke('fm-access-query', {
+                body: { action: 'test-connection' }
+            });
+            if (connError || !connData?.success) {
+                toast({ variant: 'destructive', title: 'FM Access ej ansluten', description: connData?.error || connError?.message || 'Kunde inte ansluta.' });
+                setFmAccessStatus('error');
+                return;
+            }
+            setFmAccessStatus('success');
+
+            // 2. Find local assets with building_fm_guid (FM-linked)
+            const { data: assets, error: assetError } = await supabase
+                .from('assets')
+                .select('fm_guid, building_fm_guid')
+                .not('building_fm_guid', 'is', null);
+
+            if (assetError) throw assetError;
+
+            const fmAssets = assets || [];
+            setFmAccessLocalCount(fmAssets.length);
+
+            if (fmAssets.length === 0) {
+                toast({ title: 'Inga objekt att synka', description: 'Det finns inga lokala objekt med FM Access-koppling.' });
+                return;
+            }
+
+            // 3. Push each asset
+            const { pushAssetToFmAccess } = await import('@/services/fm-access-service');
+            let success = 0;
+            let failed = 0;
+            for (const asset of fmAssets) {
+                try {
+                    const result = await pushAssetToFmAccess(asset.fm_guid);
+                    if (result.success) success++; else failed++;
+                } catch {
+                    failed++;
+                }
+            }
+
+            const now = new Date().toISOString();
+            setFmAccessSyncResult({ success, failed, lastSync: now });
+            toast({
+                title: 'FM Access-synk klar',
+                description: `${success} lyckades, ${failed} misslyckades av ${fmAssets.length} objekt.`,
+            });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Synkfel', description: error.message });
+        } finally {
+            setIsSyncingFmAccess(false);
+        }
+    };
+
+    // FM Access: Count local assets with FM link (on mount / tab switch)
+    useEffect(() => {
+        const countFmAssets = async () => {
+            const { count } = await supabase
+                .from('assets')
+                .select('*', { count: 'exact', head: true })
+                .not('building_fm_guid', 'is', null);
+            setFmAccessLocalCount(count || 0);
+        };
+        countFmAssets();
+    }, []);
+
     const handleSaveConfig = async () => {
         setIsSaving(true);
         try {
@@ -2866,25 +2938,57 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <Building2 className="h-5 w-5 text-primary" />
                                         <div>
                                             <h4 className="font-medium">FM Access</h4>
-                                            <p className="text-xs text-muted-foreground">0 objekt synkade</p>
+                                            <p className="text-xs text-muted-foreground">Push lokala objekt till FM Access</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
-                                        <Button 
-                                            disabled
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            <RefreshCw className="h-3 w-3" />
-                                            Starta synk
-                                        </Button>
+                                    <div className="flex items-center gap-1.5">
+                                        {fmAccessStatus === 'success' && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">Ansluten</Badge>}
+                                        {fmAccessStatus === 'error' && <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">Ej ansluten</Badge>}
                                     </div>
                                 </div>
-                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
-                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                    <p className="text-sm">Konfigurera FM Access API först</p>
+
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Lokala objekt med FM-koppling:</span>
+                                        <span className="font-medium">{fmAccessLocalCount}</span>
+                                    </div>
+                                    {fmAccessSyncResult && (
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Senaste synk:</span>
+                                                <span className="font-medium text-xs">{fmAccessSyncResult.lastSync ? new Date(fmAccessSyncResult.lastSync).toLocaleString('sv-SE') : '–'}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Resultat:</span>
+                                                <span className="font-medium text-xs">
+                                                    <span className="text-green-600">{fmAccessSyncResult.success} lyckades</span>
+                                                    {fmAccessSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{fmAccessSyncResult.failed} misslyckades</span>}
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1 h-8 text-xs"
+                                        onClick={handleTestFmAccessConnection}
+                                        disabled={isTestingFmAccess || isSyncingFmAccess}
+                                    >
+                                        {isTestingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                        Testa anslutning
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        className="gap-1 h-8 text-xs"
+                                        onClick={handleSyncToFmAccess}
+                                        disabled={isSyncingFmAccess || isTestingFmAccess || fmAccessLocalCount === 0}
+                                    >
+                                        {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
+                                        {isSyncingFmAccess ? 'Synkar...' : 'Synka till FM Access →'}
+                                    </Button>
                                 </div>
                             </div>
 
