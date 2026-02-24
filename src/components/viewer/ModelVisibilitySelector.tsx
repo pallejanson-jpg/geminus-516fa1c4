@@ -268,11 +268,44 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
         });
       });
 
+      // Third, ensure all Asset+ sources are represented
+      // Some scene models might already be listed but with a GUID-based name instead of Asset+ name
+      const extractedNames = new Set(extractedModels.map(m => m.name.toLowerCase()));
+      assetPlusSources.forEach((sourceName, sourceGuid) => {
+        if (extractedNames.has(sourceName.toLowerCase())) return;
+        // Try to find an existing model entry that belongs to this source (via storey lookup)
+        const viewer = getXeokitViewer();
+        const metaObjects = viewer?.metaScene?.metaObjects;
+        if (!metaObjects) return;
+        
+        // Check each existing model to see if it contains storeys from this source
+        let updated = false;
+        for (const em of extractedModels) {
+          if (!em.loaded) continue;
+          const sceneModel = viewer?.scene?.models?.[em.id];
+          if (!sceneModel?.objects) continue;
+          for (const objKey of Object.keys(sceneModel.objects).slice(0, 500)) {
+            const mo = metaObjects[objKey];
+            if (mo?.type === 'IfcBuildingStorey') {
+              const sysId = (mo.originalSystemId || '').toLowerCase();
+              const byGuid = storeyLookup.byGuid.get(sysId) || storeyLookup.byGuid.get(sysId.replace(/-/g, ''));
+              if (byGuid && byGuid.parentName === sourceName) {
+                em.name = sourceName;
+                em.shortName = sourceName.length > 30 ? sourceName.substring(0, 27) + '...' : sourceName;
+                updated = true;
+                break;
+              }
+            }
+          }
+          if (updated) break;
+        }
+      });
+
       // Sort alphabetically
       extractedModels.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
       return extractedModels;
-    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyLookup]);
+    }, [getXeokitViewer, modelNamesMap, dbModels, isLoadingNames, storeyLookup, assetPlusSources]);
 
     // Apply visibility changes to 3D viewer
     const applyModelVisibility = useCallback((visibleIds: Set<string>) => {
