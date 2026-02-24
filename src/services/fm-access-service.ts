@@ -86,16 +86,17 @@ export async function deleteFmAccessObject(guid: string): Promise<any> {
   return data.data;
 }
 
-// ── Push asset to FM Access ────────────────────────────────────────
+// ── Smart bidirectional sync ───────────────────────────────────────
 
 /**
- * Push a local asset from Geminus to FM Access.
- * Reads asset from local DB, resolves parent hierarchy, then creates in FM Access.
+ * Smart sync a local asset to FM Access.
+ * - If the object exists in FM Access (by GUID), compares timestamps and syncs properties bidirectionally.
+ * - If it doesn't exist, creates it.
  * 
  * @param fmGuid - The asset's FM GUID 
- * @returns Result with success status
+ * @returns Result with sync action taken
  */
-export async function pushAssetToFmAccess(fmGuid: string): Promise<{ success: boolean; error?: string; data?: any }> {
+export async function syncAssetWithFmAccess(fmGuid: string): Promise<{ success: boolean; error?: string; action?: string; direction?: string; pulled?: boolean }> {
   // 1. Fetch asset from local DB
   const { data: asset, error: fetchError } = await supabase
     .from("assets")
@@ -109,9 +110,6 @@ export async function pushAssetToFmAccess(fmGuid: string): Promise<{ success: bo
 
   // 2. Determine parent GUID (room > floor > building)
   const parentGuid = asset.in_room_fm_guid || asset.level_fm_guid || asset.building_fm_guid;
-  if (!parentGuid) {
-    return { success: false, error: "Asset has no parent (room/floor/building) GUID - cannot place in FM Access hierarchy" };
-  }
 
   // 3. Build properties from asset attributes
   const attrs = (asset.attributes as Record<string, any>) || {};
@@ -122,25 +120,64 @@ export async function pushAssetToFmAccess(fmGuid: string): Promise<{ success: bo
   if (attrs.designation) properties.designation = attrs.designation;
   if (attrs.description) properties.description = attrs.description;
   
-  // Add coordinates if available
   if (asset.coordinate_x != null) {
     properties.coordinateX = asset.coordinate_x;
     properties.coordinateY = asset.coordinate_y;
     properties.coordinateZ = asset.coordinate_z;
   }
 
-  // 4. Create in FM Access
+  // 4. Call smart sync endpoint
   try {
-    const result = await createFmAccessObject({
-      parentGuid,
-      name: asset.name || asset.common_name || "Unnamed",
-      properties: Object.keys(properties).length > 0 ? properties : undefined,
+    const { data, error } = await supabase.functions.invoke("fm-access-query", {
+      body: { 
+        action: "sync-object",
+        fmGuid: asset.fm_guid,
+        name: asset.name || asset.common_name || "Unnamed",
+        parentGuid: parentGuid || undefined,
+        properties: Object.keys(properties).length > 0 ? properties : undefined,
+        localUpdatedAt: asset.updated_at,
+      },
     });
 
-    return { success: true, data: result };
+    if (error) return { success: false, error: error.message };
+    if (!data?.success) return { success: false, error: data?.error || "Sync failed", action: data?.action };
+
+    // 5. If FM Access has newer data, update local DB
+    if (data.direction === 'pull' && data.remoteProperties) {
+      const remoteProps = data.remoteProperties as Record<string, any>;
+      const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+      
+      if (remoteProps.commonName && remoteProps.commonName !== asset.common_name) {
+        updates.common_name = remoteProps.commonName;
+      }
+      if (data.remoteName && data.remoteName !== asset.name) {
+        updates.name = data.remoteName;
+      }
+
+      // Merge remote properties into attributes
+      const mergedAttrs = { ...attrs };
+      for (const [key, value] of Object.entries(remoteProps)) {
+        if (key !== 'commonName' && key !== 'assetType') {
+          mergedAttrs[key] = value;
+        }
+      }
+      updates.attributes = mergedAttrs;
+
+      await supabase.from("assets").update(updates).eq("fm_guid", fmGuid);
+      return { success: true, action: 'pull', direction: 'pull', pulled: true };
+    }
+
+    return { success: true, action: data.action, direction: data.direction };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Push a local asset from Geminus to FM Access (legacy, wraps syncAssetWithFmAccess).
+ */
+export async function pushAssetToFmAccess(fmGuid: string): Promise<{ success: boolean; error?: string; data?: any }> {
+  return syncAssetWithFmAccess(fmGuid);
 }
 
 /**
