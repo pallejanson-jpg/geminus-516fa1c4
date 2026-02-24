@@ -520,7 +520,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   return (
     <div 
       className={cn(
-        'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-0.5 p-0.5 rounded-lg h-auto w-auto',
+        'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-px p-px rounded-lg w-auto',
         'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
         'pointer-events-auto',
         className
@@ -566,7 +566,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
             <TooltipContent side="left">
               <p>{floor.name}</p>
               <p className="text-xs text-muted-foreground">
-                {state === 'active' ? 'Solo' : state === 'partial' ? 'Del av selektion' : 'Ej isolerad'}
+                {state === 'active' ? 'Solo' : state === 'partial' ? 'Part of selection' : 'Not isolated'}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -652,7 +652,21 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         </Popover>
       )}
 
-      {/* Removed "Alla" button — double-click any pill to show all floors */}
+      {/* Show All button */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={handlePillDoubleClick}
+        title="Show all floors"
+        className={cn(
+          compact ? 'h-6 w-7 p-0 text-[8px] font-medium rounded-full' : 'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[9px] font-medium rounded-full',
+          'bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground',
+          visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary',
+        )}
+      >
+        All
+      </Button>
     </div>
   );
 });

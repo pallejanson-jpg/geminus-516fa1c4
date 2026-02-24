@@ -60,7 +60,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const t = THEMES[theme];
 
     // User display info
-    const displayName = profile?.displayName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Användare';
+    const displayName = profile?.displayName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
     const avatarUrl = profile?.avatarUrl || user?.user_metadata?.avatar_url;
     const userInitials = displayName.slice(0, 2).toUpperCase();
 
@@ -116,10 +116,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, []);
 
     const viewButtons = [
-        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfölj' },
-        { key: 'map', mode: undefined, icon: Globe, label: 'Karta' },
+        { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
+        { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
         { key: 'navigation', mode: undefined, icon: Network, label: 'Navigator' },
-        { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D-vy' },
+        { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
     ];
 
     return (
@@ -140,7 +140,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     className="hidden md:flex gap-2"
                 >
                     <Home size={18} />
-                    <span className="hidden lg:inline">Hem</span>
+                    <span className="hidden lg:inline">Home</span>
                 </AppButton>
 
                 <div className="hidden md:flex items-center gap-1 ml-2">
@@ -165,7 +165,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Sök byggnader, rum, utrymmen..."
+                        placeholder="Search buildings, rooms, spaces..."
                         className="pl-10 w-full text-sm"
                         value={globalSearch}
                         onChange={(e) => setGlobalSearch(e.target.value)}
@@ -182,7 +182,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <SearchResultsList
                             results={searchResults}
                             onSelect={handleSearchResultSelect}
-                            emptyMessage="Inga resultat för din sökning"
+                            emptyMessage="No results for your search"
                         />
                     </div>
                 )}
@@ -194,7 +194,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={toggleRightSidebar}
                     variant="ghost"
                     className="h-9 w-9 sm:h-10 sm:w-10"
-                    title="Hjälpcenter"
+                    title="Help Center"
                 >
                     <HelpCircle size={18} />
                 </AppButton>
@@ -226,24 +226,24 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
                             <UserIcon className="mr-2 h-4 w-4" />
-                            Profil
+                            Profile
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsApiSettingsOpen(true)}>
                             <Settings className="mr-2 h-4 w-4" />
-                            Inställningar
+                            Settings
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsAppMenuOpen(true)}>
                             <AppWindow className="mr-2 h-4 w-4" />
-                            Appar
+                            Apps
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate('/onboarding')}>
                             <Sparkles className="mr-2 h-4 w-4" />
-                            Starta introduktion
+                            Start introduction
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                             <LogOut className="mr-2 h-4 w-4" />
-                            Logga ut
+                            Sign out
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

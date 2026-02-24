@@ -38,7 +38,7 @@ import EdgeScrollIndicator from "@/components/common/EdgeScrollIndicator";
 import { ROOM_LABELS_TOGGLE_EVENT, ROOM_LABELS_CONFIG_EVENT, type RoomLabelsConfigDetail } from "@/hooks/useRoomLabels";
 import { useRoomLabelConfigs } from "@/hooks/useRoomLabelConfigs";
 import { FLOOR_PILLS_TOGGLE_EVENT } from "./FloatingFloorSwitcher";
-import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels";
+// import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 interface VisualizationToolbarProps {
   viewerRef: React.MutableRefObject<any>;
@@ -147,7 +147,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const [showFloorPills, setShowFloorPills] = useState(() => {
     return localStorage.getItem('viewer-show-floor-pills') !== 'false';
   });
-  const [showLevelLabels, setShowLevelLabels] = useState(true);
+  // const [showLevelLabels, setShowLevelLabels] = useState(true); // disabled
   
   // Room label configs from database
   const { configs: roomLabelConfigs, loading: loadingRoomLabelConfigs } = useRoomLabelConfigs();
@@ -345,7 +345,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     
     if (!xeokitViewer || !buildingFmGuid) {
-      toast({ title: "Kan inte skapa vy", description: "Viewer är inte redo", variant: "destructive" });
+      toast({ title: "Cannot create view", description: "Viewer is not ready", variant: "destructive" });
       return;
     }
 
@@ -353,7 +353,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       // Get screenshot from canvas directly (xeokit doesn't have getImage method)
       const canvas = xeokitViewer.scene?.canvas?.canvas;
       if (!canvas) {
-        toast({ title: "Kan inte skapa vy", description: "Canvas inte tillgängligt", variant: "destructive" });
+        toast({ title: "Cannot create view", description: "Canvas not available", variant: "destructive" });
         return;
       }
       
@@ -372,7 +372,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       // Get building name
       const building = allData.find((b: any) => b.fmGuid === buildingFmGuid && b.category === 'Building');
-      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Okänd byggnad';
+      const resolvedBuildingName = buildingName || building?.commonName || building?.name || 'Unknown building';
 
       const viewState = {
         buildingFmGuid,
@@ -396,7 +396,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setShowCreateViewDialog(true);
     } catch (err) {
       console.error('Failed to capture view state:', err);
-      toast({ title: "Fel", description: "Kunde inte fånga vyn", variant: "destructive" });
+      toast({ title: "Error", description: "Could not capture view", variant: "destructive" });
     }
   }, [viewerRef, buildingFmGuid, buildingName, allData, is2DMode, clipHeight, visibleModelIds, visibleFloorIds, showSpaces, showAnnotations]);
 
@@ -493,7 +493,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     priority: string;
   }) => {
     if (!pendingIssueState || !user || !buildingFmGuid) {
-      toast({ title: "Kan inte skapa ärende", variant: "destructive" });
+      toast({ title: "Cannot create issue", variant: "destructive" });
       return;
     }
 
@@ -550,7 +550,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       setPendingIssueState(null);
     } catch (err) {
       console.error('Failed to create issue:', err);
-      toast({ title: "Kunde inte skapa ärende", variant: "destructive" });
+      toast({ title: "Could not create issue", variant: "destructive" });
     } finally {
       setIsSubmittingIssue(false);
     }
@@ -911,7 +911,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         >
                           <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-xs sm:text-sm">Visa annotationer</span>
+                        <span className="text-xs sm:text-sm">Show annotations</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Switch checked={showAnnotations} onCheckedChange={handleToggleAnnotations} />
@@ -943,7 +943,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         >
                           <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-xs sm:text-sm">Rumsvisualisering</span>
+                        <span className="text-xs sm:text-sm">Room visualization</span>
                       </div>
                       <Switch checked={showVisualization} onCheckedChange={handleToggleVisualization} />
                     </div>
@@ -976,7 +976,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Klipphöjd (2D-vy)</span>
+                      <span className="text-xs sm:text-sm">Clip height (2D view)</span>
                       <span className="text-xs font-medium ml-auto">
                         {clipHeight.toFixed(1)}m
                       </span>
@@ -991,7 +991,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                         className="w-full"
                       />
                       <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                        Höjd ovanför golv
+                        Height above floor
                       </p>
                     </div>
                   </div>
@@ -1030,25 +1030,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                     </div>
                   </div>
 
-                  {/* Level Labels Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={cn(
-                        "p-1 sm:p-1.5 rounded-md",
-                        showLevelLabels ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </div>
-                      <span className="text-xs sm:text-sm">Våningsetiketter</span>
-                    </div>
-                    <Switch
-                      checked={showLevelLabels}
-                      onCheckedChange={(checked) => {
-                        setShowLevelLabels(checked);
-                        window.dispatchEvent(new CustomEvent(LEVEL_LABELS_TOGGLE_EVENT, { detail: { enabled: checked } }));
-                      }}
-                    />
-                  </div>
+                  {/* Level Labels Toggle — disabled */}
 
                   {/* Room Labels Selector - Dropdown matching other selectors */}
                   <div className="space-y-1.5 sm:space-y-2">
@@ -1059,11 +1041,11 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       )}>
                         <Type className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Rumsetiketter</span>
+                      <span className="text-xs sm:text-sm">Room labels</span>
                     </div>
                     <div className="pl-8 sm:pl-10">
                       {loadingRoomLabelConfigs ? (
-                        <div className="text-xs text-muted-foreground">Laddar...</div>
+                        <div className="text-xs text-muted-foreground">Loading...</div>
                       ) : (
                         <Select
                           value={showRoomLabels && activeRoomLabelConfigId ? activeRoomLabelConfigId : 'off'}
@@ -1081,7 +1063,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                             ))}
                             {roomLabelConfigs.length === 0 && (
                               <SelectItem value="__none" disabled>
-                                Inga konfigurationer
+                                No configurations
                               </SelectItem>
                             )}
                           </SelectContent>
@@ -1102,7 +1084,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       <div className="p-1 sm:p-1.5 rounded-md bg-muted text-muted-foreground">
                         <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Bakgrundsfärg</span>
+                      <span className="text-xs sm:text-sm">Background color</span>
                     </div>
                     <div className="pl-8 sm:pl-10">
                       <div className="grid grid-cols-5 gap-1.5">
@@ -1136,7 +1118,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                       )}>
                         <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
-                      <span className="text-xs sm:text-sm">Våningsväljare (pills)</span>
+                      <span className="text-xs sm:text-sm">Floor switcher (pills)</span>
                     </div>
                     <Switch 
                       checked={showFloorPills} 
