@@ -1,143 +1,177 @@
 
 
-## Plan: UI/UX Improvements -- 7 Changes
+## Plan: Viewer Filter Panel, Home Page, and Context Menu Improvements
 
-### 1. Replace X with ArrowLeft on FacilityLandingPage
+This is a large set of changes. I'll break it into distinct work items with effort estimates.
 
-**File:** `src/components/portfolio/FacilityLandingPage.tsx`
+---
 
-- Line 4: Add `ArrowLeft` to the lucide import, remove `X` if unused elsewhere
-- Lines 290-301: Replace the `<X>` icon with `<ArrowLeft>` in the close button
-- Update the `aria-label` / title to "Tillbaka" instead of close semantics
+### Summary of Issues & Changes
 
-### 2. Add Breadcrumb Navigation in FacilityLandingPage
+| # | Issue | File(s) | Effort |
+|---|---|---|---|
+| 1 | Filter panel: white text + larger UI elements | `ViewerFilterPanel.tsx` | Easy |
+| 2 | Filter panel: "Show all" button next to paintbrush | `ViewerFilterPanel.tsx` | Easy |
+| 3 | Filter panel: add close button (X) | `ViewerFilterPanel.tsx` | Already exists (line 828-830) -- no change needed |
+| 4 | Filter panel: remove "Building Storey" and "Space" from Categories | `ViewerFilterPanel.tsx` | Easy |
+| 5 | Filter panel: space selection shows room in 3D (not blank) | `ViewerFilterPanel.tsx` | Medium |
+| 6 | Filter panel: keep slabs visible by default | `ViewerFilterPanel.tsx` | Easy |
+| 7 | Rooms clickable in 2D/3D (IfcSpace pickable) | `ViewerFilterPanel.tsx` | Medium |
+| 8 | Right panel (Visning): white text + larger elements | `ViewerRightPanel.tsx` | Easy |
+| 9 | Remove old model tree | `ViewerTreePanel.tsx`, refs | Medium |
+| 10 | Unify context menus (single Geminus menu) | `ViewerContextMenu.tsx`, `AssetPlusViewer` | Medium |
+| 11 | Home page: widen layout, "Recent" + "Views" sections with carousel | `HomeLanding.tsx` | Medium |
+| 12 | Building landing: saved views on right side | `FacilityLandingPage.tsx` | Medium |
+| 13 | 2D mode not starting on desktop | `UnifiedViewer.tsx` | Easy |
+| 14 | 3D for Småviken not working on desktop | Needs debugging | Unknown |
 
-**File:** `src/components/portfolio/FacilityLandingPage.tsx`
+---
 
-- Add new prop `breadcrumbs?: Array<{ label: string; onClick: () => void }>` to `FacilityLandingPageProps`
-- Render a compact breadcrumb bar below the header (after line ~315), showing the navigation path (e.g., "Portfolio > Byggnad > Våning > Rum")
-- Style: `text-xs text-white/70` with `>` separators, clickable items except the last (current)
+### Detailed Changes
 
-**File:** `src/components/portfolio/PortfolioView.tsx`
+#### 1. Filter Panel: White Text + Larger UI (ViewerFilterPanel.tsx)
 
-- Build the breadcrumbs array from `facilityHistory` + `selectedFacility`:
+- Add `text-foreground` to the panel container (line 797-802)
+- FilterSection header: change `text-xs` to `text-sm` for title, increase badge size
+- FilterRow: change `text-xs` to `text-sm`, increase checkbox from `h-3.5 w-3.5` to `h-4 w-4`
+- Increase `py-1` to `py-1.5` for better spacing
+- Add explicit `text-foreground` on labels to ensure white text in dark mode
+
+#### 2. Filter Panel: "Show All" Button (ViewerFilterPanel.tsx)
+
+- In the header (line 813-831), add a new button with `Eye` icon labeled "Visa alla" next to the paintbrush/X-ray button
+- On click, call `handleResetAll()` which already exists and resets all filters
+
+#### 3. Filter Panel: Close Button
+
+The close button already exists at line 828-830 (`<X>` icon calling `onClose`). No change needed.
+
+#### 4. Remove "Building Storey" and "Space" from Categories (ViewerFilterPanel.tsx)
+
+- Line 250-253 already removes Building, Project, Site. Add:
   ```typescript
-  const breadcrumbs = [
-    { label: 'Portfolio', onClick: () => { setFacilityHistory([]); setSelectedFacility(null); } },
-    ...facilityHistory.map((f, i) => ({
-      label: f.commonName || f.name || f.category,
-      onClick: () => { setFacilityHistory(prev => prev.slice(0, i)); setSelectedFacility(facilityHistory[i]); }
-    })),
-    { label: selectedFacility.commonName || selectedFacility.name || selectedFacility.category, onClick: () => {} }
-  ];
-  ```
-- Pass `breadcrumbs` prop to `FacilityLandingPage`
-
-### 3. Add Loading Skeleton to QuickActions
-
-**File:** `src/components/portfolio/QuickActions.tsx`
-
-- Add new prop `isLoading?: boolean`
-- Import `Skeleton` from `@/components/ui/skeleton`
-- When `isLoading` is true, render 6-8 skeleton rectangles in the grid instead of real buttons:
-  ```tsx
-  if (isLoading) {
-    return (
-      <Card className="mt-4 sm:mt-6">
-        <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 rounded-lg" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  counts.delete('Building Storey');
+  counts.delete('Space');
   ```
 
-**File:** `src/components/portfolio/FacilityLandingPage.tsx`
+#### 5. Space Selection Shows Room (Not Blank) (ViewerFilterPanel.tsx)
 
-- Pass `isLoading={isLoadingSettings}` to the `QuickActions` component
+**Root cause**: When a space is checked, `applyFilterVisibility` at line 596-608 puts IfcSpace into `hideIds` and hides them entirely. The selected space's own geometry is hidden.
 
-### 4. Improve HomeLanding Favorites Touch Targets
+**Fix**: When spaces are checked, do NOT hide the checked space's entities. Instead:
+- In Step 2b, skip hiding IfcSpace entities that belong to checked spaces
+- Keep the space visible with its natural geometry (solid, pickable)
+- Make slabs semi-transparent (opacity ~0.3) instead of fully invisible, so the floor is still visible
+- This matches the reference image: room is visible as a 3D volume with walls
 
-**File:** `src/components/home/HomeLanding.tsx`
+#### 6. Keep Slabs Visible by Default (ViewerFilterPanel.tsx)
 
-- Line 233: Change `h-24 sm:h-28` to `h-32 sm:h-36` for the image container
-- This gives mobile users a larger tap area and more visible hero image
+- In `fadeIds` handling (line 632-635), change `entity.opacity = 0` to `entity.opacity = 0.3` so slabs remain visible as semi-transparent floors instead of disappearing
 
-### 5. Fix MobileNav 360 Context (Simplified -- No Ivion Site ID Check)
+#### 7. Rooms Clickable in 2D/3D (ViewerFilterPanel.tsx)
 
-**File:** `src/components/layout/MobileNav.tsx`
+- Currently IfcSpace is in `obstructTypes` (line 598) which hides them entirely
+- Change approach: when filters are active, make IfcSpace visible but semi-transparent (opacity 0.1-0.2) and **pickable**, so users can click on rooms
+- When no filters are active (full reset/show all), keep IfcSpace as-is (handled by the viewer's defaults)
 
-Per your instruction, the user account controls site access so no Ivion site ID lookup is needed. The fix is simpler:
+#### 8. Right Panel (Visning): White Text + Larger Elements (ViewerRightPanel.tsx)
 
-- Destructure `selectedFacility` and `open360WithContext` from `AppContext`
-- In `handleAppClick`, add a special case for `id === 'radar'`:
+- Add `text-foreground` to SheetContent and section headers
+- Increase label text from `text-xs` to `text-sm` where appropriate
+- Ensure all text uses `text-foreground` for dark mode visibility
+
+#### 9. Remove Old Model Tree
+
+- Remove the `ViewerTreePanel.tsx` component references from `UnifiedViewer.tsx` and `MobileViewerOverlay.tsx`
+- Keep the file for now but remove all import/render references
+- The FilterPanel replaces this functionality
+
+#### 10. Unify Context Menus
+
+- The Asset+ viewer has its own DevExtreme context menu which is hidden via CSS overrides
+- The Geminus `ViewerContextMenu` captures right-clicks on the canvas
+- Ensure the CSS override fully suppresses Asset+'s menu
+- Add any missing Asset+ actions (like "Isolate", "Hide selected") into `ViewerContextMenu` if not already present
+
+#### 11. Home Page: Wider Layout + Recent + Views (HomeLanding.tsx)
+
+- Change `max-w-2xl` to `max-w-4xl` for a wider layout
+- Replace "My Favorites" section with two sections:
+  - **Recent**: Last 6 buildings worked with (3 per row), with carousel if >3
+  - **Views**: Last 6 saved views (3 per row), with carousel if >3
+- Track recent buildings in localStorage (record building fmGuid + timestamp on each visit)
+- Fetch saved views from `saved_views` table
+- Use `embla-carousel-react` (already installed) for the carousel
+
+#### 12. Building Landing: Saved Views on Right Side (FacilityLandingPage.tsx)
+
+- Add a section to the right of the main content showing saved views for this building
+- Fetch from `saved_views` table filtered by `building_fm_guid`
+- Display as a card grid with screenshot thumbnails
+
+#### 13. 2D Mode Not Starting on Desktop (UnifiedViewer.tsx)
+
+- The existing re-dispatch logic (lines 220-226) only fires when `viewerReady` becomes true
+- The issue is likely the same timing problem as mobile: the 2D event fires before ViewerToolbar mounts
+- The fix at line 220-226 should work, but may need to also check if the toolbar is actually mounted
+- Add a small delay (500ms) to the re-dispatch to ensure toolbar is ready:
   ```typescript
-  if (id === 'radar') {
-    const radarConfig = appConfigs?.radar || {};
-    const ivionUrl = radarConfig.url || 'https://swg.iv.navvis.com';
-    if (selectedFacility?.fmGuid) {
-      open360WithContext({
-        buildingFmGuid: selectedFacility.fmGuid,
-        buildingName: selectedFacility.commonName || selectedFacility.name || '',
-        ivionSiteId: '', // User account controls access
-        ivionUrl,
-      });
-    } else {
-      setActiveApp('radar');
+  useEffect(() => {
+    if (viewerReady && viewMode === '2d') {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
+        );
+      }, 500);
+      return () => clearTimeout(timer);
     }
-    setIsMobileMenuOpen(false);
-    return;
-  }
+  }, [viewerReady, viewMode]);
   ```
 
-### 6. Bottom-sheet for ViewerRightPanel on Mobile
+#### 14. Småviken 3D Not Working
 
-**No changes needed.** The current code already uses `side={isMobile ? "bottom" : "right"}` with `max-h-[75vh]` and `rounded-t-2xl` on mobile (line 467-470). This is already the correct bottom-sheet pattern.
+Need to debug this separately -- likely a data/model loading issue specific to that building's configuration. Will investigate console logs.
 
-### 7. Offline-first Favorites (Stale-While-Revalidate)
+---
 
-**File:** `src/hooks/useAllBuildingSettings.ts`
+### Implementation Order
 
-- Add localStorage caching with a stale-while-revalidate pattern:
-  - On mount, immediately return cached data from localStorage (instant render)
-  - Then fetch fresh data from the database in the background
-  - When fresh data arrives, update state AND localStorage
-  - This eliminates the loading spinner for returning users
+**Batch 1 (Easy, immediate)**:
+1. Filter panel text/sizing improvements
+2. "Show All" button
+3. Remove Building Storey/Space from Categories
+4. Slab visibility fix
+5. 2D desktop init fix
+6. Right panel text fixes
 
-```typescript
-const CACHE_KEY = 'all-building-settings-cache';
+**Batch 2 (Medium)**:
+7. Space selection room visibility fix
+8. Rooms clickable (IfcSpace pickable)
+9. Remove old model tree references
+10. Unify context menus
 
-const fetchAll = useCallback(async () => {
-  // 1. Read cache first (instant)
-  const cached = localStorage.getItem(CACHE_KEY);
-  if (cached) {
-    try { setSettingsMap(JSON.parse(cached)); } catch {}
-  }
-  // 2. Fetch fresh (background)
-  setIsLoading(!cached);
-  const { data } = await supabase.from('building_settings').select('*');
-  if (data) {
-    const map = /* build map */;
-    setSettingsMap(map);
-    localStorage.setItem(CACHE_KEY, JSON.stringify(map));
-  }
-  setIsLoading(false);
-}, []);
+**Batch 3 (Medium-Large)**:
+11. Home page redesign (Recent + Views + carousel)
+12. Building landing saved views
+
+---
+
+### Technical Details
+
+**Space visibility fix (items 5, 6, 7)** -- the core logic change in `applyFilterVisibility`:
+
+```text
+Current flow:
+  IfcSpace → hideIds → setObjectsVisible(false)
+  IfcSlab  → fadeIds → opacity=0, pickable=false
+
+New flow:
+  IfcSpace (checked) → keep in solidIds, visible + pickable + natural color
+  IfcSpace (unchecked) → semi-transparent (opacity 0.15), pickable=true
+  IfcSlab  → opacity=0.3, pickable=false (visible floor)
 ```
 
-### Summary of Files to Modify
+**Recent buildings tracking**: Store in localStorage as `geminus-recent-buildings` with `{ fmGuid, timestamp, name, image }[]`, max 6 entries, updated whenever user opens a building.
 
-| File | Changes |
-|---|---|
-| `src/components/portfolio/FacilityLandingPage.tsx` | ArrowLeft icon, breadcrumb rendering, pass `isLoading` to QuickActions |
-| `src/components/portfolio/QuickActions.tsx` | Add `isLoading` prop + skeleton state |
-| `src/components/portfolio/PortfolioView.tsx` | Build and pass breadcrumbs array |
-| `src/components/home/HomeLanding.tsx` | Increase favorite card image height |
-| `src/components/layout/MobileNav.tsx` | Add radar/360 context handling |
-| `src/hooks/useAllBuildingSettings.ts` | Add stale-while-revalidate caching |
+**Saved views on home**: Query `saved_views` table ordered by `created_at DESC LIMIT 6`.
 
