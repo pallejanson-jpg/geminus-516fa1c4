@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Facility } from '@/lib/types';
 
 export interface InventoryPrefill {
@@ -19,6 +20,7 @@ interface QuickActionsProps {
   ivionSiteId?: string | null;
   has3DModels?: boolean;
   hasFmAccess?: boolean;
+  isLoading?: boolean;
   onOpenMap: () => void;
   onOpenNavigator: (facility: Facility) => void;
   onShowAssets: (facility: Facility) => void;
@@ -40,6 +42,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   ivionSiteId,
   has3DModels,
   hasFmAccess,
+  isLoading,
   onOpenMap, 
   onOpenNavigator, 
   onShowAssets, 
@@ -73,6 +76,23 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const btnClass = "justify-start sm:justify-center gap-2 h-auto py-3 px-3 sm:py-3 sm:px-4";
   const iconSize = 16;
   const labelClass = "text-[11px] sm:text-xs";
+
+  if (isLoading) {
+    return (
+      <Card className="mt-4 sm:mt-6">
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 rounded-lg" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="mt-4 sm:mt-6">

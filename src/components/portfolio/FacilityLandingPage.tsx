@@ -1,8 +1,8 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw
+  ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,8 +23,14 @@ import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDi
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+interface BreadcrumbItem {
+  label: string;
+  onClick: () => void;
+}
+
 interface FacilityLandingPageProps {
   facility: Facility;
+  breadcrumbs?: BreadcrumbItem[];
   onClose: () => void;
   onEdit: (facility: Facility) => void;
   onOpenMap: () => void;
@@ -42,6 +48,7 @@ interface FacilityLandingPageProps {
 
 const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   facility,
+  breadcrumbs,
   onClose,
   onEdit,
   onOpenMap,
@@ -287,22 +294,47 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
       </div>
 
-      {/* Close Button */}
-      <div className="absolute top-3 sm:top-4 right-3 sm:right-4 z-50 flex items-center gap-2">
+      {/* Back Button */}
+      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-50 flex items-center gap-2">
         <Button 
           onClick={onClose} 
           variant="ghost" 
           size="icon"
           className="h-9 w-9 sm:h-10 sm:w-10 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white"
+          aria-label="Tillbaka"
         >
-          <X size={18} className="sm:hidden" />
-          <X size={20} className="hidden sm:block" />
+          <ArrowLeft size={18} className="sm:hidden" />
+          <ArrowLeft size={20} className="hidden sm:block" />
         </Button>
       </div>
       
       {/* Scrollable Content */}
       <ScrollArea className="flex-1 z-10 pt-20 sm:pt-24 md:pt-32">
         <div className="max-w-5xl mx-auto px-3 sm:px-4 md:px-6 pb-24">
+          {/* Breadcrumb Navigation */}
+          {breadcrumbs && breadcrumbs.length > 1 && (
+            <nav className="flex items-center gap-1 text-xs text-white/60 mb-2 flex-wrap" aria-label="Breadcrumb">
+              {breadcrumbs.map((crumb, i) => {
+                const isLast = i === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={i}>
+                    {i > 0 && <ChevronRight size={10} className="text-white/40 shrink-0" />}
+                    {isLast ? (
+                      <span className="text-white/90 font-medium truncate max-w-[140px]">{crumb.label}</span>
+                    ) : (
+                      <button
+                        onClick={crumb.onClick}
+                        className="hover:text-white transition-colors truncate max-w-[120px]"
+                      >
+                        {crumb.label}
+                      </button>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </nav>
+          )}
+
           {/* Header */}
           <header className="relative w-full shrink-0 flex items-start gap-4 sm:gap-8 text-white">
             <div className="flex-1 min-w-0">
@@ -649,6 +681,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             ivionSiteId={settings?.ivionSiteId}
             has3DModels={has3DModels}
             hasFmAccess={hasFmAccess}
+            isLoading={isLoadingSettings}
             onOpenMap={onOpenMap}
             onOpenNavigator={onOpenNavigator}
             onShowAssets={onShowAssets}

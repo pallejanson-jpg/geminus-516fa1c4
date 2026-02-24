@@ -395,6 +395,14 @@ const PortfolioView: React.FC = () => {
       <>
         <FacilityLandingPage
           facility={selectedFacility}
+          breadcrumbs={[
+            { label: 'Portfolio', onClick: () => { setFacilityHistory([]); setSelectedFacility(null); } },
+            ...facilityHistory.map((f, i) => ({
+              label: f.commonName || f.name || f.category || '',
+              onClick: () => { const target = facilityHistory[i]; setFacilityHistory(prev => prev.slice(0, i)); setSelectedFacility(target); }
+            })),
+            { label: selectedFacility.commonName || selectedFacility.name || selectedFacility.category || '', onClick: () => {} }
+          ]}
           onClose={handleClose}
           onEdit={handleEdit}
           onOpenMap={handleOpenMap}
