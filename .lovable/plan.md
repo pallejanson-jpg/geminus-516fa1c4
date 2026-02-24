@@ -1,214 +1,89 @@
 
 
-## Plan: BCF Issue Email Notification and External Issue Resolution
+## Updated Plan: BCF Issue Annotations + Resend API Key
 
-### Overview
+### Addition 1: Resend API Key
 
-Extend the existing BCF issue system to allow admins to assign issues to registered users and notify them via email. Recipients receive a link to a dedicated public issue page where they can view the issue details (including 3D viewpoint), add comments, and mark the issue as resolved. Status changes propagate back to the admin in real-time.
+**Where to get it:**
+1. Go to [resend.com](https://resend.com) and create a free account
+2. Navigate to **API Keys** in the dashboard
+3. Click **Create API Key**, give it a name, select **Sending access**
+4. Copy the key (starts with `re_...`)
+5. Free tier: 100 emails/day, 3,000 emails/month
 
----
-
-### Architecture
-
-```text
-┌─────────────┐    ┌──────────────────┐    ┌─────────────────────┐
-│  Admin UI   │───▸│  Edge Function   │───▸│  Email (Resend API) │
-│ (Assign +   │    │ send-issue-email │    │  with deep link     │
-│  Send)      │    └──────────────────┘    └─────────────────────┘
-└─────────────┘                                      │
-       ▲                                             ▼
-       │ realtime                          ┌─────────────────────┐
-       │                                   │  /issue/:token      │
-┌──────┴──────┐                            │  Public issue page  │
-│ bcf_issues  │◀───────────────────────────│  (view, comment,    │
-│ bcf_comments│                            │   resolve)          │
-└─────────────┘                            └─────────────────────┘
-```
+You will also need to verify a sending domain in Resend (Settings > Domains) or use the sandbox `onboarding@resend.dev` for testing. I will prompt you to enter the key when we start implementing the edge function.
 
 ---
 
-### 1. Database Changes
+### Addition 2: BCF Issue Annotations in 3D Viewer
 
-#### 1a. Issue assignment tracking table
+Issues with a saved viewpoint will appear as clickable annotation markers in the 3D scene, following the same pattern as existing local annotations (asset markers).
 
-New table `bcf_issue_assignments` to track who an issue was sent to and their response:
+#### How it works
 
-```sql
-CREATE TABLE public.bcf_issue_assignments (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  issue_id uuid NOT NULL,
-  assigned_to_user_id uuid NOT NULL,
-  assigned_by_user_id uuid NOT NULL,
-  token text NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'),
-  sent_at timestamptz DEFAULT now(),
-  viewed_at timestamptz,
-  responded_at timestamptz,
-  response_status text, -- 'resolved', 'comment_only'
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(issue_id, assigned_to_user_id)
-);
+1. **Marker position**: Derived from the issue's `viewpoint_json`. The "look at" point (`camera_view_point + camera_direction`) becomes the 3D world position for the marker. If `selected_object_ids` exist, use the center of the first selected object's bounding box instead (more accurate).
 
-ALTER TABLE public.bcf_issue_assignments ENABLE ROW LEVEL SECURITY;
+2. **Marker appearance**: Red circle with an issue-type icon (AlertCircle for faults, Lightbulb for improvements, etc.), using the same 28px circular marker style as existing annotations but with issue-type-specific colors.
 
--- Admins can manage assignments
-CREATE POLICY "Admins can manage assignments" ON public.bcf_issue_assignments
-  FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+3. **Click behavior**: Clicking an issue marker restores the full BCF viewpoint (camera position + selection + clipping) and opens the `IssueDetailSheet` for that issue.
 
--- Assigned users can read and update their own assignments
-CREATE POLICY "Users can read own assignments" ON public.bcf_issue_assignments
-  FOR SELECT TO authenticated USING (auth.uid() = assigned_to_user_id);
+4. **Floor awareness**: Issue markers will be shown/hidden based on the active floor, using the `building_fm_guid` for filtering. Issues without floor context show on all floors.
 
-CREATE POLICY "Users can update own assignments" ON public.bcf_issue_assignments
-  FOR UPDATE TO authenticated USING (auth.uid() = assigned_to_user_id);
+5. **Category filtering**: Issue annotations appear as a new category in the `ViewerFilterPanel` annotations section, allowing users to toggle issue marker visibility.
 
--- Public token-based access for the external page
-CREATE POLICY "Token access for assignments" ON public.bcf_issue_assignments
-  FOR SELECT TO anon USING (true);
-```
+#### Implementation
 
-#### 1b. Enable realtime on bcf_issues (if not already)
+**File: `src/components/viewer/AssetPlusViewer.tsx`**
 
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.bcf_issue_assignments;
-```
+New function `loadIssueAnnotations`:
+- Fetches open BCF issues for the current `buildingFmGuid` from `bcf_issues` table
+- Extracts world position from `viewpoint_json` (look-at point) or from first selected object's scene position
+- Creates DOM marker elements in the same `local-annotations-container` (or a separate `issue-annotations-container`)
+- Uses the same `projectWorldToCanvas` helper for 3D-to-2D projection
+- Subscribes to realtime changes on `bcf_issues` to add/remove markers when issues are created or resolved
+- Called from `handleAllModelsLoaded` alongside `loadLocalAnnotations`
 
----
-
-### 2. Edge Function: `send-issue-email`
-
-New edge function that:
-1. Validates the caller is an admin
-2. Accepts `issue_id` and array of `user_ids` to notify
-3. Fetches issue details and user profiles
-4. Generates a unique token per assignment (stored in `bcf_issue_assignments`)
-5. Sends email via Resend API (or Lovable AI model for generating email HTML)
-6. The email contains:
-   - Issue title, type, priority, description
-   - Screenshot image (inline or linked)
-   - Building name
-   - Deep link: `{APP_URL}/issue/{token}`
-
+**Marker creation logic (pseudocode):**
 ```typescript
-// supabase/functions/send-issue-email/index.ts
-// POST { issue_id, user_ids: string[] }
-// 1. Verify admin
-// 2. Fetch issue from bcf_issues
-// 3. For each user_id:
-//    a. Upsert bcf_issue_assignments (get token)
-//    b. Fetch profile for email/name
-//    c. Send email with Resend
-// 4. Update bcf_issues.assigned_to = first user_id (optional)
+// Extract position from viewpoint
+const vp = issue.viewpoint_json;
+const cam = vp.perspective_camera || vp.orthogonal_camera;
+const eye = cam.camera_view_point;
+const dir = cam.camera_direction;
+// look-at = eye + direction (normalized, scaled by ~5m)
+const len = Math.sqrt(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
+const worldPos = [eye.x + dir.x/len*5, eye.y + dir.y/len*5, eye.z + dir.z/len*5];
 ```
 
-**Secret required:** `RESEND_API_KEY` for sending emails.
+**Click handler:**
+- Calls `restoreViewpoint(issue.viewpoint_json)` 
+- Opens `IssueDetailSheet` with the issue data
 
----
+**Realtime subscription:**
+- Listens for INSERT/UPDATE/DELETE on `bcf_issues` where `building_fm_guid` matches
+- Adds new markers on INSERT, removes on DELETE, updates visibility on status change (hide resolved)
 
-### 3. Public Issue Page: `/issue/:token`
-
-New route and page component that:
-
-1. **Token resolution**: Looks up `bcf_issue_assignments` by token to find the issue
-2. **Authentication check**: If user is logged in, show full experience. If not, redirect to login with return URL
-3. **Issue display**:
-   - Screenshot with "Go to 3D" button
-   - Issue title, type, priority, description
-   - Building name and related objects
-   - Comments thread (existing `bcf_comments`)
-4. **3D Viewer embed**: Clicking "View in 3D" navigates to the unified viewer with the issue's viewpoint restored (using existing `restoreViewpoint` from `useBcfViewpoints`)
-5. **Actions**:
-   - Add comment (writes to `bcf_comments`)
-   - "Mark as resolved" button → updates `bcf_issues.status` to `resolved` and `bcf_issue_assignments.response_status` to `resolved`
-6. **Status feedback**: Updates `bcf_issue_assignments.responded_at` so admin sees real-time that the assignee has acted
-
-```text
-/issue/:token
-├── IssueResolutionPage.tsx
-│   ├── Issue header (title, type, priority badge)
-│   ├── Screenshot + "Open in 3D" link
-│   ├── Description
-│   ├── Related objects
-│   ├── Comments list + input
-│   └── Action bar: [Add Comment] [Mark Resolved]
-```
-
----
-
-### 4. Admin UI: "Send Issue" from IssueDetailSheet
-
-Add a "Send to user" button in `IssueDetailSheet.tsx` (visible to admins):
-
-1. Opens a popover/dialog listing registered users (from `profiles` table)
-2. Users can be selected (multi-select with checkboxes)
-3. "Send" button calls the edge function
-4. Shows confirmation toast
-5. Assignment status badges appear on the issue card (sent, viewed, resolved)
-
-UI additions in `IssueDetailSheet.tsx`:
-```
-[Send Issue]  →  Dialog with user list  →  [Send Email]
-                 ☐ Mats Broman
-                 ☐ Emelie Näslund
-                 ☐ Louise Tranberg
-```
-
----
-
-### 5. Issue Status Flow
-
-```text
-Admin creates issue → status: "open"
-Admin sends to user → assignment created, email sent
-User opens link    → assignment.viewed_at set
-User comments      → comment added to bcf_comments
-User resolves      → bcf_issues.status = "resolved"
-                     assignment.response_status = "resolved"
-                     assignment.responded_at = now()
-Admin sees update  → realtime subscription on bcf_issues
-Admin can reopen   → status back to "open" if needed
-```
-
----
-
-### 6. Translate Existing Swedish Labels
-
-The `IssueListPanel.tsx` and `IssueDetailSheet.tsx` still contain Swedish labels (`Ärenden`, `Öppna`, `Lösta`, `Kommentarer`, etc.). These will be translated to English as part of this work.
-
----
-
-### Files to Create
-
-| File | Purpose |
-|---|---|
-| `supabase/functions/send-issue-email/index.ts` | Edge function for sending issue emails |
-| `src/pages/IssueResolution.tsx` | Public issue page for assignees |
-| `src/components/viewer/SendIssueDialog.tsx` | User selection dialog for sending issues |
-| `supabase/migrations/xxx_bcf_issue_assignments.sql` | New table + RLS |
-
-### Files to Modify
+#### Files to modify
 
 | File | Changes |
 |---|---|
-| `src/components/viewer/IssueDetailSheet.tsx` | Add "Send to user" button, translate to English |
-| `src/components/viewer/IssueListPanel.tsx` | Show assignment status badges, translate to English |
-| `src/App.tsx` | Add `/issue/:token` route |
-| `supabase/config.toml` | Add `send-issue-email` function config |
+| `src/components/viewer/AssetPlusViewer.tsx` | Add `loadIssueAnnotations` function, call from `handleAllModelsLoaded`, add realtime subscription, add issue marker click handler |
+| `src/components/viewer/ViewerFilterPanel.tsx` | Add "Issues" as a toggleable annotation category |
 
-### Secret Required
+---
 
-| Secret | Purpose |
+### Summary of full implementation order
+
+| Step | Task |
 |---|---|
-| `RESEND_API_KEY` | Resend email service API key for sending issue notifications |
-
-### Implementation Priority
-
-| Step | Task | Complexity |
-|---|---|---|
-| 1 | Database migration (assignments table) | Small |
-| 2 | Send issue dialog + user picker UI | Medium |
-| 3 | Edge function for email sending | Medium |
-| 4 | Issue resolution page (`/issue/:token`) | Medium |
-| 5 | 3D viewpoint deep-link from resolution page | Small |
-| 6 | Real-time status updates for admin | Small |
-| 7 | Translate Swedish labels to English | Small |
+| 1 | Request `RESEND_API_KEY` secret |
+| 2 | Create `send-issue-email` edge function |
+| 3 | Create `SendIssueDialog` component |
+| 4 | Update `IssueDetailSheet` with send button + English translation |
+| 5 | Translate `IssueListPanel` + `FloatingIssueListPanel` to English |
+| 6 | Create `IssueResolution` page + add route |
+| 7 | Add issue annotations in 3D viewer (loadIssueAnnotations) |
+| 8 | Enhance `CreateWorkOrderDialog` with BCF attachment + hierarchy |
+| 9 | Update `AssetPlusViewer` to pass full context to work order dialog |
+| 10 | Add work order creation from Navigator |
 
