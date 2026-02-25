@@ -805,7 +805,14 @@ serve(async (req) => {
           let existingObj: any = null;
           try { existingObj = JSON.parse(checkText); } catch { existingObj = null; }
 
-          const objectExists = checkResp.ok && existingObj && !existingObj.error && (existingObj.objectId || existingObj.ObjectId || existingObj.objectName || existingObj.ObjectName);
+          // Log the raw response to diagnose field names
+          console.log(`FM Access: byguid response status=${checkResp.status}, keys=${existingObj ? Object.keys(existingObj).join(',') : 'null'}, snippet=${checkText.substring(0, 300)}`);
+
+          // Broaden existence check: any 200 OK with a valid object (not an error message)
+          const objectExists = checkResp.ok && existingObj && typeof existingObj === 'object' && !existingObj.error && !existingObj.Error &&
+            (existingObj.objectId || existingObj.ObjectId || existingObj.id || existingObj.Id ||
+             existingObj.objectName || existingObj.ObjectName || existingObj.name || existingObj.Name ||
+             existingObj.guid || existingObj.Guid || existingObj.systemGuid || existingObj.SystemGuid);
 
           if (objectExists) {
             // Object exists — compare and decide direction
