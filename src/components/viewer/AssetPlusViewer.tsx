@@ -3908,10 +3908,45 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             if (hasRealNames) {
               dbModels.forEach(m => { if (m.model_name) nameMap.set(m.model_id, m.model_name); });
             }
-            // If all names are GUIDs, fall through to API fetch below
+            // If all names are GUIDs/generic, try Asset+ API for real names
           }
 
-          // If nameMap is empty, skip filtering — load all models (safer than a failing API call)
+          // Fallback: if nameMap is empty, try to resolve via Asset+ API (GetAllRelatedModels)
+          if (nameMap.size === 0 && dbModels && dbModels.length > 0) {
+            try {
+              const TOKEN_CACHE_KEY = 'geminus_ap_token';
+              const cached = sessionStorage.getItem(TOKEN_CACHE_KEY);
+              const token = cached ? JSON.parse(cached).token : null;
+              const configRaw = sessionStorage.getItem('geminus_ap_config');
+              const apiUrl = configRaw ? JSON.parse(configRaw).apiUrl : baseUrl;
+              
+              if (token && apiUrl) {
+                const res = await fetch(`${apiUrl}/api/BimObject/GetAllRelatedModels/${resolvedGuid}`, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (res.ok) {
+                  const apiModels = await res.json();
+                  // apiModels is array of { bimObjectId, name, ... }
+                  if (Array.isArray(apiModels)) {
+                    apiModels.forEach((am: any) => {
+                      const matchingDb = dbModels.find(dm =>
+                        dm.model_id === am.bimObjectId ||
+                        dm.model_id.toLowerCase() === am.bimObjectId?.toLowerCase()
+                      );
+                      if (matchingDb && am.name) {
+                        nameMap.set(matchingDb.model_id, am.name);
+                      }
+                    });
+                    console.log(`XKT filter: API fallback resolved ${nameMap.size} model name(s)`);
+                  }
+                }
+              }
+            } catch (e) {
+              console.debug('XKT filter: API fallback failed:', e);
+            }
+          }
+
+          // If nameMap is still empty, skip filtering — load all models
 
           // Build A-model filter — only allow models whose name starts with 'A'
           if (nameMap.size > 0) {

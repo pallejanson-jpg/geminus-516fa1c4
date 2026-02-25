@@ -122,7 +122,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
   const [showIssueList, setShowIssueList] = useState(false);
   const [showAlarms, setShowAlarms] = useState(false);
   const [showSensors, setShowSensors] = useState(false);
-  const [showIssues, setShowIssues] = useState(true);
+  const [showIssues, setShowIssues] = useState(false);
 
   // Collapsible section states
   const [modelsOpen, setModelsOpen] = useState(false);

@@ -32,21 +32,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate caller
+    // Validate caller using getUser()
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const callerUserId = claimsData.claims.sub;
+    const callerUserId = userData.user.id;
 
     // Parse body
     const { issue_id, user_ids } = await req.json();
