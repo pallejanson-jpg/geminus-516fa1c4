@@ -2549,25 +2549,52 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.log('[ContextMenu] Capturing listener attached to xeokit canvas');
       }
 
+      // Also intercept contextmenu on the whole #AssetPlusViewer container
+      // This catches cases where Asset+ registers listeners outside the canvas
+      const apvDiv = document.getElementById('AssetPlusViewer');
+      if (apvDiv && !(apvDiv as any).__geminusCtxBlock) {
+        apvDiv.addEventListener('contextmenu', (ev: MouseEvent) => {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+        }, { capture: true });
+        (apvDiv as any).__geminusCtxBlock = true;
+        console.log('[ContextMenu] Capture blocker attached to #AssetPlusViewer container');
+      }
+
+      // Also block at document level to catch DevExtreme overlays that mount on body
+      if (!(document.body as any).__geminusCtxBodyBlock) {
+        document.body.addEventListener('contextmenu', (ev: MouseEvent) => {
+          // Only block if the target is inside a dx- element
+          const target = ev.target as HTMLElement;
+          if (target?.closest?.('.dx-context-menu, .dx-overlay-wrapper, [class*="dx-context-menu"]')) {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+          }
+        }, { capture: true });
+        (document.body as any).__geminusCtxBodyBlock = true;
+      }
+
       // MutationObserver to nuke any DevExtreme context menus that slip through
       if (!(window as any).__dxContextMenuObserver) {
         const observer = new MutationObserver((mutations) => {
           for (const m of mutations) {
             m.addedNodes.forEach((node) => {
               if (node instanceof HTMLElement) {
+                // Check for dx-context-menu or any dx-overlay containing a context menu
                 const isDxCtx = node.classList?.contains('dx-context-menu') ||
                   node.classList?.contains('dx-context-menu-container') ||
+                  node.classList?.contains('dx-context-menu-container-wrapper') ||
                   node.querySelector?.('.dx-context-menu');
                 if (isDxCtx) {
-                  (node as HTMLElement).style.display = 'none';
-                  (node as HTMLElement).remove();
+                  node.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;width:0!important;height:0!important;position:absolute!important;left:-9999px!important;top:-9999px!important;';
+                  node.remove();
                   console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
                 }
                 if (node.classList?.contains('dx-overlay-wrapper')) {
-                  const ctx = node.querySelector('.dx-context-menu');
+                  const ctx = node.querySelector('.dx-context-menu, [class*="dx-context-menu"]');
                   if (ctx) {
-                    (node as HTMLElement).style.display = 'none';
-                    (node as HTMLElement).remove();
+                    node.style.cssText = 'display:none!important;visibility:hidden!important;';
+                    node.remove();
                     console.log('[ContextMenu] Removed Asset+ overlay wrapper with context menu');
                   }
                 }
@@ -4173,8 +4200,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           }
           return accepted;
         },
-        // externalCustomObjectContextMenuItems
-        undefined,
+        // externalCustomObjectContextMenuItems — empty array disables Asset+ built-in menu
+        [],
         // horizontalAngle (use default)
         undefined,
         // verticalAngle (use default)
