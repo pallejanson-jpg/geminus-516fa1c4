@@ -159,12 +159,16 @@
   }
 }
 
-/* Hide Asset+ DevExtreme context menu - we use our custom context menu */
-#AssetPlusViewer .dx-context-menu-container,
+/* Hide Asset+ DevExtreme context menu entirely - we use our custom Geminus context menu */
+.dx-context-menu,
+.dx-context-menu-container,
+.dx-context-menu.dx-menu-base,
+.dx-overlay-wrapper.dx-context-menu-container-wrapper,
 .dx-overlay-wrapper .dx-context-menu,
 .dx-overlay-content .dx-context-menu,
-.dx-context-menu.dx-menu-base,
-.dx-overlay-wrapper.dx-context-menu-container-wrapper {
+#AssetPlusViewer .dx-context-menu-container,
+div[class*="dx-context-menu"],
+.dx-overlay-wrapper[style*="z-index"] .dx-context-menu {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -172,6 +176,9 @@
   width: 0 !important;
   height: 0 !important;
   overflow: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
 }
 
 /* Hide built-in Asset+ toolbars - we use our custom toolbar */
