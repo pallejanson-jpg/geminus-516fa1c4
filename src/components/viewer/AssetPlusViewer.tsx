@@ -28,7 +28,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, type SensorAnnotationsToggleDetail } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, ISSUE_ANNOTATIONS_TOGGLE_EVENT, type SensorAnnotationsToggleDetail, type IssueAnnotationsToggleDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -243,6 +243,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const [visibleFloorFmGuids, setVisibleFloorFmGuids] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
+  const issueAnnotationsVisibleRef = useRef(true);
+  const sensorAnnotationsVisibleRef = useRef(false);
   
   // Mobile floors state for visibility control (internal — no longer imported from overlay)
   const [mobileFloors, setMobileFloors] = useState<{ id: string; fmGuid: string; name: string; visible: boolean }[]>([]);
@@ -1032,6 +1034,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const plugin = localAnnotationsPluginRef.current;
     if (plugin?.annotations) {
       Object.values(plugin.annotations).forEach((ann: any) => {
+        const category = ann.category || ann.markerElement?.dataset?.category || '';
+        const isIndependent = category === 'Issues' || category === 'Sensor';
+        if (isIndependent) return;
         ann.markerShown = show;
         if (ann.markerElement) {
           ann.markerElement.style.display = show ? 'flex' : 'none';
@@ -1088,6 +1093,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     const plugin = localAnnotationsPluginRef.current;
     if (!plugin?.annotations) return;
     Object.values(plugin.annotations).forEach((ann: any) => {
+      const category = ann.category || ann.markerElement?.dataset?.category || '';
+      const isIndependent = category === 'Issues' || category === 'Sensor';
+      if (isIndependent) return;
       ann.markerShown = showAnnotations;
       if (ann.markerElement) {
         ann.markerElement.style.display = showAnnotations ? 'flex' : 'none';
@@ -1111,10 +1119,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       Object.values(plugin.annotations).forEach((ann: any) => {
         if (!ann.markerElement) return;
-        if (isAll) {
+        const category = ann.category || ann.markerElement?.dataset?.category || '';
+        const levelGuid = ann.levelFmGuid || ann.markerElement?.dataset?.levelFmGuid || '';
+        const isIssue = category === 'Issues';
+
+        if (isAll || isIssue || !levelGuid) {
           ann.markerElement.style.display = ann.markerShown ? 'flex' : 'none';
         } else {
-          const levelGuid = ann.levelFmGuid || ann.markerElement?.dataset?.levelFmGuid || '';
           const isOnFloor = (singleFloor && levelGuid === singleFloor) ||
                             (visibleGuids.length > 0 && visibleGuids.includes(levelGuid));
           ann.markerElement.style.display = (ann.markerShown && isOnFloor) ? 'flex' : 'none';
@@ -1138,13 +1149,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         if (!ann.markerElement) return;
         const category = ann.category || ann.markerElement?.dataset?.category || '';
         if (visibleCats.size > 0) {
-          // Filter is active: show matching categories, hide rest
           const catVisible = visibleCats.has(category);
+          ann.markerShown = catVisible;
           ann.markerElement.style.display = catVisible ? 'flex' : 'none';
-          // Also set markerShown so floor filtering respects it
-          if (catVisible) ann.markerShown = true;
         } else {
-          // No filter: restore to default (show based on markerShown)
           ann.markerElement.style.display = ann.markerShown ? 'flex' : 'none';
         }
       });
@@ -1800,7 +1808,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           name: alarm.name || 'Sensor',
           color: symbolColor,
           iconUrl: symbolIcon,
-          markerShown: true,
+          markerShown: sensorAnnotationsVisibleRef.current,
           levelFmGuid: alarm.level_fm_guid,
         });
 
@@ -2087,7 +2095,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           border-radius: 50%;
           border: 2px solid white;
           box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 3px ${color}40;
-          display: flex;
+          display: ${issueAnnotationsVisibleRef.current ? 'flex' : 'none'};
           align-items: center;
           justify-content: center;
           cursor: pointer;
@@ -2117,7 +2125,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           category: 'Issues',
           name: issue.title,
           color,
-          markerShown: true,
+          markerShown: issueAnnotationsVisibleRef.current,
           markerElement: marker,
           levelFmGuid: null, // Issues don't have floor context directly
         };
@@ -2173,32 +2181,56 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   useEffect(() => {
     const handler = async (e: Event) => {
       const { visible } = (e as CustomEvent<SensorAnnotationsToggleDetail>).detail;
-      if (visible) {
-        // Lazy-load if not yet loaded
-        if (!sensorAnnotationsLoadedRef.current) {
-          await loadSensorAnnotationsRef.current?.();
-        }
-        // Show all sensor markers
-        const container = document.getElementById('local-annotations-container');
-        if (container) {
-          container.querySelectorAll('.sensor-marker').forEach((el) => {
-            (el as HTMLElement).style.display = 'flex';
-          });
-          // Update positions
-          localAnnotationsPluginRef.current?.updatePositions?.();
-        }
-      } else {
-        // Hide all sensor markers
-        const container = document.getElementById('local-annotations-container');
-        if (container) {
-          container.querySelectorAll('.sensor-marker').forEach((el) => {
-            (el as HTMLElement).style.display = 'none';
-          });
-        }
+      sensorAnnotationsVisibleRef.current = visible;
+
+      // Lazy-load if not yet loaded and we're turning sensors on
+      if (visible && !sensorAnnotationsLoadedRef.current) {
+        await loadSensorAnnotationsRef.current?.();
       }
+
+      const plugin = localAnnotationsPluginRef.current;
+      if (!plugin?.annotations) return;
+
+      Object.values(plugin.annotations).forEach((ann: any) => {
+        const category = ann.category || ann.markerElement?.dataset?.category || '';
+        if (category === 'Sensor') {
+          ann.markerShown = visible;
+          if (ann.markerElement) {
+            ann.markerElement.style.display = visible ? 'flex' : 'none';
+          }
+        }
+      });
+
+      plugin.updatePositions?.();
     };
     window.addEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
     return () => window.removeEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
+  }, []);
+
+  // Listen for ISSUE_ANNOTATIONS_TOGGLE_EVENT to show/hide issue markers
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { visible } = (e as CustomEvent<IssueAnnotationsToggleDetail>).detail;
+      issueAnnotationsVisibleRef.current = visible;
+
+      const plugin = localAnnotationsPluginRef.current;
+      if (!plugin?.annotations) return;
+
+      Object.values(plugin.annotations).forEach((ann: any) => {
+        const category = ann.category || ann.markerElement?.dataset?.category || '';
+        if (category === 'Issues') {
+          ann.markerShown = visible;
+          if (ann.markerElement) {
+            ann.markerElement.style.display = visible ? 'flex' : 'none';
+          }
+        }
+      });
+
+      plugin.updatePositions?.();
+    };
+
+    window.addEventListener(ISSUE_ANNOTATIONS_TOGGLE_EVENT, handler);
+    return () => window.removeEventListener(ISSUE_ANNOTATIONS_TOGGLE_EVENT, handler);
   }, []);
 
 
