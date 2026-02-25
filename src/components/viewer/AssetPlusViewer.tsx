@@ -2515,63 +2515,88 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.debug("Could not initialize NavCube:", e);
     }
 
-    // Intercept Asset+ DevExtreme context menu at the capture phase
-    // This ensures our custom Geminus context menu always wins
+    // Intercept Asset+ DevExtreme context menu at capture phase so Geminus menu is the only one shown
     try {
       const xViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      const canvas = xViewer?.scene?.canvas?.canvas;
+      const canvas = xViewer?.scene?.canvas?.canvas as HTMLCanvasElement | undefined;
+
+      const removeDxContextMenus = () => {
+        const selectors = [
+          '.dx-context-menu',
+          '.dx-context-menu-container',
+          '.dx-context-menu-container-wrapper',
+          '.dx-overlay-wrapper.dx-context-menu-container-wrapper',
+          '[class*="dx-context-menu"]',
+        ].join(',');
+
+        document.querySelectorAll<HTMLElement>(selectors).forEach((el) => {
+          el.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;width:0!important;height:0!important;position:absolute!important;left:-9999px!important;top:-9999px!important;';
+          el.remove();
+        });
+
+        document.querySelectorAll<HTMLElement>('.dx-overlay-wrapper').forEach((overlay) => {
+          if (overlay.querySelector('.dx-context-menu, [class*="dx-context-menu"]')) {
+            overlay.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;';
+            overlay.remove();
+          }
+        });
+      };
+
+      const openGeminusMenuAt = (clientX: number, clientY: number) => {
+        const liveViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer || xViewer;
+        if (!liveViewer?.scene?.canvas?.canvas) {
+          setContextMenu({ position: { x: clientX, y: clientY }, entityId: null, fmGuid: null, entityName: null });
+          return;
+        }
+
+        const liveCanvas = liveViewer.scene.canvas.canvas as HTMLCanvasElement;
+        const rect = liveCanvas.getBoundingClientRect();
+        const canvasPos = [clientX - rect.left, clientY - rect.top];
+        const hit = liveViewer.scene.pick({ canvasPos });
+
+        let entityId: string | null = null;
+        let fmGuid: string | null = null;
+        let entityName: string | null = null;
+
+        if (hit?.entity) {
+          entityId = hit.entity.id;
+          const metaObj = liveViewer.metaScene?.metaObjects?.[entityId];
+          if (metaObj) {
+            fmGuid = metaObj.originalSystemId || null;
+            entityName = metaObj.name || null;
+          }
+        }
+
+        setContextMenu({ position: { x: clientX, y: clientY }, entityId, fmGuid, entityName });
+
+        // Remove any Asset+ menu that may be created async
+        removeDxContextMenus();
+        window.setTimeout(removeDxContextMenus, 0);
+        window.setTimeout(removeDxContextMenus, 30);
+        window.setTimeout(removeDxContextMenus, 120);
+      };
+
+      // Canvas capture listener
       if (canvas && !(canvas as any).__geminusContextMenuAttached) {
         canvas.addEventListener('contextmenu', (ev: MouseEvent) => {
           ev.preventDefault();
           ev.stopImmediatePropagation();
-
-          // Pick entity at mouse position
-          const rect = canvas.getBoundingClientRect();
-          const canvasPos = [ev.clientX - rect.left, ev.clientY - rect.top];
-          const hit = xViewer.scene.pick({ canvasPos });
-
-          let entityId: string | null = null;
-          let fmGuid: string | null = null;
-          let entityName: string | null = null;
-
-          if (hit?.entity) {
-            entityId = hit.entity.id;
-            const metaObj = xViewer.metaScene?.metaObjects?.[entityId];
-            if (metaObj) {
-              fmGuid = metaObj.originalSystemId || null;
-              entityName = metaObj.name || null;
-            }
-          }
-
-          setContextMenu({ position: { x: ev.clientX, y: ev.clientY }, entityId, fmGuid, entityName });
+          openGeminusMenuAt(ev.clientX, ev.clientY);
         }, { capture: true });
         (canvas as any).__geminusContextMenuAttached = true;
         console.log('[ContextMenu] Capturing listener attached to xeokit canvas');
       }
 
-      // Also intercept contextmenu on the whole #AssetPlusViewer container
-      // This catches cases where Asset+ registers listeners outside the canvas
+      // Container capture listener (catches non-canvas targets inside viewer)
       const apvDiv = document.getElementById('AssetPlusViewer');
-      if (apvDiv && !(apvDiv as any).__geminusCtxBlock) {
+      if (apvDiv && !(apvDiv as any).__geminusContextMenuContainerAttached) {
         apvDiv.addEventListener('contextmenu', (ev: MouseEvent) => {
           ev.preventDefault();
           ev.stopImmediatePropagation();
+          openGeminusMenuAt(ev.clientX, ev.clientY);
         }, { capture: true });
-        (apvDiv as any).__geminusCtxBlock = true;
-        console.log('[ContextMenu] Capture blocker attached to #AssetPlusViewer container');
-      }
-
-      // Also block at document level to catch DevExtreme overlays that mount on body
-      if (!(document.body as any).__geminusCtxBodyBlock) {
-        document.body.addEventListener('contextmenu', (ev: MouseEvent) => {
-          // Only block if the target is inside a dx- element
-          const target = ev.target as HTMLElement;
-          if (target?.closest?.('.dx-context-menu, .dx-overlay-wrapper, [class*="dx-context-menu"]')) {
-            ev.preventDefault();
-            ev.stopImmediatePropagation();
-          }
-        }, { capture: true });
-        (document.body as any).__geminusCtxBodyBlock = true;
+        (apvDiv as any).__geminusContextMenuContainerAttached = true;
+        console.log('[ContextMenu] Capturing listener attached to #AssetPlusViewer');
       }
 
       // MutationObserver to nuke any DevExtreme context menus that slip through
@@ -2579,25 +2604,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         const observer = new MutationObserver((mutations) => {
           for (const m of mutations) {
             m.addedNodes.forEach((node) => {
-              if (node instanceof HTMLElement) {
-                // Check for dx-context-menu or any dx-overlay containing a context menu
-                const isDxCtx = node.classList?.contains('dx-context-menu') ||
-                  node.classList?.contains('dx-context-menu-container') ||
-                  node.classList?.contains('dx-context-menu-container-wrapper') ||
-                  node.querySelector?.('.dx-context-menu');
-                if (isDxCtx) {
-                  node.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;width:0!important;height:0!important;position:absolute!important;left:-9999px!important;top:-9999px!important;';
-                  node.remove();
-                  console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
-                }
-                if (node.classList?.contains('dx-overlay-wrapper')) {
-                  const ctx = node.querySelector('.dx-context-menu, [class*="dx-context-menu"]');
-                  if (ctx) {
-                    node.style.cssText = 'display:none!important;visibility:hidden!important;';
-                    node.remove();
-                    console.log('[ContextMenu] Removed Asset+ overlay wrapper with context menu');
-                  }
-                }
+              if (!(node instanceof HTMLElement)) return;
+              const className = node.className || '';
+              const containsCtx =
+                className.toString().includes('dx-context-menu') ||
+                node.matches('.dx-context-menu, .dx-context-menu-container, [class*="dx-context-menu"]') ||
+                !!node.querySelector('.dx-context-menu, [class*="dx-context-menu"]');
+
+              if (containsCtx) {
+                node.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;';
+                node.remove();
+                console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
               }
             });
           }
