@@ -1,79 +1,87 @@
 
 
-## Analysis Results
+## Analysis of Current Issues
 
-### Issue 1: Akerselva 2D flips back to 3D
+### 1. Filter Panel Missing Close Button
+The `ViewerFilterPanel` (line 969) already has a close button (`<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}><X className="h-4 w-4" /></Button>`). This is confirmed in the code. However, the user says it's missing — this may be a visibility or rendering issue, or it could be the mobile variant. Need to verify the `onClose` prop is being passed correctly from the parent.
 
-**Root cause confirmed:** `UnifiedViewer.tsx` line 190-211 fires a `LOAD_SAVED_VIEW_EVENT` after 2 seconds. The start view data defaults `viewMode` to `'3d'` (line 198: `viewMode: (sv.viewMode as '2d' | '3d') || '3d'`). When `applyViewSettings` runs in `AssetPlusViewer.tsx` (line 3147), it dispatches `VIEW_MODE_REQUESTED_EVENT` with `mode: '3d'`, overriding the user's manual 2D selection.
+### 2. FloatingFloorSwitcher Too Narrow + Too Tall
+Current pills are `h-7 w-8 sm:h-7 sm:w-9` (line 544) — roughly 32-36px wide. Floor names like "PLAN 3 Pål." don't fit in `shortName` which only extracts digits. The max visible pills are `MAX_VISIBLE_PILLS_DESKTOP = 10` (line 34) — should be 12 per user request.
 
-The SDK-fail guard (line 157-162) was already fixed to only affect vt/split/360. This is a different code path.
+### 3. 3D Performance
+The `usePerformancePlugins` hook is installed but the LOD culling iterates ALL objects every 500ms which could be expensive. The XKT Phase 1 chunking columns exist in the schema but the **viewer loading logic** doesn't use them — it still loads full monolithic models. This is the main performance bottleneck.
 
-**Fix:** In `UnifiedViewer.tsx`, the start view effect must respect the current `viewMode`. If the user has already switched to 2D, the start view should NOT override it. Guard the `LOAD_SAVED_VIEW_EVENT` dispatch:
-- If the user's current `viewMode` differs from the start view's `viewMode`, override the start view's `viewMode` with the user's choice before dispatching.
-- Alternatively, skip the `viewMode` field entirely when the user has manually changed mode since page load.
+### 4. Issue Click → Fly-to + Open Detail Sheet (No Gray Overlay)
+When clicking an issue marker in 3D, `ISSUE_MARKER_CLICKED_EVENT` is dispatched. `ViewerRightPanel` handles this via `handleSelectIssue` which calls `handleGoToIssueViewpoint(issue.viewpoint_json)` AND opens `showIssueDetail = true`. The `IssueDetailSheet` uses a Radix `Sheet` which creates a modal overlay that grays out the background. To prevent this, the Sheet should be non-modal (`modal={false}`) or use a different layout approach.
 
-### Issue 2: Småviken "no 3D"
+### 5. "Click to go to position" Doesn't Work
+In `IssueDetailSheet.tsx` line 215: `onClick={() => issue.viewpoint_json && onGoToViewpoint?.(issue.viewpoint_json)}`. The `onGoToViewpoint` prop is passed from `ViewerRightPanel` (line 953). The function calls `restoreViewpoint()` which uses `cameraFlight.flyTo()`. This should work — but if the Sheet is modal, pointer events on the viewer may be blocked. Making the Sheet non-modal should fix this.
 
-**Logs show the model DOES load** (8.22 MB XKT cached, `allModelsLoadedCallback` fires, camera falls back to `viewFitAll`). The DB has `model_name: "Modell 1"` and `"Modell 2"` — neither starts with "A", so the A-model filter is disabled and both models load.
+### 6. 2D Still Not Starting in 2D
+The `userChangedModeRef` approach was implemented but there's a timing issue. The URL has `mode=2d`, which sets `viewMode` to `'2d'` via the `modeParam` effect (line 102-110). However, the `prevViewModeRef` is initialized to `viewMode === '2d' ? '__init__' : viewMode` (line 114). The `LOAD_SAVED_VIEW_EVENT` timer (line 197-224) fires at 2 seconds and should respect `userChangedModeRef.current`. But the `modeParam` effect at line 107 sets `userChangedModeRef.current = true` — this looks correct. The issue may be that `buildingData` loads and the start view effect runs before the `modeParam` effect, since both depend on different deps. The `modeParam` effect runs on `[modeParam, viewMode]` while the start view runs on `[buildingData]`.
 
-The DB `model_name` values ("Modell 1", "Modell 2") are generic and don't match the expected naming convention ("A-modell", "ARK-modell", etc.). The Asset+ API returns `name: "ARK-modell"` for `bc185635`, which IS the A-model. The `xkt_models` table uses generic names from when the models were synced.
+**Root cause:** The start view effect (line 189-225) captures `viewMode` at the time it creates the closure but doesn't update when `viewMode` changes. The `setTimeout` uses a stale closure. Since the timer fires at 2 seconds, `viewMode` might still be `'3d'` at closure creation time (before `modeParam` effect fires).
 
-**Fix:** Update the A-model filter to also check the Asset+ API response (`GetAllRelatedModels`) for model names. The network requests show this API returns `"ARK-modell"` with the correct `bimObjectId`. Use this as a fallback name source when DB names are generic/UUID-like.
+**Fix:** The start view timer should read `viewMode` from a ref, not from the closure.
 
-Additionally: update the `xkt_models` rows for Småviken to have correct `model_name` values ("A-modell" / "V-modell") via a migration or the sync function.
-
-But since the model IS loading and the 3D IS rendering per the logs, there might be a visual/camera issue. Need the user to confirm what they see.
-
-### Issue 3: Sending an issue kills 3D and removes annotations
-
-**Root cause:** When `SendIssueDialog.handleSend` completes, it calls `onClose()` which closes the dialog. The `IssueDetailSheet` has a realtime subscription on `bcf_issues` (line 2148-2163 in AssetPlusViewer). If the send-issue-email edge function modifies `bcf_issue_assignments` table (not `bcf_issues`), the subscription shouldn't fire. However:
-
-1. The `IssueDetailSheet` allows status changes. If the user changes status, that updates `bcf_issues`, which triggers the realtime handler calling `loadIssueAnnotationsRef.current?.()`. This reloads issue annotations but should be harmless since `loadIssueAnnotations` checks for existing markers (`if (issueAnnotationsManager.annotations[markerId]) return`).
-
-2. The real problem is likely that dialog open/close causes a React re-render cascade that unmounts/remounts `AssetPlusViewer`. The `SendIssueDialog` is rendered inside `IssueDetailSheet` which is inside `ViewerRightPanel`/`VisualizationToolbar`. If any parent component's key or conditional rendering changes, the entire viewer could unmount.
-
-Need to verify: does `showIssueDetail` or `selectedIssue` state change in a way that triggers a re-render of the parent component?
-
-### Issue 4: Issues auto-load despite "default OFF" setting
-
-**Root cause confirmed:** `ViewerRightPanel.tsx` line 125 has `const [showIssues, setShowIssues] = useState(true)`. This should be `false`.
-
-Additionally, even with `showIssues=true`, no event is dispatched at mount — only on toggle. But the `IssueListPanel` (used by `FloatingIssueListPanel`) does its own Supabase queries and subscriptions, which could indirectly trigger loads.
-
-### Issue 5: Email not reaching recipient
-
-The edge function `send-issue-email` uses `getClaims()` which may not exist on all Supabase client versions. Need to verify the auth validation works. Also uses Resend API with `from: "Geminus <onboarding@resend.dev>"` which is the Resend test domain — emails only deliver to the domain owner's email address.
+### 7. XKT Phase 1 Status
+The database columns (`parent_model_id`, `storey_fm_guid`, `is_chunk`, `chunk_order`) **already exist** in the schema. The converter (`acc-xkt-converter.ts`) has a `splitAndStoreByStorey` method. However, the **viewer loading in AssetPlusViewer** does NOT use chunks — it loads the full model. The preloader (`useXktPreload.ts`) also doesn't distinguish chunks. So Phase 1 schema is done, converter has a stub, but **viewer-side chunk loading is not implemented**.
 
 ---
 
 ## Planned Changes
 
-### A. Fix Akerselva 2D→3D (UnifiedViewer.tsx)
+### A. Fix FloatingFloorSwitcher — Wider Pills + Max 12 Visible
 
-In the start view effect (line 182-212), before dispatching `LOAD_SAVED_VIEW_EVENT`:
-- Track whether the user has manually changed `viewMode` with a ref (`userChangedModeRef`)
-- If the user has changed mode, override `sv.viewMode` with the current `viewMode`
-- This prevents the start view from resetting 2D back to 3D
+**File:** `src/components/viewer/FloatingFloorSwitcher.tsx`
 
-### B. Fix issues default OFF (ViewerRightPanel.tsx)
+1. Change `MAX_VISIBLE_PILLS_DESKTOP` from 10 to 12
+2. Widen pills to show full floor name instead of just `shortName`:
+   - Change pill width from `w-8 sm:w-9` to `w-auto min-w-[40px] px-2`
+   - Display `floor.name` (truncated) instead of `floor.shortName`
+   - Set `max-w-[120px]` with truncation for very long names
+3. Reduce pill height slightly for density: keep `h-7`
 
-Line 125: Change `useState(true)` to `useState(false)`.
+### B. Fix Filter Panel Close Button Visibility
 
-### C. Improve A-model filter for Småviken (AssetPlusViewer.tsx)
+**File:** `src/components/viewer/ViewerFilterPanel.tsx`
 
-The current filter checks DB `model_name`. Since Småviken's DB names are "Modell 1"/"Modell 2", add a fallback:
-- After checking DB names, if no names start with "A", also check the Asset+ `GetAllRelatedModels` API response (already fetched via network) for model names containing "ARK" or starting with "A"
-- Map those `bimObjectId` values to the `xkt_models` entries to build the whitelist
+The close button exists (line 969) but is using `text-foreground` which may not be visible. Ensure the X button is prominent and has proper contrast. Also verify the `onClose` prop flows through correctly from `AssetPlusViewer.tsx`.
 
-### D. Protect viewer from dialog-induced re-renders (IssueDetailSheet.tsx / SendIssueDialog.tsx)
+### C. Fix 2D Mode Not Sticking
 
-- Ensure `SendIssueDialog.onClose()` does not trigger any state change that cascades up to unmount the viewer
-- Move `SendIssueDialog` to be a portal rendered at root level rather than inside the Sheet hierarchy
-- In `loadIssueAnnotations()`: before creating markers, clear existing markers first (container `innerHTML = ''`) to prevent duplicates on reload, rather than relying on the skip-if-exists check which doesn't clean up stale resolved issues
+**File:** `src/pages/UnifiedViewer.tsx`
 
-### E. Fix send-issue-email auth (edge function)
+The start view effect creates a stale closure over `viewMode`. Fix by using a `viewModeRef` that always has the current value:
+- Add `const viewModeRef = useRef(viewMode)` and keep it updated
+- In the start view timer, read `viewModeRef.current` instead of `viewMode`
+- Also check `userChangedModeRef.current` (already done)
 
-Replace `getClaims()` (which may not exist) with `getUser()` for token validation. Note that Resend test domain (`onboarding@resend.dev`) only delivers to verified addresses.
+### D. Issue Click → Fly-to + Non-Modal Detail Sheet
+
+**File:** `src/components/viewer/IssueDetailSheet.tsx`
+
+1. Make the Sheet non-modal so the 3D viewer stays interactive:
+   - Already has `modal` support — but currently no prop set
+   - Change: `<Sheet open={open} onOpenChange={...} modal={false}>`
+   - Remove or hide the overlay so 3D isn't grayed out
+
+2. The "Click to go to position" should work once the Sheet is non-modal (pointer events unblocked on canvas)
+
+**File:** `src/components/viewer/ViewerRightPanel.tsx`
+
+3. When `ISSUE_MARKER_CLICKED_EVENT` fires, also fly to the issue viewpoint (already done in `handleSelectIssue` which calls `handleGoToIssueViewpoint`)
+
+### E. Performance — Throttle LOD Culling for Large Models
+
+**File:** `src/hooks/usePerformancePlugins.ts`
+
+1. Add object-count guard: if `Object.keys(scene.objects).length > 50000`, skip LOD culling entirely (already mentioned in memory but not implemented)
+2. On mobile, disable LOD culling interval completely
+
+### F. XKT Phase 1 — No Code Changes Needed Now
+
+The schema columns exist. The converter has the stub. The viewer-side loading is not yet chunk-aware but this is a larger feature that would require its own plan. The user asked if it's implemented — answer: **partially** (schema + converter stub done, viewer loading not yet chunk-aware). This is not causing the current slowness — the slowness is from loading large monolithic XKT files.
 
 ---
 
@@ -81,9 +89,9 @@ Replace `getClaims()` (which may not exist) with `getUser()` for token validatio
 
 | File | Change |
 |---|---|
-| `src/pages/UnifiedViewer.tsx` | Guard start view from overriding user-selected 2D mode |
-| `src/components/viewer/ViewerRightPanel.tsx` | `showIssues` default to `false` |
-| `src/components/viewer/AssetPlusViewer.tsx` | Improve A-model filter fallback; protect marker reload from clearing 3D |
-| `src/components/viewer/IssueDetailSheet.tsx` | Render SendIssueDialog as portal to prevent re-render cascade |
-| `supabase/functions/send-issue-email/index.ts` | Fix auth validation |
+| `src/components/viewer/FloatingFloorSwitcher.tsx` | Wider pills showing full name, max 12 visible |
+| `src/pages/UnifiedViewer.tsx` | Fix stale closure in start view timer for 2D mode |
+| `src/components/viewer/IssueDetailSheet.tsx` | Non-modal Sheet so 3D stays visible and interactive |
+| `src/hooks/usePerformancePlugins.ts` | Guard LOD culling for large models (>50k objects) |
+| `src/components/viewer/ViewerFilterPanel.tsx` | Ensure close button is visible |
 
