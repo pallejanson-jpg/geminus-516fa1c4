@@ -73,6 +73,10 @@ const UnifiedViewerContent: React.FC<{
   const effectiveInitialMode = modeParam || initialMode;
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
   const userChangedModeRef = useRef(false);
+  const viewModeRef = useRef<ViewMode>(effectiveInitialMode);
+
+  // Keep viewModeRef always in sync
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
   // ─── FM Access availability ────────────────────────────────────────
   const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
@@ -195,9 +199,11 @@ const UnifiedViewerContent: React.FC<{
 
     // Dispatch after a delay to allow model loading
     const timer = setTimeout(() => {
+      // Read current mode from ref to avoid stale closure
+      const currentMode = viewModeRef.current;
       // If user has already manually changed mode, respect their choice
       const resolvedViewMode = userChangedModeRef.current
-        ? viewMode
+        ? currentMode
         : ((sv.viewMode as '2d' | '3d') || '3d');
 
       const resolvedMode2d3d: '2d' | '3d' = resolvedViewMode === '2d' ? '2d' : '3d';
