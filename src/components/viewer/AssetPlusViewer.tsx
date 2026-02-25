@@ -4766,15 +4766,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           {/* Custom toolbar - centered at bottom */}
           {state.isInitialized && initStep === 'ready' && !compactMode && (
             <>
-              {/* Floating Floor Switcher - always visible pills above toolbar */}
-              {!isMobile && (
-                <FloatingFloorSwitcher
-                  viewerRef={viewerInstanceRef}
-                  buildingFmGuid={buildingFmGuid}
-                  isViewerReady={true}
-                  className="absolute bottom-20 left-4 z-20 pointer-events-auto"
-                />
-              )}
+              {/* Floating Floor Switcher - always visible pills */}
+              <FloatingFloorSwitcher
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingFmGuid}
+                isViewerReady={true}
+                compact={isMobile}
+                className={isMobile
+                  ? "!fixed !left-auto !top-auto !bottom-16 !right-2 !flex-row !h-auto !w-auto !z-50"
+                  : "absolute bottom-20 left-4 z-20 pointer-events-auto"
+                }
+              />
 
               {/* Visualization Legend Bar - independent of right panel */}
               <VisualizationLegendBarOverlay />
