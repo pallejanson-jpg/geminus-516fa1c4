@@ -1723,7 +1723,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         }
     };
 
-    // FM Access: Smart bidirectional sync for inventoried objects (created_in_model = false)
+    // FM Access: Smart bidirectional sync — auto-creates hierarchy, then syncs inventoried objects
     const handleSyncToFmAccess = async () => {
         setIsSyncingFmAccess(true);
         try {
@@ -1738,24 +1738,42 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
             setFmAccessStatus('success');
 
-            // 2. Find inventoried assets (created_in_model = false) with building_fm_guid
-            const { data: assets, error: assetError } = await supabase
+            // 2. Find all unique building_fm_guids from assets
+            const { data: allAssets, error: allError } = await supabase
                 .from('assets')
-                .select('fm_guid, building_fm_guid')
-                .not('building_fm_guid', 'is', null)
-                .eq('created_in_model', false);
+                .select('fm_guid, building_fm_guid, created_in_model')
+                .not('building_fm_guid', 'is', null);
 
-            if (assetError) throw assetError;
+            if (allError) throw allError;
+            const allItems = allAssets || [];
 
-            const fmAssets = assets || [];
-            setFmAccessLocalCount(fmAssets.length);
+            // Get unique building GUIDs
+            const uniqueBuildingGuids = [...new Set(allItems.map(a => a.building_fm_guid).filter(Boolean))] as string[];
+            console.log('[FM Access] Unique buildings to ensure hierarchy for:', uniqueBuildingGuids.length);
 
-            if (fmAssets.length === 0) {
-                toast({ title: 'Inga objekt att synka', description: 'Det finns inga inventerade objekt (ej i modell) med FM Access-koppling.' });
-                return;
+            // 3. Auto-create hierarchy for each building if needed
+            const { ensureFmAccessHierarchy } = await import('@/services/fm-access-service');
+            let hierarchyCreated = 0;
+            let hierarchySkipped = 0;
+            for (let i = 0; i < uniqueBuildingGuids.length; i++) {
+                const bldGuid = uniqueBuildingGuids[i];
+                try {
+                    const hResult = await ensureFmAccessHierarchy(bldGuid);
+                    if (hResult.success && hResult.action === 'created') {
+                        hierarchyCreated++;
+                        console.log('[FM Access] Hierarchy created for building:', bldGuid, hResult.created);
+                    } else {
+                        hierarchySkipped++;
+                    }
+                } catch (e: any) {
+                    console.error('[FM Access] Hierarchy error for', bldGuid, e.message);
+                }
             }
 
-            // 3. Smart sync each asset (check existence, bidirectional)
+            // 4. Sync inventoried assets (created_in_model = false)
+            const fmAssets = allItems.filter(a => a.created_in_model === false);
+            setFmAccessLocalCount(fmAssets.length);
+
             const { syncAssetWithFmAccess } = await import('@/services/fm-access-service');
             let created = 0;
             let updated = 0;
@@ -1776,10 +1794,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
 
             const now = new Date().toISOString();
-            setFmAccessSyncResult({ success: created + updated + pulled, failed, lastSync: now });
+            setFmAccessSyncResult({ success: created + updated + pulled + hierarchyCreated, failed, lastSync: now });
 
             const parts: string[] = [];
-            if (created > 0) parts.push(`${created} skapade`);
+            if (hierarchyCreated > 0) parts.push(`${hierarchyCreated} byggnader skapade`);
+            if (created > 0) parts.push(`${created} objekt skapade`);
             if (updated > 0) parts.push(`${updated} uppdaterade (push)`);
             if (pulled > 0) parts.push(`${pulled} uppdaterade (pull)`);
             if (skipped > 0) parts.push(`${skipped} redan synkade`);
@@ -1787,7 +1806,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             toast({
                 title: 'FM Access-synk klar',
-                description: parts.join(', ') + ` av ${fmAssets.length} objekt.`,
+                description: parts.join(', ') || 'Inget att synka.',
             });
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Synkfel', description: error.message });
@@ -3019,7 +3038,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         size="sm"
                                         className="gap-1 h-8 text-xs"
                                         onClick={handleSyncToFmAccess}
-                                        disabled={isSyncingFmAccess || isTestingFmAccess || fmAccessLocalCount === 0}
+                                        disabled={isSyncingFmAccess || isTestingFmAccess}
                                     >
                                         {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
                                         {isSyncingFmAccess ? 'Synkar...' : 'Synka med FM Access ↔'}
