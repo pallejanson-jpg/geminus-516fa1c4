@@ -35,7 +35,7 @@ import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
-import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
+import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 import FloatingFloorSwitcher from '@/components/viewer/FloatingFloorSwitcher';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -96,12 +96,28 @@ const UnifiedViewerContent: React.FC<{
     }
   }, [buildingData, viewMode]);
 
-  // ─── Dispatch 2D toggle event when viewMode changes ────────────────
+  // Keep internal viewMode in sync with URL mode param (important when navigating
+  // to the same route with a new mode query parameter, e.g. "2D" quick action)
+  useEffect(() => {
+    if (!modeParam) return;
+    const validModes: ViewMode[] = ['2d', '3d', 'split', 'vt', '360'];
+    if (!validModes.includes(modeParam)) return;
+    if (modeParam !== viewMode) {
+      setViewMode(modeParam);
+    }
+  }, [modeParam, viewMode]);
+
+  // ─── Dispatch mode events when viewMode changes ────────────────
   // Use a sentinel so the first render always fires the event when starting in 2D
   const prevViewModeRef = useRef<ViewMode | '__init__'>(viewMode === '2d' ? '__init__' : viewMode);
   useEffect(() => {
     const prev = prevViewModeRef.current;
     prevViewModeRef.current = viewMode;
+
+    if (viewMode === '2d' || viewMode === '3d') {
+      window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: viewMode } }));
+    }
+
     if (viewMode === '2d' && prev !== '2d') {
       window.dispatchEvent(new CustomEvent<ViewMode2DToggledDetail>(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
       // If a floor was specified in URL, dispatch floor selection after a short delay
@@ -220,10 +236,10 @@ const UnifiedViewerContent: React.FC<{
   useEffect(() => {
     if (viewerReady && viewMode === '2d') {
       // Fire at 1.5s and again at 3s as fallback for slow mobile loads
-      const dispatch2D = () =>
-        window.dispatchEvent(
-          new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } })
-        );
+      const dispatch2D = () => {
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_2D_TOGGLED_EVENT, { detail: { enabled: true } }));
+        window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: '2d' } }));
+      };
       const t1 = setTimeout(dispatch2D, 1500);
       const t2 = setTimeout(dispatch2D, 3000);
       return () => { clearTimeout(t1); clearTimeout(t2); };
