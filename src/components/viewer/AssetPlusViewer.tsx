@@ -208,6 +208,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const loadSensorAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const sensorAnnotationsLoadedRef = useRef(false);
   const loadIssueAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const issueAnnotationsLoadedRef = useRef(false);
   const assetDataRef = useRef<any>(null);
   const allDataRef = useRef<any[]>(allData);
   const insightsColorModeRef = useRef(insightsColorMode);
@@ -1819,13 +1820,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       if (foundCount === 0) return;
 
-      // Get existing annotations manager or create new container
-      let localAnnotationsManager = localAnnotationsPluginRef.current;
-      let container = document.getElementById('local-annotations-container');
+      // Get or create a dedicated sensor annotations manager and container
+      let sensorAnnotationsManager = (viewerInstanceRef.current as any)?._sensorAnnotationsManager;
+      let container = document.getElementById('sensor-markers-container');
 
-      if (!localAnnotationsManager) {
-        // Initialize a basic annotations manager
-        localAnnotationsManager = {
+      if (!sensorAnnotationsManager) {
+        // Initialize a basic annotations manager for sensors only
+        sensorAnnotationsManager = {
           annotations: {} as Record<string, any>,
           container: null as HTMLElement | null,
           updatePositions: () => {
@@ -1837,7 +1838,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             if (!viewMatrix || !projMatrix) return;
             const cw = canvas.clientWidth;
             const ch = canvas.clientHeight;
-            Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
+            Object.values(sensorAnnotationsManager.annotations).forEach((ann: any) => {
               if (!ann.markerElement || !ann.markerShown) return;
               const canvasPos = projectWorldToCanvas(ann.worldPos, viewMatrix, projMatrix, cw, ch);
               if (canvasPos &&
@@ -1853,24 +1854,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             });
           },
         };
-        localAnnotationsPluginRef.current = localAnnotationsManager;
         if (viewerInstanceRef.current) {
-          viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsManager;
+          (viewerInstanceRef.current as any)._sensorAnnotationsManager = sensorAnnotationsManager;
         }
       }
 
       if (!container) {
         container = document.createElement('div');
-        container.id = 'local-annotations-container';
+        container.id = 'sensor-markers-container';
         container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;overflow:hidden;';
         viewerContainerRef.current?.appendChild(container);
       }
-      localAnnotationsManager.container = container;
+      sensorAnnotationsManager.container = container;
 
       // Create marker elements for each alarm annotation
       alarmAnnotations.forEach(ann => {
         // Skip if already exists
-        if (localAnnotationsManager.annotations[ann.id]) return;
+        if (sensorAnnotationsManager.annotations[ann.id]) return;
 
         const marker = document.createElement('div');
         marker.id = ann.id;
@@ -1922,21 +1922,21 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         
         container!.appendChild(marker);
 
-        localAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
+        sensorAnnotationsManager.annotations[ann.id] = { ...ann, markerElement: marker };
       });
 
       // Set up camera update listener (only once)
-      if (!localAnnotationsManager._cameraListenerSet) {
-        const updateHandler = () => localAnnotationsManager.updatePositions();
+      if (!sensorAnnotationsManager._cameraListenerSet) {
+        const updateHandler = () => sensorAnnotationsManager.updatePositions();
         xeokitViewer.scene.camera.on('viewMatrix', updateHandler);
         xeokitViewer.scene.camera.on('projMatrix', updateHandler);
-        localAnnotationsManager._cameraListenerSet = true;
+        sensorAnnotationsManager._cameraListenerSet = true;
 
         // Initial position update
         setTimeout(updateHandler, 100);
       } else {
         // Just update positions for new markers
-        setTimeout(() => localAnnotationsManager.updatePositions(), 100);
+        setTimeout(() => sensorAnnotationsManager.updatePositions(), 100);
       }
 
       console.log(`Created ${foundCount} sensor annotations for building:`, resolvedBuildingGuid);
@@ -1978,12 +1978,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       console.log(`Loading ${issues.length} issue annotations...`);
 
-      // Get or create the annotations manager and container
-      let localAnnotationsManager = localAnnotationsPluginRef.current;
-      let container = document.getElementById('local-annotations-container');
+      // Get or create a dedicated issue annotations manager and container
+      let issueAnnotationsManager = (viewerInstanceRef.current as any)?._issueAnnotationsManager;
+      let container = document.getElementById('issue-markers-container');
 
-      if (!localAnnotationsManager) {
-        localAnnotationsManager = {
+      if (!issueAnnotationsManager) {
+        issueAnnotationsManager = {
           annotations: {} as Record<string, any>,
           container: null as HTMLElement | null,
           updatePositions: () => {
@@ -1995,7 +1995,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             if (!viewMatrix || !projMatrix) return;
             const cw = canvas.clientWidth;
             const ch = canvas.clientHeight;
-            Object.values(localAnnotationsManager.annotations).forEach((ann: any) => {
+            Object.values(issueAnnotationsManager.annotations).forEach((ann: any) => {
               if (!ann.markerElement || !ann.markerShown) return;
               const canvasPos = projectWorldToCanvas(ann.worldPos, viewMatrix, projMatrix, cw, ch);
               if (canvasPos &&
@@ -2011,19 +2011,18 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             });
           },
         };
-        localAnnotationsPluginRef.current = localAnnotationsManager;
         if (viewerInstanceRef.current) {
-          viewerInstanceRef.current.localAnnotationsPlugin = localAnnotationsManager;
+          (viewerInstanceRef.current as any)._issueAnnotationsManager = issueAnnotationsManager;
         }
       }
 
       if (!container) {
         container = document.createElement('div');
-        container.id = 'local-annotations-container';
-        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:15;overflow:hidden;';
+        container.id = 'issue-markers-container';
+        container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:16;overflow:hidden;';
         viewerContainerRef.current?.appendChild(container);
       }
-      localAnnotationsManager.container = container;
+      issueAnnotationsManager.container = container;
 
       // Issue type color map
       const issueColors: Record<string, string> = {
@@ -2038,7 +2037,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       issues.forEach(issue => {
         const markerId = `issue-${issue.id}`;
         // Skip if already exists
-        if (localAnnotationsManager.annotations[markerId]) return;
+        if (issueAnnotationsManager.annotations[markerId]) return;
 
         // Extract world position from viewpoint_json
         const vp = issue.viewpoint_json as any;
@@ -2119,7 +2118,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
         container!.appendChild(marker);
 
-        localAnnotationsManager.annotations[markerId] = {
+        issueAnnotationsManager.annotations[markerId] = {
           id: markerId,
           worldPos,
           category: 'Issues',
@@ -2134,14 +2133,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       });
 
       // Set up camera listener if not already
-      if (!localAnnotationsManager._cameraListenerSet) {
-        const updateHandler = () => localAnnotationsManager.updatePositions();
+      if (!issueAnnotationsManager._cameraListenerSet) {
+        const updateHandler = () => issueAnnotationsManager.updatePositions();
         xeokitViewer.scene.camera.on('viewMatrix', updateHandler);
         xeokitViewer.scene.camera.on('projMatrix', updateHandler);
-        localAnnotationsManager._cameraListenerSet = true;
+        issueAnnotationsManager._cameraListenerSet = true;
         setTimeout(updateHandler, 100);
       } else {
-        setTimeout(() => localAnnotationsManager.updatePositions(), 100);
+        setTimeout(() => issueAnnotationsManager.updatePositions(), 100);
       }
 
       console.log(`Created ${createdCount} issue annotations for building:`, resolvedBuildingGuid);
@@ -2188,45 +2187,47 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         await loadSensorAnnotationsRef.current?.();
       }
 
-      const plugin = localAnnotationsPluginRef.current;
-      if (!plugin?.annotations) return;
+      // Use dedicated sensor annotations manager
+      const mgr = (viewerInstanceRef.current as any)?._sensorAnnotationsManager;
+      if (!mgr?.annotations) return;
 
-      Object.values(plugin.annotations).forEach((ann: any) => {
-        const category = ann.category || ann.markerElement?.dataset?.category || '';
-        if (category === 'Sensor') {
-          ann.markerShown = visible;
-          if (ann.markerElement) {
-            ann.markerElement.style.display = visible ? 'flex' : 'none';
-          }
+      Object.values(mgr.annotations).forEach((ann: any) => {
+        ann.markerShown = visible;
+        if (ann.markerElement) {
+          ann.markerElement.style.display = visible ? 'flex' : 'none';
         }
       });
 
-      plugin.updatePositions?.();
+      mgr.updatePositions?.();
     };
     window.addEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
     return () => window.removeEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
   }, []);
 
-  // Listen for ISSUE_ANNOTATIONS_TOGGLE_EVENT to show/hide issue markers
+  // Listen for ISSUE_ANNOTATIONS_TOGGLE_EVENT to lazy-load and show/hide issue markers
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = async (e: Event) => {
       const { visible } = (e as CustomEvent<IssueAnnotationsToggleDetail>).detail;
       issueAnnotationsVisibleRef.current = visible;
 
-      const plugin = localAnnotationsPluginRef.current;
-      if (!plugin?.annotations) return;
+      // Lazy-load if not yet loaded and we're turning issues on
+      if (visible && !issueAnnotationsLoadedRef.current) {
+        await loadIssueAnnotationsRef.current?.();
+        issueAnnotationsLoadedRef.current = true;
+      }
 
-      Object.values(plugin.annotations).forEach((ann: any) => {
-        const category = ann.category || ann.markerElement?.dataset?.category || '';
-        if (category === 'Issues') {
-          ann.markerShown = visible;
-          if (ann.markerElement) {
-            ann.markerElement.style.display = visible ? 'flex' : 'none';
-          }
+      // Use dedicated issue annotations manager
+      const mgr = (viewerInstanceRef.current as any)?._issueAnnotationsManager;
+      if (!mgr?.annotations) return;
+
+      Object.values(mgr.annotations).forEach((ann: any) => {
+        ann.markerShown = visible;
+        if (ann.markerElement) {
+          ann.markerElement.style.display = visible ? 'flex' : 'none';
         }
       });
 
-      plugin.updatePositions?.();
+      mgr.updatePositions?.();
     };
 
     window.addEventListener(ISSUE_ANNOTATIONS_TOGGLE_EVENT, handler);
@@ -2462,10 +2463,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       // Sensor annotations (IfcAlarm BIM objects) are NOT auto-loaded.
       // They are lazy-loaded when the user toggles "Show Sensors" in the right panel.
 
-      // Load issue annotations (BCF issues as 3D markers)
-      loadIssueAnnotationsRef.current?.().catch(e => {
-        console.error('loadIssueAnnotations failed:', e);
-      });
+      // Issue annotations are NOT auto-loaded (default OFF).
+      // They are lazy-loaded when the user toggles "Show Issues" in the right panel.
 
     // Initialize NavCube using custom plugin
     try {
@@ -3538,7 +3537,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         // Check if model is in the initial load whitelist
         if (allowedModelIdsRef.current) {
           const allowed = allowedModelIdsRef.current;
-          const isAllowed = allowed.has(modelId) || allowed.has(modelId.toLowerCase());
+          const lower = modelId.toLowerCase();
+          const stripped = lower.replace(/\.xkt$/i, '');
+          const isAllowed = allowed.has(modelId) || allowed.has(lower) || allowed.has(stripped);
           if (!isAllowed) {
             console.log(`XKT filter: Non-initial model ${modelId} — passing through without caching`);
             return original!(input, init);
@@ -3916,18 +3917,37 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           if (nameMap.size > 0) {
             const aModelIdsOriginal = new Set<string>();
             const aModelIds = new Set<string>();
+            
+            // Also build a file_name → model_id lookup from DB
+            const dbModelLookup = new Map<string, string>();
+            dbModels?.forEach(m => {
+              if (m.file_name) {
+                dbModelLookup.set(m.file_name, m.model_id);
+                dbModelLookup.set(m.file_name.toLowerCase(), m.model_id);
+              }
+            });
+
             nameMap.forEach((name, id) => {
               if (name.toLowerCase().startsWith('a')) {
                 aModelIdsOriginal.add(id);
+                // Add all possible key variants the SDK might use
                 aModelIds.add(id);
                 aModelIds.add(id.toLowerCase());
+                // Find the file_name for this model_id and add variants
+                const dbModel = dbModels?.find(m => m.model_id === id);
+                if (dbModel?.file_name) {
+                  aModelIds.add(dbModel.file_name);                          // e.g. "uuid.xkt"
+                  aModelIds.add(dbModel.file_name.toLowerCase());
+                  aModelIds.add(dbModel.file_name.replace(/\.xkt$/i, ''));    // strip .xkt
+                  aModelIds.add(dbModel.file_name.replace(/\.xkt$/i, '').toLowerCase());
+                }
               }
             });
 
             const totalUniqueModels = new Set([...nameMap.keys()].map(k => k.toLowerCase())).size;
             if (aModelIdsOriginal.size > 0 && aModelIdsOriginal.size < totalUniqueModels) {
               allowedModelIdsRef.current = aModelIds;
-              console.log(`XKT filter: Initial load restricted to ${aModelIdsOriginal.size} A-model(s) out of ${totalUniqueModels}`);
+              console.log(`XKT filter: Initial load restricted to ${aModelIdsOriginal.size} A-model(s) out of ${totalUniqueModels}. Whitelist keys: ${aModelIds.size}`);
             }
           } else {
             console.debug('XKT filter: No model names resolved — loading all models');
@@ -4037,7 +4057,17 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         // additionalDefaultPredicate - filter to only load allowed models (A-model whitelist)
         (modelId: string) => {
           if (!allowedModelIdsRef.current) return true; // no filter → load all
-          return allowedModelIdsRef.current.has(modelId) || allowedModelIdsRef.current.has(modelId.toLowerCase());
+          const whitelist = allowedModelIdsRef.current;
+          const lower = modelId.toLowerCase();
+          const stripped = lower.replace(/\.xkt$/i, '');
+          const accepted = whitelist.has(modelId) || whitelist.has(lower) || whitelist.has(stripped);
+          // Diagnostic logging for first few calls
+          if (!(window as any).__xktPredicateLogCount) (window as any).__xktPredicateLogCount = 0;
+          if ((window as any).__xktPredicateLogCount < 8) {
+            console.log(`[XKT predicate] modelId="${modelId}" → ${accepted ? 'ACCEPT' : 'REJECT'}`);
+            (window as any).__xktPredicateLogCount++;
+          }
+          return accepted;
         },
         // externalCustomObjectContextMenuItems
         undefined,
