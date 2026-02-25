@@ -146,6 +146,138 @@ async function fmAccessFetch(
   });
 }
 
+// ── IFC/Asset+ → FM Access target class mapping ────────────────────
+
+interface TargetClassResult {
+  classId: number | null;
+  targetClass: string;
+}
+
+/**
+ * Resolve FM Access target class from IFC type and/or Asset+ category.
+ * FM Access uses target class names (e.g. fmo_equip_door) to route objects
+ * into the correct import domain / object tab.
+ */
+function resolveTargetClass(ifcType?: string, category?: string): TargetClassResult {
+  const ifc = (ifcType || '').toLowerCase().replace(/^ifc/, '');
+  const cat = (category || '').toLowerCase();
+
+  // Structural hierarchy
+  if (ifc === 'building' || cat === 'building') return { classId: 103, targetClass: 'fmo_struct' };
+  if (ifc === 'buildingstorey' || cat === 'level' || cat === 'building storey') return { classId: 105, targetClass: 'fmo_floor' };
+  if (ifc === 'space' || cat === 'space') return { classId: 107, targetClass: 'fmo_space_i' };
+  if (ifc === 'site' || cat === 'site') return { classId: null, targetClass: 'fmo_prop' };
+
+  // Equipment — doors & windows
+  if (ifc === 'door' || cat === 'door') return { classId: null, targetClass: 'fmo_equip_door' };
+  if (ifc === 'window' || cat === 'window') return { classId: null, targetClass: 'fmo_equip_window' };
+
+  // Fire safety equipment
+  if (ifc === 'firesuppressionterminal' || ifc === 'alarm' || cat === 'alarm' ||
+      ifc === 'distributioncontrolelement' || cat === 'distributioncontrolelement' ||
+      cat === 'fire' || cat === 'firesuppression') {
+    return { classId: null, targetClass: 'fmo_equip_fire' };
+  }
+
+  // Flow terminals (HVAC etc.)
+  if (ifc === 'flowterminal' || cat === 'flowterminal' || cat === 'flow terminal') {
+    return { classId: null, targetClass: 'fmo_equip_flowterminals' };
+  }
+
+  // Sensors
+  if (ifc === 'sensor' || cat === 'sensor') return { classId: null, targetClass: 'fmo_equip_fire' };
+
+  // Building element proxy → electrical appliance (IFC) or appliance (Asset+)
+  if (ifc === 'buildingelementproxy' || cat === 'buildingelementproxy') {
+    return { classId: null, targetClass: 'fmo_equip_electricappliance' };
+  }
+
+  // Furniture / units
+  if (ifc === 'furniture' || ifc === 'furnishingelement' || cat === 'furniture') {
+    return { classId: null, targetClass: 'fmo_equip_units' };
+  }
+
+  // Default: generic appliance/equipment
+  return { classId: null, targetClass: 'fmo_equip_appliance' };
+}
+
+/**
+ * Map Geminus/Asset+ property names to FM Access domain-specific field names
+ * based on the resolved target class.
+ */
+function mapPropertiesToFmAccess(targetClass: string, props: Record<string, any>): Record<string, any> {
+  if (!props || Object.keys(props).length === 0) return props;
+
+  const mapped: Record<string, any> = {};
+
+  if (targetClass === 'fmo_space_i') {
+    // Space property mapping
+    const spaceMap: Record<string, string> = {
+      commonName: 'space_name',
+      usableFloorArea: 'space_bra',
+      grossFloorArea: 'space_bta',
+      netFloorArea: 'space_nta',
+      fmGuid: 'space_guid',
+      globalId: 'space_id',
+      typeId: 'space_function',
+      function: 'space_function',
+      averageClearHeight: 'space_unboundedheight',
+      occupancyNumber: 'space_ru_nr',
+      designation: 'space_name',
+      description: 'space_descr',
+    };
+    for (const [key, value] of Object.entries(props)) {
+      mapped[spaceMap[key] || key] = value;
+    }
+  } else if (targetClass.startsWith('fmo_equip_')) {
+    // Equipment property mapping (doors, windows, fire, etc.)
+    const equipMap: Record<string, string> = {
+      commonName: 'equip_name',
+      designation: 'equip_name',
+      description: 'equip_descr',
+      manufacturer: 'equip_manufacturer',
+      warrantyTime: 'equip_warranty_time',
+      fireClass: 'equip_fire_class',
+      soundClass: 'equip_sound_class',
+      material: 'equip_material',
+      model: 'equip_model',
+      serialNumber: 'equip_serial',
+      installationDate: 'equip_install_date',
+      assetType: 'equip_type',
+      coordinateX: 'equip_coord_x',
+      coordinateY: 'equip_coord_y',
+      coordinateZ: 'equip_coord_z',
+    };
+    for (const [key, value] of Object.entries(props)) {
+      mapped[equipMap[key] || key] = value;
+    }
+  } else if (targetClass === 'fmo_floor') {
+    const floorMap: Record<string, string> = {
+      commonName: 'floor_name',
+      designation: 'floor_name',
+      description: 'floor_descr',
+      elevation: 'floor_elevation',
+    };
+    for (const [key, value] of Object.entries(props)) {
+      mapped[floorMap[key] || key] = value;
+    }
+  } else if (targetClass === 'fmo_struct') {
+    const structMap: Record<string, string> = {
+      commonName: 'struct_name',
+      designation: 'struct_name',
+      description: 'struct_descr',
+    };
+    for (const [key, value] of Object.entries(props)) {
+      mapped[structMap[key] || key] = value;
+    }
+  } else {
+    // Pass through for unknown target classes
+    return props;
+  }
+
+  return mapped;
+}
+
 // ── Shared helpers for building/floor resolution ────────────────────
 
 function findNodesByClassId(nodes: any[], classId: number): any[] {
@@ -790,7 +922,7 @@ serve(async (req) => {
 
       case 'sync-object': {
         // Smart sync: check if object exists by GUID, create or update accordingly
-        const { fmGuid, name: syncName, parentGuid: syncParentGuid, properties: syncProps, localUpdatedAt } = params;
+        const { fmGuid, name: syncName, parentGuid: syncParentGuid, properties: syncProps, localUpdatedAt, ifcType, category: syncCategory } = params;
         if (!fmGuid) {
           return new Response(
             JSON.stringify({ success: false, error: 'fmGuid is required' }),
@@ -799,6 +931,10 @@ serve(async (req) => {
         }
 
         try {
+          // Resolve target class for this object
+          const { targetClass, classId: resolvedClassId } = resolveTargetClass(ifcType, syncCategory);
+          console.log(`FM Access sync-object: ifcType=${ifcType}, category=${syncCategory} -> targetClass=${targetClass}, classId=${resolvedClassId}`);
+
           // 1. Check if object exists in FM Access
           const checkResp = await fmAccessFetch(config, `/api/object/byguid/json/${encodeURIComponent(fmGuid)}`);
           const checkText = await checkResp.text();
@@ -840,10 +976,11 @@ serve(async (req) => {
             }
 
             if (direction === 'push' && syncProps && Object.keys(syncProps).length > 0) {
-              // Push local changes to FM Access
+              // Map properties to FM Access field names before pushing
+              const mappedUpdateProps = mapPropertiesToFmAccess(targetClass, syncProps);
               const updatePayload: any = {};
               if (syncName) updatePayload.objectName = syncName;
-              updatePayload.properties = syncProps;
+              updatePayload.properties = mappedUpdateProps;
 
               const updateResp = await fmAccessFetch(config, `/api/object/byguid/${encodeURIComponent(fmGuid)}`, {
                 method: 'PUT',
@@ -858,6 +995,7 @@ serve(async (req) => {
                   success: updateResp.ok, 
                   action: 'updated', 
                   direction: 'push',
+                  targetClass,
                   data: updateData,
                   error: !updateResp.ok ? `FM Access returned ${updateResp.status}` : undefined 
                 }),
@@ -870,6 +1008,7 @@ serve(async (req) => {
                   success: true, 
                   action: 'pull', 
                   direction: 'pull',
+                  targetClass,
                   remoteObject: existingObj,
                   remoteProperties: remoteProps,
                   remoteName: existingObj.objectName || existingObj.ObjectName || null,
@@ -878,7 +1017,7 @@ serve(async (req) => {
               );
             } else {
               return new Response(
-                JSON.stringify({ success: true, action: 'none', direction: 'none', message: 'Object in sync' }),
+                JSON.stringify({ success: true, action: 'none', direction: 'none', targetClass, message: 'Object in sync' }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
@@ -891,13 +1030,20 @@ serve(async (req) => {
               );
             }
 
+            // Map properties to FM Access domain-specific field names
+            const mappedCreateProps = mapPropertiesToFmAccess(targetClass, syncProps || {});
+
             const createPayload: any = {
               objectName: syncName,
               parentGuid: syncParentGuid,
               systemGuid: fmGuid,
+              targetClass: targetClass,
             };
-            if (syncProps && Object.keys(syncProps).length > 0) {
-              createPayload.properties = syncProps;
+            if (resolvedClassId) {
+              createPayload.classId = resolvedClassId;
+            }
+            if (mappedCreateProps && Object.keys(mappedCreateProps).length > 0) {
+              createPayload.properties = mappedCreateProps;
             }
 
             const createResp = await fmAccessFetch(config, '/api/object', {
@@ -1025,7 +1171,7 @@ serve(async (req) => {
           // 4. Create Byggnad (classId 103) under Fastighet
           const byggnadResp = await fmAccessFetch(config, '/api/object', {
             method: 'POST',
-            body: JSON.stringify({ objectName: buildingName, parentGuid: fastighetGuid, classId: 103, systemGuid: buildingFmGuid }),
+            body: JSON.stringify({ objectName: buildingName, parentGuid: fastighetGuid, classId: 103, systemGuid: buildingFmGuid, targetClass: 'fmo_struct' }),
           });
           const byggnadData = await byggnadResp.json();
           console.log('FM Access ensure-hierarchy: Created Byggnad:', byggnadResp.status, JSON.stringify(byggnadData).substring(0, 300));
@@ -1040,7 +1186,7 @@ serve(async (req) => {
             try {
               const planResp = await fmAccessFetch(config, '/api/object', {
                 method: 'POST',
-                body: JSON.stringify({ objectName: level.name || 'Plan', parentGuid: byggnadGuid, classId: 105, systemGuid: level.fmGuid }),
+                body: JSON.stringify({ objectName: level.name || 'Plan', parentGuid: byggnadGuid, classId: 105, systemGuid: level.fmGuid, targetClass: 'fmo_floor' }),
               });
               const planData = await planResp.json();
               console.log('FM Access ensure-hierarchy: Created Plan:', level.name, planResp.status);
@@ -1061,7 +1207,7 @@ serve(async (req) => {
             try {
               const roomResp = await fmAccessFetch(config, '/api/object', {
                 method: 'POST',
-                body: JSON.stringify({ objectName: room.name || 'Rum', parentGuid, classId: 107, systemGuid: room.fmGuid }),
+                body: JSON.stringify({ objectName: room.name || 'Rum', parentGuid, classId: 107, systemGuid: room.fmGuid, targetClass: 'fmo_space_i' }),
               });
               console.log('FM Access ensure-hierarchy: Created Room:', room.name, roomResp.status);
               if (roomResp.ok) roomsCreated++;
