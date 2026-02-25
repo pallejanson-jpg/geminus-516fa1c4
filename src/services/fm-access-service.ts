@@ -174,6 +174,84 @@ export async function syncAssetWithFmAccess(fmGuid: string): Promise<{ success: 
 }
 
 /**
+ * Ensure the full building hierarchy (Fastighet → Byggnad → Plan → Rum) exists in FM Access.
+ * Called automatically before syncing individual assets.
+ */
+export async function ensureFmAccessHierarchy(buildingFmGuid: string): Promise<{ success: boolean; error?: string; action?: string; created?: string[] }> {
+  try {
+    // 1. Get building info from local assets
+    const { data: buildingAsset } = await supabase
+      .from("assets")
+      .select("name, common_name, complex_common_name, building_fm_guid")
+      .eq("fm_guid", buildingFmGuid)
+      .maybeSingle();
+
+    // If no building asset found, try to get building name from any asset under this building
+    let buildingName = buildingAsset?.name || buildingAsset?.common_name || "Unnamed";
+    let complexName = buildingAsset?.complex_common_name || buildingName;
+
+    if (!buildingAsset) {
+      const { data: anyAsset } = await supabase
+        .from("assets")
+        .select("complex_common_name")
+        .eq("building_fm_guid", buildingFmGuid)
+        .limit(1)
+        .maybeSingle();
+      if (anyAsset?.complex_common_name) {
+        buildingName = anyAsset.complex_common_name;
+        complexName = anyAsset.complex_common_name;
+      }
+    }
+
+    // 2. Get levels (category = 'Level') under this building
+    const { data: levelAssets } = await supabase
+      .from("assets")
+      .select("fm_guid, name, common_name")
+      .eq("building_fm_guid", buildingFmGuid)
+      .eq("category", "Level");
+
+    const levels = (levelAssets || []).map(l => ({
+      fmGuid: l.fm_guid,
+      name: l.name || l.common_name || "Plan",
+    }));
+
+    // 3. Get rooms (category = 'Space') under this building
+    const { data: roomAssets } = await supabase
+      .from("assets")
+      .select("fm_guid, name, common_name, level_fm_guid")
+      .eq("building_fm_guid", buildingFmGuid)
+      .eq("category", "Space");
+
+    const rooms = (roomAssets || []).map(r => ({
+      fmGuid: r.fm_guid,
+      name: r.name || r.common_name || "Rum",
+      levelFmGuid: r.level_fm_guid || undefined,
+    }));
+
+    console.log(`[FM Access] ensureFmAccessHierarchy: ${buildingName}, ${levels.length} levels, ${rooms.length} rooms`);
+
+    // 4. Call ensure-hierarchy action
+    const { data, error } = await supabase.functions.invoke("fm-access-query", {
+      body: {
+        action: "ensure-hierarchy",
+        buildingFmGuid,
+        buildingName,
+        complexName,
+        levels,
+        rooms,
+      },
+    });
+
+    if (error) return { success: false, error: error.message };
+    if (!data?.success) return { success: false, error: data?.error || "Hierarchy creation failed" };
+
+    return { success: true, action: data.action, created: data.created };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Push a local asset from Geminus to FM Access (legacy, wraps syncAssetWithFmAccess).
  */
 export async function pushAssetToFmAccess(fmGuid: string): Promise<{ success: boolean; error?: string; data?: any }> {

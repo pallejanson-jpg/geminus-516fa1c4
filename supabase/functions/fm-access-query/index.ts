@@ -927,6 +927,226 @@ serve(async (req) => {
         }
       }
 
+      // ── Ensure full building hierarchy exists in FM Access ──────────
+      case 'ensure-hierarchy': {
+        const { buildingFmGuid, buildingName, complexName, levels, rooms } = params;
+        if (!buildingFmGuid || !buildingName) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'buildingFmGuid and buildingName are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const created: string[] = [];
+          const skipped: string[] = [];
+
+          // 1. Check if building already exists in FM Access
+          const checkResp = await fmAccessFetch(config, `/api/object/byguid/json/${encodeURIComponent(buildingFmGuid)}`);
+          const checkText = await checkResp.text();
+          let existingObj: any = null;
+          try { existingObj = JSON.parse(checkText); } catch { existingObj = null; }
+
+          const buildingExists = checkResp.ok && existingObj && typeof existingObj === 'object' && !existingObj.error && !existingObj.Error &&
+            (existingObj.objectId || existingObj.ObjectId || existingObj.id || existingObj.Id ||
+             existingObj.objectName || existingObj.ObjectName || existingObj.name || existingObj.Name ||
+             existingObj.guid || existingObj.Guid || existingObj.systemGuid || existingObj.SystemGuid);
+
+          if (buildingExists) {
+            console.log('FM Access ensure-hierarchy: Building already exists:', buildingName);
+            return new Response(
+              JSON.stringify({ success: true, action: 'skipped', message: 'Building already exists in FM Access', created, skipped: ['building'] }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          console.log('FM Access ensure-hierarchy: Building not found, creating hierarchy for:', buildingName);
+
+          // 2. Get perspective root to find parent for Fastighet
+          const rootResp = await fmAccessFetch(config, '/api/perspective/root/json/8');
+          if (!rootResp.ok) {
+            const rootErr = await rootResp.text();
+            throw new Error(`Could not get perspective root: ${rootResp.status} ${rootErr.substring(0, 200)}`);
+          }
+          const rootData = await rootResp.json();
+          const rootNodes = Array.isArray(rootData) ? rootData : (rootData.children || rootData.Children || [rootData]);
+
+          // Find root perspective node GUID (first node, usually the system root)
+          let rootGuid: string | null = null;
+          if (rootNodes.length > 0) {
+            const first = rootNodes[0];
+            rootGuid = first.systemGuid || first.objectGuid || first.ObjectGuid || first.guid || first.Guid || null;
+          }
+          if (!rootGuid) {
+            throw new Error('Could not determine root perspective GUID');
+          }
+
+          console.log('FM Access ensure-hierarchy: Root perspective GUID:', rootGuid);
+
+          // 3. Create Fastighet (classId 102) under root
+          const fastighetName = complexName || buildingName;
+          // Check if a Fastighet with this name already exists
+          let fastighetGuid: string | null = null;
+          for (const node of rootNodes) {
+            const nodeName = (node.objectName || node.ObjectName || node.name || '').toLowerCase().trim();
+            const nodeClassId = node.classId || node.ClassId;
+            if (nodeName === fastighetName.toLowerCase().trim() && (nodeClassId === 102 || !nodeClassId)) {
+              fastighetGuid = node.systemGuid || node.objectGuid || node.guid || null;
+              console.log('FM Access ensure-hierarchy: Found existing Fastighet:', fastighetName, '->', fastighetGuid);
+              skipped.push('fastighet');
+              break;
+            }
+          }
+
+          if (!fastighetGuid) {
+            const fastighetResp = await fmAccessFetch(config, '/api/object', {
+              method: 'POST',
+              body: JSON.stringify({ objectName: fastighetName, parentGuid: rootGuid, classId: 102 }),
+            });
+            const fastighetData = await fastighetResp.json();
+            console.log('FM Access ensure-hierarchy: Created Fastighet:', fastighetResp.status, JSON.stringify(fastighetData).substring(0, 300));
+            if (!fastighetResp.ok) throw new Error(`Failed to create Fastighet: ${fastighetResp.status}`);
+            fastighetGuid = fastighetData.systemGuid || fastighetData.guid || fastighetData.objectGuid || fastighetData.Guid || null;
+            if (!fastighetGuid) {
+              // Try to look it up after creation
+              const lookupResp = await fmAccessFetch(config, '/api/perspective/root/json/8');
+              if (lookupResp.ok) {
+                const lookupData = await lookupResp.json();
+                const lookupNodes = Array.isArray(lookupData) ? lookupData : (lookupData.children || lookupData.Children || []);
+                const match = lookupNodes.find((n: any) => (n.objectName || n.ObjectName || '').toLowerCase().trim() === fastighetName.toLowerCase().trim());
+                if (match) fastighetGuid = match.systemGuid || match.objectGuid || match.guid || null;
+              }
+            }
+            created.push('fastighet');
+          }
+
+          if (!fastighetGuid) throw new Error('Could not determine Fastighet GUID after creation');
+
+          // 4. Create Byggnad (classId 103) under Fastighet
+          const byggnadResp = await fmAccessFetch(config, '/api/object', {
+            method: 'POST',
+            body: JSON.stringify({ objectName: buildingName, parentGuid: fastighetGuid, classId: 103, systemGuid: buildingFmGuid }),
+          });
+          const byggnadData = await byggnadResp.json();
+          console.log('FM Access ensure-hierarchy: Created Byggnad:', byggnadResp.status, JSON.stringify(byggnadData).substring(0, 300));
+          if (!byggnadResp.ok) throw new Error(`Failed to create Byggnad: ${byggnadResp.status}`);
+          const byggnadGuid = byggnadData.systemGuid || byggnadData.guid || byggnadData.objectGuid || buildingFmGuid;
+          created.push('byggnad');
+
+          // 5. Create Plans (classId 105) under Byggnad
+          const levelGuids: Record<string, string> = {};
+          const levelArray = Array.isArray(levels) ? levels : [];
+          for (const level of levelArray) {
+            try {
+              const planResp = await fmAccessFetch(config, '/api/object', {
+                method: 'POST',
+                body: JSON.stringify({ objectName: level.name || 'Plan', parentGuid: byggnadGuid, classId: 105, systemGuid: level.fmGuid }),
+              });
+              const planData = await planResp.json();
+              console.log('FM Access ensure-hierarchy: Created Plan:', level.name, planResp.status);
+              if (planResp.ok) {
+                levelGuids[level.fmGuid] = planData.systemGuid || planData.guid || level.fmGuid;
+                created.push(`plan:${level.name}`);
+              }
+            } catch (e: any) {
+              console.error('FM Access ensure-hierarchy: Plan creation failed:', level.name, e.message);
+            }
+          }
+
+          // 6. Create Rooms (classId 107) under their Plan
+          const roomArray = Array.isArray(rooms) ? rooms : [];
+          let roomsCreated = 0;
+          for (const room of roomArray) {
+            const parentGuid = room.levelFmGuid ? (levelGuids[room.levelFmGuid] || room.levelFmGuid) : byggnadGuid;
+            try {
+              const roomResp = await fmAccessFetch(config, '/api/object', {
+                method: 'POST',
+                body: JSON.stringify({ objectName: room.name || 'Rum', parentGuid, classId: 107, systemGuid: room.fmGuid }),
+              });
+              console.log('FM Access ensure-hierarchy: Created Room:', room.name, roomResp.status);
+              if (roomResp.ok) roomsCreated++;
+            } catch (e: any) {
+              console.error('FM Access ensure-hierarchy: Room creation failed:', room.name, e.message);
+            }
+          }
+          if (roomsCreated > 0) created.push(`${roomsCreated} rum`);
+
+          // 7. Update building_settings with FM Access GUID
+          try {
+            const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+            const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+            if (supabaseUrl && serviceRoleKey) {
+              await fetch(`${supabaseUrl}/rest/v1/building_settings?fm_guid=eq.${encodeURIComponent(buildingFmGuid)}`, {
+                method: 'PATCH',
+                headers: {
+                  'apikey': serviceRoleKey,
+                  'Authorization': `Bearer ${serviceRoleKey}`,
+                  'Content-Type': 'application/json',
+                  'Prefer': 'return=minimal',
+                },
+                body: JSON.stringify({ fm_access_building_guid: byggnadGuid }),
+              });
+              console.log('FM Access ensure-hierarchy: Updated building_settings with FM Access GUID');
+            }
+          } catch (e: any) {
+            console.log('FM Access ensure-hierarchy: Failed to update building_settings:', e.message);
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, action: 'created', created, skipped, byggnadGuid }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          console.error('FM Access ensure-hierarchy error:', error.message);
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // ── Discover drawing upload API capabilities ──────────────────
+      case 'discover-drawing-api': {
+        try {
+          const results: Record<string, any> = {};
+
+          // Probe various drawing-related endpoints
+          const endpoints = [
+            { path: '/api/drawings', method: 'GET', label: 'list-drawings' },
+            { path: '/api/drawings', method: 'OPTIONS', label: 'drawings-options' },
+            { path: '/api/files', method: 'OPTIONS', label: 'files-options' },
+            { path: '/api/files/upload', method: 'OPTIONS', label: 'files-upload-options' },
+            { path: '/api/config/classes/json', method: 'GET', label: 'classes' },
+          ];
+
+          for (const ep of endpoints) {
+            try {
+              const resp = await fmAccessFetch(config, ep.path, { method: ep.method });
+              const text = await resp.text();
+              let data: any;
+              try { data = JSON.parse(text); } catch { data = text.substring(0, 500); }
+              results[ep.label] = {
+                status: resp.status,
+                headers: Object.fromEntries(resp.headers.entries()),
+                data: typeof data === 'string' ? data : JSON.stringify(data).substring(0, 1000),
+              };
+            } catch (e: any) {
+              results[ep.label] = { error: e.message };
+            }
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, results }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error: any) {
+          return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       case 'proxy': {
         const { path: apiPath, method: apiMethod, body: apiBody } = params;
         if (!apiPath) {
