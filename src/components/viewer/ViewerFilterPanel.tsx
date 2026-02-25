@@ -115,8 +115,9 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [spacesSearch, setSpacesSearch] = useState('');
   const [levelsSearch, setLevelsSearch] = useState('');
 
-  // Per-level colors
+  // Per-level and per-space colors
   const [levelColors, setLevelColors] = useState<Map<string, string>>(new Map());
+  const [spaceColors, setSpaceColors] = useState<Map<string, string>>(new Map());
   const [autoColorEnabled, setAutoColorEnabled] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
 
@@ -582,17 +583,28 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         }
       });
 
+      // Also colorize spaces with their own colors
+      spaces.forEach(space => {
+        const color = spaceColors.get(space.fmGuid);
+        if (color) {
+          const rgb = hexToRgb01(color);
+          const spaceEntityIds = eMap.get(space.fmGuid);
+          spaceEntityIds?.forEach(id => {
+            const entity = scene.objects?.[id];
+            if (entity) entity.colorize = rgb;
+          });
+        }
+      });
+
       // Also colorize by IFC category when auto-color is enabled
-      if (viewer.metaScene?.metaObjects) {
+      if (checkedCategories.size > 0 && viewer.metaScene?.metaObjects) {
         Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
           if (!mo.type) return;
           const catName = mo.type.replace(/^Ifc/, '').replace(/StandardCase$/, '');
           const catColor = CATEGORY_PALETTE[catName];
           if (catColor) {
             const entity = scene.objects?.[mo.id];
-            if (entity) {
-              entity.colorize = hexToRgb01(catColor);
-            }
+            if (entity) entity.colorize = hexToRgb01(catColor);
           }
         });
       }
@@ -802,7 +814,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           scene.setObjectsXRayed(contextOnlyIds, true);
         }
       }
-      // Show the selected space solid with highlight color
+      // Show the selected space solid with natural colors (or user-picked color)
       spaceOnlyEntityIds.forEach(id => {
         if (areaSet.has(id)) return; // Never show area spaces
         const entity = scene.objects?.[id];
@@ -810,8 +822,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           entity.visible = true;
           entity.pickable = true;
           entity.xrayed = false;
-          entity.opacity = 0.6;
-          entity.colorize = HIGHLIGHT_COLOR;
+          entity.opacity = 0.7;
+          // Only colorize if user has explicitly set a color for this space
+          // Find the space fmGuid for this entity id
+          let hasCustomColor = false;
+          if (autoColorEnabled) {
+            for (const [spaceFmGuid, color] of spaceColors.entries()) {
+              if (checkedSpaces.has(spaceFmGuid)) {
+                const spaceIds = eMap.get(spaceFmGuid);
+                if (spaceIds?.includes(id)) {
+                  entity.colorize = hexToRgb01(color);
+                  hasCustomColor = true;
+                  break;
+                }
+              }
+            }
+          }
+          // If no custom color, keep natural colors (don't colorize)
+          if (!hasCustomColor) {
+            entity.colorize = null;
+          }
         }
       });
     }
@@ -851,7 +881,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, categoryToIfcTypes, levelColors, autoColorEnabled, xrayMode]);
+    levels, spaces, categoryToIfcTypes, levelColors, spaceColors, autoColorEnabled, xrayMode]);
 
   // Apply whenever filters or colors change
   useEffect(() => {
@@ -1096,7 +1126,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 checked={checkedSpaces.has(space.fmGuid)}
                 onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
-                color={autoColorEnabled ? levelColors.get(space.levelFmGuid) : undefined}
+                color={autoColorEnabled ? (spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length]) : undefined}
+                onColorChange={autoColorEnabled ? (c) => setSpaceColors(prev => new Map(prev).set(space.fmGuid, c)) : undefined}
               />
             ))}
             {filteredSpaces.length > 200 && (
