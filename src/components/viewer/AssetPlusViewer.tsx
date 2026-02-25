@@ -2548,6 +2548,36 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         (canvas as any).__geminusContextMenuAttached = true;
         console.log('[ContextMenu] Capturing listener attached to xeokit canvas');
       }
+
+      // MutationObserver to nuke any DevExtreme context menus that slip through
+      if (!(window as any).__dxContextMenuObserver) {
+        const observer = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            m.addedNodes.forEach((node) => {
+              if (node instanceof HTMLElement) {
+                const isDxCtx = node.classList?.contains('dx-context-menu') ||
+                  node.classList?.contains('dx-context-menu-container') ||
+                  node.querySelector?.('.dx-context-menu');
+                if (isDxCtx) {
+                  (node as HTMLElement).style.display = 'none';
+                  (node as HTMLElement).remove();
+                  console.log('[ContextMenu] Removed Asset+ DevExtreme context menu from DOM');
+                }
+                if (node.classList?.contains('dx-overlay-wrapper')) {
+                  const ctx = node.querySelector('.dx-context-menu');
+                  if (ctx) {
+                    (node as HTMLElement).style.display = 'none';
+                    (node as HTMLElement).remove();
+                    console.log('[ContextMenu] Removed Asset+ overlay wrapper with context menu');
+                  }
+                }
+              }
+            });
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        (window as any).__dxContextMenuObserver = observer;
+      }
     } catch (e) {
       console.debug('Could not attach context menu interceptor:', e);
     }
