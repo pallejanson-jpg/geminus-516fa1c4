@@ -112,6 +112,14 @@ export interface LoadSavedViewDetail {
   visualizationMockData: boolean;
 }
 
+/** Event dispatched when issue annotations should be toggled on/off */
+export const ISSUE_ANNOTATIONS_TOGGLE_EVENT = 'ISSUE_ANNOTATIONS_TOGGLE';
+
+/** Type for issue annotations toggle event detail */
+export interface IssueAnnotationsToggleDetail {
+  visible: boolean;
+}
+
 /** Event dispatched when sensor annotations should be toggled on/off */
 export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE';
 
