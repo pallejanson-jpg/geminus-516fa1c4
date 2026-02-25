@@ -93,35 +93,37 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
       }
 
       // 3. LOD distance culling — hide small entities when camera is far
-      if (!pluginsRef.current.lodInterval) {
+      // Skip entirely on mobile or if scene has >50k objects (too expensive)
+      if (!pluginsRef.current.lodInterval && !isMobile) {
         const scene = xeokitViewer.scene;
-        pluginsRef.current.lodInterval = setInterval(() => {
-          if (!scene?.camera || !scene.objects) return;
-          const eye = scene.camera.eye;
-          const objects = scene.objects;
-          for (const id in objects) {
-            const entity = objects[id];
-            if (!entity?.aabb) continue;
-            const aabb = entity.aabb;
-            // Size of the entity (diagonal of bounding box)
-            const dx = aabb[3] - aabb[0];
-            const dy = aabb[4] - aabb[1];
-            const dz = aabb[5] - aabb[2];
-            const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (size > 2) continue; // Only cull small objects
-
-            // Distance from camera to entity center
-            const cx = (aabb[0] + aabb[3]) / 2;
-            const cy = (aabb[1] + aabb[4]) / 2;
-            const cz = (aabb[2] + aabb[5]) / 2;
-            const dist = Math.sqrt(
-              (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
-            );
-
-            entity.culled = dist > LOD_FAR_DISTANCE;
-          }
-        }, LOD_CHECK_INTERVAL_MS);
-        console.log('[perf-plugins] LOD distance culling started');
+        const objectCount = scene?.objectIds?.length || Object.keys(scene?.objects || {}).length;
+        if (objectCount <= 50000) {
+          pluginsRef.current.lodInterval = setInterval(() => {
+            if (!scene?.camera || !scene.objects) return;
+            const eye = scene.camera.eye;
+            const objects = scene.objects;
+            for (const id in objects) {
+              const entity = objects[id];
+              if (!entity?.aabb) continue;
+              const aabb = entity.aabb;
+              const dx = aabb[3] - aabb[0];
+              const dy = aabb[4] - aabb[1];
+              const dz = aabb[5] - aabb[2];
+              const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (size > 2) continue;
+              const cx = (aabb[0] + aabb[3]) / 2;
+              const cy = (aabb[1] + aabb[4]) / 2;
+              const cz = (aabb[2] + aabb[5]) / 2;
+              const dist = Math.sqrt(
+                (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
+              );
+              entity.culled = dist > LOD_FAR_DISTANCE;
+            }
+          }, LOD_CHECK_INTERVAL_MS);
+          console.log('[perf-plugins] LOD distance culling started', { objectCount });
+        } else {
+          console.log('[perf-plugins] LOD culling skipped — too many objects:', objectCount);
+        }
       }
     };
 

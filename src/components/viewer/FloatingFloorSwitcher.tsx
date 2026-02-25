@@ -31,7 +31,7 @@ interface FloatingFloorSwitcherProps {
 export const FLOOR_PILLS_TOGGLE_EVENT = 'FLOOR_PILLS_TOGGLE';
 
 // Constants for responsive design
-const MAX_VISIBLE_PILLS_DESKTOP = 10;
+const MAX_VISIBLE_PILLS_DESKTOP = 12;
 const MAX_VISIBLE_PILLS_MOBILE = 4;
 
 /**
@@ -541,8 +541,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  compact ? 'h-6 w-7 p-0 text-[9px] font-medium rounded-full' : 'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
-                  'transition-all duration-150',
+                  compact ? 'h-6 px-1.5 text-[9px] font-medium rounded-md' : 'h-7 px-2 min-w-[40px] max-w-[120px] text-[10px] sm:text-xs font-medium rounded-md',
+                  'transition-all duration-150 w-auto',
                   state === 'active' && [
                     'bg-primary text-primary-foreground',
                     'ring-2 ring-primary/30',
@@ -558,8 +558,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                   ],
                 )}
               >
-                <span className={compact ? "text-[9px]" : "text-[10px] sm:text-xs"}>
-                  {floor.shortName}
+                <span className={cn(compact ? "text-[9px]" : "text-[10px] sm:text-xs", "truncate")}>
+                  {floor.name}
                 </span>
               </Button>
             </TooltipTrigger>
@@ -582,7 +582,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
               variant="ghost"
               size="sm"
               className={cn(
-                'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[10px] sm:text-xs font-medium rounded-full',
+                'h-7 px-2 min-w-[40px] text-[10px] sm:text-xs font-medium rounded-md',
                 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
                 'flex items-center justify-center',
               )}
@@ -660,7 +660,7 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         onClick={handlePillDoubleClick}
         title="Show all floors"
         className={cn(
-          compact ? 'h-6 w-7 p-0 text-[8px] font-medium rounded-full' : 'h-7 w-8 sm:h-7 sm:w-9 p-0 text-[9px] font-medium rounded-full',
+          compact ? 'h-6 px-1.5 text-[8px] font-medium rounded-md' : 'h-7 px-2 min-w-[40px] text-[9px] font-medium rounded-md',
           'bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground',
           visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary',
         )}
