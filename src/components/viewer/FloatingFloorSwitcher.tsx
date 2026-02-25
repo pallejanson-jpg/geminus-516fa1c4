@@ -55,11 +55,8 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
   const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
 
 
-  // Visibility state (controlled from VisualizationToolbar settings) — default to visible
-  const [isVisible, setIsVisible] = useState(() => {
-    const stored = localStorage.getItem('viewer-show-floor-pills');
-    return stored === null ? true : stored === 'true';
-  });
+  // Visibility state (default visible; stale localStorage should not hide it unexpectedly)
+  const [isVisible, setIsVisible] = useState(true);
 
   // Ref to track if we're receiving an external event (to prevent dispatch loops)
   const isReceivingExternalEvent = useRef(false);
