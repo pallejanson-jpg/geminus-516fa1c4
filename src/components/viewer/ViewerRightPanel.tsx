@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useContext, useRef } from "rea
 import {
   Layers, MessageSquare, MessageSquarePlus, Palette, Plus, X, Scissors,
   Box, ChevronDown, Camera, SquareDashed, Settings, Type, TreeDeciduous, Eye, EyeOff, Check, Settings2, Home,
-  Pin, PinOff
+  Pin, PinOff, Radio
 } from "lucide-react";
 import { useFlashHighlight } from "@/hooks/useFlashHighlight";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import LightingControlsPanel from "./LightingControlsPanel";
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { CLIP_HEIGHT_3D_CHANGED_EVENT } from "@/hooks/useSectionPlaneClipping";
 import { FORCE_SHOW_SPACES_EVENT } from "./RoomVisualizationPanel";
-import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, MINIMAP_TOGGLE_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
+import { VIEW_MODE_REQUESTED_EVENT, ISSUE_MARKER_CLICKED_EVENT, MINIMAP_TOGGLE_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, type IssueMarkerClickedDetail } from "@/lib/viewer-events";
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT, ARCHITECT_BACKGROUND_PRESETS, type BackgroundPresetId } from "@/hooks/useArchitectViewMode";
 import { AppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -646,6 +646,21 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       </CollapsibleContent>
                     </Collapsible>
                   )}
+
+                  {/* Show Sensors Toggle */}
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
+                        <Radio className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm">Show Sensors</span>
+                    </div>
+                    <Switch
+                      onCheckedChange={(checked) => {
+                        window.dispatchEvent(new CustomEvent(SENSOR_ANNOTATIONS_TOGGLE_EVENT, { detail: { visible: checked } }));
+                      }}
+                    />
+                  </div>
                 </div>
                 </CollapsibleContent>
               </Collapsible>
