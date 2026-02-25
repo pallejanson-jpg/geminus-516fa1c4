@@ -155,7 +155,8 @@ const UnifiedViewerContent: React.FC<{
   });
 
   useEffect(() => {
-    if (sdkStatus === 'failed' && viewMode !== '3d') {
+    // Only force 3D for modes that actually require the 360° SDK
+    if (sdkStatus === 'failed' && (viewMode === 'vt' || viewMode === 'split' || viewMode === '360')) {
       setViewMode('3d');
       toast.error('360° SDK kunde inte laddas. Visar 3D-modell.');
     }
