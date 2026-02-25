@@ -187,8 +187,8 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent className="sm:max-w-lg w-full flex flex-col">
+      <Sheet open={open} onOpenChange={(o) => !o && onClose()} modal={false}>
+        <SheetContent className="sm:max-w-lg w-full flex flex-col [&>div[data-radix-dialog-overlay]]:hidden">
           <SheetHeader className="flex-shrink-0">
             <div className="flex items-start gap-3">
               <div className={cn("p-2 rounded-lg bg-muted", typeConfig.color)}>
