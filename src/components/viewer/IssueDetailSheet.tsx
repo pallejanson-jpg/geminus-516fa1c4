@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Sheet,
   SheetContent,
@@ -376,13 +377,14 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
         </SheetContent>
       </Sheet>
 
-      {issue && (
+      {issue && createPortal(
         <SendIssueDialog
           open={showSendDialog}
           onClose={() => setShowSendDialog(false)}
           issueId={issue.id}
           issueTitle={issue.title}
-        />
+        />,
+        document.body
       )}
     </>
   );

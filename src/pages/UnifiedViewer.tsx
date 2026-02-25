@@ -72,6 +72,7 @@ const UnifiedViewerContent: React.FC<{
   const modeParam = searchParams.get('mode') as ViewMode | null;
   const effectiveInitialMode = modeParam || initialMode;
   const [viewMode, setViewMode] = useState<ViewMode>(effectiveInitialMode);
+  const userChangedModeRef = useRef(false);
 
   // ─── FM Access availability ────────────────────────────────────────
   const [hasFmAccess, setHasFmAccess] = useState(!!floorFmGuid);
@@ -103,6 +104,7 @@ const UnifiedViewerContent: React.FC<{
     const validModes: ViewMode[] = ['2d', '3d', 'split', 'vt', '360'];
     if (!validModes.includes(modeParam)) return;
     if (modeParam !== viewMode) {
+      userChangedModeRef.current = true;
       setViewMode(modeParam);
     }
   }, [modeParam, viewMode]);
@@ -116,6 +118,11 @@ const UnifiedViewerContent: React.FC<{
 
     if (viewMode === '2d' || viewMode === '3d') {
       window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode: viewMode } }));
+    }
+
+    // Mark user-initiated mode changes (not the initial dispatch)
+    if (prev !== '__init__' && prev !== viewMode) {
+      userChangedModeRef.current = true;
     }
 
     if (viewMode === '2d' && prev !== '2d') {
@@ -188,6 +195,12 @@ const UnifiedViewerContent: React.FC<{
 
     // Dispatch after a delay to allow model loading
     const timer = setTimeout(() => {
+      // If user has already manually changed mode, respect their choice
+      const resolvedViewMode = userChangedModeRef.current
+        ? viewMode
+        : ((sv.viewMode as '2d' | '3d') || '3d');
+
+      const resolvedMode2d3d: '2d' | '3d' = resolvedViewMode === '2d' ? '2d' : '3d';
       window.dispatchEvent(new CustomEvent<LoadSavedViewDetail>(LOAD_SAVED_VIEW_EVENT, {
         detail: {
           viewId: 'start-view',
@@ -195,7 +208,7 @@ const UnifiedViewerContent: React.FC<{
           cameraLook: sv.cameraLook || [0, 0, 0],
           cameraUp: sv.cameraUp || [0, 1, 0],
           cameraProjection: sv.cameraProjection || 'perspective',
-          viewMode: (sv.viewMode as '2d' | '3d') || '3d',
+          viewMode: resolvedMode2d3d,
           clipHeight: sv.clipHeight || 1.2,
           visibleModelIds: sv.visibleModelIds || [],
           visibleFloorIds: sv.visibleFloorIds || [],
@@ -205,8 +218,8 @@ const UnifiedViewerContent: React.FC<{
           visualizationMockData: false,
         },
       }));
-      // If start view is 2D, also switch mode
-      if (sv.viewMode === '2d') setViewMode('2d');
+      // If start view is 2D (and user hasn't overridden), also switch mode
+      if (resolvedViewMode === '2d') setViewMode('2d');
     }, 2000);
     return () => clearTimeout(timer);
   }, [buildingData]);
