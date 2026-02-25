@@ -55,6 +55,16 @@ const LEVEL_PALETTE = [
   '#795548', '#607D8B', '#9C27B0', '#2196F3', '#4CAF50',
 ];
 
+const CATEGORY_PALETTE: Record<string, string> = {
+  'Wall': '#607D8B', 'Door': '#8D6E63', 'Window': '#4FC3F7',
+  'Slab': '#90A4AE', 'Roof': '#FF7043', 'Stair': '#AB47BC',
+  'Column': '#78909C', 'Beam': '#A1887F', 'Covering': '#CE93D8',
+  'Railing': '#FFB74D', 'Curtain Wall': '#4DD0E1', 'Space': '#64B5F6',
+  'Furnishing': '#81C784', 'Flow Terminal': '#4DB6AC', 'Flow Segment': '#4DD0E1',
+  'Flow Fitting': '#7986CB', 'Flow Controller': '#9575CD',
+  'Pipe': '#26A69A', 'Duct': '#66BB6A', 'Member': '#BDBDBD', 'Proxy': '#E0E0E0',
+};
+
 const hexToRgb01 = (hex: string): [number, number, number] => {
   const c = hex.replace('#', '');
   return [
@@ -571,6 +581,21 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           });
         }
       });
+
+      // Also colorize by IFC category when auto-color is enabled
+      if (viewer.metaScene?.metaObjects) {
+        Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+          if (!mo.type) return;
+          const catName = mo.type.replace(/^Ifc/, '').replace(/StandardCase$/, '');
+          const catColor = CATEGORY_PALETTE[catName];
+          if (catColor) {
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.colorize = hexToRgb01(catColor);
+            }
+          }
+        });
+      }
     }
 
     if (!hasAnyFilter) {
@@ -759,15 +784,33 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       if (entity) { entity.visible = true; entity.opacity = 0.3; entity.pickable = false; }
     });
 
-    // Step 4: Handle checked spaces — show and highlight ONLY the space entities
+    // Step 4: Handle checked spaces — show room solid in 3D while context is x-rayed
     if (checkedSpaces.size > 0 && spaceOnlyEntityIds && spaceOnlyEntityIds.size > 0) {
+      // X-ray the context (parent level entities minus the space entities)
+      if (spaceAndContextIds) {
+        const contextOnlyIds = [...spaceAndContextIds].filter(id => !spaceOnlyEntityIds!.has(id));
+        if (contextOnlyIds.length > 0) {
+          const xrayMat = scene.xrayMaterial;
+          if (xrayMat) {
+            xrayMat.fill = true;
+            xrayMat.fillAlpha = 0.15;
+            xrayMat.fillColor = [0.55, 0.55, 0.6];
+            xrayMat.edges = true;
+            xrayMat.edgeAlpha = 0.35;
+            xrayMat.edgeColor = [0.4, 0.4, 0.45];
+          }
+          scene.setObjectsXRayed(contextOnlyIds, true);
+        }
+      }
+      // Show the selected space solid with highlight color
       spaceOnlyEntityIds.forEach(id => {
         if (areaSet.has(id)) return; // Never show area spaces
         const entity = scene.objects?.[id];
         if (entity) {
           entity.visible = true;
           entity.pickable = true;
-          entity.opacity = 0.4;
+          entity.xrayed = false;
+          entity.opacity = 0.6;
           entity.colorize = HIGHLIGHT_COLOR;
         }
       });
@@ -966,7 +1009,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-foreground hover:bg-destructive/10 hover:text-destructive" onClick={onClose}>
+          <Button variant="outline" size="icon" className="h-7 w-7 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -1053,6 +1096,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 checked={checkedSpaces.has(space.fmGuid)}
                 onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
+                color={autoColorEnabled ? levelColors.get(space.levelFmGuid) : undefined}
               />
             ))}
             {filteredSpaces.length > 200 && (
@@ -1083,6 +1127,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 badge={`${cat.count}`}
                 checked={checkedCategories.has(cat.name)}
                 onCheckedChange={(checked) => handleCategoryToggle(cat.name, checked)}
+                color={autoColorEnabled ? (CATEGORY_PALETTE[cat.name] || LEVEL_PALETTE[categories.indexOf(cat) % LEVEL_PALETTE.length]) : undefined}
               />
             ))}
           </FilterSection>
