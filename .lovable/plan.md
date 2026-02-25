@@ -1,66 +1,111 @@
 
 
-## XKT-uppdelning per våningsplan med xeokit-convert
+## Plan: Fix Småviken 3D Loading, 2D Stability, and Issue Visibility
 
-### Nuläge
+### Root Cause Analysis
 
-`splitAndStoreByStorey` i `acc-xkt-converter.ts` är en **placeholder** -- den sparar bara metadata-rader i `xkt_models`-tabellen men skapar inga faktiska per-vånings-XKT-filer. Kommentaren i koden säger: *"True binary splitting requires parsing XKT internals which is complex."*
+**1. Småviken empty 3D scene**
 
-### Kan vi göra det med xeokit-convert?
+The `additionalDefaultPredicate` callback receives a `modelId` from the Asset+ SDK. Our whitelist contains DB `model_id` values (UUIDs like `042dba20-8b16-4e2d-b7cd-591e707b6395`). But the SDK may pass a different format (e.g. with `.xkt` suffix, a file path, or the `file_name` column value). If none match, the predicate returns `false` for ALL models, and the scene is empty.
 
-**Ja, det går.** Biblioteket `@xeokit/xeokit-convert` exponerar `XKTModel` som en builder-klass. Strategin:
+DB state for Småviken confirms:
+```text
+model_id: 042dba20-8b16-4e2d-b7cd-591e707b6395  model_name: A-modell  file_name: 042dba20-8b16-4e2d-b7cd-591e707b6395.xkt
+model_id: ee97a084-7454-4cbf-b5ab-e840eb670b9c  model_name: V-modell  file_name: ee97a084-7454-4cbf-b5ab-e840eb670b9c.xkt
+```
 
-1. Parsa IFC/GLB till en `XKTModel` (det gör vi redan i `convertToXktWithMetadata`)
-2. Efter `xktModel.finalize()` har modellen `metaObjects` med IFC-hierarki (typ, parent)
-3. För varje `IfcBuildingStorey`:
-   - Skapa en **ny** `XKTModel`
-   - Kopiera alla entities vars metaObject-parent-kedja pekar på just den storeyn
-   - Kopiera tillhörande meshes, geometries, textures
-   - `finalize()` + `writeXKTModelToArrayBuffer()`
-   - Ladda upp till Storage som en separat chunk-fil
+The predicate only checks `modelId` and `modelId.toLowerCase()`. It does NOT check:
+- `modelId` with `.xkt` stripped
+- `file_name` variants
+- Partial path matches
 
-### Komplexitet och risker
+**2. 2D flips back to 3D**
 
-| Aspekt | Bedömning |
+`UnifiedViewer.tsx` line 157-162:
+```typescript
+if (sdkStatus === 'failed' && viewMode !== '3d') {
+  setViewMode('3d');
+}
+```
+This fires for ALL non-3D modes including `2d`, even though 2D does not need the 360 SDK.
+
+**3. Issues disappear / don't show on toggle**
+
+From the previous approved plan (not yet fully implemented): `loadLocalAnnotations()` clears `container.innerHTML = ''` which deletes issue markers sharing the same container. Issues are also auto-loaded then immediately wiped.
+
+---
+
+### Changes
+
+#### A. Fix `additionalDefaultPredicate` matching (AssetPlusViewer.tsx)
+
+1. When building the A-model whitelist, add **all possible key variants** for each model:
+   - `model_id` (raw UUID)
+   - `model_id.toLowerCase()`
+   - `file_name` (e.g. `042dba20-...xkt`)
+   - `file_name` without `.xkt` extension
+   - All lowercased variants
+
+2. In the predicate callback, normalize the incoming `modelId`:
+   - Strip `.xkt` suffix
+   - Try both raw and lowercased
+   - Log the first 5 incoming modelIds for diagnostics
+
+3. Add a safety fallback: if the predicate is called 3+ times and rejects everything, log a warning and disable the filter (set `allowedModelIdsRef.current = null`) so the scene is never empty.
+
+**File:** `src/components/viewer/AssetPlusViewer.tsx` (lines ~3896-3940 and ~4037-4041)
+
+#### B. Fix 2D mode stability (UnifiedViewer.tsx)
+
+Change the `sdkStatus === 'failed'` effect to only force 3D for modes that require the SDK:
+
+```typescript
+if (sdkStatus === 'failed' && (viewMode === 'vt' || viewMode === 'split' || viewMode === '360')) {
+  setViewMode('3d');
+  toast.error('360° SDK kunde inte laddas. Visar 3D-modell.');
+}
+```
+
+2D mode does not require the SDK and must not be affected.
+
+**File:** `src/pages/UnifiedViewer.tsx` (line 158)
+
+#### C. Separate marker containers for Issues (AssetPlusViewer.tsx)
+
+1. Create a dedicated `#issue-markers-container` div (absolute, pointer-events:none, z-index:15) separate from the local annotations container.
+
+2. `loadIssueAnnotations()` appends markers to this dedicated container instead of sharing with local annotations.
+
+3. `loadLocalAnnotations()` only clears its own container (`#local-annotations-container`), no longer destroying issue markers.
+
+4. Remove auto-load of issues from `handleAllModelsLoaded()` (Issues default OFF).
+
+5. `ISSUE_ANNOTATIONS_TOGGLE_EVENT` handler:
+   - `visible: true` + not loaded yet -> call `loadIssueAnnotations()`, mark loaded
+   - `visible: true` + already loaded -> set container `display: flex`
+   - `visible: false` -> set container `display: none`
+
+**File:** `src/components/viewer/AssetPlusViewer.tsx`
+
+#### D. Same pattern for sensor markers (AssetPlusViewer.tsx)
+
+Ensure `loadSensorAnnotations()` uses its own `#sensor-markers-container`, separate from local and issue containers.
+
+**File:** `src/components/viewer/AssetPlusViewer.tsx`
+
+---
+
+### Files Modified
+
+| File | Change |
 |---|---|
-| Hierarki-traversering | Medel -- metaObjects har `parentMetaObjectId`, behöver rekursiv walk |
-| Geometry-kopiering | **Hög risk** -- `XKTModel` har inte en publik "copy entity"-API; vi måste manuellt kopiera mesh/geometry/texture-data via interna arrayer |
-| Filstorlek | Summan av chunks > originalet pga duplicerad shared geometry (t.ex. väggar som spänner flera plan) |
-| IFC vs GLB | IFC har rikare hierarki; GLB från ACC saknar ofta tydlig storey-koppling |
-| Webbläsarminne | Stor IFC → XKTModel tar redan mycket RAM; att skapa N ytterligare XKTModel-instanser multiplicerar |
+| `src/components/viewer/AssetPlusViewer.tsx` | Robust predicate matching with all key variants + fallback; separate marker containers for issues/sensors; remove auto-load of issues; lazy-load on toggle |
+| `src/pages/UnifiedViewer.tsx` | Guard SDK-fail effect to only affect vt/split/360 modes, not 2D |
 
-### Alternativ approach: Viewer-side filtering (enklare, fungerar nu)
+### Implementation Order
 
-Istället för att faktiskt split-a binären kan viewern ladda hela XKT-filen men **visa/dölja per storey** genom att:
-- Mappa entity → storey via metaObjects (redan delvis implementerat i floor-isolation-logiken)
-- Sätta `visible=false` på entities som inte tillhör aktiv våning
-
-**Detta är vad viewern redan gör idag** för floor-isolation i 2D-mode. Den faktiska prestandavinsten av binär splitting kommer främst vid **initial load time** (mindre fil att ladda), inte vid rendering (xeokit hanterar visibility-culling effektivt).
-
-### Rekommendation
-
-Verklig binär XKT-splitting kräver att vi gräver i `XKTModel`-internals (mesh-arrayer, geometry-buffers) vilket är fragilt och svårtestat. **Den pragmatiska vägen** som ger mest effekt per insats:
-
-1. **Prioriterad laddning** (redan stöd i DB-schemat): ladda synlig vånings chunk först → rendera snabbt → ladda resten i bakgrunden
-2. **Server-side splitting via IFC** (edge function): Använd `web-ifc` i en edge function för att extrahera geometri per storey **innan** XKT-konvertering, dvs skapa separata IFC-subset → konvertera var och en till XKT
-3. **Behåll nuvarande metadata-approach** tills vi har en edge function med tillräcklig RAM/timeout
-
-### Vad som behövs för att implementera server-side splitting
-
-| Steg | Beskrivning |
-|---|---|
-| 1. Edge function `xkt-split` | Tar emot IFC-fil från Storage, parsar med web-ifc, identifierar storeys, extraherar subset per storey |
-| 2. Per-storey konvertering | Varje subset → `parseIFCIntoXKTModel` → `writeXKTModelToArrayBuffer` |
-| 3. Upload chunks | Ladda upp till `xkt-models` bucket med `storey_fm_guid` och `is_chunk=true` |
-| 4. Viewer loader update | Ändra modell-laddaren att kolla `is_chunk` och ladda synlig våning först |
-
-**Begränsning:** Deno edge functions har 150s timeout och begränsat minne. Stora IFC-filer (>50 MB) kan behöva en extern worker eller klient-side approach.
-
-### Slutsats
-
-Det **går tekniskt** men kräver antingen:
-- (A) Grävande i XKTModel-internals (klient-side, fragilt), eller
-- (B) Server-side IFC-parsing med web-ifc i en edge function (robustare men begränsad av edge function-resurser)
-
-Vill du att jag implementerar approach (B) med en edge function, eller ska vi fokusera på de andra viewer-problemen (2D-sync, click-through, prestanda, context menu) först?
+1. Fix `UnifiedViewer.tsx` SDK guard (1 line change)
+2. Fix predicate matching in `AssetPlusViewer.tsx` (whitelist building + normalization + fallback)
+3. Separate marker containers for issues and sensors
+4. Wire up lazy-load toggle for issues (default OFF)
 
