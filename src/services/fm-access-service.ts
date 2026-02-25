@@ -136,6 +136,8 @@ export async function syncAssetWithFmAccess(fmGuid: string): Promise<{ success: 
         parentGuid: parentGuid || undefined,
         properties: Object.keys(properties).length > 0 ? properties : undefined,
         localUpdatedAt: asset.updated_at,
+        ifcType: asset.asset_type,     // e.g. "IfcDoor" — used for targetClass resolution
+        category: asset.category,       // e.g. "Instance", "Space", "Level"
       },
     });
 
