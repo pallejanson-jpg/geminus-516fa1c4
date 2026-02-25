@@ -28,7 +28,7 @@ import { usePerformancePlugins } from '@/hooks/usePerformancePlugins';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { VisualizationType } from '@/lib/visualization-utils';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
-import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT } from '@/lib/viewer-events';
+import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail, VIEW_MODE_REQUESTED_EVENT, VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, INSIGHTS_COLOR_UPDATE_EVENT, InsightsColorUpdateDetail, ALARM_ANNOTATIONS_SHOW_EVENT, AlarmAnnotationsShowDetail, ANNOTATION_FILTER_EVENT, AnnotationFilterDetail, ISSUE_MARKER_CLICKED_EVENT, SENSOR_ANNOTATIONS_TOGGLE_EVENT, type SensorAnnotationsToggleDetail } from '@/lib/viewer-events';
 import { CLIP_HEIGHT_CHANGED_EVENT, VIEW_MODE_CHANGED_EVENT, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { useArchitectViewMode, ARCHITECT_MODE_REQUESTED_EVENT, ARCHITECT_MODE_CHANGED_EVENT, ARCHITECT_BACKGROUND_CHANGED_EVENT, type BackgroundPresetId } from '@/hooks/useArchitectViewMode';
 import { useRoomLabels, ROOM_LABELS_TOGGLE_EVENT, type RoomLabelsToggleDetail } from '@/hooks/useRoomLabels';
@@ -205,7 +205,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   const cacheStatusRef = useRef(cacheStatus);
   const showNavCubeRef = useRef(showNavCube);
   const loadLocalAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
-  const loadAlarmAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const loadSensorAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
+  const sensorAnnotationsLoadedRef = useRef(false);
   const loadIssueAnnotationsRef = useRef<(() => Promise<void>) | null>(null);
   const assetDataRef = useRef<any>(null);
   const allDataRef = useRef<any[]>(allData);
@@ -1700,31 +1701,40 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     }
   }, [resolveBuildingFmGuid, showAnnotations]);
 
-  // Load alarm annotations from BIM geometry (assets with asset_type = 'IfcAlarm')
+  // Load sensor annotations from BIM geometry (assets with asset_type = 'IfcAlarm')
   // These are placed at their BIM object positions, not from coordinate_x/y/z
-  const loadAlarmAnnotations = useCallback(async () => {
+  // Uses the "Sensor" symbol from annotation_symbols (falls back to teal default)
+  const loadSensorAnnotations = useCallback(async () => {
     const resolvedBuildingGuid = resolveBuildingFmGuid();
     if (!resolvedBuildingGuid) return;
 
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
-      console.log('Cannot load alarm annotations - viewer not ready');
+      console.log('Cannot load sensor annotations - viewer not ready');
       return;
     }
 
     try {
-      // Fetch Alarm symbol
-      const { data: alarmSymbol } = await supabase
+      // Fetch Sensor symbol (fall back to Alarm, then defaults)
+      let symbolResult = await supabase
         .from('annotation_symbols')
-        .select('id, name, color, icon_url')
-        .eq('name', 'Alarm')
+        .select('id, name, color, icon_url, marker_html')
+        .eq('name', 'Sensor')
         .maybeSingle();
 
-      if (!alarmSymbol) {
-        console.log('No Alarm symbol configured - skipping alarm annotations');
-        return;
+      if (!symbolResult.data) {
+        symbolResult = await supabase
+          .from('annotation_symbols')
+          .select('id, name, color, icon_url, marker_html')
+          .eq('name', 'Alarm')
+          .maybeSingle();
       }
+
+      const sensorSymbol = symbolResult.data;
+      const symbolColor = sensorSymbol?.color || '#14B8A6';
+      const symbolIcon = sensorSymbol?.icon_url || '';
+      const symbolMarkerHtml = sensorSymbol?.marker_html || '';
 
       // Fetch all alarm assets for this building (limit to 1000 for performance)
       const { data: alarms, error } = await supabase
@@ -1784,13 +1794,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         ];
 
         alarmAnnotations.push({
-          id: `alarm-${alarm.fm_guid}`,
+          id: `sensor-${alarm.fm_guid}`,
           worldPos,
-          category: 'Alarm',
-          name: alarm.name || 'Alarm',
-          color: alarmSymbol.color,
-          iconUrl: alarmSymbol.icon_url || '',
-          markerShown: showAnnotations,
+          category: 'Sensor',
+          name: alarm.name || 'Sensor',
+          color: symbolColor,
+          iconUrl: symbolIcon,
+          markerShown: true,
           levelFmGuid: alarm.level_fm_guid,
         });
 
@@ -1856,7 +1866,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
         const marker = document.createElement('div');
         marker.id = ann.id;
-        marker.className = 'local-annotation-marker alarm-marker';
+        marker.className = 'local-annotation-marker sensor-marker';
         marker.dataset.category = ann.category;
         marker.dataset.levelFmGuid = ann.levelFmGuid || '';
         marker.style.cssText = `
@@ -1875,7 +1885,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           pointer-events: auto;
         `;
 
-        if (ann.iconUrl) {
+        // Use marker_html if available, otherwise icon
+        if (symbolMarkerHtml) {
+          marker.innerHTML = symbolMarkerHtml;
+        } else if (ann.iconUrl) {
           const img = document.createElement('img');
           img.src = ann.iconUrl;
           img.alt = '';
@@ -1887,7 +1900,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         marker.title = ann.name;
         
         // Click handler: fly to + open properties
-        const fmGuidForClick = ann.id.replace('alarm-', '');
+        const fmGuidForClick = ann.id.replace('sensor-', '');
         marker.addEventListener('click', (e) => {
           e.stopPropagation();
           xeokitViewer.cameraFlight?.flyTo({
@@ -1918,15 +1931,16 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         setTimeout(() => localAnnotationsManager.updatePositions(), 100);
       }
 
-      console.log(`Created ${foundCount} alarm annotations for building:`, resolvedBuildingGuid);
+      console.log(`Created ${foundCount} sensor annotations for building:`, resolvedBuildingGuid);
+      sensorAnnotationsLoadedRef.current = true;
 
       // NOTE: Do NOT bulk-update symbol_id here — it triggers 100+ sequential DB requests
       // which hangs the UI for buildings with thousands of IfcAlarm assets (e.g. Småviken ~17k).
-      // The alarm symbol is resolved at load-time above; saving it to DB is not required for functionality.
+      // The sensor symbol is resolved at load-time above; saving it to DB is not required for functionality.
     } catch (e) {
-      console.error('Error loading alarm annotations:', e);
+      console.error('Error loading sensor annotations:', e);
     }
-  }, [resolveBuildingFmGuid, showAnnotations]);
+  }, [resolveBuildingFmGuid]);
 
   // Load issue annotations (BCF issues with viewpoints as 3D markers)
   const loadIssueAnnotations = useCallback(async () => {
@@ -2152,10 +2166,42 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
   // Keep annotation function refs in sync so handleAllModelsLoaded can call latest versions
   useEffect(() => { loadLocalAnnotationsRef.current = loadLocalAnnotations; }, [loadLocalAnnotations]);
-  useEffect(() => { loadAlarmAnnotationsRef.current = loadAlarmAnnotations; }, [loadAlarmAnnotations]);
+  useEffect(() => { loadSensorAnnotationsRef.current = loadSensorAnnotations; }, [loadSensorAnnotations]);
   useEffect(() => { loadIssueAnnotationsRef.current = loadIssueAnnotations; }, [loadIssueAnnotations]);
 
-  // Load ACC models (GLB/OBJ) directly via xeokit loader plugins (bypasses XKT conversion)
+  // Listen for SENSOR_ANNOTATIONS_TOGGLE_EVENT to lazy-load and show/hide sensor markers
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { visible } = (e as CustomEvent<SensorAnnotationsToggleDetail>).detail;
+      if (visible) {
+        // Lazy-load if not yet loaded
+        if (!sensorAnnotationsLoadedRef.current) {
+          await loadSensorAnnotationsRef.current?.();
+        }
+        // Show all sensor markers
+        const container = document.getElementById('local-annotations-container');
+        if (container) {
+          container.querySelectorAll('.sensor-marker').forEach((el) => {
+            (el as HTMLElement).style.display = 'flex';
+          });
+          // Update positions
+          localAnnotationsPluginRef.current?.updatePositions?.();
+        }
+      } else {
+        // Hide all sensor markers
+        const container = document.getElementById('local-annotations-container');
+        if (container) {
+          container.querySelectorAll('.sensor-marker').forEach((el) => {
+            (el as HTMLElement).style.display = 'none';
+          });
+        }
+      }
+    };
+    window.addEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
+    return () => window.removeEventListener(SENSOR_ANNOTATIONS_TOGGLE_EVENT, handler);
+  }, []);
+
+
   const loadAccDirectModels = useCallback(async () => {
     const resolvedGuid = buildingFmGuid;
     if (!resolvedGuid) return;
@@ -2381,10 +2427,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.error('loadLocalAnnotations failed:', e);
       });
       
-      // Load alarm annotations from BIM geometry
-      loadAlarmAnnotationsRef.current?.().catch(e => {
-        console.error('loadAlarmAnnotations failed:', e);
-      });
+      // Sensor annotations (IfcAlarm BIM objects) are NOT auto-loaded.
+      // They are lazy-loaded when the user toggles "Show Sensors" in the right panel.
 
       // Load issue annotations (BCF issues as 3D markers)
       loadIssueAnnotationsRef.current?.().catch(e => {

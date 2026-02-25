@@ -111,3 +111,11 @@ export interface LoadSavedViewDetail {
   visualizationType: string;
   visualizationMockData: boolean;
 }
+
+/** Event dispatched when sensor annotations should be toggled on/off */
+export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE';
+
+/** Type for sensor annotations toggle event detail */
+export interface SensorAnnotationsToggleDetail {
+  visible: boolean;
+}
