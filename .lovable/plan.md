@@ -1,108 +1,66 @@
 
 
-## Plan: Add "Show Sensors" Toggle to Viewer Right Panel
+## XKT-uppdelning per våningsplan med xeokit-convert
 
-### Context
+### Nuläge
 
-Currently `loadAlarmAnnotations` loads all `IfcAlarm` assets from BIM and displays them with the "Alarm" symbol. The user wants to split the viewer overlay controls into three separate toggles:
+`splitAndStoreByStorey` i `acc-xkt-converter.ts` är en **placeholder** -- den sparar bara metadata-rader i `xkt_models`-tabellen men skapar inga faktiska per-vånings-XKT-filer. Kommentaren i koden säger: *"True binary splitting requires parsing XKT internals which is complex."*
 
-1. **Show Issues** -- BCF issues as 3D markers (loaded via `loadIssueAnnotations`)
-2. **Show Alarms** -- Alarm events from Insights/FM tab (dispatched via `ALARM_ANNOTATIONS_SHOW_EVENT`, red markers)
-3. **Show Sensors** (NEW) -- `IfcAlarm` BIM objects shown with the "Sensor" symbol configured in Settings > Symbols
+### Kan vi göra det med xeokit-convert?
 
-The existing `loadAlarmAnnotations` function loads `IfcAlarm` assets and uses the "Alarm" annotation symbol. This needs to be repurposed as the "Show Sensors" data source, using the **Sensor** symbol instead (or a configurable symbol name).
+**Ja, det går.** Biblioteket `@xeokit/xeokit-convert` exponerar `XKTModel` som en builder-klass. Strategin:
 
-### What Changes
+1. Parsa IFC/GLB till en `XKTModel` (det gör vi redan i `convertToXktWithMetadata`)
+2. Efter `xktModel.finalize()` har modellen `metaObjects` med IFC-hierarki (typ, parent)
+3. För varje `IfcBuildingStorey`:
+   - Skapa en **ny** `XKTModel`
+   - Kopiera alla entities vars metaObject-parent-kedja pekar på just den storeyn
+   - Kopiera tillhörande meshes, geometries, textures
+   - `finalize()` + `writeXKTModelToArrayBuffer()`
+   - Ladda upp till Storage som en separat chunk-fil
 
-#### 1. ViewerRightPanel -- Add "Show Sensors" toggle
+### Komplexitet och risker
 
-**File: `src/components/viewer/ViewerRightPanel.tsx`**
-
-Add a third toggle in the Display section, between Show Issues and Show Alarms (or after both). The toggle dispatches a new custom event `SENSOR_ANNOTATIONS_TOGGLE_EVENT` with `{ visible: boolean }`.
-
-```text
-Display section toggles:
-  - 2D/3D
-  - Show spaces
-  - X-ray
-  - Minimap
-  - Annotations (local/inventoried)
-  - Show Issues    (NEW - toggle for BCF issue markers)
-  - Show Alarms    (NEW - toggle for Insights alarm markers)  
-  - Show Sensors   (NEW - toggle for IfcAlarm BIM sensor markers)
-```
-
-The Sensor toggle uses a `Radio` or `Activity` icon from lucide-react.
-
-#### 2. New event in viewer-events.ts
-
-**File: `src/lib/viewer-events.ts`**
-
-Add:
-```typescript
-export const SENSOR_ANNOTATIONS_TOGGLE_EVENT = 'SENSOR_ANNOTATIONS_TOGGLE';
-export interface SensorAnnotationsToggleDetail { visible: boolean; }
-```
-
-#### 3. AssetPlusViewer -- Lazy-load sensor annotations on toggle
-
-**File: `src/components/viewer/AssetPlusViewer.tsx`**
-
-- **Rename** `loadAlarmAnnotations` to `loadSensorAnnotations` (since it loads IfcAlarm BIM objects which represent sensors).
-- Change the symbol lookup from `'Alarm'` to `'Sensor'` (or a fallback chain: look for "Sensor" symbol first, then "Alarm", then use a default green/teal color).
-- Change marker CSS class from `alarm-marker` to `sensor-marker`.
-- **Do NOT auto-load** on `handleAllModelsLoaded` -- remove the `loadAlarmAnnotationsRef.current?.()` call from there.
-- Add a `useEffect` listener for `SENSOR_ANNOTATIONS_TOGGLE_EVENT`:
-  - When `visible: true`: call `loadSensorAnnotations()` if not already loaded, then show all sensor markers (`display: flex`).
-  - When `visible: false`: hide all sensor markers (`display: none`).
-- The marker appearance uses the symbol configured under Settings > Symbols with name "Sensor":
-  - `color` from the symbol record
-  - `icon_url` from the symbol record (rendered as an img inside the marker circle)
-  - If no "Sensor" symbol exists, fall back to a default teal circle with a radio icon.
-
-#### 4. Symbol lookup logic
-
-The existing code already queries `annotation_symbols` for the "Alarm" symbol:
-```typescript
-const { data: alarmSymbol } = await supabase
-  .from('annotation_symbols')
-  .select('id, name, color, icon_url')
-  .eq('name', 'Alarm')
-  .maybeSingle();
-```
-
-Change to query for "Sensor" instead:
-```typescript
-const { data: sensorSymbol } = await supabase
-  .from('annotation_symbols')
-  .select('id, name, color, icon_url, marker_html')
-  .eq('name', 'Sensor')
-  .maybeSingle();
-
-// Fallback defaults if no symbol configured
-const symbolColor = sensorSymbol?.color || '#14B8A6'; // teal
-const symbolIcon = sensorSymbol?.icon_url || '';
-```
-
-If `marker_html` is set on the symbol, use that as the marker innerHTML instead of the default circle+icon pattern.
-
-#### 5. Keep "Show Alarms" separate
-
-"Show Alarms" remains tied to `ALARM_ANNOTATIONS_SHOW_EVENT` from Insights, which creates red markers at room centers for active alarms. This is a different data source (Insights FM alarm events) from the BIM-based IfcAlarm sensor objects.
-
-### Files to Modify
-
-| File | Changes |
+| Aspekt | Bedömning |
 |---|---|
-| `src/lib/viewer-events.ts` | Add `SENSOR_ANNOTATIONS_TOGGLE_EVENT` + detail type |
-| `src/components/viewer/ViewerRightPanel.tsx` | Add "Show Sensors" toggle that dispatches `SENSOR_ANNOTATIONS_TOGGLE_EVENT` |
-| `src/components/viewer/AssetPlusViewer.tsx` | Rename `loadAlarmAnnotations` → `loadSensorAnnotations`; change symbol from "Alarm" to "Sensor"; remove auto-load on init; add event listener for toggle; use sensor symbol appearance |
+| Hierarki-traversering | Medel -- metaObjects har `parentMetaObjectId`, behöver rekursiv walk |
+| Geometry-kopiering | **Hög risk** -- `XKTModel` har inte en publik "copy entity"-API; vi måste manuellt kopiera mesh/geometry/texture-data via interna arrayer |
+| Filstorlek | Summan av chunks > originalet pga duplicerad shared geometry (t.ex. väggar som spänner flera plan) |
+| IFC vs GLB | IFC har rikare hierarki; GLB från ACC saknar ofta tydlig storey-koppling |
+| Webbläsarminne | Stor IFC → XKTModel tar redan mycket RAM; att skapa N ytterligare XKTModel-instanser multiplicerar |
 
-### Implementation Order
+### Alternativ approach: Viewer-side filtering (enklare, fungerar nu)
 
-1. Add `SENSOR_ANNOTATIONS_TOGGLE_EVENT` to `viewer-events.ts`
-2. Add "Show Sensors" toggle UI in `ViewerRightPanel.tsx`
-3. Refactor `loadAlarmAnnotations` → `loadSensorAnnotations` in `AssetPlusViewer.tsx` with Sensor symbol lookup
-4. Wire up lazy-load on toggle event + hide/show logic
-5. Remove auto-load from `handleAllModelsLoaded`
+Istället för att faktiskt split-a binären kan viewern ladda hela XKT-filen men **visa/dölja per storey** genom att:
+- Mappa entity → storey via metaObjects (redan delvis implementerat i floor-isolation-logiken)
+- Sätta `visible=false` på entities som inte tillhör aktiv våning
+
+**Detta är vad viewern redan gör idag** för floor-isolation i 2D-mode. Den faktiska prestandavinsten av binär splitting kommer främst vid **initial load time** (mindre fil att ladda), inte vid rendering (xeokit hanterar visibility-culling effektivt).
+
+### Rekommendation
+
+Verklig binär XKT-splitting kräver att vi gräver i `XKTModel`-internals (mesh-arrayer, geometry-buffers) vilket är fragilt och svårtestat. **Den pragmatiska vägen** som ger mest effekt per insats:
+
+1. **Prioriterad laddning** (redan stöd i DB-schemat): ladda synlig vånings chunk först → rendera snabbt → ladda resten i bakgrunden
+2. **Server-side splitting via IFC** (edge function): Använd `web-ifc` i en edge function för att extrahera geometri per storey **innan** XKT-konvertering, dvs skapa separata IFC-subset → konvertera var och en till XKT
+3. **Behåll nuvarande metadata-approach** tills vi har en edge function med tillräcklig RAM/timeout
+
+### Vad som behövs för att implementera server-side splitting
+
+| Steg | Beskrivning |
+|---|---|
+| 1. Edge function `xkt-split` | Tar emot IFC-fil från Storage, parsar med web-ifc, identifierar storeys, extraherar subset per storey |
+| 2. Per-storey konvertering | Varje subset → `parseIFCIntoXKTModel` → `writeXKTModelToArrayBuffer` |
+| 3. Upload chunks | Ladda upp till `xkt-models` bucket med `storey_fm_guid` och `is_chunk=true` |
+| 4. Viewer loader update | Ändra modell-laddaren att kolla `is_chunk` och ladda synlig våning först |
+
+**Begränsning:** Deno edge functions har 150s timeout och begränsat minne. Stora IFC-filer (>50 MB) kan behöva en extern worker eller klient-side approach.
+
+### Slutsats
+
+Det **går tekniskt** men kräver antingen:
+- (A) Grävande i XKTModel-internals (klient-side, fragilt), eller
+- (B) Server-side IFC-parsing med web-ifc i en edge function (robustare men begränsad av edge function-resurser)
+
+Vill du att jag implementerar approach (B) med en edge function, eller ska vi fokusera på de andra viewer-problemen (2D-sync, click-through, prestanda, context menu) först?
 
