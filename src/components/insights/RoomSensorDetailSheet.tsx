@@ -274,10 +274,11 @@ const RoomSensorDetailSheet: React.FC<RoomSensorDetailSheetProps> = ({
   }, [data?.current]);
 
   return (
-    <Sheet open={open} onOpenChange={open => !open && onClose()}>
+    <Sheet open={open} onOpenChange={open => !open && onClose()} modal={false}>
       <SheetContent
         side="left"
-        className="w-full sm:max-w-md flex flex-col p-0 gap-0"
+        className="w-full sm:max-w-md flex flex-col p-0 gap-0 shadow-2xl"
+        onInteractOutside={(e) => e.preventDefault()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b bg-gradient-to-r from-card via-card to-primary/5 shrink-0">
