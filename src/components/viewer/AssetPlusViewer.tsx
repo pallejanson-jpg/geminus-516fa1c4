@@ -2367,6 +2367,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
       });
 
+      // ─── Progressive background loading of deferred models ───
+      // If the A-model whitelist was active, remaining models were deferred.
+      // Schedule them to load in the background after a short delay so the UI stays responsive.
+      if (allowedModelIdsRef.current) {
+        setTimeout(() => {
+          const resolvedGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid || fmGuid;
+          if (!resolvedGuid) return;
+          console.log('[handleAllModelsLoaded] Progressive load: enabling all deferred models');
+          allowedModelIdsRef.current = null; // Allow all models through
+          try {
+            viewerInstanceRef.current?.setAvailableModelsByFmGuid(resolvedGuid);
+          } catch (e) {
+            console.warn('[handleAllModelsLoaded] Progressive load failed:', e);
+          }
+        }, 3000); // Wait 3s for UI to stabilize before loading remaining models
+      }
+
       // Virtual Twin: apply ghost opacity after all models load
       if (transparentBackground && ghostOpacity !== undefined) {
         try {
@@ -2533,6 +2550,28 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
     } catch (e) {
       console.debug('Could not attach context menu interceptor:', e);
+    }
+
+    // ─── Zero-object recovery ───
+    // If the A-model whitelist was active and 0 objects loaded, the model was likely too
+    // large or unavailable. Clear the whitelist and reload ALL models as a fallback.
+    {
+      const xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+      const objectCount = xv?.scene?.objectIds?.length ?? 0;
+      if (objectCount === 0 && allowedModelIdsRef.current) {
+        console.warn('[handleAllModelsLoaded] 0 objects loaded with active whitelist — disabling filter and reloading all models');
+        allowedModelIdsRef.current = null; // Allow all models
+        const resolvedGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid || fmGuid;
+        if (resolvedGuid) {
+          try {
+            viewerInstanceRef.current?.setAvailableModelsByFmGuid(resolvedGuid);
+          } catch (e) {
+            console.warn('[handleAllModelsLoaded] Reload failed:', e);
+          }
+        }
+        // Don't proceed with display — wait for the next allModelsLoadedCallback
+        return;
+      }
     }
 
     if (deferredFmGuidForDisplayRef.current) {
