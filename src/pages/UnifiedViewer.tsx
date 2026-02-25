@@ -37,7 +37,7 @@ import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
-import FloatingFloorSwitcher from '@/components/viewer/FloatingFloorSwitcher';
+
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
@@ -735,15 +735,7 @@ function MobileUnifiedViewer({
             syncPosition={sync3DPosition}
             syncHeading={sync3DHeading}
             syncPitch={sync3DPitch}
-            suppressOverlay
-          />
-          {/* Floating floor switcher — always render, component self-manages visibility */}
-          <FloatingFloorSwitcher
-            viewerRef={{ current: (window as any).__assetPlusViewerInstance }}
-            buildingFmGuid={buildingData.fmGuid}
-            isViewerReady={true}
-            compact
-            className="!fixed !left-auto !top-auto !bottom-16 !right-2 !flex-row !h-auto !w-auto !z-50"
+            onClose={onGoBack}
           />
         </div>
 
@@ -761,29 +753,22 @@ function MobileUnifiedViewer({
         )}
       </div>
 
-      {/* Floating header — overlays the canvas */}
+      {/* Floating mode switcher — positioned below the MobileViewerOverlay header */}
       <div
-        className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-2 py-2 bg-gradient-to-b from-black/70 via-black/40 to-transparent"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
+        className="absolute z-40 flex justify-center"
+        style={{
+          top: 'calc(max(env(safe-area-inset-top, 0px), 20px) + 52px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+        }}
       >
-        <Button variant="ghost" size="icon" onClick={onGoBack} className="h-9 w-9 text-white hover:bg-white/20">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-
-        {/* Building name — truncated */}
-        <span className="text-white text-xs font-medium truncate max-w-[100px]">
-          {buildingData.name}
-        </span>
-
-        <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
           <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
           <Button size="sm" variant={viewMode === '3d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('3d')}>3D</Button>
           {hasIvion && (
             <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('360')}>360°</Button>
           )}
         </div>
-
-        <div className="w-9" />
       </div>
     </div>
   );
