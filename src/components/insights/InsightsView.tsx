@@ -9,7 +9,8 @@ import SpaceManagementTab from './tabs/SpaceManagementTab';
 import AssetManagementTab from './tabs/AssetManagementTab';
 import PortfolioManagementTab from './tabs/PortfolioManagementTab';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Expand, Shrink } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { MapColoringMode } from '@/lib/map-coloring-utils';
 
 const MapView = lazy(() => import('@/components/map/MapView'));
@@ -143,27 +144,64 @@ export default function InsightsView({ selectedBuilding }: InsightsViewProps) {
                 </div>
 
                 {/* Right: Mini-map with coloring synced to active tab */}
-                <div className="hidden xl:block xl:w-[380px] 2xl:w-[440px] shrink-0">
-                    <div className="sticky top-4">
-                        <div className="rounded-xl overflow-hidden border border-border shadow-md" style={{ height: '520px' }}>
-                            <Suspense fallback={
-                                <div className="flex items-center justify-center h-full bg-muted/20">
-                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                </div>
-                            }>
-                                <MapView
-                                    initialColoringMode={mapColoringMode}
-                                    hideSidebar
-                                    compact
-                                    externalColoringMode={mapColoringMode}
-                                />
-                            </Suspense>
+                <InsightsMap mapColoringMode={mapColoringMode} activeTab={activeTab} />
+            </div>
+        </div>
+    );
+}
+
+/** Insights map panel — supports inline (small), enlarged, and fullscreen modes */
+function InsightsMap({ mapColoringMode, activeTab }: { mapColoringMode: MapColoringMode; activeTab: string }) {
+    const [enlarged, setEnlarged] = useState(false);
+
+    return (
+        <div className={cn(
+            "shrink-0 transition-all duration-300",
+            enlarged 
+                ? "fixed inset-4 z-50 flex items-center justify-center" 
+                : "hidden xl:block xl:w-[380px] 2xl:w-[440px]"
+        )}>
+            {enlarged && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setEnlarged(false)} />
+            )}
+            <div className={cn(
+                "relative",
+                enlarged ? "w-full max-w-4xl h-[80vh] z-10" : "sticky top-4"
+            )}>
+                <div className={cn(
+                    "rounded-xl overflow-hidden border border-border shadow-md",
+                    enlarged ? "h-full" : ""
+                )} style={enlarged ? undefined : { height: '520px' }}>
+                    <Suspense fallback={
+                        <div className="flex items-center justify-center h-full bg-muted/20">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         </div>
-                        <p className="text-[11px] sm:text-xs text-muted-foreground mt-1.5 text-center">
-                            Markeringar färgas efter aktiv tab ({activeTab})
-                        </p>
-                    </div>
+                    }>
+                        <MapView
+                            initialColoringMode={mapColoringMode}
+                            hideSidebar
+                            compact={!enlarged}
+                            externalColoringMode={mapColoringMode}
+                        />
+                    </Suspense>
                 </div>
+                {/* Enlarge/shrink button */}
+                <div className="absolute top-2 right-2 z-20">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-8 w-8 bg-card/90 backdrop-blur-sm shadow-lg"
+                        onClick={() => setEnlarged(prev => !prev)}
+                        title={enlarged ? "Shrink map" : "Enlarge map"}
+                    >
+                        {enlarged ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+                    </Button>
+                </div>
+                {!enlarged && (
+                    <p className="text-[11px] sm:text-xs text-muted-foreground mt-1.5 text-center">
+                        Markers colored by active tab ({activeTab})
+                    </p>
+                )}
             </div>
         </div>
     );
