@@ -2503,7 +2503,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           } catch (e) {
             console.warn('[handleAllModelsLoaded] Progressive load failed:', e);
           }
-        }, 3000); // Wait 3s for UI to stabilize before loading remaining models
+        }, 500); // Load remaining models quickly after initial render
       }
 
       // Virtual Twin: apply ghost opacity after all models load
@@ -2576,6 +2576,24 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               }
             });
             console.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
+
+            // Auto-hide "Area" objects globally — these block selection in both 2D and 3D
+            let areaHiddenCount = 0;
+            Object.values(metaObjects).forEach((mo: any) => {
+              if (mo.type?.toLowerCase() !== 'ifcspace') return;
+              const name = (mo.name || '').trim().toLowerCase();
+              if (name === 'area' || name.startsWith('area ') || name.startsWith('area:')) {
+                const entity = sceneObjects[mo.id];
+                if (entity) {
+                  entity.visible = false;
+                  entity.pickable = false;
+                  areaHiddenCount++;
+                }
+              }
+            });
+            if (areaHiddenCount > 0) {
+              console.log(`Area objects hidden & unpickable: ${areaHiddenCount}`);
+            }
           }
         } catch (e) {
           console.debug("Could not hide spaces:", e);
@@ -3973,11 +3991,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     setModelLoadState('idle');
     setCacheStatus(null);
     
-    // Clear stale in-memory XKT cache for this building before initializing.
-    // Prevents corrupt/expired data from previous sessions being served to the XKT parser (→ RangeError).
+    // Preserve preloaded XKT data in memory — useXktPreload may have already fetched models.
+    // Only clear if no models are cached (avoids double-fetch which was the main perf bottleneck).
     if (buildingFmGuid) {
-      clearBuildingFromMemory(buildingFmGuid);
-      console.log('AssetPlusViewer: Cleared in-memory XKT cache for fresh load');
+      const stats = getMemoryStats();
+      if (stats.modelCount === 0) {
+        console.log('AssetPlusViewer: No preloaded models in memory');
+      } else {
+        console.log(`AssetPlusViewer: ${stats.modelCount} preloaded models in memory (${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB) — preserving for cache hits`);
+      }
     }
 
     // Setup cache interceptor before viewer initialization

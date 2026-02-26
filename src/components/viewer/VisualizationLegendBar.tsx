@@ -121,7 +121,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
           // Mobile: position at bottom-right to avoid floor switcher on the left
           isMobile
             ? 'right-3 bottom-24'
-            : 'left-3 top-1/2 -translate-y-1/2',
+            : 'right-3 top-1/2 -translate-y-1/2',
           className
         )}
       >

@@ -508,14 +508,19 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const applyWithRetry = (attempt: number) => {
       if (cancelled) return;
       // Early exit: if cache and rooms are both empty and we've already tried once, stop polling
-      if (entityIdCache.size === 0 && rooms.length === 0 && attempt > 0) return;
       if (entityIdCache.size > 0 && rooms.length > 0) {
         setColorizedCount(0);
         applyVisualization();
-      } else if (attempt < 5) {
-        setTimeout(() => applyWithRetry(attempt + 1), 400);
+      } else if (attempt < 12) {
+        // Poll more aggressively: metaScene may take time to populate after model load
+        const delay = attempt < 3 ? 300 : attempt < 6 ? 500 : 1000;
+        setTimeout(() => applyWithRetry(attempt + 1), delay);
       } else {
-        console.debug('Room visualization: gave up after 5 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
+        console.debug('Room visualization: gave up after 12 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
+        // Last resort: force rebuild the entity cache
+        if (entityIdCache.size === 0) {
+          setCacheKey(`${buildingFmGuid}-force-${Date.now()}`);
+        }
       }
     };
 

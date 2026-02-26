@@ -201,8 +201,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !SPACE_TYPES.has(mo.type?.toLowerCase())) continue;
+        // Skip "Area" objects — they are large covering objects that block the plan
+        const moName = (mo.name || '').trim().toLowerCase();
+        if (moName === 'area' || moName.startsWith('area ') || moName.startsWith('area:')) continue;
         const obj = scene.objects?.[mo.id];
-        if (!obj?.visible || !obj?.aabb) continue;
+        if (!obj?.aabb) continue; // Don't check visibility — areas may be hidden but rooms should show
         const { x, z, w, h } = projectAABB(obj.aabb);
 
         const isHovered = hoveredRoom === mo.id;
@@ -352,8 +355,17 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [render]);
 
-  // Click to navigate
+  // Click to navigate — only if not panning (detect drag vs click)
+  const clickStartRef = useRef<{ x: number; y: number } | null>(null);
+
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // If we were panning, don't navigate
+    if (clickStartRef.current) {
+      const dx = Math.abs(e.clientX - clickStartRef.current.x);
+      const dy = Math.abs(e.clientY - clickStartRef.current.y);
+      if (dx > 5 || dy > 5) return; // was a drag, not a click
+    }
+
     const xv = getXeokitViewer();
     const aabb = lastAabbRef.current;
     const canvas = canvasRef.current;
@@ -404,8 +416,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     for (const id in metaScene.metaObjects) {
       const mo = metaScene.metaObjects[id];
       if (!mo || mo.type?.toLowerCase() !== 'ifcspace') continue;
+      // Skip area objects
+      const moName = (mo.name || '').trim().toLowerCase();
+      if (moName === 'area' || moName.startsWith('area ') || moName.startsWith('area:')) continue;
       const obj = scene.objects?.[mo.id];
-      if (!obj?.visible || !obj?.aabb) continue;
+      if (!obj?.aabb) continue;
       const [ax, , az, bx, , bz] = obj.aabb;
       if (worldX >= ax && worldX <= bx && worldZ >= az && worldZ <= bz) {
         foundRoom = mo.id;
@@ -432,10 +447,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     });
   }, []);
 
-  // Pan start/end
+  // Pan start/end — left-click drag pans (no alt key needed)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    if (e.button === 0 || e.button === 1) {
       e.preventDefault();
+      clickStartRef.current = { x: e.clientX, y: e.clientY };
       panStartRef.current = { x: e.clientX, y: e.clientY, ox: panZoom.offsetX, oy: panZoom.offsetY };
     }
   }, [panZoom]);
