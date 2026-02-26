@@ -111,6 +111,27 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     return { worldX, worldZ };
   }, []);
 
+  // Read CSS variable colors for themed rendering
+  const getThemeColors = useCallback(() => {
+    const root = document.documentElement;
+    const style = getComputedStyle(root);
+    const getCssHsl = (varName: string) => {
+      const val = style.getPropertyValue(varName).trim();
+      return val ? `hsl(${val})` : null;
+    };
+    return {
+      bg: getCssHsl('--background') || '#0f172a',
+      fg: getCssHsl('--foreground') || '#e2e8f0',
+      muted: getCssHsl('--muted') || '#1e293b',
+      mutedFg: getCssHsl('--muted-foreground') || '#94a3b8',
+      border: getCssHsl('--border') || '#334155',
+      primary: getCssHsl('--primary') || '#3b82f6',
+      primaryFg: getCssHsl('--primary-foreground') || '#ffffff',
+      accent: getCssHsl('--accent') || '#1e293b',
+      card: getCssHsl('--card') || '#1c1c2e',
+    };
+  }, []);
+
   // Main render loop
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -132,13 +153,15 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     const cw = rect.width;
     const ch = rect.height;
 
+    const colors = getThemeColors();
+
     const scene = xv.scene;
     const metaScene = xv.metaScene;
     const aabb = computeVisibleAabb(scene, metaScene);
     if (!aabb || aabb.length < 6 || !isFinite(aabb[0])) {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = colors.bg;
       ctx.fillRect(0, 0, cw, ch);
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillStyle = colors.mutedFg;
       ctx.font = '14px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText('Laddar planvy...', cw / 2, ch / 2);
@@ -146,8 +169,8 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     }
     lastAabbRef.current = aabb;
 
-    // Background
-    ctx.fillStyle = '#0f172a';
+    // Background — use theme background
+    ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, cw, ch);
 
     // Helper to project AABB to canvas rect
@@ -161,18 +184,20 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
     if (metaScene?.metaObjects) {
       const objects = metaScene.metaObjects;
 
-      // 1. Draw slabs (floor plates) — very subtle
+      // 1. Draw slabs (floor plates) — subtle muted fill
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !SLAB_TYPES.has(mo.type?.toLowerCase())) continue;
         const obj = scene.objects?.[mo.id];
         if (!obj?.visible || !obj?.aabb) continue;
         const { x, z, w, h } = projectAABB(obj.aabb);
-        ctx.fillStyle = 'rgba(30, 41, 59, 0.6)';
+        ctx.fillStyle = colors.muted;
+        ctx.globalAlpha = 0.5;
         ctx.fillRect(x, z, w, h);
+        ctx.globalAlpha = 1;
       }
 
-      // 2. Draw spaces (rooms) — light fill, clickable
+      // 2. Draw spaces (rooms) — themed fill, clickable
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !SPACE_TYPES.has(mo.type?.toLowerCase())) continue;
@@ -183,24 +208,21 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
         const isHovered = hoveredRoom === mo.id;
         const isSelected = selectedRoom === mo.id;
 
-        ctx.fillStyle = isSelected
-          ? 'rgba(59, 130, 246, 0.35)'
-          : isHovered
-            ? 'rgba(100, 140, 220, 0.25)'
-            : 'rgba(71, 85, 105, 0.15)';
+        ctx.globalAlpha = isSelected ? 0.35 : isHovered ? 0.2 : 0.08;
+        ctx.fillStyle = isSelected ? colors.primary : isHovered ? colors.accent : colors.muted;
         ctx.fillRect(x, z, w, h);
+        ctx.globalAlpha = 1;
 
-        ctx.strokeStyle = isSelected
-          ? 'rgba(96, 165, 250, 0.9)'
-          : isHovered
-            ? 'rgba(148, 163, 184, 0.6)'
-            : 'rgba(100, 116, 139, 0.35)';
+        ctx.strokeStyle = isSelected ? colors.primary : isHovered ? colors.border : colors.border;
+        ctx.globalAlpha = isSelected ? 0.9 : isHovered ? 0.6 : 0.3;
         ctx.lineWidth = isSelected ? 2 : 1;
         ctx.strokeRect(x, z, w, h);
+        ctx.globalAlpha = 1;
 
         // Room label
         if (w > 35 && h > 20) {
-          ctx.fillStyle = isSelected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)';
+          ctx.fillStyle = colors.fg;
+          ctx.globalAlpha = isSelected ? 0.9 : 0.55;
           const fontSize = Math.max(9, Math.min(13, w / 8));
           ctx.font = `${fontSize}px system-ui`;
           ctx.textAlign = 'center';
@@ -209,43 +231,48 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
           const maxChars = Math.floor(w / (fontSize * 0.6));
           const display = name.length > maxChars ? name.substring(0, maxChars - 1) + '…' : name;
           ctx.fillText(display, x + w / 2, z + h / 2);
+          ctx.globalAlpha = 1;
         }
       }
 
-      // 3. Draw walls — dark solid fill
+      // 3. Draw walls — solid border color
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !WALL_TYPES.has(mo.type?.toLowerCase())) continue;
         const obj = scene.objects?.[mo.id];
         if (!obj?.visible || !obj?.aabb) continue;
         const { x, z, w, h } = projectAABB(obj.aabb);
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillStyle = colors.border;
         ctx.fillRect(x, z, w, h);
-        ctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
+        ctx.strokeStyle = colors.mutedFg;
+        ctx.globalAlpha = 0.4;
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x, z, w, h);
+        ctx.globalAlpha = 1;
       }
 
-      // 4. Draw columns — small dark squares
+      // 4. Draw columns — small muted squares
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !COLUMN_TYPES.has(mo.type?.toLowerCase())) continue;
         const obj = scene.objects?.[mo.id];
         if (!obj?.visible || !obj?.aabb) continue;
         const { x, z, w, h } = projectAABB(obj.aabb);
-        ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+        ctx.fillStyle = colors.border;
         ctx.fillRect(x, z, w, h);
       }
 
-      // 5. Draw doors — subtle indication
+      // 5. Draw doors — subtle primary accent
       for (const id in objects) {
         const mo = objects[id];
         if (!mo || !DOOR_TYPES.has(mo.type?.toLowerCase())) continue;
         const obj = scene.objects?.[mo.id];
         if (!obj?.visible || !obj?.aabb) continue;
         const { x, z, w, h } = projectAABB(obj.aabb);
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
+        ctx.fillStyle = colors.primary;
+        ctx.globalAlpha = 0.12;
         ctx.fillRect(x, z, w, h);
+        ctx.globalAlpha = 1;
       }
     }
 
@@ -256,61 +283,68 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
       const lookPos = worldToCanvas(camera.look[0], camera.look[2], aabb, cw, ch, panZoom);
 
       // Direction line
-      ctx.strokeStyle = 'rgba(96, 165, 250, 0.5)';
+      ctx.strokeStyle = colors.primary;
+      ctx.globalAlpha = 0.5;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(camPos.x, camPos.z);
       ctx.lineTo(lookPos.x, lookPos.z);
       ctx.stroke();
+      ctx.globalAlpha = 1;
 
       // FOV cone
       const dx = lookPos.x - camPos.x;
       const dz = lookPos.z - camPos.z;
       const angle = Math.atan2(dz, dx);
       const coneLen = 40 * panZoom.scale;
-      const coneSpread = 0.4; // radians
+      const coneSpread = 0.4;
 
-      ctx.fillStyle = 'rgba(96, 165, 250, 0.12)';
+      ctx.fillStyle = colors.primary;
+      ctx.globalAlpha = 0.12;
       ctx.beginPath();
       ctx.moveTo(camPos.x, camPos.z);
       ctx.lineTo(camPos.x + Math.cos(angle - coneSpread) * coneLen, camPos.z + Math.sin(angle - coneSpread) * coneLen);
       ctx.lineTo(camPos.x + Math.cos(angle + coneSpread) * coneLen, camPos.z + Math.sin(angle + coneSpread) * coneLen);
       ctx.closePath();
       ctx.fill();
+      ctx.globalAlpha = 1;
 
       // Camera dot
-      ctx.fillStyle = '#3b82f6';
+      ctx.fillStyle = colors.primary;
       ctx.beginPath();
       ctx.arc(camPos.x, camPos.z, 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#fff';
+      ctx.strokeStyle = colors.primaryFg;
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
     // Scale indicator
-    const scaleBarWorld = 10; // 10 meters
+    const scaleBarWorld = 10;
     const p1 = worldToCanvas(aabb[0], aabb[2], aabb, cw, ch, panZoom);
     const p2 = worldToCanvas(aabb[0] + scaleBarWorld, aabb[2], aabb, cw, ch, panZoom);
     const barPx = p2.x - p1.x;
     if (barPx > 20 && barPx < cw * 0.5) {
       const barY = ch - 20;
       const barX = 20;
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.strokeStyle = colors.mutedFg;
+      ctx.globalAlpha = 0.4;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(barX, barY); ctx.lineTo(barX + barPx, barY);
       ctx.moveTo(barX, barY - 4); ctx.lineTo(barX, barY + 4);
       ctx.moveTo(barX + barPx, barY - 4); ctx.lineTo(barX + barPx, barY + 4);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillStyle = colors.mutedFg;
+      ctx.globalAlpha = 0.5;
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(`${scaleBarWorld}m`, barX + barPx / 2, barY - 8);
+      ctx.globalAlpha = 1;
     }
 
     animFrameRef.current = requestAnimationFrame(render);
-  }, [getXeokitViewer, panZoom, hoveredRoom, selectedRoom, computeVisibleAabb, worldToCanvas]);
+  }, [getXeokitViewer, panZoom, hoveredRoom, selectedRoom, computeVisibleAabb, worldToCanvas, getThemeColors]);
 
   // Start/stop render loop
   useEffect(() => {
@@ -422,7 +456,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({ viewerRef, buildingFmGuid
   return (
     <div
       ref={containerRef}
-      className={cn('relative w-full h-full bg-[#0f172a] overflow-hidden', className)}
+      className={cn('relative w-full h-full bg-background overflow-hidden', className)}
     >
       <canvas
         ref={canvasRef}
