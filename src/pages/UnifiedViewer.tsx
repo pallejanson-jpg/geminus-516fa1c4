@@ -443,13 +443,13 @@ const UnifiedViewerContent: React.FC<{
   const isAnySplit = isSplitMode || isSplit2D3D;
 
   const viewerContainerStyle: React.CSSProperties = {
-    position: isSplit2D3D ? 'relative' : 'absolute',
+    position: 'absolute',
     top: 0,
-    left: 0,
+    left: isSplit2D3D ? '40%' : 0,
     height: '100%',
     display: needs3D ? 'flex' : 'none',
     flexDirection: 'column',
-    width: isSplit2D3D ? '100%' : (isSplitMode ? '50%' : '100%'),
+    width: isSplit2D3D ? '60%' : (isSplitMode ? '50%' : '100%'),
     zIndex: is3DMode || is2DMode ? 10 : isVTMode ? 10 : 5,
     pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
   };
@@ -589,51 +589,40 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* ── Split 2D/3D mode — ResizablePanelGroup layout ── */}
-        {isSplit2D3D ? (
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-              <SplitPlanView
-                viewerRef={viewerInstanceRef}
-                buildingFmGuid={buildingData.fmGuid}
-              />
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={60} minSize={30}>
-              <div style={viewerContainerStyle}>
-                <AssetPlusViewer
-                  fmGuid={buildingData.fmGuid}
-                  initialFmGuidToFocus={entityFmGuid || undefined}
-                  initialVisualization={visualizationParam || undefined}
-                  insightsColorMode={insightsModeParam || undefined}
-                  forceXray={xrayParam || undefined}
-                  onClose={handleGoBack}
-                  syncEnabled={false}
+        {/* ── Split 2D/3D: left panel with 2D plan view ── */}
+        {isSplit2D3D && (
+          <div className="absolute top-0 left-0 h-full z-20" style={{ width: '40%' }}>
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              <ResizablePanel defaultSize={100} minSize={100}>
+                <SplitPlanView
+                  viewerRef={viewerInstanceRef}
+                  buildingFmGuid={buildingData.fmGuid}
                 />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : (
-          /* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */
-          <div style={viewerContainerStyle}>
-            <AssetPlusViewer
-              fmGuid={buildingData.fmGuid}
-              initialFmGuidToFocus={entityFmGuid || undefined}
-              initialVisualization={visualizationParam || undefined}
-              insightsColorMode={insightsModeParam || undefined}
-              forceXray={xrayParam || undefined}
-              transparentBackground={isVTMode}
-              ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-              suppressOverlay={isVTMode}
-              onClose={is3DMode ? handleGoBack : undefined}
-              syncEnabled={isSplitMode ? syncLocked : false}
-              onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-              syncPosition={isSplitMode ? sync3DPosition : undefined}
-              syncHeading={isSplitMode ? sync3DHeading : undefined}
-              syncPitch={isSplitMode ? sync3DPitch : undefined}
-            />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+            </ResizablePanelGroup>
           </div>
         )}
+
+        {/* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */}
+        <div style={viewerContainerStyle}>
+          <AssetPlusViewer
+            fmGuid={buildingData.fmGuid}
+            initialFmGuidToFocus={entityFmGuid || undefined}
+            initialVisualization={visualizationParam || undefined}
+            insightsColorMode={insightsModeParam || undefined}
+            forceXray={xrayParam || undefined}
+            transparentBackground={isVTMode}
+            ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+            suppressOverlay={isVTMode}
+            onClose={is3DMode ? handleGoBack : undefined}
+            syncEnabled={isSplitMode ? syncLocked : false}
+            onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+            syncPosition={isSplitMode ? sync3DPosition : undefined}
+            syncHeading={isSplitMode ? sync3DHeading : undefined}
+            syncPitch={isSplitMode ? sync3DPitch : undefined}
+          />
+        </div>
 
         {/* ── Split: 360° panel on the right half ── */}
         {/* Split mode: SDK container above handles the 360° panel */}
