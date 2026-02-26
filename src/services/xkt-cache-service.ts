@@ -65,7 +65,7 @@ export class XktCacheService {
         // Try matching on model_id or file_name
         const { data: dbModels } = await supabase
           .from('xkt_models')
-          .select('file_url, storage_path, file_name, model_id, synced_at, source_updated_at, format')
+          .select('file_url, storage_path, file_name, model_id, file_size, synced_at, source_updated_at, format')
           .eq('building_fm_guid', buildingFmGuid);
 
         if (dbModels && dbModels.length > 0) {
@@ -92,7 +92,13 @@ export class XktCacheService {
             ? (Date.now() - new Date(match.synced_at).getTime() > MAX_CACHE_AGE_MS)
             : false;
 
-      if (match && match.storage_path) {
+          const MIN_VALID_XKT_BYTES = 50_000;
+          if (match && typeof (match as any).file_size === 'number' && (match as any).file_size > 0 && (match as any).file_size < MIN_VALID_XKT_BYTES) {
+            console.warn(`XKT cache: Skipping corrupt DB entry for ${modelId} (${(match as any).file_size} bytes)`);
+            return { cached: false };
+          }
+
+          if (match && match.storage_path) {
             // Always generate a fresh signed URL from storage_path
             // (file_url may contain an expired signed URL)
             const { data: urlData } = await supabase.storage

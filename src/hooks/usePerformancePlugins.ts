@@ -76,17 +76,20 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
       // 3. SAO (Scalable Ambient Obscurance) — soft contact shadows
       try {
         const sao = xeokitViewer.scene?.sao;
-        if (sao && !isMobile) {
+        const sceneObjectCount = xeokitViewer.scene?.objectIds?.length || Object.keys(xeokitViewer.scene?.objects || {}).length;
+        const enableSao = !isMobile && sceneObjectCount <= 40000;
+
+        if (sao && enableSao) {
           sao.enabled = true;
           sao.intensity = 0.15;
           sao.bias = 0.5;
           sao.scale = 1000;
           sao.kernelRadius = 100;
           sao.minResolution = 0;
-          console.log('[perf-plugins] SAO enabled (desktop)');
-        } else if (sao && isMobile) {
+          console.log('[perf-plugins] SAO enabled (desktop)', { objectCount: sceneObjectCount });
+        } else if (sao) {
           sao.enabled = false;
-          console.log('[perf-plugins] SAO skipped (mobile)');
+          console.log('[perf-plugins] SAO disabled (mobile/heavy scene)', { objectCount: sceneObjectCount });
         }
       } catch (e) {
         console.debug('[perf-plugins] SAO setup error:', e);
