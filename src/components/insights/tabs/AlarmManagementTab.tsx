@@ -53,6 +53,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteSelected, setShowDeleteSelected] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [showDeleteRandom, setShowDeleteRandom] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchLevelNames = useCallback(async () => {
@@ -156,13 +157,59 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
       }
       const { error } = await query;
       if (error) throw error;
-      toast({ title: 'Alla larm raderade' });
+      toast({ title: 'All alarms deleted' });
       setShowDeleteAll(false);
       setPage(0);
       fetchAlarms();
       onAlarmsDeleted?.();
     } catch (e: any) {
-      toast({ title: 'Fel vid radering', description: e.message, variant: 'destructive' });
+      toast({ title: 'Error deleting', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteRandom90 = async () => {
+    setIsDeleting(true);
+    try {
+      // Fetch all alarm fm_guids for this building
+      const { data: allAlarms, error: fetchError } = await supabase
+        .from('assets')
+        .select('fm_guid')
+        .eq('building_fm_guid', buildingFmGuid)
+        .eq('asset_type', 'IfcAlarm')
+        .limit(10000);
+      if (fetchError) throw fetchError;
+      if (!allAlarms || allAlarms.length === 0) {
+        toast({ title: 'No alarms to delete' });
+        setShowDeleteRandom(false);
+        setIsDeleting(false);
+        return;
+      }
+
+      // Shuffle and pick 90%
+      const shuffled = [...allAlarms].sort(() => Math.random() - 0.5);
+      const toDelete = shuffled.slice(0, Math.floor(shuffled.length * 0.9));
+      const guids = toDelete.map(a => a.fm_guid);
+
+      // Delete in batches of 500
+      for (let i = 0; i < guids.length; i += 500) {
+        const batch = guids.slice(i, i + 500);
+        const { error } = await supabase
+          .from('assets')
+          .delete()
+          .in('fm_guid', batch)
+          .eq('building_fm_guid', buildingFmGuid);
+        if (error) throw error;
+      }
+
+      toast({ title: `${toDelete.length} of ${allAlarms.length} alarms deleted (90%)` });
+      setShowDeleteRandom(false);
+      setPage(0);
+      fetchAlarms();
+      onAlarmsDeleted?.();
+    } catch (e: any) {
+      toast({ title: 'Error deleting', description: e.message, variant: 'destructive' });
     } finally {
       setIsDeleting(false);
     }
@@ -185,7 +232,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Sök FM-GUID..."
+            placeholder="Search FM-GUID..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="pl-8 h-9"
@@ -198,7 +245,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
             variant={levelFilter === '' ? 'default' : 'outline'}
             size="sm"
             onClick={() => { setLevelFilter(''); setPage(0); }}
-          >Alla våningar</Button>
+          >All floors</Button>
           {Array.from(levelNames.entries()).map(([guid, name]) => (
             <Button
               key={guid}
@@ -218,9 +265,19 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
               disabled={isDeleting}
             >
               <Trash2 className="h-4 w-4 mr-1" />
-              Radera valda ({selectedIds.size})
+              Delete selected ({selectedIds.size})
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteRandom(true)}
+            disabled={isDeleting}
+            className="text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete 90%
+          </Button>
           <Button
             variant="destructive"
             size="sm"
@@ -228,16 +285,16 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
             disabled={isDeleting}
           >
             <Trash2 className="h-4 w-4 mr-1" />
-            {levelFilter ? 'Radera för denna våning' : 'Radera alla'}
+            {levelFilter ? 'Delete floor alarms' : 'Delete all'}
           </Button>
         </div>
       </div>
 
       {/* Stats */}
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span>{totalCount.toLocaleString()} larm totalt</span>
+        <span>{totalCount.toLocaleString()} alarms total</span>
         {selectedIds.size > 0 && (
-          <Badge variant="secondary">{selectedIds.size} valda</Badge>
+          <Badge variant="secondary">{selectedIds.size} selected</Badge>
         )}
         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
       </div>
@@ -254,9 +311,9 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
                 />
               </TableHead>
               <TableHead>FM-GUID</TableHead>
-              <TableHead>Våning</TableHead>
-              <TableHead>Rum (GUID)</TableHead>
-              <TableHead>Uppdaterad</TableHead>
+              <TableHead>Floor</TableHead>
+              <TableHead>Room (GUID)</TableHead>
+              <TableHead>Updated</TableHead>
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
@@ -295,7 +352,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
                         .delete()
                         .eq('fm_guid', alarm.fm_guid);
                       if (!error) {
-                        toast({ title: 'Larm raderat' });
+                        toast({ title: 'Alarm deleted' });
                         fetchAlarms();
                         onAlarmsDeleted?.();
                       }
@@ -309,7 +366,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
             {filteredAlarms.length === 0 && !isLoading && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                  Inga larm hittades
+                  No alarms found
                 </TableCell>
               </TableRow>
             )}
@@ -329,7 +386,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm text-muted-foreground">
-            Sida {page + 1} av {totalPages}
+            Page {page + 1} of {totalPages}
           </span>
           <Button
             variant="outline"
@@ -348,21 +405,21 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Radera {selectedIds.size} larm
+              Delete {selectedIds.size} alarms
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Är du säker på att du vill radera de valda larmen? Åtgärden kan inte ångras.
+              Are you sure you want to delete the selected alarms? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteSelected}
               disabled={isDeleting}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Radera
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -374,24 +431,52 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Radera {levelFilter ? 'alla larm för denna våning' : `alla ${totalCount.toLocaleString()} larm`}
+              Delete {levelFilter ? 'all alarms for this floor' : `all ${totalCount.toLocaleString()} alarms`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {levelFilter
-                ? `Detta raderar alla IfcAlarm-objekt på vald våning för ${buildingName || 'byggnaden'}.`
-                : `Detta raderar ALLA ${totalCount.toLocaleString()} IfcAlarm-objekt för ${buildingName || 'byggnaden'}.`
-              } Åtgärden kan INTE ångras.
+                ? `This will delete all IfcAlarm objects on the selected floor for ${buildingName || 'the building'}.`
+                : `This will delete ALL ${totalCount.toLocaleString()} IfcAlarm objects for ${buildingName || 'the building'}.`
+              } This action CANNOT be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteAll}
               disabled={isDeleting}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Ja, radera
+              Yes, delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete 90% Dialog */}
+      <AlertDialog open={showDeleteRandom} onOpenChange={setShowDeleteRandom}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete 90% of alarms randomly
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will randomly select and delete approximately 90% of the {totalCount.toLocaleString()} alarms
+              for {buildingName || 'the building'}, keeping only ~{Math.ceil(totalCount * 0.1)} alarms.
+              This action CANNOT be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteRandom90}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Yes, delete 90%
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
