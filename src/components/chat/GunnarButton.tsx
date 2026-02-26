@@ -38,9 +38,16 @@ export default function GunnarButton() {
   // Detect mobile
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   
-  // Panel dimensions — fullscreen on mobile
-  const panelWidth = isMobile ? window.innerWidth : 400;
-  const panelHeight = isMobile ? window.innerHeight : (typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 550);
+  // Panel dimensions — fullscreen on mobile, resizable on desktop
+  const DEFAULT_WIDTH = 480;
+  const DEFAULT_HEIGHT = typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 620;
+  const MIN_WIDTH = 360;
+  const MIN_HEIGHT = 400;
+  const [panelSize, setPanelSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
+  const panelWidth = isMobile ? window.innerWidth : panelSize.width;
+  const panelHeight = isMobile ? window.innerHeight : panelSize.height;
 
   // Load saved position on mount — clamp to current viewport
   useEffect(() => {
@@ -256,6 +263,47 @@ export default function GunnarButton() {
     return context;
   };
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    resizeStartRef.current = { x: clientX, y: clientY, w: panelSize.width, h: panelSize.height };
+  }, [panelSize]);
+
+  const handleResizeMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isResizing) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const dx = clientX - resizeStartRef.current.x;
+    const dy = clientY - resizeStartRef.current.y;
+    setPanelSize({
+      width: Math.max(MIN_WIDTH, resizeStartRef.current.w + dx),
+      height: Math.max(MIN_HEIGHT, resizeStartRef.current.h + dy),
+    });
+  }, [isResizing]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResizeMove);
+      window.addEventListener('mouseup', handleResizeEnd);
+      window.addEventListener('touchmove', handleResizeMove);
+      window.addEventListener('touchend', handleResizeEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleResizeMove);
+        window.removeEventListener('mouseup', handleResizeEnd);
+        window.removeEventListener('touchmove', handleResizeMove);
+        window.removeEventListener('touchend', handleResizeEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   // Add/remove global drag listeners for panel
   useEffect(() => {
     if (isDragging) {
@@ -443,6 +491,20 @@ export default function GunnarButton() {
               embedded 
             />
           </div>
+
+          {/* Resize handle (bottom-right corner) */}
+          {!isMobile && (
+            <div
+              className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+              onMouseDown={handleResizeStart}
+              onTouchStart={handleResizeStart}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" className="text-muted-foreground/50">
+                <path d="M14 14L8 14L14 8Z" fill="currentColor" />
+                <path d="M14 14L11 14L14 11Z" fill="currentColor" opacity="0.5" />
+              </svg>
+            </div>
+          )}
         </div>
       )}
     </TooltipProvider>

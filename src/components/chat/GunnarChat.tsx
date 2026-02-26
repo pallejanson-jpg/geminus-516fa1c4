@@ -132,16 +132,21 @@ export default function GunnarChat({ open, onClose, context, embedded }: GunnarC
     fetchInsights();
   }, [context?.currentBuilding?.fmGuid]);
 
+  // Only set greeting on initial mount or when building actually changes — don't reset on every context serialization change
+  const currentBuildingRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const contextKey = JSON.stringify(context);
-    if (contextKey !== prevContextRef.current) {
-      prevContextRef.current = contextKey;
-      setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
-      setSuggestedFollowups([]);
-      setProactiveInsights([]);
-      proactiveFetchedRef.current = "";
+    const buildingKey = context?.currentBuilding?.fmGuid;
+    if (buildingKey !== currentBuildingRef.current) {
+      currentBuildingRef.current = buildingKey;
+      // Only reset if building actually changed (not on minimize/restore)
+      if (messages.length === 0 || (messages.length === 1 && messages[0].role === 'assistant')) {
+        setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
+        setSuggestedFollowups([]);
+        setProactiveInsights([]);
+        proactiveFetchedRef.current = "";
+      }
     }
-  }, [context]);
+  }, [context?.currentBuilding?.fmGuid]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
