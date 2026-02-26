@@ -268,9 +268,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   return (
     <div className={cn(
-      'fixed left-3 top-[140px] z-20 flex flex-col items-center gap-px p-px rounded-lg w-auto',
-      'bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg',
+      'fixed left-3 z-20 flex flex-col items-center gap-0.5 w-auto',
       'pointer-events-auto',
+      compact ? 'top-[100px] gap-px' : 'top-[140px]',
       className
     )}>
       {visiblePills.map((floor) => {
@@ -283,14 +283,14 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  compact ? 'h-6 px-1.5 text-[9px] font-medium rounded-md' : 'h-7 px-2 min-w-[40px] max-w-[120px] text-[10px] sm:text-xs font-medium rounded-md',
-                  'transition-all duration-150 w-auto',
-                  state === 'active' && 'bg-primary text-primary-foreground ring-2 ring-primary/30 hover:bg-primary/90',
-                  state === 'partial' && 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30',
-                  state === 'inactive' && 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
+                  compact ? 'h-5 px-1 text-[8px] font-medium rounded' : 'h-7 px-2 min-w-[40px] max-w-[120px] text-[10px] sm:text-xs font-medium rounded-md',
+                  'transition-all duration-150 w-auto shadow-sm',
+                  state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
+                  state === 'partial' && 'bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30',
+                  state === 'inactive' && 'bg-background/90 backdrop-blur-sm text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground',
                 )}
               >
-                <span className={cn(compact ? "text-[9px]" : "text-[10px] sm:text-xs", "truncate")}>{floor.name}</span>
+                <span className={cn(compact ? "text-[8px]" : "text-[10px] sm:text-xs", "truncate")}>{floor.name}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
@@ -354,9 +354,9 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         onClick={handlePillDoubleClick}
         title="Show all floors"
         className={cn(
-          compact ? 'h-6 px-1.5 text-[8px] font-medium rounded-md' : 'h-7 px-2 min-w-[40px] text-[9px] font-medium rounded-md',
-          'bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground',
-          visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary',
+          compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-7 px-2 min-w-[40px] text-[9px] font-medium rounded-md',
+          'bg-background/70 backdrop-blur-sm text-muted-foreground border border-border/30 shadow-sm hover:bg-muted hover:text-foreground',
+          visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary border-primary/40',
         )}
       >
         All

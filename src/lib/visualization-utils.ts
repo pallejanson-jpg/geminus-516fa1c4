@@ -197,10 +197,25 @@ export function rgbToFloat(rgb: [number, number, number]): [number, number, numb
 }
 
 /**
- * Convert an HSL string like 'hsl(220, 80%, 55%)' to normalized RGB floats [0-1] for xeokit.
+ * Convert an HSL string like 'hsl(220, 80%, 55%)' or 'hsl(var(--chart-2))' to normalized RGB floats [0-1] for xeokit.
+ * Resolves CSS custom properties (var(--name)) by reading computed styles from the document.
  */
 export function hslStringToRgbFloat(hsl: string): [number, number, number] {
-  const match = hsl.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*\)/i);
+  // Resolve CSS variables: 'hsl(var(--chart-2))' → read computed value → 'hsl(220 80% 55%)'
+  let resolved = hsl;
+  const varMatch = hsl.match(/var\(\s*(--[\w-]+)\s*\)/);
+  if (varMatch) {
+    try {
+      const rawValue = getComputedStyle(document.documentElement).getPropertyValue(varMatch[1]).trim();
+      if (rawValue) {
+        // rawValue is typically "220 80% 55%" (space-separated HSL components from Tailwind)
+        resolved = `hsl(${rawValue})`;
+      }
+    } catch { /* SSR or no DOM */ }
+  }
+
+  // Support both comma-separated 'hsl(220, 80%, 55%)' and space-separated 'hsl(220 80% 55%)'
+  const match = resolved.match(/hsl\(\s*([\d.]+)[\s,]+([\d.]+)%?[\s,]+([\d.]+)%?\s*\)/i);
   if (!match) return [0.5, 0.5, 0.5];
   const h = parseFloat(match[1]) / 360;
   const s = parseFloat(match[2]) / 100;
