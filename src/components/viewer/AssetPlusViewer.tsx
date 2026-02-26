@@ -509,7 +509,11 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       const viewer = viewerInstanceRef.current;
       const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      if (!xeokitViewer?.scene) return;
+      if (!xeokitViewer?.scene) {
+        insightsColorMapCacheRef.current = { mode: detail.mode, colorMap: detail.colorMap };
+        console.log('[AssetPlusViewer] Queued INSIGHTS_COLOR_UPDATE until viewer is ready');
+        return;
+      }
 
       const scene = xeokitViewer.scene;
       const metaObjects = xeokitViewer.metaScene?.metaObjects || {};
@@ -599,37 +603,55 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           colorizeDescendants(mo, rgb);
         });
       } else if (mode === 'asset_categories' || mode === 'asset_category') {
-        // colorMap keys are category names — match assets via allData
+        // colorMap keys can be asset_type labels (e.g. "Alarm") or category labels.
+        // Build a case-insensitive lookup and colorize via O(1) FMGUID → entity map.
         const currentData = allDataRef.current;
         const buildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid;
-        const categoryToFmGuids = new Map<string, string[]>();
-        currentData.forEach((a: any) => {
-          if (a.buildingFmGuid !== buildingGuid) return;
-          const cat = a.category || 'Unknown';
-          if (!categoryToFmGuids.has(cat)) categoryToFmGuids.set(cat, []);
-          categoryToFmGuids.get(cat)!.push(a.fmGuid.toLowerCase());
+        const normalizedColorMap = new Map<string, [number, number, number]>();
+        Object.entries(colorMap).forEach(([key, value]) => normalizedColorMap.set(key.toLowerCase(), value));
+
+        const entityByFmGuid = new Map<string, any>();
+        Object.values(metaObjects).forEach((mo: any) => {
+          const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
+          if (!moGuid) return;
+          const entity = scene.objects?.[mo.id];
+          if (entity) entityByFmGuid.set(moGuid, entity);
         });
 
-        categoryToFmGuids.forEach((fmGuids, cat) => {
-          let rgb = colorMap[cat];
-          if (!rgb) {
-            const truncated = cat.length > 15 ? cat.substring(0, 15) + '...' : cat;
-            rgb = colorMap[truncated];
-          }
-          if (!rgb) return;
-          fmGuids.forEach(guid => {
-            Object.values(metaObjects).forEach((mo: any) => {
-              const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
-              if (moGuid !== guid) return;
-              const entity = scene.objects?.[mo.id];
-              if (entity) {
-                entity.xrayed = false;
-                entity.visible = true;
-                entity.colorize = rgb;
-                entity.opacity = 0.85;
+        currentData.forEach((a: any) => {
+          if (a.buildingFmGuid !== buildingGuid) return;
+
+          const rawKeys = [a.assetType, a.asset_type, a.category]
+            .filter((v): v is string => typeof v === 'string' && v.length > 0);
+
+          let rgb: [number, number, number] | undefined;
+          for (const rawKey of rawKeys) {
+            const candidates = [
+              rawKey,
+              rawKey.replace(/^Ifc/i, ''),
+              rawKey.length > 15 ? `${rawKey.substring(0, 15)}...` : rawKey,
+            ];
+            for (const candidate of candidates) {
+              const match = normalizedColorMap.get(candidate.toLowerCase());
+              if (match) {
+                rgb = match;
+                break;
               }
-            });
-          });
+            }
+            if (rgb) break;
+          }
+
+          if (!rgb) return;
+          const fmGuidLower = (a.fmGuid || '').toLowerCase();
+          if (!fmGuidLower) return;
+
+          const entity = entityByFmGuid.get(fmGuidLower);
+          if (!entity) return;
+
+          entity.xrayed = false;
+          entity.visible = true;
+          entity.colorize = rgb;
+          entity.opacity = 0.85;
         });
       } else {
         // Forward to existing insights logic — update cache and trigger re-render
@@ -644,97 +666,145 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
   }, []);
 
-   // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel ───
+  // Re-apply queued Insights coloring once viewer is ready
   useEffect(() => {
-    const handler = (e: Event) => {
+    if (modelLoadState !== 'loaded' || initStep !== 'ready') return;
+    const pending = insightsColorMapCacheRef.current;
+    if (!pending) return;
+    insightsColorMapCacheRef.current = null;
+    window.dispatchEvent(new CustomEvent(INSIGHTS_COLOR_UPDATE_EVENT, { detail: pending }));
+  }, [modelLoadState, initStep]);
+
+  // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel / panel toggles ───
+  useEffect(() => {
+    const removeAlarmMarkerContainer = () => {
+      const existingContainer = document.getElementById('alarm-annotation-markers');
+      if (existingContainer) existingContainer.remove();
+    };
+
+    const handler = async (e: Event) => {
       const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
-      if (!detail?.alarms?.length) return;
+      const visible = detail?.visible ?? true;
+
+      if (!visible) {
+        removeAlarmMarkerContainer();
+        return;
+      }
 
       const viewer = viewerInstanceRef.current;
       const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
       const xeokitViewer = assetView?.viewer;
       if (!xeokitViewer?.scene) return;
 
-      // Collect all room entity IDs for viewFit
+      let alarmsToRender = detail?.alarms ?? [];
+
+      // Toggle path from right panel: visible=true with empty alarms → fetch latest building alarms
+      if (alarmsToRender.length === 0) {
+        const resolvedBuildingGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid || fmGuid;
+        if (!resolvedBuildingGuid) return;
+
+        const { data: fallbackAlarms, error } = await supabase
+          .from('assets')
+          .select('fm_guid, in_room_fm_guid')
+          .eq('building_fm_guid', resolvedBuildingGuid)
+          .eq('asset_type', 'IfcAlarm')
+          .not('in_room_fm_guid', 'is', null)
+          .limit(200);
+
+        if (error) {
+          console.warn('[AlarmAnnotations] Failed to load fallback alarms:', error);
+          return;
+        }
+
+        alarmsToRender = (fallbackAlarms || []).map((alarm: any) => ({
+          fmGuid: alarm.fm_guid,
+          roomFmGuid: alarm.in_room_fm_guid,
+        }));
+      }
+
+      if (alarmsToRender.length === 0) {
+        removeAlarmMarkerContainer();
+        return;
+      }
+
       const allRoomEntityIds: string[] = [];
 
-      // Remove previous alarm markers
-      const existingContainer = document.getElementById('alarm-annotation-markers');
-      if (existingContainer) existingContainer.remove();
+      removeAlarmMarkerContainer();
       const markerContainer = document.createElement('div');
       markerContainer.id = 'alarm-annotation-markers';
-      markerContainer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25;';
-      const viewerEl = viewerInstanceRef.current?.$el;
-      if (viewerEl) viewerEl.appendChild(markerContainer);
+      markerContainer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25;overflow:hidden;';
+      const markerHost = viewerContainerRef.current || ((viewer?.$el instanceof HTMLElement) ? viewer.$el : null);
+      if (!markerHost) return;
+      markerHost.appendChild(markerContainer);
 
-      for (const alarm of detail.alarms) {
+      for (const alarm of alarmsToRender) {
         const roomGuid = alarm.roomFmGuid;
         if (!roomGuid) continue;
 
-        // Find room entities in BIM by fmguid property
-        const roomItemIds = assetView.getItemsByPropertyValue?.("fmguid", roomGuid.toUpperCase()) || [];
+        const roomItemIds = assetView.getItemsByPropertyValue?.('fmguid', roomGuid.toUpperCase()) || [];
         if (roomItemIds.length === 0) {
           console.debug('[AlarmAnnotations] No BIM entities for room:', roomGuid);
           continue;
         }
 
         allRoomEntityIds.push(...roomItemIds);
-
-        // Flash the first room entity to highlight it
         flashEntityById(xeokitViewer.scene, roomItemIds[0]);
 
-        // Create visible DOM annotation marker at the room center
         const entity = xeokitViewer.scene.objects?.[roomItemIds[0]];
-        if (entity?.aabb) {
-          const aabb = entity.aabb;
-          const worldPos = [
-            (aabb[0] + aabb[3]) / 2,
-            (aabb[1] + aabb[4]) / 2 + 0.5, // slightly above center
-            (aabb[2] + aabb[5]) / 2,
-          ];
-          // Create a marker using xeokit's camera projection
-          const marker = document.createElement('div');
-          marker.className = 'alarm-annotation-marker';
-          marker.style.cssText = `
-            position:absolute;width:24px;height:24px;border-radius:50%;
-            background:hsl(var(--destructive));border:2px solid white;
-            box-shadow:0 2px 8px rgba(0,0,0,0.4);pointer-events:auto;cursor:pointer;
-            display:flex;align-items:center;justify-content:center;
-            font-size:10px;color:white;font-weight:bold;
-            transform:translate(-50%,-50%);transition:opacity 0.3s;
-          `;
-          marker.innerHTML = '🔔';
-          marker.title = `Alarm in room ${roomGuid.substring(0, 8)}…`;
-          markerContainer.appendChild(marker);
+        if (!entity?.aabb) continue;
 
-          // Position updater
-          const updatePos = () => {
-            const canvas = xeokitViewer.scene.canvas?.canvas;
-            if (!canvas) return;
-            const projected = xeokitViewer.scene.camera?.projectWorldPos(worldPos);
-            if (!projected) return;
-            const canvasRect = canvas.getBoundingClientRect();
-            const containerRect = markerContainer.getBoundingClientRect();
-            const x = canvasRect.left - containerRect.left + (projected[0] + 1) * canvasRect.width / 2;
-            const y = canvasRect.top - containerRect.top + (1 - projected[1]) * canvasRect.height / 2;
-            marker.style.left = `${x}px`;
-            marker.style.top = `${y}px`;
-            // Hide if behind camera
-            marker.style.opacity = projected[2] > 0 && projected[2] < 1 ? '1' : '0';
-          };
-          updatePos();
-          // Update on camera move
-          const onCamera = xeokitViewer.scene.camera?.on?.('matrix', updatePos);
-          // Cleanup after 30 seconds
-          setTimeout(() => {
-            marker.remove();
-            if (onCamera !== undefined) xeokitViewer.scene.camera?.off?.(onCamera);
-          }, 30000);
-        }
+        const aabb = entity.aabb;
+        const worldPos: [number, number, number] = [
+          (aabb[0] + aabb[3]) / 2,
+          (aabb[1] + aabb[4]) / 2 + 0.5,
+          (aabb[2] + aabb[5]) / 2,
+        ];
+
+        const marker = document.createElement('div');
+        marker.className = 'alarm-annotation-marker';
+        marker.style.cssText = `
+          position:absolute;width:24px;height:24px;border-radius:50%;
+          background:hsl(var(--destructive));border:2px solid white;
+          box-shadow:0 2px 8px rgba(0,0,0,0.4);pointer-events:auto;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;
+          font-size:10px;color:white;font-weight:bold;
+          transform:translate(-50%,-50%);transition:opacity 0.3s;
+        `;
+        marker.innerHTML = '🔔';
+        marker.title = `Alarm in room ${roomGuid.substring(0, 8)}…`;
+        markerContainer.appendChild(marker);
+
+        const updatePos = () => {
+          const canvas = xeokitViewer.scene?.canvas?.canvas;
+          const camera = xeokitViewer.scene?.camera;
+          if (!canvas || !camera) return;
+
+          const canvasPos = projectWorldToCanvas(worldPos, camera.viewMatrix, camera.projMatrix, canvas.clientWidth, canvas.clientHeight);
+          if (!canvasPos) {
+            marker.style.display = 'none';
+            return;
+          }
+
+          const canvasRect = canvas.getBoundingClientRect();
+          const containerRect = markerContainer.getBoundingClientRect();
+          marker.style.left = `${canvasRect.left - containerRect.left + canvasPos[0]}px`;
+          marker.style.top = `${canvasRect.top - containerRect.top + canvasPos[1]}px`;
+          marker.style.display = canvasPos[2] > 0 ? 'flex' : 'none';
+          marker.style.opacity = canvasPos[2] > 0 ? '1' : '0';
+        };
+
+        updatePos();
+        const onView = xeokitViewer.scene.camera?.on?.('viewMatrix', updatePos);
+        const onProj = xeokitViewer.scene.camera?.on?.('projMatrix', updatePos);
+
+        setTimeout(() => {
+          marker.remove();
+          if (onView !== undefined) xeokitViewer.scene.camera?.off?.(onView);
+          if (onProj !== undefined) xeokitViewer.scene.camera?.off?.(onProj);
+        }, 30000);
       }
 
-      // flyTo: viewFit on all room entities
-      if (detail.flyTo && allRoomEntityIds.length > 0) {
+      if (detail?.flyTo && allRoomEntityIds.length > 0) {
         try {
           xeokitViewer.cameraFlight?.flyTo({
             aabb: xeokitViewer.scene.getAABB(allRoomEntityIds),
@@ -745,14 +815,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
       }
 
-      // Show annotations via existing toggle
-      setShowAnnotations(true);
-      console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', detail.alarms.length, 'alarms, rooms found:', allRoomEntityIds.length);
+      console.log('[AssetPlusViewer] ALARM_ANNOTATIONS_SHOW:', alarmsToRender.length, 'alarms, rooms found:', allRoomEntityIds.length);
     };
 
     window.addEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
-    return () => window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
-  }, [flashEntityById]);
+    return () => {
+      window.removeEventListener(ALARM_ANNOTATIONS_SHOW_EVENT, handler);
+      removeAlarmMarkerContainer();
+    };
+  }, [flashEntityById, fmGuid]);
 
   const { broadcastCamera } = useViewerCameraSync({
     viewerRef: viewerInstanceRef,
