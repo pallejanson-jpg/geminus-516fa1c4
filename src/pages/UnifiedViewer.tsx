@@ -17,8 +17,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
-  Loader2, Square, BarChart2,
+  Loader2, Square, BarChart2, LayoutPanelLeft,
 } from 'lucide-react';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
 import FmAccess2DPanel from '@/components/viewer/FmAccess2DPanel';
 import { Button } from '@/components/ui/button';
@@ -36,12 +37,13 @@ import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
+import SplitPlanView from '@/components/viewer/SplitPlanView';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from 'sonner';
 
-export type ViewMode = '2d' | '3d' | 'split' | 'vt' | '360';
+export type ViewMode = '2d' | '3d' | 'split' | 'split2d3d' | 'vt' | '360';
 
 interface UnifiedViewerProps {
   initialMode?: ViewMode;
@@ -96,7 +98,7 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData?.fmGuid, buildingData?.fmAccessBuildingGuid]);
 
   useEffect(() => {
-    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d') {
+    if (buildingData && !buildingData.ivionSiteId && viewMode !== '3d' && viewMode !== '2d' && viewMode !== 'split2d3d') {
       setViewMode('3d');
     }
   }, [buildingData, viewMode]);
@@ -105,7 +107,7 @@ const UnifiedViewerContent: React.FC<{
   // to the same route with a new mode query parameter, e.g. "2D" quick action)
   useEffect(() => {
     if (!modeParam) return;
-    const validModes: ViewMode[] = ['2d', '3d', 'split', 'vt', '360'];
+    const validModes: ViewMode[] = ['2d', '3d', 'split', 'split2d3d', 'vt', '360'];
     if (!validModes.includes(modeParam)) return;
     if (modeParam !== viewMode) {
       userChangedModeRef.current = true;
@@ -437,16 +439,17 @@ const UnifiedViewerContent: React.FC<{
   const needs3D = viewMode !== '360'; // 2D now uses xeokit too
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
-  const isAnySplit = isSplitMode;
+  const isSplit2D3D = viewMode === 'split2d3d';
+  const isAnySplit = isSplitMode || isSplit2D3D;
 
   const viewerContainerStyle: React.CSSProperties = {
-    position: 'absolute',
+    position: isSplit2D3D ? 'relative' : 'absolute',
     top: 0,
     left: 0,
     height: '100%',
     display: needs3D ? 'flex' : 'none',
     flexDirection: 'column',
-    width: isAnySplit ? '50%' : '100%',
+    width: isSplit2D3D ? '100%' : (isSplitMode ? '50%' : '100%'),
     zIndex: is3DMode || is2DMode ? 10 : isVTMode ? 10 : 5,
     pointerEvents: isVTMode ? (overlayInteractive ? 'auto' : 'none') : 'auto',
   };
@@ -474,6 +477,7 @@ const UnifiedViewerContent: React.FC<{
               <p className="text-[10px] text-white/60">
                 {viewMode === 'vt' ? 'Virtual Twin' :
                  viewMode === 'split' ? 'Split 3D/360°' :
+                 viewMode === 'split2d3d' ? 'Split 2D/3D' :
                  viewMode === '360' ? '360° Panorama' :
                  viewMode === '2d' ? '2D Planvy' : '3D Viewer'}
               </p>
@@ -485,7 +489,8 @@ const UnifiedViewerContent: React.FC<{
         <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
           <ModeButton mode="2d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Square className="h-3.5 w-3.5" />} label="2D" />
           <ModeButton mode="3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
-          <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="Split 3D/360" />
+          <ModeButton mode="split2d3d" current={viewMode} disabled={false} onClick={setViewMode} icon={<LayoutPanelLeft className="h-3.5 w-3.5" />} label="2D/3D" />
+          <ModeButton mode="split" current={viewMode} disabled={!hasIvion} onClick={setViewMode} icon={<SplitSquareHorizontal className="h-3.5 w-3.5" />} label="3D/360" />
           <ModeButton mode="vt" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
           <ModeButton mode="360" current={viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={setViewMode} icon={<View className="h-3.5 w-3.5" />} label="360°" />
 
@@ -584,25 +589,51 @@ const UnifiedViewerContent: React.FC<{
           }}
         />
 
-        {/* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */}
-        <div style={viewerContainerStyle}>
-          <AssetPlusViewer
-            fmGuid={buildingData.fmGuid}
-            initialFmGuidToFocus={entityFmGuid || undefined}
-            initialVisualization={visualizationParam || undefined}
-            insightsColorMode={insightsModeParam || undefined}
-            forceXray={xrayParam || undefined}
-            transparentBackground={isVTMode}
-            ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-            suppressOverlay={isVTMode}
-            onClose={is3DMode ? handleGoBack : undefined}
-            syncEnabled={isSplitMode ? syncLocked : false}
-            onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-            syncPosition={isSplitMode ? sync3DPosition : undefined}
-            syncHeading={isSplitMode ? sync3DHeading : undefined}
-            syncPitch={isSplitMode ? sync3DPitch : undefined}
-          />
-        </div>
+        {/* ── Split 2D/3D mode — ResizablePanelGroup layout ── */}
+        {isSplit2D3D ? (
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
+              <SplitPlanView
+                viewerRef={viewerInstanceRef}
+                buildingFmGuid={buildingData.fmGuid}
+              />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={60} minSize={30}>
+              <div style={viewerContainerStyle}>
+                <AssetPlusViewer
+                  fmGuid={buildingData.fmGuid}
+                  initialFmGuidToFocus={entityFmGuid || undefined}
+                  initialVisualization={visualizationParam || undefined}
+                  insightsColorMode={insightsModeParam || undefined}
+                  forceXray={xrayParam || undefined}
+                  onClose={handleGoBack}
+                  syncEnabled={false}
+                />
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          /* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */
+          <div style={viewerContainerStyle}>
+            <AssetPlusViewer
+              fmGuid={buildingData.fmGuid}
+              initialFmGuidToFocus={entityFmGuid || undefined}
+              initialVisualization={visualizationParam || undefined}
+              insightsColorMode={insightsModeParam || undefined}
+              forceXray={xrayParam || undefined}
+              transparentBackground={isVTMode}
+              ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+              suppressOverlay={isVTMode}
+              onClose={is3DMode ? handleGoBack : undefined}
+              syncEnabled={isSplitMode ? syncLocked : false}
+              onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+              syncPosition={isSplitMode ? sync3DPosition : undefined}
+              syncHeading={isSplitMode ? sync3DHeading : undefined}
+              syncPitch={isSplitMode ? sync3DPitch : undefined}
+            />
+          </div>
+        )}
 
         {/* ── Split: 360° panel on the right half ── */}
         {/* Split mode: SDK container above handles the 360° panel */}
@@ -679,6 +710,7 @@ function ModeButton({ mode, current, disabled, onClick, icon, label }: {
         {disabled ? 'Kräver Ivion-konfiguration' :
          mode === '3d' ? 'Enbart 3D BIM-modell' :
          mode === 'split' ? '3D + 360° sida vid sida' :
+         mode === 'split2d3d' ? '2D planvy + 3D sida vid sida' :
          mode === 'vt' ? 'Virtual Twin — 3D overlay på 360°' :
          mode === '2d' ? 'Xeokit 2D planvy' :
          'Enbart 360° panorama'}
