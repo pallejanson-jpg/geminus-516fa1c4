@@ -82,6 +82,8 @@ interface AssetPropertiesDialogProps {
   initialCoordinates?: { x: number; y: number; z: number } | null;
   onPickCoordinates?: () => void;
   isPickingCoordinates?: boolean;
+  /** Viewer ref for BIM metadata fallback when asset not in database */
+  viewerRef?: React.MutableRefObject<any>;
 }
 
 const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
@@ -96,6 +98,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
   initialCoordinates,
   onPickCoordinates,
   isPickingCoordinates,
+  viewerRef,
 }) => {
   const [assets, setAssets] = useState<AssetProperties[]>([]);
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
@@ -546,10 +549,75 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                 </div>
               </div>
             ) : assets.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <p>Ingen asset hittad i databasen</p>
-                <p className="text-xs mt-1">Objektet kanske inte är synkat ännu</p>
-              </div>
+              /* Fallback: show BIM metadata from xeokit metaScene */
+              (() => {
+                const xeokitViewer = viewerRef?.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                const guid = selectedFmGuids[0];
+                // Try to find by originalSystemId or by entity ID
+                let metaObj: any = null;
+                if (xeokitViewer?.metaScene?.metaObjects) {
+                  const metaObjects = xeokitViewer.metaScene.metaObjects;
+                  // Direct lookup by ID
+                  metaObj = metaObjects[guid];
+                  // Search by originalSystemId if not found
+                  if (!metaObj) {
+                    const guidLower = guid?.toLowerCase();
+                    const guidUpper = guid?.toUpperCase();
+                    metaObj = Object.values(metaObjects).find((mo: any) => {
+                      const osid = mo.originalSystemId;
+                      return osid && (osid === guid || osid === guidLower || osid === guidUpper);
+                    });
+                  }
+                }
+                if (metaObj) {
+                  // Gather property sets from metaObject
+                  const propertySets = metaObj.propertySets || [];
+                  return (
+                    <div className="space-y-3">
+                      <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+                        BIM-metadata (ej synkat till databasen)
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Namn</Label>
+                        <p className="text-sm">{metaObj.name || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Typ (IFC)</Label>
+                        <p className="text-sm">{metaObj.type || '-'}</p>
+                      </div>
+                      {metaObj.originalSystemId && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">FM GUID</Label>
+                          <p className="text-xs font-mono break-all">{metaObj.originalSystemId}</p>
+                        </div>
+                      )}
+                      {metaObj.parent && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Förälder</Label>
+                          <p className="text-sm">{metaObj.parent.name || metaObj.parent.type || '-'}</p>
+                        </div>
+                      )}
+                      {propertySets.length > 0 && propertySets.map((ps: any, idx: number) => (
+                        <div key={idx} className="space-y-1">
+                          <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Egenskaper ${idx + 1}`}</Label>
+                          {(ps.properties || []).map((prop: any, pidx: number) => (
+                            <div key={pidx} className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">{prop.name}</span>
+                              <span className="text-foreground font-mono truncate ml-2 max-w-[180px]">{String(prop.value ?? '-')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    <p>Ingen asset hittad i databasen</p>
+                    <p className="text-xs mt-1">Objektet kanske inte är synkat ännu</p>
+                  </div>
+                );
+              })()
             ) : isMultiSelect ? (
               /* Multi-select view */
               <div className="space-y-4">
