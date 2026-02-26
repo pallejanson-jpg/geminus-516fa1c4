@@ -904,6 +904,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
                                  {/* Room sensor sheet */}
                                  <RoomSensorDetailSheet
+                                     key={sensorSheetRoom?.fmGuid ?? 'none'}
                                      open={sensorSheetOpen}
                                      onClose={() => setSensorSheetOpen(false)}
                                      roomFmGuid={sensorSheetRoom?.fmGuid ?? null}

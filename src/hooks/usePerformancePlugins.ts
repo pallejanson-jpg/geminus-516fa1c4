@@ -101,29 +101,47 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
         const scene = xeokitViewer.scene;
         const objectCount = scene?.objectIds?.length || Object.keys(scene?.objects || {}).length;
         if (objectCount <= 50000) {
-          pluginsRef.current.lodInterval = setInterval(() => {
+          // Use requestIdleCallback to avoid blocking rendering
+          const runLodCull = () => {
             if (!scene?.camera || !scene.objects) return;
             const eye = scene.camera.eye;
             const objects = scene.objects;
-            for (const id in objects) {
-              const entity = objects[id];
-              if (!entity?.aabb) continue;
-              const aabb = entity.aabb;
-              const dx = aabb[3] - aabb[0];
-              const dy = aabb[4] - aabb[1];
-              const dz = aabb[5] - aabb[2];
-              const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
-              if (size > 2) continue;
-              const cx = (aabb[0] + aabb[3]) / 2;
-              const cy = (aabb[1] + aabb[4]) / 2;
-              const cz = (aabb[2] + aabb[5]) / 2;
-              const dist = Math.sqrt(
-                (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
-              );
-              entity.culled = dist > LOD_FAR_DISTANCE;
+            // Process in batches to avoid long frame stalls
+            const ids = Object.keys(objects);
+            let i = 0;
+            const BATCH_SIZE = 2000;
+            const processBatch = (deadline?: IdleDeadline) => {
+              const end = Math.min(i + BATCH_SIZE, ids.length);
+              for (; i < end; i++) {
+                const entity = objects[ids[i]];
+                if (!entity?.aabb) continue;
+                const aabb = entity.aabb;
+                const dx = aabb[3] - aabb[0];
+                const dy = aabb[4] - aabb[1];
+                const dz = aabb[5] - aabb[2];
+                const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (size > 2) continue;
+                const cx = (aabb[0] + aabb[3]) / 2;
+                const cy = (aabb[1] + aabb[4]) / 2;
+                const cz = (aabb[2] + aabb[5]) / 2;
+                const dist = Math.sqrt(
+                  (eye[0] - cx) ** 2 + (eye[1] - cy) ** 2 + (eye[2] - cz) ** 2
+                );
+                entity.culled = dist > LOD_FAR_DISTANCE;
+              }
+              if (i < ids.length) {
+                requestIdleCallback(processBatch, { timeout: 200 });
+              }
+            };
+            if (typeof requestIdleCallback !== 'undefined') {
+              requestIdleCallback(processBatch, { timeout: 200 });
+            } else {
+              processBatch();
             }
-          }, LOD_CHECK_INTERVAL_MS);
-          console.log('[perf-plugins] LOD distance culling started', { objectCount });
+          };
+          // Run LOD cull less frequently (every 1s instead of 500ms)
+          pluginsRef.current.lodInterval = setInterval(runLodCull, 1000);
+          console.log('[perf-plugins] LOD distance culling started (batched)', { objectCount });
         } else {
           console.log('[perf-plugins] LOD culling skipped — too many objects:', objectCount);
         }
