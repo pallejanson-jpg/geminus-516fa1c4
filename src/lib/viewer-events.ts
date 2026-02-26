@@ -69,6 +69,8 @@ export interface InsightsColorUpdateDetail {
 export interface AlarmAnnotationsShowDetail {
   alarms: { fmGuid: string; roomFmGuid?: string }[];
   flyTo?: boolean;
+  /** Used by panel toggles: false hides alarm markers, true shows them */
+  visible?: boolean;
 }
 
 /** Event dispatched when annotation category filter changes in ViewerFilterPanel */
