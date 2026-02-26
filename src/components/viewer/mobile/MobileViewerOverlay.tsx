@@ -1,6 +1,8 @@
 import React from 'react';
-import { ArrowLeft, Settings2, Filter } from 'lucide-react';
+import { ArrowLeft, Settings2, Filter, Square, Box, View } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+type ViewMode = '2d' | '3d' | '360';
 
 interface MobileViewerOverlayProps {
   onClose?: () => void;
@@ -12,20 +14,26 @@ interface MobileViewerOverlayProps {
   // Filter panel
   showFilterPanel?: boolean;
   onToggleFilterPanel?: () => void;
+  // Mode switch
+  viewMode?: ViewMode;
+  onChangeViewMode?: (mode: ViewMode) => void;
+  hasIvion?: boolean;
 }
 
 /**
  * Slim mobile overlay for the 3D viewer.
- * Only renders the header bar with back/filter/settings buttons.
- * The old model tree has been removed — FilterPanel replaces it.
+ * Header bar with back, mode switcher, filter and settings buttons.
+ * Building name removed per design decision.
  */
 const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
   onClose,
-  buildingName,
   isViewerReady,
   onOpenSettings,
   showFilterPanel,
   onToggleFilterPanel,
+  viewMode = '3d',
+  onChangeViewMode,
+  hasIvion = false,
 }) => {
   return (
     <>
@@ -46,12 +54,40 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
           </Button>
         )}
 
-        {/* Center: Building name */}
-        <div className="flex-1 mx-2 text-center">
-          <h1 className="text-sm font-medium truncate text-foreground drop-shadow-sm">
-            {buildingName || '3D Viewer'}
-          </h1>
-        </div>
+        {/* Center: Mode switcher */}
+        {onChangeViewMode && (
+          <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
+            <Button
+              size="sm"
+              variant={viewMode === '2d' ? 'default' : 'ghost'}
+              className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              onClick={() => onChangeViewMode('2d')}
+            >
+              <Square className="h-3 w-3" />
+              2D
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === '3d' ? 'default' : 'ghost'}
+              className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              onClick={() => onChangeViewMode('3d')}
+            >
+              <Box className="h-3 w-3" />
+              3D
+            </Button>
+            {hasIvion && (
+              <Button
+                size="sm"
+                variant={viewMode === '360' ? 'default' : 'ghost'}
+                className={`h-7 px-2.5 text-[10px] rounded-md gap-1 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                onClick={() => onChangeViewMode('360')}
+              >
+                <View className="h-3 w-3" />
+                360°
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Right: Filter + Settings */}
         <div className="flex gap-1.5">
