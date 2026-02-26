@@ -158,13 +158,21 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           // Concurrent fetch with limit to avoid overwhelming the network
           const CONCURRENT_FETCHES = 3;
-          let activePromises: Promise<void>[] = [];
+          const activePromises = new Set<Promise<void>>();
           let completedCount = 0;
 
           const fetchModel = async (model: typeof models[0]) => {
             try {
+              const modelSize = model.file_size || 0;
+
+              // Preload only models that can actually be stored in memory cache
+              if (modelSize > MAX_SINGLE_MODEL_BYTES) {
+                console.log(`XKT Preload: Skipping ${model.model_id} — too large for memory preload (${(modelSize / 1024 / 1024).toFixed(1)} MB)`);
+                return;
+              }
+
               // Skip models that are suspiciously small — likely corrupt cache entries (HTML/JSON error responses)
-              if ((model.file_size || 0) < 50_000) {
+              if (modelSize > 0 && modelSize < 50_000) {
                 console.warn(`XKT Preload: Skipping ${model.model_id} — file_size ${model.file_size} bytes is too small (likely corrupt)`);
                 return;
               }
@@ -204,24 +212,21 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
             }
           };
 
-          // Process models with concurrency control
+          // Process models with strict concurrency control
           for (const model of sortedModels) {
-            if (activePromises.length >= CONCURRENT_FETCHES) {
-              await Promise.race(activePromises);
-              activePromises = activePromises.filter(p => 
-                // Filter out resolved promises (hacky but works)
-                !p.then(() => false, () => false)
-              );
-            }
-            
-            const promise = fetchModel(model).then(() => {
-              activePromises = activePromises.filter(p => p !== promise);
+            let promise: Promise<void>;
+            promise = fetchModel(model).finally(() => {
+              activePromises.delete(promise);
             });
-            activePromises.push(promise);
+            activePromises.add(promise);
+
+            if (activePromises.size >= CONCURRENT_FETCHES) {
+              await Promise.race(activePromises);
+            }
           }
 
           // Wait for remaining fetches
-          await Promise.allSettled(activePromises);
+          await Promise.allSettled(Array.from(activePromises));
         }
 
         // Mark building as preloaded in global cache
