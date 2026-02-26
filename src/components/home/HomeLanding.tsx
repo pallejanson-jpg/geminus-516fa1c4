@@ -24,9 +24,9 @@ const ASSISTANTS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   available: boolean;
 }> = [
-  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Fråga om byggnader, rum och tillgångar", icon: Database, available: true },
-  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Sök i dokument och ritningar", icon: FileQuestion, available: true },
-  { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration med FM Access", icon: Sparkles, available: false },
+  { id: "gunnar", title: "Gunnar", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
+  { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Search documents and drawings", icon: FileQuestion, available: true },
+  { id: "doris", title: "Doris", subtitle: "FM Access Assistant", description: "Integration with FM Access", icon: Sparkles, available: false },
 ];
 
 const RECENT_KEY = 'geminus-recent-buildings';
@@ -204,7 +204,7 @@ export default function HomeLanding() {
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-semibold text-sm sm:text-base leading-none text-foreground">{a.title}</span>
                           {!a.available && (
-                            <span className="text-[11px] sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Snart</span>
+                            <span className="text-[11px] sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Soon</span>
                           )}
                         </div>
                         <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
