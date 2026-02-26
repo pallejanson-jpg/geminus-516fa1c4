@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Globally suppress Asset+ DevExtreme context menus */
+.dx-context-menu,
+.dx-context-menu-container,
+.dx-context-menu-container-wrapper,
+.dx-overlay-wrapper.dx-context-menu-container-wrapper,
+[class*="dx-context-menu"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+}
+
 @layer base {
   :root {
     --background: 285 44% 96%;

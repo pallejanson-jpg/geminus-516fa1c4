@@ -762,6 +762,9 @@ function MobileUnifiedViewer({
             syncHeading={sync3DHeading}
             syncPitch={sync3DPitch}
             onClose={onGoBack}
+            mobileViewMode={viewMode === '360' ? '360' : viewMode === '2d' ? '2d' : '3d'}
+            onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
+            mobileHasIvion={hasIvion}
           />
         </div>
 
@@ -777,24 +780,6 @@ function MobileUnifiedViewer({
             }}
           />
         )}
-      </div>
-
-      {/* Floating mode switcher — positioned below the MobileViewerOverlay header */}
-      <div
-        className="absolute z-40 flex justify-center"
-        style={{
-          top: 'calc(max(env(safe-area-inset-top, 0px), 20px) + 52px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-        }}
-      >
-        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md rounded-lg p-0.5 border border-white/10">
-          <Button size="sm" variant={viewMode === '2d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('2d')}>2D</Button>
-          <Button size="sm" variant={viewMode === '3d' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('3d')}>3D</Button>
-          {hasIvion && (
-            <Button size="sm" variant={activePanel === '360' ? 'default' : 'ghost'} className={`h-7 px-3 text-xs rounded-md ${activePanel !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={() => setViewMode('360')}>360°</Button>
-          )}
-        </div>
       </div>
     </div>
   );
