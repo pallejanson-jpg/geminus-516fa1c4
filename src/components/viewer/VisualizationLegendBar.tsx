@@ -33,8 +33,8 @@ interface VisualizationLegendBarProps {
 
 /**
  * Vertical color scale legend bar for room visualization.
- * Displays color stops with value labels. Each label is clickable —
- * clicking dispatches a custom event to select all rooms matching that value range.
+ * Positioned on the LEFT side. Value labels are to the LEFT of the gradient bar.
+ * Each label is clickable — clicking dispatches a custom event to select all rooms matching that value range.
  */
 const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
   visualizationType,
@@ -90,9 +90,6 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
       ? (stop.value + sortedAsc[ascIdx + 1].value) / 2
       : stop.value;
 
-    // Count matching rooms
-    const matchCount = roomValues.filter(r => r.value >= rangeMin && r.value <= rangeMax).length;
-
     setActiveStop(prev => prev === stopIndex ? null : stopIndex);
 
     // Dispatch selection event
@@ -118,31 +115,21 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         className={cn(
           'absolute z-[52] flex gap-1.5',
           'pointer-events-auto',
-          // Mobile: position at bottom-right to avoid floor switcher on the left
+          // LEFT side — value labels LEFT of gradient bar
           isMobile
-            ? 'right-3 bottom-24'
-            : 'right-3 top-1/2 -translate-y-1/2',
+            ? 'left-3 bottom-24'
+            : 'left-3 top-1/2 -translate-y-1/2',
           className
         )}
       >
-      {/* Gradient bar */}
-      <div
-        className="rounded-md border border-white/20 shadow-lg"
-        style={{
-          ...gradientStyle,
-          width: isMobile ? 14 : 18,
-          height: barHeight,
-        }}
-      />
-
-      {/* Value labels */}
+      {/* Value labels — LEFT of gradient bar (flex-row-reverse puts labels first) */}
       <div
         className="relative flex flex-col justify-between py-0.5"
         style={{ height: barHeight }}
       >
         {/* Actual max label */}
         {actualMax !== null && (
-          <div className="text-[9px] text-white/60 font-medium px-1 -mt-1 mb-0.5">
+          <div className="text-[9px] text-white/60 font-medium px-1 -mt-1 mb-0.5 text-right">
             Max: {actualMax.toFixed(1)} {config.unit}
           </div>
         )}
@@ -169,6 +156,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
               )}
               title={`${stop.value} ${config.unit} — ${matchCount} rum`}
             >
+              <span>{stop.value}</span>
               <span
                 className="inline-block rounded-full shrink-0"
                 style={{
@@ -178,7 +166,6 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                   boxShadow: `0 0 4px ${rgbToHex(stop.color)}80`,
                 }}
               />
-              <span>{stop.value}</span>
               {matchCount > 0 && (
                 <span className="text-[9px] text-white/60 ml-0.5">({matchCount})</span>
               )}
@@ -190,11 +177,21 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         })}
         {/* Actual min label */}
         {actualMin !== null && (
-          <div className="text-[9px] text-white/60 font-medium px-1 mt-0.5 -mb-1">
+          <div className="text-[9px] text-white/60 font-medium px-1 mt-0.5 -mb-1 text-right">
             Min: {actualMin.toFixed(1)} {config.unit}
           </div>
         )}
       </div>
+
+      {/* Gradient bar — RIGHT of value labels */}
+      <div
+        className="rounded-md border border-white/20 shadow-lg"
+        style={{
+          ...gradientStyle,
+          width: isMobile ? 14 : 18,
+          height: barHeight,
+        }}
+      />
     </div>
   );
 };

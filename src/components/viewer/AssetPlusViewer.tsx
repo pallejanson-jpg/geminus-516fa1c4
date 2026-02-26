@@ -75,6 +75,12 @@ interface AssetPlusViewerProps {
   insightsColorMap?: Record<string, [number, number, number]>;
   /** When true, hides toolbar, NavCube, and floor switcher (used in small Insights panel) */
   compactMode?: boolean;
+  /** Mobile mode switch — current mode */
+  mobileViewMode?: '2d' | '3d' | '360';
+  /** Mobile mode switch — callback */
+  onMobileChangeViewMode?: (mode: '2d' | '3d' | '360') => void;
+  /** Mobile mode switch — has Ivion (360°) */
+  mobileHasIvion?: boolean;
 }
 
 /**
@@ -160,6 +166,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
   forceXray,
   insightsColorMap: insightsColorMapProp,
   compactMode = false,
+  mobileViewMode,
+  onMobileChangeViewMode,
+  mobileHasIvion = false,
 }) => {
   const { allData } = useContext(AppContext);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -2489,21 +2498,12 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         console.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
       });
 
-      // ─── Progressive background loading of deferred models ───
-      // If the A-model whitelist was active, remaining models were deferred.
-      // Schedule them to load in the background after a short delay so the UI stays responsive.
+      // ─── Deferred models are NOT auto-loaded ───
+      // Non-A models (B, V, E etc.) are only loaded when the user explicitly
+      // enables them via the model visibility selector in the right panel.
+      // This prevents heavy fire/structural/electrical models from slowing initial load.
       if (allowedModelIdsRef.current) {
-        setTimeout(() => {
-          const resolvedGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid || fmGuid;
-          if (!resolvedGuid) return;
-          console.log('[handleAllModelsLoaded] Progressive load: enabling all deferred models');
-          allowedModelIdsRef.current = null; // Allow all models through
-          try {
-            viewerInstanceRef.current?.setAvailableModelsByFmGuid(resolvedGuid);
-          } catch (e) {
-            console.warn('[handleAllModelsLoaded] Progressive load failed:', e);
-          }
-        }, 500); // Load remaining models quickly after initial render
+        console.log('[handleAllModelsLoaded] Non-A models deferred — user must enable manually via model selector');
       }
 
       // Virtual Twin: apply ghost opacity after all models load
@@ -4775,12 +4775,14 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
             <MobileViewerOverlay
               onClose={onClose}
               viewerInstanceRef={viewerInstanceRef}
-              buildingName={assetData?.commonName || assetData?.name}
               buildingFmGuid={buildingFmGuid}
               isViewerReady={modelLoadState === 'loaded' && initStep === 'ready'}
               onOpenSettings={() => setRightPanelOpen(true)}
               showFilterPanel={showFilterPanel}
               onToggleFilterPanel={() => setShowFilterPanel(!showFilterPanel)}
+              viewMode={mobileViewMode}
+              onChangeViewMode={onMobileChangeViewMode}
+              hasIvion={mobileHasIvion}
             />
           )}
           
