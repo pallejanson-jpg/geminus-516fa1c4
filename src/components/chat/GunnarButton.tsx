@@ -495,13 +495,14 @@ export default function GunnarButton() {
           {/* Resize handle (bottom-right corner) */}
           {!isMobile && (
             <div
-              className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+              className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize z-10 group flex items-end justify-end p-0.5"
               onMouseDown={handleResizeStart}
               onTouchStart={handleResizeStart}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" className="text-muted-foreground/50">
-                <path d="M14 14L8 14L14 8Z" fill="currentColor" />
-                <path d="M14 14L11 14L14 11Z" fill="currentColor" opacity="0.5" />
+              <svg width="14" height="14" viewBox="0 0 14 14" className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+                <line x1="12" y1="2" x2="2" y2="12" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="12" y1="6" x2="6" y2="12" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="12" y1="10" x2="10" y2="12" stroke="currentColor" strokeWidth="1.5" />
               </svg>
             </div>
           )}
