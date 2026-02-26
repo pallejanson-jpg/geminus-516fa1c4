@@ -6,71 +6,46 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { useSectionPlaneClipping, FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { useFloorData, FloorInfo } from '@/hooks/useFloorData';
 
-export interface FloorInfo {
-  id: string;  // Representative ID for the group
-  name: string;
-  shortName: string;
-  metaObjectIds: string[];  // All metaObject IDs with this name (from all models)
-  databaseLevelFmGuids: string[];  // All database fmGuids for this floor
-}
+// Re-export FloorInfo so existing imports keep working
+export type { FloorInfo } from '@/hooks/useFloorData';
 
 interface FloorVisibilitySelectorProps {
   viewerRef: React.MutableRefObject<any>;
   buildingFmGuid?: string;
   isViewerReady?: boolean;
   onVisibleFloorsChange?: (visibleFloorIds: string[]) => void;
-  enableClipping?: boolean;  // Enable SectionPlane clipping for single floor
+  enableClipping?: boolean;
   className?: string;
-  /** When true, renders only the toggle list without header/collapsible wrapper */
   listOnly?: boolean;
-  /** When set on first init, overrides localStorage and selects only the floor matching this fmGuid */
   initialFloorFmGuid?: string;
 }
 
-/**
- * Multi-select floor visibility selector with switches.
- * Collapsed by default - expands when user clicks to select floors.
- * Controls which floors are visible in the 3D viewer.
- * Blocks interaction until viewer is ready to prevent UI freezing.
- * Emits FLOOR_SELECTION_CHANGED_EVENT when floor selection changes.
- */
 const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelectorProps>(
   ({ viewerRef, buildingFmGuid, isViewerReady = true, onVisibleFloorsChange, enableClipping = true, className, listOnly = false, initialFloorFmGuid }, ref) => {
-    const [floors, setFloors] = useState<FloorInfo[]>([]);
+    // ── Shared floor data hook ────────────────────────────────────────────
+    const { floors, isLoading: floorsLoading } = useFloorData(viewerRef, buildingFmGuid);
+
     const [visibleFloorIds, setVisibleFloorIds] = useState<Set<string>>(new Set());
     const [isExpanded, setIsExpanded] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
     const [childrenMapCache, setChildrenMapCache] = useState<Map<string, string[]> | null>(null);
-    const [floorNamesMap, setFloorNamesMap] = useState<Map<string, string>>(new Map());
     const [clippingEnabled, setClippingEnabled] = useState(false);
     const [localStorageLoaded, setLocalStorageLoaded] = useState(false);
     
-    // Ref to track if initial visibility has been applied (prevents re-triggering)
     const initialVisibilityAppliedRef = useRef(false);
-    
-    // Ref to prevent dispatch loops when receiving external floor selection events
     const isReceivingExternalEvent = useRef(false);
-    
-    // Stable refs to preserve selection across re-renders
     const visibleFloorIdsRef = React.useRef<Set<string>>(new Set());
     const floorsRef = React.useRef<FloorInfo[]>([]);
     
-    // Sync refs with state
-    React.useEffect(() => {
-      visibleFloorIdsRef.current = visibleFloorIds;
-    }, [visibleFloorIds]);
-    
-    React.useEffect(() => {
-      floorsRef.current = floors;
-    }, [floors]);
+    React.useEffect(() => { visibleFloorIdsRef.current = visibleFloorIds; }, [visibleFloorIds]);
+    React.useEffect(() => { floorsRef.current = floors; }, [floors]);
 
-    // Restore floor selection from localStorage (persists across panel opens)
+    // Restore from localStorage
     useEffect(() => {
       if (!buildingFmGuid || localStorageLoaded) return;
-      // Don't restore from localStorage if we have an initial floor override
       if (!initialFloorFmGuid) {
         const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
         const saved = localStorage.getItem(storageKey);
@@ -86,324 +61,135 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       setLocalStorageLoaded(true);
     }, [buildingFmGuid, localStorageLoaded, initialFloorFmGuid]);
 
-    // Save selection to localStorage when it changes
+    // Save to localStorage
     useEffect(() => {
       if (!buildingFmGuid || !isInitialized || visibleFloorIds.size === 0) return;
-      
       const storageKey = `viewer-visible-floors-${buildingFmGuid}`;
       localStorage.setItem(storageKey, JSON.stringify(Array.from(visibleFloorIds)));
     }, [visibleFloorIds, buildingFmGuid, isInitialized]);
 
-    // SectionPlane clipping hook (uses ceiling mode for 3D solo)
+    // Section plane clipping
     const { updateClipping, isClippingActive, calculateFloorBounds } = useSectionPlaneClipping(viewerRef, {
       enabled: enableClipping && clippingEnabled,
-      offset: 0.1, // 10cm above ceiling
-      clipMode: 'ceiling', // 3D solo mode uses ceiling clipping
+      offset: 0.1,
+      clipMode: 'ceiling',
     });
 
-    // Get XEOkit viewer
     const getXeokitViewer = useCallback(() => {
-      try {
-        return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-      } catch (e) {
-        return null;
-      }
+      try { return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer; }
+      catch { return null; }
     }, [viewerRef]);
 
-    // Fetch floor names from database
+    // ── Initialize selection when floors arrive ───────────────────────────
     useEffect(() => {
-      if (!buildingFmGuid) return;
+      if (isInitialized || !localStorageLoaded || floors.length === 0) return;
 
-      const fetchFloorNames = async () => {
-        try {
-          const { data: floors, error } = await supabase
-            .from('assets')
-            .select('fm_guid, name, common_name')
-            .eq('building_fm_guid', buildingFmGuid)
-            .eq('category', 'Building Storey');
+      const validFloorIds = new Set(floors.map(f => f.id));
 
-          if (!error && floors && floors.length > 0) {
-            const nameMap = new Map<string, string>();
-            floors.forEach((f) => {
-            const displayName = f.common_name || f.name || null;
-              if (!displayName) return; // Skip floors without any name - they'll get sequential naming
-              nameMap.set(f.fm_guid, displayName);
-              nameMap.set(f.fm_guid.toLowerCase(), displayName);
-              nameMap.set(f.fm_guid.toUpperCase(), displayName);
-            });
-            setFloorNamesMap(nameMap);
-          }
-        } catch (e) {
-          console.debug('Failed to fetch floor names:', e);
-        }
-      };
-
-      fetchFloorNames();
-    }, [buildingFmGuid]);
-
-    // Extract floors from metaScene - group by name to deduplicate across models
-    const extractFloors = useCallback(() => {
-      const viewer = getXeokitViewer();
-      if (!viewer?.metaScene?.metaObjects) return [];
-
-      const metaObjects = viewer.metaScene.metaObjects;
-      const floorsByName = new Map<string, FloorInfo>();
-
-      Object.values(metaObjects).forEach((metaObject: any) => {
-        const type = metaObject?.type?.toLowerCase();
-        if (type === 'ifcbuildingstorey') {
-          // Get fmGuid from originalSystemId or use metaObject.id
-          const fmGuid = metaObject.originalSystemId || metaObject.id;
-          
-          // Try to get a nice name from database first, then fall back to metaObject.name
-          const dbName = floorNamesMap.get(fmGuid) || 
-                         floorNamesMap.get(fmGuid.toLowerCase()) ||
-                         floorNamesMap.get(fmGuid.toUpperCase());
-          
-          // Use database name, or clean up the raw name if it looks like a GUID
-          let displayName = metaObject.name || 'Unknown Floor';
-          if (dbName) {
-            displayName = dbName;
-          } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-            // Name looks like a GUID - mark for sequential numbering
-            displayName = `__GUID_PLACEHOLDER__`;
-          }
-          
-          const shortMatch = displayName.match(/(\d+)/);
-          const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 10);
-          
-          if (floorsByName.has(displayName)) {
-            // Add this metaObject to existing group
-            const existing = floorsByName.get(displayName)!;
-            existing.metaObjectIds.push(metaObject.id);
-            if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
-              existing.databaseLevelFmGuids.push(fmGuid);
-            }
-          } else {
-            // Create new group
-            floorsByName.set(displayName, {
-              id: metaObject.id,  // First ID as representative
-              name: displayName,
-              shortName,
-              metaObjectIds: [metaObject.id],
-              databaseLevelFmGuids: [fmGuid],
-            });
-          }
-        }
-      });
-
-      // Convert to array and sort alphabetically by name
-      const extractedFloors = Array.from(floorsByName.values());
-      extractedFloors.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-
-      // Replace GUID placeholders with sequential "Plan X" names
-      let unknownIndex = 1;
-      extractedFloors.forEach(floor => {
-        if (floor.name === '__GUID_PLACEHOLDER__') {
-          floor.name = `Plan ${unknownIndex}`;
-          floor.shortName = String(unknownIndex);
-          unknownIndex++;
-        }
-      });
-
-      return extractedFloors;
-    }, [getXeokitViewer, floorNamesMap]);
-
-    // Load floors once and set visible based on localStorage or default to all
-    // IMPORTANT: Wait for localStorage to be loaded first to prevent race condition
-    // where visibleFloorIdsRef is still empty and all floors get selected
-    useEffect(() => {
-      if (isInitialized || !localStorageLoaded) return;
-
-      const checkFloors = () => {
-        const newFloors = extractFloors();
-        if (newFloors.length > 0) {
-          setFloors(newFloors);
-          
-          const validFloorIds = new Set(newFloors.map(f => f.id));
-          
-          // Priority 1: initialFloorFmGuid prop — select only the matching floor
-          if (initialFloorFmGuid) {
-            const matchingFloor = newFloors.find(f =>
-              f.databaseLevelFmGuids.some(g => g.toLowerCase() === initialFloorFmGuid.toLowerCase()) ||
-              f.id.toLowerCase() === initialFloorFmGuid.toLowerCase()
-            );
-            if (matchingFloor) {
-              setVisibleFloorIds(new Set([matchingFloor.id]));
-              setIsInitialized(true);
-              return;
-            }
-          }
-          
-          // Priority 2: localStorage saved selection
-          const savedSelection = visibleFloorIdsRef.current;
-          const validSavedSelection = new Set(
-            Array.from(savedSelection).filter(id => validFloorIds.has(id))
-          );
-          
-          if (validSavedSelection.size > 0) {
-            setVisibleFloorIds(validSavedSelection);
-          } else {
-            // Default to all visible
-            setVisibleFloorIds(validFloorIds);
-          }
+      // Priority 1: initialFloorFmGuid
+      if (initialFloorFmGuid) {
+        const match = floors.find(f =>
+          f.databaseLevelFmGuids.some(g => g.toLowerCase() === initialFloorFmGuid.toLowerCase()) ||
+          f.id.toLowerCase() === initialFloorFmGuid.toLowerCase()
+        );
+        if (match) {
+          setVisibleFloorIds(new Set([match.id]));
           setIsInitialized(true);
-        }
-      };
-
-      checkFloors();
-      
-      // Only retry a few times, not forever
-      let attempts = 0;
-      const maxAttempts = 10;
-      const interval = setInterval(() => {
-        if (isInitialized || attempts >= maxAttempts) {
-          clearInterval(interval);
           return;
         }
-        checkFloors();
-        attempts++;
-      }, 500);
-
-      return () => clearInterval(interval);
-    }, [extractFloors, isInitialized, localStorageLoaded]);
-
-    // Re-extract floors when floor names map is updated (after DB fetch)
-    // IMPORTANT: Preserve existing selection when updating floor list
-    useEffect(() => {
-      if (!isInitialized || floorNamesMap.size === 0) return;
-      
-      const updatedFloors = extractFloors();
-      if (updatedFloors.length > 0) {
-        // Preserve existing selection by matching IDs
-        const currentSelection = visibleFloorIdsRef.current;
-        const updatedIds = new Set(updatedFloors.map(f => f.id));
-        
-        // Keep selections that still exist in updated list
-        const preservedSelection = new Set(
-          Array.from(currentSelection).filter(id => updatedIds.has(id))
-        );
-        
-        // If no selections preserved, keep all visible (default state)
-        if (preservedSelection.size === 0 && currentSelection.size > 0) {
-          // All previous selections were lost - this shouldn't happen normally
-          console.debug("Floor selection reset - all floors now visible");
-        } else if (preservedSelection.size > 0) {
-          setVisibleFloorIds(preservedSelection);
-        }
-        
-        setFloors(updatedFloors);
       }
-    }, [floorNamesMap, isInitialized, extractFloors]);
 
-    // Build parent-to-children map ONCE for fast lookups (O(n) instead of O(n*m))
+      // Priority 2: localStorage
+      const savedSelection = visibleFloorIdsRef.current;
+      const validSaved = new Set(Array.from(savedSelection).filter(id => validFloorIds.has(id)));
+
+      if (validSaved.size > 0) {
+        setVisibleFloorIds(validSaved);
+      } else {
+        setVisibleFloorIds(validFloorIds);
+      }
+      setIsInitialized(true);
+    }, [floors, isInitialized, localStorageLoaded, initialFloorFmGuid]);
+
+    // Build children map
     const buildChildrenMap = useCallback(() => {
       if (childrenMapCache) return childrenMapCache;
-      
       const viewer = getXeokitViewer();
       if (!viewer?.metaScene?.metaObjects) return new Map<string, string[]>();
-
       const metaObjects = viewer.metaScene.metaObjects;
       const childrenMap = new Map<string, string[]>();
-
-      // Single pass through all objects to build parent->children map
       Object.values(metaObjects).forEach((metaObj: any) => {
         const parentId = metaObj.parent?.id;
         if (parentId) {
-          if (!childrenMap.has(parentId)) {
-            childrenMap.set(parentId, []);
-          }
+          if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
           childrenMap.get(parentId)!.push(metaObj.id);
         }
       });
-
       setChildrenMapCache(childrenMap);
       return childrenMap;
     }, [getXeokitViewer, childrenMapCache]);
 
-    // Optimized recursive function using cached children map
     const getChildIdsOptimized = useCallback((metaObjId: string, childrenMap: Map<string, string[]>): string[] => {
       const ids: string[] = [metaObjId];
       const children = childrenMap.get(metaObjId) || [];
-      children.forEach(childId => {
-        ids.push(...getChildIdsOptimized(childId, childrenMap));
-      });
+      children.forEach(childId => { ids.push(...getChildIdsOptimized(childId, childrenMap)); });
       return ids;
     }, []);
 
-    // Apply visibility changes to 3D viewer (optimized batch approach)
-    // Also hides IfcCovering objects in solo mode to prevent visual clutter
+    // Apply visibility (batch)
     const applyFloorVisibility = useCallback((visibleIds: Set<string>) => {
       const viewer = getXeokitViewer();
       if (!viewer?.scene) return;
-
       const scene = viewer.scene;
       const childrenMap = buildChildrenMap();
       const isSoloMode = visibleIds.size === 1;
-      
-      // Collect ALL object IDs to show (batch approach for performance)
+
       const idsToShow: string[] = [];
-      
       floors.forEach(floor => {
         if (visibleIds.has(floor.id)) {
-          // Collect all child IDs for visible floors
           floor.metaObjectIds.forEach(metaObjId => {
             idsToShow.push(...getChildIdsOptimized(metaObjId, childrenMap));
           });
         }
       });
-      
-      // SAFETY: Abort if no objects to show -- prevents blacking out
+
       if (idsToShow.length === 0) {
-        console.warn('FloorVisibilitySelector.applyFloorVisibility: no objects found for selected floors, aborting');
+        console.warn('FloorVisibilitySelector: no objects found, aborting');
         return;
       }
-      
-      const idsToShowSet = new Set(idsToShow);
-      
-      // Use XEOkit batch API if available, otherwise use requestIdleCallback
+
       if (scene.setObjectsVisible && scene.objectIds) {
-        // Native batch update - much faster!
         scene.setObjectsVisible(scene.objectIds, false);
         scene.setObjectsVisible(idsToShow, true);
       } else {
-        // Fallback with requestIdleCallback to avoid blocking UI
+        const set = new Set(idsToShow);
         requestIdleCallback(() => {
           Object.entries(scene.objects || {}).forEach(([id, entity]: [string, any]) => {
-            if (entity && typeof entity.visible !== 'undefined') {
-              entity.visible = idsToShowSet.has(id);
-            }
+            if (entity && typeof entity.visible !== 'undefined') entity.visible = set.has(id);
           });
         }, { timeout: 100 });
       }
-      
-      // Hide IfcCovering objects in solo mode (they often cause visual artifacts)
+
       if (isSoloMode) {
         const metaObjects = viewer.metaScene?.metaObjects || {};
         Object.values(metaObjects).forEach((metaObj: any) => {
           if (metaObj.type?.toLowerCase() === 'ifccovering') {
             const entity = scene.objects?.[metaObj.id];
-            if (entity) {
-              entity.visible = false;
-            }
+            if (entity) entity.visible = false;
           }
         });
       }
-      
-      // Dispatch event so RoomVisualizationPanel can re-apply colors after visibility settles
+
       window.dispatchEvent(new CustomEvent('FLOOR_VISIBILITY_APPLIED'));
     }, [getXeokitViewer, floors, buildChildrenMap, getChildIdsOptimized]);
 
-    // Listen for external floor selection changes (from FloatingFloorSwitcher, ViewerTreePanel)
+    // Listen for external floor selection
     useEffect(() => {
-      const handleExternalFloorChange = (e: CustomEvent<FloorSelectionEventDetail>) => {
-        // Skip if this event was dispatched by us (prevent loops)
+      const handler = (e: CustomEvent<FloorSelectionEventDetail>) => {
         if (isReceivingExternalEvent.current) return;
-        
         const { visibleMetaFloorIds, isAllFloorsVisible } = e.detail;
-        
         isReceivingExternalEvent.current = true;
-        
+
         if (isAllFloorsVisible) {
           const allIds = new Set(floorsRef.current.map(f => f.id));
           setVisibleFloorIds(allIds);
@@ -413,256 +199,148 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
         } else if (visibleMetaFloorIds && visibleMetaFloorIds.length > 0) {
           const matchingIds = new Set(
             floorsRef.current
-              .filter(f => visibleMetaFloorIds.some(metaId =>
-                f.id === metaId || f.metaObjectIds.includes(metaId)
-              ))
+              .filter(f => visibleMetaFloorIds.some(metaId => f.id === metaId || f.metaObjectIds.includes(metaId)))
               .map(f => f.id)
           );
-          
           if (matchingIds.size > 0) {
             setVisibleFloorIds(matchingIds);
             applyFloorVisibility(matchingIds);
-            
-            // Trigger clipping when solo floor is selected externally
-            if (matchingIds.size === 1) {
-              setClippingEnabled(true);
-              updateClipping(Array.from(matchingIds));
-            } else {
-              updateClipping(Array.from(matchingIds));
-            }
+            if (matchingIds.size === 1) setClippingEnabled(true);
+            updateClipping(Array.from(matchingIds));
           }
         }
-        
-        // Reset flag after a tick to allow our own events again
-        setTimeout(() => {
-          isReceivingExternalEvent.current = false;
-        }, 100);
+
+        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
       };
-      
-      window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
-      return () => {
-        window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handleExternalFloorChange as EventListener);
-      };
+      window.addEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
+      return () => window.removeEventListener(FLOOR_SELECTION_CHANGED_EVENT, handler as EventListener);
     }, [applyFloorVisibility, updateClipping]);
 
-    // Apply initial floor visibility when initialization completes
-    // This ensures the 3D scene matches the saved selection from localStorage
+    // Apply initial visibility
     useEffect(() => {
       if (!isInitialized || floors.length === 0 || visibleFloorIds.size === 0) return;
       if (initialVisibilityAppliedRef.current) return;
-      
       initialVisibilityAppliedRef.current = true;
-      
+
       const timeoutId = setTimeout(() => {
-        console.log('Applying initial floor visibility:', Array.from(visibleFloorIds));
         applyFloorVisibility(visibleFloorIds);
-        
-        // Calculate and emit complete event data
+
         const visibleFloors = floors.filter(f => visibleFloorIds.has(f.id));
         const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
         const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
         const isAllVisible = visibleFloorIds.size === floors.length;
         const isSolo = visibleFloorIds.size === 1;
-        
         const soloFloorId = isSolo ? Array.from(visibleFloorIds)[0] : null;
         const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
         const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
-        
-        if (isSolo) {
-          setClippingEnabled(true);
-        }
-        
-        // ALWAYS dispatch event on init with complete data
+
+        if (isSolo) setClippingEnabled(true);
+
         isReceivingExternalEvent.current = true;
-        const eventDetail: FloorSelectionEventDetail = {
+        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+          detail: {
+            floorId: soloFloorId,
+            floorName: soloFloor?.name || null,
+            bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
+            visibleMetaFloorIds: allMetaIds,
+            visibleFloorFmGuids: allFmGuids,
+            isAllFloorsVisible: isAllVisible,
+          } as FloorSelectionEventDetail,
+        }));
+        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
+    }, [isInitialized, floors, visibleFloorIds, applyFloorVisibility, calculateFloorBounds]);
+
+    // ── Handlers ──────────────────────────────────────────────────────────
+    const emitFloorEvent = useCallback((newSet: Set<string>) => {
+      const visibleFloors = floors.filter(f => newSet.has(f.id));
+      const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
+      const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
+      const isAllVisible = newSet.size === floors.length;
+      const isSolo = newSet.size === 1;
+      const soloFloorId = isSolo ? Array.from(newSet)[0] : null;
+      const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
+      const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
+
+      if (isSolo) setClippingEnabled(true);
+
+      isReceivingExternalEvent.current = true;
+      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, {
+        detail: {
           floorId: soloFloorId,
           floorName: soloFloor?.name || null,
           bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
           visibleMetaFloorIds: allMetaIds,
           visibleFloorFmGuids: allFmGuids,
           isAllFloorsVisible: isAllVisible,
-        };
-        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
-      }, 100);
-      
-      return () => clearTimeout(timeoutId);
-    }, [isInitialized, floors, visibleFloorIds, applyFloorVisibility, calculateFloorBounds]);
+        } as FloorSelectionEventDetail,
+      }));
+      setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
+
+      if (onVisibleFloorsChange) onVisibleFloorsChange(allFmGuids);
+    }, [floors, calculateFloorBounds, onVisibleFloorsChange]);
 
     const handleFloorToggle = useCallback((floorId: string, checked: boolean) => {
       setVisibleFloorIds(prev => {
         const newSet = new Set(prev);
-        if (checked) {
-          newSet.add(floorId);
-        } else {
-          newSet.delete(floorId);
-        }
-        
+        checked ? newSet.add(floorId) : newSet.delete(floorId);
         applyFloorVisibility(newSet);
-        
-        // Update section plane clipping based on visible floors
         updateClipping(Array.from(newSet));
-        
-        // Calculate event data
-        const visibleFloors = floors.filter(f => newSet.has(f.id));
-        const allFmGuids = visibleFloors.flatMap(f => f.databaseLevelFmGuids);
-        const allMetaIds = visibleFloors.flatMap(f => f.metaObjectIds);
-        const isAllVisible = newSet.size === floors.length;
-        const isSolo = newSet.size === 1;
-        
-        // ALWAYS emit floor selection event with complete data
-        const soloFloorId = isSolo ? Array.from(newSet)[0] : null;
-        const soloFloor = soloFloorId ? floors.find(f => f.id === soloFloorId) : null;
-        const bounds = soloFloorId ? calculateFloorBounds(soloFloorId) : null;
-        
-        if (isSolo) {
-          setClippingEnabled(true);
-        }
-        
-        isReceivingExternalEvent.current = true;
-        const eventDetail: FloorSelectionEventDetail = {
-          floorId: soloFloorId,
-          floorName: soloFloor?.name || null,
-          bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-          visibleMetaFloorIds: allMetaIds,
-          visibleFloorFmGuids: allFmGuids,
-          isAllFloorsVisible: isAllVisible,
-        };
-        window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-        setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
-        
-        if (onVisibleFloorsChange) {
-          onVisibleFloorsChange(allFmGuids);
-        }
-        
+        emitFloorEvent(newSet);
         return newSet;
       });
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds]);
+    }, [applyFloorVisibility, updateClipping, emitFloorEvent]);
 
     const handleShowOnlyFloor = useCallback((floorId: string) => {
       const newSet = new Set([floorId]);
       setVisibleFloorIds(newSet);
       applyFloorVisibility(newSet);
-      
-      // Auto-enable clipping in solo mode for ceiling cut
       setClippingEnabled(true);
-      
-      // Apply ceiling clipping immediately using the hook's function
-      // Get the actual floor bounds and apply section plane
       const bounds = calculateFloorBounds(floorId);
-      if (bounds && enableClipping) {
-        const viewer = getXeokitViewer();
-        if (viewer?.scene) {
-          // Use xeokit SectionPlanesPlugin to apply ceiling clipping
-          // The updateClipping function from the hook handles this
-          updateClipping([floorId]);
-        }
-      }
-      
-      // Emit event for other components with complete data
-      isReceivingExternalEvent.current = true;
-      const floor = floors.find(f => f.id === floorId);
-      const eventDetail: FloorSelectionEventDetail = {
-        floorId,
-        floorName: floor?.name || null,
-        bounds: bounds ? { minY: bounds.minY, maxY: bounds.maxY } : null,
-        visibleMetaFloorIds: floor ? floor.metaObjectIds : [floorId],
-        visibleFloorFmGuids: floor ? floor.databaseLevelFmGuids : [],
-        isAllFloorsVisible: false,
-      };
-      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-      setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
-      
-      if (onVisibleFloorsChange) {
-        if (floor) {
-          onVisibleFloorsChange(floor.databaseLevelFmGuids);
-        }
-      }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping, calculateFloorBounds, enableClipping, getXeokitViewer]);
+      if (bounds && enableClipping) updateClipping([floorId]);
+      emitFloorEvent(newSet);
+    }, [applyFloorVisibility, calculateFloorBounds, enableClipping, updateClipping, emitFloorEvent]);
 
     const handleShowAll = useCallback(() => {
       const allIds = new Set(floors.map(f => f.id));
       setVisibleFloorIds(allIds);
       applyFloorVisibility(allIds);
-      
-      // Remove clipping when showing all floors
       updateClipping(Array.from(allIds));
-      
-      // Emit event with complete data for all floors
-      const allFmGuids = floors.flatMap(f => f.databaseLevelFmGuids);
-      const allMetaIds = floors.flatMap(f => f.metaObjectIds);
-      
-      isReceivingExternalEvent.current = true;
-      const eventDetail: FloorSelectionEventDetail = {
-        floorId: null,
-        floorName: null,
-        bounds: null,
-        visibleMetaFloorIds: allMetaIds,
-        visibleFloorFmGuids: allFmGuids,
-        isAllFloorsVisible: true,
-      };
-      window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
-      setTimeout(() => { isReceivingExternalEvent.current = false; }, 100);
-      
-      if (onVisibleFloorsChange) {
-        onVisibleFloorsChange(allFmGuids);
-      }
-    }, [applyFloorVisibility, floors, onVisibleFloorsChange, updateClipping]);
+      emitFloorEvent(allIds);
+    }, [applyFloorVisibility, floors, updateClipping, emitFloorEvent]);
 
-    const allVisible = useMemo(() => 
-      floors.length > 0 && visibleFloorIds.size === floors.length,
-      [floors, visibleFloorIds]
-    );
-
+    const allVisible = useMemo(() => floors.length > 0 && visibleFloorIds.size === floors.length, [floors, visibleFloorIds]);
     const visibleCount = visibleFloorIds.size;
     const totalCount = floors.length;
 
-    // Show loading placeholder if viewer is not ready
-    if (!isViewerReady) {
+    if (!isViewerReady || floorsLoading) {
       return (
         <div className={cn("space-y-2", className)} ref={ref}>
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-              Våningsplan
-            </Label>
-            <span className="text-xs text-muted-foreground/70 ml-1 italic">
-              (Laddar...)
-            </span>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Våningsplan</Label>
+            <span className="text-xs text-muted-foreground/70 ml-1 italic">(Laddar...)</span>
           </div>
         </div>
       );
     }
 
-    if (floors.length === 0) {
-      return null;
-    }
+    if (floors.length === 0) return null;
 
-    // listOnly mode: render just the toggle list without header/collapsible
-    // Uses tri-state mode: Alla (show all) | Solo (isolate one) | Multi (manual per-floor)
+    // listOnly mode
     if (listOnly) {
       const soloFloorId = visibleFloorIds.size === 1 ? Array.from(visibleFloorIds)[0] : null;
-      
-      // Determine current mode from state
       const currentMode: 'all' | 'solo' | 'multi' = allVisible ? 'all' : soloFloorId ? 'solo' : 'multi';
-      
+
       const handleModeChange = (mode: 'all' | 'solo' | 'multi') => {
-        if (mode === 'all') {
-          handleShowAll();
-        } else if (mode === 'solo') {
-          // Pick first floor as default if entering solo
-          if (floors.length > 0) {
-            handleShowOnlyFloor(floors[0].id);
-          }
-        } else {
-          // Multi: keep current selection, just switch display
-          // If currently all visible, keep that; otherwise keep selection
-        }
+        if (mode === 'all') handleShowAll();
+        else if (mode === 'solo' && floors.length > 0) handleShowOnlyFloor(floors[0].id);
       };
 
       return (
         <div className={cn("space-y-2", className)} ref={ref}>
-          {/* Mode selector */}
           <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
             {(['all', 'solo', 'multi'] as const).map((mode) => (
               <button
@@ -680,7 +358,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             ))}
           </div>
 
-          {/* Floor list — hidden in "all" mode, pills in solo, switches in multi */}
           {currentMode !== 'all' && (
             <div className="space-y-0.5 max-h-[40vh] overflow-y-auto pr-0.5">
               {floors.map((floor) => {
@@ -704,7 +381,6 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
                   );
                 }
 
-                // Multi mode: switches
                 return (
                   <div
                     key={floor.id}
@@ -713,32 +389,19 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
                       isVisible ? "bg-primary/10" : "bg-muted/20"
                     )}
                   >
-                    <span className={cn(
-                      "text-xs sm:text-sm truncate flex-1",
-                      isVisible ? "text-foreground" : "text-muted-foreground"
-                    )}>
+                    <span className={cn("text-xs sm:text-sm truncate flex-1", isVisible ? "text-foreground" : "text-muted-foreground")}>
                       {floor.name}
                     </span>
-                    <Switch
-                      checked={isVisible}
-                      onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)}
-                      className="scale-75"
-                    />
+                    <Switch checked={isVisible} onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)} className="scale-75" />
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Show All button — only in multi mode when not all visible */}
           {currentMode === 'multi' && !allVisible && (
             <div className="pt-1 border-t border-border/30">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full h-6 text-[10px] sm:text-xs"
-                onClick={handleShowAll}
-              >
+              <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] sm:text-xs" onClick={handleShowAll}>
                 Visa alla våningsplan
               </Button>
             </div>
@@ -751,62 +414,32 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className={cn("space-y-1.5 sm:space-y-2", className)}>
         <div className="flex items-center justify-between gap-1" ref={ref}>
           <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1"
-            >
+            <Button variant="ghost" size="sm" className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1">
               <Layers className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
-              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">
-                Våningsplan
-              </Label>
-              <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
-                ({visibleCount}/{totalCount})
-              </span>
-              <ChevronDown className={cn(
-                "h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0",
-                isExpanded && "rotate-180"
-              )} />
+              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">Våningsplan</Label>
+              <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">({visibleCount}/{totalCount})</span>
+              <ChevronDown className={cn("h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
             </Button>
           </CollapsibleTrigger>
-          
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-            {/* Clipping toggle */}
             {enableClipping && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant={clippingEnabled ? "secondary" : "ghost"}
                     size="sm"
-                    className={cn(
-                      "h-5 w-5 sm:h-6 sm:w-auto px-1 sm:px-1.5",
-                      clippingEnabled && "text-primary",
-                      isClippingActive && "ring-1 ring-primary"
-                    )}
+                    className={cn("h-5 w-5 sm:h-6 sm:w-auto px-1 sm:px-1.5", clippingEnabled && "text-primary", isClippingActive && "ring-1 ring-primary")}
                     onClick={() => setClippingEnabled(!clippingEnabled)}
                   >
                     <Scissors className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  <p className="text-xs">
-                    {clippingEnabled 
-                      ? 'Klippning aktiverad - objekt som sticker upp klipps vid taknivå' 
-                      : 'Aktivera klippning för att klippa bort fel ritade objekt'}
-                  </p>
+                  <p className="text-xs">{clippingEnabled ? 'Klippning aktiverad' : 'Aktivera klippning'}</p>
                 </TooltipContent>
               </Tooltip>
             )}
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs"
-              onClick={handleShowAll}
-              disabled={allVisible}
-            >
-              Alla
-            </Button>
+            <Button variant="ghost" size="sm" className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs" onClick={handleShowAll} disabled={allVisible}>Alla</Button>
           </div>
         </div>
 
@@ -815,39 +448,14 @@ const FloorVisibilitySelector = forwardRef<HTMLDivElement, FloorVisibilitySelect
             {floors.map((floor) => {
               const isVisible = visibleFloorIds.has(floor.id);
               const isSolo = visibleFloorIds.size === 1 && isVisible;
-              
               return (
-                <div
-                  key={floor.id}
-                  className={cn(
-                    "flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1",
-                    isVisible ? "bg-primary/5" : "bg-muted/30"
-                  )}
-                >
+                <div key={floor.id} className={cn("flex items-center justify-between py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-md transition-colors gap-1", isVisible ? "bg-primary/5" : "bg-muted/30")}>
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
-                    <Switch
-                      checked={isVisible}
-                      onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)}
-                      className="scale-75 sm:scale-90"
-                    />
-                    <span className={cn(
-                      "text-xs sm:text-sm truncate",
-                      isVisible ? "text-foreground" : "text-muted-foreground"
-                    )}>
-                      {floor.name}
-                    </span>
+                    <Switch checked={isVisible} onCheckedChange={(checked) => handleFloorToggle(floor.id, checked)} className="scale-75 sm:scale-90" />
+                    <span className={cn("text-xs sm:text-sm truncate", isVisible ? "text-foreground" : "text-muted-foreground")}>{floor.name}</span>
                   </div>
-                  
                   {!isSolo && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0"
-                      onClick={() => handleShowOnlyFloor(floor.id)}
-                      title="Visa endast detta våningsplan"
-                    >
-                      Solo
-                    </Button>
+                    <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyFloor(floor.id)} title="Visa endast detta våningsplan">Solo</Button>
                   )}
                 </div>
               );
