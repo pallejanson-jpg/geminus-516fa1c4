@@ -576,17 +576,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         }
       } else if (mode === 'energy_floors' || mode === 'energy_floor') {
         // colorMap keys are floor fmGuids — colorize all children of each IfcBuildingStorey
-        const getChildEntityIds = (parent: any, allMeta: any): string[] => {
-          const result: string[] = [];
-          Object.values(allMeta).forEach((mo: any) => {
-            if (mo.parent === parent.id || mo.parentId === parent.id) {
-              // If it's a leaf that maps to a scene object, add it
-              if (scene.objects?.[mo.id]) result.push(mo.id);
-              // Also recurse into children
-              result.push(...getChildEntityIds(mo, allMeta));
-            }
-          });
-          return result;
+        // Use xeokit's metaObject tree traversal (children array) instead of flat scan
+        const colorizeDescendants = (metaObj: any, rgb: [number, number, number]) => {
+          if (!metaObj) return;
+          const entity = scene.objects?.[metaObj.id];
+          if (entity) {
+            entity.xrayed = false;
+            entity.visible = true;
+            entity.colorize = rgb;
+            entity.opacity = 0.85;
+          }
+          if (metaObj.children) {
+            metaObj.children.forEach((child: any) => colorizeDescendants(child, rgb));
+          }
         };
 
         Object.values(metaObjects).forEach((mo: any) => {
@@ -594,16 +596,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
           const moGuid = (mo.originalSystemId || mo.id || '').toLowerCase();
           const rgb = colorMap[moGuid] || colorMap[moGuid.toUpperCase()] || colorMap[mo.originalSystemId] || colorMap[mo.id];
           if (!rgb) return;
-          const childIds = getChildEntityIds(mo, metaObjects);
-          childIds.forEach(childId => {
-            const entity = scene.objects?.[childId];
-            if (entity) {
-              entity.xrayed = false;
-              entity.visible = true;
-              entity.colorize = rgb;
-              entity.opacity = 0.85;
-            }
-          });
+          colorizeDescendants(mo, rgb);
         });
       } else if (mode === 'asset_categories' || mode === 'asset_category') {
         // colorMap keys are category names — match assets via allData
@@ -651,7 +644,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
     return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
   }, []);
 
-  // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel ───
+   // ─── Listen for ALARM_ANNOTATIONS_SHOW from InsightsDrawerPanel ───
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<AlarmAnnotationsShowDetail>).detail;
@@ -664,6 +657,15 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
       // Collect all room entity IDs for viewFit
       const allRoomEntityIds: string[] = [];
+
+      // Remove previous alarm markers
+      const existingContainer = document.getElementById('alarm-annotation-markers');
+      if (existingContainer) existingContainer.remove();
+      const markerContainer = document.createElement('div');
+      markerContainer.id = 'alarm-annotation-markers';
+      markerContainer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:25;';
+      const viewerEl = viewerInstanceRef.current?.$el;
+      if (viewerEl) viewerEl.appendChild(markerContainer);
 
       for (const alarm of detail.alarms) {
         const roomGuid = alarm.roomFmGuid;
@@ -680,6 +682,55 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
 
         // Flash the first room entity to highlight it
         flashEntityById(xeokitViewer.scene, roomItemIds[0]);
+
+        // Create visible DOM annotation marker at the room center
+        const entity = xeokitViewer.scene.objects?.[roomItemIds[0]];
+        if (entity?.aabb) {
+          const aabb = entity.aabb;
+          const worldPos = [
+            (aabb[0] + aabb[3]) / 2,
+            (aabb[1] + aabb[4]) / 2 + 0.5, // slightly above center
+            (aabb[2] + aabb[5]) / 2,
+          ];
+          // Create a marker using xeokit's camera projection
+          const marker = document.createElement('div');
+          marker.className = 'alarm-annotation-marker';
+          marker.style.cssText = `
+            position:absolute;width:24px;height:24px;border-radius:50%;
+            background:hsl(var(--destructive));border:2px solid white;
+            box-shadow:0 2px 8px rgba(0,0,0,0.4);pointer-events:auto;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;
+            font-size:10px;color:white;font-weight:bold;
+            transform:translate(-50%,-50%);transition:opacity 0.3s;
+          `;
+          marker.innerHTML = '🔔';
+          marker.title = `Alarm in room ${roomGuid.substring(0, 8)}…`;
+          markerContainer.appendChild(marker);
+
+          // Position updater
+          const updatePos = () => {
+            const canvas = xeokitViewer.scene.canvas?.canvas;
+            if (!canvas) return;
+            const projected = xeokitViewer.scene.camera?.projectWorldPos(worldPos);
+            if (!projected) return;
+            const canvasRect = canvas.getBoundingClientRect();
+            const containerRect = markerContainer.getBoundingClientRect();
+            const x = canvasRect.left - containerRect.left + (projected[0] + 1) * canvasRect.width / 2;
+            const y = canvasRect.top - containerRect.top + (1 - projected[1]) * canvasRect.height / 2;
+            marker.style.left = `${x}px`;
+            marker.style.top = `${y}px`;
+            // Hide if behind camera
+            marker.style.opacity = projected[2] > 0 && projected[2] < 1 ? '1' : '0';
+          };
+          updatePos();
+          // Update on camera move
+          const onCamera = xeokitViewer.scene.camera?.on?.('matrix', updatePos);
+          // Cleanup after 30 seconds
+          setTimeout(() => {
+            marker.remove();
+            if (onCamera !== undefined) xeokitViewer.scene.camera?.off?.(onCamera);
+          }, 30000);
+        }
       }
 
       // flyTo: viewFit on all room entities

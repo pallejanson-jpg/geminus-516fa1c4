@@ -304,7 +304,25 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     const map = new Map<string, string[]>();
 
     // Step 1: Collect ALL IfcBuildingStorey and IfcSpace from xeokit metaScene
-    const xeokitStoreys: { id: string; sysId: string; name: string }[] = [];
+    // Also track which model each storey belongs to, to prefer A-model storeys
+    const sceneModels = viewer.scene.models || {};
+    const entityToModelId = new Map<string, string>();
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+      Object.keys(model.objects || {}).forEach(objId => entityToModelId.set(objId, modelId));
+    });
+
+    // Detect A-model IDs (name starts with 'A' or contains 'arkitekt')
+    const aModelSceneIds = new Set<string>();
+    if (sharedModels.length > 0) {
+      sharedModels.forEach(m => {
+        const n = m.name.toLowerCase();
+        if (n.startsWith('a') || n.includes('a-modell') || n.includes('arkitekt')) {
+          aModelSceneIds.add(m.id);
+        }
+      });
+    }
+
+    const xeokitStoreys: { id: string; sysId: string; name: string; modelId: string }[] = [];
     const xeokitSpaces: { id: string; sysId: string; name: string }[] = [];
     const areaSpaceIds: string[] = [];
 
@@ -315,6 +333,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           id: mo.id,
           sysId: (mo.originalSystemId || mo.id || ''),
           name: (mo.name || ''),
+          modelId: entityToModelId.get(mo.id) || '',
         });
       } else if (type === 'ifcspace') {
         xeokitSpaces.push({
@@ -342,23 +361,37 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Step 2: Match Asset+ levels → xeokit storeys (try sysId first, then name)
+    // IMPORTANT: Prefer storeys from A-model when multiple models have same-named storeys
+    // Sort storeys: A-model first, then others
+    const sortedStoreys = [...xeokitStoreys].sort((a, b) => {
+      const aIsA = aModelSceneIds.has(a.modelId) ? 0 : 1;
+      const bIsA = aModelSceneIds.has(b.modelId) ? 0 : 1;
+      return aIsA - bIsA;
+    });
+
     const usedStoreyIds = new Set<string>();
     levels.forEach(level => {
       const fmLower = level.fmGuid.toLowerCase();
       const nameLower = level.name.toLowerCase().trim();
 
-      let matched = xeokitStoreys.find(xs =>
+      // When no source is checked or A-model source is checked, prefer A-model storeys
+      const preferAModel = checkedSources.size === 0 || 
+        sources.some(s => checkedSources.has(s.guid) && s.name.toLowerCase().startsWith('a'));
+
+      const storeysToSearch = preferAModel ? sortedStoreys : xeokitStoreys;
+
+      let matched = storeysToSearch.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
       );
-      if (!matched) matched = xeokitStoreys.find(xs =>
+      if (!matched) matched = storeysToSearch.find(xs =>
         !usedStoreyIds.has(xs.id) &&
         xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
       );
-      if (!matched) matched = xeokitStoreys.find(xs =>
+      if (!matched) matched = storeysToSearch.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
       );
       // Fuzzy name: contains match
-      if (!matched) matched = xeokitStoreys.find(xs =>
+      if (!matched) matched = storeysToSearch.find(xs =>
         !usedStoreyIds.has(xs.id) && (
           xs.name.toLowerCase().includes(nameLower) ||
           nameLower.includes(xs.name.toLowerCase().trim())
@@ -397,8 +430,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Step 4: Also build a source → model objects map using scene.models
-    const sceneModels = viewer.scene.models || {};
-    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+    const sceneModels2 = viewer.scene.models || {};
+    Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
       const modelObjKeys = Object.keys((model as any).objects || {});
       for (const objId of modelObjKeys) {
         const mo = metaObjects[objId];
@@ -427,7 +460,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       'Spaces matched:', spaces.filter(s => map.has(s.fmGuid)).length, '/', spaces.length,
       'xeokit storeys:', xeokitStoreys.length, 'xeokit spaces:', xeokitSpaces.length);
     return true;
-  }, [getXeokitViewer, levels]);
+  }, [getXeokitViewer, levels, sharedModels, checkedSources, sources]);
 
   // Cached spaces ref for entity map (avoids rebuild on checkbox toggle)
   const spacesRef = useRef(spaces);
@@ -1064,8 +1097,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="outline" size="icon" className="h-7 w-7 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <Button variant="outline" size="icon" className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground bg-background shadow-md" onClick={onClose} title="Close filter panel">
+            <X className="h-5 w-5" />
           </Button>
         </div>
       </div>
