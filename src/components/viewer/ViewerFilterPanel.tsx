@@ -11,6 +11,8 @@ import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { ANNOTATION_FILTER_EVENT } from '@/lib/viewer-events';
+import { useFloorData } from '@/hooks/useFloorData';
+import { useModelData } from '@/hooks/useModelData';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,10 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
 }) => {
   const { allData } = useContext(AppContext);
 
+  // ── Shared hooks for consistent data ─────────────────────────────────
+  const { floors: sharedFloors } = useFloorData(viewerRef, buildingFmGuid);
+  const { models: sharedModels, applyModelVisibility, assetPlusSources: apSources } = useModelData(viewerRef, buildingFmGuid);
+
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [levelsOpen, setLevelsOpen] = useState(true);
   const [spacesOpen, setSpacesOpen] = useState(false);
@@ -141,49 +147,46 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     );
   }, [allData, buildingFmGuid]);
 
+  // Sources: derived from shared useModelData hook (consistent with Visningsmeny)
   const sources: BimSource[] = useMemo(() => {
-    const map = new Map<string, { name: string; count: number }>();
-    buildingData
-      .filter((a: any) => a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
-      .forEach((a: any) => {
-        const attrs = a.attributes || {};
-        const guid = attrs.parentBimObjectId;
-        const name = attrs.parentCommonName;
-        if (guid && name && !isGuid(name)) {
-          const existing = map.get(guid);
-          if (existing) existing.count++;
-          else map.set(guid, { name, count: 1 });
-        }
-      });
-    return Array.from(map.entries())
-      .map(([guid, { name, count }]) => ({ guid, name, storeyCount: count }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }, [buildingData]);
-
-  const levels: LevelItem[] = useMemo(() => {
-    return buildingData
-      .filter((a: any) => a.category === 'Building Storey' || a.category === 'IfcBuildingStorey')
-      .map((a: any) => {
-        const fmGuid = a.fmGuid || a.fm_guid;
-        const name = a.commonName || a.common_name || a.name;
-        const attrs = a.attributes || {};
-        const sourceGuid = attrs.parentBimObjectId || '';
-        const spaceCount = buildingData.filter((s: any) =>
-          (s.category === 'Space' || s.category === 'IfcSpace') &&
-          (s.levelFmGuid || s.level_fm_guid) === fmGuid
-        ).length;
-        return {
-          fmGuid,
-          name: name && !isGuid(name) ? name : `Level ${fmGuid?.slice(0, 8)}`,
-          sourceGuid,
-          spaceCount,
-        };
+    // Build from Asset+ sources map (same data, but guaranteed consistent naming)
+    return Array.from(apSources.entries())
+      .map(([guid, name]) => {
+        // Count storeys belonging to this source
+        const storeyCount = buildingData.filter((a: any) => {
+          const attrs = a.attributes || {};
+          return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
+            attrs.parentBimObjectId === guid;
+        }).length;
+        return { guid, name, storeyCount };
       })
-      .sort((a, b) => {
-        const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
-        return extract(a.name) - extract(b.name);
+      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [apSources, buildingData]);
+
+  // Levels: derived from shared useFloorData hook (consistent naming with Visningsmeny)
+  const levels: LevelItem[] = useMemo(() => {
+    return sharedFloors.map(floor => {
+      // Find matching Asset+ storey for sourceGuid
+      const matchingAsset = buildingData.find((a: any) => {
+        const fmGuid = (a.fmGuid || a.fm_guid || '').toLowerCase();
+        return (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') &&
+          floor.databaseLevelFmGuids.some(g => g.toLowerCase() === fmGuid);
       });
-  }, [buildingData]);
+      const sourceGuid = matchingAsset?.attributes?.parentBimObjectId || '';
+      const fmGuid = floor.databaseLevelFmGuids[0] || floor.id;
+      const spaceCount = buildingData.filter((s: any) =>
+        (s.category === 'Space' || s.category === 'IfcSpace') &&
+        floor.databaseLevelFmGuids.includes(s.levelFmGuid || s.level_fm_guid)
+      ).length;
+      return { fmGuid, name: floor.name, sourceGuid, spaceCount };
+    }).sort((a, b) => {
+      const extract = (n: string) => { const m = n.match(/(-?\d+)/); return m ? parseInt(m[1], 10) : 0; };
+      return extract(a.name) - extract(b.name);
+    });
+  }, [sharedFloors, buildingData]);
+
+
+
 
   const spaces: SpaceItem[] = useMemo(() => {
     const visibleLevelGuids = checkedLevels.size > 0 ? checkedLevels : new Set(levels.map(l => l.fmGuid));
@@ -631,15 +634,37 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Step 2: Collect solid IDs per active filter, then intersect
+    // Source filtering: use model-level visibility via shared hook's batch approach
     let sourceIds: Set<string> | null = null;
     if (checkedSources.size > 0) {
       sourceIds = new Set<string>();
+      // Collect entity IDs from levels belonging to checked sources
       levels.filter(l => checkedSources.has(l.sourceGuid)).forEach(l => {
         eMap.get(l.fmGuid)?.forEach(id => sourceIds!.add(id));
       });
-      checkedSources.forEach(guid => {
-        eMap.get(`source::${guid}`)?.forEach(id => sourceIds!.add(id));
-      });
+      // Also collect from scene models matched to these sources
+      const viewer = getXeokitViewer();
+      const sceneModels = viewer?.scene?.models || {};
+      const metaObjects = viewer?.metaScene?.metaObjects;
+      if (metaObjects) {
+        Object.entries(sceneModels).forEach(([, model]: [string, any]) => {
+          const objKeys = Object.keys(model.objects || {});
+          for (const objId of objKeys) {
+            const mo = metaObjects[objId];
+            if (mo?.type === 'IfcBuildingStorey') {
+              const sysId = (mo.originalSystemId || '').toLowerCase();
+              const matchedLevel = levels.find(l =>
+                l.fmGuid.toLowerCase() === sysId ||
+                l.fmGuid.toLowerCase().replace(/-/g, '') === sysId.replace(/-/g, '')
+              );
+              if (matchedLevel && checkedSources.has(matchedLevel.sourceGuid)) {
+                objKeys.forEach(id => sourceIds!.add(id));
+              }
+              break;
+            }
+          }
+        });
+      }
     }
 
     let levelIds: Set<string> | null = null;
