@@ -168,7 +168,9 @@
 .dx-overlay-content .dx-context-menu,
 #AssetPlusViewer .dx-context-menu-container,
 div[class*="dx-context-menu"],
-.dx-overlay-wrapper[style*="z-index"] .dx-context-menu {
+.dx-overlay-wrapper[style*="z-index"] .dx-context-menu,
+.dx-overlay-wrapper:has(.dx-context-menu),
+.dx-overlay-shader:has(+ .dx-overlay-wrapper .dx-context-menu) {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -179,6 +181,7 @@ div[class*="dx-context-menu"],
   position: absolute !important;
   left: -9999px !important;
   top: -9999px !important;
+  z-index: -1 !important;
 }
 
 /* Hide built-in Asset+ toolbars - we use our custom toolbar */

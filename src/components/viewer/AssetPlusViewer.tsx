@@ -4666,16 +4666,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                   {isFullscreen ? <Minimize2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </Button>
                 <Button 
-                  variant={showTreePanel ? "default" : "secondary"}
-                  size="icon"
-                  onClick={() => setShowTreePanel(!showTreePanel)} 
-                  className="h-8 w-8 sm:h-10 sm:w-10 shadow-lg bg-card/95 backdrop-blur-sm border"
-                   aria-label="Model tree"
-                   title="Model tree"
-                >
-                  <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />
-                </Button>
-                <Button 
                   variant={showFilterPanel ? "default" : "secondary"}
                   size="icon"
                   onClick={() => setShowFilterPanel(!showFilterPanel)} 
@@ -4791,29 +4781,6 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 className="pointer-events-auto"
               />
               
-              {/* Tree View Panel - standalone mode (not in sheet) */}
-              {showTreePanel && (
-                <div className="pointer-events-auto">
-                  <ViewerTreePanel
-                    viewerRef={viewerInstanceRef}
-                    buildingFmGuid={buildingFmGuid}
-                    isVisible={showTreePanel}
-                    onClose={() => setShowTreePanel(false)}
-                    onNodeSelect={(nodeId, nodeFmGuid) => {
-                      console.log('TreePanel node selected:', nodeId, nodeFmGuid);
-                      const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
-                      if (xeokitViewer?.scene) {
-                        flashEntityById(xeokitViewer.scene, nodeId, {
-                          color1: [0.3, 1, 0.3],
-                          color2: [1, 1, 1],
-                          interval: 200,
-                          duration: 2000,
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              )}
               
               {/* Tandem-style Filter Panel - fixed left sidebar */}
               {showFilterPanel && (
@@ -4914,6 +4881,7 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               initialCoordinates={pickedCoordinates}
               onPickCoordinates={handleTogglePickMode}
               isPickingCoordinates={isPickMode}
+              viewerRef={viewerInstanceRef}
             />
           </div>
           
@@ -4944,8 +4912,10 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
               entityName={contextMenu.entityName}
               onClose={() => setContextMenu(null)}
               onProperties={() => {
-                if (contextMenu.fmGuid) {
-                  setSelectedFmGuids([contextMenu.fmGuid]);
+                if (contextMenu.fmGuid || contextMenu.entityId) {
+                  // Use fmGuid if available, fall back to entityId for BIM metadata lookup
+                  const guidToUse = contextMenu.fmGuid || contextMenu.entityId || '';
+                  setSelectedFmGuids([guidToUse]);
                   setPropertiesDialogOpen(true);
                 }
               }}

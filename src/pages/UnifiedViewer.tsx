@@ -104,16 +104,21 @@ const UnifiedViewerContent: React.FC<{
   }, [buildingData, viewMode]);
 
   // Keep internal viewMode in sync with URL mode param (important when navigating
-  // to the same route with a new mode query parameter, e.g. "2D" quick action)
+  // to the same route with a new mode query parameter, e.g. "2D" quick action).
+  // IMPORTANT: Only react to modeParam changes, NOT viewMode changes, otherwise
+  // clicking a mode button triggers a re-sync back to the URL param value.
+  const prevModeParamRef = useRef(modeParam);
   useEffect(() => {
     if (!modeParam) return;
+    if (modeParam === prevModeParamRef.current) return; // only react to URL changes
+    prevModeParamRef.current = modeParam;
     const validModes: ViewMode[] = ['2d', '3d', 'split', 'split2d3d', 'vt', '360'];
     if (!validModes.includes(modeParam)) return;
     if (modeParam !== viewMode) {
       userChangedModeRef.current = true;
       setViewMode(modeParam);
     }
-  }, [modeParam, viewMode]);
+  }, [modeParam]);
 
   // ─── Dispatch mode events when viewMode changes ────────────────
   // Use a sentinel so the first render always fires the event when starting in 2D
