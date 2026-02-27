@@ -4126,11 +4126,23 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       console.log("AssetPlusViewer: Access token ready");
 
       setInitStep('check_script');
-      // Check if assetplusviewer is available globally
-      const assetplusviewer = (window as any).assetplusviewer;
+      // Load the Asset+ viewer script on-demand if not already loaded
+      let assetplusviewer = (window as any).assetplusviewer;
       
       if (!assetplusviewer) {
-        throw new Error('Asset+ 3D Viewer package is not loaded. Verify that /lib/assetplus/assetplusviewer.umd.min.js is included.');
+        console.log('AssetPlusViewer: Loading UMD script on-demand...');
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = '/lib/assetplus/assetplusviewer.umd.min.js';
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Asset+ 3D Viewer script'));
+          document.body.appendChild(script);
+        });
+        assetplusviewer = (window as any).assetplusviewer;
+        if (!assetplusviewer) {
+          throw new Error('Asset+ 3D Viewer package failed to initialize after loading.');
+        }
+        console.log('AssetPlusViewer: UMD script loaded successfully');
       }
 
       setInitStep('fetch_config');
