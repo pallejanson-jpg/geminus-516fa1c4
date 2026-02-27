@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -95,7 +95,7 @@ const CreateBuildingPanel: React.FC = () => {
 
   const handleCreate = async () => {
     if (!complexDesignation || !complexName || !buildingDesignation || !buildingName) {
-      toast({ variant: 'destructive', title: 'Fyll i alla obligatoriska fält' });
+      toast({ variant: 'destructive', title: 'Please fill in all required fields' });
       return;
     }
 
@@ -114,7 +114,7 @@ const CreateBuildingPanel: React.FC = () => {
       });
 
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Skapandet misslyckades');
+      if (!data?.success) throw new Error(data?.error || 'Creation failed');
 
       setCreatedBuilding({
         complexFmGuid: data.complexFmGuid,
@@ -125,13 +125,13 @@ const CreateBuildingPanel: React.FC = () => {
       });
 
       toast({
-        title: 'Byggnad skapad!',
+        title: 'Building created!',
         description: data.message,
       });
     } catch (err: any) {
       toast({
         variant: 'destructive',
-        title: 'Fel vid skapande',
+        title: 'Error creating building',
         description: err.message,
       });
     } finally {
@@ -139,7 +139,7 @@ const CreateBuildingPanel: React.FC = () => {
     }
   };
 
-  // The building FM GUID to use for IFC upload (either newly created or selected existing)
+  // The building FM GUID to use for IFC upload
   const targetBuildingFmGuid = createdBuilding?.buildingFmGuid || selectedExistingFmGuid;
   const targetModelFmGuid = createdBuilding?.modelFmGuid || '';
 
@@ -153,28 +153,28 @@ const CreateBuildingPanel: React.FC = () => {
     setConversionStartTime(Date.now());
 
     try {
-      addLog(`Läser fil: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
+      addLog(`Reading file: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
       setConversionProgress(10);
 
       const arrayBuffer = await ifcFile.arrayBuffer();
       setConversionProgress(20);
 
-      addLog('Konverterar IFC till XKT och extraherar hierarki...');
+      addLog('Converting IFC to XKT and extracting hierarchy...');
       const result: IfcHierarchyResult = await convertToXktWithMetadata(arrayBuffer, (msg) => {
         addLog(msg);
         setConversionProgress(prev => Math.min(prev + 5, 70));
       });
 
       setConversionProgress(75);
-      addLog(`XKT genererad: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-      addLog(`Hierarki: ${result.levels.length} våningsplan, ${result.spaces.length} rum`);
+      addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+      addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
 
       // Upload XKT to storage
       const modelId = `ifc-${Date.now()}`;
       const storageFileName = `${modelId}.xkt`;
       const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
 
-      addLog('Laddar upp XKT till storage...');
+      addLog('Uploading XKT to storage...');
       const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
       const { error: uploadError } = await supabase.storage
         .from('xkt-models')
@@ -183,11 +183,11 @@ const CreateBuildingPanel: React.FC = () => {
           upsert: true,
         });
 
-      if (uploadError) throw new Error(`Upload misslyckades: ${uploadError.message}`);
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
       setConversionProgress(82);
 
       // Save XKT metadata
-      addLog('Sparar XKT-metadata...');
+      addLog('Saving XKT metadata...');
       const { error: dbError } = await supabase
         .from('xkt_models')
         .upsert({
@@ -202,14 +202,13 @@ const CreateBuildingPanel: React.FC = () => {
           source_updated_at: new Date().toISOString(),
         } as any, { onConflict: 'building_fm_guid,model_id' });
 
-      if (dbError) throw new Error(`Databasfel: ${dbError.message}`);
+      if (dbError) throw new Error(`Database error: ${dbError.message}`);
       setConversionProgress(88);
 
       // Create hierarchy in Asset+ if we have levels/spaces
       if ((result.levels.length > 0 || result.spaces.length > 0) && targetModelFmGuid) {
-        addLog(`Skapar ${result.levels.length} våningsplan och ${result.spaces.length} rum i Asset+...`);
+        addLog(`Creating ${result.levels.length} levels and ${result.spaces.length} spaces in Asset+...`);
 
-        // Build level FmGuid map (IFC id -> generated FmGuid)
         const levelFmGuids = new Map<string, string>();
         const hierarchyLevels = result.levels.map(level => {
           const fmGuid = crypto.randomUUID();
@@ -244,29 +243,29 @@ const CreateBuildingPanel: React.FC = () => {
         );
 
         if (hierarchyError) {
-          addLog(`⚠️ Hierarki-skapande misslyckades: ${hierarchyError.message}`);
+          addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
         } else if (hierarchyData?.success) {
           addLog(`✅ ${hierarchyData.message}`);
         } else {
-          addLog(`⚠️ ${hierarchyData?.error || 'Hierarki-skapande misslyckades'}`);
+          addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
         }
       } else if (result.levels.length > 0 || result.spaces.length > 0) {
-        addLog('ℹ️ Hierarki extraherad men ingen modelFmGuid – sparas bara lokalt.');
+        addLog('ℹ️ Hierarchy extracted but no modelFmGuid — saved locally only.');
       }
 
       setConversionProgress(100);
       setConversionDone(true);
-      addLog('✅ Klart! Modellen är redo att visas i 3D-viewern.');
+      addLog('✅ Done! The model is ready to view in the 3D viewer.');
 
       toast({
-        title: 'IFC uppladdad!',
-        description: `${ifcFile.name} konverterad och sparad som 3D-modell.`,
+        title: 'IFC uploaded!',
+        description: `${ifcFile.name} converted and saved as a 3D model.`,
       });
     } catch (err: any) {
-      addLog(`❌ Fel: ${err.message}`);
+      addLog(`❌ Error: ${err.message}`);
       toast({
         variant: 'destructive',
-        title: 'Konverteringsfel',
+        title: 'Conversion error',
         description: err.message,
       });
     } finally {
@@ -299,14 +298,14 @@ const CreateBuildingPanel: React.FC = () => {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-sm">Ladda upp IFC till befintlig byggnad</h3>
+            <h3 className="font-semibold text-sm">Upload IFC to existing building</h3>
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Välj byggnad</Label>
+            <Label className="text-xs">Select building</Label>
             <Select value={selectedExistingFmGuid} onValueChange={setSelectedExistingFmGuid}>
               <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Välj en befintlig byggnad..." />
+                <SelectValue placeholder="Select an existing building..." />
               </SelectTrigger>
               <SelectContent>
                 {existingBuildings.map(b => (
@@ -319,7 +318,7 @@ const CreateBuildingPanel: React.FC = () => {
           </div>
 
           {!selectedExistingFmGuid && (
-            <p className="text-xs text-muted-foreground text-center py-2">— ELLER —</p>
+            <p className="text-xs text-muted-foreground text-center py-2">— OR —</p>
           )}
         </div>
       )}
@@ -330,11 +329,11 @@ const CreateBuildingPanel: React.FC = () => {
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-sm">
-              {createdBuilding ? 'Byggnad skapad' : 'Skapa ny fastighet & byggnad'}
+              {createdBuilding ? 'Building created' : 'Create new property & building'}
             </h3>
             {createdBuilding && (
               <Badge variant="default" className="ml-auto gap-1">
-                <CheckCircle2 className="h-3 w-3" /> Skapad
+                <CheckCircle2 className="h-3 w-3" /> Created
               </Badge>
             )}
           </div>
@@ -343,58 +342,58 @@ const CreateBuildingPanel: React.FC = () => {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Fastighetsbeteckning *</Label>
-                  <Input placeholder="t.ex. FASTIGHET-01" value={complexDesignation} onChange={e => setComplexDesignation(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs">Property designation *</Label>
+                  <Input placeholder="e.g. PROPERTY-01" value={complexDesignation} onChange={e => setComplexDesignation(e.target.value)} className="h-9 text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Fastighetsnamn *</Label>
-                  <Input placeholder="t.ex. Kvarngatan 5" value={complexName} onChange={e => setComplexName(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs">Property name *</Label>
+                  <Input placeholder="e.g. Main Street 5" value={complexName} onChange={e => setComplexName(e.target.value)} className="h-9 text-sm" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Byggnadsbeteckning *</Label>
-                  <Input placeholder="t.ex. HUS-A" value={buildingDesignation} onChange={e => setBuildingDesignation(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs">Building designation *</Label>
+                  <Input placeholder="e.g. BLDG-A" value={buildingDesignation} onChange={e => setBuildingDesignation(e.target.value)} className="h-9 text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Byggnadsnamn *</Label>
-                  <Input placeholder="t.ex. Huvudbyggnaden" value={buildingName} onChange={e => setBuildingName(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs">Building name *</Label>
+                  <Input placeholder="e.g. Main Building" value={buildingName} onChange={e => setBuildingName(e.target.value)} className="h-9 text-sm" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1">
-                  <Layers className="h-3 w-3" /> Modellnamn
+                  <Layers className="h-3 w-3" /> Model name
                 </Label>
-                <Input placeholder="t.ex. A-modell" value={modelName} onChange={e => setModelName(e.target.value)} className="h-9 text-sm" />
-                <p className="text-[10px] text-muted-foreground">Skapar en BIM-modell (ObjectType 5) under byggnaden i Asset+</p>
+                <Input placeholder="e.g. A-modell" value={modelName} onChange={e => setModelName(e.target.value)} className="h-9 text-sm" />
+                <p className="text-[10px] text-muted-foreground">Creates a BIM model (ObjectType 5) under the building in Asset+</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Latitud</Label>
-                  <Input type="number" step="any" placeholder="t.ex. 59.3293" value={latitude} onChange={e => setLatitude(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Latitude</Label>
+                  <Input type="number" step="any" placeholder="e.g. 59.3293" value={latitude} onChange={e => setLatitude(e.target.value)} className="h-9 text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Longitud</Label>
-                  <Input type="number" step="any" placeholder="t.ex. 18.0686" value={longitude} onChange={e => setLongitude(e.target.value)} className="h-9 text-sm" />
+                  <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" /> Longitude</Label>
+                  <Input type="number" step="any" placeholder="e.g. 18.0686" value={longitude} onChange={e => setLongitude(e.target.value)} className="h-9 text-sm" />
                 </div>
               </div>
 
               <Button onClick={handleCreate} disabled={isCreating || !complexDesignation || !complexName || !buildingDesignation || !buildingName} className="w-full gap-2">
                 {isCreating ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" />Skapar i Asset+...</>
+                  <><Loader2 className="h-4 w-4 animate-spin" />Creating in Asset+...</>
                 ) : (
-                  <><Building2 className="h-4 w-4" />Skapa i Asset+</>
+                  <><Building2 className="h-4 w-4" />Create in Asset+</>
                 )}
               </Button>
             </div>
           ) : (
             <div className="rounded-md border bg-muted/30 p-3 space-y-1 text-xs">
-              <p><span className="text-muted-foreground">Fastighet:</span> {complexName} ({complexDesignation})</p>
-              <p><span className="text-muted-foreground">Byggnad:</span> {createdBuilding.buildingName} ({buildingDesignation})</p>
-              <p><span className="text-muted-foreground">Modell:</span> {createdBuilding.modelName}</p>
+              <p><span className="text-muted-foreground">Property:</span> {complexName} ({complexDesignation})</p>
+              <p><span className="text-muted-foreground">Building:</span> {createdBuilding.buildingName} ({buildingDesignation})</p>
+              <p><span className="text-muted-foreground">Model:</span> {createdBuilding.modelName}</p>
               <p className="text-muted-foreground font-mono text-[10px]">Building: {createdBuilding.buildingFmGuid}</p>
               <p className="text-muted-foreground font-mono text-[10px]">Model: {createdBuilding.modelFmGuid}</p>
             </div>
@@ -402,12 +401,12 @@ const CreateBuildingPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Step 3: IFC Upload */}
+      {/* Section 3: IFC Upload */}
       {showIfcUpload && (
         <div className="space-y-3 border-t pt-4">
           <div className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-sm">Ladda upp IFC-fil</h3>
+            <h3 className="font-semibold text-sm">Upload IFC file</h3>
           </div>
 
           <div className="space-y-3">
@@ -423,7 +422,7 @@ const CreateBuildingPanel: React.FC = () => {
               {ifcFile && !isConverting && !conversionDone && (
                 <Button onClick={handleIfcUpload} size="sm" className="gap-1.5 shrink-0">
                   <Upload className="h-3.5 w-3.5" />
-                  Konvertera
+                  Convert
                 </Button>
               )}
             </div>
@@ -473,7 +472,7 @@ const CreateBuildingPanel: React.FC = () => {
       {/* Reset button */}
       {(createdBuilding || selectedExistingFmGuid) && (
         <Button variant="outline" size="sm" onClick={handleReset} className="w-full">
-          {createdBuilding ? 'Skapa ytterligare en byggnad' : 'Börja om'}
+          {createdBuilding ? 'Create another building' : 'Start over'}
         </Button>
       )}
     </div>
