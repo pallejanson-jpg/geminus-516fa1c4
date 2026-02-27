@@ -19,7 +19,7 @@ interface SenslincDashboardViewProps {
 const StatusBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean }) => {
   if (isLoading) return (
     <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-muted-foreground/40 text-muted-foreground">
-      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Laddar…
+      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
     </Badge>
   );
   if (isLive) return (
@@ -111,7 +111,7 @@ const SensorChart: React.FC<SensorChartProps> = ({ timeSeries, isLive }) => {
   const lines = [
     { key: 'temperature', label: 'Temp (°C)', color: '#22c55e', strokeDash: isLive ? '0' : '4 2' },
     { key: 'co2',         label: 'CO₂ (ppm)', color: '#60a5fa', strokeDash: isLive ? '0' : '4 2' },
-    { key: 'humidity',    label: 'Fukt (%)',   color: '#a78bfa', strokeDash: isLive ? '0' : '4 2' },
+    { key: 'humidity',    label: 'Humidity (%)', color: '#a78bfa', strokeDash: isLive ? '0' : '4 2' },
   ] as const;
 
   return (
@@ -205,13 +205,12 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-6">
           <Zap className="h-10 w-10 text-primary" />
         </div>
-        <h2 className="text-xl font-semibold mb-2">Ingen IoT-dashboard</h2>
+        <h2 className="text-xl font-semibold mb-2">No IoT dashboard</h2>
         <p className="text-muted-foreground text-center max-w-md mb-6">
-          Det finns ingen sensor-dashboard konfigurerad för detta objekt. Kontrollera att
-          sensorDashboard-attributet är satt i Asset+, eller att objektet är kopplat till Senslinc via FM GUID.
+          No sensor dashboard configured for this object. Verify that the sensorDashboard attribute is set in Asset+, or that the object is linked to Senslinc via FM GUID.
         </p>
         <Button onClick={onClose} variant="outline" className="gap-2">
-          <X className="h-4 w-4" />Stäng
+          <X className="h-4 w-4" />Close
         </Button>
       </div>
     );
@@ -238,11 +237,11 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {dashboardUrl && (
-            <Button variant="ghost" size="icon" onClick={handleOpenExternal} title="Öppna i ny flik" className="h-8 w-8 hover:bg-primary/10">
+            <Button variant="ghost" size="icon" onClick={handleOpenExternal} title="Open in new tab" className="h-8 w-8 hover:bg-primary/10">
               <ExternalLink className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={onClose} title="Stäng" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+          <Button variant="ghost" size="icon" onClick={onClose} title="Close" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -252,7 +251,7 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 pt-3 shrink-0">
           <TabsList className="h-8 p-0.5 gap-0.5">
-            <TabsTrigger value="sensor" className="text-xs px-3 py-1">Sensordata</TabsTrigger>
+            <TabsTrigger value="sensor" className="text-xs px-3 py-1">Sensor data</TabsTrigger>
             {dashboardUrl && (
               <TabsTrigger value="dashboard" className="text-xs px-3 py-1">Dashboard</TabsTrigger>
             )}
@@ -264,7 +263,7 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
           {/* Gauge cards */}
           <div className="grid grid-cols-2 gap-2">
             <GaugeCard
-              label="Temperatur"
+              label="Temperature"
               value={data?.current.temperature ?? null}
               unit="°C"
               icon={Thermometer}
@@ -280,7 +279,7 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
               isLoading={isLoading}
             />
             <GaugeCard
-              label="Luftfuktighet"
+              label="Humidity"
               value={data?.current.humidity ?? null}
               unit="%"
               icon={Droplets}
@@ -288,7 +287,7 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
               isLoading={isLoading}
             />
             <GaugeCard
-              label="Beläggning"
+              label="Occupancy"
               value={data?.current.occupancy ?? null}
               unit="%"
               icon={Users}
@@ -300,7 +299,7 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
           {/* 7-day trend */}
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-medium text-muted-foreground">Senaste 7 dagarna</h3>
+              <h3 className="text-xs font-medium text-muted-foreground">Last 7 days</h3>
             </div>
             {isLoading ? (
               <div className="h-40 flex items-center justify-center">
@@ -315,13 +314,13 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
           {!isLoading && error && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-border px-3 py-2 bg-muted/30">
               <WifiOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span>Ingen live-koppling till Senslinc.</span>
+              <span>No live connection to Senslinc.</span>
             </div>
           )}
           {!isLoading && isLive && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
               <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
-              <span>Live-data från Senslinc · Maskin: {data?.machinePk}</span>
+              <span>Live data from Senslinc · Machine: {data?.machinePk}</span>
             </div>
           )}
         </TabsContent>
@@ -333,11 +332,11 @@ const SenslincDashboardView: React.FC<SenslincDashboardViewProps> = ({ onClose }
               {iframeLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
                   <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-                  <span className="text-sm text-muted-foreground">Laddar Senslinc-dashboard…</span>
+                  <span className="text-sm text-muted-foreground">Loading Senslinc dashboard…</span>
                 </div>
               )}
               <div className="absolute top-2 right-2 z-20 flex gap-1">
-                <Button variant="ghost" size="icon" onClick={handleRefreshIframe} title="Uppdatera" className="h-7 w-7 bg-card/80 hover:bg-card">
+                <Button variant="ghost" size="icon" onClick={handleRefreshIframe} title="Refresh" className="h-7 w-7 bg-card/80 hover:bg-card">
                   <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
               </div>
