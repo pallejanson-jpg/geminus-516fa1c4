@@ -55,10 +55,7 @@ const MainContent: React.FC = () => {
             case 'navigation':
                 return <NavigatorView />;
             case 'assetplus_viewer':
-                return <Viewer />;
             case 'viewer':
-                // Backwards-compatible key used by Navigator
-                return <Viewer />;
             case 'native_viewer':
                 return <NativeViewerPage />;
             case 'asset_registration':
