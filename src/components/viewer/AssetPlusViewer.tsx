@@ -3783,6 +3783,9 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         return original!(input, init);
       }
       
+      // ─── XKT DIAGNOSTICS ───
+      const diagStart = performance.now();
+      
       // Extract model ID for caching
       const modelId = xktCacheService.extractModelIdFromUrl(url);
       
@@ -3802,7 +3805,8 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         // Check memory cache first
         const memoryData = getModelFromMemory(modelId, resolvedBuildingGuid);
         if (memoryData) {
-          console.log(`XKT cache: Memory hit for ${modelId}`);
+          const elapsed = Math.round(performance.now() - diagStart);
+          console.log(`%c[XKT DIAG] ✅ MEMORY HIT — ${modelId} — ${(memoryData.byteLength / 1024 / 1024).toFixed(1)} MB — ${elapsed}ms`, 'color:#22c55e;font-weight:bold');
           // Return cached data as a Response
           return new Response(memoryData.slice(0), {
             status: 200,
@@ -3812,15 +3816,20 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
         
         // Check database cache (skip stale entries — force fresh download)
         try {
+          const dbCheckStart = performance.now();
           const cacheResult = await xktCacheService.checkCache(modelId, resolvedBuildingGuid);
+          const dbCheckMs = Math.round(performance.now() - dbCheckStart);
+          
           if (cacheResult.cached && cacheResult.url) {
             // Age-stale check (>7 days)
             if (cacheResult.stale) {
-              console.log(`XKT cache: Stale entry (>7d) for ${modelId}, fetching fresh from Asset+`);
+              console.log(`%c[XKT DIAG] ⏳ STALE (>7d) — ${modelId} — DB check: ${dbCheckMs}ms — fetching fresh`, 'color:#eab308;font-weight:bold');
             } else {
-              // Use date-based staleness only — no blocking HEAD request
-            console.log(`XKT cache: Database hit for ${modelId}, fetching from storage`);
+              // Fetch from storage
+              const storeFetchStart = performance.now();
               const cachedResponse = await original!(cacheResult.url, init);
+              const storeFetchMs = Math.round(performance.now() - storeFetchStart);
+              
               if (cachedResponse.ok) {
                 const data = await cachedResponse.clone().arrayBuffer();
                 // Validate binary data before serving — reject HTML/JSON error responses
@@ -3828,16 +3837,19 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
                 const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
                 if (data.byteLength >= MIN_XKT_BYTES && firstByte !== '<' && firstByte !== '{') {
                   storeModelInMemory(modelId, resolvedBuildingGuid, data);
+                  const totalMs = Math.round(performance.now() - diagStart);
+                  console.log(`%c[XKT DIAG] 💾 STORAGE HIT — ${modelId} — ${(data.byteLength / 1024 / 1024).toFixed(1)} MB — DB: ${dbCheckMs}ms + fetch: ${storeFetchMs}ms = ${totalMs}ms total`, 'color:#3b82f6;font-weight:bold');
                   return new Response(data, {
                     status: 200,
                     headers: { 'Content-Type': 'application/octet-stream' }
                   });
                 } else {
-                  console.warn(`XKT cache: Corrupt storage data for ${modelId} (${data.byteLength} bytes, starts with '${firstByte}') — falling through to fresh fetch`);
-                  // Fall through to fetch from Asset+ API
+                  console.warn(`%c[XKT DIAG] ❌ CORRUPT — ${modelId} — ${data.byteLength} bytes — falling through`, 'color:#ef4444;font-weight:bold');
                 }
               }
             }
+          } else {
+            console.log(`%c[XKT DIAG] 🔍 CACHE MISS — ${modelId} — DB check: ${dbCheckMs}ms — will fetch from Asset+ API`, 'color:#f97316;font-weight:bold');
           }
         } catch (e) {
           console.debug('XKT cache: Database check failed, fetching from source', e);
@@ -3845,7 +3857,13 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       }
       
       // Fetch from Asset+ API
+      const apiFetchStart = performance.now();
       const response = await original!(input, init);
+      const apiFetchMs = Math.round(performance.now() - apiFetchStart);
+      const totalMs = Math.round(performance.now() - diagStart);
+      if (modelId) {
+        console.log(`%c[XKT DIAG] 🌐 API FETCH — ${modelId} — status: ${response.status} — API: ${apiFetchMs}ms — total: ${totalMs}ms`, 'color:#a855f7;font-weight:bold');
+      }
       
       // Only process successful XKT responses
       if (response.ok && modelId) {
