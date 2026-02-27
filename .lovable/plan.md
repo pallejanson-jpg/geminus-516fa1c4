@@ -1,73 +1,27 @@
 
 
-# Evaluation: That Open / Fragments 2.0 for IFC Parsing
+# IFC-to-XKT Conversion Architecture
 
-## Current Situation
+## Implementation (Completed)
 
-The Web Worker approach for IFC-to-XKT conversion was abandoned because `@xeokit/xeokit-convert` imports Node.js modules (`node:util`, `fs`, `path`) that Vite cannot bundle into a worker. The current fallback runs IFC parsing on the main thread, which blocks the UI for large files (200+ MB).
+### Dual-path conversion strategy
 
-## What Fragments 2.0 Offers
+| File size | Path | Details |
+|-----------|------|---------|
+| ≤ 20 MB | **Client-side** (main thread) | `convertToXktWithMetadata()` via dynamic imports. Acceptable UI blocking for small files. |
+| > 20 MB | **Server-side** (edge function) | IFC uploaded to `ifc-uploads` bucket → `ifc-to-xkt` edge function converts → XKT stored in `xkt-models` bucket. UI stays responsive. |
 
-The That Open Company ecosystem consists of:
+### Components
 
-| Package | Purpose |
-|---------|---------|
-| `@thatopen/fragments` | Core binary format (Flatbuffers-based) + IFC importer |
-| `@thatopen/components` | Higher-level engine: scene, camera, IfcLoader, FragmentsManager |
+- **`supabase/functions/ifc-to-xkt/index.ts`** — Edge function using `npm:web-ifc` + `npm:@xeokit/xeokit-convert`. Downloads IFC from storage, converts, uploads XKT, saves metadata.
+- **`src/components/settings/CreateBuildingPanel.tsx`** — Routes files based on size threshold. Shows Cloud/Monitor icon to indicate conversion mode.
+- **`src/services/ifc-worker-bridge.ts`** — Main-thread fallback using dynamic imports (Web Worker approach abandoned due to Node.js module incompatibility with Vite bundling).
 
-Key technical details from the documentation:
+### Storage buckets
 
-1. **IFC parsing uses `web-ifc` under the hood** -- the same WASM library we already use. So the raw parsing speed would be identical.
+- `ifc-uploads` (private) — Raw IFC files for server-side conversion
+- `xkt-models` (private) — Converted XKT files
 
-2. **Built-in Web Worker support** -- The `FragmentsManager` initializes with a worker URL (`worker.mjs`) that handles the heavy conversion off the main thread. This is the exact capability we've been trying to build.
+### Fragments 2.0 evaluation
 
-3. **Output format is `.frag` (Flatbuffers), not `.xkt`** -- This is the critical difference. Fragments are designed for Three.js rendering, not xeokit.
-
-4. **Three.js based renderer** -- The entire Fragments 2.0 viewer stack is Three.js. Models are added to a `THREE.Scene`, not a xeokit `Viewer`.
-
-## Compatibility Assessment
-
-```text
-Current stack:          Proposed stack:
-┌──────────────┐        ┌──────────────┐
-│  IFC file    │        │  IFC file    │
-│      ↓       │        │      ↓       │
-│  web-ifc     │        │  web-ifc     │  ← same library
-│      ↓       │        │      ↓       │
-│ xeokit-conv  │        │ IfcImporter  │
-│      ↓       │        │      ↓       │
-│  .xkt file   │        │  .frag file  │  ← different format
-│      ↓       │        │      ↓       │
-│ XKTLoader    │        │ FragmentsMgr │
-│      ↓       │        │      ↓       │
-│ xeokit Viewer│        │ Three.js     │  ← different renderer
-└──────────────┘        └──────────────┘
-```
-
-## Verdict
-
-**Using Fragments 2.0 only for IFC parsing (keeping xeokit for viewing) is not possible.** The library converts IFC → `.frag`, not IFC → `.xkt`. There is no way to extract an XKT from the Fragments pipeline.
-
-**Using Fragments 2.0 as a full viewer replacement** would mean:
-- Replacing the entire `NativeXeokitViewer` with a Three.js-based Fragments viewer
-- Replacing `XKTLoaderPlugin` with `FragmentsManager`
-- Re-implementing all xeokit-specific features (NavCube, SAO, FastNav, section planes, X-ray mode, entity coloring, picking)
-- Replacing the `.xkt` storage format with `.frag` in the database and storage
-- This is a multi-week migration
-
-## Recommended Path Forward
-
-The most practical fix for the IFC conversion hang is **server-side conversion via a backend function**. This approach:
-- Moves the heavy `web-ifc` + `xeokit-convert` work to a server (Deno runtime in the edge function)
-- Keeps the existing `.xkt` format and xeokit viewer untouched
-- Eliminates the browser main-thread blocking entirely
-- The IFC `ArrayBuffer` gets uploaded to file storage, the function converts it, and stores the `.xkt` result
-
-### Implementation Steps
-
-1. **Create a backend function `ifc-to-xkt`** that receives an IFC file from storage, runs `web-ifc` + `xeokit-convert` server-side, and writes the resulting `.xkt` back to storage.
-
-2. **Update `CreateBuildingPanel`** to upload the raw IFC to storage first, then invoke the backend function, and poll for completion.
-
-3. **Keep `ifc-worker-bridge.ts`** as a local fallback for small files (<20 MB) where main-thread blocking is tolerable.
-
+Using Fragments 2.0 only for IFC parsing is **not possible** — it outputs `.frag` (Flatbuffers for Three.js), not `.xkt`. A full viewer migration to Three.js would be a multi-week effort. The server-side approach keeps the existing xeokit stack untouched.

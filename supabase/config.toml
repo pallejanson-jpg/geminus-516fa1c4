@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.send-issue-email]
 verify_jwt = false
+
+[functions.ifc-to-xkt]
+verify_jwt = false
