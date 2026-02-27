@@ -1,42 +1,34 @@
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
-import { useSenslincData, type SenslincMachineData } from '@/hooks/useSenslincData';
 
-export interface IleanData {
-  /** Senslinc entity info */
+export interface IleanMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface IleanContextEntity {
   entityName: string | null;
   entityType: 'building' | 'floor' | 'room' | null;
   pk: number | null;
-  /** External dashboard URL (for "Open in Senslinc" button) */
   dashboardUrl: string | null;
-  /** Sensor data from useSenslincData */
-  sensorData: SenslincMachineData | null;
-  /** Whether sensor data is live */
-  isLive: boolean;
 }
 
 /**
- * Hook that provides Ilean contextual data natively —
- * no iframe needed. Uses Senslinc APIs to fetch sensor data
- * for the current building/floor/room context.
+ * Hook that provides Ilean document Q&A chat functionality.
+ * Proxies questions to Senslinc's Ilean API via senslinc-query edge function.
  */
 export function useIleanData() {
   const { selectedFacility } = useContext(AppContext);
   const [contextFmGuid, setContextFmGuid] = useState<string | null>(null);
   const [contextLevel, setContextLevel] = useState<'building' | 'floor' | 'room'>('building');
-  const [entityInfo, setEntityInfo] = useState<{
-    entityName: string | null;
-    entityType: 'building' | 'floor' | 'room' | null;
-    pk: number | null;
-    dashboardUrl: string | null;
-  }>({ entityName: null, entityType: null, pk: null, dashboardUrl: null });
+  const [entityInfo, setEntityInfo] = useState<IleanContextEntity>({
+    entityName: null, entityType: null, pk: null, dashboardUrl: null,
+  });
+  const [messages, setMessages] = useState<IleanMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [isResolvingContext, setIsResolvingContext] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-
-  // For room-level, we fetch sensor data using the machine fmGuid
-  const [machineFmGuid, setMachineFmGuid] = useState<string | null>(null);
-  const { data: sensorData, isLoading: sensorLoading, isLive } = useSenslincData(machineFmGuid);
 
   // Track floor/room selection from viewer events
   useEffect(() => {
@@ -81,7 +73,6 @@ export function useIleanData() {
   useEffect(() => {
     if (!contextFmGuid) {
       setEntityInfo({ entityName: null, entityType: null, pk: null, dashboardUrl: null });
-      setMachineFmGuid(null);
       return;
     }
 
@@ -99,9 +90,6 @@ export function useIleanData() {
         if (controller.signal.aborted) return;
         if (error || !result?.success) {
           setEntityInfo({ entityName: null, entityType: null, pk: null, dashboardUrl: null });
-          // Still try to use fmGuid for sensor data at room level
-          if (contextLevel === 'room') setMachineFmGuid(contextFmGuid);
-          else setMachineFmGuid(null);
         } else {
           setEntityInfo({
             entityName: result.data.entityName || null,
@@ -109,9 +97,6 @@ export function useIleanData() {
             pk: result.data.pk || null,
             dashboardUrl: result.data.dashboardUrl || null,
           });
-          // If room-level, use fmGuid for sensor data
-          if (contextLevel === 'room') setMachineFmGuid(contextFmGuid);
-          else setMachineFmGuid(null);
         }
         setIsResolvingContext(false);
       })
@@ -125,18 +110,58 @@ export function useIleanData() {
     return () => { controller.abort(); };
   }, [contextFmGuid, contextLevel]);
 
+  // Send a message to Ilean
+  const sendMessage = useCallback(async (question: string) => {
+    if (!question.trim() || isLoading) return;
+
+    const userMsg: IleanMessage = { role: 'user', content: question.trim() };
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
+    setIsLoading(true);
+
+    try {
+      const { data: result, error } = await supabase.functions.invoke('senslinc-query', {
+        body: {
+          action: 'ilean-ask',
+          fmGuid: contextFmGuid,
+          contextLevel,
+          question: question.trim(),
+          conversationHistory: updatedMessages.slice(-10), // last 10 messages for context
+        },
+      });
+
+      if (error) throw new Error(error.message || 'Failed to reach Ilean');
+
+      const answer = result?.data?.answer || result?.error || 'No response from Ilean.';
+      const assistantMsg: IleanMessage = { role: 'assistant', content: answer };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (err: any) {
+      const errorMsg: IleanMessage = {
+        role: 'assistant',
+        content: `Sorry, I couldn't get an answer: ${err.message}`,
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [messages, isLoading, contextFmGuid, contextLevel]);
+
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
+
   const setRoomContext = (roomFmGuid: string) => {
     setContextFmGuid(roomFmGuid);
     setContextLevel('room');
   };
 
   return {
-    data: {
-      ...entityInfo,
-      sensorData: sensorData || null,
-      isLive,
-    } as IleanData,
-    isLoading: isResolvingContext || sensorLoading,
+    messages,
+    sendMessage,
+    clearMessages,
+    isLoading: isLoading || isResolvingContext,
+    isSending: isLoading,
+    contextEntity: entityInfo,
     contextLevel,
     contextFmGuid,
     setRoomContext,
