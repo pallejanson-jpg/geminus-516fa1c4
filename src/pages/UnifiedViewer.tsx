@@ -27,6 +27,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
 import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
+import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
@@ -65,6 +66,10 @@ const UnifiedViewerContent: React.FC<{
   const visualizationParam = searchParams.get('visualization') as import('@/lib/visualization-utils').VisualizationType | null;
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
+  
+  // Feature flag: ?viewer=native or localStorage viewer-engine=native
+  const useNativeViewer = searchParams.get('viewer') === 'native' || 
+    (() => { try { return localStorage.getItem('viewer-engine') === 'native'; } catch { return false; } })();
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -609,24 +614,31 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
 
-        {/* ── SINGLE AssetPlusViewer — always mounted, CSS-controlled ── */}
+        {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
         <div style={viewerContainerStyle}>
-          <AssetPlusViewer
-            fmGuid={buildingData.fmGuid}
-            initialFmGuidToFocus={entityFmGuid || undefined}
-            initialVisualization={visualizationParam || undefined}
-            insightsColorMode={insightsModeParam || undefined}
-            forceXray={xrayParam || undefined}
-            transparentBackground={isVTMode}
-            ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-            suppressOverlay={isVTMode}
-            onClose={is3DMode ? handleGoBack : undefined}
-            syncEnabled={isSplitMode ? syncLocked : false}
-            onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-            syncPosition={isSplitMode ? sync3DPosition : undefined}
-            syncHeading={isSplitMode ? sync3DHeading : undefined}
-            syncPitch={isSplitMode ? sync3DPitch : undefined}
-          />
+          {useNativeViewer ? (
+            <NativeXeokitViewer
+              buildingFmGuid={buildingData.fmGuid}
+              onClose={is3DMode ? handleGoBack : undefined}
+            />
+          ) : (
+            <AssetPlusViewer
+              fmGuid={buildingData.fmGuid}
+              initialFmGuidToFocus={entityFmGuid || undefined}
+              initialVisualization={visualizationParam || undefined}
+              insightsColorMode={insightsModeParam || undefined}
+              forceXray={xrayParam || undefined}
+              transparentBackground={isVTMode}
+              ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+              suppressOverlay={isVTMode}
+              onClose={is3DMode ? handleGoBack : undefined}
+              syncEnabled={isSplitMode ? syncLocked : false}
+              onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+              syncPosition={isSplitMode ? sync3DPosition : undefined}
+              syncHeading={isSplitMode ? sync3DHeading : undefined}
+              syncPitch={isSplitMode ? sync3DPitch : undefined}
+            />
+          )}
         </div>
 
         {/* ── Split: 360° panel on the right half ── */}
