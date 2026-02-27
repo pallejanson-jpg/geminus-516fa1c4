@@ -121,7 +121,7 @@ export async function convertToXktWithMetadata(
   if (format === 'ifc') {
     logger('Parsing IFC into XKTModel via web-ifc WASM...');
     const fileSizeMB = glbData.byteLength / 1024 / 1024;
-    const timeoutMs = Math.max(5 * 60_000, fileSizeMB * 1500); // min 5 min, ~1.5s per MB
+    const timeoutMs = Math.max(10 * 60_000, fileSizeMB * 3000); // min 10 min, ~3s per MB
     logger(`IFC file size: ${fileSizeMB.toFixed(1)} MB, timeout: ${(timeoutMs / 60_000).toFixed(1)} min`);
 
     let mod: any;

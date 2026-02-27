@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { convertToXktWithMetadata, type IfcHierarchyResult } from '@/services/acc-xkt-converter';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer
 } from 'lucide-react';
 
 interface CreatedBuilding {
@@ -53,6 +53,22 @@ const CreateBuildingPanel: React.FC = () => {
   const [conversionLogs, setConversionLogs] = useState<string[]>([]);
   const [conversionDone, setConversionDone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [conversionStartTime, setConversionStartTime] = useState<number | null>(null);
+  const [elapsedDisplay, setElapsedDisplay] = useState('');
+
+  // Elapsed timer tick
+  useEffect(() => {
+    if (!conversionStartTime || conversionDone) return;
+    const tick = () => {
+      const sec = Math.floor((Date.now() - conversionStartTime) / 1000);
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      setElapsedDisplay(m > 0 ? `${m}m ${s.toString().padStart(2, '0')}s` : `${s}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [conversionStartTime, conversionDone]);
 
   // Fetch existing buildings
   useEffect(() => {
@@ -134,6 +150,7 @@ const CreateBuildingPanel: React.FC = () => {
     setConversionProgress(0);
     setConversionLogs([]);
     setConversionDone(false);
+    setConversionStartTime(Date.now());
 
     try {
       addLog(`Läser fil: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
@@ -420,7 +437,20 @@ const CreateBuildingPanel: React.FC = () => {
 
             {(isConverting || conversionDone) && (
               <div className="space-y-2">
-                <Progress value={conversionProgress} className="h-2" />
+                <div className="flex items-center gap-2">
+                  <Progress value={conversionProgress} className="h-2 flex-1" />
+                  {isConverting && !conversionDone && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 tabular-nums">
+                      <Timer className="h-3 w-3 animate-pulse text-primary" />
+                      {elapsedDisplay}
+                    </span>
+                  )}
+                </div>
+                {isConverting && !conversionDone && (
+                  <p className="text-[10px] text-muted-foreground animate-pulse">
+                    Parsing IFC — this may take several minutes for large files…
+                  </p>
+                )}
                 <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
                   {conversionLogs.map((log, i) => (
                     <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">
@@ -431,7 +461,7 @@ const CreateBuildingPanel: React.FC = () => {
                 {conversionDone && (
                   <div className="flex items-center gap-1.5 text-xs text-green-600">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    Modellen är klar och visas automatiskt i 3D-viewern.
+                    Model ready — it will appear automatically in the 3D viewer.
                   </div>
                 )}
               </div>
