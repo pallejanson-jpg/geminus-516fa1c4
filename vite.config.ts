@@ -2,6 +2,7 @@ import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 /**
  * Rollup plugin to shim Node.js modules used by @xeokit/xeokit-convert's
@@ -48,6 +49,14 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     shimNodeModules(),
+    viteStaticCopy({
+      targets: [
+        { src: 'node_modules/@cesium/engine/Build/Workers', dest: 'cesiumStatic' },
+        { src: 'node_modules/@cesium/engine/Build/ThirdParty', dest: 'cesiumStatic' },
+        { src: 'node_modules/@cesium/engine/Source/Assets', dest: 'cesiumStatic' },
+        { src: 'node_modules/@cesium/engine/Source/Widget', dest: 'cesiumStatic' },
+      ],
+    }),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -59,5 +68,6 @@ export default defineConfig(({ mode }) => ({
   // Polyfill Node.js globals referenced by web-ifc / xeokit-convert
   define: {
     global: 'globalThis',
+    CESIUM_BASE_URL: JSON.stringify('/cesiumStatic'),
   },
 }));
