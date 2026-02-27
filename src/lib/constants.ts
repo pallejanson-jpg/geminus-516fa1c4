@@ -81,6 +81,7 @@ export interface SidebarItem {
 }
 
 export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
+    { id: 'native_viewer', hasDividerAfter: false },
     { id: 'inventory', hasDividerAfter: false },
     { id: 'ai_scan', hasDividerAfter: false },
     { id: 'fault_report', hasDividerAfter: false },
