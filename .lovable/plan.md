@@ -1,55 +1,73 @@
 
 
-# Plan: Fix Four Viewer Issues
+# Evaluation: That Open / Fragments 2.0 for IFC Parsing
 
-## Issue 1: Windows colored by default in Filter Panel
-The `ViewerFilterPanel` auto-assigns colors to levels via `LEVEL_PALETTE` in a `useEffect` at line 210-216. These colors are stored in `levelColors` state. The `applyFilterVisibility` function applies these colors when `autoColorEnabled` is true (line 607). Since `autoColorEnabled` starts as `false`, the coloring should not apply. However, the Window issue is likely from the **Asset+ viewer itself** (IfcWindow default material), not the filter panel. This will be resolved by switching to the native xeokit viewer (Issue 2), where windows render with natural IFC materials.
+## Current Situation
 
-If the user means the **CATEGORY_PALETTE** colors appearing: `Window: '#4FC3F7'` — these only apply when `autoColorEnabled` is true AND categories are checked. No code change needed unless colors appear without enabling auto-color. Will verify after fixing Issue 2.
+The Web Worker approach for IFC-to-XKT conversion was abandoned because `@xeokit/xeokit-convert` imports Node.js modules (`node:util`, `fs`, `path`) that Vite cannot bundle into a worker. The current fallback runs IFC parsing on the main thread, which blocks the UI for large files (200+ MB).
 
-## Issue 2: Asset+ viewer still starts from "3D View" instead of native xeokit
+## What Fragments 2.0 Offers
 
-**Root cause**: The AppHeader "3D View" button (line 122) maps to `key: 'assetplus_viewer'`, which on line 96 navigates to `/split-viewer?mode=3d` (UnifiedViewer using AssetPlusViewer). The sidebar "3D Viewer" entry uses `native_viewer` correctly.
+The That Open Company ecosystem consists of:
 
-**Fix**: Change the AppHeader "3D View" button to use `native_viewer` instead of `assetplus_viewer`, and have it call `setActiveApp('native_viewer')` instead of navigating to `/split-viewer`.
+| Package | Purpose |
+|---------|---------|
+| `@thatopen/fragments` | Core binary format (Flatbuffers-based) + IFC importer |
+| `@thatopen/components` | Higher-level engine: scene, camera, IfcLoader, FragmentsManager |
 
-**File**: `src/components/layout/AppHeader.tsx`
-- Change line 122: `key: 'assetplus_viewer'` → `key: 'native_viewer'`
-- Update `handleMenuClick` to handle `native_viewer` by calling `setActiveApp('native_viewer')` instead of navigating to a route.
+Key technical details from the documentation:
 
-## Issue 3: Asset+ right panel still showing
+1. **IFC parsing uses `web-ifc` under the hood** -- the same WASM library we already use. So the raw parsing speed would be identical.
 
-This is because `AssetPlusViewer` renders `ViewerRightPanel` as part of its component tree. When the native viewer (`NativeViewerPage` → `NativeXeokitViewer`) is used instead, the right panel should not appear. The native viewer currently has no equivalent settings panel.
+2. **Built-in Web Worker support** -- The `FragmentsManager` initializes with a worker URL (`worker.mjs`) that handles the heavy conversion off the main thread. This is the exact capability we've been trying to build.
 
-No code change needed if Issue 2 is fixed correctly — switching to `native_viewer` will render `NativeXeokitViewer` which doesn't include `ViewerRightPanel`.
+3. **Output format is `.frag` (Flatbuffers), not `.xkt`** -- This is the critical difference. Fragments are designed for Three.js rendering, not xeokit.
 
-## Issue 4: IFC conversion hangs (browser warns "wait or leave")
+4. **Three.js based renderer** -- The entire Fragments 2.0 viewer stack is Three.js. Models are added to a `THREE.Scene`, not a xeokit `Viewer`.
 
-**Root cause**: The IFC conversion in `CreateBuildingPanel.tsx` calls `convertToXktWithMetadata()` which runs `parseIFCIntoXKTModel` synchronously on the main thread via web-ifc WASM (line 150-157 in `acc-xkt-converter.ts`). For large IFC files, this blocks the main thread for minutes, triggering the browser's "page unresponsive" warning.
+## Compatibility Assessment
 
-**Fix**: Move the IFC parsing to a Web Worker to avoid blocking the main thread. This requires:
-1. Create a new worker file `src/workers/ifc-converter.worker.ts` that imports web-ifc and xeokit-convert and runs the conversion off the main thread.
-2. Update `convertToXktWithMetadata` in `acc-xkt-converter.ts` to delegate to the worker.
-3. Use `postMessage` for progress callbacks.
-
-**Alternative simpler fix**: Use `setTimeout` chunking or convert the blocking WASM call to use the multi-threaded web-ifc build (`web-ifc-mt.wasm` already exists in `public/lib/xeokit/`). However, the most reliable fix is a Web Worker.
-
-## Implementation Steps
-
-1. **Fix AppHeader 3D View routing** — Change `assetplus_viewer` to `native_viewer` in the header nav buttons and update `handleMenuClick` to use `setActiveApp` instead of route navigation.
-
-2. **Move IFC conversion to Web Worker** — Create worker file, update `convertToXktWithMetadata` to use it, keeping the same API surface with progress callbacks via `postMessage`.
-
-## Technical Details
-
-### AppHeader change (step 1)
-```typescript
-// Line 96-98: Remove the assetplus_viewer redirect
-// Line 122: Change key to 'native_viewer'
-{ key: 'native_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
+```text
+Current stack:          Proposed stack:
+┌──────────────┐        ┌──────────────┐
+│  IFC file    │        │  IFC file    │
+│      ↓       │        │      ↓       │
+│  web-ifc     │        │  web-ifc     │  ← same library
+│      ↓       │        │      ↓       │
+│ xeokit-conv  │        │ IfcImporter  │
+│      ↓       │        │      ↓       │
+│  .xkt file   │        │  .frag file  │  ← different format
+│      ↓       │        │      ↓       │
+│ XKTLoader    │        │ FragmentsMgr │
+│      ↓       │        │      ↓       │
+│ xeokit Viewer│        │ Three.js     │  ← different renderer
+└──────────────┘        └──────────────┘
 ```
-The existing `handleMenuClick` default path already calls `setActiveApp(app)`, so changing the key is sufficient.
 
-### Web Worker for IFC (step 2)
-Worker receives `ArrayBuffer`, imports `@xeokit/xeokit-convert` and `web-ifc`, runs `parseIFCIntoXKTModel`, posts back progress messages and final result. The main thread `convertToXktWithMetadata` wraps this in a Promise.
+## Verdict
+
+**Using Fragments 2.0 only for IFC parsing (keeping xeokit for viewing) is not possible.** The library converts IFC → `.frag`, not IFC → `.xkt`. There is no way to extract an XKT from the Fragments pipeline.
+
+**Using Fragments 2.0 as a full viewer replacement** would mean:
+- Replacing the entire `NativeXeokitViewer` with a Three.js-based Fragments viewer
+- Replacing `XKTLoaderPlugin` with `FragmentsManager`
+- Re-implementing all xeokit-specific features (NavCube, SAO, FastNav, section planes, X-ray mode, entity coloring, picking)
+- Replacing the `.xkt` storage format with `.frag` in the database and storage
+- This is a multi-week migration
+
+## Recommended Path Forward
+
+The most practical fix for the IFC conversion hang is **server-side conversion via a backend function**. This approach:
+- Moves the heavy `web-ifc` + `xeokit-convert` work to a server (Deno runtime in the edge function)
+- Keeps the existing `.xkt` format and xeokit viewer untouched
+- Eliminates the browser main-thread blocking entirely
+- The IFC `ArrayBuffer` gets uploaded to file storage, the function converts it, and stores the `.xkt` result
+
+### Implementation Steps
+
+1. **Create a backend function `ifc-to-xkt`** that receives an IFC file from storage, runs `web-ifc` + `xeokit-convert` server-side, and writes the resulting `.xkt` back to storage.
+
+2. **Update `CreateBuildingPanel`** to upload the raw IFC to storage first, then invoke the backend function, and poll for completion.
+
+3. **Keep `ifc-worker-bridge.ts`** as a local fallback for small files (<20 MB) where main-thread blocking is tolerable.
 
