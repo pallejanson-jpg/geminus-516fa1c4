@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
     Box, Database, RefreshCw, CheckCircle2, AlertCircle, 
     Loader2, Server, Clock, Eye, EyeOff, Zap, Settings2, Save, Edit2,
-    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid
+    LayoutGrid, ExternalLink, Building2, Archive, Radar, BarChart2, Circle, Layers, Wrench, Mic, Palette, View, User, Sparkles, FileText, FolderOpen, ChevronRight, ChevronDown as ChevronDownIcon, File, Database as DatabaseIcon, Cuboid, Bot
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -29,6 +29,8 @@ import RoomLabelSettings from './RoomLabelSettings';
 import ProfileSettings from './ProfileSettings';
 import IvionConnectionModal from './IvionConnectionModal';
 import GunnarSettings from './GunnarSettings';
+import IleanSettings from './IleanSettings';
+import { getFastNavEnabled, setFastNavEnabled } from './VoiceSettings';
 import { SyncProgressCard } from './SyncProgressCard';
 import ConversionProgressOverlay from './ConversionProgressOverlay';
 import CreateBuildingPanel from './CreateBuildingPanel';
@@ -1961,13 +1963,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     };
 
     const formatDate = (dateStr: string | null, fallbackDateStr?: string | null) => {
-        // Use fallback (e.g., last_sync_started_at) if primary is null
         const dateToUse = dateStr || fallbackDateStr;
-        if (!dateToUse) return 'Aldrig';
+        if (!dateToUse) return 'Never';
         
         const date = new Date(dateToUse);
-        // Swedish locale with date and time
-        return date.toLocaleDateString('sv-SE', {
+        return date.toLocaleDateString('en-US', {
             year: 'numeric',
             month: '2-digit', 
             day: '2-digit',
@@ -2018,23 +2018,19 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         </TabsTrigger>
                         <TabsTrigger value="symbols" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Symboler
+                            Symbols
                         </TabsTrigger>
                         <TabsTrigger value="viewer" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <View className="h-3 w-3 sm:h-4 sm:w-4" />
                             Viewer
                         </TabsTrigger>
-                        <TabsTrigger value="voice" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
-                            <Mic className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Röst
-                        </TabsTrigger>
-                        <TabsTrigger value="gunnar" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
-                            <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Gunnar
+                        <TabsTrigger value="assistants" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                            <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
+                            AI Assistants
                         </TabsTrigger>
                         <TabsTrigger value="building" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Building2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                            Byggnad
+                            Building
                         </TabsTrigger>
                     </TabsList>
 
@@ -2084,7 +2080,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <AccordionContent className="px-4 pb-4 pt-2">
                                                 <div className="space-y-3">
                                                     <div className="flex items-center justify-end gap-2 pb-2 border-b">
-                                                        <span className="text-xs text-muted-foreground">Öppna i ny flik</span>
+                                                        <span className="text-xs text-muted-foreground">Open in new tab</span>
                                                         <Switch
                                                             checked={cfg.openMode === 'external'}
                                                             onCheckedChange={(checked) => {
@@ -2164,7 +2160,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         ) : (
                             <div className="space-y-4">
                                 <p className="text-sm text-muted-foreground">
-                                    API-secrets konfigureras via Lovable Cloud. Klicka på sektionerna nedan för att se detaljer.
+                                    API secrets are configured via Lovable Cloud. Click on sections below for details.
                                 </p>
                                 
                                 <Accordion type="multiple" className="space-y-2">
@@ -2174,7 +2170,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Box className="h-5 w-5 text-primary" />
                                                 <span className="font-medium">Asset+</span>
-                                                <Badge variant="outline" className="ml-auto mr-2 text-xs">Konfigurerad</Badge>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs">Configured</Badge>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
@@ -2187,18 +2183,18 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         className="gap-1 h-7 text-xs"
                                                     >
                                                         {showSecrets ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                                        {showSecrets ? 'Dölj' : 'Visa'}
+                                                        {showSecrets ? 'Hide' : 'Show'}
                                                     </Button>
                                                     {!isEditMode ? (
                                                         <Button variant="outline" size="sm" onClick={() => setIsEditMode(true)} className="gap-1 h-7 text-xs">
-                                                            <Edit2 className="h-3 w-3" /> Redigera
+                                                            <Edit2 className="h-3 w-3" /> Edit
                                                         </Button>
                                                     ) : (
                                                         <>
                                                             <Button onClick={handleSaveConfig} disabled={isSaving} size="sm" className="gap-1 h-7 text-xs">
-                                                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Spara
+                                                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
                                                             </Button>
-                                                            <Button onClick={handleCancelEdit} variant="ghost" size="sm" disabled={isSaving} className="h-7 text-xs">Avbryt</Button>
+                                                            <Button onClick={handleCancelEdit} variant="ghost" size="sm" disabled={isSaving} className="h-7 text-xs">Cancel</Button>
                                                         </>
                                                     )}
                                                 </div>
@@ -2219,7 +2215,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <Label className="text-sm">Client Secret</Label>
-                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret} onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.clientSecret === '••••••••' ? '' : config.clientSecret} onChange={(e) => setConfig(prev => ({ ...prev, clientSecret: e.target.value }))} placeholder={isEditMode ? "New value..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2229,24 +2225,24 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <Label className="text-sm">Password</Label>
-                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.password === '••••••••' ? '' : config.password} onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.password === '••••••••' ? '' : config.password} onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))} placeholder={isEditMode ? "New value..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                                     </div>
                                                 </div>
                                                 <div className="flex items-end gap-3">
                                                     <div className="flex-1 space-y-1.5">
                                                         <Label className="text-sm">API Key</Label>
-                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey} onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isEditMode ? "Nytt värde..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
+                                                        <Input type={showSecrets ? "text" : "password"} value={isEditMode && config.apiKey === '••••••••' ? '' : config.apiKey} onChange={(e) => setConfig(prev => ({ ...prev, apiKey: e.target.value }))} placeholder={isEditMode ? "New value..." : "••••••••"} disabled={!isEditMode} className={`h-10 ${!isEditMode ? "bg-muted" : ""}`} />
                                                     </div>
                                                     <Button onClick={handleTestConnection} disabled={isTestingConnection || isEditMode} variant="outline" className="gap-2 h-10">
                                                         {isTestingConnection ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                                                        {isTestingConnection ? 'Testar...' : 'Testa'}
+                                                        {isTestingConnection ? 'Testing...' : 'Test'}
                                                     </Button>
                                                 </div>
                                                 {connectionStatus !== 'idle' && (
                                                     <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
                                                         <div className="flex items-start gap-2">
                                                             {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
-                                                            <div><p className="font-medium">{connectionStatus === 'success' ? 'Anslutning lyckades' : 'Anslutning misslyckades'}</p><p className="text-xs">{connectionMessage}</p></div>
+                                                            <div><p className="font-medium">{connectionStatus === 'success' ? 'Connection successful' : 'Connection failed'}</p><p className="text-xs">{connectionMessage}</p></div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -2260,15 +2256,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Building2 className="h-5 w-5 text-primary" />
                                                 <span className="font-medium">FM Access</span>
-                                                {fmAccessStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Ansluten</Badge>}
+                                                {fmAccessStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Connected</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
-                                            <p className="text-xs text-muted-foreground mb-3">Secrets konfigureras i Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
+                                            <p className="text-xs text-muted-foreground mb-3">Secrets are configured in Lovable Cloud (FM_ACCESS_API_URL, FM_ACCESS_USERNAME, FM_ACCESS_PASSWORD).</p>
                                             <div className="flex gap-2">
                                                 <Button variant="outline" size="sm" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess}>
                                                     {isTestingFmAccess ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-                                                    Testa anslutning
+                                                    Test Connection
                                                 </Button>
                                             </div>
                                         </AccordionContent>
@@ -2359,12 +2355,12 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         <AccordionContent className="px-4 pb-4 pt-2">
                                             <div className="space-y-4">
                                                 <p className="text-xs text-muted-foreground">
-                                                    IoT-sensorer och mätvärden från Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) konfigureras i Lovable Cloud.
+                                                    IoT sensors and measurements from Senslinc (InUse). Secrets (SENSLINC_API_URL, SENSLINC_EMAIL, SENSLINC_PASSWORD) are configured in Lovable Cloud.
                                                 </p>
                                                 
                                                 {/* Polling interval setting */}
                                                 <div className="space-y-2">
-                                                    <Label className="text-sm font-medium">Pollningsintervall</Label>
+                                                    <Label className="text-sm font-medium">Polling Interval</Label>
                                                     <select 
                                                         className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                                                         value={appConfigs.iot?.pollIntervalHours ?? 24}
@@ -2383,7 +2379,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         ))}
                                                     </select>
                                                     <p className="text-xs text-muted-foreground">
-                                                        Hur ofta sensordata ska hämtas automatiskt. Standard är var 24:e timme.
+                                                        How often sensor data should be fetched automatically. Default is every 24 hours.
                                                     </p>
                                                 </div>
 
@@ -2870,190 +2866,181 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     </TabsContent>
 
                     <TabsContent value="sync" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <div className="space-y-6">
-                            {/* Asset+ Sync Header */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Box className="h-5 w-5 text-primary" />
-                                    <h4 className="font-medium">Asset+ Synkronisering</h4>
-                                </div>
-                                <Button
-                                    onClick={checkSyncStatus}
-                                    disabled={isCheckingSync}
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-1 h-8 text-xs"
-                                >
-                                    {isCheckingSync ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                        <RefreshCw className="h-3 w-3" />
-                                    )}
-                                    Kontrollera status
-                                </Button>
-                            </div>
-
-                            {/* 1. Structure Sync Card */}
-                            <SyncProgressCard
-                                icon={<Building2 className="h-5 w-5 text-primary" />}
-                                title="Byggnad/Plan/Rum"
-                                subtitle="Byggnader, våningsplan och rum"
-                                localCount={syncCheck?.structure?.localCount || 0}
-                                remoteCount={syncCheck?.structure?.remoteCount}
-                                inSync={syncCheck?.structure ? syncCheck.structure.inSync : null}
-                                isSyncing={isSyncingStructure}
-                                isCheckingSync={isCheckingSync}
-                                disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
-                                onSync={handleSyncStructure}
-                                syncStartedAt={syncCheck?.structure?.syncState?.last_sync_started_at}
-                                syncCompletedAt={syncCheck?.structure?.syncState?.last_sync_completed_at}
-                                syncStatus={syncCheck?.structure?.syncState?.sync_status}
-                                errorMessage={syncCheck?.structure?.syncState?.error_message}
-                                totalSynced={syncCheck?.structure?.syncState?.total_assets}
-                            />
-
-                            {/* 2. Assets Sync Card */}
-                            <SyncProgressCard
-                                icon={<Layers className="h-5 w-5 text-primary" />}
-                                title="Alla Tillgångar"
-                                subtitle="Installationer och inventarier (per byggnad)"
-                                localCount={syncCheck?.assets?.localCount || 0}
-                                remoteCount={syncCheck?.assets?.remoteCount}
-                                inSync={syncCheck?.assets ? syncCheck.assets.inSync : null}
-                                isSyncing={isSyncingAssets}
-                                isCheckingSync={isCheckingSync}
-                                disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
-                                onSync={handleSyncAssetsChunked}
-                                syncStartedAt={syncCheck?.assets?.syncState?.last_sync_started_at}
-                                syncCompletedAt={syncCheck?.assets?.syncState?.last_sync_completed_at}
-                                syncStatus={syncCheck?.assets?.syncState?.sync_status}
-                                errorMessage={syncCheck?.assets?.syncState?.error_message}
-                                progressCurrent={syncProgress?.currentBuildingIndex}
-                                progressTotal={syncProgress?.totalBuildings}
-                                progressLabel={
-                                    syncProgress?.currentBuildingIndex != null && syncProgress?.totalBuildings
-                                        ? `Byggnad ${(syncProgress.currentBuildingIndex + 1)} av ${syncProgress.totalBuildings} • ${(syncProgress.totalSynced || 0).toLocaleString()} objekt`
-                                        : undefined
-                                }
-                                totalSynced={syncProgress?.totalSynced}
-                                extraActions={
-                                    <Button
-                                        onClick={handleResetAssetsProgress}
-                                        size="sm"
-                                        variant="ghost"
-                                        className="gap-1 h-8 text-xs text-muted-foreground"
-                                        title="Återställ progress"
-                                    >
-                                        <RefreshCw className="h-3 w-3" />
-                                    </Button>
-                                }
-                            />
-
-                            {/* 3. XKT Sync Card */}
-                            <SyncProgressCard
-                                icon={<Box className="h-5 w-5 text-primary" />}
-                                title="XKT-filer"
-                                subtitle="3D-modellfiler för snabbare laddning"
-                                localCount={syncCheck?.xkt?.localCount || 0}
-                                remoteLabel={syncCheck?.xkt?.buildingCount ? `${syncCheck.xkt.buildingCount} byggnader` : undefined}
-                                inSync={syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? true : false}
-                                isSyncing={isSyncingXkt}
-                                isCheckingSync={isCheckingSync}
-                                disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
-                                onSync={handleSyncXkt}
-                                syncButtonVariant="secondary"
-                                syncStartedAt={syncCheck?.xkt?.syncState?.last_sync_started_at}
-                                syncCompletedAt={syncCheck?.xkt?.syncState?.last_sync_completed_at}
-                                syncStatus={syncCheck?.xkt?.syncState?.sync_status}
-                                errorMessage={syncCheck?.xkt?.syncState?.error_message}
-                            />
-
-                            {/* Total Summary */}
-                            {syncCheck && (
-                                <div className="rounded-lg border bg-muted/30 p-3">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted-foreground">Totalt i lokal databas:</span>
-                                        <span className="font-medium">{syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objekt</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-sm mt-1">
-                                        <span className="text-muted-foreground">Totalt i Asset+:</span>
-                                        <span className="font-medium">{syncCheck.total?.remoteCount?.toLocaleString() || '?'} objekt</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* FM Access Sync Section */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                <div className="flex items-center justify-between">
+                        <Accordion type="multiple" className="space-y-2">
+                            {/* Asset+ Sync */}
+                            <AccordionItem value="assetplus-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <Building2 className="h-5 w-5 text-primary" />
-                                        <div>
-                                            <h4 className="font-medium">FM Access</h4>
-                                            <p className="text-xs text-muted-foreground">Synka inventerade objekt (ej i modell) med FM Access</p>
+                                        <Box className="h-4 w-4 text-primary" />
+                                        <span>Asset+ Sync</span>
+                                        {syncCheck && (
+                                            <Badge variant="outline" className="ml-auto mr-2 text-xs">
+                                                {syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objects
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-6">
+                                        <div className="flex items-center justify-end">
+                                            <Button
+                                                onClick={checkSyncStatus}
+                                                disabled={isCheckingSync}
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-1 h-8 text-xs"
+                                            >
+                                                {isCheckingSync ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Check Status
+                                            </Button>
+                                        </div>
+
+                                        <SyncProgressCard
+                                            icon={<Building2 className="h-5 w-5 text-primary" />}
+                                            title="Buildings/Floors/Rooms"
+                                            subtitle="Buildings, floors and rooms"
+                                            localCount={syncCheck?.structure?.localCount || 0}
+                                            remoteCount={syncCheck?.structure?.remoteCount}
+                                            inSync={syncCheck?.structure ? syncCheck.structure.inSync : null}
+                                            isSyncing={isSyncingStructure}
+                                            isCheckingSync={isCheckingSync}
+                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
+                                            onSync={handleSyncStructure}
+                                            syncStartedAt={syncCheck?.structure?.syncState?.last_sync_started_at}
+                                            syncCompletedAt={syncCheck?.structure?.syncState?.last_sync_completed_at}
+                                            syncStatus={syncCheck?.structure?.syncState?.sync_status}
+                                            errorMessage={syncCheck?.structure?.syncState?.error_message}
+                                            totalSynced={syncCheck?.structure?.syncState?.total_assets}
+                                        />
+
+                                        <SyncProgressCard
+                                            icon={<Layers className="h-5 w-5 text-primary" />}
+                                            title="All Assets"
+                                            subtitle="Installations and inventories (per building)"
+                                            localCount={syncCheck?.assets?.localCount || 0}
+                                            remoteCount={syncCheck?.assets?.remoteCount}
+                                            inSync={syncCheck?.assets ? syncCheck.assets.inSync : null}
+                                            isSyncing={isSyncingAssets}
+                                            isCheckingSync={isCheckingSync}
+                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
+                                            onSync={handleSyncAssetsChunked}
+                                            syncStartedAt={syncCheck?.assets?.syncState?.last_sync_started_at}
+                                            syncCompletedAt={syncCheck?.assets?.syncState?.last_sync_completed_at}
+                                            syncStatus={syncCheck?.assets?.syncState?.sync_status}
+                                            errorMessage={syncCheck?.assets?.syncState?.error_message}
+                                            progressCurrent={syncProgress?.currentBuildingIndex}
+                                            progressTotal={syncProgress?.totalBuildings}
+                                            progressLabel={
+                                                syncProgress?.currentBuildingIndex != null && syncProgress?.totalBuildings
+                                                    ? `Building ${(syncProgress.currentBuildingIndex + 1)} of ${syncProgress.totalBuildings} • ${(syncProgress.totalSynced || 0).toLocaleString()} objects`
+                                                    : undefined
+                                            }
+                                            totalSynced={syncProgress?.totalSynced}
+                                            extraActions={
+                                                <Button
+                                                    onClick={handleResetAssetsProgress}
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="gap-1 h-8 text-xs text-muted-foreground"
+                                                    title="Reset progress"
+                                                >
+                                                    <RefreshCw className="h-3 w-3" />
+                                                </Button>
+                                            }
+                                        />
+
+                                        <SyncProgressCard
+                                            icon={<Box className="h-5 w-5 text-primary" />}
+                                            title="XKT Files"
+                                            subtitle="3D model files for faster loading"
+                                            localCount={syncCheck?.xkt?.localCount || 0}
+                                            remoteLabel={syncCheck?.xkt?.buildingCount ? `${syncCheck.xkt.buildingCount} buildings` : undefined}
+                                            inSync={syncCheck?.xkt?.localCount && syncCheck.xkt.localCount > 0 ? true : false}
+                                            isSyncing={isSyncingXkt}
+                                            isCheckingSync={isCheckingSync}
+                                            disabled={isSyncingStructure || isSyncingAssets || isSyncingXkt}
+                                            onSync={handleSyncXkt}
+                                            syncButtonVariant="secondary"
+                                            syncStartedAt={syncCheck?.xkt?.syncState?.last_sync_started_at}
+                                            syncCompletedAt={syncCheck?.xkt?.syncState?.last_sync_completed_at}
+                                            syncStatus={syncCheck?.xkt?.syncState?.sync_status}
+                                            errorMessage={syncCheck?.xkt?.syncState?.error_message}
+                                        />
+
+                                        {syncCheck && (
+                                            <div className="rounded-lg border bg-muted/30 p-3">
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-muted-foreground">Total in local database:</span>
+                                                    <span className="font-medium">{syncCheck.total?.localCount?.toLocaleString() || assetCount.toLocaleString()} objects</span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-sm mt-1">
+                                                    <span className="text-muted-foreground">Total in Asset+:</span>
+                                                    <span className="font-medium">{syncCheck.total?.remoteCount?.toLocaleString() || '?'} objects</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+
+                            {/* FM Access Sync */}
+                            <AccordionItem value="fmaccess-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Building2 className="h-4 w-4 text-primary" />
+                                        <span>FM Access</span>
+                                        {fmAccessStatus === 'success' && <Badge variant="outline" className="ml-auto mr-2 text-xs">Connected</Badge>}
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-4">
+                                        <p className="text-xs text-muted-foreground">Sync inventoried objects (not in model) with FM Access</p>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Inventoried objects with FM link:</span>
+                                                <span className="font-medium">{fmAccessLocalCount}</span>
+                                            </div>
+                                            {fmAccessSyncResult && (
+                                                <>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-muted-foreground">Last sync:</span>
+                                                        <span className="font-medium text-xs">{fmAccessSyncResult.lastSync ? new Date(fmAccessSyncResult.lastSync).toLocaleString('en-US') : '–'}</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-muted-foreground">Result:</span>
+                                                        <span className="font-medium text-xs">
+                                                            <span className="text-green-600">{fmAccessSyncResult.success} succeeded</span>
+                                                            {fmAccessSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{fmAccessSyncResult.failed} failed</span>}
+                                                        </span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" size="sm" className="gap-1 h-8 text-xs" onClick={handleTestFmAccessConnection} disabled={isTestingFmAccess || isSyncingFmAccess}>
+                                                {isTestingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Test Connection
+                                            </Button>
+                                            <Button size="sm" className="gap-1 h-8 text-xs" onClick={handleSyncToFmAccess} disabled={isSyncingFmAccess || isTestingFmAccess}>
+                                                {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
+                                                {isSyncingFmAccess ? 'Syncing...' : 'Sync with FM Access ↔'}
+                                            </Button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        {fmAccessStatus === 'success' && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">Ansluten</Badge>}
-                                        {fmAccessStatus === 'error' && <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">Ej ansluten</Badge>}
-                                    </div>
-                                </div>
+                                </AccordionContent>
+                            </AccordionItem>
 
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Inventerade objekt med FM-koppling:</span>
-                                        <span className="font-medium">{fmAccessLocalCount}</span>
-                                    </div>
-                                    {fmAccessSyncResult && (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground">Senaste synk:</span>
-                                                <span className="font-medium text-xs">{fmAccessSyncResult.lastSync ? new Date(fmAccessSyncResult.lastSync).toLocaleString('sv-SE') : '–'}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground">Resultat:</span>
-                                                <span className="font-medium text-xs">
-                                                    <span className="text-green-600">{fmAccessSyncResult.success} lyckades</span>
-                                                    {fmAccessSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{fmAccessSyncResult.failed} misslyckades</span>}
-                                                </span>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="gap-1 h-8 text-xs"
-                                        onClick={handleTestFmAccessConnection}
-                                        disabled={isTestingFmAccess || isSyncingFmAccess}
-                                    >
-                                        {isTestingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                        Testa anslutning
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        className="gap-1 h-8 text-xs"
-                                        onClick={handleSyncToFmAccess}
-                                        disabled={isSyncingFmAccess || isTestingFmAccess}
-                                    >
-                                        {isSyncingFmAccess ? <Loader2 className="h-3 w-3 animate-spin" /> : <Building2 className="h-3 w-3" />}
-                                        {isSyncingFmAccess ? 'Synkar...' : 'Synka med FM Access ↔'}
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Senslinc Sync Section */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                <div className="flex items-center justify-between">
+                            {/* Senslinc Sync */}
+                            <AccordionItem value="senslinc-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <Radar className="h-5 w-5 text-primary" />
-                                        <div>
-                                            <h4 className="font-medium">Senslinc</h4>
-                                            <p className="text-xs text-muted-foreground">IoT-sensorer via Senslinc (InUse)</p>
-                                        </div>
+                                        <Radar className="h-4 w-4 text-primary" />
+                                        <span>Senslinc</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-4">
+                                        <p className="text-xs text-muted-foreground">IoT sensors via Senslinc (InUse). Press "Test Connection" to check if the API is available.</p>
                                         <Button 
                                             size="sm"
                                             variant="outline"
@@ -3065,132 +3052,100 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     });
                                                     if (error) throw error;
                                                     if (data?.success) {
-                                                        toast({
-                                                            title: 'Anslutning OK',
-                                                            description: `Hittade ${data.indices?.length || 0} index i Senslinc.`,
-                                                        });
+                                                        toast({ title: 'Connection OK', description: `Found ${data.indices?.length || 0} indices in Senslinc.` });
                                                     } else {
-                                                        toast({
-                                                            variant: 'destructive',
-                                                            title: 'Anslutningsfel',
-                                                            description: data?.error || 'Kunde inte nå Senslinc API (möjlig rate limit)',
-                                                        });
+                                                        toast({ variant: 'destructive', title: 'Connection Error', description: data?.error || 'Could not reach Senslinc API (possible rate limit)' });
                                                     }
                                                 } catch (err: any) {
-                                                    toast({
-                                                        variant: 'destructive',
-                                                        title: 'Fel',
-                                                        description: err.message,
-                                                    });
+                                                    toast({ variant: 'destructive', title: 'Error', description: err.message });
                                                 }
                                             }}
                                         >
                                             <RefreshCw className="h-3 w-3" />
-                                            Testa anslutning
+                                            Test Connection
                                         </Button>
                                     </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Tryck "Testa anslutning" för att kontrollera om Senslinc API:t är tillgängligt. Om du får rate limit-fel (429), vänta en stund och försök igen.
-                                </p>
-                            </div>
+                                </AccordionContent>
+                            </AccordionItem>
 
-                            {/* Ivion Sync Section */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                <div className="flex items-center justify-between">
+                            {/* Ivion Sync */}
+                            <AccordionItem value="ivion-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <Zap className="h-5 w-5 text-primary" />
-                                        <div>
-                                            <h4 className="font-medium">Ivion</h4>
-                                            <p className="text-xs text-muted-foreground">0 platser synkade</p>
-                                        </div>
+                                        <Zap className="h-4 w-4 text-primary" />
+                                        <span>Ivion</span>
+                                        <Badge variant="outline" className="ml-auto mr-2 text-xs">Coming soon</Badge>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="text-xs">Kommer snart</Badge>
-                                        <Button 
-                                            disabled
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            <RefreshCw className="h-3 w-3" />
-                                            Starta synk
-                                        </Button>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                        <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                        <p className="text-sm">Configure Ivion API first</p>
                                     </div>
-                                </div>
-                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
-                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                    <p className="text-sm">Konfigurera Ivion API först</p>
-                                </div>
-                            </div>
+                                </AccordionContent>
+                            </AccordionItem>
 
-                            {/* Congeria Document Sync Section */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                <div className="flex items-center justify-between">
+                            {/* Congeria Documents */}
+                            <AccordionItem value="congeria-sync" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <FileText className="h-5 w-5 text-blue-500" />
-                                        <div>
-                                            <h4 className="font-medium">Congeria Dokument</h4>
-                                            <p className="text-xs text-muted-foreground">{documentCount} dokument synkade</p>
-                                        </div>
+                                        <FileText className="h-4 w-4 text-blue-500" />
+                                        <span>Congeria Documents</span>
+                                        <Badge variant="outline" className="ml-auto mr-2 text-xs">{documentCount} docs</Badge>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button 
-                                            onClick={handleSyncAllCongeria}
-                                            disabled={isSyncingCongeria || Object.keys(congeriaLinks).length === 0}
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1 h-8 text-xs"
-                                        >
-                                            {isSyncingCongeria ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="h-3 w-3" />
-                                            )}
-                                            Synka alla
-                                        </Button>
-                                    </div>
-                                </div>
-                                
-                                {/* Building URL mapping */}
-                                <div className="space-y-2">
-                                    <p className="text-xs text-muted-foreground">
-                                        Ange Congeria mapp-URL för varje byggnad
-                                    </p>
-                                    {allBuildings.length === 0 ? (
-                                        <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
-                                            <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                                            <p className="text-sm">Synka byggnader från Asset+ först</p>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-end">
+                                            <Button 
+                                                onClick={handleSyncAllCongeria}
+                                                disabled={isSyncingCongeria || Object.keys(congeriaLinks).length === 0}
+                                                size="sm"
+                                                variant="outline"
+                                                className="gap-1 h-8 text-xs"
+                                            >
+                                                {isSyncingCongeria ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Sync All
+                                            </Button>
                                         </div>
-                                    ) : (
-                                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                                            {allBuildings.map((building) => (
-                                                <div key={building.fm_guid} className="flex items-center gap-2">
-                                                    <span className="text-sm min-w-[120px] truncate">
-                                                        {building.common_name || building.name}
-                                                    </span>
-                                                    <Input 
-                                                        placeholder="https://fms.congeria.com/..."
-                                                        value={congeriaLinks[building.fm_guid] || ''}
-                                                        onChange={(e) => handleCongeriaUrlChange(building.fm_guid, e.target.value)}
-                                                        className="flex-1 h-8 text-xs"
-                                                    />
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="ghost"
-                                                        className="h-8 px-2"
-                                                        onClick={() => handleSaveCongeriaUrl(building.fm_guid)}
-                                                        disabled={!congeriaLinks[building.fm_guid]}
-                                                    >
-                                                        <Save className="h-3 w-3" />
-                                                    </Button>
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-muted-foreground">Enter Congeria folder URL for each building</p>
+                                            {allBuildings.length === 0 ? (
+                                                <div className="text-center py-4 text-muted-foreground border rounded-lg bg-muted/30">
+                                                    <Database className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                                                    <p className="text-sm">Sync buildings from Asset+ first</p>
                                                 </div>
-                                            ))}
+                                            ) : (
+                                                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                                    {allBuildings.map((building) => (
+                                                        <div key={building.fm_guid} className="flex items-center gap-2">
+                                                            <span className="text-sm min-w-[120px] truncate">
+                                                                {building.common_name || building.name}
+                                                            </span>
+                                                            <Input 
+                                                                placeholder="https://fms.congeria.com/..."
+                                                                value={congeriaLinks[building.fm_guid] || ''}
+                                                                onChange={(e) => handleCongeriaUrlChange(building.fm_guid, e.target.value)}
+                                                                className="flex-1 h-8 text-xs"
+                                                            />
+                                                            <Button 
+                                                                size="sm" 
+                                                                variant="ghost"
+                                                                className="h-8 px-2"
+                                                                onClick={() => handleSaveCongeriaUrl(building.fm_guid)}
+                                                                disabled={!congeriaLinks[building.fm_guid]}
+                                                            >
+                                                                <Save className="h-3 w-3" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </TabsContent>
 
                     {/* Symbols Settings Tab */}
@@ -3198,14 +3153,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                         <SymbolSettings />
                     </TabsContent>
 
-                    {/* Viewer Settings Tab (Themes + Room Labels) */}
+                    {/* Viewer Settings Tab (Themes + Room Labels + Performance) */}
                     <TabsContent value="viewer" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <Accordion type="multiple" defaultValue={['themes', 'labels']} className="space-y-2">
+                        <Accordion type="multiple" className="space-y-2">
                             <AccordionItem value="themes" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Palette className="h-4 w-4" />
-                                        <span>Viewer-teman</span>
+                                        <span>Viewer Themes</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
@@ -3216,24 +3171,81 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
                                         <Layers className="h-4 w-4" />
-                                        <span>Rumsetiketter</span>
+                                        <span>Room Labels</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <RoomLabelSettings />
                                 </AccordionContent>
                             </AccordionItem>
+                            <AccordionItem value="performance" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Eye className="h-4 w-4" />
+                                        <span>Performance</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between py-2">
+                                            <div>
+                                                <span className="text-sm font-medium">Smooth Navigation (FastNav)</span>
+                                                <p className="text-xs text-muted-foreground">Lowers resolution during camera movement for better performance. May cause blurry visuals while moving. Requires viewer reload.</p>
+                                            </div>
+                                            <Switch
+                                                checked={getFastNavEnabled()}
+                                                onCheckedChange={(checked) => {
+                                                    setFastNavEnabled(checked);
+                                                    toast({
+                                                        title: checked ? 'FastNav enabled' : 'FastNav disabled',
+                                                        description: 'Reload the viewer to apply changes.',
+                                                    });
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                     </TabsContent>
 
-                    {/* Voice Settings Tab */}
-                    <TabsContent value="voice" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <VoiceSettings />
-                    </TabsContent>
-
-                    {/* Gunnar AI Settings Tab */}
-                    <TabsContent value="gunnar" className="space-y-4 mt-4 flex-1 overflow-y-auto">
-                        <GunnarSettings />
+                    {/* AI Assistants Tab */}
+                    <TabsContent value="assistants" className="space-y-4 mt-4 flex-1 overflow-y-auto">
+                        <Accordion type="multiple" className="space-y-2">
+                            <AccordionItem value="gunnar" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="h-4 w-4" />
+                                        <span>Gunnar AI</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <GunnarSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="ilean" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <FileText className="h-4 w-4" />
+                                        <span>Ilean AI</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <IleanSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="voice" className="border rounded-lg px-4">
+                                <AccordionTrigger className="py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Mic className="h-4 w-4" />
+                                        <span>Voice Control</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <VoiceSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </TabsContent>
 
                     {/* Create Building Tab */}
