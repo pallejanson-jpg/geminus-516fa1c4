@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Mic, Volume2, MessageSquare, Vibrate, Gauge } from 'lucide-react';
+import { Mic, Volume2, MessageSquare, Vibrate, Gauge, Eye, RotateCcw } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { toast } from 'sonner';
 
 // Storage key for voice settings
 const VOICE_SETTINGS_KEY = 'voice-control-settings';
@@ -54,8 +56,21 @@ export function saveVoiceSettings(settings: VoiceSettingsData): void {
   }
 }
 
+// FastNav setting helpers
+const FASTNAV_KEY = 'viewer-fastnav-enabled';
+export function getFastNavEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem(FASTNAV_KEY);
+    return stored !== null ? JSON.parse(stored) : true;
+  } catch { return true; }
+}
+export function setFastNavEnabled(enabled: boolean) {
+  localStorage.setItem(FASTNAV_KEY, JSON.stringify(enabled));
+}
+
 const VoiceSettings: React.FC = () => {
   const [settings, setSettings] = useState<VoiceSettingsData>(getVoiceSettings);
+  const [fastNavEnabled, setFastNavEnabledState] = useState(getFastNavEnabled);
 
   // Update a single setting and save
   const updateSetting = <K extends keyof VoiceSettingsData>(
@@ -65,6 +80,17 @@ const VoiceSettings: React.FC = () => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     saveVoiceSettings(newSettings);
+  };
+
+  const handleResetVoicePosition = () => {
+    localStorage.removeItem('voice-control-position');
+    toast.success('Röststyrningsknappens position återställd');
+  };
+
+  const handleFastNavToggle = (checked: boolean) => {
+    setFastNavEnabledState(checked);
+    setFastNavEnabled(checked);
+    toast.info(checked ? 'Sänkt upplösning vid kamerarörelse aktiverad — ladda om viewern' : 'Full upplösning vid kamerarörelse — ladda om viewern');
   };
 
   return (
@@ -253,6 +279,57 @@ const VoiceSettings: React.FC = () => {
                 disabled={!settings.enabled}
               />
             </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Viewer Performance Section */}
+        <AccordionItem value="viewer-perf" className="border rounded-lg">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-medium text-sm">3D Viewer-prestanda</h4>
+                <p className="text-xs text-muted-foreground">
+                  Sänkt upplösning vid kamerarörelse
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <span className="text-sm">Smooth navigation (FastNav)</span>
+                <p className="text-xs text-muted-foreground">Sänker upplösningen vid panorering/rotation för bättre prestanda. Kan ge suddig bild under rörelse.</p>
+              </div>
+              <Switch
+                checked={fastNavEnabled}
+                onCheckedChange={handleFastNavToggle}
+              />
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Position Reset */}
+        <AccordionItem value="position" className="border rounded-lg">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-medium text-sm">Återställ positioner</h4>
+                <p className="text-xs text-muted-foreground">
+                  Återställ knapp-positioner till standard
+                </p>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4 pt-2">
+            <Button variant="outline" size="sm" onClick={handleResetVoicePosition}>
+              Återställ röststyrningsknappens position
+            </Button>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
