@@ -45,7 +45,6 @@ export function saveIleanSettings(settings: Partial<IleanSettingsData>): void {
 const IleanSettings: React.FC = () => {
   const [settings, setSettings] = useState<IleanSettingsData>(getIleanSettings);
 
-  // Reload on external changes
   useEffect(() => {
     const handler = (e: CustomEvent<IleanSettingsData>) => {
       setSettings(e.detail);
@@ -72,19 +71,18 @@ const IleanSettings: React.FC = () => {
         </div>
         <div>
           <h3 className="font-semibold">Ilean AI</h3>
-          <p className="text-sm text-muted-foreground">Dokumentassistent från Senslinc</p>
+          <p className="text-sm text-muted-foreground">Document assistant from Senslinc</p>
         </div>
       </div>
 
       <div className="space-y-4">
-        {/* Visibility toggle */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="ilean-visible" className="text-sm font-medium">
-              Visa Ilean-knappen
+              Show Ilean button
             </Label>
             <p className="text-xs text-muted-foreground">
-              Visar den flytande dokumentassistenten i applikationen
+              Shows the floating document assistant in the application
             </p>
           </div>
           <Switch
@@ -94,16 +92,13 @@ const IleanSettings: React.FC = () => {
           />
         </div>
 
-        {/* Reset position */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">
-              Knappposition
-            </Label>
+            <Label className="text-sm font-medium">Button Position</Label>
             <p className="text-xs text-muted-foreground">
               {settings.buttonPosition 
-                ? `Anpassad position (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
-                : 'Standardposition (nedre vänster)'
+                ? `Custom position (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
+                : 'Default position (bottom left)'
               }
             </p>
           </div>
@@ -115,14 +110,14 @@ const IleanSettings: React.FC = () => {
             className="gap-1.5"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Återställ
+            Reset
           </Button>
         </div>
       </div>
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground mb-1">Tips</p>
-        <p>Du kan dra Ilean-knappen till valfri position på skärmen. Positionen sparas automatiskt.</p>
+        <p className="font-medium text-foreground mb-1">Tip</p>
+        <p>You can drag the Ilean button to any position on the screen. The position is saved automatically.</p>
       </div>
     </div>
   );

@@ -46,7 +46,6 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
 const GunnarSettings: React.FC = () => {
   const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
 
-  // Reload on external changes
   useEffect(() => {
     const handler = (e: CustomEvent<GunnarSettingsData>) => {
       setSettings(e.detail);
@@ -73,12 +72,11 @@ const GunnarSettings: React.FC = () => {
         </div>
         <div>
           <h3 className="font-semibold">Gunnar AI</h3>
-          <p className="text-sm text-muted-foreground">AI-assistent för fastighetsfrågor</p>
+          <p className="text-sm text-muted-foreground">AI assistant for facility questions</p>
         </div>
       </div>
 
       <Accordion type="multiple" className="space-y-2">
-        {/* Visibility Section */}
         <AccordionItem value="visibility" className="border rounded-lg">
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
             <div className="flex items-center gap-3 flex-1">
@@ -86,9 +84,9 @@ const GunnarSettings: React.FC = () => {
                 <Eye className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Synlighet</h4>
+                <h4 className="font-medium text-sm">Visibility</h4>
                 <p className="text-xs text-muted-foreground">
-                  {settings.visible ? 'Gunnar-knappen visas' : 'Gunnar-knappen är dold'}
+                  {settings.visible ? 'Gunnar button is visible' : 'Gunnar button is hidden'}
                 </p>
               </div>
             </div>
@@ -97,10 +95,10 @@ const GunnarSettings: React.FC = () => {
             <div className="flex items-center justify-between py-2">
               <div className="space-y-0.5">
                 <Label htmlFor="gunnar-visible" className="text-sm font-medium">
-                  Visa Gunnar-knappen
+                  Show Gunnar button
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Visar den flytande AI-assistentknappen i applikationen
+                  Shows the floating AI assistant button in the application
                 </p>
               </div>
               <Switch
@@ -112,7 +110,6 @@ const GunnarSettings: React.FC = () => {
           </AccordionContent>
         </AccordionItem>
 
-        {/* Position Section */}
         <AccordionItem value="position" className="border rounded-lg">
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
             <div className="flex items-center gap-3 flex-1">
@@ -120,11 +117,11 @@ const GunnarSettings: React.FC = () => {
                 <MapPin className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Knappposition</h4>
+                <h4 className="font-medium text-sm">Button Position</h4>
                 <p className="text-xs text-muted-foreground">
                   {settings.buttonPosition 
-                    ? `Anpassad (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
-                    : 'Standardposition (nedre höger)'
+                    ? `Custom (${Math.round(settings.buttonPosition.x)}, ${Math.round(settings.buttonPosition.y)})`
+                    : 'Default position (bottom right)'
                   }
                 </p>
               </div>
@@ -133,12 +130,8 @@ const GunnarSettings: React.FC = () => {
           <AccordionContent className="px-4 pb-4 pt-2">
             <div className="flex items-center justify-between py-2">
               <div className="space-y-0.5">
-                <Label className="text-sm font-medium">
-                  Återställ position
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Återställ knappen till standardposition
-                </p>
+                <Label className="text-sm font-medium">Reset Position</Label>
+                <p className="text-xs text-muted-foreground">Reset button to default position</p>
               </div>
               <Button
                 variant="outline"
@@ -148,7 +141,7 @@ const GunnarSettings: React.FC = () => {
                 className="gap-1.5"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Återställ
+                Reset
               </Button>
             </div>
           </AccordionContent>
@@ -156,8 +149,8 @@ const GunnarSettings: React.FC = () => {
       </Accordion>
 
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground mb-1">Tips</p>
-        <p>Du kan dra Gunnar-knappen till valfri position på skärmen. Positionen sparas automatiskt.</p>
+        <p className="font-medium text-foreground mb-1">Tip</p>
+        <p>You can drag the Gunnar button to any position on the screen. The position is saved automatically.</p>
       </div>
     </div>
   );
