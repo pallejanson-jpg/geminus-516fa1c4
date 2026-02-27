@@ -4613,35 +4613,44 @@ const AssetPlusViewer: React.FC<AssetPlusViewerProps> = ({
       
       // Cleanup viewer on unmount - guard against null/incomplete viewer
       // The 'e.nextSibling' error occurs when Asset+ tries to manipulate DOM
-      // elements that were removed before cleanup completed
-      try {
-        const viewer = viewerInstanceRef.current;
-        if (viewer) {
-          // Use setTimeout(0) instead of rAF so cleanup runs after the current call stack
-          // but does NOT interleave with the new init's rAF-based settlement loops.
-          setTimeout(() => {
-            try {
-              const assetView = viewer?.$refs?.AssetViewer?.$refs?.assetView;
-              const scene = assetView?.viewer?.scene;
-              if (scene && typeof viewer.clearData === 'function') {
-                viewer.clearData();
-              }
-            } catch (e) {
-              console.debug('Viewer cleanup (expected during teardown):', e);
-            }
-          }, 0);
+      // elements that were removed before cleanup completed.
+      // IMPORTANT: Capture ref and nullify BEFORE deferred cleanup to prevent
+      // the UMD bundle's internal React from triggering renders on unmounted DOM
+      // (which causes React #31 "Objects are not valid as a React child").
+      const viewer = viewerInstanceRef.current;
+      const issueChannel = viewer?._issueAnnotationsChannel;
+      viewerInstanceRef.current = null;
+      
+      if (viewer) {
+        // Synchronously detach the Vue app from the DOM container before React removes it.
+        // This prevents the UMD bundle's internal framework from reacting to DOM mutations.
+        try {
+          const container = document.getElementById('AssetPlusViewer');
+          if (container) {
+            container.innerHTML = '';
+          }
+        } catch (e) {
+          console.debug('Viewer DOM cleanup:', e);
         }
-      } catch (e) {
-        console.debug('Viewer cleanup (expected during teardown):', e);
+        
+        // Deferred data cleanup — safe because we already detached from DOM
+        setTimeout(() => {
+          try {
+            if (typeof viewer.clearData === 'function') {
+              viewer.clearData();
+            }
+          } catch (e) {
+            console.debug('Viewer cleanup (expected during teardown):', e);
+          }
+        }, 0);
       }
       
       // Cleanup issue annotations realtime channel
-      const issueChannel = viewerInstanceRef.current?._issueAnnotationsChannel;
       if (issueChannel) {
         supabase.removeChannel(issueChannel);
       }
       
-      viewerInstanceRef.current = null;
+      // viewerInstanceRef already nullified above
       deferCallsRef.current = true;
     };
   }, [initializeViewer, restoreFetch]);
