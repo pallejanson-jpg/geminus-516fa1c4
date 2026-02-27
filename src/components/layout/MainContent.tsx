@@ -12,6 +12,7 @@ import InsightsView from "@/components/insights/InsightsView";
 import BuildingInsightsView from "@/components/insights/BuildingInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
 import SenslincDashboardView from "@/components/viewer/SenslincDashboardView";
+import NativeViewerPage from "@/pages/NativeViewerPage";
 
 // Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
@@ -24,7 +25,7 @@ const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView")
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 
 // Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas, maps)
-const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
+const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
 // Apps that have internal scrollbars and need h-full but NOT overflow:hidden
 const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'entity_insights', 'ivion_create'];
 // All other apps are scroll-pages (home, insights, inventory, fault_report, ai_scan, asset_registration)
@@ -58,6 +59,8 @@ const MainContent: React.FC = () => {
             case 'viewer':
                 // Backwards-compatible key used by Navigator
                 return <Viewer />;
+            case 'native_viewer':
+                return <NativeViewerPage />;
             case 'asset_registration':
                 return (
                     <Suspense fallback={
