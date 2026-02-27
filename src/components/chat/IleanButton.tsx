@@ -1,80 +1,36 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, Building2, Layers, DoorOpen, Thermometer, Wind, Droplets, Users, Wifi, WifiOff } from 'lucide-react';
+import { FileQuestion, GripHorizontal, X, Minimize2, Maximize2, Move, Loader2, ExternalLink, Building2, Layers, DoorOpen, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { getIleanSettings, saveIleanSettings } from '@/components/settings/IleanSettings';
 import { useIleanData } from '@/hooks/useIleanData';
-import { VISUALIZATION_CONFIGS, getVisualizationColor, rgbToHex } from '@/lib/visualization-utils';
-import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-} from 'recharts';
+import ReactMarkdown from 'react-markdown';
 
 const BUTTON_SIZE = 56;
 
-// ── Gauge card (reused from SenslincDashboardView pattern) ──
-interface GaugeProps {
-  label: string;
-  value: number | null;
-  unit: string;
-  icon: React.ElementType;
-  type: 'temperature' | 'co2' | 'humidity' | 'occupancy';
-}
-
-const MiniGauge: React.FC<GaugeProps> = ({ label, value, unit, icon: Icon, type }) => {
-  const config = VISUALIZATION_CONFIGS[type];
-  const rgb = value !== null ? getVisualizationColor(value, type) : null;
-  const hexColor = rgb ? rgbToHex(rgb) : undefined;
-  const pct = value !== null
-    ? Math.max(0, Math.min(100, ((value - config.min) / (config.max - config.min)) * 100))
-    : 0;
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-2.5 flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <Icon className="h-3 w-3" />
-        <span className="text-[10px]">{label}</span>
-      </div>
-      <div className="text-lg font-bold tabular-nums leading-none" style={{ color: hexColor ?? 'hsl(var(--foreground))' }}>
-        {value !== null ? (
-          <>{type === 'occupancy' ? Math.round(value) : value.toFixed(1)}<span className="text-[10px] font-normal text-muted-foreground ml-0.5">{unit}</span></>
-        ) : <span className="text-muted-foreground text-sm">—</span>}
-      </div>
-      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: hexColor ?? 'hsl(var(--primary))' }} />
-      </div>
-    </div>
-  );
-};
-
-// ── Mini trend chart ──
-const MiniChart: React.FC<{ timeSeries: any[]; isLive: boolean }> = ({ timeSeries, isLive }) => (
-  <div className="h-28">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={timeSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-        <XAxis dataKey="date" tickFormatter={d => d?.slice(5) ?? ''} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-        <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-        <RechartsTooltip
-          contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 11 }}
-          labelStyle={{ color: 'hsl(var(--foreground))' }}
-        />
-        <Line type="monotone" dataKey="temperature" stroke="#22c55e" strokeWidth={isLive ? 2 : 1.5} strokeDasharray={isLive ? '0' : '4 2'} dot={false} connectNulls />
-        <Line type="monotone" dataKey="co2" stroke="#60a5fa" strokeWidth={isLive ? 2 : 1.5} strokeDasharray={isLive ? '0' : '4 2'} dot={false} connectNulls />
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-);
+const STARTER_QUESTIONS = [
+  'What documents are available?',
+  'Summarize the latest maintenance reports',
+  'Are there any open issues in the documents?',
+  'What equipment is documented for this building?',
+];
 
 /**
- * Floating Ilean AI assistant — native Geminus UI (no iframe).
- * Shows contextual sensor data from Senslinc, same pattern as SenslincDashboardView.
+ * Floating Ilean AI assistant — Document Q&A chat via Senslinc API.
+ * Native Geminus UI, no iframe. Similar pattern to GunnarChat.
  */
 export default function IleanButton() {
-  const { data: ileanData, isLoading, contextLevel } = useIleanData();
+  const {
+    messages, sendMessage, clearMessages, isLoading, isSending,
+    contextEntity, contextLevel,
+  } = useIleanData();
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [input, setInput] = useState('');
 
   // Trigger button position (draggable)
   const [triggerPosition, setTriggerPosition] = useState<{ x: number; y: number } | null>(null);
@@ -88,10 +44,12 @@ export default function IleanButton() {
   const [isDragging, setIsDragging] = useState(false);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-  const panelWidth = isMobile ? window.innerWidth : 380;
-  const panelHeight = isMobile ? window.innerHeight : (typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 520);
+  const panelWidth = isMobile ? window.innerWidth : 400;
+  const panelHeight = isMobile ? window.innerHeight : (typeof window !== 'undefined' && window.innerHeight < 700 ? window.innerHeight - 100 : 560);
 
   // Load saved position
   useEffect(() => {
@@ -116,6 +74,20 @@ export default function IleanButton() {
       }
     }
   }, [isOpen, position.x, panelHeight, isMobile]);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // Focus input when opened
+  useEffect(() => {
+    if (isOpen && !isMinimized && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen, isMinimized]);
 
   // Panel drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -196,16 +168,22 @@ export default function IleanButton() {
   };
 
   const handleOpenExternal = () => {
-    if (ileanData.dashboardUrl) window.open(ileanData.dashboardUrl, '_blank');
+    if (contextEntity.dashboardUrl) window.open(contextEntity.dashboardUrl, '_blank');
+  };
+
+  const handleSend = () => {
+    if (!input.trim() || isSending) return;
+    sendMessage(input.trim());
+    setInput('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   const triggerStyle = triggerPosition
     ? { left: triggerPosition.x, top: triggerPosition.y, bottom: 'auto', right: 'auto' }
     : {};
-
-  const sensor = ileanData.sensorData;
-  const current = sensor?.current;
-  const timeSeries = sensor?.timeSeries || [];
 
   return (
     <TooltipProvider>
@@ -259,7 +237,7 @@ export default function IleanButton() {
         </div>
       )}
 
-      {/* Native panel (no iframe) */}
+      {/* Chat panel */}
       {isOpen && !isMinimized && (
         <div
           ref={panelRef}
@@ -287,19 +265,20 @@ export default function IleanButton() {
               {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
               <div className="flex items-center gap-1.5">
                 <FileQuestion className="h-4 w-4 text-cyan-500" />
-                <span className="font-medium text-sm">Ilean AI</span>
-                {ileanData.entityName && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1 ml-1">
-                    {ileanData.entityType === 'building' && <Building2 className="h-3 w-3" />}
-                    {ileanData.entityType === 'floor' && <Layers className="h-3 w-3" />}
-                    {ileanData.entityType === 'room' && <DoorOpen className="h-3 w-3" />}
-                    <span className="max-w-24 truncate">{ileanData.entityName}</span>
-                  </span>
-                )}
+                <span className="font-medium text-sm">Ilean</span>
+                <span className="text-[10px] text-muted-foreground">Document Q&A</span>
               </div>
+              {contextEntity.entityName && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1 ml-1">
+                  {contextEntity.entityType === 'building' && <Building2 className="h-3 w-3" />}
+                  {contextEntity.entityType === 'floor' && <Layers className="h-3 w-3" />}
+                  {contextEntity.entityType === 'room' && <DoorOpen className="h-3 w-3" />}
+                  <span className="max-w-24 truncate">{contextEntity.entityName}</span>
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
-              {ileanData.dashboardUrl && (
+              {contextEntity.dashboardUrl && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={handleOpenExternal}>
@@ -307,6 +286,16 @@ export default function IleanButton() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">Open in Senslinc</TooltipContent>
+                </Tooltip>
+              )}
+              {messages.length > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted/50" onClick={clearMessages}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">Clear conversation</TooltipContent>
                 </Tooltip>
               )}
               {!isMobile && (
@@ -325,72 +314,84 @@ export default function IleanButton() {
             </div>
           </div>
 
-          {/* Content — native sensor data */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-cyan-500 mb-2" />
-                <span className="text-sm text-muted-foreground">Loading Ilean data...</span>
-              </div>
-            ) : sensor ? (
-              <>
-                {/* Status */}
-                <div className="flex items-center gap-2">
-                  {ileanData.isLive ? (
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-green-500/50 text-green-400 bg-green-500/10">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />LIVE
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-muted-foreground/40 text-muted-foreground">
-                      DEMO
-                    </Badge>
-                  )}
-                  {sensor.machineName && (
-                    <span className="text-xs text-muted-foreground truncate">{sensor.machineName}</span>
-                  )}
-                </div>
-
-                {/* Gauge cards */}
-                <div className="grid grid-cols-2 gap-2">
-                  <MiniGauge label="Temperature" value={current?.temperature ?? null} unit="°C" icon={Thermometer} type="temperature" />
-                  <MiniGauge label="CO₂" value={current?.co2 ?? null} unit="ppm" icon={Wind} type="co2" />
-                  <MiniGauge label="Humidity" value={current?.humidity ?? null} unit="%" icon={Droplets} type="humidity" />
-                  <MiniGauge label="Occupancy" value={current?.occupancy ?? null} unit="%" icon={Users} type="occupancy" />
-                </div>
-
-                {/* Trend chart */}
-                {timeSeries.length > 0 && (
-                  <div className="rounded-lg border border-border bg-card p-2.5">
-                    <h3 className="text-[10px] font-medium text-muted-foreground mb-2">Last 7 days</h3>
-                    <MiniChart timeSeries={timeSeries} isLive={ileanData.isLive} />
+          {/* Messages area */}
+          <ScrollArea className="flex-1 p-3" ref={scrollRef}>
+            <div className="space-y-3">
+              {messages.length === 0 && !isLoading && (
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                  <FileQuestion className="h-12 w-12 text-muted-foreground/40 mb-3" />
+                  <h3 className="font-semibold text-sm mb-1">Ask Ilean about documents</h3>
+                  <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                    Ilean answers questions about documents stored in Senslinc for{' '}
+                    {contextEntity.entityName || 'this building'}.
+                  </p>
+                  <div className="flex flex-col gap-2 w-full max-w-xs">
+                    {STARTER_QUESTIONS.map((q, i) => (
+                      <Button
+                        key={i}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs justify-start h-auto py-2 px-3 text-left whitespace-normal"
+                        onClick={() => sendMessage(q)}
+                      >
+                        {q}
+                      </Button>
+                    ))}
                   </div>
-                )}
-
-                {/* Connection status */}
-                <div className={cn(
-                  "flex items-center gap-2 text-xs text-muted-foreground rounded-md border px-3 py-2",
-                  ileanData.isLive ? "border-green-500/30 bg-green-500/5" : "border-border bg-muted/30"
-                )}>
-                  {ileanData.isLive ? <Wifi className="h-3.5 w-3.5 text-green-400" /> : <WifiOff className="h-3.5 w-3.5" />}
-                  <span>{ileanData.isLive ? `Live data from Senslinc · Machine: ${sensor.machinePk}` : 'No live connection to Senslinc.'}</span>
                 </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <FileQuestion className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                <h3 className="font-semibold mb-2">No sensor data available</h3>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  {contextLevel === 'building'
-                    ? 'Select a room in the 3D viewer to see sensor data from Ilean.'
-                    : 'No Senslinc equipment found for this entity. Verify the FM GUID mapping in Senslinc.'}
-                </p>
-                {ileanData.dashboardUrl && (
-                  <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={handleOpenExternal}>
-                    <ExternalLink className="h-4 w-4" /> Open in Senslinc
-                  </Button>
-                )}
-              </div>
-            )}
+              )}
+
+              {messages.map((msg, i) => (
+                <div key={i} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
+                  <div className={cn(
+                    "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                    msg.role === 'user'
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  )}>
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {isSending && messages[messages.length - 1]?.role === 'user' && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Searching documents...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Input area */}
+          <div className="border-t border-border/50 p-3">
+            <div className="flex items-center gap-2">
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about documents..."
+                disabled={isSending}
+                className="flex-1 h-9 text-sm"
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim() || isSending}
+                size="icon"
+                className="h-9 w-9 shrink-0 bg-gradient-to-br from-cyan-500 to-teal-600 hover:from-cyan-500/90 hover:to-teal-600/90"
+              >
+                <Send className="h-4 w-4 text-white" />
+              </Button>
+            </div>
           </div>
         </div>
       )}
