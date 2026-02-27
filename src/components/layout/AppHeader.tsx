@@ -92,11 +92,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }, [setSelectedFacility, setActiveApp, setViewer3dFmGuid]);
 
     const handleMenuClick = (app: string, mode?: string) => {
-        // 3D Viewer now uses UnifiedViewer route for all devices
-        if (app === 'assetplus_viewer') {
-            navigate('/split-viewer?mode=3d');
-            return;
-        }
         setSelectedFacility(null);
         setActiveApp(app);
         if (mode) {
@@ -119,7 +114,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
         { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
         { key: 'navigation', mode: undefined, icon: Network, label: 'Navigator' },
-        { key: 'assetplus_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
+        { key: 'native_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
     ];
 
     return (
