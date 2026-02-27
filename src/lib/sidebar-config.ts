@@ -4,7 +4,7 @@
 import React from 'react';
 import {
   Box, ClipboardList, AlertTriangle, BarChart2, Building2,
-  Zap, Archive, Radar, Scan, Globe,
+  Zap, Archive, Radar, Scan, Globe, Cuboid,
 } from 'lucide-react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 
@@ -26,4 +26,5 @@ export const SIDEBAR_ITEM_META: Record<string, SidebarItemMeta> = {
   radar:            { icon: Radar,         color: 'text-primary',     label: DEFAULT_APP_CONFIGS.radar.label,       type: 'config' },
   ai_scan:          { icon: Scan,          color: 'text-accent',      label: 'AI Scan',                            type: 'internal' },
   globe:            { icon: Globe,         color: 'text-primary',     label: 'Globe',                              type: 'internal' },
+  native_viewer:    { icon: Cuboid,        color: 'text-primary',     label: '3D Viewer',                          type: 'internal' },
 };
