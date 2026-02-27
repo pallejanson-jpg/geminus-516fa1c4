@@ -12,7 +12,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -23,6 +22,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
     if (!resendApiKey) {
@@ -32,19 +32,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate caller using getUser()
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Validate caller using getClaims
+    const token = authHeader.replace("Bearer ", "");
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user) {
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const callerUserId = userData.user.id;
+    const callerUserId = claimsData.claims.sub as string;
 
     // Parse body
     const { issue_id, user_ids } = await req.json();
@@ -55,7 +55,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Service role client for reading auth.users emails
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch issue
@@ -72,13 +71,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch target user emails from auth.users
     const sentResults: { user_id: string; email: string; status: string }[] = [];
     const appUrl = req.headers.get("origin") || "https://gemini-spark-glow.lovable.app";
 
     for (const userId of user_ids) {
       try {
-        // Get email from auth.users via admin API
         const { data: authUser, error: authErr } = await adminClient.auth.admin.getUserById(userId);
         if (authErr || !authUser?.user?.email) {
           sentResults.push({ user_id: userId, email: "", status: "no_email" });
@@ -86,7 +83,7 @@ Deno.serve(async (req) => {
         }
         const email = authUser.user.email;
 
-        // Upsert assignment with token
+        // Upsert assignment
         const { data: assignment, error: assignErr } = await adminClient
           .from("bcf_issue_assignments")
           .upsert(
@@ -102,7 +99,7 @@ Deno.serve(async (req) => {
           .single();
 
         if (assignErr) {
-          // If upsert fails due to no unique constraint, do insert
+          // Fallback: insert
           const { data: inserted, error: insErr } = await adminClient
             .from("bcf_issue_assignments")
             .insert({
@@ -113,18 +110,18 @@ Deno.serve(async (req) => {
             })
             .select("token")
             .single();
-          
+
           if (insErr) {
             sentResults.push({ user_id: userId, email, status: "db_error" });
             continue;
           }
-          
-          const token = inserted?.token;
-          await sendEmail(resendApiKey, email, issue, `${appUrl}/issue/${token}`);
+
+          const assignToken = inserted?.token;
+          await sendEmail(resendApiKey, email, issue, `${appUrl}/issue/${assignToken}`);
           sentResults.push({ user_id: userId, email, status: "sent" });
         } else {
-          const token = assignment?.token;
-          await sendEmail(resendApiKey, email, issue, `${appUrl}/issue/${token}`);
+          const assignToken = assignment?.token;
+          await sendEmail(resendApiKey, email, issue, `${appUrl}/issue/${assignToken}`);
           sentResults.push({ user_id: userId, email, status: "sent" });
         }
       } catch (err) {
@@ -148,12 +145,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function sendEmail(
-  apiKey: string,
-  to: string,
-  issue: any,
-  deepLink: string
-) {
+async function sendEmail(apiKey: string, to: string, issue: any, deepLink: string) {
   const priorityColors: Record<string, string> = {
     low: "#94a3b8",
     medium: "#f59e0b",
@@ -209,7 +201,7 @@ async function sendEmail(
     const errText = await res.text();
     throw new Error(`Resend API error: ${res.status} ${errText}`);
   }
-  await res.text(); // consume body
+  await res.text();
 }
 
 function escapeHtml(str: string): string {

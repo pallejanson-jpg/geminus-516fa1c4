@@ -66,6 +66,68 @@ const STATUS_OPTIONS = [
   { value: 'closed', label: 'Closed' },
 ];
 
+interface Assignment {
+  id: string;
+  assigned_to_user_id: string;
+  sent_at: string | null;
+  viewed_at: string | null;
+  response_status: string | null;
+  profile?: { display_name: string | null; avatar_url: string | null };
+}
+
+const SentAssignments: React.FC<{ issueId: string }> = ({ issueId }) => {
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("bcf_issue_assignments")
+      .select("id, assigned_to_user_id, sent_at, viewed_at, response_status")
+      .eq("issue_id", issueId)
+      .then(async ({ data }) => {
+        if (!data || data.length === 0) { setAssignments([]); return; }
+        const userIds = [...new Set(data.map(a => a.assigned_to_user_id))];
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, display_name, avatar_url")
+          .in("user_id", userIds);
+        const pMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+        setAssignments(data.map(a => ({ ...a, profile: pMap.get(a.assigned_to_user_id) })));
+      });
+  }, [issueId]);
+
+  if (assignments.length === 0) return null;
+
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+        <Mail className="h-4 w-4" />
+        Sent to
+      </h4>
+      <div className="space-y-1">
+        {assignments.map(a => (
+          <div key={a.id} className="flex items-center gap-2 text-sm">
+            <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+              {a.profile?.avatar_url ? (
+                <img src={a.profile.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <User className="h-3 w-3 text-muted-foreground" />
+              )}
+            </div>
+            <span>{a.profile?.display_name || "User"}</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {a.viewed_at ? (
+                <span className="flex items-center gap-1 text-primary"><CheckCircle className="h-3 w-3" /> Viewed</span>
+              ) : a.sent_at ? (
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Sent {formatDistanceToNow(new Date(a.sent_at), { addSuffix: true })}</span>
+              ) : "Pending"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 interface IssueDetailSheetProps {
   issue: BcfIssue | null;
   open: boolean;
@@ -254,6 +316,9 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Sent assignments */}
+              <SentAssignments issueId={issue.id} />
 
               {/* Admin actions */}
               {isAdmin && (
