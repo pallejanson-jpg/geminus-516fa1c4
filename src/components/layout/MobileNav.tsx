@@ -1,5 +1,4 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Home, LayoutGrid, Globe, Network, Menu, X, Cuboid
 } from 'lucide-react';
@@ -28,7 +27,6 @@ interface MobileNavProps {
 const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const { activeApp, setActiveApp, appConfigs, selectedFacility, open360WithContext } = useContext(AppContext);
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
 
   const [sidebarOrder, setSidebarOrder] = useState<SidebarItem[]>(getSidebarOrder);
 
@@ -152,15 +150,21 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
 
               {/* 3D Viewer quick link */}
               <div>
-                <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
+              <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
                 <button
-                  onClick={() => { navigate('/split-viewer?mode=3d'); setIsMobileMenuOpen(false); }}
+                  onClick={() => { setActiveApp('native_viewer'); setIsMobileMenuOpen(false); }}
                   className="flex flex-col items-center gap-1.5 w-[72px] p-2 rounded-xl hover:bg-muted/60 transition-colors"
                 >
-                  <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
-                    <Cuboid className="h-6 w-6 text-foreground/70" />
+                  <div className={cn(
+                    "h-12 w-12 rounded-xl flex items-center justify-center transition-colors",
+                    activeApp === 'native_viewer' ? "bg-primary/15" : "bg-muted"
+                  )}>
+                    <Cuboid className={cn("h-6 w-6", activeApp === 'native_viewer' ? "text-primary" : "text-foreground/70")} />
                   </div>
-                  <span className="text-xs text-center text-muted-foreground leading-tight">3D Viewer</span>
+                  <span className={cn(
+                    "text-xs text-center leading-tight",
+                    activeApp === 'native_viewer' ? "text-primary font-medium" : "text-muted-foreground"
+                  )}>3D Viewer</span>
                 </button>
               </div>
 
