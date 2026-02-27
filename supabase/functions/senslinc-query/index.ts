@@ -781,39 +781,62 @@ serve(async (req) => {
         if (!question) return jsonResponse({ success: false, error: 'question is required' }, 400);
         const authToken = token as string;
 
-        // Resolve site PK for context
-        let sitePk: number | null = null;
-        let siteName = '';
+        // Resolve entity PK based on contextLevel (building→site, floor→line, room→machine)
+        let entityPk: number | null = null;
+        let entityName = '';
+        let entityApiType = 'sites'; // API path segment
+        const level = contextLevel || 'building';
+
         if (fmGuid) {
           try {
-            const sites = await senslincFetchWithRetry(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
-            const sitesArr = Array.isArray(sites) ? sites : (sites?.results ?? []);
-            if (sitesArr.length > 0) {
-              sitePk = sitesArr[0].pk;
-              siteName = sitesArr[0].name || '';
+            if (level === 'room') {
+              // Room → Machine in Senslinc
+              const machines = await senslincFetchWithRetry(cleanApiUrl, `/api/machines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+              const arr = Array.isArray(machines) ? machines : (machines?.results ?? []);
+              if (arr.length > 0) { entityPk = arr[0].pk; entityName = arr[0].name || ''; entityApiType = 'machines'; }
+            } else if (level === 'floor') {
+              // Floor → Line in Senslinc
+              const lines = await senslincFetchWithRetry(cleanApiUrl, `/api/lines?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+              const arr = Array.isArray(lines) ? lines : (lines?.results ?? []);
+              if (arr.length > 0) { entityPk = arr[0].pk; entityName = arr[0].name || ''; entityApiType = 'lines'; }
+            }
+            // Always also try to resolve the site for broader context
+            if (!entityPk || level === 'building') {
+              const sites = await senslincFetchWithRetry(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+              const arr = Array.isArray(sites) ? sites : (sites?.results ?? []);
+              if (arr.length > 0) {
+                if (!entityPk) { entityPk = arr[0].pk; entityName = arr[0].name || ''; entityApiType = 'sites'; }
+                else if (!entityName) entityName = arr[0].name || '';
+              }
             }
           } catch (e) {
-            console.warn('[Senslinc] Could not resolve site for ilean-ask:', e);
+            console.warn('[Senslinc] Could not resolve entity for ilean-ask:', e);
           }
         }
 
-        // Try Senslinc Ilean API endpoints
+        console.log(`[Senslinc] ilean-ask context: level=${level}, entityApiType=${entityApiType}, pk=${entityPk}, name=${entityName}`);
+
+        // Try Senslinc Ilean API endpoints — use the resolved entity type and PK
         let portalUrl2 = cleanApiUrl
           .replace(/^(https?:\/\/)api\./, '$1')
           .replace(/\/api\/?$/, '')
           .replace(/\/$/, '');
 
-        const ileanEndpoints = sitePk
-          ? [
-              `${cleanApiUrl}/api/sites/${sitePk}/ilean/ask/`,
-              `${cleanApiUrl}/api/ilean/ask/`,
-              `${portalUrl2}/api/sites/${sitePk}/ilean/ask/`,
-              `${portalUrl2}/api/ilean/ask/`,
-            ]
-          : [
-              `${cleanApiUrl}/api/ilean/ask/`,
-              `${portalUrl2}/api/ilean/ask/`,
-            ];
+        const ileanEndpoints: string[] = [];
+        if (entityPk) {
+          // Entity-specific Ilean endpoints (most specific first)
+          ileanEndpoints.push(
+            `${cleanApiUrl}/api/${entityApiType}/${entityPk}/ilean/ask/`,
+            `${cleanApiUrl}/api/${entityApiType}/${entityPk}/ilean/`,
+            `${portalUrl2}/api/${entityApiType}/${entityPk}/ilean/ask/`,
+            `${portalUrl2}/api/${entityApiType}/${entityPk}/ilean/`,
+          );
+        }
+        // Generic Ilean endpoints as fallback
+        ileanEndpoints.push(
+          `${cleanApiUrl}/api/ilean/ask/`,
+          `${portalUrl2}/api/ilean/ask/`,
+        );
 
         for (const endpoint of ileanEndpoints) {
           try {
@@ -837,8 +860,11 @@ serve(async (req) => {
               return jsonResponse({ success: true, data: { answer, source: 'senslinc-ilean', endpoint } });
             }
 
-            // 404 means endpoint doesn't exist — try next
-            if (resp.status === 404 || resp.status === 405) continue;
+            // 404/405 means endpoint doesn't exist — try next
+            if (resp.status === 404 || resp.status === 405) {
+              await resp.text(); // consume body
+              continue;
+            }
 
             // Other errors — log but try next
             const errText = await resp.text();
@@ -848,35 +874,34 @@ serve(async (req) => {
           }
         }
 
-        // Fallback: use Lovable AI with building context
+        // Fallback: use Lovable AI — but clearly state it's a fallback with no real document access
         console.log('[Senslinc] No Ilean API found, falling back to Lovable AI');
         const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
         if (!LOVABLE_API_KEY) {
           return jsonResponse({
             success: true,
             data: {
-              answer: 'The Ilean document Q&A service is not available for this building at the moment. The Senslinc Ilean API endpoint could not be reached, and no fallback AI is configured.',
+              answer: `Ilean-tjänsten för dokumentfrågor kunde inte nås för ${entityName || 'denna byggnad'}. Kontrollera att Senslinc Ilean är aktiverat för denna fastighet.`,
               source: 'fallback-error',
             },
           });
         }
 
-        // Build context-aware prompt
-        const systemPrompt = `You are Ilean, an AI assistant that answers questions about building documents and facility management data. You are part of the Geminus digital twin platform.
+        // Build context-aware prompt — Ilean should proxy real Senslinc doc Q&A, not invent answers
+        const systemPrompt = `Du är Ilean, en AI-assistent som svarar på frågor om dokument i fastighetssystemet Senslinc. Du är integrerad i Geminus digital twin-plattform.
 
-Current context:
-- Building: ${siteName || 'Unknown'}
-- Context level: ${contextLevel || 'building'}
+Aktuell kontext:
+- Entitet: ${entityName || 'Okänd'}
+- Kontextnivå: ${level === 'building' ? 'Byggnad' : level === 'floor' ? 'Våningsplan' : 'Rum/utrymme'}
+- API-typ: ${entityApiType}
+${entityPk ? `- Senslinc PK: ${entityPk}` : '- Ingen Senslinc-koppling hittad'}
 
-You help users find information about:
-- Building documentation (maintenance reports, inspection records, compliance documents)
-- Equipment specifications and manuals
-- Floor plans and space information
-- Historical maintenance data
+VIKTIGT: Senslinc Ilean API kunde inte nås direkt. Informera användaren att du inte kan söka i dokumenten just nu och föreslå att de:
+1. Kontrollerar att Ilean är aktiverat för denna fastighet i Senslinc
+2. Försöker igen om en stund
+3. Öppnar Senslinc direkt via "Öppna i Senslinc"-knappen
 
-If you don't have specific document data available, provide helpful guidance about what types of documents are typically available in facility management systems, and suggest the user check the Senslinc portal directly for detailed document access.
-
-Keep answers concise and helpful.`;
+Svara ALLTID på samma språk som användaren skriver. Hitta INTE PÅ dokumentinnehåll.`;
 
         const aiMessages = [
           { role: 'system', content: systemPrompt },

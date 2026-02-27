@@ -12,10 +12,10 @@ import ReactMarkdown from 'react-markdown';
 const BUTTON_SIZE = 56;
 
 const STARTER_QUESTIONS = [
-  'What documents are available?',
-  'Summarize the latest maintenance reports',
-  'Are there any open issues in the documents?',
-  'What equipment is documented for this building?',
+  'Vilka dokument finns för denna fastighet?',
+  'Sammanfatta senaste underhållsrapporterna',
+  'Finns det öppna ärenden i dokumenten?',
+  'Vilken utrustning är dokumenterad?',
 ];
 
 /**
@@ -320,11 +320,11 @@ export default function IleanButton() {
               {messages.length === 0 && !isLoading && (
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                   <FileQuestion className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                  <h3 className="font-semibold text-sm mb-1">Ask Ilean about documents</h3>
-                  <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                    Ilean answers questions about documents stored in Senslinc for{' '}
-                    {contextEntity.entityName || 'this building'}.
-                  </p>
+                   <h3 className="font-semibold text-sm mb-1">Fråga Ilean om dokument</h3>
+                   <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                     Ilean svarar på frågor om dokument i Senslinc för{' '}
+                     {contextEntity.entityName || 'denna byggnad'}.
+                   </p>
                   <div className="flex flex-col gap-2 w-full max-w-xs">
                     {STARTER_QUESTIONS.map((q, i) => (
                       <Button
@@ -379,7 +379,7 @@ export default function IleanButton() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about documents..."
+                placeholder="Fråga om dokument..."
                 disabled={isSending}
                 className="flex-1 h-9 text-sm"
               />
