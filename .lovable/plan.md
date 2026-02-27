@@ -1,27 +1,62 @@
 
 
-# IFC-to-XKT Conversion Architecture
+# Plan: Congeria Document Sync Fix + Ilean Native UI + Translations
 
-## Implementation (Completed)
+## Summary
 
-### Dual-path conversion strategy
+Three workstreams: (1) fix why Congeria documents never arrive, (2) replace the Ilean iframe with a native Geminus UI that calls Senslinc APIs directly (like SenslincDashboardView does for sensor data), and (3) translate all Swedish strings to English.
 
-| File size | Path | Details |
-|-----------|------|---------|
-| ≤ 20 MB | **Client-side** (main thread) | `convertToXktWithMetadata()` via dynamic imports. Acceptable UI blocking for small files. |
-| > 20 MB | **Server-side** (edge function) | IFC uploaded to `ifc-uploads` bucket → `ifc-to-xkt` edge function converts → XKT stored in `xkt-models` bucket. UI stays responsive. |
+---
 
-### Components
+## 1. Fix Congeria Document Sync
 
-- **`supabase/functions/ifc-to-xkt/index.ts`** — Edge function using `npm:web-ifc` + `npm:@xeokit/xeokit-convert`. Downloads IFC from storage, converts, uploads XKT, saves metadata.
-- **`src/components/settings/CreateBuildingPanel.tsx`** — Routes files based on size threshold. Shows Cloud/Monitor icon to indicate conversion mode.
-- **`src/services/ifc-worker-bridge.ts`** — Main-thread fallback using dynamic imports (Web Worker approach abandoned due to Node.js module incompatibility with Vite bundling).
+**Root cause**: The `documents` table has no unique constraint on `(building_fm_guid, file_path)`, so the `onConflict` in upsert silently fails. Additionally, the scraper only requests `formats: ['links']` but Congeria is a JS-rendered SPA where document URLs may not appear in the raw links array.
 
-### Storage buckets
+**Changes:**
 
-- `ifc-uploads` (private) — Raw IFC files for server-side conversion
-- `xkt-models` (private) — Converted XKT files
+- **Database migration**: Add unique constraint `UNIQUE(building_fm_guid, file_path)` on `documents` table
+- **Edge function `congeria-sync`**: Change scrape formats to `['links', 'html']` and improve `parseDocumentLinks` to also scan the HTML content for download hrefs (not just the links array). Add a `test-scrape` diagnostic action that returns raw scrape results for debugging
+- **Translate** all Swedish strings in `congeria-sync` and `DocumentsView` to English
 
-### Fragments 2.0 evaluation
+## 2. Replace Ilean Iframe with Native UI
 
-Using Fragments 2.0 only for IFC parsing is **not possible** — it outputs `.frag` (Flatbuffers for Three.js), not `.xkt`. A full viewer migration to Three.js would be a multi-week effort. The server-side approach keeps the existing xeokit stack untouched.
+**Current state**: `IleanButton` opens a draggable panel with an `<iframe src={senslincPortalUrl}/ilean/>`. This has issues: cross-origin restrictions, authentication problems, and the user explicitly does not want iframing.
+
+**New approach** (matching the SenslincDashboardView pattern):
+
+- **New edge function action** `get-ilean-data` in `senslinc-query`: Call the Senslinc API to fetch whatever Ilean provides for a given site/line/machine. This likely includes the Ilean chat endpoint or contextual data. We'll probe `/api/sites/{pk}/ilean/` or similar API endpoints.
+- **New hook `useIleanData`**: Similar to `useSenslincData`, calls the backend function and returns structured Ilean data (contextual insights, recommendations, chat responses).
+- **Rewrite `IleanButton`**: Remove the iframe entirely. Replace with a native floating panel that:
+  - Shows the contextual entity (building/floor/room) with the same header as today
+  - Displays Ilean insights/chat natively using Geminus UI components (cards, charts, text)
+  - Uses the Senslinc API for data, rendered in our own React components
+  - Keeps the draggable trigger button behavior
+  - If Ilean exposes a chat API, implement a chat interface similar to `GunnarChat`
+  - If Ilean only provides a web page (no API), add a "Open in Senslinc" button that links out, and show contextual sensor data from the existing `useSenslincData` hook instead
+
+**Key technical question**: We need to discover whether Senslinc exposes Ilean as an API endpoint (e.g., `/api/ilean/chat/`) or only as a web page. The edge function will probe this and we'll adapt accordingly.
+
+## 3. Translate All Swedish UI to English
+
+Files to translate:
+- `src/components/portfolio/DocumentsView.tsx` — all labels, toasts, empty states
+- `src/components/chat/IleanButton.tsx` — tooltips, loading text, headers
+- `src/components/viewer/SenslincDashboardView.tsx` — labels, tab names, status text
+- `supabase/functions/congeria-sync/index.ts` — error messages
+- `supabase/functions/senslinc-query/index.ts` — Swedish error messages (lines 309, 322, etc.)
+
+## 4. Gunnar + Documents
+
+No code changes needed for Gunnar. The `query_documents` tool in `gunnar-chat` already queries the `documents` table. Once the sync fix populates documents, Gunnar will automatically be able to answer questions about them.
+
+---
+
+## Implementation Order
+
+1. Database migration (unique constraint)
+2. Fix `congeria-sync` edge function (HTML parsing + diagnostics)
+3. Add `get-ilean-data` action to `senslinc-query` (probe Ilean API)
+4. Create `useIleanData` hook
+5. Rewrite `IleanButton` with native UI (no iframe)
+6. Translate all Swedish strings to English across all affected files
+
