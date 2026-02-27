@@ -302,11 +302,11 @@ serve(async (req) => {
         token = result.token;
         tokenType = result.type;
       } catch (error: any) {
-        return jsonResponse({
-          success: false,
-          error: error?.message ?? 'Authentication failed',
-          message: 'Kunde inte ansluta till Senslinc. Kontrollera credentials.',
-        });
+          return jsonResponse({
+            success: false,
+            error: error?.message ?? 'Authentication failed',
+            message: 'Could not connect to Senslinc. Check credentials.',
+          });
       }
     }
 
@@ -318,14 +318,14 @@ serve(async (req) => {
           const sites = await senslincFetch(cleanApiUrl, '/api/sites', t, type);
           return jsonResponse({
             success: true,
-            message: `Anslutning lyckades via ${authMode}! Hittade ${Array.isArray(sites) ? sites.length : 0} sites.`,
+            message: `Connection successful via ${authMode}! Found ${Array.isArray(sites) ? sites.length : 0} sites.`,
             authMode,
           });
         } catch (error: any) {
           return jsonResponse({
             success: false,
             error: error.message,
-            message: 'Kunde inte ansluta till Senslinc. Kontrollera credentials.',
+            message: 'Could not connect to Senslinc. Check credentials.',
           });
         }
       }
@@ -399,7 +399,7 @@ serve(async (req) => {
           console.log('[Senslinc] No line found for fmGuid:', fmGuid);
         }
 
-        return jsonResponse({ success: false, error: 'No equipment found for this FM GUID', message: 'Ingen utrustning hittades i Senslinc för detta FM GUID.' });
+        return jsonResponse({ success: false, error: 'No equipment found for this FM GUID' });
       }
 
       case 'get-indices': {
