@@ -1,0 +1,1 @@
+ALTER TABLE public.documents ADD CONSTRAINT documents_building_file_unique UNIQUE (building_fm_guid, file_path);
