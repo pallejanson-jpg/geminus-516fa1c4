@@ -104,11 +104,11 @@ export async function convertToXktWithMetadata(
     
     throw new Error(
       looksLikeJson
-        ? `Filen verkar vara en SVF2-manifest (JSON), inte en geometrifil. ` +
-          `RVT-filer genererar SVF2-format som kräver serverbaserad konvertering och kan inte konverteras i webbläsaren.`
-        : `Okänt filformat (header: ${headerHex}). ` +
-          `RVT-filer genererar SVF2-format som inte stöds för klientkonvertering. ` +
-          `Hierarkidata (byggnader, våningar, rum) synkas via BIM-synk istället.`
+        ? `The file appears to be an SVF2 manifest (JSON), not a geometry file. ` +
+          `RVT files generate SVF2 format which requires server-side conversion and cannot be converted in the browser.`
+        : `Unknown file format (header: ${headerHex}). ` +
+          `RVT files generate SVF2 format which is not supported for client-side conversion. ` +
+          `Hierarchy data (buildings, floors, rooms) is synced via BIM sync instead.`
     );
   }
 
