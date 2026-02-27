@@ -132,14 +132,11 @@ const BuildingSelector: React.FC = () => {
 
   const handleSelectBuilding = (fmGuid: string) => {
     setViewer3dFmGuid(fmGuid);
-    const mode = searchParams.get('mode') || '3d';
-    navigate(`/split-viewer?building=${fmGuid}&mode=${mode}`, { replace: true });
+    // Don't navigate away — NativeViewerPage will re-render with the new fmGuid
   };
 
   const handleSelectView = (view: SavedView) => {
     setViewer3dFmGuid(view.building_fm_guid);
-    const mode = view.view_mode || '3d';
-    navigate(`/split-viewer?building=${view.building_fm_guid}&mode=${mode}`, { replace: true });
     
     // Dispatch event with full view settings to be applied after viewer initializes
     // Use a short delay to ensure the viewer context is set up
