@@ -119,58 +119,12 @@ export async function convertToXktWithMetadata(
   const xktModel = new XKTModel();
 
   if (format === 'ifc') {
-    logger('Delegating IFC parsing to Web Worker...');
     const fileSizeMB = glbData.byteLength / 1024 / 1024;
     const timeoutMs = Math.max(10 * 60_000, fileSizeMB * 3000);
-    logger(`IFC file size: ${fileSizeMB.toFixed(1)} MB, timeout: ${(timeoutMs / 60_000).toFixed(1)} min`);
+    logger(`IFC file: ${fileSizeMB.toFixed(1)} MB, timeout: ${(timeoutMs / 60_000).toFixed(1)} min`);
 
-    const workerResult = await new Promise<IfcHierarchyResult>((resolve, reject) => {
-      const worker = new Worker(
-        new URL('../workers/ifc-converter.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-
-      const timeout = setTimeout(() => {
-        worker.terminate();
-        reject(new Error(
-          `IFC-parsning tog för lång tid (timeout efter ${(timeoutMs / 60_000).toFixed(0)} min). ` +
-          `Filen är ${fileSizeMB.toFixed(0)} MB — prova att dela upp den i mindre delar.`
-        ));
-      }, timeoutMs);
-
-      worker.onmessage = (e) => {
-        const msg = e.data;
-        if (msg.type === 'log') {
-          logger(msg.message);
-        } else if (msg.type === 'result') {
-          clearTimeout(timeout);
-          worker.terminate();
-          resolve({
-            xktData: msg.xktData,
-            levels: msg.levels,
-            spaces: msg.spaces,
-          });
-        } else if (msg.type === 'error') {
-          clearTimeout(timeout);
-          worker.terminate();
-          reject(new Error(`IFC-parsning misslyckades: ${msg.message}`));
-        }
-      };
-
-      worker.onerror = (err) => {
-        clearTimeout(timeout);
-        worker.terminate();
-        reject(new Error(`Worker error: ${err.message}`));
-      };
-
-      // Transfer the ArrayBuffer to worker (zero-copy)
-      worker.postMessage(
-        { ifcData: glbData, wasmPath: '/lib/xeokit/' },
-        [glbData]
-      );
-    });
-
-    return workerResult;
+    const { convertIfcInWorker } = await import('./ifc-worker-bridge');
+    return await convertIfcInWorker(glbData, '/lib/xeokit/', logger, timeoutMs);
   } else if (format === 'obj') {
     logger('Parsing OBJ into XKTModel...');
     const mod = await import('@xeokit/xeokit-convert');
