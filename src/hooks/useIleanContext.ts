@@ -37,8 +37,22 @@ export function useIleanContext() {
       }
     };
 
+    // Listen for room/asset selection from viewer context changes
+    const handleViewerContext = (e: CustomEvent) => {
+      const detail = e.detail;
+      if (detail?.selectedFmGuids?.length > 0) {
+        // Use the first selected entity as room context
+        setContextFmGuid(detail.selectedFmGuids[0]);
+        setContextLevel('room');
+      }
+    };
+
     window.addEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
-    return () => window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+    window.addEventListener('VIEWER_CONTEXT_CHANGED', handleViewerContext as EventListener);
+    return () => {
+      window.removeEventListener('FLOOR_SELECTION_CHANGED', handleFloorChange as EventListener);
+      window.removeEventListener('VIEWER_CONTEXT_CHANGED', handleViewerContext as EventListener);
+    };
   }, [selectedFacility]);
 
   // Set building context when facility changes

@@ -50,8 +50,15 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
         const sdk = await import(/* @vite-ignore */ XEOKIT_CDN);
         if (cancelled) return;
 
-        // 1. FastNavPlugin
-        if (sdk.FastNavPlugin && !pluginsRef.current.fastNav) {
+        // 1. FastNavPlugin — check user setting
+        const fastNavEnabled = (() => {
+          try {
+            const stored = localStorage.getItem('viewer-fastnav-enabled');
+            return stored !== null ? JSON.parse(stored) : true; // default ON
+          } catch { return true; }
+        })();
+
+        if (sdk.FastNavPlugin && !pluginsRef.current.fastNav && fastNavEnabled) {
           pluginsRef.current.fastNav = new sdk.FastNavPlugin(xeokitViewer, {
             scaleCanvasResolution: true,
             scaleCanvasResolutionFactor: isMobile ? 0.5 : 0.6,
@@ -60,6 +67,8 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
             hideSAO: true,
           });
           console.log('[perf-plugins] FastNavPlugin installed', { factor: isMobile ? 0.5 : 0.6 });
+        } else if (!fastNavEnabled) {
+          console.log('[perf-plugins] FastNavPlugin disabled by user setting');
         }
 
         // 2. ViewCullPlugin (frustum culling)
