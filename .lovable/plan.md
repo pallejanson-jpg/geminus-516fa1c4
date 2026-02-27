@@ -1,62 +1,49 @@
 
 
-# Plan: Congeria Document Sync Fix + Ilean Native UI + Translations
+# Plan: Transform Ilean into a Document Q&A Chat via Senslinc API
 
-## Summary
+## Understanding
 
-Three workstreams: (1) fix why Congeria documents never arrive, (2) replace the Ilean iframe with a native Geminus UI that calls Senslinc APIs directly (like SenslincDashboardView does for sensor data), and (3) translate all Swedish strings to English.
+Ilean in Senslinc is a **document Q&A feature** — users ask questions about documents stored in Senslinc, and Ilean answers. The current implementation incorrectly shows IoT sensor gauges. Instead, Ilean should be a **chat interface** (like Gunnar) that proxies questions to Senslinc's Ilean API and renders responses in Geminus UI.
 
----
+**Role separation:**
+- **Gunnar** = Geminus data + Senslinc IoT data
+- **Ilean** = Document Q&A via Senslinc Ilean API
 
-## 1. Fix Congeria Document Sync
+## Technical Discovery Needed
 
-**Root cause**: The `documents` table has no unique constraint on `(building_fm_guid, file_path)`, so the `onConflict` in upsert silently fails. Additionally, the scraper only requests `formats: ['links']` but Congeria is a JS-rendered SPA where document URLs may not appear in the raw links array.
+The Senslinc edge function currently constructs URLs like `/site/{pk}/ilean/` (a web page). We need to discover if Senslinc exposes an Ilean **API endpoint** (e.g., `/api/sites/{pk}/ilean/ask/` or similar REST/chat endpoint). This will be done by adding a probe action to the edge function.
 
-**Changes:**
+## Implementation Steps
 
-- **Database migration**: Add unique constraint `UNIQUE(building_fm_guid, file_path)` on `documents` table
-- **Edge function `congeria-sync`**: Change scrape formats to `['links', 'html']` and improve `parseDocumentLinks` to also scan the HTML content for download hrefs (not just the links array). Add a `test-scrape` diagnostic action that returns raw scrape results for debugging
-- **Translate** all Swedish strings in `congeria-sync` and `DocumentsView` to English
+### 1. Add `ilean-ask` action to `senslinc-query` edge function
+- New action that: (a) resolves the site/line/machine PK from fmGuid, (b) POSTs the user's question to Senslinc's Ilean API endpoint (likely `/api/sites/{pk}/ilean/` or `/api/ilean/ask/`), (c) returns the answer
+- Add a `ilean-probe` diagnostic action that tries known Ilean API patterns and returns what's available
+- If no chat API exists, fall back to using a Lovable AI model (Gemini) with Senslinc document context as a proxy
 
-## 2. Replace Ilean Iframe with Native UI
+### 2. Rewrite `useIleanData` hook → `useIleanChat` hook
+- Replace the sensor-data-fetching hook with a chat-oriented hook
+- Manages conversation messages (user/assistant)
+- `sendMessage(question: string)` → calls `senslinc-query` with `ilean-ask` action
+- Maintains context (building/floor/room PK) for scoping questions
+- Returns `{ messages, sendMessage, isLoading, contextEntity }`
 
-**Current state**: `IleanButton` opens a draggable panel with an `<iframe src={senslincPortalUrl}/ilean/>`. This has issues: cross-origin restrictions, authentication problems, and the user explicitly does not want iframing.
+### 3. Rewrite `IleanButton` panel as a chat UI
+- Remove all sensor gauge/chart components (MiniGauge, MiniChart)
+- Replace with a chat interface matching the GunnarChat pattern:
+  - Message list with markdown rendering (ReactMarkdown)
+  - Text input + send button
+  - Context header showing current building/floor/room
+  - Suggested starter questions (e.g., "What documents are available?", "Summarize maintenance reports")
+- Keep the existing draggable trigger button and panel drag/minimize behavior
+- Keep the "Open in Senslinc" external link button
 
-**New approach** (matching the SenslincDashboardView pattern):
+### 4. Update edge function interface type
+- Add `'ilean-ask' | 'ilean-probe'` to the `SenslincRequest.action` union
+- Add `question?: string` and `conversationHistory?: Array<{role: string, content: string}>` to the request interface
 
-- **New edge function action** `get-ilean-data` in `senslinc-query`: Call the Senslinc API to fetch whatever Ilean provides for a given site/line/machine. This likely includes the Ilean chat endpoint or contextual data. We'll probe `/api/sites/{pk}/ilean/` or similar API endpoints.
-- **New hook `useIleanData`**: Similar to `useSenslincData`, calls the backend function and returns structured Ilean data (contextual insights, recommendations, chat responses).
-- **Rewrite `IleanButton`**: Remove the iframe entirely. Replace with a native floating panel that:
-  - Shows the contextual entity (building/floor/room) with the same header as today
-  - Displays Ilean insights/chat natively using Geminus UI components (cards, charts, text)
-  - Uses the Senslinc API for data, rendered in our own React components
-  - Keeps the draggable trigger button behavior
-  - If Ilean exposes a chat API, implement a chat interface similar to `GunnarChat`
-  - If Ilean only provides a web page (no API), add a "Open in Senslinc" button that links out, and show contextual sensor data from the existing `useSenslincData` hook instead
-
-**Key technical question**: We need to discover whether Senslinc exposes Ilean as an API endpoint (e.g., `/api/ilean/chat/`) or only as a web page. The edge function will probe this and we'll adapt accordingly.
-
-## 3. Translate All Swedish UI to English
-
-Files to translate:
-- `src/components/portfolio/DocumentsView.tsx` — all labels, toasts, empty states
-- `src/components/chat/IleanButton.tsx` — tooltips, loading text, headers
-- `src/components/viewer/SenslincDashboardView.tsx` — labels, tab names, status text
-- `supabase/functions/congeria-sync/index.ts` — error messages
-- `supabase/functions/senslinc-query/index.ts` — Swedish error messages (lines 309, 322, etc.)
-
-## 4. Gunnar + Documents
-
-No code changes needed for Gunnar. The `query_documents` tool in `gunnar-chat` already queries the `documents` table. Once the sync fix populates documents, Gunnar will automatically be able to answer questions about them.
-
----
-
-## Implementation Order
-
-1. Database migration (unique constraint)
-2. Fix `congeria-sync` edge function (HTML parsing + diagnostics)
-3. Add `get-ilean-data` action to `senslinc-query` (probe Ilean API)
-4. Create `useIleanData` hook
-5. Rewrite `IleanButton` with native UI (no iframe)
-6. Translate all Swedish strings to English across all affected files
+### Files to modify
+- `supabase/functions/senslinc-query/index.ts` — add `ilean-ask` and `ilean-probe` actions
+- `src/hooks/useIleanData.ts` — rewrite as chat hook (rename to useIleanChat or keep name)
+- `src/components/chat/IleanButton.tsx` — replace sensor UI with chat UI
 
