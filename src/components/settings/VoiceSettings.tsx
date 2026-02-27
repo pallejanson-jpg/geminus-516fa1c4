@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mic, Volume2, MessageSquare, Vibrate, Gauge, Eye, RotateCcw } from 'lucide-react';
+import { Mic, Volume2, MessageSquare, Vibrate, Gauge, RotateCcw } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -8,13 +8,12 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
 
-// Storage key for voice settings
 const VOICE_SETTINGS_KEY = 'voice-control-settings';
 
 export interface VoiceSettingsData {
   enabled: boolean;
-  sensitivity: number;  // 0.0 - 1.0 (microphone sensitivity)
-  feedbackVolume: number;  // 0.0 - 1.0 (audio feedback volume)
+  sensitivity: number;
+  feedbackVolume: number;
   hapticFeedback: boolean;
   showTranscription: boolean;
   continuousListening: boolean;
@@ -29,10 +28,8 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettingsData = {
   continuousListening: false,
 };
 
-// Event for notifying components about settings changes
 export const VOICE_SETTINGS_CHANGED_EVENT = 'voice-settings-changed';
 
-// Helper to get voice settings from localStorage
 export function getVoiceSettings(): VoiceSettingsData {
   try {
     const stored = localStorage.getItem(VOICE_SETTINGS_KEY);
@@ -46,7 +43,6 @@ export function getVoiceSettings(): VoiceSettingsData {
   return DEFAULT_VOICE_SETTINGS;
 }
 
-// Helper to save voice settings
 export function saveVoiceSettings(settings: VoiceSettingsData): void {
   try {
     localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
@@ -70,9 +66,7 @@ export function setFastNavEnabled(enabled: boolean) {
 
 const VoiceSettings: React.FC = () => {
   const [settings, setSettings] = useState<VoiceSettingsData>(getVoiceSettings);
-  const [fastNavEnabled, setFastNavEnabledState] = useState(getFastNavEnabled);
 
-  // Update a single setting and save
   const updateSetting = <K extends keyof VoiceSettingsData>(
     key: K,
     value: VoiceSettingsData[K]
@@ -84,20 +78,14 @@ const VoiceSettings: React.FC = () => {
 
   const handleResetVoicePosition = () => {
     localStorage.removeItem('voice-control-position');
-    toast.success('Röststyrningsknappens position återställd');
-  };
-
-  const handleFastNavToggle = (checked: boolean) => {
-    setFastNavEnabledState(checked);
-    setFastNavEnabled(checked);
-    toast.info(checked ? 'Sänkt upplösning vid kamerarörelse aktiverad — ladda om viewern' : 'Full upplösning vid kamerarörelse — ladda om viewern');
+    toast.success('Voice control button position reset');
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Konfigurera röststyrning och taligenkänning.
+          Configure voice control and speech recognition.
         </p>
       </div>
 
@@ -113,16 +101,16 @@ const VoiceSettings: React.FC = () => {
                 <Mic className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Röststyrning</h4>
+                <h4 className="font-medium text-sm">Voice Control</h4>
                 <p className="text-xs text-muted-foreground">
-                  {settings.enabled ? 'Aktiverad' : 'Inaktiverad'}
+                  {settings.enabled ? 'Enabled' : 'Disabled'}
                 </p>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4 pt-2">
             <div className="flex items-center justify-between py-2">
-              <span className="text-sm">Aktivera mikrofon för röstkommandon</span>
+              <span className="text-sm">Enable microphone for voice commands</span>
               <Switch
                 checked={settings.enabled}
                 onCheckedChange={(checked) => updateSetting('enabled', checked)}
@@ -139,7 +127,7 @@ const VoiceSettings: React.FC = () => {
                 <Gauge className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Mikrofonkänslighet</h4>
+                <h4 className="font-medium text-sm">Microphone Sensitivity</h4>
                 <p className="text-xs text-muted-foreground">
                   {Math.round(settings.sensitivity * 100)}%
                 </p>
@@ -148,7 +136,7 @@ const VoiceSettings: React.FC = () => {
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4 pt-2">
             <div className="flex items-center gap-4">
-              <span className="text-xs text-muted-foreground w-8">Låg</span>
+              <span className="text-xs text-muted-foreground w-8">Low</span>
               <Slider
                 value={[settings.sensitivity]}
                 onValueChange={(value) => updateSetting('sensitivity', value[0])}
@@ -158,7 +146,7 @@ const VoiceSettings: React.FC = () => {
                 className="flex-1"
                 disabled={!settings.enabled}
               />
-              <span className="text-xs text-muted-foreground w-8 text-right">Hög</span>
+              <span className="text-xs text-muted-foreground w-8 text-right">High</span>
               <span className="text-sm font-medium w-12 text-right">
                 {Math.round(settings.sensitivity * 100)}%
               </span>
@@ -174,7 +162,7 @@ const VoiceSettings: React.FC = () => {
                 <Volume2 className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Feedback-volym</h4>
+                <h4 className="font-medium text-sm">Feedback Volume</h4>
                 <p className="text-xs text-muted-foreground">
                   {Math.round(settings.feedbackVolume * 100)}%
                 </p>
@@ -183,7 +171,7 @@ const VoiceSettings: React.FC = () => {
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4 pt-2">
             <div className="flex items-center gap-4">
-              <span className="text-xs text-muted-foreground w-8">Tyst</span>
+              <span className="text-xs text-muted-foreground w-8">Mute</span>
               <Slider
                 value={[settings.feedbackVolume]}
                 onValueChange={(value) => updateSetting('feedbackVolume', value[0])}
@@ -209,15 +197,14 @@ const VoiceSettings: React.FC = () => {
                 <MessageSquare className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Övrigt</h4>
+                <h4 className="font-medium text-sm">Additional Options</h4>
                 <p className="text-xs text-muted-foreground">
-                  Transkription, vibration, kontinuerligt lyssnande
+                  Transcription, haptics, continuous listening
                 </p>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
-            {/* Show Transcription */}
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -227,8 +214,8 @@ const VoiceSettings: React.FC = () => {
                   <MessageSquare className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="text-sm">Visa transkription</span>
-                  <p className="text-xs text-muted-foreground">Visa talat text på skärmen</p>
+                  <span className="text-sm">Show Transcription</span>
+                  <p className="text-xs text-muted-foreground">Display spoken text on screen</p>
                 </div>
               </div>
               <Switch
@@ -238,7 +225,6 @@ const VoiceSettings: React.FC = () => {
               />
             </div>
 
-            {/* Haptic Feedback */}
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -248,8 +234,8 @@ const VoiceSettings: React.FC = () => {
                   <Vibrate className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="text-sm">Vibrations-feedback</span>
-                  <p className="text-xs text-muted-foreground">Vibrera vid igenkänt kommando (mobil)</p>
+                  <span className="text-sm">Haptic Feedback</span>
+                  <p className="text-xs text-muted-foreground">Vibrate on recognized command (mobile)</p>
                 </div>
               </div>
               <Switch
@@ -259,7 +245,6 @@ const VoiceSettings: React.FC = () => {
               />
             </div>
 
-            {/* Continuous Listening */}
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -269,43 +254,14 @@ const VoiceSettings: React.FC = () => {
                   <Mic className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="text-sm">Kontinuerligt lyssnande</span>
-                  <p className="text-xs text-muted-foreground">Lyssna alltid istället för tryck-och-håll</p>
+                  <span className="text-sm">Continuous Listening</span>
+                  <p className="text-xs text-muted-foreground">Always listen instead of push-and-hold</p>
                 </div>
               </div>
               <Switch
                 checked={settings.continuousListening}
                 onCheckedChange={(checked) => updateSetting('continuousListening', checked)}
                 disabled={!settings.enabled}
-              />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* Viewer Performance Section */}
-        <AccordionItem value="viewer-perf" className="border rounded-lg">
-          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="p-2 rounded-md bg-muted text-muted-foreground">
-                <Eye className="h-5 w-5" />
-              </div>
-              <div className="text-left">
-                <h4 className="font-medium text-sm">3D Viewer-prestanda</h4>
-                <p className="text-xs text-muted-foreground">
-                  Sänkt upplösning vid kamerarörelse
-                </p>
-              </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <span className="text-sm">Smooth navigation (FastNav)</span>
-                <p className="text-xs text-muted-foreground">Sänker upplösningen vid panorering/rotation för bättre prestanda. Kan ge suddig bild under rörelse.</p>
-              </div>
-              <Switch
-                checked={fastNavEnabled}
-                onCheckedChange={handleFastNavToggle}
               />
             </div>
           </AccordionContent>
@@ -319,16 +275,16 @@ const VoiceSettings: React.FC = () => {
                 <RotateCcw className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <h4 className="font-medium text-sm">Återställ positioner</h4>
+                <h4 className="font-medium text-sm">Reset Positions</h4>
                 <p className="text-xs text-muted-foreground">
-                  Återställ knapp-positioner till standard
+                  Reset button positions to default
                 </p>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4 pt-2">
             <Button variant="outline" size="sm" onClick={handleResetVoicePosition}>
-              Återställ röststyrningsknappens position
+              Reset voice control button position
             </Button>
           </AccordionContent>
         </AccordionItem>
