@@ -1,76 +1,55 @@
 
 
-# Analysis: Cesium Globe, Build Error, and Map Coordinate Systems
+# Plan: Fix Four Viewer Issues
 
-## 1. Build Error (blocking everything)
+## Issue 1: Windows colored by default in Filter Panel
+The `ViewerFilterPanel` auto-assigns colors to levels via `LEVEL_PALETTE` in a `useEffect` at line 210-216. These colors are stored in `levelColors` state. The `applyFilterVisibility` function applies these colors when `autoColorEnabled` is true (line 607). Since `autoColorEnabled` starts as `false`, the coloring should not apply. However, the Window issue is likely from the **Asset+ viewer itself** (IfcWindow default material), not the filter panel. This will be resolved by switching to the native xeokit viewer (Issue 2), where windows render with natural IFC materials.
 
-The build error message says "dev server state is error" but the actual runtime error is React #31 from `assetplusviewer.umd.min.js` -- this is in the Asset+ Vue wrapper, not related to our changes. The build itself compiles. This is a pre-existing runtime error in the legacy viewer, not a new regression.
+If the user means the **CATEGORY_PALETTE** colors appearing: `Window: '#4FC3F7'` — these only apply when `autoColorEnabled` is true AND categories are checked. No code change needed unless colors appear without enabling auto-color. Will verify after fixing Issue 2.
 
-## 2. Cesium Globe Analysis
+## Issue 2: Asset+ viewer still starts from "3D View" instead of native xeokit
 
-The CesiumGlobeView component at `src/components/globe/CesiumGlobeView.tsx` has these potential issues:
+**Root cause**: The AppHeader "3D View" button (line 122) maps to `key: 'assetplus_viewer'`, which on line 96 navigates to `/split-viewer?mode=3d` (UnifiedViewer using AssetPlusViewer). The sidebar "3D Viewer" entry uses `native_viewer` correctly.
 
-- **Token fetch**: It calls `get-cesium-token` edge function. If `CESIUM_ION_TOKEN` secret is not set, it falls back to a hardcoded demo token that is almost certainly expired/invalid.
-- **Resium + @cesium/engine bundling**: The component imports `resium` and `@cesium/engine` directly. These are heavy WebGL/WASM packages. The vite config has no special handling for Cesium assets (CSS, workers, static assets like `Assets/`, `Workers/`). Cesium requires these to be served from a specific base URL. Without a Vite plugin like `vite-plugin-cesium` or manual `CESIUM_BASE_URL` configuration, the globe will fail silently.
-- **Missing Cesium CSS**: No import of Cesium's widget CSS.
-- **No CESIUM_BASE_URL**: `@cesium/engine` needs `window.CESIUM_BASE_URL` set to the path where Cesium's static assets are served from. This is not configured.
+**Fix**: Change the AppHeader "3D View" button to use `native_viewer` instead of `assetplus_viewer`, and have it call `setActiveApp('native_viewer')` instead of navigating to `/split-viewer`.
 
-**Root cause**: The Cesium globe likely crashes on init because it can't find its static assets (Workers, Assets). The component is lazy-loaded so the crash is silent unless you navigate to `globe`.
+**File**: `src/components/layout/AppHeader.tsx`
+- Change line 122: `key: 'assetplus_viewer'` → `key: 'native_viewer'`
+- Update `handleMenuClick` to handle `native_viewer` by calling `setActiveApp('native_viewer')` instead of navigating to a route.
 
-## 3. Map Coordinate Comparison
+## Issue 3: Asset+ right panel still showing
 
-The app has two map views that display buildings:
+This is because `AssetPlusViewer` renders `ViewerRightPanel` as part of its component tree. When the native viewer (`NativeViewerPage` → `NativeXeokitViewer`) is used instead, the right panel should not appear. The native viewer currently has no equivalent settings panel.
 
-### Mapbox Map (`MapView.tsx`)
-- Uses **lat/lng** from `building_settings` table
-- Falls back to random Nordic cities if no coordinates saved
-- Buildings shown as 2D markers/clusters
-- No 3D model placement -- just icons/pins
+No code change needed if Issue 2 is fixed correctly — switching to `native_viewer` will render `NativeXeokitViewer` which doesn't include `ViewerRightPanel`.
 
-### Cesium Globe (`CesiumGlobeView.tsx`)
-- Uses **lat/lng** from `building_settings` table (same source)
-- Buildings shown as pins with labels
-- Has optional OSM 3D buildings toggle (generic, not your BIM models)
-- No actual BIM model placement on the globe currently
+## Issue 4: IFC conversion hangs (browser warns "wait or leave")
 
-### Key difference: "Placing 3D models on the map"
-- **Mapbox**: Cannot render 3D BIM models natively. Would need Mapbox GL's `addLayer` with custom 3D data (glTF), which is complex and limited.
-- **Cesium**: Can render actual 3D models via `Cesium3DTileset` or `glTF/glb` entities. The existing `xkt-to-gltf` pipeline (mentioned in memory) could convert cached XKT models to glTF for Cesium placement. Requires proper georeferencing (origin_lat, origin_lng, rotation from `building_settings`).
+**Root cause**: The IFC conversion in `CreateBuildingPanel.tsx` calls `convertToXktWithMetadata()` which runs `parseIFCIntoXKTModel` synchronously on the main thread via web-ifc WASM (line 150-157 in `acc-xkt-converter.ts`). For large IFC files, this blocks the main thread for minutes, triggering the browser's "page unresponsive" warning.
 
-Both maps use the **same coordinate format** (WGS84 lat/lng from `building_settings`). No format difference for pin placement.
+**Fix**: Move the IFC parsing to a Web Worker to avoid blocking the main thread. This requires:
+1. Create a new worker file `src/workers/ifc-converter.worker.ts` that imports web-ifc and xeokit-convert and runs the conversion off the main thread.
+2. Update `convertToXktWithMetadata` in `acc-xkt-converter.ts` to delegate to the worker.
+3. Use `postMessage` for progress callbacks.
 
-## Proposed Plan
+**Alternative simpler fix**: Use `setTimeout` chunking or convert the blocking WASM call to use the multi-threaded web-ifc build (`web-ifc-mt.wasm` already exists in `public/lib/xeokit/`). However, the most reliable fix is a Web Worker.
 
-### Step 1: Fix Cesium Globe startup
-- Add `vite-plugin-cesium` or configure `CESIUM_BASE_URL` manually in `vite.config.ts`
-- Import Cesium widget CSS
-- Verify `CESIUM_ION_TOKEN` secret is set in backend
+## Implementation Steps
 
-### Step 2: Fix the existing build/runtime error
-- The React #31 error comes from the Asset+ viewer UMD bundle -- this is pre-existing and unrelated to our changes. No action needed unless it blocks navigation.
+1. **Fix AppHeader 3D View routing** — Change `assetplus_viewer` to `native_viewer` in the header nav buttons and update `handleMenuClick` to use `setActiveApp` instead of route navigation.
 
-### Step 3: Plan for 3D model placement (future)
-- For Cesium: Use `ModelGraphics` or `Cesium3DTileset` entities with georeferenced positions from `building_settings` (origin_lat, origin_lng, rotation)
-- For Mapbox: Limited to 2D pins/markers. 3D model overlay is possible but complex (custom layers with THREE.js). Not recommended.
-- Both use the same WGS84 coordinates -- no format conversion needed between the two maps.
+2. **Move IFC conversion to Web Worker** — Create worker file, update `convertToXktWithMetadata` to use it, keeping the same API surface with progress callbacks via `postMessage`.
 
-### Technical Details
+## Technical Details
 
-**Cesium asset serving problem**: `@cesium/engine` expects its `Assets/`, `Workers/`, and `ThirdParty/` directories to be available at a base URL. Without configuring this, the globe renders a black screen or crashes. The fix is either:
-1. Install `vite-plugin-cesium` and add it to vite plugins
-2. Or copy Cesium static assets to `public/cesium/` and set `window.CESIUM_BASE_URL = '/cesium/'`
-
-**Coordinate system summary**:
-```text
-building_settings table:
-  latitude, longitude    → WGS84 (used by both Mapbox and Cesium for pins)
-  origin_lat, origin_lng → WGS84 origin for BIM coordinate transforms
-  rotation               → Building rotation in degrees
-
-For 3D model placement on Cesium:
-  XKT (viewer format) → glTF/glb (Cesium format) → placed at origin_lat/origin_lng with rotation
-
-For Mapbox:
-  Only 2D pins using latitude/longitude — no 3D models
+### AppHeader change (step 1)
+```typescript
+// Line 96-98: Remove the assetplus_viewer redirect
+// Line 122: Change key to 'native_viewer'
+{ key: 'native_viewer', mode: undefined, icon: Cuboid, label: '3D View' },
 ```
+The existing `handleMenuClick` default path already calls `setActiveApp(app)`, so changing the key is sufficient.
+
+### Web Worker for IFC (step 2)
+Worker receives `ArrayBuffer`, imports `@xeokit/xeokit-convert` and `web-ifc`, runs `parseIFCIntoXKTModel`, posts back progress messages and final result. The main thread `convertToXktWithMetadata` wraps this in a Promise.
 
