@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface SenslincRequest {
-  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data' | 'get-machine-air-quality' | 'get-ilean-context';
+  action: 'test-connection' | 'get-equipment' | 'get-site-equipment' | 'get-sites' | 'get-lines' | 'get-machines' | 'get-dashboard-url' | 'get-indices' | 'get-properties' | 'search-data' | 'get-machine-data' | 'get-building-sensor-data' | 'get-machine-air-quality' | 'get-ilean-context' | 'ilean-ask' | 'ilean-probe';
   fmGuid?: string;
   siteCode?: string;
   sitePk?: number;
@@ -16,6 +16,8 @@ interface SenslincRequest {
   query?: Record<string, unknown>;
   days?: number;
   contextLevel?: 'building' | 'floor' | 'room';
+  question?: string;
+  conversationHistory?: Array<{ role: string; content: string }>;
 }
 
 // ── Token cache (55-minute TTL) ──
@@ -258,7 +260,7 @@ serve(async (req) => {
     });
 
   try {
-    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days, contextLevel } = await req.json() as SenslincRequest;
+    const { action, fmGuid, siteCode, indiceId, workspaceKey, query, days, contextLevel, question, conversationHistory } = await req.json() as SenslincRequest;
 
     const apiUrl = Deno.env.get('SENSLINC_API_URL');
     const email = Deno.env.get('SENSLINC_EMAIL');
@@ -291,6 +293,8 @@ serve(async (req) => {
       'get-building-sensor-data',
       'get-machine-air-quality',
       'get-ilean-context',
+      'ilean-ask',
+      'ilean-probe',
     ]);
 
     let token: string | null = null;
@@ -733,6 +737,191 @@ serve(async (req) => {
         }
 
         return jsonResponse({ success: false, error: `No Senslinc entity found for fmGuid at level: ${level}` });
+      }
+
+      // ── ilean-probe: discover Ilean API endpoints ──
+      case 'ilean-probe': {
+        const authToken = token as string;
+        let portalUrl = cleanApiUrl
+          .replace(/^(https?:\/\/)api\./, '$1')
+          .replace(/\/api\/?$/, '')
+          .replace(/\/$/, '');
+
+        const endpoints = [
+          { url: `${cleanApiUrl}/api/ilean/ask/`, label: 'api/ilean/ask' },
+          { url: `${cleanApiUrl}/api/ilean/chat/`, label: 'api/ilean/chat' },
+          { url: `${cleanApiUrl}/api/ilean/`, label: 'api/ilean' },
+          { url: `${portalUrl}/api/ilean/ask/`, label: 'portal/api/ilean/ask' },
+          { url: `${portalUrl}/api/ilean/`, label: 'portal/api/ilean' },
+        ];
+
+        const results: Array<{ endpoint: string; status: number; ok: boolean; snippet?: string }> = [];
+        for (const ep of endpoints) {
+          try {
+            const resp = await fetch(ep.url, {
+              method: 'POST',
+              headers: {
+                'Authorization': `${tokenType} ${authToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ question: 'hello' }),
+            });
+            const text = await resp.text();
+            results.push({ endpoint: ep.label, status: resp.status, ok: resp.ok, snippet: text.slice(0, 200) });
+          } catch (e) {
+            results.push({ endpoint: ep.label, status: 0, ok: false, snippet: (e as Error).message });
+          }
+        }
+
+        return jsonResponse({ success: true, data: { probeResults: results } });
+      }
+
+      // ── ilean-ask: document Q&A via Senslinc Ilean API or Lovable AI fallback ──
+      case 'ilean-ask': {
+        if (!question) return jsonResponse({ success: false, error: 'question is required' }, 400);
+        const authToken = token as string;
+
+        // Resolve site PK for context
+        let sitePk: number | null = null;
+        let siteName = '';
+        if (fmGuid) {
+          try {
+            const sites = await senslincFetchWithRetry(cleanApiUrl, `/api/sites?code=${encodeURIComponent(fmGuid)}`, authToken, tokenType) as any;
+            const sitesArr = Array.isArray(sites) ? sites : (sites?.results ?? []);
+            if (sitesArr.length > 0) {
+              sitePk = sitesArr[0].pk;
+              siteName = sitesArr[0].name || '';
+            }
+          } catch (e) {
+            console.warn('[Senslinc] Could not resolve site for ilean-ask:', e);
+          }
+        }
+
+        // Try Senslinc Ilean API endpoints
+        let portalUrl2 = cleanApiUrl
+          .replace(/^(https?:\/\/)api\./, '$1')
+          .replace(/\/api\/?$/, '')
+          .replace(/\/$/, '');
+
+        const ileanEndpoints = sitePk
+          ? [
+              `${cleanApiUrl}/api/sites/${sitePk}/ilean/ask/`,
+              `${cleanApiUrl}/api/ilean/ask/`,
+              `${portalUrl2}/api/sites/${sitePk}/ilean/ask/`,
+              `${portalUrl2}/api/ilean/ask/`,
+            ]
+          : [
+              `${cleanApiUrl}/api/ilean/ask/`,
+              `${portalUrl2}/api/ilean/ask/`,
+            ];
+
+        for (const endpoint of ileanEndpoints) {
+          try {
+            console.log('[Senslinc] Trying Ilean endpoint:', endpoint);
+            const resp = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Authorization': `${tokenType} ${authToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                question,
+                conversation_history: conversationHistory?.map(m => ({ role: m.role, content: m.content })),
+              }),
+            });
+
+            if (resp.ok) {
+              const data = await resp.json();
+              console.log('[Senslinc] Ilean API response OK from:', endpoint);
+              const answer = data.answer || data.response || data.message || data.content || JSON.stringify(data);
+              return jsonResponse({ success: true, data: { answer, source: 'senslinc-ilean', endpoint } });
+            }
+
+            // 404 means endpoint doesn't exist — try next
+            if (resp.status === 404 || resp.status === 405) continue;
+
+            // Other errors — log but try next
+            const errText = await resp.text();
+            console.warn('[Senslinc] Ilean endpoint returned', resp.status, ':', errText.slice(0, 200));
+          } catch (e) {
+            console.warn('[Senslinc] Ilean endpoint error:', endpoint, (e as Error).message);
+          }
+        }
+
+        // Fallback: use Lovable AI with building context
+        console.log('[Senslinc] No Ilean API found, falling back to Lovable AI');
+        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+        if (!LOVABLE_API_KEY) {
+          return jsonResponse({
+            success: true,
+            data: {
+              answer: 'The Ilean document Q&A service is not available for this building at the moment. The Senslinc Ilean API endpoint could not be reached, and no fallback AI is configured.',
+              source: 'fallback-error',
+            },
+          });
+        }
+
+        // Build context-aware prompt
+        const systemPrompt = `You are Ilean, an AI assistant that answers questions about building documents and facility management data. You are part of the Geminus digital twin platform.
+
+Current context:
+- Building: ${siteName || 'Unknown'}
+- Context level: ${contextLevel || 'building'}
+
+You help users find information about:
+- Building documentation (maintenance reports, inspection records, compliance documents)
+- Equipment specifications and manuals
+- Floor plans and space information
+- Historical maintenance data
+
+If you don't have specific document data available, provide helpful guidance about what types of documents are typically available in facility management systems, and suggest the user check the Senslinc portal directly for detailed document access.
+
+Keep answers concise and helpful.`;
+
+        const aiMessages = [
+          { role: 'system', content: systemPrompt },
+          ...(conversationHistory || []).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: question },
+        ];
+
+        try {
+          const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-3-flash-preview',
+              messages: aiMessages,
+            }),
+          });
+
+          if (!aiResp.ok) {
+            const errText = await aiResp.text();
+            console.error('[Ilean] AI gateway error:', aiResp.status, errText);
+            return jsonResponse({
+              success: true,
+              data: {
+                answer: 'I apologize, but I\'m unable to process your question at the moment. Please try again later or check the Senslinc portal directly.',
+                source: 'fallback-error',
+              },
+            });
+          }
+
+          const aiData = await aiResp.json();
+          const answer = aiData.choices?.[0]?.message?.content || 'No response generated.';
+          return jsonResponse({ success: true, data: { answer, source: 'lovable-ai-fallback' } });
+        } catch (e) {
+          console.error('[Ilean] AI fallback error:', e);
+          return jsonResponse({
+            success: true,
+            data: {
+              answer: 'I encountered an error while processing your question. Please try again.',
+              source: 'fallback-error',
+            },
+          });
+        }
       }
 
       default:
