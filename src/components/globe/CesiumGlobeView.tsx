@@ -6,6 +6,7 @@ import {
   CesiumComponentRef,
 } from 'resium';
 import * as Cesium from '@cesium/engine';
+import '@cesium/engine/Source/Widget/CesiumWidget.css';
 import { Building2, Eye, Globe, Loader2, Box, RotateCcw } from 'lucide-react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
