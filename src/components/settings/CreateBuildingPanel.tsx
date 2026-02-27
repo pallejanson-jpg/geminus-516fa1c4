@@ -9,8 +9,11 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { convertToXktWithMetadata, type IfcHierarchyResult } from '@/services/acc-xkt-converter';
 import {
-  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer
+  Building2, MapPin, Upload, Loader2, CheckCircle2, FileText, Layers, Timer, Cloud, Monitor
 } from 'lucide-react';
+
+/** Files larger than this threshold (in bytes) are converted server-side */
+const SERVER_CONVERSION_THRESHOLD = 20 * 1024 * 1024; // 20 MB
 
 interface CreatedBuilding {
   complexFmGuid: string;
@@ -152,105 +155,151 @@ const CreateBuildingPanel: React.FC = () => {
     setConversionDone(false);
     setConversionStartTime(Date.now());
 
+    const useServerSide = ifcFile.size > SERVER_CONVERSION_THRESHOLD;
+
     try {
       addLog(`Reading file: ${ifcFile.name} (${(ifcFile.size / 1024 / 1024).toFixed(1)} MB)`);
+      if (useServerSide) {
+        addLog('📡 Large file detected — using server-side conversion');
+      }
       setConversionProgress(10);
 
-      const arrayBuffer = await ifcFile.arrayBuffer();
-      setConversionProgress(20);
+      if (useServerSide) {
+        // ── Server-side path: upload IFC → call edge function ──
+        const ifcStoragePath = `${targetBuildingFmGuid}/${ifcFile.name}`;
+        addLog('Uploading IFC to storage...');
+        const { error: ifcUploadError } = await supabase.storage
+          .from('ifc-uploads')
+          .upload(ifcStoragePath, ifcFile, {
+            contentType: 'application/octet-stream',
+            upsert: true,
+          });
+        if (ifcUploadError) throw new Error(`IFC upload failed: ${ifcUploadError.message}`);
+        setConversionProgress(30);
+        addLog('IFC uploaded. Starting server conversion...');
 
-      addLog('Converting IFC to XKT and extracting hierarchy...');
-      const result: IfcHierarchyResult = await convertToXktWithMetadata(arrayBuffer, (msg) => {
-        addLog(msg);
-        setConversionProgress(prev => Math.min(prev + 5, 70));
-      });
-
-      setConversionProgress(75);
-      addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
-      addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
-
-      // Upload XKT to storage
-      const modelId = `ifc-${Date.now()}`;
-      const storageFileName = `${modelId}.xkt`;
-      const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
-
-      addLog('Uploading XKT to storage...');
-      const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
-      const { error: uploadError } = await supabase.storage
-        .from('xkt-models')
-        .upload(storagePath, blob, {
-          contentType: 'application/octet-stream',
-          upsert: true,
+        const { data: convResult, error: fnError } = await supabase.functions.invoke('ifc-to-xkt', {
+          body: {
+            ifcStoragePath,
+            buildingFmGuid: targetBuildingFmGuid,
+            modelName: ifcFile.name.replace(/\.ifc$/i, ''),
+          },
         });
 
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-      setConversionProgress(82);
+        if (fnError) throw new Error(`Server conversion failed: ${fnError.message}`);
+        if (!convResult?.success) throw new Error(convResult?.error || 'Conversion failed');
 
-      // Save XKT metadata
-      addLog('Saving XKT metadata...');
-      const { error: dbError } = await supabase
-        .from('xkt_models')
-        .upsert({
-          building_fm_guid: targetBuildingFmGuid,
-          model_id: modelId,
-          model_name: ifcFile.name.replace(/\.ifc$/i, ''),
-          file_name: storageFileName,
-          file_size: result.xktData.byteLength,
-          storage_path: storagePath,
-          format: 'xkt',
-          synced_at: new Date().toISOString(),
-          source_updated_at: new Date().toISOString(),
-        } as any, { onConflict: 'building_fm_guid,model_id' });
+        setConversionProgress(85);
+        addLog(`XKT generated: ${convResult.xktSizeMB} MB`);
+        addLog(`Hierarchy: ${convResult.levels?.length || 0} levels, ${convResult.spaces?.length || 0} spaces`);
 
-      if (dbError) throw new Error(`Database error: ${dbError.message}`);
-      setConversionProgress(88);
+        // Create hierarchy in Asset+ if available
+        const levels = convResult.levels || [];
+        const spaces = convResult.spaces || [];
+        if ((levels.length > 0 || spaces.length > 0) && targetModelFmGuid) {
+          addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Asset+...`);
+          const levelFmGuids = new Map<string, string>();
+          const hierarchyLevels = levels.map((level: any) => {
+            const fmGuid = crypto.randomUUID();
+            levelFmGuids.set(level.id, fmGuid);
+            return { fmGuid, designation: level.name, commonName: level.name };
+          });
+          const hierarchySpaces = spaces.map((space: any) => {
+            const fmGuid = crypto.randomUUID();
+            return {
+              fmGuid,
+              designation: space.name,
+              commonName: space.name,
+              levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
+            };
+          });
 
-      // Create hierarchy in Asset+ if we have levels/spaces
-      if ((result.levels.length > 0 || result.spaces.length > 0) && targetModelFmGuid) {
-        addLog(`Creating ${result.levels.length} levels and ${result.spaces.length} spaces in Asset+...`);
-
-        const levelFmGuids = new Map<string, string>();
-        const hierarchyLevels = result.levels.map(level => {
-          const fmGuid = crypto.randomUUID();
-          levelFmGuids.set(level.id, fmGuid);
-          return {
-            fmGuid,
-            designation: level.name,
-            commonName: level.name,
-          };
-        });
-
-        const hierarchySpaces = result.spaces.map(space => {
-          const fmGuid = crypto.randomUUID();
-          return {
-            fmGuid,
-            designation: space.name,
-            commonName: space.name,
-            levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
-          };
-        });
-
-        const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
-          'asset-plus-create-hierarchy',
-          {
-            body: {
-              buildingFmGuid: targetBuildingFmGuid,
-              modelFmGuid: targetModelFmGuid,
-              levels: hierarchyLevels,
-              spaces: hierarchySpaces,
-            },
-          }
-        );
-
-        if (hierarchyError) {
-          addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
-        } else if (hierarchyData?.success) {
-          addLog(`✅ ${hierarchyData.message}`);
-        } else {
-          addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
+          const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
+            'asset-plus-create-hierarchy',
+            { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
+          );
+          if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
+          else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
+          else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
         }
-      } else if (result.levels.length > 0 || result.spaces.length > 0) {
-        addLog('ℹ️ Hierarchy extracted but no modelFmGuid — saved locally only.');
+
+      } else {
+        // ── Client-side path: convert on main thread for small files ──
+        addLog('🖥️ Small file — converting locally');
+        const arrayBuffer = await ifcFile.arrayBuffer();
+        setConversionProgress(20);
+
+        addLog('Converting IFC to XKT and extracting hierarchy...');
+        const result: IfcHierarchyResult = await convertToXktWithMetadata(arrayBuffer, (msg) => {
+          addLog(msg);
+          setConversionProgress(prev => Math.min(prev + 5, 70));
+        });
+
+        setConversionProgress(75);
+        addLog(`XKT generated: ${(result.xktData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+        addLog(`Hierarchy: ${result.levels.length} levels, ${result.spaces.length} spaces`);
+
+        // Upload XKT to storage
+        const modelId = `ifc-${Date.now()}`;
+        const storageFileName = `${modelId}.xkt`;
+        const storagePath = `${targetBuildingFmGuid}/${storageFileName}`;
+
+        addLog('Uploading XKT to storage...');
+        const blob = new Blob([result.xktData], { type: 'application/octet-stream' });
+        const { error: uploadError } = await supabase.storage
+          .from('xkt-models')
+          .upload(storagePath, blob, { contentType: 'application/octet-stream', upsert: true });
+
+        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+        setConversionProgress(82);
+
+        addLog('Saving XKT metadata...');
+        const { error: dbError } = await supabase
+          .from('xkt_models')
+          .upsert({
+            building_fm_guid: targetBuildingFmGuid,
+            model_id: modelId,
+            model_name: ifcFile.name.replace(/\.ifc$/i, ''),
+            file_name: storageFileName,
+            file_size: result.xktData.byteLength,
+            storage_path: storagePath,
+            format: 'xkt',
+            synced_at: new Date().toISOString(),
+            source_updated_at: new Date().toISOString(),
+          } as any, { onConflict: 'building_fm_guid,model_id' });
+
+        if (dbError) throw new Error(`Database error: ${dbError.message}`);
+        setConversionProgress(88);
+
+        // Create hierarchy in Asset+
+        if ((result.levels.length > 0 || result.spaces.length > 0) && targetModelFmGuid) {
+          addLog(`Creating ${result.levels.length} levels and ${result.spaces.length} spaces in Asset+...`);
+          const levelFmGuids = new Map<string, string>();
+          const hierarchyLevels = result.levels.map(level => {
+            const fmGuid = crypto.randomUUID();
+            levelFmGuids.set(level.id, fmGuid);
+            return { fmGuid, designation: level.name, commonName: level.name };
+          });
+          const hierarchySpaces = result.spaces.map(space => {
+            const fmGuid = crypto.randomUUID();
+            return {
+              fmGuid,
+              designation: space.name,
+              commonName: space.name,
+              levelFmGuid: levelFmGuids.get(space.parentId) || undefined,
+            };
+          });
+
+          const { data: hierarchyData, error: hierarchyError } = await supabase.functions.invoke(
+            'asset-plus-create-hierarchy',
+            { body: { buildingFmGuid: targetBuildingFmGuid, modelFmGuid: targetModelFmGuid, levels: hierarchyLevels, spaces: hierarchySpaces } }
+          );
+          if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
+          else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
+          else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
+        } else if (result.levels.length > 0 || result.spaces.length > 0) {
+          addLog('ℹ️ Hierarchy extracted but no modelFmGuid — saved locally only.');
+        }
       }
 
       setConversionProgress(100);
@@ -446,8 +495,11 @@ const CreateBuildingPanel: React.FC = () => {
                   )}
                 </div>
                 {isConverting && !conversionDone && (
-                  <p className="text-[10px] text-muted-foreground animate-pulse">
-                    Parsing IFC — this may take several minutes for large files…
+                  <p className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
+                    {ifcFile && ifcFile.size > SERVER_CONVERSION_THRESHOLD
+                      ? <><Cloud className="h-3 w-3" /> Converting on server — this may take a few minutes…</>
+                      : <><Monitor className="h-3 w-3" /> Parsing IFC locally — this may take several minutes for large files…</>
+                    }
                   </p>
                 )}
                 <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
