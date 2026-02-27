@@ -121,10 +121,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
   const [spacesSearch, setSpacesSearch] = useState('');
   const [levelsSearch, setLevelsSearch] = useState('');
 
-  // Per-level and per-space colors
+  // Per-level, per-space and per-category colors
   const [levelColors, setLevelColors] = useState<Map<string, string>>(new Map());
   const [spaceColors, setSpaceColors] = useState<Map<string, string>>(new Map());
+  const [categoryColors, setCategoryColors] = useState<Map<string, string>>(new Map());
   const [autoColorEnabled, setAutoColorEnabled] = useState(false);
+  const [autoColorSpaces, setAutoColorSpaces] = useState(false);
+  const [autoColorCategories, setAutoColorCategories] = useState(false);
   const [xrayMode, setXrayMode] = useState(false);
 
   // Annotations state
@@ -202,8 +205,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         name: (a.commonName || a.common_name || a.name || 'Unnamed').replace(/^null$/, 'Unnamed'),
         levelFmGuid: a.levelFmGuid || a.level_fm_guid,
       }))
-      .filter(s => !isGuid(s.name))
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
+      .filter((s: SpaceItem) => s.name && s.name !== 'Unnamed')
+      .sort((a: SpaceItem, b: SpaceItem) => a.name.localeCompare(b.name, 'sv', { numeric: true }));
   }, [buildingData, checkedLevels, levels]);
 
   // Auto-assign palette colors to levels
@@ -214,6 +217,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
     setLevelColors(colors);
   }, [levels]);
+
+  // (Category colors useEffect moved below categories declaration)
 
   // ── XEOKit accessor ─────────────────────────────────────────────────────
 
@@ -294,6 +299,15 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       .sort((a, b) => b.count - a.count);
   }, [getXeokitViewer, isVisible, checkedLevels, checkedSpaces]);
 
+  // Auto-assign palette colors to categories (must be after categories declaration)
+  useEffect(() => {
+    const colors = new Map<string, string>();
+    categories.forEach((cat, idx) => {
+      colors.set(cat.name, CATEGORY_PALETTE[cat.name] || LEVEL_PALETTE[idx % LEVEL_PALETTE.length]);
+    });
+    setCategoryColors(colors);
+  }, [categories]);
+
   // ── Build entity ID map (fmGuid → xeokit IDs) ─────────────────────────
 
   const buildEntityMap = useCallback(() => {
@@ -361,7 +375,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     }
 
     // Step 2: Match Asset+ levels → xeokit storeys (try sysId first, then name)
-    // IMPORTANT: Prefer storeys from A-model when multiple models have same-named storeys
+    // IMPORTANT: Only map storeys from A-model by default.
+    // Only include non-A storeys when that specific source is explicitly checked.
     // Sort storeys: A-model first, then others
     const sortedStoreys = [...xeokitStoreys].sort((a, b) => {
       const aIsA = aModelSceneIds.has(a.modelId) ? 0 : 1;
@@ -369,29 +384,45 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       return aIsA - bIsA;
     });
 
+    const checkedNonASourceGuids = new Set<string>();
+    sources.forEach(s => {
+      if (checkedSources.has(s.guid)) {
+        const n = s.name.toLowerCase();
+        if (!n.startsWith('a') && !n.includes('a-modell') && !n.includes('arkitekt')) {
+          checkedNonASourceGuids.add(s.guid);
+        }
+      }
+    });
+
+    // Filter storeys: A-model always, non-A only if explicitly checked
+    const eligibleStoreys = sortedStoreys.filter(xs => {
+      if (aModelSceneIds.has(xs.modelId)) return true;
+      // Non-A storey: only include if that source is explicitly checked
+      if (checkedNonASourceGuids.size === 0) return false; // no non-A sources checked
+      // Find the source guid for this storey's model
+      const matchModel = sharedModels.find(m => m.id === xs.modelId);
+      if (!matchModel) return false;
+      const matchSource = sources.find(s => s.name === matchModel.name);
+      return matchSource && checkedNonASourceGuids.has(matchSource.guid);
+    });
+
     const usedStoreyIds = new Set<string>();
     levels.forEach(level => {
       const fmLower = level.fmGuid.toLowerCase();
       const nameLower = level.name.toLowerCase().trim();
 
-      // When no source is checked or A-model source is checked, prefer A-model storeys
-      const preferAModel = checkedSources.size === 0 || 
-        sources.some(s => checkedSources.has(s.guid) && s.name.toLowerCase().startsWith('a'));
-
-      const storeysToSearch = preferAModel ? sortedStoreys : xeokitStoreys;
-
-      let matched = storeysToSearch.find(xs =>
+      let matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.sysId.toLowerCase() === fmLower
       );
-      if (!matched) matched = storeysToSearch.find(xs =>
+      if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) &&
         xs.sysId.toLowerCase().replace(/-/g, '') === fmLower.replace(/-/g, '')
       );
-      if (!matched) matched = storeysToSearch.find(xs =>
+      if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && xs.name.toLowerCase().trim() === nameLower
       );
       // Fuzzy name: contains match
-      if (!matched) matched = storeysToSearch.find(xs =>
+      if (!matched) matched = eligibleStoreys.find(xs =>
         !usedStoreyIds.has(xs.id) && (
           xs.name.toLowerCase().includes(nameLower) ||
           nameLower.includes(xs.name.toLowerCase().trim())
@@ -603,41 +634,42 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       });
     }
 
-    // Step 1: Apply level auto-colors (always, if enabled)
-    if (autoColorEnabled && eMap.size > 0) {
-      levels.forEach(level => {
-        const color = levelColors.get(level.fmGuid);
-        const entityIds = eMap.get(level.fmGuid);
-        if (color && entityIds) {
-          const rgb = hexToRgb01(color);
-          entityIds.forEach(id => {
-            const entity = scene.objects?.[id];
-            if (entity) {
-              entity.colorize = rgb;
-            }
-          });
-        }
-      });
+    // Step 1: Apply auto-colors per section (only when each section's brush is enabled)
+    if (eMap.size > 0) {
+      // Level colors
+      if (autoColorEnabled) {
+        levels.forEach(level => {
+          const color = levelColors.get(level.fmGuid);
+          const entityIds = eMap.get(level.fmGuid);
+          if (color && entityIds) {
+            const rgb = hexToRgb01(color);
+            entityIds.forEach(id => {
+              const entity = scene.objects?.[id];
+              if (entity) entity.colorize = rgb;
+            });
+          }
+        });
+      }
 
-      // Also colorize spaces with their own colors
-      spaces.forEach(space => {
-        const color = spaceColors.get(space.fmGuid);
-        if (color) {
+      // Space colors
+      if (autoColorSpaces) {
+        spaces.forEach(space => {
+          const color = spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
           const rgb = hexToRgb01(color);
           const spaceEntityIds = eMap.get(space.fmGuid);
           spaceEntityIds?.forEach(id => {
             const entity = scene.objects?.[id];
             if (entity) entity.colorize = rgb;
           });
-        }
-      });
+        });
+      }
 
-      // Also colorize by IFC category when auto-color is enabled
-      if (checkedCategories.size > 0 && viewer.metaScene?.metaObjects) {
+      // Category colors
+      if (autoColorCategories && viewer.metaScene?.metaObjects) {
         Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
           if (!mo.type) return;
           const catName = mo.type.replace(/^Ifc/, '').replace(/StandardCase$/, '');
-          const catColor = CATEGORY_PALETTE[catName];
+          const catColor = categoryColors.get(catName);
           if (catColor) {
             const entity = scene.objects?.[mo.id];
             if (entity) entity.colorize = hexToRgb01(catColor);
@@ -884,7 +916,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           // Only colorize if user has explicitly set a color for this space
           // Find the space fmGuid for this entity id
           let hasCustomColor = false;
-          if (autoColorEnabled) {
+          if (autoColorSpaces) {
             for (const [spaceFmGuid, color] of spaceColors.entries()) {
               if (checkedSpaces.has(spaceFmGuid)) {
                 const spaceIds = eMap.get(spaceFmGuid);
@@ -892,6 +924,20 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                   entity.colorize = hexToRgb01(color);
                   hasCustomColor = true;
                   break;
+                }
+              }
+            }
+            // If auto-color enabled but no custom color, use palette
+            if (!hasCustomColor) {
+              for (const space of spaces) {
+                if (checkedSpaces.has(space.fmGuid)) {
+                  const spaceIds = eMap.get(space.fmGuid);
+                  if (spaceIds?.includes(id)) {
+                    const color = LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length];
+                    entity.colorize = hexToRgb01(color);
+                    hasCustomColor = true;
+                    break;
+                  }
                 }
               }
             }
@@ -939,14 +985,14 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', scene.objectIds.length);
     }); // end requestAnimationFrame
   }, [getXeokitViewer, checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levels, spaces, categoryToIfcTypes, levelColors, spaceColors, autoColorEnabled, xrayMode]);
+    levels, spaces, categoryToIfcTypes, levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, xrayMode]);
 
   // Apply whenever filters or colors change
   useEffect(() => {
     if (!isVisible) return;
     applyFilterVisibility();
   }, [checkedSources, checkedLevels, checkedSpaces, checkedCategories,
-    levelColors, autoColorEnabled, applyFilterVisibility, isVisible]);
+    levelColors, spaceColors, categoryColors, autoColorEnabled, autoColorSpaces, autoColorCategories, applyFilterVisibility, isVisible]);
 
   // Cleanup when panel closes: reset viewer state
   useEffect(() => {
@@ -1176,6 +1222,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             searchValue={spacesSearch}
             onSearchChange={setSpacesSearch}
             showSearch={spaces.length > 6}
+            rightAction={
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-6 w-6", autoColorSpaces ? "text-primary" : "text-muted-foreground")}
+                title={autoColorSpaces ? "Disable space colors" : "Enable space colors"}
+                onClick={(e) => { e.stopPropagation(); setAutoColorSpaces(!autoColorSpaces); }}
+              >
+                <Paintbrush className="h-3.5 w-3.5" />
+              </Button>
+            }
           >
             {filteredSpaces.slice(0, 200).map(space => (
               <FilterRow
@@ -1184,8 +1241,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 checked={checkedSpaces.has(space.fmGuid)}
                 onCheckedChange={(checked) => handleSpaceToggle(space.fmGuid, checked)}
                 onClick={() => handleSpaceClick(space.fmGuid)}
-                color={autoColorEnabled ? (spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length]) : undefined}
-                onColorChange={autoColorEnabled ? (c) => setSpaceColors(prev => new Map(prev).set(space.fmGuid, c)) : undefined}
+                color={autoColorSpaces ? (spaceColors.get(space.fmGuid) || LEVEL_PALETTE[spaces.indexOf(space) % LEVEL_PALETTE.length]) : undefined}
+                onColorChange={autoColorSpaces ? (c) => setSpaceColors(prev => new Map(prev).set(space.fmGuid, c)) : undefined}
               />
             ))}
             {filteredSpaces.length > 200 && (
@@ -1208,6 +1265,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
             isOpen={categoriesOpen}
             onToggle={() => setCategoriesOpen(!categoriesOpen)}
             onReset={() => handleResetSection('categories')}
+            rightAction={
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-6 w-6", autoColorCategories ? "text-primary" : "text-muted-foreground")}
+                title={autoColorCategories ? "Disable category colors" : "Enable category colors"}
+                onClick={(e) => { e.stopPropagation(); setAutoColorCategories(!autoColorCategories); }}
+              >
+                <Paintbrush className="h-3.5 w-3.5" />
+              </Button>
+            }
           >
             {categories.map(cat => (
               <FilterRow
@@ -1216,7 +1284,8 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
                 badge={`${cat.count}`}
                 checked={checkedCategories.has(cat.name)}
                 onCheckedChange={(checked) => handleCategoryToggle(cat.name, checked)}
-                color={autoColorEnabled ? (CATEGORY_PALETTE[cat.name] || LEVEL_PALETTE[categories.indexOf(cat) % LEVEL_PALETTE.length]) : undefined}
+                color={autoColorCategories ? (categoryColors.get(cat.name) || LEVEL_PALETTE[categories.indexOf(cat) % LEVEL_PALETTE.length]) : undefined}
+                onColorChange={autoColorCategories ? (c) => setCategoryColors(prev => new Map(prev).set(cat.name, c)) : undefined}
               />
             ))}
           </FilterSection>

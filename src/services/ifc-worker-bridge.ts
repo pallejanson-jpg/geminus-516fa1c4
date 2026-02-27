@@ -26,9 +26,9 @@ export function convertIfcInWorker(
         
         try {
           log('Worker: Loading xeokit-convert...');
-          const mod = await import('/node_modules/.vite/deps/@xeokit_xeokit-convert.js?v=worker');
+          const mod = await import('@xeokit/xeokit-convert');
           log('Worker: Loading web-ifc...');
-          const WebIFC = await import('/node_modules/.vite/deps/web-ifc.js?v=worker');
+          const WebIFC = await import('web-ifc');
           
           const xktModel = new mod.XKTModel();
           const fileSizeMB = ifcData.byteLength / 1024 / 1024;

@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Spinner } from '@/components/ui/spinner';
 import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
+import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
+import { hslStringToRgbFloat } from '@/lib/visualization-utils';
 
 const XEOKIT_CDN = 'https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.5/dist/xeokit-sdk.es.js';
 
@@ -244,6 +246,68 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       nc?.remove();
     };
   }, [initialize]);
+
+  // ── Listen for Insights color events (chart click → colorize model) ───
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const viewer = viewerRef.current;
+      if (!viewer?.scene || !viewer?.metaScene) return;
+      const detail = (e as CustomEvent<InsightsColorUpdateDetail>).detail;
+      if (!detail?.colorMap) return;
+
+      const scene = viewer.scene;
+      const colorMap = detail.colorMap;
+
+      // X-ray everything first
+      const xrayMat = scene.xrayMaterial;
+      if (xrayMat) {
+        xrayMat.fill = true;
+        xrayMat.fillAlpha = 0.15;
+        xrayMat.fillColor = [0.55, 0.55, 0.6];
+        xrayMat.edges = true;
+        xrayMat.edgeAlpha = 0.3;
+      }
+      scene.setObjectsXRayed(scene.objectIds, true);
+
+      // Colorize matching objects
+      Object.entries(colorMap).forEach(([fmGuid, rgb]) => {
+        // Find entities matching this fmGuid in metaScene
+        const metaObjects = viewer.metaScene.metaObjects;
+        if (!metaObjects) return;
+        Object.values(metaObjects).forEach((mo: any) => {
+          const sysId = (mo.originalSystemId || '').toLowerCase();
+          if (sysId === fmGuid.toLowerCase() || sysId.replace(/-/g, '') === fmGuid.toLowerCase().replace(/-/g, '')) {
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.xrayed = false;
+              entity.visible = true;
+              entity.colorize = rgb;
+              entity.opacity = 0.85;
+            }
+            // Also colorize descendants (e.g. room contents)
+            const collectDescendants = (obj: any) => {
+              obj.children?.forEach((child: any) => {
+                const childEntity = scene.objects?.[child.id];
+                if (childEntity) {
+                  childEntity.xrayed = false;
+                  childEntity.visible = true;
+                  childEntity.colorize = rgb;
+                  childEntity.opacity = 0.85;
+                }
+                collectDescendants(child);
+              });
+            };
+            collectDescendants(mo);
+          }
+        });
+      });
+
+      console.log('[NativeViewer] Applied INSIGHTS_COLOR_UPDATE:', detail.mode, Object.keys(colorMap).length, 'entries');
+    };
+
+    window.addEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+    return () => window.removeEventListener(INSIGHTS_COLOR_UPDATE_EVENT, handler);
+  }, []);
 
   return (
     <div className="relative w-full h-full bg-background">
