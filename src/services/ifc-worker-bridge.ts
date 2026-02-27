@@ -1,28 +1,69 @@
 /**
- * IFC-to-XKT conversion bridge.
+ * IFC-to-XKT Web Worker bridge.
  * 
- * Runs IFC parsing on the main thread using dynamically imported
- * @xeokit/xeokit-convert and web-ifc libraries.
- * 
- * Note: A Web Worker approach was attempted but blob-based workers
- * cannot resolve bare npm imports. The main thread approach works
- * reliably with the WASM-based web-ifc parser.
+ * Uses Vite's native worker bundling via `new Worker(new URL(...))`.
+ * The worker runs in a separate thread so the UI stays responsive
+ * even for very large IFC files (200+ MB).
  */
 
 import type { IfcHierarchyResult } from './acc-xkt-converter';
 
-export async function convertIfcInWorker(
+export function convertIfcInWorker(
   ifcData: ArrayBuffer,
   wasmPath: string,
   logger: (msg: string) => void,
   timeoutMs: number
 ): Promise<IfcHierarchyResult> {
-  // Run directly on main thread — web-ifc WASM handles the heavy lifting
-  return runOnMainThread(ifcData, wasmPath, logger, timeoutMs);
+  return new Promise((resolve, reject) => {
+    let worker: Worker;
+
+    try {
+      worker = new Worker(
+        new URL('../workers/ifc-converter.worker.ts', import.meta.url),
+        { type: 'module' }
+      );
+    } catch (err) {
+      logger('Worker creation failed, falling back to main thread');
+      runOnMainThread(ifcData, wasmPath, logger, timeoutMs).then(resolve, reject);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      worker.terminate();
+      reject(new Error(`IFC parsing timeout after ${(timeoutMs / 60_000).toFixed(0)} min`));
+    }, timeoutMs);
+
+    worker.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'log') {
+        logger(msg.message);
+      } else if (msg.type === 'result') {
+        clearTimeout(timeout);
+        worker.terminate();
+        resolve({ xktData: msg.xktData, levels: msg.levels, spaces: msg.spaces });
+      } else if (msg.type === 'error') {
+        clearTimeout(timeout);
+        worker.terminate();
+        logger('Worker failed, falling back to main thread: ' + msg.message);
+        // Re-read the file since the buffer may have been transferred
+        runOnMainThread(ifcData, wasmPath, logger, timeoutMs).then(resolve, reject);
+      }
+    };
+
+    worker.onerror = (err) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      logger('Worker error, falling back to main thread');
+      runOnMainThread(ifcData, wasmPath, logger, timeoutMs).then(resolve, reject);
+    };
+
+    // Don't transfer — keep a copy in case we need main-thread fallback
+    worker.postMessage({ ifcData, wasmPath });
+  });
 }
 
 /**
- * Main-thread IFC conversion using xeokit-convert + web-ifc.
+ * Main-thread fallback for IFC conversion.
  */
 async function runOnMainThread(
   ifcData: ArrayBuffer,
@@ -30,14 +71,14 @@ async function runOnMainThread(
   logger: (msg: string) => void,
   timeoutMs: number
 ): Promise<IfcHierarchyResult> {
-  logger('Loading xeokit-convert...');
+  logger('Main thread: Loading xeokit-convert...');
   const mod = await import('@xeokit/xeokit-convert');
-  logger('Loading web-ifc...');
+  logger('Main thread: Loading web-ifc...');
   const WebIFC = await import('web-ifc');
 
   const xktModel = new (mod as any).XKTModel();
   const fileSizeMB = ifcData.byteLength / 1024 / 1024;
-  logger(`Parsing IFC (${fileSizeMB.toFixed(1)} MB)...`);
+  logger(`Main thread: Parsing IFC (${fileSizeMB.toFixed(1)} MB)...`);
 
   const parsePromise = (mod as any).parseIFCIntoXKTModel({
     WebIFC,
@@ -49,11 +90,11 @@ async function runOnMainThread(
   });
 
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`IFC parsing timeout after ${(timeoutMs / 60_000).toFixed(0)} min`)), timeoutMs)
+    setTimeout(() => reject(new Error(`IFC timeout after ${(timeoutMs / 60_000).toFixed(0)} min`)), timeoutMs)
   );
 
   await Promise.race([parsePromise, timeoutPromise]);
-  logger('Finalizing model...');
+  logger('Main thread: Finalizing...');
   xktModel.finalize();
 
   const levels: IfcHierarchyResult['levels'] = [];
@@ -69,6 +110,6 @@ async function runOnMainThread(
 
   const stats: Record<string, any> = { texturesSize: 0 };
   const xktArrayBuffer = (mod as any).writeXKTModelToArrayBuffer(xktModel, null, stats, { zip: false });
-  logger(`XKT ready (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+  logger(`Main thread: XKT ready (${(xktArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
   return { xktData: xktArrayBuffer, levels, spaces };
 }
