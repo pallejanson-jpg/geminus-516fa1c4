@@ -102,13 +102,13 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
   return (
     <div
       ref={menuRef}
-      className="fixed z-[100] min-w-[200px] rounded-lg border border-border bg-card/95 backdrop-blur-md shadow-xl animate-in fade-in-0 zoom-in-95 duration-100"
+      className="fixed z-[100] min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-md shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 text-zinc-100"
       style={{ left: x, top: y }}
     >
       {/* Entity name header */}
       {entityName && (
-        <div className="px-3 py-2 border-b border-border">
-          <p className="text-xs text-muted-foreground truncate max-w-[200px]">{entityName}</p>
+        <div className="px-3 py-2 border-b border-zinc-700">
+          <p className="text-xs text-zinc-400 truncate max-w-[200px]">{entityName}</p>
         </div>
       )}
 
@@ -125,7 +125,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
               return (
                 <button
                   key={item.id}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   onClick={() => handleClick(item.id)}
                   disabled={disabled}
                 >
@@ -141,7 +141,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
       {(() => {
         const gItems = settings.filter((s) => s.group === 'geminus' && s.visible);
         const vItems = settings.filter((s) => s.group === 'viewer' && s.visible);
-        return gItems.length > 0 && vItems.length > 0 ? <Separator /> : null;
+        return gItems.length > 0 && vItems.length > 0 ? <Separator className="bg-zinc-700" /> : null;
       })()}
 
       {/* Viewer actions */}
@@ -157,7 +157,7 @@ const ViewerContextMenu: React.FC<ViewerContextMenuProps> = ({
               return (
                 <button
                   key={item.id}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   onClick={() => handleClick(item.id)}
                   disabled={needsEntity && !hasEntity}
                 >

@@ -117,12 +117,22 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
           'pointer-events-auto',
           // LEFT side — value labels LEFT of gradient bar
           isMobile
-            ? 'left-3 bottom-24'
-            : 'left-3 top-1/2 -translate-y-1/2',
+            ? 'right-3 bottom-24'
+            : 'right-3 top-1/2 -translate-y-1/2',
           className
         )}
       >
-      {/* Value labels — LEFT of gradient bar (flex-row-reverse puts labels first) */}
+      {/* Gradient bar — LEFT of value labels */}
+      <div
+        className="rounded-md border border-white/20 shadow-lg"
+        style={{
+          ...gradientStyle,
+          width: isMobile ? 14 : 18,
+          height: barHeight,
+        }}
+      />
+
+      {/* Value labels — RIGHT of gradient bar */}
       <div
         className="relative flex flex-col justify-between py-0.5"
         style={{ height: barHeight }}
@@ -183,15 +193,6 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         )}
       </div>
 
-      {/* Gradient bar — RIGHT of value labels */}
-      <div
-        className="rounded-md border border-white/20 shadow-lg"
-        style={{
-          ...gradientStyle,
-          width: isMobile ? 14 : 18,
-          height: barHeight,
-        }}
-      />
     </div>
   );
 };
