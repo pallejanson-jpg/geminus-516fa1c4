@@ -12,8 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Spinner } from '@/components/ui/spinner';
 import { AlertCircle, Box } from 'lucide-react';
 import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
-import { hslStringToRgbFloat } from '@/lib/visualization-utils';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
@@ -41,6 +41,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
+  const isMobile = useIsMobile();
   const [phase, setPhase] = useState<LoadPhase>('init');
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
   const [errorMsg, setErrorMsg] = useState('');
@@ -103,11 +104,54 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 3. Fetch model list from DB
       setPhase('loading_models');
-      let { data: models, error: dbError } = await supabase
+      const { data: modelsFromDb, error: dbErrorRaw } = await supabase
         .from('xkt_models')
         .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
         .eq('building_fm_guid', buildingFmGuid)
         .order('file_size', { ascending: true });
+      let dbError: any = dbErrorRaw;
+      let models: Array<ModelInfo & { synced_at?: string | null }> = (modelsFromDb as any[]) ?? [];
+
+      // Supplement from storage folder to avoid stale/missing DB metadata
+      // (xkt_models can lag behind actual files in xkt-models bucket)
+      const mergedModels = new Map<string, ModelInfo & { synced_at?: string | null }>();
+      (models || []).forEach((m: any) => mergedModels.set(m.model_id, m));
+
+      try {
+        const { data: storageFiles, error: storageListError } = await supabase.storage
+          .from('xkt-models')
+          .list(buildingFmGuid, {
+            limit: 1000,
+            sortBy: { column: 'name', order: 'asc' },
+          });
+
+        if (!storageListError && storageFiles) {
+          const xktFiles = storageFiles.filter((f: any) =>
+            f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt')
+          );
+
+          xktFiles.forEach((file: any) => {
+            const modelId = file.name.replace(/\.xkt$/i, '');
+            if (!mergedModels.has(modelId)) {
+              mergedModels.set(modelId, {
+                model_id: modelId,
+                model_name: modelId,
+                storage_path: `${buildingFmGuid}/${file.name}`,
+                file_size: file.metadata?.size ?? null,
+                storey_fm_guid: null,
+                synced_at: null,
+              });
+            }
+          });
+
+          models = Array.from(mergedModels.values());
+          console.log(`[NativeViewer] Model sources → DB: ${(models || []).filter((m: any) => !!m.synced_at).length}, Storage: ${xktFiles.length}, Merged: ${models.length}`);
+        } else if (storageListError) {
+          console.warn('[NativeViewer] Storage list failed, continuing with DB models only:', storageListError.message);
+        }
+      } catch (storageError) {
+        console.warn('[NativeViewer] Storage list fallback failed, continuing with DB models only:', storageError);
+      }
 
       // Auto-sync fallback: if no models cached, trigger server-side sync from Asset+
       if (!dbError && (!models || models.length === 0)) {
@@ -189,8 +233,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       setLoadProgress({ loaded: 0, total: loadList.length });
 
-      // 4. Load models concurrently (max 3)
-      const CONCURRENT = 3;
+      // 4. Load models (mobile-safe sequential loading to avoid memory crashes)
+      const CONCURRENT = isMobile ? 1 : 2;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
 
@@ -256,7 +300,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
         loaded++;
         if (mountedRef.current) {
-          setLoadProgress({ loaded, total: models.length });
+          setLoadProgress({ loaded, total: loadList.length });
         }
       };
 
