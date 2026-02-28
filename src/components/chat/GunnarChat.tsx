@@ -71,7 +71,7 @@ function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
     return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about floors, rooms, areas, assets, work orders, or issues!`;
   }
-  if (context?.activeApp === 'assetplus_viewer') {
+  if (context?.activeApp === 'assetplus_viewer' || context?.activeApp === 'native_viewer') {
     return `Hi! You're in the 3D viewer. I can help you navigate, explore floors, or find specific objects. Try asking "How many rooms are there?" or "Show floor 2".`;
   }
   if (context?.activeApp === 'navigator') {

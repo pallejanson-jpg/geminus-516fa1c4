@@ -274,7 +274,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             // Save current app before switching to viewer
             setPreviousAppBeforeViewer(activeApp);
             setViewer3dFmGuidInternal(fmGuid);
-            setActiveApp('assetplus_viewer');
+            setActiveApp('native_viewer');
         } else {
             // Return to previous app when closing viewer
             setViewer3dFmGuidInternal(null);
@@ -338,7 +338,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Save current app and open 3D viewer for this building
         setPreviousAppBeforeViewer(activeApp);
         setViewer3dFmGuidInternal(buildingFmGuid);
-        setActiveApp('assetplus_viewer');
+        setActiveApp('native_viewer');
     }, [activeApp]);
 
     const completeAnnotationPlacement = useCallback((coordinates: { x: number; y: number; z: number }) => {
