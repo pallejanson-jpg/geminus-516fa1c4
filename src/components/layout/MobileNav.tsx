@@ -84,7 +84,11 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
     setIsMobileMenuOpen(false);
   }, [appConfigs, setActiveApp, setIsMobileMenuOpen, selectedFacility, open360WithContext]);
 
-  if (!isMobile) return null;
+  // Hide FAB when a viewer app is active (viewer has its own mobile overlay)
+  const VIEWER_APPS = ['native_viewer', 'viewer', 'assetplus_viewer', 'split_viewer', 'virtual_twin'];
+  const isInViewer = VIEWER_APPS.includes(activeApp);
+
+  if (!isMobile || isInViewer) return null;
 
   return (
     <>

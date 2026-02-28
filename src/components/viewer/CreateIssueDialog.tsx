@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const ISSUE_TYPES = [
   { value: 'fault', label: 'Fault / Problem', icon: AlertCircle, color: 'text-destructive' },
@@ -57,6 +58,7 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
   isSubmitting = false,
   selectedObjectIds = [],
 }) => {
+  const isMobile = useIsMobile();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [issueType, setIssueType] = useState<string>("fault");
@@ -149,26 +151,31 @@ const CreateIssueDialog: React.FC<CreateIssueDialogProps> = ({
         onClick={handleClose}
       />
       
-      {/* Draggable panel */}
+      {/* Panel — bottom-sheet on mobile, draggable on desktop */}
       <div
         className={cn(
-          "fixed z-[71] border rounded-lg shadow-xl bg-card",
-          "w-[480px] max-w-[calc(100vw-40px)]",
-          "animate-in fade-in-0 zoom-in-95 duration-200",
-          isDragging && "cursor-grabbing"
+          "fixed z-[71] border shadow-xl bg-card",
+          "animate-in fade-in-0 duration-200",
+          isMobile
+            ? "inset-x-0 bottom-0 rounded-t-2xl max-h-[90dvh] w-full slide-in-from-bottom-10"
+            : cn(
+                "rounded-lg w-[480px] max-w-[calc(100vw-40px)] zoom-in-95",
+                isDragging && "cursor-grabbing"
+              )
         )}
-        style={{ left: position.x, top: position.y }}
+        style={isMobile ? undefined : { left: position.x, top: position.y }}
       >
         {/* Draggable header */}
         <div
           className={cn(
             "flex items-center gap-2 px-4 py-3 border-b",
-            "cursor-grab select-none",
+            !isMobile && "cursor-grab select-none",
             isDragging && "cursor-grabbing"
           )}
-          onMouseDown={handleDragStart}
+          onMouseDown={isMobile ? undefined : handleDragStart}
         >
-          <GripHorizontal className="h-4 w-4 text-muted-foreground" />
+          {isMobile && <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-muted-foreground/30 rounded-full" />}
+          {!isMobile && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
           <MessageSquarePlus className="h-5 w-5 text-primary" />
           <span className="font-semibold flex-1">Create issue</span>
           <Button 
