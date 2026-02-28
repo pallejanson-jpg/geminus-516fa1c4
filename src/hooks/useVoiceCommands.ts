@@ -105,7 +105,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
     patterns: [
       /^(öppna|visa)\s+(3d|tre-?d|viewer|visare|visaren|3d-?visare|3d-?visaren)$/i,
     ],
-    action: (ctx) => { ctx.setActiveApp('assetplus_viewer'); },
+    action: (ctx) => { ctx.setActiveApp('native_viewer'); },
     description: 'Öppna 3D-visare',
     category: '3d',
   },
@@ -243,7 +243,7 @@ const VOICE_COMMANDS: VoiceCommand[] = [
       /^(skapa|ny|rapportera)\s+(ärende|issue|avvikelse)$/i,
     ],
     action: (ctx) => {
-      ctx.setActiveApp('assetplus_viewer');
+      ctx.setActiveApp('native_viewer');
       // Dispatch event to open issue dialog
       setTimeout(() => window.dispatchEvent(new CustomEvent('VOICE_CREATE_ISSUE')), 500);
     },

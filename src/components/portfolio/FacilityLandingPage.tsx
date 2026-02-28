@@ -190,9 +190,10 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     };
   }, [facility, childSpaces, childStoreys, isSpace]);
 
-  // Handler for 3D button - passes the building's fmGuid to viewer
+  // Handler for 3D button - passes the building's fmGuid to native viewer
   const handleToggle3D = () => {
     if (facility.fmGuid) {
+      onClose();
       setViewer3dFmGuid(facility.fmGuid);
     }
   };

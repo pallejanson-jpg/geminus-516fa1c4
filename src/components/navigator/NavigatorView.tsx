@@ -185,14 +185,14 @@ export default function NavigatorView() {
   const handleOpen3D = useCallback((node: NavigatorNode) => {
     // Set the FMGUID and navigate to 3D viewer
     setViewer3dFmGuid(node.fmGuid);
-    setActiveApp('assetplus_viewer');
+    setActiveApp('native_viewer');
   }, [setViewer3dFmGuid, setActiveApp]);
 
   const handleOpen2D = useCallback((node: NavigatorNode) => {
     // Set the FMGUID and navigate to 3D viewer (will start in 2D mode for floors)
     // Store a flag to indicate 2D mode should be activated
     setViewer3dFmGuid(node.fmGuid);
-    setActiveApp('assetplus_viewer');
+    setActiveApp('native_viewer');
     toast.info(`Öppnar 2D-vy för "${node.commonName || node.name}"`, {
       description: 'Växla till 2D-läge i verktygsfältet',
     });
