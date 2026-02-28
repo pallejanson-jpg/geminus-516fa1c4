@@ -117,8 +117,8 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
           'pointer-events-auto',
           // LEFT side — value labels LEFT of gradient bar
           isMobile
-            ? 'right-3 bottom-24'
-            : 'right-3 top-1/2 -translate-y-1/2',
+            ? 'left-3 bottom-24'
+            : 'left-3 top-1/2 -translate-y-1/2',
           className
         )}
       >
