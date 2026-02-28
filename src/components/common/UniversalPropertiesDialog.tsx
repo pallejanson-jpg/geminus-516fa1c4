@@ -987,23 +987,26 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     );
   }
 
-  // Desktop: Floating dialog
+  // Desktop: Floating dialog with backdrop
   return (
-    <div
-      className={cn(
-        "fixed z-50 bg-card border rounded-lg shadow-xl transition-all flex flex-col",
-        "w-full max-w-[400px] max-h-[85vh]",
-        "sm:max-w-none",
-        isDragging && "cursor-grabbing opacity-90",
-        isResizing && "select-none"
-      )}
-      style={{ 
-        left: position.x, 
-        top: position.y,
-        width: size.width,
-        height: !isCollapsed ? size.height : undefined,
-      }}
-    >
+    <>
+      {/* Backdrop — click to close */}
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      <div
+        className={cn(
+          "fixed z-50 bg-card border rounded-lg shadow-xl transition-all flex flex-col",
+          "w-full max-w-[400px] max-h-[90vh]",
+          "sm:max-w-none",
+          isDragging && "cursor-grabbing opacity-90",
+          isResizing && "select-none"
+        )}
+        style={{ 
+          left: position.x, 
+          top: position.y,
+          width: size.width,
+          height: !isCollapsed ? size.height : undefined,
+        }}
+      >
       {/* Header - Draggable */}
       <div
         className="flex items-center justify-between p-3 border-b cursor-grab select-none bg-muted/30 shrink-0"
@@ -1021,8 +1024,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsCollapsed(!isCollapsed)}>
             {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-            <X className="h-3 w-3" />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -1042,7 +1045,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 
