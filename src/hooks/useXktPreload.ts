@@ -142,44 +142,37 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
         console.log(`XKT Preload: ${result.count} models found in database, fetching binary data...`);
 
-        // Actually fetch model data into memory for faster loading (XKT models only)
-        // Cast to any to avoid type issues with new 'format' column not yet in generated types
+        // Fetch model metadata including names for A-model prioritization
         const { data: models } = await (supabase
           .from('xkt_models')
-          .select('model_id, file_url, storage_path, file_size') as any)
+          .select('model_id, model_name, file_url, storage_path, file_size') as any)
           .eq('building_fm_guid', buildingFmGuid)
           .eq('format', 'xkt');
 
         if (models && models.length > 0) {
-          // Sort models by size (smallest first for faster initial feedback)
-          const sortedModels = [...models].sort((a, b) => 
-            (a.file_size || 0) - (b.file_size || 0)
-          );
+          // Split into A-models (priority) and secondary models
+          const isAModel = (name: string | null) => !name || name.charAt(0).toUpperCase() === 'A';
+          const aModels = models.filter((m: any) => isAModel(m.model_name));
+          const secondaryModels = models.filter((m: any) => !isAModel(m.model_name));
 
-          // Concurrent fetch with limit to avoid overwhelming the network
-          const CONCURRENT_FETCHES = 3;
-          const activePromises = new Set<Promise<void>>();
-          let completedCount = 0;
+          // Sort each group by size (smallest first)
+          const sortBySize = (a: any, b: any) => (a.file_size || 0) - (b.file_size || 0);
+          aModels.sort(sortBySize);
+          secondaryModels.sort(sortBySize);
+
+          console.log(`XKT Preload: ${aModels.length} A-models (priority), ${secondaryModels.length} secondary`);
 
           const fetchModel = async (model: typeof models[0]) => {
             try {
               const modelSize = model.file_size || 0;
 
-              // Preload only models that can actually be stored in memory cache
               if (modelSize > MAX_SINGLE_MODEL_BYTES) {
-                console.log(`XKT Preload: Skipping ${model.model_id} — too large for memory preload (${(modelSize / 1024 / 1024).toFixed(1)} MB)`);
                 return;
               }
-
-              // Skip models that are suspiciously small — likely corrupt cache entries (HTML/JSON error responses)
               if (modelSize > 0 && modelSize < 50_000) {
-                console.warn(`XKT Preload: Skipping ${model.model_id} — file_size ${model.file_size} bytes is too small (likely corrupt)`);
                 return;
               }
-
-              // Skip if already in memory
               if (isModelInMemory(model.model_id, buildingFmGuid)) {
-                console.log(`XKT Preload: ${model.model_id} already in memory`);
                 return;
               }
 
@@ -195,16 +188,11 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 const response = await fetch(url);
                 if (response.ok) {
                   const data = await response.arrayBuffer();
-                  // Validate binary data — reject HTML/JSON error responses from expired signed URLs
-                  const MIN_VALID_XKT_BYTES = 50_000;
                   const firstByte = data.byteLength > 0 ? String.fromCharCode(new Uint8Array(data)[0]) : '';
-                  if (data.byteLength < MIN_VALID_XKT_BYTES || firstByte === '<' || firstByte === '{') {
-                    console.warn(`XKT Preload: Skipping ${model.model_id} — invalid data (${data.byteLength} bytes, starts with '${firstByte}')`);
+                  if (data.byteLength < 50_000 || firstByte === '<' || firstByte === '{') {
                     return;
                   }
                   storeModelInMemory(model.model_id, buildingFmGuid, data);
-                  completedCount++;
-                  console.log(`XKT Preload: ${completedCount}/${sortedModels.length} models loaded`);
                 }
               }
             } catch (e) {
@@ -212,21 +200,31 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
             }
           };
 
-          // Process models with strict concurrency control
-          for (const model of sortedModels) {
-            let promise: Promise<void>;
-            promise = fetchModel(model).finally(() => {
-              activePromises.delete(promise);
-            });
-            activePromises.add(promise);
-
-            if (activePromises.size >= CONCURRENT_FETCHES) {
-              await Promise.race(activePromises);
+          const fetchBatch = async (batch: typeof models, concurrency: number) => {
+            const activePromises = new Set<Promise<void>>();
+            for (const model of batch) {
+              let promise: Promise<void>;
+              promise = fetchModel(model).finally(() => activePromises.delete(promise));
+              activePromises.add(promise);
+              if (activePromises.size >= concurrency) {
+                await Promise.race(activePromises);
+              }
             }
-          }
+            await Promise.allSettled(Array.from(activePromises));
+          };
 
-          // Wait for remaining fetches
-          await Promise.allSettled(Array.from(activePromises));
+          // Phase 1: Fetch A-models with higher concurrency (priority)
+          await fetchBatch(aModels, 3);
+          console.log(`XKT Preload: ✅ A-models preloaded`);
+
+          // Phase 2: Fetch secondary models in background with lower concurrency
+          if (secondaryModels.length > 0) {
+            console.log(`XKT Preload: 🔄 Background-loading ${secondaryModels.length} secondary models...`);
+            // Use requestIdleCallback or setTimeout to yield to main thread
+            await new Promise(r => setTimeout(r, 500));
+            await fetchBatch(secondaryModels, 2);
+            console.log(`XKT Preload: ✅ Secondary models preloaded`);
+          }
         }
 
         // Mark building as preloaded in global cache
