@@ -211,15 +211,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }).catch(() => {});
       }
 
-      // A-model filter: only load architectural models initially
-      // Filter strictly by model_name — UUID-based model_id is unreliable
-      const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER'];
+      // A-model filter: only load models whose name starts with "A" (architectural)
       const isArchitectural = (_id: string, name: string | null) => {
         if (!name) return true; // no name = assume architectural (safest default)
-        const n = name.toUpperCase();
-        // Exclude known non-architectural prefixes
-        if (NON_ARCH_PREFIXES.some(p => n.startsWith(p))) return false;
-        return true; // everything else loads by default
+        return name.charAt(0).toUpperCase() === 'A';
       };
       const archModels = models.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
       const skipped = models.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
