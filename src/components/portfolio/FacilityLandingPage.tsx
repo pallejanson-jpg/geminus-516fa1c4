@@ -203,6 +203,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const handleToggle2D = () => {
     if (facility.fmGuid) {
       setViewer3dFmGuid(facility.fmGuid);
+      setActiveApp('native_viewer');
     }
   };
 
