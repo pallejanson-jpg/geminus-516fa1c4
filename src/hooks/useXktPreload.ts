@@ -147,13 +147,36 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
         if (models && models.length > 0) {
           // Split into A-models (priority) and secondary models
-          // UUID-named models have no real name — treat as architectural
-          const UUID_RE = /^[0-9a-f]{8}-/i;
-          const isAModel = (name: string | null) => !name || UUID_RE.test(name) || name.charAt(0).toUpperCase() === 'A';
-          const aModels = models.filter((m: any) => isAModel(m.model_name));
-          const secondaryModels = models.filter((m: any) => !isAModel(m.model_name));
+          // Use NON_ARCH_PREFIXES exclusion + UUID heuristic (largest = architectural)
+          const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+          const hasRealName = (name: string | null) => name && !UUID_RE.test(name);
+          const isAModel = (name: string | null) => {
+            if (!hasRealName(name)) return false;
+            const upper = name!.toUpperCase();
+            if (NON_ARCH_PREFIXES.some(p => upper.startsWith(p))) return false;
+            return upper.charAt(0) === 'A';
+          };
 
-          // Sort each group by size (smallest first)
+          const namedModels = models.filter((m: any) => hasRealName(m.model_name));
+          const uuidModels = models.filter((m: any) => !hasRealName(m.model_name));
+
+          let aModels: any[];
+          let secondaryModels: any[];
+
+          if (namedModels.length > 0) {
+            aModels = namedModels.filter((m: any) => isAModel(m.model_name));
+            const nonArch = namedModels.filter((m: any) => !isAModel(m.model_name));
+            if (aModels.length === 0) aModels = namedModels; // fallback
+            secondaryModels = aModels.length > 0 ? [...nonArch, ...uuidModels] : [];
+          } else {
+            // All UUID-named: largest = architectural priority
+            const sorted = [...uuidModels].sort((a: any, b: any) => (b.file_size || 0) - (a.file_size || 0));
+            aModels = sorted.length > 0 ? [sorted[0]] : models;
+            secondaryModels = sorted.slice(1);
+          }
+
+          // Sort each group by size (smallest first for preload)
           const sortBySize = (a: any, b: any) => (a.file_size || 0) - (b.file_size || 0);
           aModels.sort(sortBySize);
           secondaryModels.sort(sortBySize);

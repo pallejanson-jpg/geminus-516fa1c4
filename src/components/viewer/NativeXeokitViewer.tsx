@@ -212,21 +212,41 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       // A-model filter: only load models whose name starts with "A" (architectural)
-      // UUID-named models (no real name) are treated as architectural by default
-      const UUID_RE = /^[0-9a-f]{8}-/i;
-      const isArchitectural = (_id: string, name: string | null) => {
-        if (!name) return true; // no name = assume architectural
-        if (UUID_RE.test(name)) return true; // UUID name = no real name, assume architectural
-        return name.charAt(0).toUpperCase() === 'A';
-      };
-      const archModels = models.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
-      const skipped = models.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
-      // If fallback triggered (all models loaded), clear skipped to prevent double-loading
-      const loadList = archModels.length > 0 ? archModels : models;
-      const backgroundList = archModels.length > 0 ? skipped : []; // no background if fallback
+      // Non-architectural prefixes are excluded (BRAND, FIRE, V-, EL-, MEP, SPRINKLER, etc.)
+      const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+      const hasRealName = (name: string | null) => name && !UUID_RE.test(name);
 
-      if (skipped.length > 0) {
-        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, background: ${backgroundList.length}, skipped names: ${skipped.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
+      const isArchitectural = (_id: string, name: string | null) => {
+        if (!hasRealName(name)) return false; // UUID or no name — can't determine, handle separately
+        const upper = name!.toUpperCase();
+        if (NON_ARCH_PREFIXES.some(p => upper.startsWith(p))) return false;
+        if (upper.charAt(0) === 'A') return true;
+        return false; // Unknown prefix — not architectural
+      };
+
+      // Separate models with real names vs UUID-only names
+      const namedModels = models.filter((m: ModelInfo) => hasRealName(m.model_name));
+      const uuidModels = models.filter((m: ModelInfo) => !hasRealName(m.model_name));
+
+      let loadList: ModelInfo[];
+      let backgroundList: ModelInfo[];
+
+      if (namedModels.length > 0) {
+        // Use name-based filtering when real names are available
+        const archModels = namedModels.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
+        const nonArchNamed = namedModels.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
+        loadList = archModels.length > 0 ? archModels : namedModels; // fallback to all named
+        backgroundList = archModels.length > 0 ? [...nonArchNamed, ...uuidModels] : [];
+      } else {
+        // All models are UUID-named: load only the largest (likely architectural), background the rest
+        const sorted = [...uuidModels].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
+        loadList = sorted.length > 0 ? [sorted[0]] : models;
+        backgroundList = sorted.slice(1);
+      }
+
+      if (backgroundList.length > 0) {
+        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, background: ${backgroundList.length}, background names: ${backgroundList.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
       } else {
         console.log(`[NativeViewer] A-filter: All ${models.length} models match architectural filter`);
       }
