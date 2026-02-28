@@ -147,7 +147,9 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
         if (models && models.length > 0) {
           // Split into A-models (priority) and secondary models
-          const isAModel = (name: string | null) => !name || name.charAt(0).toUpperCase() === 'A';
+          // UUID-named models have no real name — treat as architectural
+          const UUID_RE = /^[0-9a-f]{8}-/i;
+          const isAModel = (name: string | null) => !name || UUID_RE.test(name) || name.charAt(0).toUpperCase() === 'A';
           const aModels = models.filter((m: any) => isAModel(m.model_name));
           const secondaryModels = models.filter((m: any) => !isAModel(m.model_name));
 
