@@ -67,9 +67,7 @@ const UnifiedViewerContent: React.FC<{
   const insightsModeParam = searchParams.get('insightsMode') || null;
   const xrayParam = searchParams.get('xray') === 'true';
   
-  // Feature flag: ?viewer=native or localStorage viewer-engine=native
-  const useNativeViewer = searchParams.get('viewer') === 'native' || 
-    (() => { try { return localStorage.getItem('viewer-engine') === 'native'; } catch { return false; } })();
+  // 3D/2D ska alltid använda native xeokit för stabil laddning på både desktop och mobil
 
   // ─── Building data (shared) ────────────────────────────────────────
   const { buildingData, isLoading, error } = useBuildingViewerData(buildingFmGuid);
@@ -450,7 +448,7 @@ const UnifiedViewerContent: React.FC<{
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
   const isSplit2D3D = viewMode === 'split2d3d';
-  const isAnySplit = isSplitMode || isSplit2D3D;
+  const shouldUseNative3D = viewMode === '3d' || viewMode === '2d';
 
   const viewerContainerStyle: React.CSSProperties = {
     position: 'absolute',
@@ -616,7 +614,7 @@ const UnifiedViewerContent: React.FC<{
 
         {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
         <div style={viewerContainerStyle}>
-          {useNativeViewer ? (
+          {shouldUseNative3D ? (
             <NativeXeokitViewer
               buildingFmGuid={buildingData.fmGuid}
               onClose={is3DMode ? handleGoBack : undefined}
@@ -762,22 +760,29 @@ function MobileUnifiedViewer({
       <div className="absolute inset-0">
         {/* 3D/2D viewer — always mounted, hidden when 360 active */}
         <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
-          <AssetPlusViewer
-            fmGuid={buildingData.fmGuid}
-            initialFmGuidToFocus={entityFmGuid || undefined}
-            initialVisualization={visualizationParam || undefined}
-            insightsColorMode={insightsMode || undefined}
-            forceXray={forceXray || undefined}
-            syncEnabled={false}
-            onCameraChange={handle3DCameraChange}
-            syncPosition={sync3DPosition}
-            syncHeading={sync3DHeading}
-            syncPitch={sync3DPitch}
-            onClose={onGoBack}
-            mobileViewMode={viewMode === '360' ? '360' : viewMode === '2d' ? '2d' : '3d'}
-            onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
-            mobileHasIvion={hasIvion}
-          />
+          {viewMode === '3d' || viewMode === '2d' ? (
+            <NativeXeokitViewer
+              buildingFmGuid={buildingData.fmGuid}
+              onClose={onGoBack}
+            />
+          ) : (
+            <AssetPlusViewer
+              fmGuid={buildingData.fmGuid}
+              initialFmGuidToFocus={entityFmGuid || undefined}
+              initialVisualization={visualizationParam || undefined}
+              insightsColorMode={insightsMode || undefined}
+              forceXray={forceXray || undefined}
+              syncEnabled={false}
+              onCameraChange={handle3DCameraChange}
+              syncPosition={sync3DPosition}
+              syncHeading={sync3DHeading}
+              syncPitch={sync3DPitch}
+              onClose={onGoBack}
+              mobileViewMode="3d"
+              onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
+              mobileHasIvion={hasIvion}
+            />
+          )}
         </div>
 
         {/* 360 SDK container */}
