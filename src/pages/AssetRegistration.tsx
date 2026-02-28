@@ -15,7 +15,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { NavigatorNode } from '@/components/navigator/TreeNode';
+import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 
 // Asset type options for dropdown
 const ASSET_TYPES = [
@@ -293,14 +293,39 @@ export default function AssetRegistration() {
     }
   }, [isPickingCoordinates]);
 
-  // Callback from viewer when coordinates are picked
-  const handleCoordinatePicked = useCallback((
-    coords: { x: number; y: number; z: number },
-    parentNode: NavigatorNode | null
-  ) => {
-    setCoordinates(coords);
-    setIsPickingCoordinates(false);
-    // parentNode could be used to update context if needed
+  // Viewer ready — attach pick listeners
+  const handleViewerReady = useCallback((viewer: any) => {
+    const canvas = viewer.scene.canvas.canvas;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchStart: { x: number; y: number } | null = null;
+
+    const doPick = (cx: number, cy: number) => {
+      const hit = viewer.scene.pick({ canvasPos: [cx, cy], pickSurface: true });
+      if (hit?.worldPos) {
+        setCoordinates({ x: hit.worldPos[0], y: hit.worldPos[1], z: hit.worldPos[2] });
+        setIsPickingCoordinates(false);
+      }
+    };
+
+    canvas.addEventListener('touchstart', (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0]; const r = canvas.getBoundingClientRect();
+      touchStart = { x: t.clientX - r.left, y: t.clientY - r.top };
+      longPressTimer = setTimeout(() => { if (touchStart) doPick(touchStart.x, touchStart.y); }, 500);
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (e: TouchEvent) => {
+      if (longPressTimer && touchStart) {
+        const t = e.touches[0]; const r = canvas.getBoundingClientRect();
+        if (Math.hypot(t.clientX - r.left - touchStart.x, t.clientY - r.top - touchStart.y) > 10) {
+          clearTimeout(longPressTimer); longPressTimer = null;
+        }
+      }
+    }, { passive: true });
+    canvas.addEventListener('touchend', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
+    canvas.addEventListener('dblclick', (e: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      doPick(e.clientX - r.left, e.clientY - r.top);
+    });
   }, []);
 
   if (!assetRegistrationContext) {
@@ -311,28 +336,22 @@ export default function AssetRegistration() {
     );
   }
 
-  // Import the actual viewer component
-  const AssetPlusViewerComponent = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
-
-  // Determine correct fmGuid for viewer - use space if available for room context
   const viewerFmGuid = assetRegistrationContext.parentNode?.fmGuid || assetRegistrationContext.buildingFmGuid;
 
   return (
     <div className="h-full flex flex-col">
-      {/* 3D Viewer - takes more space for better picking */}
-      <div className={`min-h-0 ${isMobile ? 'h-[55vh] min-h-[300px]' : 'h-[65vh] min-h-[400px]'}`}>
-        <React.Suspense fallback={
-          <div className="h-full flex items-center justify-center bg-muted">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      {/* 3D Viewer with Native Xeokit */}
+      <div className={`min-h-0 relative ${isMobile ? 'h-[55vh] min-h-[300px]' : 'h-[65vh] min-h-[400px]'}`}>
+        <NativeXeokitViewer
+          buildingFmGuid={viewerFmGuid}
+          onClose={cancelAssetRegistration}
+          onViewerReady={handleViewerReady}
+        />
+        {isPickingCoordinates && (
+          <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md shadow-md">
+            Håll nedtryckt / dubbelklicka för att välja position
           </div>
-        }>
-          <AssetPlusViewerComponent 
-            fmGuid={viewerFmGuid} 
-            onClose={cancelAssetRegistration}
-            pickModeEnabled={isPickingCoordinates}
-            onCoordinatePicked={handleCoordinatePicked}
-          />
-        </React.Suspense>
+        )}
       </div>
       
       {/* Registration Form - bottom section */}
