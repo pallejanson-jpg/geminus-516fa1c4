@@ -1,57 +1,41 @@
 
 
-# Plan: Auto-sync XKT-modeller från Asset+ vid öppning i Native Viewer
-
 ## Problem
-Native Xeokit-viewern läser XKT-filer enbart från den lokala databasen (`xkt_models`-tabellen + `xkt-models` storage bucket). Om inga modeller är cachade visas ett felmeddelande. Det finns redan en `sync-xkt-building` action i edge function som kan hämta XKT från Asset+ och spara till storage — men viewern anropar den aldrig automatiskt.
 
-## Nuvarande flöde
-```text
-Användare öppnar byggnad → NativeXeokitViewer → SELECT från xkt_models
-                                                    ↓
-                                              Inga modeller? → Felmeddelande (stopp)
+NativeXeokitViewer laddar **alla** XKT-modeller utan filtrering. Det finns ingen A-modell-whitelist som det arkitekturbeslut vi tagit kräver (bara modeller som börjar på "A" eller "ARK" ska laddas initialt). Det förklarar varför Brand-modeller laddas och varför prestandan inte förbättrats.
+
+Rad 103-107 hämtar alla modeller från `xkt_models`-tabellen och rad 170-250 laddar samtliga utan filter.
+
+## Plan
+
+### 1. Lägg till A-modell-filtrering i NativeXeokitViewer
+**Fil:** `src/components/viewer/NativeXeokitViewer.tsx`
+
+Efter att modellerna hämtats (rad ~167), filtrera listan:
+- Behåll bara modeller vars `model_id` eller `model_name` börjar med `A-`, `A_`, `ARK`, eller är ett UUID (som typiskt är en arkitekturmodell)
+- Om filtret resulterar i 0 modeller, fallback till att ladda alla (recovery)
+- Logga tydligt vilka modeller som filtreras bort och varför
+
+Filtreringslogik (återanvänd befintlig policy):
+```typescript
+const isArchitectural = (id: string, name: string | null) => {
+  const n = (name || id).toUpperCase();
+  return n.startsWith('A-') || n.startsWith('A_') || n.startsWith('ARK') 
+    || /^[0-9A-F]{8}-/i.test(id); // UUID = likely main model
+};
+const archModels = models.filter(m => isArchitectural(m.model_id, m.model_name));
+const loadList = archModels.length > 0 ? archModels : models; // fallback
 ```
 
-## Nytt flöde
-```text
-Användare öppnar byggnad → NativeXeokitViewer → SELECT från xkt_models
-                                                    ↓
-                                              Inga modeller? → Anropa sync-xkt-building
-                                                    ↓
-                                              Visa "Synkar modeller..." UI
-                                                    ↓
-                                              Modeller synkade → Ladda in i viewer
-                                                    ↓
-                                              Fortfarande inga? → Visa felmeddelande
+Logga filtrerade modeller:
+```
+[NativeViewer] A-filter: Loading 3/8 models, skipped: Brand_P1, V_P1, ...
 ```
 
-## Implementation
+### 2. Inga andra filändringar behövs
 
-### 1. Uppdatera NativeXeokitViewer — auto-sync fallback
-**File:** `src/components/viewer/NativeXeokitViewer.tsx`
+Filtrering är den enda saknade pusselbiten — SDK, viewer-skapande, memory cache och concurrency fungerar redan korrekt.
 
-Ändra logiken vid `models.length === 0`:
-- Istället för att visa fel direkt, sätt `phase = 'syncing'` och anropa `supabase.functions.invoke('asset-plus-sync', { body: { action: 'sync-xkt-building', buildingFmGuid } })`
-- Vid lyckat svar: hämta modellistan igen från `xkt_models` och ladda in
-- Vid misslyckat svar eller fortfarande 0 modeller: visa felmeddelande
-- Lägg till `'syncing'` i `LoadPhase` typ
-- Lägg till synk-UI med spinner och text "Hämtar 3D-modeller från Asset+..."
-
-### 2. Hantera uppdaterade modeller (staleness check)
-**File:** `src/components/viewer/NativeXeokitViewer.tsx`
-
-Även när modeller finns, kontrollera om de kan vara inaktuella:
-- Jämför `synced_at` med nuvarande tid — om äldsta modellen > 7 dagar, trigga en bakgrundssynk (icke-blockerande)
-- Bakgrundssynken anropar `sync-xkt-building` och om nya modeller hittas, logga det (utan att störa pågående session)
-
-### 3. Uppdatera sync-xkt-building — stöd uppdateringscheck
-**File:** `supabase/functions/asset-plus-sync/index.ts`
-
-Lägg till `force: boolean` parameter i `sync-xkt-building`:
-- Om `force: true`: ersätt befintliga modeller (upsert med ny data)
-- Nuvarande beteende (skippa existerande) behålls som default
-
-### Filer att ändra
-- `src/components/viewer/NativeXeokitViewer.tsx` — auto-sync fallback + staleness check
-- `supabase/functions/asset-plus-sync/index.ts` — stöd `force` parameter
+### Fil att ändra
+- `src/components/viewer/NativeXeokitViewer.tsx` — lägg till A-modell-filter efter databasquery
 
