@@ -20,6 +20,8 @@ const XEOKIT_CDN = 'https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.5/dist/x
 interface NativeXeokitViewerProps {
   buildingFmGuid: string;
   onClose?: () => void;
+  /** Called when the xeokit Viewer instance is ready */
+  onViewerReady?: (viewer: any) => void;
 }
 
 interface ModelInfo {
@@ -35,6 +37,7 @@ type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'loadi
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
   onClose,
+  onViewerReady,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
@@ -287,7 +290,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const memStats = getMemoryStats();
       console.log(`[NativeViewer] Memory: ${memStats.modelCount} models, ${(memStats.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(memStats.maxBytes / 1024 / 1024).toFixed(0)} MB`);
       
-      if (mountedRef.current) setPhase('ready');
+      if (mountedRef.current) {
+        setPhase('ready');
+        onViewerReady?.(viewer);
+      }
 
     } catch (e) {
       console.error('[NativeViewer] Init error:', e);
