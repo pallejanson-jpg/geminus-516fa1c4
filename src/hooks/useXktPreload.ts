@@ -166,14 +166,12 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           if (namedModels.length > 0) {
             aModels = namedModels.filter((m: any) => isAModel(m.model_name));
-            const nonArch = namedModels.filter((m: any) => !isAModel(m.model_name));
-            if (aModels.length === 0) aModels = namedModels; // fallback
-            secondaryModels = aModels.length > 0 ? [...nonArch, ...uuidModels] : [];
+            secondaryModels = []; // Strict mode: never preload secondary/non-A models
           } else {
             // All UUID-named: largest = architectural priority
             const sorted = [...uuidModels].sort((a: any, b: any) => (b.file_size || 0) - (a.file_size || 0));
-            aModels = sorted.length > 0 ? [sorted[0]] : models;
-            secondaryModels = sorted.slice(1);
+            aModels = sorted.length > 0 ? [sorted[0]] : [];
+            secondaryModels = [];
           }
 
           // Sort each group by size (smallest first for preload)
@@ -238,12 +236,9 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           await fetchBatch(aModels, isMobile ? 1 : 3);
           console.log(`XKT Preload: ✅ A-models preloaded`);
 
-          // Phase 2: Fetch secondary models in background
+          // Phase 2 disabled: do NOT preload secondary/non-A models in strict A-mode
           if (secondaryModels.length > 0) {
-            console.log(`XKT Preload: 🔄 Background-loading ${secondaryModels.length} secondary models...`);
-            await new Promise(r => setTimeout(r, isMobile ? 1000 : 500));
-            await fetchBatch(secondaryModels, isMobile ? 1 : 2);
-            console.log(`XKT Preload: ✅ Secondary models preloaded`);
+            console.log(`XKT Preload: Secondary preload disabled (${secondaryModels.length} models skipped)`);
           }
         }
 
