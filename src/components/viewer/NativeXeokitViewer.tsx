@@ -351,7 +351,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       const totalTime = Math.round(performance.now() - t0);
-      console.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
+      console.log(`%c[NativeViewer] 🎉 All ${loaded} A-models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
       
       const memStats = getMemoryStats();
       console.log(`[NativeViewer] Memory: ${memStats.modelCount} models, ${(memStats.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(memStats.maxBytes / 1024 / 1024).toFixed(0)} MB`);
@@ -359,6 +359,27 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       if (mountedRef.current) {
         setPhase('ready');
         onViewerReady?.(viewer);
+      }
+
+      // 6. Background-load remaining (non-A) models so they're ready when the user toggles them
+      if (skipped.length > 0 && mountedRef.current) {
+        console.log(`[NativeViewer] 🔄 Background-loading ${skipped.length} secondary models...`);
+        (async () => {
+          for (const model of skipped) {
+            if (!mountedRef.current) break;
+            try {
+              await loadModel(model);
+              // Hide secondary models after loading — user enables via filter panel
+              const sceneModel = viewer.scene?.models?.[model.model_id];
+              if (sceneModel) {
+                viewer.scene.setObjectsVisible(viewer.scene.getObjectIDsInSubtree(sceneModel.id), false);
+              }
+            } catch (e) {
+              console.debug(`[NativeViewer] Background load failed for ${model.model_name || model.model_id}:`, e);
+            }
+          }
+          console.log(`%c[NativeViewer] ✅ Background loading complete`, 'color:#8b5cf6;font-weight:bold');
+        })();
       }
 
     } catch (e) {
