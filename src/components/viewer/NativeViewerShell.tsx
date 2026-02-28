@@ -9,6 +9,7 @@ import MobileViewerOverlay from './mobile/MobileViewerOverlay';
 import FloatingFloorSwitcher from './FloatingFloorSwitcher';
 import ViewerFilterPanel from './ViewerFilterPanel';
 import ViewerContextMenu from './ViewerContextMenu';
+import ViewerToolbar from './ViewerToolbar';
 import VisualizationToolbar from './VisualizationToolbar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { AppContext } from '@/context/AppContext';
@@ -61,17 +62,89 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     setXeokitViewer(viewer);
     setIsViewerReady(true);
 
-    // Build shim ref matching $refs.AssetViewer.$refs.assetView.viewer
-    viewerShimRef.current = {
-      $refs: {
-        AssetViewer: {
-          $refs: {
-            assetView: {
-              viewer,
-            },
-          },
-        },
+    // Build comprehensive shim that mimics the Asset+ API for all toolbar/settings components
+    const assetViewShim = {
+      viewer,
+      get selectedItemIds() {
+        return viewer.scene?.selectedObjectIds || [];
       },
+      viewFit: (ids?: string[], fitAll?: boolean) => {
+        if (!viewer.cameraFlight) return;
+        if (fitAll || !ids?.length) {
+          viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+        } else {
+          const aabb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+          ids.forEach(id => {
+            const entity = viewer.scene.objects?.[id];
+            if (entity?.aabb) {
+              aabb[0] = Math.min(aabb[0], entity.aabb[0]);
+              aabb[1] = Math.min(aabb[1], entity.aabb[1]);
+              aabb[2] = Math.min(aabb[2], entity.aabb[2]);
+              aabb[3] = Math.max(aabb[3], entity.aabb[3]);
+              aabb[4] = Math.max(aabb[4], entity.aabb[4]);
+              aabb[5] = Math.max(aabb[5], entity.aabb[5]);
+            }
+          });
+          if (aabb[0] !== Infinity) {
+            viewer.cameraFlight.flyTo({ aabb, duration: 0.5 });
+          }
+        }
+      },
+      setNavMode: (mode: string) => {
+        if (!viewer.cameraControl) return;
+        if (mode === 'firstPerson') {
+          viewer.cameraControl.navMode = 'firstPerson';
+          viewer.cameraControl.followPointer = true;
+        } else if (mode === 'planView') {
+          viewer.cameraControl.navMode = 'planView';
+        } else {
+          viewer.cameraControl.navMode = 'orbit';
+          viewer.cameraControl.followPointer = false;
+        }
+      },
+      useTool: (tool: string | null) => {
+        // Native xeokit: select is the default pick mode
+        // Measure and slicer emit events handled by respective hooks
+        console.debug('[NativeShim] useTool:', tool);
+      },
+      clearSlices: () => {
+        if (!viewer.scene) return;
+        const planes = Object.values(viewer.scene.sectionPlanes || {});
+        planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+      },
+    };
+
+    const assetViewerShim = {
+      $refs: { assetView: assetViewShim },
+      onShowSpacesChanged: (show: boolean) => {
+        const scene = viewer.scene;
+        if (!scene?.metaScene?.metaObjects) return;
+        const metaObjects = scene.metaScene.metaObjects;
+        Object.values(metaObjects).forEach((mo: any) => {
+          if (mo.type?.toLowerCase() === 'ifcspace') {
+            const entity = scene.objects?.[mo.id];
+            if (entity) {
+              entity.visible = show;
+              if (show) {
+                entity.opacity = 0.3;
+                entity.colorize = [0.5, 0.7, 0.9];
+              }
+            }
+          }
+        });
+      },
+      onToggleAnnotation: (show: boolean) => {
+        window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show } }));
+      },
+      setShowFloorplan: (show: boolean) => {
+        // Handled by ViewerToolbar's 2D mode logic via events
+        console.debug('[NativeShim] setShowFloorplan:', show);
+      },
+    };
+
+    viewerShimRef.current = {
+      $refs: { AssetViewer: assetViewerShim },
+      assetViewer: assetViewerShim,
     };
   }, []);
 
@@ -228,7 +301,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     window.dispatchEvent(new CustomEvent(VIEW_MODE_REQUESTED_EVENT, { detail: { mode } }));
   }, []);
 
-  return (
+    return (
     <div className="relative w-full h-full overflow-hidden">
       {/* Canvas layer */}
       <NativeXeokitViewer
@@ -236,6 +309,13 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         onClose={onClose}
         onViewerReady={handleViewerReady}
       />
+
+      {/* Bottom toolbar (zoom, select, measure, xray, 2d/3d) */}
+      {isViewerReady && !isMobile && (
+        <ViewerToolbar
+          viewerRef={viewerShimRef}
+        />
+      )}
 
       {/* Mobile header overlay */}
       {isMobile && isViewerReady && (
@@ -280,7 +360,12 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           buildingName={buildingName}
           isViewerReady={isViewerReady}
           showSpaces={showSpaces}
-          onShowSpacesChange={setShowSpaces}
+          onShowSpacesChange={(show) => {
+            setShowSpaces(show);
+            // Directly call the shim's method
+            const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
+            assetViewer?.onShowSpacesChanged?.(show);
+          }}
         />
       )}
 
