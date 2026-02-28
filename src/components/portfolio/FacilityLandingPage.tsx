@@ -195,6 +195,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     if (facility.fmGuid) {
       onClose();
       setViewer3dFmGuid(facility.fmGuid);
+      setActiveApp('native_viewer');
     }
   };
 
