@@ -1991,7 +1991,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-3xl max-h-[calc(100dvh-2rem)] sm:h-[85vh] flex flex-col fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
+            <DialogContent className="w-full max-w-full sm:max-w-3xl h-full sm:h-[85vh] max-h-dvh sm:max-h-[calc(100dvh-2rem)] rounded-none sm:rounded-lg flex flex-col fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
                 <DialogHeader className="flex-shrink-0 pr-8">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
