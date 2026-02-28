@@ -126,9 +126,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({
               variant="ghost" 
               onClick={() => {
                 if (!has3D) return;
-                const buildingGuid = isBuilding ? facility.fmGuid : (facility as any).buildingFmGuid || facility.fmGuid;
-                const entityParam = !isBuilding ? `&entity=${facility.fmGuid}` : '';
-                navigate(`/split-viewer?building=${buildingGuid}&mode=3d${entityParam}`);
+                onToggle3D(facility);
               }} 
               className={`${btnClass} ${!has3D ? disabledClass : ''}`}
             >
