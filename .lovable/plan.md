@@ -1,26 +1,42 @@
 
 
-# Plan: Let inventory 3D picker use NativeXeokitViewer's built-in sync
+# Plan: Fix three UI issues
 
-## Problem
-`PositionPickerDialog` and `PositionPickerStep` check `xkt_models` table for existing models. If none found, they show "Ingen 3D-modell tillgänglig" and block the user. But `NativeXeokitViewer` already has auto-sync logic that fetches models from Asset+ when none exist locally. The inventory dialogs bypass this by never rendering the viewer.
+## Issue 1: Visualization legend bar positioned on wrong side
+**File:** `src/components/viewer/VisualizationLegendBar.tsx`
 
-## Solution
-Remove the pre-check gates. Always render `NativeXeokitViewer` — it will handle the "no models" case by syncing from Asset+, exactly like it does in the main viewer.
+The legend bar uses `right-3` (lines 119-121) but should be on the LEFT side per design. Change positioning:
+- Mobile: `left-3 bottom-24` (was `right-3 bottom-24`)
+- Desktop: `left-3 top-1/2 -translate-y-1/2` (was `right-3 top-1/2 -translate-y-1/2`)
 
-## Changes
+## Issue 2: Floor switcher overlaps mobile navigation FAB
+**File:** `src/components/viewer/FloatingFloorSwitcher.tsx`
 
-### 1. `src/components/inventory/PositionPickerDialog.tsx`
-- Remove `hasModels` state and the `useEffect` that checks `xkt_models`
-- Remove the conditional rendering (loading / no models / viewer)
-- Always render `NativeXeokitViewer` directly — it handles syncing and error states internally
+Mobile position is `bottom-20` (line 274) which collides with the MobileNav FAB. However, floor switcher only shows in viewer apps, and MobileNav hides in viewer apps (`isInViewer` check in MobileNav). So this collision happens only in `split-viewer` route (not an `activeApp`-based view). 
 
-### 2. `src/components/inventory/mobile/PositionPickerStep.tsx`
-- Remove `has3dModels` state and the Supabase check for `xkt_models`
-- Always show the "Välj i 3D-modell" button as enabled (the viewer will sync if needed)
-- Remove the disabled state / "Ingen 3D-modell tillgänglig" fallback
+Fix: increase mobile bottom offset from `bottom-20` to `bottom-28` to clear any safe-area overlap and ensure no collision with any bottom UI.
+
+## Issue 3: QuickActions buttons don't navigate properly
+**File:** `src/components/portfolio/FacilityLandingPage.tsx`
+
+When QuickActions calls `startInventory()` or `startFaultReport()`, these change `activeApp` but the `FacilityLandingPage` overlay (z-40, absolute inset-0) remains on top because `selectedFacility` is still set in PortfolioView.
+
+Similarly, `navigate('/split-viewer?...')` navigates to a route but the overlay stays.
+
+**Fix:** In `FacilityLandingPage`:
+- `handleInventory`: After calling `startInventory()`, also call `onClose()` to dismiss the overlay
+- `onFaultReport` handler: After calling `startFaultReport()`, also call `onClose()` (already does via the lambda but need to verify)
+- For visualization buttons in QuickActions that use `navigate()`: The navigate should work since it goes to a different route entirely. But on mobile SPA, we should verify the FacilityLandingPage unmounts when route changes.
+
+Actually, looking more carefully: the `navigate()` calls in QuickActions go to `/split-viewer` route — this changes the route from `/` to `/split-viewer`, which unmounts the entire `Dashboard` component (which contains PortfolioView). So those should work.
+
+The issue is specifically with `startInventory` and `startFaultReport` which change `activeApp` but don't clear `selectedFacility`. Fix:
+- In `handleInventory`: call `onClose()` before `startInventory()` doesn't work since onClose navigates back in history. Instead, the fix should be in the context — but simplest is to close the overlay.
+
+**Approach:** Modify `FacilityLandingPage.handleInventory` to close the landing page, and similarly for the fault report handler.
 
 ## Files to change
-1. `src/components/inventory/PositionPickerDialog.tsx`
-2. `src/components/inventory/mobile/PositionPickerStep.tsx`
+1. `src/components/viewer/VisualizationLegendBar.tsx` — move to left side
+2. `src/components/viewer/FloatingFloorSwitcher.tsx` — increase mobile bottom offset
+3. `src/components/portfolio/FacilityLandingPage.tsx` — close overlay when switching to inventory/fault report
 
