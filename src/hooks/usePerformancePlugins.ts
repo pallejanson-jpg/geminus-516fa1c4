@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef } from 'react';
 
-const XEOKIT_CDN = 'https://xeokit.github.io/xeokit-sdk/dist/xeokit-sdk.min.es.js';
+const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
 // Distance thresholds for LOD culling
 const LOD_FAR_DISTANCE = 50;
