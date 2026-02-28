@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, Sparkles, ChevronRight, Loader2, CheckCircle2, AlertCircle, RefreshCw, Filter } from 'lucide-react';
+import { Camera, Sparkles, ChevronRight, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -31,17 +31,8 @@ interface AiResult {
     text_visible?: string | null;
     material?: string | null;
     installation_type?: string | null;
-    // Legacy fields
     brand?: string | null;
   };
-}
-
-interface DetectionTemplate {
-  id: string;
-  name: string;
-  object_type: string;
-  description: string | null;
-  default_category: string | null;
 }
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
@@ -74,24 +65,6 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Template/profile selection
-  const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [showProfiles, setShowProfiles] = useState(false);
-
-  // Load detection templates
-  useEffect(() => {
-    const loadTemplates = async () => {
-      const { data } = await supabase
-        .from('detection_templates')
-        .select('id, name, object_type, description, default_category')
-        .eq('is_active', true)
-        .order('name');
-      if (data) setTemplates(data);
-    };
-    loadTemplates();
-  }, []);
-
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -110,15 +83,16 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
       await analyzeImage(base64);
     };
     reader.readAsDataURL(file);
-  }, [selectedTemplateId]);
+  }, []);
 
   const analyzeImage = useCallback(async (base64: string) => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
+      // No templateId — all active templates are used automatically by the edge function
       const { data, error: fnError } = await supabase.functions.invoke('mobile-ai-scan', {
-        body: { imageBase64: base64, templateId: selectedTemplateId },
+        body: { imageBase64: base64 },
       });
 
       if (fnError) throw fnError;
@@ -127,7 +101,6 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
       const result = data as AiResult;
       setAiResult(result);
 
-      // Pre-fill form data with AI suggestion
       const updates: Partial<WizardFormData> = {
         category: result.category || '',
         categoryLabel: result.category || '',
@@ -135,17 +108,9 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
         aiSuggestionConfidence: result.confidence,
       };
 
-      // Set description if provided
-      if (result.description) {
-        updates.description = result.description;
-      }
+      if (result.description) updates.description = result.description;
+      if (result.suggestedSymbolId) updates.symbolId = result.suggestedSymbolId;
 
-      // Set symbol if suggested
-      if (result.suggestedSymbolId) {
-        updates.symbolId = result.suggestedSymbolId;
-      }
-
-      // Store AI properties in form for later use
       if (result.properties) {
         const manufacturer = result.properties.manufacturer || result.properties.brand || null;
         updates.aiProperties = {
@@ -161,10 +126,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
       }
 
       updateFormData(updates);
-
-      // Upload image to storage in background
       uploadImageToStorage(base64);
-
     } catch (err: any) {
       console.error('[PhotoScanStep] Analysis failed:', err);
       if (err.message?.includes('429') || err.message?.includes('Rate limit')) {
@@ -177,7 +139,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [updateFormData, selectedTemplateId]);
+  }, [updateFormData]);
 
   const uploadImageToStorage = async (base64: string) => {
     try {
@@ -200,11 +162,9 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     }
   };
 
-  const handleRetry = () => {
+  const handleReanalyze = () => {
     if (imageBase64) {
       analyzeImage(imageBase64);
-    } else {
-      fileInputRef.current?.click();
     }
   };
 
@@ -258,57 +218,6 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
             </p>
           </div>
 
-          {/* Profile selector */}
-          {templates.length > 0 && (
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowProfiles(!showProfiles)}
-                className={cn(
-                  "w-full justify-between h-10",
-                  selectedTemplateId && "border-primary/50 bg-primary/5"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Filter className="h-3.5 w-3.5" />
-                  <span className="text-sm">
-                    {selectedTemplateId
-                      ? templates.find(t => t.id === selectedTemplateId)?.name || 'Vald profil'
-                      : 'Välj skanningsprofil (valfritt)'}
-                  </span>
-                </div>
-                {selectedTemplateId && (
-                  <Badge variant="secondary" className="text-xs ml-2">Aktiv</Badge>
-                )}
-              </Button>
-
-              {showProfiles && (
-                <div className="grid grid-cols-2 gap-1.5">
-                  <Button
-                    variant={!selectedTemplateId ? "default" : "outline"}
-                    size="sm"
-                    className="h-9 text-xs"
-                    onClick={() => { setSelectedTemplateId(null); setShowProfiles(false); }}
-                  >
-                    Automatisk
-                  </Button>
-                  {templates.map(t => (
-                    <Button
-                      key={t.id}
-                      variant={selectedTemplateId === t.id ? "default" : "outline"}
-                      size="sm"
-                      className="h-9 text-xs truncate"
-                      onClick={() => { setSelectedTemplateId(t.id); setShowProfiles(false); }}
-                    >
-                      {t.name}
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Camera input */}
           <input
             ref={fileInputRef}
@@ -343,16 +252,28 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
                   <span className="text-sm font-medium">Identifierar objekt...</span>
                 </div>
               )}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute bottom-2 right-2"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isAnalyzing}
-              >
-                <Camera className="h-3.5 w-3.5 mr-1" />
-                Nytt foto
-              </Button>
+              <div className="absolute bottom-2 right-2 flex gap-1.5">
+                {/* Re-analyze button */}
+                {imageBase64 && (aiResult || error) && !isAnalyzing && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleReanalyze}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    Analysera igen
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isAnalyzing}
+                >
+                  <Camera className="h-3.5 w-3.5 mr-1" />
+                  Nytt foto
+                </Button>
+              </div>
             </div>
           )}
 
@@ -429,7 +350,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
               <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
               <div className="space-y-1 flex-1">
                 <p className="text-sm text-destructive">{error}</p>
-                <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
+                <Button variant="outline" size="sm" onClick={handleReanalyze} className="h-7 text-xs">
                   <RefreshCw className="h-3 w-3 mr-1" />
                   Försök igen
                 </Button>
@@ -439,13 +360,10 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
         </div>
       </ScrollArea>
 
-      {/* Actions - fixed at bottom */}
+      {/* Actions */}
       <div className="p-4 space-y-2 border-t pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
         {aiResult && !isAnalyzing && (
-          <Button
-            className="w-full h-12"
-            onClick={handleConfirm}
-          >
+          <Button className="w-full h-12" onClick={handleConfirm}>
             <ChevronRight className="h-4 w-4 mr-2" />
             {aiResult.confidence >= 0.7
               ? 'Använd förslag & gå vidare'
