@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 interface CacheRequest {
-  action: "check" | "get" | "store";
-  modelId: string;
+  action: "check" | "get" | "store" | "invalidate-building";
+  modelId?: string;
   buildingFmGuid?: string;
   xktData?: ArrayBuffer | string;
 }
@@ -18,6 +18,8 @@ interface CacheResponse {
   cached?: boolean;
   url?: string;
   error?: string;
+  deletedModels?: number;
+  deletedFiles?: number;
 }
 
 /**
@@ -29,6 +31,7 @@ interface CacheResponse {
  * - check: Check if a model is cached
  * - get: Get the cached model URL
  * - store: Store a model in cache
+ * - invalidate-building: Delete all cached XKT data for a building
  */
 serve(async (req) => {
   // Handle CORS preflight
@@ -49,14 +52,14 @@ serve(async (req) => {
     const body: CacheRequest = await req.json();
     const { action, modelId, buildingFmGuid, xktData } = body;
 
-    if (!modelId) {
+    if (action !== "invalidate-building" && !modelId) {
       throw new Error("modelId is required");
     }
 
     // Create a safe filename from modelId
-    const safeModelId = modelId.replace(/[^a-zA-Z0-9-_]/g, "_");
+    const safeModelId = modelId ? modelId.replace(/[^a-zA-Z0-9-_]/g, "_") : "";
     const buildingPath = buildingFmGuid ? `${buildingFmGuid}/` : "";
-    const filePath = `${buildingPath}${safeModelId}.xkt`;
+    const filePath = modelId ? `${buildingPath}${safeModelId}.xkt` : "";
 
     let response: CacheResponse;
 
@@ -168,6 +171,54 @@ serve(async (req) => {
           success: true,
           cached: true,
           url: urlData.signedUrl,
+        };
+        break;
+      }
+
+      case "invalidate-building": {
+        if (!buildingFmGuid) {
+          throw new Error("buildingFmGuid is required for invalidate-building action");
+        }
+
+        const { error: dbDeleteError, count: deletedModels } = await supabase
+          .from("xkt_models")
+          .delete({ count: "exact" })
+          .eq("building_fm_guid", buildingFmGuid);
+
+        if (dbDeleteError) {
+          throw dbDeleteError;
+        }
+
+        const { data: files, error: listError } = await supabase.storage
+          .from("xkt-models")
+          .list(buildingFmGuid, { limit: 1000 });
+
+        if (listError) {
+          throw listError;
+        }
+
+        const paths = (files ?? []).map((f) => `${buildingFmGuid}/${f.name}`);
+        let deletedFiles = 0;
+
+        if (paths.length > 0) {
+          const { data: removed, error: removeError } = await supabase.storage
+            .from("xkt-models")
+            .remove(paths);
+
+          if (removeError) {
+            throw removeError;
+          }
+
+          deletedFiles = removed?.length ?? paths.length;
+        }
+
+        console.log(`Invalidated XKT cache for building ${buildingFmGuid}: db=${deletedModels ?? 0}, storage=${deletedFiles}`);
+
+        response = {
+          success: true,
+          cached: false,
+          deletedModels: deletedModels ?? 0,
+          deletedFiles,
         };
         break;
       }
