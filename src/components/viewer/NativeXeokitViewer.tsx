@@ -32,6 +32,8 @@ interface ModelInfo {
   storey_fm_guid: string | null;
 }
 
+type ModelCandidate = ModelInfo & { synced_at?: string | null; source: 'db' | 'storage' };
+
 type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'loading_models' | 'ready' | 'error';
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
@@ -110,12 +112,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         .eq('building_fm_guid', buildingFmGuid)
         .order('file_size', { ascending: true });
       let dbError: any = dbErrorRaw;
-      let models: Array<ModelInfo & { synced_at?: string | null }> = (modelsFromDb as any[]) ?? [];
+      let models: ModelCandidate[] = ((modelsFromDb as any[]) ?? []).map((m) => ({
+        ...m,
+        source: 'db' as const,
+      }));
 
       // Supplement from storage folder to avoid stale/missing DB metadata
       // (xkt_models can lag behind actual files in xkt-models bucket)
-      const mergedModels = new Map<string, ModelInfo & { synced_at?: string | null }>();
-      (models || []).forEach((m: any) => mergedModels.set(m.model_id, m));
+      const mergedModels = new Map<string, ModelCandidate>();
+      models.forEach((m) => mergedModels.set(m.model_id, m));
 
       try {
         const { data: storageFiles, error: storageListError } = await supabase.storage
@@ -140,6 +145,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
                 file_size: file.metadata?.size ?? null,
                 storey_fm_guid: null,
                 synced_at: null,
+                source: 'storage',
               });
             }
           });
@@ -179,7 +185,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             .eq('building_fm_guid', buildingFmGuid)
             .order('file_size', { ascending: true });
           
-          models = refetch.data;
+          models = ((refetch.data as any[]) ?? []).map((m) => ({ ...m, source: 'db' as const }));
           dbError = refetch.error;
         } catch (e) {
           console.warn('[NativeViewer] Auto-sync error:', e);
@@ -226,22 +232,27 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       };
 
       // Separate models with real names vs UUID-only names
-      const namedModels = models.filter((m: ModelInfo) => hasRealName(m.model_name));
-      const uuidModels = models.filter((m: ModelInfo) => !hasRealName(m.model_name));
+      const namedModels = models.filter((m: ModelCandidate) => hasRealName(m.model_name));
+      const uuidModels = models.filter((m: ModelCandidate) => !hasRealName(m.model_name));
 
       let loadList: ModelInfo[];
       let backgroundList: ModelInfo[];
 
       if (namedModels.length > 0) {
         // Use strict name-based filtering: only A-prefixed architectural models
-        const archModels = namedModels.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
+        const archModels = namedModels.filter((m: ModelCandidate) => isArchitectural(m.model_id, m.model_name));
         loadList = archModels;
         backgroundList = []; // Strict mode: never auto-load secondary/non-A models
       } else {
-        // All models are UUID-named: load only the largest (likely architectural)
-        const sorted = [...uuidModels].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
+        // UUID-only fallback: prioritize DB-known models first, ignore storage-only spillover when possible
+        const dbUuidModels = uuidModels.filter((m: ModelCandidate) => m.source === 'db');
+        const uuidPool = dbUuidModels.length > 0 ? dbUuidModels : uuidModels;
+        const sorted = [...uuidPool].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
+
         loadList = sorted.length > 0 ? [sorted[0]] : [];
         backgroundList = []; // Strict mode
+
+        console.log(`[NativeViewer] UUID fallback pool: ${uuidPool.length} (db=${dbUuidModels.length}, storage=${uuidModels.length - dbUuidModels.length})`);
       }
 
       if (loadList.length === 0) {
