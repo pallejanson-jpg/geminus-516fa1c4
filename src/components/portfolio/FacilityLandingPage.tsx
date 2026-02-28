@@ -744,7 +744,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                     <button
                       key={view.id}
                       type="button"
-                      onClick={() => navigate(`/split-viewer?building=${facility.fmGuid}&mode=3d`)}
+                      onClick={handleToggle3D}
                       className="rounded-xl border border-border bg-card/80 overflow-hidden text-left transition-all hover:border-primary/50 hover:shadow-lg active:scale-[0.98] group"
                     >
                       <div className="h-24 sm:h-28 relative overflow-hidden bg-muted">
