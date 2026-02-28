@@ -268,9 +268,11 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   return (
     <div className={cn(
-      'fixed left-3 z-20 flex flex-col items-center gap-0.5 w-auto',
+      'fixed z-20 items-center gap-0.5 w-auto',
       'pointer-events-auto',
-      compact ? 'top-[100px] gap-px' : 'top-[140px]',
+      isMobile
+        ? 'bottom-20 left-1/2 -translate-x-1/2 flex flex-row'
+        : cn('left-3 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
       className
     )}>
       {visiblePills.map((floor) => {
