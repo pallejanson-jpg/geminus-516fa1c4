@@ -247,11 +247,18 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           const memData = getModelFromMemory(modelId, buildingFmGuid);
           if (memData) {
             // Load from memory
-            xktLoader.load({
-              id: modelId,
-              xkt: memData,
-              edges: true,
-            });
+            console.log(`[NativeViewer] About to xktLoader.load() from memory for ${modelId}, size: ${memData.byteLength}`);
+            try {
+              xktLoader.load({
+                id: modelId,
+                xkt: memData,
+                edges: true,
+              });
+              console.log(`[NativeViewer] xktLoader.load() from memory succeeded for ${modelId}`);
+            } catch (loadErr) {
+              console.error(`[NativeViewer] xktLoader.load() from memory CRASHED for ${modelId}:`, loadErr);
+              return;
+            }
             const ms = Math.round(performance.now() - modelStart);
             console.log(`%c[NativeViewer] ✅ Memory → ${modelId} (${(memData.byteLength / 1024 / 1024).toFixed(1)} MB) ${ms}ms`, 'color:#22c55e;font-weight:bold');
           } else {
@@ -284,12 +291,19 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             // Store in memory for next time
             storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
 
-            // Load into viewer
-            xktLoader.load({
-              id: modelId,
-              xkt: arrayBuf,
-              edges: true,
-            });
+          // Load into viewer
+            console.log(`[NativeViewer] About to xktLoader.load() for ${modelId}, arrayBuf size: ${arrayBuf.byteLength}`);
+            try {
+              xktLoader.load({
+                id: modelId,
+                xkt: arrayBuf,
+                edges: true,
+              });
+              console.log(`[NativeViewer] xktLoader.load() succeeded for ${modelId}`);
+            } catch (loadErr) {
+              console.error(`[NativeViewer] xktLoader.load() CRASHED for ${modelId}:`, loadErr);
+              return;
+            }
 
             const totalMs = Math.round(performance.now() - modelStart);
             console.log(`%c[NativeViewer] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) fetch: ${fetchMs}ms, total: ${totalMs}ms`, 'color:#3b82f6;font-weight:bold');
