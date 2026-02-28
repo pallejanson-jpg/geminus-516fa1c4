@@ -221,6 +221,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
   // Handler for Inventory button with prefill
   const handleInventory = (prefill: { buildingFmGuid?: string; levelFmGuid?: string; roomFmGuid?: string }) => {
+    onClose();
     startInventory(prefill);
   };
 
@@ -717,6 +718,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               navigate(`/split-viewer?building=${f.fmGuid}&mode=split`);
             }}
             onFaultReport={(f) => {
+              onClose();
               startFaultReport({
                 buildingFmGuid: isBuilding ? f.fmGuid : (f as any).buildingFmGuid,
                 buildingName: f.commonName || f.name || undefined,
