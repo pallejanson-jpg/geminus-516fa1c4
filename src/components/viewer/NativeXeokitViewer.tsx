@@ -233,23 +233,25 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       let backgroundList: ModelInfo[];
 
       if (namedModels.length > 0) {
-        // Use name-based filtering when real names are available
+        // Use strict name-based filtering: only A-prefixed architectural models
         const archModels = namedModels.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
-        const nonArchNamed = namedModels.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
-        loadList = archModels.length > 0 ? archModels : namedModels; // fallback to all named
-        backgroundList = archModels.length > 0 ? [...nonArchNamed, ...uuidModels] : [];
+        loadList = archModels;
+        backgroundList = []; // Strict mode: never auto-load secondary/non-A models
       } else {
-        // All models are UUID-named: load only the largest (likely architectural), background the rest
+        // All models are UUID-named: load only the largest (likely architectural)
         const sorted = [...uuidModels].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
-        loadList = sorted.length > 0 ? [sorted[0]] : models;
-        backgroundList = sorted.slice(1);
+        loadList = sorted.length > 0 ? [sorted[0]] : [];
+        backgroundList = []; // Strict mode
       }
 
-      if (backgroundList.length > 0) {
-        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, background: ${backgroundList.length}, background names: ${backgroundList.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
-      } else {
-        console.log(`[NativeViewer] A-filter: All ${models.length} models match architectural filter`);
+      if (loadList.length === 0) {
+        console.warn('[NativeViewer] No architectural (A) models matched filter for initial load');
+        setErrorMsg('Inga arkitekturmodeller (A-*) hittades för initial laddning.');
+        setPhase('error');
+        return;
       }
+
+      console.log(`[NativeViewer] A-filter (strict): Initial load ${loadList.length}/${models.length}. Secondary auto-load disabled.`);
 
       setLoadProgress({ loaded: 0, total: loadList.length });
 
@@ -386,25 +388,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         onViewerReady?.(viewer);
       }
 
-      // 6. Background-load remaining (non-A) models so they're ready when the user toggles them
-      if (backgroundList.length > 0 && mountedRef.current) {
-        console.log(`[NativeViewer] 🔄 Background-loading ${backgroundList.length} secondary models...`);
-        (async () => {
-          for (const model of backgroundList) {
-            if (!mountedRef.current) break;
-            try {
-              await loadModel(model);
-              // Hide secondary models after loading — user enables via filter panel
-              const sceneModel = viewer.scene?.models?.[model.model_id];
-              if (sceneModel) {
-                viewer.scene.setObjectsVisible(viewer.scene.getObjectIDsInSubtree(sceneModel.id), false);
-              }
-            } catch (e) {
-              console.debug(`[NativeViewer] Background load failed for ${model.model_name || model.model_id}:`, e);
-            }
-          }
-          console.log(`%c[NativeViewer] ✅ Background loading complete`, 'color:#8b5cf6;font-weight:bold');
-        })();
+      // 6. Secondary/non-A auto-loading disabled in strict A-mode to avoid OOM/crashes
+      if (backgroundList.length > 0) {
+        console.log(`[NativeViewer] Secondary auto-load disabled (${backgroundList.length} models skipped)`);
       }
 
     } catch (e) {
