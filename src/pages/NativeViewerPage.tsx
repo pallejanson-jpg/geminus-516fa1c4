@@ -13,10 +13,16 @@ export default function NativeViewerPage() {
 
   const { buildingFmGuid } = useMemo(() => {
     if (!viewer3dFmGuid || !allData || allData.length === 0) {
+      console.log('[NativeViewerPage] No viewer3dFmGuid or allData empty', { viewer3dFmGuid, dataLen: allData?.length });
       return { buildingFmGuid: null };
     }
     const facility = allData.find((item: any) => item.fmGuid === viewer3dFmGuid);
-    if (!facility) return { buildingFmGuid: null };
+    if (!facility) {
+      console.warn('[NativeViewerPage] facility not found in allData for guid:', viewer3dFmGuid);
+      return { buildingFmGuid: null };
+    }
+
+    console.log('[NativeViewerPage] Found facility:', { fmGuid: facility.fmGuid, category: facility.category, name: facility.name || facility.commonName });
 
     if (facility.category === 'Building' || facility.category === 'IfcBuilding') {
       return { buildingFmGuid: facility.fmGuid };
@@ -27,7 +33,9 @@ export default function NativeViewerPage() {
         (item.category === 'Building' || item.category === 'IfcBuilding')
       );
       if (building) return { buildingFmGuid: building.fmGuid };
+      console.warn('[NativeViewerPage] Parent building not found:', facility.buildingFmGuid);
     }
+    console.warn('[NativeViewerPage] Could not resolve building for:', viewer3dFmGuid);
     return { buildingFmGuid: null };
   }, [viewer3dFmGuid, allData]);
 
