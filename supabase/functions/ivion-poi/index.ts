@@ -449,10 +449,48 @@ serve(async (req) => {
         result = await getPoiTypes(params.siteId);
         break;
         
-      case 'create-poi':
-        if (!params.siteId || !params.poiData) throw new Error('siteId and poiData required');
-        result = await createPoi(params.siteId, params.poiData);
+      case 'create-poi': {
+        if (!params.siteId) throw new Error('siteId required');
+        
+        let poiData = params.poiData;
+        
+        // If no poiData but formData provided, build POI from form context
+        if (!poiData && params.formData) {
+          const fd = params.formData;
+          const fmGuid = fd.fmGuid || crypto.randomUUID();
+          const displayName = fd.name || fd.categoryLabel || 'Ny tillgång';
+          const customData: Record<string, any> = {
+            fm_guid: fmGuid,
+            asset_type: fd.category || null,
+            source: 'geminus',
+          };
+          if (fd.aiProperties) customData.ai_properties = fd.aiProperties;
+          
+          const poiTypeId = await getDefaultPoiTypeId(params.siteId);
+          poiData = {
+            titles: { sv: displayName },
+            descriptions: { sv: fd.description || '' },
+            scsLocation: {
+              type: 'Point',
+              coordinates: [
+                fd.coordinates?.x || 0,
+                fd.coordinates?.y || 0,
+                fd.coordinates?.z || 0,
+              ],
+            },
+            scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
+            poiTypeId,
+            security: { groupRead: 0, groupWrite: 0 },
+            visibilityCheck: false,
+            importance: 1,
+            customData: JSON.stringify(customData),
+          };
+        }
+        
+        if (!poiData) throw new Error('poiData or formData required');
+        result = await createPoi(params.siteId, poiData);
         break;
+      }
         
       case 'update-poi':
         if (!params.siteId || !params.poiId) throw new Error('siteId and poiId required');

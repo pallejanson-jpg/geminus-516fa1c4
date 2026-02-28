@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Box, Camera, MapPin, SkipForward, Loader2, Play } from 'lucide-react';
+import { Box, Camera, MapPin, SkipForward, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import PositionPickerDialog from '@/components/inventory/PositionPickerDialog';
+import Ivion360PositionPicker from './Ivion360PositionPicker';
 import type { WizardFormData } from './MobileInventoryWizard';
-import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 
 interface PositionPickerStepProps {
   formData: WizardFormData;
@@ -21,37 +20,47 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
   onComplete,
   onSkip,
 }) => {
-  const navigate = useNavigate();
   const [showPositionPicker, setShowPositionPicker] = useState(false);
+  const [show360Picker, setShow360Picker] = useState(false);
   const [ivionSiteId, setIvionSiteId] = useState<string | null>(null);
+  const [has3dModels, setHas3dModels] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check if building has Ivion 360 configured
+  // Check building capabilities: Ivion 360 + 3D models
   useEffect(() => {
-    const checkIvionConfig = async () => {
+    const checkConfig = async () => {
       if (!formData.buildingFmGuid) {
         setIsLoading(false);
         return;
       }
 
       try {
-        const { data, error } = await supabase
-          .from('building_settings')
-          .select('ivion_site_id')
-          .eq('fm_guid', formData.buildingFmGuid)
-          .maybeSingle();
+        // Check Ivion config and 3D models in parallel
+        const [settingsResult, modelsResult] = await Promise.all([
+          supabase
+            .from('building_settings')
+            .select('ivion_site_id')
+            .eq('fm_guid', formData.buildingFmGuid)
+            .maybeSingle(),
+          supabase
+            .from('xkt_models')
+            .select('id')
+            .eq('building_fm_guid', formData.buildingFmGuid)
+            .limit(1),
+        ]);
 
-        if (!error && data?.ivion_site_id) {
-          setIvionSiteId(data.ivion_site_id);
+        if (!settingsResult.error && settingsResult.data?.ivion_site_id) {
+          setIvionSiteId(settingsResult.data.ivion_site_id);
         }
+        setHas3dModels(!modelsResult.error && (modelsResult.data?.length ?? 0) > 0);
       } catch (err) {
-        console.error('Error checking Ivion config:', err);
+        console.error('Error checking config:', err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    checkIvionConfig();
+    checkConfig();
   }, [formData.buildingFmGuid]);
 
   const handlePositionPicked = (coords: { x: number; y: number; z: number }) => {
@@ -59,17 +68,20 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
     onComplete();
   };
 
-  const handleOpen360 = () => {
-    if (ivionSiteId) {
-      // Open Ivion in a new tab - user creates POI there and syncs later
-      const ivionUrl = `${IVION_DEFAULT_BASE_URL}/?site=${ivionSiteId}`;
-      window.open(ivionUrl, '_blank');
-    }
-  };
-
-  // Navigate to fullscreen Ivion inventory mode
-  const handleStartIvionInventory = () => {
-    navigate(`/ivion-inventory?building=${formData.buildingFmGuid}`);
+  const handle360PositionPicked = (result: {
+    coordinates: { x: number; y: number; z: number };
+    ivionPoiId: number;
+    ivionImageId: number;
+    fmGuid: string;
+  }) => {
+    updateFormData({
+      coordinates: result.coordinates,
+      ivionPoiId: result.ivionPoiId,
+      ivionImageId: result.ivionImageId,
+      fmGuid: result.fmGuid,
+      ivionSiteId: ivionSiteId || undefined,
+    });
+    onComplete();
   };
 
   if (isLoading) {
@@ -117,39 +129,34 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
 
           {/* Position picker options */}
           <div className="space-y-3">
-            {/* 3D Picker */}
-            <Button
-              variant="outline"
-              className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2"
-              onClick={() => setShowPositionPicker(true)}
-            >
-              <Box className="h-8 w-8 text-primary" />
-              <span className="text-base font-medium">Välj i 3D-modell</span>
-            </Button>
-
-            {/* 360° Inventory Mode - Recommended option */}
+            {/* 360° Picker — primary option */}
             {ivionSiteId && (
               <Button
                 variant="default"
                 className="w-full h-24 flex flex-col items-center justify-center gap-2 border-2"
-                onClick={handleStartIvionInventory}
+                onClick={() => setShow360Picker(true)}
               >
-                <Play className="h-8 w-8" />
-                <span className="text-base font-medium">Starta inventering i 360°</span>
-                <span className="text-xs opacity-80">Skapa POI → Registrera direkt</span>
+                <Camera className="h-8 w-8" />
+                <span className="text-base font-medium">Välj i 360°-vy</span>
+                <span className="text-xs opacity-80">Navigera → Bekräfta position</span>
               </Button>
             )}
 
-            {/* Legacy 360° Option - open in new tab */}
-            {ivionSiteId && (
+            {/* 3D Picker */}
+            {has3dModels ? (
               <Button
                 variant="outline"
-                className="w-full h-16 flex flex-col items-center justify-center gap-1 border"
-                onClick={handleOpen360}
+                className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2"
+                onClick={() => setShowPositionPicker(true)}
               >
-                <Camera className="h-5 w-5 text-muted-foreground" />
-                <span className="text-sm">Öppna 360° i ny flik</span>
+                <Box className="h-8 w-8 text-primary" />
+                <span className="text-base font-medium">Välj i 3D-modell</span>
               </Button>
+            ) : (
+              <div className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg text-muted-foreground">
+                <AlertCircle className="h-6 w-6" />
+                <span className="text-sm">Ingen 3D-modell tillgänglig</span>
+              </div>
             )}
           </div>
 
@@ -173,6 +180,18 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
         roomFmGuid={formData.roomFmGuid}
         onPositionPicked={handlePositionPicked}
       />
+
+      {/* 360° Position Picker */}
+      {ivionSiteId && (
+        <Ivion360PositionPicker
+          open={show360Picker}
+          onOpenChange={setShow360Picker}
+          ivionSiteId={ivionSiteId}
+          buildingFmGuid={formData.buildingFmGuid}
+          formData={formData}
+          onPositionPicked={handle360PositionPicked}
+        />
+      )}
     </>
   );
 };
