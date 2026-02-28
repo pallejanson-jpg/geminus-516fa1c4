@@ -164,13 +164,28 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }).catch(() => {});
       }
 
-      console.log(`[NativeViewer] Found ${models.length} models, loading...`);
-      setLoadProgress({ loaded: 0, total: models.length });
+      // A-model filter: only load architectural models initially
+      const isArchitectural = (id: string, name: string | null) => {
+        const n = (name || id).toUpperCase();
+        return n.startsWith('A-') || n.startsWith('A_') || n.startsWith('ARK')
+          || /^[0-9A-F]{8}-/i.test(id);
+      };
+      const archModels = models.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
+      const skipped = models.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
+      const loadList = archModels.length > 0 ? archModels : models;
+
+      if (skipped.length > 0) {
+        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, skipped: ${skipped.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
+      } else {
+        console.log(`[NativeViewer] A-filter: All ${models.length} models match architectural filter`);
+      }
+
+      setLoadProgress({ loaded: 0, total: loadList.length });
 
       // 4. Load models concurrently (max 3)
       const CONCURRENT = 3;
       let loaded = 0;
-      const queue = [...models] as ModelInfo[];
+      const queue = [...loadList] as ModelInfo[];
 
       const loadModel = async (model: ModelInfo) => {
         const modelStart = performance.now();
