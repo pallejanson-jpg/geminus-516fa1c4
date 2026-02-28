@@ -1,7 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Camera, Sparkles, ChevronRight, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Camera, Sparkles, ChevronRight, Loader2, CheckCircle2, AlertCircle, RefreshCw, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -17,16 +18,30 @@ interface PhotoScanStepProps {
 interface AiResult {
   objectType: string;
   suggestedName: string;
+  description?: string;
   confidence: number;
   category: string;
+  suggestedSymbolId?: string | null;
   properties?: {
-    brand?: string | null;
+    manufacturer?: string | null;
     model?: string | null;
     size?: string | null;
     color?: string | null;
     condition?: string | null;
     text_visible?: string | null;
+    material?: string | null;
+    installation_type?: string | null;
+    // Legacy fields
+    brand?: string | null;
   };
+}
+
+interface DetectionTemplate {
+  id: string;
+  name: string;
+  object_type: string;
+  description: string | null;
+  default_category: string | null;
 }
 
 const OBJECT_TYPE_LABELS: Record<string, string> = {
@@ -39,6 +54,10 @@ const OBJECT_TYPE_LABELS: Record<string, string> = {
   elevator: 'Hiss',
   staircase: 'Trappa',
   ventilation: 'Ventilation',
+  hvac_unit: 'Värmepump/AC',
+  sprinkler: 'Sprinkler',
+  emergency_light: 'Nödbelysning',
+  access_control: 'Passersystem',
   other: 'Övrigt',
 };
 
@@ -55,6 +74,24 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Template/profile selection
+  const [templates, setTemplates] = useState<DetectionTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [showProfiles, setShowProfiles] = useState(false);
+
+  // Load detection templates
+  useEffect(() => {
+    const loadTemplates = async () => {
+      const { data } = await supabase
+        .from('detection_templates')
+        .select('id, name, object_type, description, default_category')
+        .eq('is_active', true)
+        .order('name');
+      if (data) setTemplates(data);
+    };
+    loadTemplates();
+  }, []);
+
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -62,21 +99,18 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     setError(null);
     setAiResult(null);
 
-    // Show preview
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
       setImagePreview(dataUrl);
 
-      // Extract base64 (strip data URI prefix)
       const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
       setImageBase64(base64);
 
-      // Auto-analyze
       await analyzeImage(base64);
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [selectedTemplateId]);
 
   const analyzeImage = useCallback(async (base64: string) => {
     setIsAnalyzing(true);
@@ -84,7 +118,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('mobile-ai-scan', {
-        body: { imageBase64: base64 },
+        body: { imageBase64: base64, templateId: selectedTemplateId },
       });
 
       if (fnError) throw fnError;
@@ -94,12 +128,39 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
       setAiResult(result);
 
       // Pre-fill form data with AI suggestion
-      updateFormData({
+      const updates: Partial<WizardFormData> = {
         category: result.category || '',
         categoryLabel: result.category || '',
         name: result.suggestedName || '',
         aiSuggestionConfidence: result.confidence,
-      });
+      };
+
+      // Set description if provided
+      if (result.description) {
+        updates.description = result.description;
+      }
+
+      // Set symbol if suggested
+      if (result.suggestedSymbolId) {
+        updates.symbolId = result.suggestedSymbolId;
+      }
+
+      // Store AI properties in form for later use
+      if (result.properties) {
+        const manufacturer = result.properties.manufacturer || result.properties.brand || null;
+        updates.aiProperties = {
+          manufacturer,
+          model: result.properties.model || null,
+          size: result.properties.size || null,
+          color: result.properties.color || null,
+          condition: result.properties.condition || null,
+          text_visible: result.properties.text_visible || null,
+          material: result.properties.material || null,
+          installation_type: result.properties.installation_type || null,
+        };
+      }
+
+      updateFormData(updates);
 
       // Upload image to storage in background
       uploadImageToStorage(base64);
@@ -116,7 +177,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [updateFormData]);
+  }, [updateFormData, selectedTemplateId]);
 
   const uploadImageToStorage = async (base64: string) => {
     try {
@@ -165,139 +226,221 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
     return 'Låg säkerhet';
   };
 
+  const PROPERTY_LABELS: Record<string, string> = {
+    manufacturer: 'Tillverkare',
+    brand: 'Märke',
+    model: 'Modell',
+    size: 'Storlek',
+    color: 'Färg',
+    condition: 'Skick',
+    text_visible: 'Synlig text',
+    material: 'Material',
+    installation_type: 'Montering',
+  };
+
+  const conditionLabel = (c: string) => {
+    const map: Record<string, string> = { good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' };
+    return map[c] || c;
+  };
+
   return (
-    <div className="h-full flex flex-col p-4 gap-4">
-      {/* Header */}
-      <div className="text-center space-y-1">
-        <div className="flex items-center justify-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-semibold">AI-identifiering</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Fotografera objektet — AI identifierar typ och fyller i uppgifter automatiskt
-        </p>
-      </div>
+    <div className="h-full flex flex-col">
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <div className="flex items-center justify-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-semibold">AI-identifiering</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Fotografera objektet — AI identifierar typ och fyller i uppgifter automatiskt
+            </p>
+          </div>
 
-      {/* Camera input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+          {/* Profile selector */}
+          {templates.length > 0 && (
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowProfiles(!showProfiles)}
+                className={cn(
+                  "w-full justify-between h-10",
+                  selectedTemplateId && "border-primary/50 bg-primary/5"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Filter className="h-3.5 w-3.5" />
+                  <span className="text-sm">
+                    {selectedTemplateId
+                      ? templates.find(t => t.id === selectedTemplateId)?.name || 'Vald profil'
+                      : 'Välj skanningsprofil (valfritt)'}
+                  </span>
+                </div>
+                {selectedTemplateId && (
+                  <Badge variant="secondary" className="text-xs ml-2">Aktiv</Badge>
+                )}
+              </Button>
 
-      {/* Image area */}
-      {!imagePreview ? (
-        <Button
-          variant="outline"
-          className="flex-1 border-2 border-dashed flex flex-col gap-3 min-h-[200px]"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Camera className="h-12 w-12 text-muted-foreground" />
-          <span className="text-base font-medium">Ta foto</span>
-          <span className="text-sm text-muted-foreground">eller välj bild från galleriet</span>
-        </Button>
-      ) : (
-        <div className="relative rounded-lg overflow-hidden border flex-shrink-0">
-          <img
-            src={imagePreview}
-            alt="Fotad bild"
-            className="w-full h-48 object-cover"
+              {showProfiles && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button
+                    variant={!selectedTemplateId ? "default" : "outline"}
+                    size="sm"
+                    className="h-9 text-xs"
+                    onClick={() => { setSelectedTemplateId(null); setShowProfiles(false); }}
+                  >
+                    Automatisk
+                  </Button>
+                  {templates.map(t => (
+                    <Button
+                      key={t.id}
+                      variant={selectedTemplateId === t.id ? "default" : "outline"}
+                      size="sm"
+                      className="h-9 text-xs truncate"
+                      onClick={() => { setSelectedTemplateId(t.id); setShowProfiles(false); }}
+                    >
+                      {t.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Camera input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileChange}
+            className="hidden"
           />
-          {isAnalyzing && (
-            <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="text-sm font-medium">Identifierar objekt...</span>
-            </div>
-          )}
-          <Button
-            variant="secondary"
-            size="sm"
-            className="absolute bottom-2 right-2"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isAnalyzing}
-          >
-            <Camera className="h-3.5 w-3.5 mr-1" />
-            Nytt foto
-          </Button>
-        </div>
-      )}
 
-      {/* AI result */}
-      {aiResult && !isAnalyzing && (
-        <div className={cn(
-          'rounded-lg border p-3 space-y-2',
-          aiResult.confidence >= 0.7 ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/30'
-        )}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className={cn(
-                'h-4 w-4',
-                aiResult.confidence >= 0.7 ? 'text-primary' : 'text-muted-foreground'
-              )} />
-              <span className="font-semibold text-sm">
-                {OBJECT_TYPE_LABELS[aiResult.objectType] || aiResult.objectType}
-              </span>
-              <Badge variant="secondary" className="text-xs">
-                {aiResult.category}
-              </Badge>
-            </div>
-            <span className={cn('text-xs font-medium', confidenceColor(aiResult.confidence))}>
-              {Math.round(aiResult.confidence * 100)}% — {confidenceLabel(aiResult.confidence)}
-            </span>
-          </div>
-
-          {aiResult.suggestedName && (
-            <p className="text-sm text-foreground">
-              <span className="text-muted-foreground">Föreslaget namn: </span>
-              <span className="font-medium">{aiResult.suggestedName}</span>
-            </p>
-          )}
-
-          {/* Properties */}
-          {aiResult.properties && (
-            <div className="flex flex-wrap gap-1">
-              {Object.entries(aiResult.properties).map(([key, val]) => {
-                if (!val) return null;
-                const labelMap: Record<string, string> = {
-                  brand: 'Märke', model: 'Modell', size: 'Storlek',
-                  color: 'Färg', condition: 'Skick', text_visible: 'Text',
-                };
-                return (
-                  <Badge key={key} variant="outline" className="text-xs">
-                    {labelMap[key] || key}: {val}
-                  </Badge>
-                );
-              })}
-            </div>
-          )}
-
-          {aiResult.confidence < 0.5 && (
-            <p className="text-xs text-muted-foreground italic">
-              Låg säkerhet — du kan korrigera i nästa steg
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Error */}
-      {error && !isAnalyzing && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-          <div className="space-y-1 flex-1">
-            <p className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Försök igen
+          {/* Image area */}
+          {!imagePreview ? (
+            <Button
+              variant="outline"
+              className="w-full border-2 border-dashed flex flex-col gap-3 min-h-[200px]"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Camera className="h-12 w-12 text-muted-foreground" />
+              <span className="text-base font-medium">Ta foto</span>
+              <span className="text-sm text-muted-foreground">eller välj bild från galleriet</span>
             </Button>
-          </div>
-        </div>
-      )}
+          ) : (
+            <div className="relative rounded-lg overflow-hidden border flex-shrink-0">
+              <img
+                src={imagePreview}
+                alt="Fotad bild"
+                className="w-full h-48 object-cover"
+              />
+              {isAnalyzing && (
+                <div className="absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm font-medium">Identifierar objekt...</span>
+                </div>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="absolute bottom-2 right-2"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isAnalyzing}
+              >
+                <Camera className="h-3.5 w-3.5 mr-1" />
+                Nytt foto
+              </Button>
+            </div>
+          )}
 
-      {/* Actions */}
-      <div className="space-y-2 mt-auto">
+          {/* AI result */}
+          {aiResult && !isAnalyzing && (
+            <div className={cn(
+              'rounded-lg border p-3 space-y-2.5',
+              aiResult.confidence >= 0.7 ? 'border-primary/30 bg-primary/5' : 'border-border bg-muted/30'
+            )}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className={cn(
+                    'h-4 w-4',
+                    aiResult.confidence >= 0.7 ? 'text-primary' : 'text-muted-foreground'
+                  )} />
+                  <span className="font-semibold text-sm">
+                    {OBJECT_TYPE_LABELS[aiResult.objectType] || aiResult.objectType}
+                  </span>
+                  <Badge variant="secondary" className="text-xs">
+                    {aiResult.category}
+                  </Badge>
+                </div>
+                <span className={cn('text-xs font-medium', confidenceColor(aiResult.confidence))}>
+                  {Math.round(aiResult.confidence * 100)}% — {confidenceLabel(aiResult.confidence)}
+                </span>
+              </div>
+
+              {aiResult.suggestedName && (
+                <p className="text-sm text-foreground">
+                  <span className="text-muted-foreground">Namn: </span>
+                  <span className="font-medium">{aiResult.suggestedName}</span>
+                </p>
+              )}
+
+              {aiResult.description && (
+                <p className="text-xs text-muted-foreground italic">
+                  {aiResult.description}
+                </p>
+              )}
+
+              {/* Properties */}
+              {aiResult.properties && (
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(aiResult.properties).map(([key, val]) => {
+                    if (!val) return null;
+                    const label = PROPERTY_LABELS[key] || key;
+                    const displayVal = key === 'condition' ? conditionLabel(val) : val;
+                    return (
+                      <Badge key={key} variant="outline" className="text-xs">
+                        {label}: {displayVal}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+
+              {aiResult.suggestedSymbolId && (
+                <p className="text-xs text-primary">
+                  ✓ Symbol automatiskt vald
+                </p>
+              )}
+
+              {aiResult.confidence < 0.5 && (
+                <p className="text-xs text-muted-foreground italic">
+                  Låg säkerhet — du kan korrigera i nästa steg
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !isAnalyzing && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+              <div className="space-y-1 flex-1">
+                <p className="text-sm text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={handleRetry} className="h-7 text-xs">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Försök igen
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Actions - fixed at bottom */}
+      <div className="p-4 space-y-2 border-t pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
         {aiResult && !isAnalyzing && (
           <Button
             className="w-full h-12"

@@ -28,6 +28,16 @@ export interface WizardFormData {
   description: string;
   coordinates: { x: number; y: number; z: number } | null;
   aiSuggestionConfidence?: number;
+  aiProperties?: {
+    manufacturer?: string | null;
+    model?: string | null;
+    size?: string | null;
+    color?: string | null;
+    condition?: string | null;
+    text_visible?: string | null;
+    material?: string | null;
+    installation_type?: string | null;
+  } | null;
 }
 
 interface SavedItem {
