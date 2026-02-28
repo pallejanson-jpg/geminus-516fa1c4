@@ -212,16 +212,21 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       // A-model filter: only load models whose name starts with "A" (architectural)
+      // UUID-named models (no real name) are treated as architectural by default
+      const UUID_RE = /^[0-9a-f]{8}-/i;
       const isArchitectural = (_id: string, name: string | null) => {
-        if (!name) return true; // no name = assume architectural (safest default)
+        if (!name) return true; // no name = assume architectural
+        if (UUID_RE.test(name)) return true; // UUID name = no real name, assume architectural
         return name.charAt(0).toUpperCase() === 'A';
       };
       const archModels = models.filter((m: ModelInfo) => isArchitectural(m.model_id, m.model_name));
       const skipped = models.filter((m: ModelInfo) => !isArchitectural(m.model_id, m.model_name));
+      // If fallback triggered (all models loaded), clear skipped to prevent double-loading
       const loadList = archModels.length > 0 ? archModels : models;
+      const backgroundList = archModels.length > 0 ? skipped : []; // no background if fallback
 
       if (skipped.length > 0) {
-        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, skipped: ${skipped.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
+        console.log(`[NativeViewer] A-filter: Loading ${loadList.length}/${models.length} models, background: ${backgroundList.length}, skipped names: ${skipped.map((m: ModelInfo) => m.model_name || m.model_id).join(', ')}`);
       } else {
         console.log(`[NativeViewer] A-filter: All ${models.length} models match architectural filter`);
       }
@@ -362,10 +367,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       // 6. Background-load remaining (non-A) models so they're ready when the user toggles them
-      if (skipped.length > 0 && mountedRef.current) {
-        console.log(`[NativeViewer] 🔄 Background-loading ${skipped.length} secondary models...`);
+      if (backgroundList.length > 0 && mountedRef.current) {
+        console.log(`[NativeViewer] 🔄 Background-loading ${backgroundList.length} secondary models...`);
         (async () => {
-          for (const model of skipped) {
+          for (const model of backgroundList) {
             if (!mountedRef.current) break;
             try {
               await loadModel(model);
