@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, templateId } = await req.json();
+    const { imageBase64 } = await req.json();
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: "imageBase64 is required" }), {
@@ -45,18 +45,11 @@ serve(async (req) => {
       .select("id, name, category, color, icon_url")
       .order("category, name");
 
-    // Build template context
+    // Build template context — always use ALL active templates automatically
     let templateContext = "";
-    let selectedTemplate: any = null;
 
-    if (templateId && templates) {
-      selectedTemplate = templates.find((t: any) => t.id === templateId);
-    }
-
-    if (selectedTemplate) {
-      templateContext = `Focus on detecting: ${selectedTemplate.name} (${selectedTemplate.object_type}). ${selectedTemplate.ai_prompt || selectedTemplate.description || ""}`;
-    } else if (templates && templates.length > 0) {
-      templateContext = `Known object types in this facility: ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Övrigt"}): ${t.description || t.name}`).join("; ")}.`;
+    if (templates && templates.length > 0) {
+      templateContext = `Known object types in this facility (use these for context): ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Övrigt"}): ${t.ai_prompt || t.description || t.name}`).join("; ")}. If the object matches one of these types, use the matching category. If it doesn't match any template, still identify it to the best of your ability.`;
     }
 
     // Build symbol list for AI matching
@@ -154,9 +147,12 @@ serve(async (req) => {
       );
     }
 
-    // If AI didn't suggest a symbol but we have a template with a default symbol, use that
-    if (!result.suggestedSymbolId && selectedTemplate?.default_symbol_id) {
-      result.suggestedSymbolId = selectedTemplate.default_symbol_id;
+    // If AI didn't suggest a symbol, try to match from templates by object_type
+    if (!result.suggestedSymbolId && templates && result.objectType) {
+      const matchingTemplate = templates.find((t: any) => t.object_type === result.objectType);
+      if (matchingTemplate?.default_symbol_id) {
+        result.suggestedSymbolId = matchingTemplate.default_symbol_id;
+      }
     }
 
     console.log("[mobile-ai-scan] Result:", JSON.stringify(result));
