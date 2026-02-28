@@ -284,7 +284,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     const scene = xeokitViewer.scene;
     scene.setObjectsVisible(scene.objectIds, true);
     scene.setObjectsXRayed(scene.objectIds, false);
-    scene.setObjectsColorize(scene.objectIds, null);
+    scene.setObjectsColorize(scene.objectIds);
   }, [xeokitViewer]);
 
   const handleProperties = useCallback(() => {

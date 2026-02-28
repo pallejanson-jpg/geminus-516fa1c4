@@ -85,9 +85,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       // NavCube
       if (sdk.NavCubePlugin) {
         const navCubeCanvas = document.createElement('canvas');
-        navCubeCanvas.id = 'navcube-canvas';
-        navCubeCanvas.id = 'navcube-canvas';
-        navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;z-index:20;';
+        navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
+        navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
         canvasRef.current.parentElement?.appendChild(navCubeCanvas);
         new sdk.NavCubePlugin(viewer, { canvasElement: navCubeCanvas });
       }
@@ -428,7 +427,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         viewerRef.current = null;
       }
       // Clean up any NavCube canvas we added
-      const nc = document.getElementById('navcube-canvas');
+      const nc = document.getElementById(`native-navcube-${buildingFmGuid.substring(0, 8)}`);
       nc?.remove();
     };
   }, [initialize]);
