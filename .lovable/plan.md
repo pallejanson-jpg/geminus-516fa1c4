@@ -1,59 +1,90 @@
 
 
-# Plan: Fem UI-korrigeringar för Native Xeokit Viewer
+# Plan: Native Viewer Komplett Mobil-UI
 
-## Problem 1: A-modell-filter matchar allt (Brand laddas)
-**Orsak:** Filtret `/^[0-9A-F]{8}-/i.test(id)` matchar UUID-format — och ALLA `model_id` i databasen är UUID:er. Filtret släpper igenom allt.
+## Kärnproblem
+`NativeViewerPage` renderar bara `NativeXeokitViewer` (en ren canvas). Alla UI-overlays (VisualizationToolbar, FloatingFloorSwitcher, ViewerFilterPanel, MobileViewerOverlay, ViewerContextMenu, dialoger) är enbart kopplade till den gamla `UnifiedViewer`/`AssetPlusViewer`-flödet. Därför saknas all interaktion på mobil och desktop.
 
-**Fix:** Ta bort UUID-matchningen. Filtrera istället på `model_name` — om inget namn finns eller om namnet börjar med "Brand", "V-", "EL-", "VS-" etc, exkludera modellen. Behåll bara modeller vars `model_name` börjar med `A-`, `A_`, `ARK`, eller är null/saknas (fallback: ladda om inget matchar).
+## Implementationsplan
 
-**Fil:** `src/components/viewer/NativeXeokitViewer.tsx` (rad 168-175)
+### Steg 1: Bygg ut `NativeViewerPage` med komplett viewer-shell
+
+Skapa en ny wrapper-komponent `NativeViewerShell` som omsluter `NativeXeokitViewer` och monterar alla UI-overlays:
+
+**Fil:** `src/components/viewer/NativeViewerShell.tsx` (ny fil)
+
+Komponenten ska:
+- Ta emot `buildingFmGuid` och `onClose`
+- Hålla state för: `isViewerReady`, `showFilterPanel`, `showSettings` (VisualizationToolbar), `viewMode` (2d/3d)
+- Rendera i lager:
+  1. `NativeXeokitViewer` (canvas, ref sparas)
+  2. `MobileViewerOverlay` (mobil: bakåtknapp + filter/settings-knappar)
+  3. `VisualizationToolbar` (desktop + mobil meny)
+  4. `FloatingFloorSwitcher` (våningspills)
+  5. `ViewerFilterPanel` (filterpanel vid klick)
+  6. `ViewerContextMenu` (högerklick)
+- Lyssna på `NativeXeokitViewer`s `phase === 'ready'` event för att sätta `isViewerReady`
+
+### Steg 2: Refaktorera `NativeXeokitViewer` att exponera viewerRef
+
+**Fil:** `src/components/viewer/NativeXeokitViewer.tsx`
+
+- Exponera `viewerRef.current` (xeokit Viewer-instansen) till föräldrakomponenten via `React.forwardRef` eller en callback-prop `onViewerReady(viewer)`
+- Dispatcha en custom event `NATIVE_VIEWER_READY` med viewer-referensen när `phase === 'ready'`
+- Exponera `buildingFmGuid` som `data-building-guid` på wrapper-diven
+
+### Steg 3: Anpassa `viewerRef`-formatet för overlays
+
+Alla overlays (VisualizationToolbar, FloatingFloorSwitcher, ViewerFilterPanel) förväntar sig `viewerRef.current.$refs.AssetViewer.$refs.assetView.viewer` — den gamla Asset+ kedjan.
+
+**Fix:** Skapa en adapter-ref som matchar det förväntade formatet:
+```typescript
+const viewerShimRef = useRef({
+  $refs: { AssetViewer: { $refs: { assetView: { viewer: xeokitViewerInstance } } } }
+});
+```
+Detta gör att alla befintliga hooks (`useFloorData`, `useModelData`, `useSectionPlaneClipping`) fungerar utan ändringar.
+
+### Steg 4: Högerklickmeny för native viewer
+
+**Fil:** `src/components/viewer/NativeViewerShell.tsx`
+
+- Lägg till `contextmenu`-eventlyssnare på canvasen
+- Vid högerklick: använd xeokit `scene.pick()` för att identifiera entitet
+- Rendera `ViewerContextMenu` med korrekt position och entity-info
+- Koppla actions: properties, zoom-to-fit, isolate, hide
+
+### Steg 5: Uppdatera `NativeViewerPage` att använda shell
+
+**Fil:** `src/pages/NativeViewerPage.tsx`
+
+Byt `<NativeXeokitViewer>` mot `<NativeViewerShell>`.
+
+### Steg 6: Mobil-specifika fixes
+
+- `MobileViewerOverlay`: bakåtknapp → `onClose` → `setActiveApp('portfolio')`  
+- `FloatingFloorSwitcher`: redan fixad med `bottom-20` + `flex-row` på mobil
+- Säkerställ `MobileNav` FAB-knappen inte krockar med viewer-overlays (dölj FAB när native_viewer är aktiv)
+
+**Fil:** `src/components/layout/MobileNav.tsx`
+- Dölj MobileNav FAB-pill när `activeApp` är en viewer-app
+
+### Steg 7: Dialog-responsivitet
+
+`CreateIssueDialog` och `CreateViewDialog`:
+- På mobil: rendera som bottom-sheet (full bredd, `bottom: 0`) istället för draggable panel
+- Säkerställ `overflow-y-auto` på form-content
+- Backdrop för stängning vid klick utanför
 
 ---
 
-## Problem 2: Högerklickmeny ser "vit" ut — matchar inte dark theme
-**Orsak:** `ViewerContextMenu` använder `bg-card/95` och `text-foreground` som i dark mode borde vara mörk, men den visas ovanpå viewern som har ljus bakgrund. Ingen explicit dark-mode-klass sätts.
+## Filer att skapa
+1. `src/components/viewer/NativeViewerShell.tsx` — ny wrapper med alla overlays
 
-**Fix:** Ge menyn en explicit mörk styling: `bg-zinc-900/95 text-zinc-100 border-zinc-700` istället för theme-variabler, så den alltid ser konsekvent ut oavsett viewer-bakgrund.
-
-**Fil:** `src/components/viewer/ViewerContextMenu.tsx` (rad 105, 128, 160)
-
----
-
-## Problem 3: Egenskaps-dialogrutan (Properties) — dålig responsivitet, svår att stänga
-**Orsak:** `UniversalPropertiesDialog` och `AssetPropertiesDialog` är floating divs utan klickyta utanför för stängning. På mobil saknas tydlig stäng-knapp.
-
-**Fix i UniversalPropertiesDialog:**
-- Lägg till en halvtransparent backdrop (`fixed inset-0 bg-black/30`) som stänger dialogen vid klick
-- Öka dialogens storlek men begränsa till max 90vw/90vh
-- Gör stäng-knappen (X) större och mer synlig
-
-**Fil:** `src/components/common/UniversalPropertiesDialog.tsx`
-
----
-
-## Problem 4: Visualiseringslegend (temperatur etc) på fel sida
-**Orsak:** `VisualizationLegendBar` placeras med `left-3`. Användaren vill ha den på höger sida med värdena på andra sidan av stapeln.
-
-**Fix:** Ändra positionering till `right-3` istället för `left-3`. Byt ordning så gradient-bar är till vänster och värde-labels till höger (omvänd flex-ordning).
-
-**Fil:** `src/components/viewer/VisualizationLegendBar.tsx` (rad 119-121, 126, 186)
-
----
-
-## Problem 5: Våningsväljare (floor pills) krockar med navigationsmeny på mobil
-**Orsak:** `FloatingFloorSwitcher` är vertikal med `left-3 top-[140px]` — som krockar med MobileNav-menyn.
-
-**Fix:** På mobil, flytta floor-pills till `bottom-20 left-1/2 -translate-x-1/2` och gör dem horisontella (`flex-row` istället för `flex-col`).
-
-**Fil:** `src/components/viewer/FloatingFloorSwitcher.tsx` (rad 270-275)
-
----
-
-## Filer att ändra
-1. `src/components/viewer/NativeXeokitViewer.tsx` — fix A-filter (ta bort UUID-match)
-2. `src/components/viewer/ViewerContextMenu.tsx` — mörk explicit styling
-3. `src/components/common/UniversalPropertiesDialog.tsx` — backdrop + responsivitet
-4. `src/components/viewer/VisualizationLegendBar.tsx` — flytta till höger sida
-5. `src/components/viewer/FloatingFloorSwitcher.tsx` — mobil positionering
+## Filer att ändra  
+1. `src/components/viewer/NativeXeokitViewer.tsx` — exponera viewer via callback
+2. `src/pages/NativeViewerPage.tsx` — byt till NativeViewerShell
+3. `src/components/layout/MobileNav.tsx` — dölj FAB i viewer-läge
+4. `src/components/viewer/CreateIssueDialog.tsx` — mobil bottom-sheet + responsivitet
+5. `src/components/viewer/CreateViewDialog.tsx` — mobil responsivitet
 
