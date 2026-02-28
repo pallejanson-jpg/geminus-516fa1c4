@@ -1,7 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Check, RotateCcw, Crosshair } from 'lucide-react';
+import { Check, RotateCcw, Crosshair, AlertCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 
 interface PositionPickerDialogProps {
@@ -20,11 +21,26 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
   onPositionPicked,
 }) => {
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [hasModels, setHasModels] = useState<boolean | null>(null);
   const viewerRef = useRef<any>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
   const targetFmGuid = roomFmGuid || buildingFmGuid;
+
+  // Check if 3D models exist before rendering viewer
+  useEffect(() => {
+    if (!open) { setHasModels(null); return; }
+    const check = async () => {
+      const { data, error } = await supabase
+        .from('xkt_models')
+        .select('id')
+        .eq('building_fm_guid', buildingFmGuid)
+        .limit(1);
+      setHasModels(!error && (data?.length ?? 0) > 0);
+    };
+    check();
+  }, [open, buildingFmGuid]);
 
   const handleViewerReady = useCallback((viewer: any) => {
     viewerRef.current = viewer;
@@ -100,35 +116,50 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
           </p>
         </DialogHeader>
         <div className="flex-1 min-h-0 relative">
-          <NativeXeokitViewer
-            buildingFmGuid={targetFmGuid}
-            onClose={() => onOpenChange(false)}
-            onViewerReady={handleViewerReady}
-          />
-
-          {/* Instruction banner — top-left, out of the way */}
-          {!pendingCoords && (
-            <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
-              <Crosshair className="h-3.5 w-3.5" />
-              <span>Håll nedtryckt för att välja position</span>
+          {hasModels === null ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              Kontrollerar 3D-modeller…
             </div>
-          )}
-
-          {/* Confirmation bar */}
-          {pendingCoords && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-background/95 backdrop-blur border rounded-lg shadow-lg p-3 flex items-center gap-3">
-              <p className="text-sm font-mono">
-                X: {pendingCoords.x.toFixed(2)}, Y: {pendingCoords.y.toFixed(2)}, Z: {pendingCoords.z.toFixed(2)}
+          ) : hasModels === false ? (
+            <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <AlertCircle className="h-12 w-12 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">Ingen 3D-modell tillgänglig</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Det finns inga 3D-modeller för denna byggnad. Ladda upp en modell först eller välj position i 360°-vyn istället.
               </p>
-              <Button size="sm" variant="outline" onClick={handleReset} className="gap-1">
-                <RotateCcw className="h-3.5 w-3.5" />
-                Välj om
-              </Button>
-              <Button size="sm" onClick={handleConfirm} className="gap-1">
-                <Check className="h-3.5 w-3.5" />
-                Bekräfta
-              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)} className="mt-2">Stäng</Button>
             </div>
+          ) : (
+            <>
+              <NativeXeokitViewer
+                buildingFmGuid={targetFmGuid}
+                onClose={() => onOpenChange(false)}
+                onViewerReady={handleViewerReady}
+              />
+
+              {!pendingCoords && (
+                <div className="absolute top-3 left-3 z-20 bg-primary/90 text-primary-foreground text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-md">
+                  <Crosshair className="h-3.5 w-3.5" />
+                  <span>Håll nedtryckt för att välja position</span>
+                </div>
+              )}
+
+              {pendingCoords && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-background/95 backdrop-blur border rounded-lg shadow-lg p-3 flex items-center gap-3">
+                  <p className="text-sm font-mono">
+                    X: {pendingCoords.x.toFixed(2)}, Y: {pendingCoords.y.toFixed(2)}, Z: {pendingCoords.z.toFixed(2)}
+                  </p>
+                  <Button size="sm" variant="outline" onClick={handleReset} className="gap-1">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Välj om
+                  </Button>
+                  <Button size="sm" onClick={handleConfirm} className="gap-1">
+                    <Check className="h-3.5 w-3.5" />
+                    Bekräfta
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </DialogContent>
