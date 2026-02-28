@@ -30,7 +30,7 @@ interface ModelInfo {
   storey_fm_guid: string | null;
 }
 
-type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'loading_models' | 'ready' | 'error';
+type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'loading_models' | 'ready' | 'error';
 
 const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   buildingFmGuid,
@@ -100,17 +100,68 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 3. Fetch model list from DB
       setPhase('loading_models');
-      const { data: models, error: dbError } = await supabase
+      let { data: models, error: dbError } = await supabase
         .from('xkt_models')
-        .select('model_id, model_name, storage_path, file_size, storey_fm_guid')
+        .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
         .eq('building_fm_guid', buildingFmGuid)
-        .order('file_size', { ascending: true }); // smallest first for fast feedback
+        .order('file_size', { ascending: true });
+
+      // Auto-sync fallback: if no models cached, trigger server-side sync from Asset+
+      if (!dbError && (!models || models.length === 0)) {
+        console.log('[NativeViewer] No cached models — triggering auto-sync from Asset+...');
+        if (!mountedRef.current) return;
+        setPhase('syncing');
+
+        try {
+          const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
+            body: { action: 'sync-xkt-building', buildingFmGuid }
+          });
+          
+          if (syncError) {
+            console.warn('[NativeViewer] Auto-sync failed:', syncError);
+          } else {
+            console.log('[NativeViewer] Auto-sync result:', syncResult);
+          }
+
+          if (!mountedRef.current) return;
+
+          // Re-fetch models after sync
+          const refetch = await supabase
+            .from('xkt_models')
+            .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at')
+            .eq('building_fm_guid', buildingFmGuid)
+            .order('file_size', { ascending: true });
+          
+          models = refetch.data;
+          dbError = refetch.error;
+        } catch (e) {
+          console.warn('[NativeViewer] Auto-sync error:', e);
+        }
+      }
 
       if (dbError || !models || models.length === 0) {
-        console.warn('[NativeViewer] No cached models found for building', buildingFmGuid);
-        setErrorMsg(`Inga cachade XKT-modeller hittades för denna byggnad. Öppna först byggnaden i standard-viewern så att modellerna cachas.`);
+        console.warn('[NativeViewer] No models found for building', buildingFmGuid);
+        setErrorMsg(`Inga XKT-modeller hittades för denna byggnad, varken lokalt eller från Asset+.`);
         setPhase('error');
         return;
+      }
+
+      // Staleness check: if oldest model > 7 days, trigger background refresh
+      const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+      const oldestSync = models.reduce((oldest: string | null, m: any) => {
+        if (!oldest || (m.synced_at && m.synced_at < oldest)) return m.synced_at;
+        return oldest;
+      }, null as string | null);
+      
+      if (oldestSync && (Date.now() - new Date(oldestSync).getTime()) > STALE_MS) {
+        console.log('[NativeViewer] Models are stale (>7d), triggering background refresh...');
+        supabase.functions.invoke('asset-plus-sync', {
+          body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
+        }).then(({ data }) => {
+          if (data?.synced > 0) {
+            console.log(`[NativeViewer] Background refresh: ${data.synced} models updated`);
+          }
+        }).catch(() => {});
       }
 
       console.log(`[NativeViewer] Found ${models.length} models, loading...`);
@@ -325,6 +376,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             {phase === 'init' && 'Initierar...'}
             {phase === 'loading_sdk' && 'Laddar xeokit SDK...'}
             {phase === 'creating_viewer' && 'Skapar viewer...'}
+            {phase === 'syncing' && 'Hämtar 3D-modeller från Asset+...'}
             {phase === 'loading_models' && (
               <>
                 Laddar modeller ({loadProgress.loaded}/{loadProgress.total})
