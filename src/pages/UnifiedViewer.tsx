@@ -449,7 +449,7 @@ const UnifiedViewerContent: React.FC<{
   const is3DMode = viewMode === '3d';
   const isVTMode = viewMode === 'vt';
   const isSplit2D3D = viewMode === 'split2d3d';
-  const shouldUseNative3D = viewMode === '3d' || viewMode === '2d';
+  // Native viewer disabled — using AssetPlusViewer for all 3D/2D
 
   const viewerContainerStyle: React.CSSProperties = {
     position: 'absolute',
@@ -615,12 +615,6 @@ const UnifiedViewerContent: React.FC<{
 
         {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
         <div style={viewerContainerStyle}>
-          {shouldUseNative3D ? (
-            <NativeViewerShell
-              buildingFmGuid={buildingData.fmGuid}
-              onClose={is3DMode ? handleGoBack : (() => {})}
-            />
-          ) : (
             <AssetPlusViewer
               fmGuid={buildingData.fmGuid}
               initialFmGuidToFocus={entityFmGuid || undefined}
@@ -637,7 +631,6 @@ const UnifiedViewerContent: React.FC<{
               syncHeading={isSplitMode ? sync3DHeading : undefined}
               syncPitch={isSplitMode ? sync3DPitch : undefined}
             />
-          )}
         </div>
 
         {/* ── Split: 360° panel on the right half ── */}
@@ -761,12 +754,6 @@ function MobileUnifiedViewer({
       <div className="absolute inset-0">
         {/* 3D/2D viewer — always mounted, hidden when 360 active */}
         <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
-          {viewMode === '3d' || viewMode === '2d' ? (
-            <NativeViewerShell
-              buildingFmGuid={buildingData.fmGuid}
-              onClose={onGoBack}
-            />
-          ) : (
             <AssetPlusViewer
               fmGuid={buildingData.fmGuid}
               initialFmGuidToFocus={entityFmGuid || undefined}
@@ -783,7 +770,6 @@ function MobileUnifiedViewer({
               onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
               mobileHasIvion={hasIvion}
             />
-          )}
         </div>
 
         {/* 360 SDK container */}
