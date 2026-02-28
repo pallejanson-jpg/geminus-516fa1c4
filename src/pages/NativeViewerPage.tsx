@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo } from "react";
 import { AppContext } from "@/context/AppContext";
-import NativeXeokitViewer from "@/components/viewer/NativeXeokitViewer";
+import NativeViewerShell from "@/components/viewer/NativeViewerShell";
 import BuildingSelector from "@/components/viewer/BuildingSelector";
 import ViewerErrorBoundary from "@/components/common/ViewerErrorBoundary";
 
@@ -49,7 +49,7 @@ export default function NativeViewerPage() {
     return (
       <div className="h-full">
         <ViewerErrorBoundary onReset={handleClose}>
-          <NativeXeokitViewer buildingFmGuid={buildingFmGuid} onClose={handleClose} />
+          <NativeViewerShell buildingFmGuid={buildingFmGuid} onClose={handleClose} />
         </ViewerErrorBoundary>
       </div>
     );
