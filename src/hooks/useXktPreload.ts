@@ -110,12 +110,8 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
   useEffect(() => {
     if (!buildingFmGuid) return;
 
-    // Skip preloading on mobile to prevent memory competition with 3D viewer
+    // Detect mobile for lower concurrency (but still preload — A-model priority keeps it safe)
     const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (isMobile) {
-      console.log('XKT Preload: Skipped on mobile device');
-      return;
-    }
     
     // Prevent duplicate preloads - check global cache
     if (globalPreloadedBuildings.has(buildingFmGuid)) {
@@ -213,16 +209,15 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
             await Promise.allSettled(Array.from(activePromises));
           };
 
-          // Phase 1: Fetch A-models with higher concurrency (priority)
-          await fetchBatch(aModels, 3);
+          // Phase 1: Fetch A-models (lower concurrency on mobile)
+          await fetchBatch(aModels, isMobile ? 1 : 3);
           console.log(`XKT Preload: ✅ A-models preloaded`);
 
-          // Phase 2: Fetch secondary models in background with lower concurrency
+          // Phase 2: Fetch secondary models in background
           if (secondaryModels.length > 0) {
             console.log(`XKT Preload: 🔄 Background-loading ${secondaryModels.length} secondary models...`);
-            // Use requestIdleCallback or setTimeout to yield to main thread
-            await new Promise(r => setTimeout(r, 500));
-            await fetchBatch(secondaryModels, 2);
+            await new Promise(r => setTimeout(r, isMobile ? 1000 : 500));
+            await fetchBatch(secondaryModels, isMobile ? 1 : 2);
             console.log(`XKT Preload: ✅ Secondary models preloaded`);
           }
         }
