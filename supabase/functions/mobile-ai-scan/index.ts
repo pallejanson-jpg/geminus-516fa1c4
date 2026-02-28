@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64 } = await req.json();
+    const { imageBase64, templateId } = await req.json();
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: "imageBase64 is required" }), {
@@ -27,37 +27,62 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Fetch active detection templates for context
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Fetch active detection templates for context
     const { data: templates } = await supabase
       .from("detection_templates")
-      .select("name, object_type, description, default_category")
+      .select("id, name, object_type, description, default_category, ai_prompt, default_symbol_id")
       .eq("is_active", true)
-      .limit(10);
+      .limit(20);
 
-    const templateContext = templates && templates.length > 0
-      ? `Known object types in this facility: ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Övrigt"}): ${t.description || t.name}`).join("; ")}.`
+    // Fetch annotation symbols for matching
+    const { data: symbols } = await supabase
+      .from("annotation_symbols")
+      .select("id, name, category, color, icon_url")
+      .order("category, name");
+
+    // Build template context
+    let templateContext = "";
+    let selectedTemplate: any = null;
+
+    if (templateId && templates) {
+      selectedTemplate = templates.find((t: any) => t.id === templateId);
+    }
+
+    if (selectedTemplate) {
+      templateContext = `Focus on detecting: ${selectedTemplate.name} (${selectedTemplate.object_type}). ${selectedTemplate.ai_prompt || selectedTemplate.description || ""}`;
+    } else if (templates && templates.length > 0) {
+      templateContext = `Known object types in this facility: ${templates.map((t: any) => `${t.object_type} (${t.default_category || "Övrigt"}): ${t.description || t.name}`).join("; ")}.`;
+    }
+
+    // Build symbol list for AI matching
+    const symbolContext = symbols && symbols.length > 0
+      ? `\nAvailable annotation symbols (use these exact IDs): ${symbols.map((s: any) => `"${s.id}" = "${s.name}" (category: ${s.category})`).join("; ")}.`
       : "";
 
-    const systemPrompt = `You are an expert at identifying building equipment and assets from photos taken during facility management inspections in Sweden. ${templateContext} Return ONLY valid JSON, no markdown, no explanation.`;
+    const systemPrompt = `You are an expert at identifying building equipment and assets from photos taken during facility management inspections in Sweden. ${templateContext}${symbolContext} Return ONLY valid JSON, no markdown, no explanation.`;
 
     const userPrompt = `Identify the main object in this photo. Return a JSON object with exactly these fields:
 {
-  "objectType": one of ["fire_extinguisher", "fire_alarm_button", "smoke_detector", "fire_hose", "electrical_panel", "door", "elevator", "staircase", "ventilation", "other"],
-  "suggestedName": a short descriptive name in Swedish (e.g. "Brandsläckare 6kg", "Larmknapp plan 2", "Rökdetektor"),
+  "objectType": one of ["fire_extinguisher", "fire_alarm_button", "smoke_detector", "fire_hose", "electrical_panel", "door", "elevator", "staircase", "ventilation", "hvac_unit", "sprinkler", "emergency_light", "access_control", "other"],
+  "suggestedName": a short descriptive name in Swedish (e.g. "Brandsläckare 6kg ABC", "Larmknapp plan 2", "Rökdetektor optisk"),
+  "description": a brief description in Swedish of what you see, including placement, condition and any notable details (1-2 sentences),
   "confidence": a number between 0.0 and 1.0,
-  "category": one of ["Brandskydd", "El", "VVS", "Ventilation", "Dörrar", "Transporter", "Övrigt"],
+  "category": one of ["Brandskydd", "El", "VVS", "Ventilation", "Dörrar", "Transporter", "Säkerhet", "Övrigt"],
+  "suggestedSymbolId": the UUID of the best matching annotation symbol from the available list, or null if no good match,
   "properties": {
-    "brand": "brand name or null",
-    "model": "model name or null",
-    "size": "size or capacity or null",
+    "manufacturer": "manufacturer/brand name or null",
+    "model": "model name/number or null",
+    "size": "size, capacity or weight (e.g. '6kg', '2L') or null",
     "color": "color description or null",
-    "condition": "good/fair/poor or null",
-    "text_visible": "any visible text on the object or null"
+    "condition": one of ["good", "fair", "poor"] or null,
+    "text_visible": "any visible text, serial numbers, labels on the object or null",
+    "material": "material type or null",
+    "installation_type": "wall-mounted, ceiling-mounted, floor-standing, recessed, etc. or null"
   }
 }`;
 
@@ -82,7 +107,7 @@ serve(async (req) => {
             ],
           },
         ],
-        max_tokens: 500,
+        max_tokens: 800,
       }),
     });
 
@@ -109,7 +134,6 @@ serve(async (req) => {
     // Parse JSON from response
     let result: any = null;
     try {
-      // Strip potential markdown code fences
       const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       result = JSON.parse(cleaned);
     } catch (e) {
@@ -120,12 +144,19 @@ serve(async (req) => {
           raw: content,
           objectType: "other",
           suggestedName: "",
+          description: "",
           confidence: 0,
           category: "Övrigt",
+          suggestedSymbolId: null,
           properties: {},
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // If AI didn't suggest a symbol but we have a template with a default symbol, use that
+    if (!result.suggestedSymbolId && selectedTemplate?.default_symbol_id) {
+      result.suggestedSymbolId = selectedTemplate.default_symbol_id;
     }
 
     console.log("[mobile-ai-scan] Result:", JSON.stringify(result));
