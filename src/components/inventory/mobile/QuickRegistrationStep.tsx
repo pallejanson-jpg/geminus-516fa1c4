@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Save, Loader2, Plus, FileText, MapPin } from 'lucide-react';
+import { Camera, Save, Loader2, Plus, FileText, MapPin, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -130,6 +131,20 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
       const inventoryDate = new Date().toISOString();
       const isEditing = !!editingItem;
 
+      const aiProps = formData.aiProperties || {};
+      const syncProperties = [
+        { name: 'Description', value: formData.description.trim() || '', dataType: 0 },
+        { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
+        { name: 'AssetCategory', value: formData.category, dataType: 0 },
+      ];
+      // Add AI-detected properties to sync
+      if (aiProps.manufacturer) syncProperties.push({ name: 'Manufacturer', value: aiProps.manufacturer, dataType: 0 });
+      if (aiProps.model) syncProperties.push({ name: 'Model', value: aiProps.model, dataType: 0 });
+      if (aiProps.size) syncProperties.push({ name: 'Size', value: aiProps.size, dataType: 0 });
+      if (aiProps.condition) syncProperties.push({ name: 'Condition', value: aiProps.condition, dataType: 0 });
+      if (aiProps.material) syncProperties.push({ name: 'Material', value: aiProps.material, dataType: 0 });
+      if (aiProps.installation_type) syncProperties.push({ name: 'InstallationType', value: aiProps.installation_type, dataType: 0 });
+
       const assetData = {
         name: formData.name.trim(),
         common_name: formData.name.trim(),
@@ -154,11 +169,9 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           description: formData.description.trim() || null,
           inventoryDate: inventoryDate,
           imageUrl: formData.imageUrl || null,
-          syncProperties: [
-            { name: 'Description', value: formData.description.trim() || '', dataType: 0 },
-            { name: 'InventoryDate', value: inventoryDate, dataType: 4 },
-            { name: 'AssetCategory', value: formData.category, dataType: 0 },
-          ],
+          manufacturer: aiProps.manufacturer || null,
+          model: aiProps.model || null,
+          syncProperties,
         },
         updated_at: new Date().toISOString(),
       };
@@ -359,6 +372,41 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
             />
           </CollapsibleContent>
         </Collapsible>
+
+        {/* AI-detected properties */}
+        {formData.aiProperties && Object.values(formData.aiProperties).some(v => v) && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-semibold text-primary">AI-identifierade egenskaper</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {formData.aiProperties.manufacturer && (
+                <Badge variant="outline" className="text-xs">Tillverkare: {formData.aiProperties.manufacturer}</Badge>
+              )}
+              {formData.aiProperties.model && (
+                <Badge variant="outline" className="text-xs">Modell: {formData.aiProperties.model}</Badge>
+              )}
+              {formData.aiProperties.size && (
+                <Badge variant="outline" className="text-xs">Storlek: {formData.aiProperties.size}</Badge>
+              )}
+              {formData.aiProperties.condition && (
+                <Badge variant="outline" className="text-xs">
+                  Skick: {{ good: 'Bra', fair: 'Acceptabelt', poor: 'Dåligt' }[formData.aiProperties.condition] || formData.aiProperties.condition}
+                </Badge>
+              )}
+              {formData.aiProperties.material && (
+                <Badge variant="outline" className="text-xs">Material: {formData.aiProperties.material}</Badge>
+              )}
+              {formData.aiProperties.installation_type && (
+                <Badge variant="outline" className="text-xs">Montering: {formData.aiProperties.installation_type}</Badge>
+              )}
+              {formData.aiProperties.text_visible && (
+                <Badge variant="outline" className="text-xs">Text: {formData.aiProperties.text_visible}</Badge>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Action buttons - kompaktare med safe-area */}
         <div className="space-y-2 pt-3">
