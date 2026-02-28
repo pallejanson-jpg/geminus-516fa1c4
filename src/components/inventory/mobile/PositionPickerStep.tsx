@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Camera, MapPin, SkipForward, Loader2, AlertCircle } from 'lucide-react';
+import { Box, Camera, MapPin, SkipForward, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,10 +23,9 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
   const [showPositionPicker, setShowPositionPicker] = useState(false);
   const [show360Picker, setShow360Picker] = useState(false);
   const [ivionSiteId, setIvionSiteId] = useState<string | null>(null);
-  const [has3dModels, setHas3dModels] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check building capabilities: Ivion 360 + 3D models
+  // Check building capabilities: Ivion 360
   useEffect(() => {
     const checkConfig = async () => {
       if (!formData.buildingFmGuid) {
@@ -35,24 +34,15 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
       }
 
       try {
-        // Check Ivion config and 3D models in parallel
-        const [settingsResult, modelsResult] = await Promise.all([
-          supabase
-            .from('building_settings')
-            .select('ivion_site_id')
-            .eq('fm_guid', formData.buildingFmGuid)
-            .maybeSingle(),
-          supabase
-            .from('xkt_models')
-            .select('id')
-            .eq('building_fm_guid', formData.buildingFmGuid)
-            .limit(1),
-        ]);
+        const settingsResult = await supabase
+          .from('building_settings')
+          .select('ivion_site_id')
+          .eq('fm_guid', formData.buildingFmGuid)
+          .maybeSingle();
 
         if (!settingsResult.error && settingsResult.data?.ivion_site_id) {
           setIvionSiteId(settingsResult.data.ivion_site_id);
         }
-        setHas3dModels(!modelsResult.error && (modelsResult.data?.length ?? 0) > 0);
       } catch (err) {
         console.error('Error checking config:', err);
       } finally {
@@ -143,21 +133,14 @@ const PositionPickerStep: React.FC<PositionPickerStepProps> = ({
             )}
 
             {/* 3D Picker */}
-            {has3dModels ? (
-              <Button
-                variant="outline"
-                className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2"
-                onClick={() => setShowPositionPicker(true)}
-              >
-                <Box className="h-8 w-8 text-primary" />
-                <span className="text-base font-medium">Välj i 3D-modell</span>
-              </Button>
-            ) : (
-              <div className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg text-muted-foreground">
-                <AlertCircle className="h-6 w-6" />
-                <span className="text-sm">Ingen 3D-modell tillgänglig</span>
-              </div>
-            )}
+            <Button
+              variant="outline"
+              className="w-full h-20 flex flex-col items-center justify-center gap-2 border-2"
+              onClick={() => setShowPositionPicker(true)}
+            >
+              <Box className="h-8 w-8 text-primary" />
+              <span className="text-base font-medium">Välj i 3D-modell</span>
+            </Button>
           </div>
 
           {/* Skip option */}
