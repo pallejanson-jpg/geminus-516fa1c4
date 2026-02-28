@@ -15,7 +15,7 @@ import { getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
 import { hslStringToRgbFloat } from '@/lib/visualization-utils';
 
-const XEOKIT_CDN = 'https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk@2.6.5/dist/xeokit-sdk.es.js';
+const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
 interface NativeXeokitViewerProps {
   buildingFmGuid: string;
