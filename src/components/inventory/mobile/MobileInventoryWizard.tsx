@@ -27,6 +27,10 @@ export interface WizardFormData {
   imageUrl: string | null;
   description: string;
   coordinates: { x: number; y: number; z: number } | null;
+  ivionPoiId?: number;
+  ivionImageId?: number;
+  fmGuid?: string;
+  ivionSiteId?: string;
   aiSuggestionConfidence?: number;
   aiProperties?: {
     manufacturer?: string | null;
@@ -232,6 +236,10 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
         imageUrl: null,
         description: '',
         coordinates: null,
+        ivionPoiId: undefined,
+        ivionImageId: undefined,
+        fmGuid: undefined,
+        ivionSiteId: undefined,
       });
       // Go back to position step for quick loop
       goToStep('position');
@@ -245,6 +253,10 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
         imageUrl: null,
         description: '',
         coordinates: null,
+        ivionPoiId: undefined,
+        ivionImageId: undefined,
+        fmGuid: undefined,
+        ivionSiteId: undefined,
       });
       goToStep('category');
     } else {

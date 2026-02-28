@@ -186,13 +186,17 @@ const QuickRegistrationStep: React.FC<QuickRegistrationStepProps> = ({
           .eq('id', editingItem.id);
         error = result.error;
       } else {
-        // INSERT new asset
-        const newFmGuid = crypto.randomUUID();
+        // INSERT new asset — use fmGuid from 360° flow if available
+        const newFmGuid = formData.fmGuid || crypto.randomUUID();
         const result = await supabase.from('assets').insert([{
           ...assetData,
           fm_guid: newFmGuid,
           created_in_model: false,
           is_local: true,
+          ivion_poi_id: formData.ivionPoiId ?? null,
+          ivion_site_id: formData.ivionSiteId ?? null,
+          ivion_image_id: formData.ivionImageId ?? null,
+          ivion_synced_at: formData.ivionPoiId ? new Date().toISOString() : null,
         }]);
         error = result.error;
       }
