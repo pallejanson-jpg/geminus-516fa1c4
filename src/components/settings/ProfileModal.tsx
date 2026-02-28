@@ -29,7 +29,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg w-[calc(100vw-1rem)] max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-lg w-full max-w-full h-full sm:h-auto sm:max-h-[calc(100dvh-2rem)] max-h-dvh rounded-none sm:rounded-lg overflow-hidden flex flex-col">
         <DialogHeader className="pr-8">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
