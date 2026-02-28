@@ -1389,7 +1389,8 @@ serve(async (req) => {
           const fileName = xktUrl.split('/').pop() || `${modelId}.xkt`;
           const storagePath = `${buildingFmGuid}/${fileName}`;
 
-          // Check if already synced
+          // Check if already synced (skip unless force=true)
+          const forceSync = body?.force === true;
           const { data: existingModel } = await supabase
             .from('xkt_models')
             .select('id')
@@ -1397,8 +1398,8 @@ serve(async (req) => {
             .eq('model_id', modelId)
             .maybeSingle();
 
-          if (existingModel) {
-            console.log(`Model ${modelId} already synced`);
+          if (existingModel && !forceSync) {
+            console.log(`Model ${modelId} already synced (use force:true to re-sync)`);
             continue;
           }
 
