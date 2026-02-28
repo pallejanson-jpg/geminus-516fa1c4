@@ -233,36 +233,46 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       setLoadProgress({ loaded: 0, total: loadList.length });
 
-      // 4. Load models (mobile-safe sequential loading to avoid memory crashes)
-      const CONCURRENT = isMobile ? 1 : 2;
+      // 4. Load models with strict sequential loading (prevents xeokit parser OOM/crashes on large files)
+      const CONCURRENT = 1;
       let loaded = 0;
       const queue = [...loadList] as ModelInfo[];
+
+      const waitForModel = (entity: any, modelId: string) =>
+        new Promise<boolean>((resolve) => {
+          let settled = false;
+          const done = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            resolve(ok);
+          };
+
+          entity?.on?.('loaded', () => done(true));
+          entity?.on?.('error', (err: unknown) => {
+            console.error(`[NativeViewer] Model error for ${modelId}:`, err);
+            done(false);
+          });
+
+          // Safety timeout so one bad model never blocks the whole queue
+          setTimeout(() => done(false), 90_000);
+        });
 
       const loadModel = async (model: ModelInfo) => {
         const modelStart = performance.now();
         const modelId = model.model_id;
 
         try {
-          // Check memory cache first
           const memData = getModelFromMemory(modelId, buildingFmGuid);
+
           if (memData) {
-            // Load from memory
-            console.log(`[NativeViewer] About to xktLoader.load() from memory for ${modelId}, size: ${memData.byteLength}`);
-            try {
-              xktLoader.load({
-                id: modelId,
-                xkt: memData,
-                edges: true,
-              });
-              console.log(`[NativeViewer] xktLoader.load() from memory succeeded for ${modelId}`);
-            } catch (loadErr) {
-              console.error(`[NativeViewer] xktLoader.load() from memory CRASHED for ${modelId}:`, loadErr);
-              return;
-            }
+            console.log(`[NativeViewer] Loading from memory: ${modelId}, size: ${memData.byteLength}`);
+            const entity = xktLoader.load({ id: modelId, xkt: memData, edges: true });
+            const ok = await waitForModel(entity, modelId);
+            if (!ok) return;
+
             const ms = Math.round(performance.now() - modelStart);
             console.log(`%c[NativeViewer] ✅ Memory → ${modelId} (${(memData.byteLength / 1024 / 1024).toFixed(1)} MB) ${ms}ms`, 'color:#22c55e;font-weight:bold');
           } else {
-            // Get signed URL from storage
             const { data: urlData } = await supabase.storage
               .from('xkt-models')
               .createSignedUrl(model.storage_path, 3600);
@@ -272,41 +282,40 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
               return;
             }
 
-            // Fetch binary
-            const fetchStart = performance.now();
-            const resp = await fetch(urlData.signedUrl);
-            if (!resp.ok) {
-              console.warn(`[NativeViewer] Fetch failed for ${modelId}: ${resp.status}`);
-              return;
+            // Stream very large models directly from URL to reduce JS heap pressure
+            const shouldStreamByUrl = (model.file_size ?? 0) > 30 * 1024 * 1024;
+
+            if (shouldStreamByUrl) {
+              console.log(`[NativeViewer] Streaming large model via src: ${modelId} (${((model.file_size ?? 0) / 1024 / 1024).toFixed(1)} MB)`);
+              const entity = xktLoader.load({ id: modelId, src: urlData.signedUrl, edges: true });
+              const ok = await waitForModel(entity, modelId);
+              if (!ok) return;
+            } else {
+              const fetchStart = performance.now();
+              const resp = await fetch(urlData.signedUrl);
+              if (!resp.ok) {
+                console.warn(`[NativeViewer] Fetch failed for ${modelId}: ${resp.status}`);
+                return;
+              }
+
+              const arrayBuf = await resp.arrayBuffer();
+              const fetchMs = Math.round(performance.now() - fetchStart);
+              const firstByte = arrayBuf.byteLength > 0 ? String.fromCharCode(new Uint8Array(arrayBuf)[0]) : '';
+
+              if (arrayBuf.byteLength < 50_000 || firstByte === '<' || firstByte === '{') {
+                console.warn(`[NativeViewer] Skipping ${modelId} — invalid binary (${arrayBuf.byteLength} bytes, starts with '${firstByte}')`);
+                return;
+              }
+
+              storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
+
+              const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true });
+              const ok = await waitForModel(entity, modelId);
+              if (!ok) return;
+
+              const totalMs = Math.round(performance.now() - modelStart);
+              console.log(`%c[NativeViewer] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) fetch: ${fetchMs}ms, total: ${totalMs}ms`, 'color:#3b82f6;font-weight:bold');
             }
-            const arrayBuf = await resp.arrayBuffer();
-            const fetchMs = Math.round(performance.now() - fetchStart);
-
-            // Validate
-            if (arrayBuf.byteLength < 50_000) {
-              console.warn(`[NativeViewer] Skipping ${modelId} — too small (${arrayBuf.byteLength} bytes)`);
-              return;
-            }
-
-            // Store in memory for next time
-            storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
-
-          // Load into viewer
-            console.log(`[NativeViewer] About to xktLoader.load() for ${modelId}, arrayBuf size: ${arrayBuf.byteLength}`);
-            try {
-              xktLoader.load({
-                id: modelId,
-                xkt: arrayBuf,
-                edges: true,
-              });
-              console.log(`[NativeViewer] xktLoader.load() succeeded for ${modelId}`);
-            } catch (loadErr) {
-              console.error(`[NativeViewer] xktLoader.load() CRASHED for ${modelId}:`, loadErr);
-              return;
-            }
-
-            const totalMs = Math.round(performance.now() - modelStart);
-            console.log(`%c[NativeViewer] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) fetch: ${fetchMs}ms, total: ${totalMs}ms`, 'color:#3b82f6;font-weight:bold');
           }
         } catch (e) {
           console.warn(`[NativeViewer] Error loading ${modelId}:`, e);
@@ -318,11 +327,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         }
       };
 
-      // Process queue with concurrency control
+      // Process queue with strict concurrency control
       const active = new Set<Promise<void>>();
       for (const model of queue) {
-        const p = loadModel(model).finally(() => active.delete(p));
-        active.add(p);
+        let promise: Promise<void>;
+        promise = loadModel(model).finally(() => {
+          active.delete(promise);
+        });
+        active.add(promise);
+
         if (active.size >= CONCURRENT) {
           await Promise.race(active);
         }
