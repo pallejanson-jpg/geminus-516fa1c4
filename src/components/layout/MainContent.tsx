@@ -7,7 +7,7 @@ import PortfolioView from "@/components/portfolio/PortfolioView";
 import HomeLanding from "@/components/home/HomeLanding";
 import PlaceholderView from "@/components/layout/PlaceholderView";
 import NavigatorView from "@/components/navigator/NavigatorView";
-import Viewer from "@/pages/Viewer";
+// Viewer (AssetPlusViewer) removed — native_viewer is the standard now
 import InsightsView from "@/components/insights/InsightsView";
 import BuildingInsightsView from "@/components/insights/BuildingInsightsView";
 import Ivion360View from "@/components/viewer/Ivion360View";
