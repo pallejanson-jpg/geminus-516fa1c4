@@ -15,6 +15,7 @@ import {
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
     Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X
 } from 'lucide-react';
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
@@ -769,30 +770,34 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                              {/* ── Sensor content (merged from Sensors tab) ── */}
                              <div className="space-y-4 mt-6">
                                  {/* Floor filter pills */}
-                                 {spaceFloorOptions.length > 1 && (
-                                     <div className="flex flex-wrap gap-1.5 items-center">
-                                         <span className="text-xs text-muted-foreground mr-1">Floor:</span>
-                                         <Button
-                                             size="sm"
-                                             variant={spaceFloorFilter === '' ? 'default' : 'outline'}
-                                             className="h-6 px-2 text-[10px]"
-                                             onClick={() => setSpaceFloorFilter('')}
-                                         >
-                                             All
-                                         </Button>
-                                         {spaceFloorOptions.map(opt => (
-                                             <Button
-                                                 key={opt.guid}
-                                                 size="sm"
-                                                 variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
-                                                 className="h-6 px-2 text-[10px]"
-                                                 onClick={() => setSpaceFloorFilter(opt.name)}
-                                             >
-                                                 {opt.name}
-                                             </Button>
-                                         ))}
-                                     </div>
-                                 )}
+                                  {spaceFloorOptions.length > 1 && (
+                                      <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
+                                          <CarouselContent className="-ml-1">
+                                              <CarouselItem className="pl-1 basis-auto">
+                                                  <Button
+                                                      size="sm"
+                                                      variant={spaceFloorFilter === '' ? 'default' : 'outline'}
+                                                      className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                      onClick={() => setSpaceFloorFilter('')}
+                                                  >
+                                                      All
+                                                  </Button>
+                                              </CarouselItem>
+                                              {spaceFloorOptions.map(opt => (
+                                                  <CarouselItem key={opt.guid} className="pl-1 basis-auto">
+                                                      <Button
+                                                          size="sm"
+                                                          variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
+                                                          className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                                                          onClick={() => setSpaceFloorFilter(opt.name)}
+                                                      >
+                                                          {opt.name}
+                                                      </Button>
+                                                  </CarouselItem>
+                                              ))}
+                                          </CarouselContent>
+                                      </Carousel>
+                                  )}
 
                                  {/* Metric buttons */}
                                  <div className="flex flex-wrap gap-1.5 items-center justify-between">
@@ -862,8 +867,14 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                          {sensorRooms.length === 0 ? (
                                              <p className="text-sm text-muted-foreground text-center py-8">No rooms found</p>
                                          ) : (
-                                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
-                                                 {sensorRoomValues.map(room => {
+                                              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+                                                  {[...sensorRoomValues].sort((a, b) => {
+                                                      // Sort by status: highest values first (red/warning), lowest last (green/ok)
+                                                      if (a.value === null && b.value === null) return 0;
+                                                      if (a.value === null) return 1;
+                                                      if (b.value === null) return -1;
+                                                      return b.value - a.value;
+                                                  }).map(room => {
                                                      const rgb = room.value !== null ? getVisualizationColor(room.value, sensorMetric) : null;
                                                      const hex = rgb ? rgbToHex(rgb) : undefined;
                                                      return (

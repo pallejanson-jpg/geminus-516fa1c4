@@ -594,12 +594,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          'absolute bottom-4 left-1/2 -translate-x-1/2 z-20',
+          'absolute bottom-4 left-1/2 -translate-x-1/2 z-30',
           'flex items-center gap-0 px-1 py-1 sm:gap-0.5 sm:px-2 sm:py-1.5 rounded-xl',
           'bg-black/80 backdrop-blur-sm border border-white/10 shadow-lg text-white',
           className,
         )}
-        style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 24px)' }}
+        style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)' }}
       >
         {/* Group 1 — Navigation mode */}
         <ToolButton
