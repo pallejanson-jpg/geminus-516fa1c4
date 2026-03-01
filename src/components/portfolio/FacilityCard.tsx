@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Building2, Layers, LayoutGrid, Split } from 'lucide-react';
+import { MapPin, Building2, Layers, LayoutGrid, Split, Cuboid, Eye, Info } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,8 @@ interface FacilityCardProps {
 
 const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSplitViewButton = true }) => {
   const navigate = useNavigate();
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heroImage = facility.image || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop';
   const title = facility.commonName || facility.name || 'Unnamed';
   const address = facility.address || facility.designation || 'No address';
@@ -25,20 +27,31 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
       navigate(`/split-viewer?building=${facility.fmGuid}&mode=split`);
     }
   };
+
+  const handleMouseEnter = useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => setIsHovered(true), 600);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setIsHovered(false);
+  }, []);
   
   return (
     <Card 
-      className="overflow-hidden cursor-pointer group transition-all hover:shadow-lg hover:border-primary/50"
+      className="overflow-hidden cursor-pointer group transition-all duration-300 hover:shadow-xl hover:border-primary/50 hover:scale-[1.03] hover:z-10 relative"
       onClick={() => onClick(facility)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Image Section — standardized h-36 sm:h-44 */}
       <div className="relative h-36 sm:h-44 bg-muted overflow-hidden">
         <img 
           src={heroImage} 
           alt={title}
-          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
         <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 right-2 sm:right-3">
           <h3 className="font-bold text-white text-sm sm:text-base truncate">{title}</h3>
           <div className="flex items-center gap-1 text-white/80 text-[11px] sm:text-xs mt-0.5 sm:mt-1">
@@ -68,6 +81,34 @@ const FacilityCard: React.FC<FacilityCardProps> = ({ facility, onClick, showSpli
             </TooltipContent>
           </Tooltip>
         )}
+
+        {/* Hover Preview Overlay (desktop only) */}
+        <div className={`absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} hidden sm:flex`}>
+          <div className="grid grid-cols-3 gap-3 text-center text-white mb-2">
+            <div>
+              <p className="text-lg font-bold">{facility.numberOfLevels || '-'}</p>
+              <p className="text-[10px] text-white/60 uppercase">Våningar</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold">{facility.numberOfSpaces || '-'}</p>
+              <p className="text-[10px] text-white/60 uppercase">Rum</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold">{facility.area ? `${facility.area}` : '-'}</p>
+              <p className="text-[10px] text-white/60 uppercase">m²</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={(e) => { e.stopPropagation(); onClick(facility); }}>
+              <Info size={12} /> Detaljer
+            </Button>
+            {(facility.category === 'Building' || facility.category === 'IfcBuilding') && (
+              <Button size="sm" variant="secondary" className="h-7 text-xs gap-1.5" onClick={handleSplitViewClick}>
+                <Cuboid size={12} /> 3D
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
       
       {/* Stats Section */}
