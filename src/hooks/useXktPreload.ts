@@ -146,6 +146,40 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           .eq('format', 'xkt');
 
         if (models && models.length > 0) {
+          // Resolve model names from Asset+ Building Storey objects (same logic as useModelNames)
+          try {
+            const { data: storeys } = await supabase
+              .from('assets')
+              .select('attributes')
+              .eq('building_fm_guid', buildingFmGuid)
+              .eq('category', 'Building Storey');
+
+            if (storeys && storeys.length > 0) {
+              const assetPlusNames = new Map<string, string>();
+              storeys.forEach((s: any) => {
+                const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
+                const guid = attrs.parentBimObjectId;
+                const name = attrs.parentCommonName;
+                if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
+                  assetPlusNames.set(guid, name);
+                  assetPlusNames.set(guid.toLowerCase(), name);
+                }
+              });
+
+              if (assetPlusNames.size > 0) {
+                console.log(`XKT Preload: Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
+                models.forEach((m: any) => {
+                  const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
+                  if (resolved && resolved !== m.model_name) {
+                    m.model_name = resolved;
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            console.debug('XKT Preload: Asset+ name resolution failed:', e);
+          }
+
           // Split into A-models (priority) and secondary models
           // Use NON_ARCH_PREFIXES exclusion + UUID heuristic (largest = architectural)
           const NON_ARCH_PREFIXES = ['BRAND', 'FIRE', 'V-', 'V_', 'VS-', 'VS_', 'EL-', 'EL_', 'MEP', 'SPRINKLER', 'K-', 'K_', 'R-', 'R_', 'S-', 'S_'];
