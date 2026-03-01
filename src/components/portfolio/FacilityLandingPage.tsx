@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, X, MapPin, Info, BarChart, Star, Table, Layers, 
-  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye
+  DoorOpen, LayoutGrid, Zap, Settings2, Loader2, Globe, Image, Upload, RotateCcw, ChevronRight, Eye, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +68,8 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   const [showStoreys, setShowStoreys] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedFloorIdx, setSelectedFloorIdx] = useState(0);
+  const [roomSearch, setRoomSearch] = useState('');
+  const [roomSortKey, setRoomSortKey] = useState<'name' | 'number' | 'area'>('name');
 
   // Saved views for this building
   const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string; screenshot_url: string | null; created_at: string | null }>>([]);
@@ -661,35 +663,65 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
                 <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Våningar ({childStoreys.length})</h3>
                 
-                {/* Floor pills - "Season" tabs */}
-                <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-                  {childStoreys.map((storey, idx) => (
-                    <button
-                      key={storey.fmGuid}
-                      type="button"
-                      onClick={() => setSelectedFloorIdx(idx)}
-                      className={`shrink-0 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all ${
-                        selectedFloorIdx === idx
-                          ? 'bg-primary text-primary-foreground shadow-md'
-                          : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
-                    >
-                      {storey.commonName || storey.name || `Våning ${idx + 1}`}
-                    </button>
-                  ))}
-                </div>
+                {/* Floor pills - "Season" tabs — scrollable carousel */}
+                <Carousel opts={{ align: 'start', dragFree: true }} className="mb-4">
+                  <CarouselContent className="-ml-1.5">
+                    {childStoreys.map((storey, idx) => (
+                      <CarouselItem key={storey.fmGuid} className="pl-1.5 basis-auto">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFloorIdx(idx)}
+                          className={`shrink-0 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                            selectedFloorIdx === idx
+                              ? 'bg-primary text-primary-foreground shadow-md'
+                              : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                        >
+                          {storey.commonName || storey.name || `Våning ${idx + 1}`}
+                        </button>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                </Carousel>
 
                 {/* Room grid - "Episode" cards for selected floor */}
                 {(() => {
                   const selectedStorey = childStoreys[selectedFloorIdx];
                   if (!selectedStorey) return null;
-                  const floorSpaces = allData.filter(
+                  let floorSpaces = allData.filter(
                     (item: any) => item.category === 'Space' && item.levelFmGuid === selectedStorey.fmGuid
                   );
+
+                  // Extract room number helper
+                  const getRoomNumber = (space: any): string => {
+                    const attrs = space.attributes || {};
+                    return attrs.roomNumber || attrs.RoomNumber || attrs.designation || space.name || '';
+                  };
+
+                  // Search filter
+                  if (roomSearch) {
+                    const q = roomSearch.toLowerCase();
+                    floorSpaces = floorSpaces.filter((s: any) =>
+                      (s.commonName || '').toLowerCase().includes(q) ||
+                      (s.name || '').toLowerCase().includes(q) ||
+                      getRoomNumber(s).toLowerCase().includes(q)
+                    );
+                  }
+
+                  // Sort
+                  floorSpaces = [...floorSpaces].sort((a: any, b: any) => {
+                    if (roomSortKey === 'number') return getRoomNumber(a).localeCompare(getRoomNumber(b), undefined, { numeric: true });
+                    if (roomSortKey === 'area') {
+                      const areaA = a.grossArea || 0;
+                      const areaB = b.grossArea || 0;
+                      return areaB - areaA;
+                    }
+                    return (a.commonName || a.name || '').localeCompare(b.commonName || b.name || '', undefined, { numeric: true });
+                  });
                   
                   return (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <p className="text-xs sm:text-sm text-muted-foreground">
                           {floorSpaces.length} rum på {selectedStorey.commonName || selectedStorey.name}
                         </p>
@@ -708,13 +740,41 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           Visa alla detaljer <ChevronRight size={12} />
                         </Button>
                       </div>
+
+                      {/* Search + Sort controls */}
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <div className="relative flex-1 min-w-[140px] max-w-[240px]">
+                          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={roomSearch}
+                            onChange={(e) => setRoomSearch(e.target.value)}
+                            placeholder="Sök rum..."
+                            className="h-7 pl-8 text-xs"
+                          />
+                        </div>
+                        <div className="flex gap-1">
+                          {([['name', 'Namn'], ['number', 'Nr'], ['area', 'Yta']] as const).map(([key, label]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setRoomSortKey(key)}
+                              className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                                roomSortKey === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       
                       {floorSpaces.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
-                          {floorSpaces.slice(0, 12).map((space: any) => {
+                          {floorSpaces.slice(0, 20).map((space: any) => {
                             const spaceArea = space.attributes ? 
                               Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
                             const areaVal = spaceArea && space.attributes[spaceArea]?.value;
+                            const roomNum = getRoomNumber(space);
                             return (
                               <button
                                 key={space.fmGuid}
@@ -736,25 +796,26 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                                     {space.commonName || space.name || '(namnlöst)'}
                                   </span>
                                 </div>
-                                <div className="text-[10px] sm:text-[11px] text-muted-foreground">
-                                  {areaVal ? `${typeof areaVal === 'number' ? areaVal.toFixed(1) : areaVal} m²` : 'Ingen area'}
+                                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-muted-foreground gap-1">
+                                  {roomNum && <span className="font-mono truncate">{roomNum}</span>}
+                                  <span className="shrink-0">{areaVal ? `${typeof areaVal === 'number' ? areaVal.toFixed(1) : areaVal} m²` : ''}</span>
                                 </div>
                               </button>
                             );
                           })}
-                          {floorSpaces.length > 12 && (
+                          {floorSpaces.length > 20 && (
                             <button
                               type="button"
                               onClick={() => onShowRooms(facility)}
                               className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
                             >
-                              +{floorSpaces.length - 12} fler rum
+                              +{floorSpaces.length - 20} fler rum
                             </button>
                           )}
                         </div>
                       ) : (
                         <div className="text-center text-muted-foreground py-6 text-sm">
-                          Inga rum registrerade på denna våning
+                          {roomSearch ? 'Inga rum matchade sökningen' : 'Inga rum registrerade på denna våning'}
                         </div>
                       )}
                     </div>
