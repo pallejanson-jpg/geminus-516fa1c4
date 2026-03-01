@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
-import AssetPlusViewer from '@/components/viewer/AssetPlusViewer';
+const AssetPlusViewer = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
 import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
@@ -620,22 +620,24 @@ const UnifiedViewerContent: React.FC<{
               onClose={is3DMode ? handleGoBack : undefined}
             />
           ) : (
-            <AssetPlusViewer
-              fmGuid={buildingData.fmGuid}
-              initialFmGuidToFocus={entityFmGuid || undefined}
-              initialVisualization={visualizationParam || undefined}
-              insightsColorMode={insightsModeParam || undefined}
-              forceXray={xrayParam || undefined}
-              transparentBackground={isVTMode}
-              ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
-              suppressOverlay={isVTMode}
-              onClose={is3DMode ? handleGoBack : undefined}
-              syncEnabled={isSplitMode ? syncLocked : false}
-              onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
-              syncPosition={isSplitMode ? sync3DPosition : undefined}
-              syncHeading={isSplitMode ? sync3DHeading : undefined}
-              syncPitch={isSplitMode ? sync3DPitch : undefined}
-            />
+            <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
+              <AssetPlusViewer
+                fmGuid={buildingData.fmGuid}
+                initialFmGuidToFocus={entityFmGuid || undefined}
+                initialVisualization={visualizationParam || undefined}
+                insightsColorMode={insightsModeParam || undefined}
+                forceXray={xrayParam || undefined}
+                transparentBackground={isVTMode}
+                ghostOpacity={isVTMode ? ghostOpacity / 100 : undefined}
+                suppressOverlay={isVTMode}
+                onClose={is3DMode ? handleGoBack : undefined}
+                syncEnabled={isSplitMode ? syncLocked : false}
+                onCameraChange={isSplitMode ? handle3DCameraChange : undefined}
+                syncPosition={isSplitMode ? sync3DPosition : undefined}
+                syncHeading={isSplitMode ? sync3DHeading : undefined}
+                syncPitch={isSplitMode ? sync3DPitch : undefined}
+              />
+            </React.Suspense>
           )}
         </div>
 
@@ -766,22 +768,24 @@ function MobileUnifiedViewer({
               onClose={onGoBack}
             />
           ) : (
-            <AssetPlusViewer
-              fmGuid={buildingData.fmGuid}
-              initialFmGuidToFocus={entityFmGuid || undefined}
-              initialVisualization={visualizationParam || undefined}
-              insightsColorMode={insightsMode || undefined}
-              forceXray={forceXray || undefined}
-              syncEnabled={false}
-              onCameraChange={handle3DCameraChange}
-              syncPosition={sync3DPosition}
-              syncHeading={sync3DHeading}
-              syncPitch={sync3DPitch}
-              onClose={onGoBack}
-              mobileViewMode="3d"
-              onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
-              mobileHasIvion={hasIvion}
-            />
+            <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
+              <AssetPlusViewer
+                fmGuid={buildingData.fmGuid}
+                initialFmGuidToFocus={entityFmGuid || undefined}
+                initialVisualization={visualizationParam || undefined}
+                insightsColorMode={insightsMode || undefined}
+                forceXray={forceXray || undefined}
+                syncEnabled={false}
+                onCameraChange={handle3DCameraChange}
+                syncPosition={sync3DPosition}
+                syncHeading={sync3DHeading}
+                syncPitch={sync3DPitch}
+                onClose={onGoBack}
+                mobileViewMode="3d"
+                onMobileChangeViewMode={(m) => setViewMode(m as ViewMode)}
+                mobileHasIvion={hasIvion}
+              />
+            </React.Suspense>
           )}
         </div>
 
