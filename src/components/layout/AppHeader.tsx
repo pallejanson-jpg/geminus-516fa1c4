@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSearchResults, SearchResult } from '@/hooks/useSearchResults';
 import { SearchResultsList } from '@/components/common/SearchResultsList';
+import { CommandSearch } from '@/components/common/CommandSearch';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
@@ -56,6 +57,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
+    const [isCommandOpen, setIsCommandOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const t = THEMES[theme];
 
@@ -110,6 +112,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Ctrl+K / Cmd+K to open command palette
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsCommandOpen(true);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const viewButtons = [
         { key: 'portfolio', mode: 'grid', icon: LayoutGrid, label: 'Portfolio' },
         { key: 'map', mode: undefined, icon: Globe, label: 'Map' },
@@ -154,34 +168,22 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 </div>
             </div>
 
-            {/* Center - Search */}
-            <div ref={searchRef} className="flex-1 max-w-xs sm:max-w-md relative">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Search buildings, rooms, spaces..."
-                        className="pl-10 w-full text-sm"
-                        value={globalSearch}
-                        onChange={(e) => setGlobalSearch(e.target.value)}
-                        onFocus={() => setIsSearchFocused(true)}
-                    />
-                    {isLoading && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
-                </div>
-                
-                {/* Search Results Dropdown */}
-                {isSearchFocused && globalSearch.trim().length >= 2 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
-                        <SearchResultsList
-                            results={searchResults}
-                            onSelect={handleSearchResultSelect}
-                            emptyMessage="No results for your search"
-                        />
-                    </div>
-                )}
+            {/* Center - Search (click opens command palette) */}
+            <div className="flex-1 max-w-xs sm:max-w-md relative">
+                <button
+                    type="button"
+                    onClick={() => setIsCommandOpen(true)}
+                    className="w-full flex items-center gap-2 h-9 sm:h-10 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
+                >
+                    <Search className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-left truncate">Sök byggnader, rum, rum...</span>
+                    <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                        ⌘K
+                    </kbd>
+                </button>
             </div>
+
+            <CommandSearch open={isCommandOpen} onOpenChange={setIsCommandOpen} />
 
             {/* Right section */}
             <div className="flex items-center gap-1 sm:gap-2">
