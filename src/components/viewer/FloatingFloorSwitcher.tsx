@@ -268,10 +268,10 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
 
   return (
     <div className={cn(
-      'fixed z-20 items-center gap-0.5 w-auto',
+      'fixed z-20 items-center gap-1 w-auto',
       'pointer-events-auto',
       isMobile
-        ? 'bottom-20 left-1/2 -translate-x-1/2 flex flex-row'
+        ? 'bottom-16 left-1/2 -translate-x-1/2 flex flex-row bg-black/50 backdrop-blur-md rounded-full px-1.5 py-1 border border-white/10'
         : cn('left-3 flex flex-col', compact ? 'top-[100px] gap-px' : 'top-[140px]'),
       className
     )}>
@@ -285,11 +285,15 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
                 onClick={(e) => handlePillClick(floor.id, e)}
                 onDoubleClick={handlePillDoubleClick}
                 className={cn(
-                  compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] max-w-[90px] text-[9px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:max-w-[120px] sm:text-xs font-medium rounded-md',
+                  isMobile
+                    ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+                    : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] max-w-[90px] text-[9px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:max-w-[120px] sm:text-xs font-medium rounded-md',
                   'transition-all duration-150 w-auto shadow-sm',
                   state === 'active' && 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90',
                   state === 'partial' && 'bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30',
-                  state === 'inactive' && 'bg-background/90 backdrop-blur-sm text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground',
+                  state === 'inactive' && (isMobile
+                    ? 'text-white/70 hover:text-white hover:bg-white/10'
+                    : 'bg-background/90 backdrop-blur-sm text-muted-foreground border border-border/40 hover:bg-muted hover:text-foreground'),
                 )}
               >
                 <span className={cn(compact ? "text-[7px]" : "text-[9px] sm:text-xs", "truncate")}>{floor.name}</span>
@@ -356,9 +360,13 @@ const FloatingFloorSwitcher: React.FC<FloatingFloorSwitcherProps> = memo(({
         onClick={handlePillDoubleClick}
         title="Show all floors"
         className={cn(
-          compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] text-[8px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:text-[9px] font-medium rounded-md',
-          'bg-background/70 backdrop-blur-sm text-muted-foreground border border-border/30 shadow-sm hover:bg-muted hover:text-foreground',
-          visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary border-primary/40',
+          isMobile
+            ? 'h-7 px-2 text-[10px] font-medium rounded-full'
+            : compact ? 'h-5 px-1 text-[7px] font-medium rounded' : 'h-6 px-1.5 min-w-[32px] text-[8px] sm:h-7 sm:px-2 sm:min-w-[40px] sm:text-[9px] font-medium rounded-md',
+          isMobile
+            ? (visibleFloorIds.size === floors.length ? 'bg-primary/30 text-primary' : 'text-white/70 hover:text-white hover:bg-white/10')
+            : cn('bg-background/70 backdrop-blur-sm text-muted-foreground border border-border/30 shadow-sm hover:bg-muted hover:text-foreground',
+                  visibleFloorIds.size === floors.length && 'bg-primary/20 text-primary border-primary/40'),
         )}
       >
         All
