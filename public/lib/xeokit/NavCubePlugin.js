@@ -1,16 +1,12 @@
 /**
- * NavCubePlugin - Clean Monochrome 3D Navigation Cube for xeokit viewer
+ * NavCubePlugin - 3D Navigation Cube for xeokit viewer
  * 
- * Features:
- * - Clean monochrome design with subtle hover states
- * - Real 3D perspective rendering with proper face sorting
- * - Interactive click navigation to fly camera to faces
- * - Synchronized camera orientation display
+ * Classic cube design with distinct face shading, full labels, and hover highlights.
+ * Synchronized camera orientation. Click to fly to face.
  */
 (function(global) {
   'use strict';
 
-  // Face definitions with camera positions
   const FACES = {
     front:  { eye: [0, 0, 1],  look: [0, 0, 0], up: [0, 1, 0], label: 'FRONT' },
     back:   { eye: [0, 0, -1], look: [0, 0, 0], up: [0, 1, 0], label: 'BACK' },
@@ -28,15 +24,6 @@
       this._cameraFly = cfg.cameraFly !== false;
       this._cameraFlyDuration = cfg.cameraFlyDuration || 0.5;
       
-      // Clean monochrome color scheme
-      this._baseFaceColor = '#3a3a3a';
-      this._lightFaceColor = '#4a4a4a';
-      this._darkFaceColor = '#2a2a2a';
-      this._hoverColor = '#5a5a5a';
-      this._edgeColor = '#555555';
-      this._textColor = '#999999';
-      this._textHoverColor = '#ffffff';
-      
       this._canvas = document.getElementById(cfg.canvasId);
       if (!this._canvas) {
         console.error('NavCubePlugin: Canvas not found:', cfg.canvasId);
@@ -45,7 +32,7 @@
       
       this._ctx = this._canvas.getContext('2d');
       this._hoveredFace = null;
-      this._cubeSize = 38;
+      this._cubeSize = 36;
       this._destroyed = false;
       this._lastProjectedFaces = [];
       
@@ -69,9 +56,7 @@
         const x = (e.clientX - rect.left) * (this._canvas.width / rect.width);
         const y = (e.clientY - rect.top) * (this._canvas.height / rect.height);
         const face = this._hitTest(x, y);
-        if (face) {
-          this._flyToFace(face);
-        }
+        if (face) this._flyToFace(face);
       };
       
       this._onMouseLeave = () => {
@@ -79,7 +64,6 @@
         this._canvas.style.cursor = 'default';
       };
       
-      // Touch support
       this._onTouchStart = (e) => {
         e.preventDefault();
         const touch = e.touches[0];
@@ -87,9 +71,7 @@
         const x = (touch.clientX - rect.left) * (this._canvas.width / rect.width);
         const y = (touch.clientY - rect.top) * (this._canvas.height / rect.height);
         const face = this._hitTest(x, y);
-        if (face) {
-          this._flyToFace(face);
-        }
+        if (face) this._flyToFace(face);
       };
       
       this._canvas.addEventListener('mousemove', this._onMouseMove);
@@ -99,12 +81,9 @@
     }
     
     _hitTest(x, y) {
-      // Test against rendered faces (back to front, so check front first)
       for (let i = this._lastProjectedFaces.length - 1; i >= 0; i--) {
         const face = this._lastProjectedFaces[i];
-        if (this._pointInPolygon(x, y, face.points)) {
-          return face.name;
-        }
+        if (this._pointInPolygon(x, y, face.points)) return face.name;
       }
       return null;
     }
@@ -129,17 +108,9 @@
       const scene = this.viewer.scene;
       if (!camera || !scene) return;
       
-      // Get scene center and size for positioning
       let aabb;
-      try {
-        aabb = scene.getAABB ? scene.getAABB() : null;
-      } catch (e) {
-        aabb = null;
-      }
-      
-      if (!aabb) {
-        aabb = [-10, -10, -10, 10, 10, 10];
-      }
+      try { aabb = scene.getAABB ? scene.getAABB() : null; } catch (e) { aabb = null; }
+      if (!aabb) aabb = [-10, -10, -10, 10, 10, 10];
       
       const center = [
         (aabb[0] + aabb[3]) / 2,
@@ -159,16 +130,12 @@
         center[2] + face.eye[2] * dist
       ];
       
-      // Use cameraFlight if available, otherwise set directly
       if (this._cameraFly && this.viewer.cameraFlight) {
         this.viewer.cameraFlight.flyTo({
-          eye: eye,
-          look: center,
-          up: face.up,
+          eye, look: center, up: face.up,
           duration: this._cameraFlyDuration
         });
       } else {
-        // Direct camera set
         camera.eye = eye;
         camera.look = center;
         camera.up = face.up;
@@ -178,9 +145,7 @@
     _startRenderLoop() {
       const render = () => {
         if (this._destroyed) return;
-        if (this._visible) {
-          this._draw();
-        }
+        if (this._visible) this._draw();
         requestAnimationFrame(render);
       };
       requestAnimationFrame(render);
@@ -196,11 +161,9 @@
       const cy = h / 2;
       const size = this._cubeSize;
       
-      // Clear with transparent background
       ctx.clearRect(0, 0, w, h);
       
-      // Get camera orientation from viewer
-      let rotX = -0.5, rotY = 0.7; // Default view angle
+      let rotX = -0.5, rotY = 0.7;
       if (this.viewer && this.viewer.camera) {
         const camera = this.viewer.camera;
         const eye = camera.eye;
@@ -215,7 +178,6 @@
         }
       }
       
-      // Draw the 3D cube
       this._drawCube3D(ctx, cx, cy, size, rotX, rotY);
     }
     
@@ -225,36 +187,23 @@
       const cosX = Math.cos(rotX);
       const sinX = Math.sin(rotX);
       
-      // Cube vertices (normalized -1 to 1)
       const vertices = [
-        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], // Back face
-        [-1, -1, 1],  [1, -1, 1],  [1, 1, 1],  [-1, 1, 1]   // Front face
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1],  [1, -1, 1],  [1, 1, 1],  [-1, 1, 1]
       ];
       
-      // Project vertices to 2D with perspective
       const projected = vertices.map(v => {
-        // Rotate around Y axis
         let x = v[0] * cosY - v[2] * sinY;
         let z = v[0] * sinY + v[2] * cosY;
         let y = v[1];
-        
-        // Rotate around X axis
         const y2 = y * cosX - z * sinX;
         z = y * sinX + z * cosX;
         y = y2;
-        
-        // Perspective projection
         const perspective = 3;
         const scale = perspective / (perspective + z * 0.3);
-        
-        return {
-          x: cx + x * size * scale,
-          y: cy - y * size * scale,
-          z: z
-        };
+        return { x: cx + x * size * scale, y: cy - y * size * scale, z };
       });
       
-      // Face definitions with vertex indices
       const faces = [
         { verts: [0, 1, 2, 3], name: 'back', normal: [0, 0, -1] },
         { verts: [4, 7, 6, 5], name: 'front', normal: [0, 0, 1] },
@@ -264,111 +213,79 @@
         { verts: [1, 5, 6, 2], name: 'right', normal: [1, 0, 0] }
       ];
       
-      // Calculate face visibility and depth, then sort
       const visibleFaces = faces.map(f => {
-        // Rotate normal
         let nx = f.normal[0] * cosY - f.normal[2] * sinY;
         let nz = f.normal[0] * sinY + f.normal[2] * cosY;
         let ny = f.normal[1];
         const ny2 = ny * cosX - nz * sinX;
         nz = ny * sinX + nz * cosX;
-        
-        // Calculate center depth
         const centerZ = f.verts.reduce((sum, i) => sum + projected[i].z, 0) / 4;
-        
-        // Get projected points
         const points = f.verts.map(i => ({ x: projected[i].x, y: projected[i].y }));
-        
         return { ...f, depth: centerZ, visible: nz > -0.15, points };
       }).filter(f => f.visible).sort((a, b) => a.depth - b.depth);
       
-      // Store for hit testing
       this._lastProjectedFaces = visibleFaces;
       
-      // Draw faces back to front
       visibleFaces.forEach(face => {
         const points = face.points;
         const isHovered = this._hoveredFace === face.name;
         
-        // Create path
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-          ctx.lineTo(points[i].x, points[i].y);
-        }
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.closePath();
         
-        // Fill with clean monochrome shading based on face orientation
-        const baseShade = this._getFaceShade(face.name);
-        const fillColor = isHovered ? this._hoverColor : baseShade;
-        ctx.fillStyle = fillColor;
+        // Classic distinct face colors
+        const colors = {
+          top:    isHovered ? '#6a9fd8' : '#4a7fb8',
+          bottom: isHovered ? '#5a7a9a' : '#3a5a7a',
+          front:  isHovered ? '#5588bb' : '#3568a0',
+          back:   isHovered ? '#4a7090' : '#2a5070',
+          left:   isHovered ? '#4e80a8' : '#2e6088',
+          right:  isHovered ? '#5890b8' : '#387098',
+        };
+        
+        ctx.fillStyle = colors[face.name] || '#3568a0';
         ctx.fill();
         
-        // Draw subtle edges
-        ctx.strokeStyle = this._edgeColor;
+        // Crisp edges
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
         ctx.lineWidth = 1;
         ctx.stroke();
         
-        // Draw face label
+        // Full face labels
         this._drawFaceLabel(ctx, points, face.name, isHovered);
       });
     }
     
-    _getFaceShade(faceName) {
-      // Different shades for 3D depth perception
-      switch(faceName) {
-        case 'top': return this._lightFaceColor;
-        case 'bottom': return this._darkFaceColor;
-        case 'front': return this._baseFaceColor;
-        case 'back': return this._darkFaceColor;
-        case 'left': return '#353535';
-        case 'right': return '#404040';
-        default: return this._baseFaceColor;
-      }
-    }
-    
     _drawFaceLabel(ctx, points, faceName, isHovered) {
-      // Calculate center of face
       const centerX = points.reduce((sum, p) => sum + p.x, 0) / points.length;
       const centerY = points.reduce((sum, p) => sum + p.y, 0) / points.length;
       
-      // Calculate face size for font scaling
       const width = Math.abs(points[1].x - points[0].x) + Math.abs(points[2].x - points[1].x);
-      const fontSize = Math.max(9, Math.min(11, width / 4));
+      const fontSize = Math.max(7, Math.min(10, width / 5));
       
       ctx.save();
-      ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+      ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Label text - short abbreviations
       const labels = {
-        front: 'F',
-        back: 'B', 
-        top: 'T',
-        bottom: 'U',
-        left: 'L',
-        right: 'R'
+        front: 'FRONT', back: 'BACK', top: 'TOP',
+        bottom: 'BTM', left: 'LEFT', right: 'RIGHT'
       };
-      const label = labels[faceName] || '';
       
-      // Text color
-      ctx.fillStyle = isHovered ? this._textHoverColor : this._textColor;
-      ctx.fillText(label, centerX, centerY);
-      
+      ctx.fillStyle = isHovered ? '#ffffff' : 'rgba(255,255,255,0.75)';
+      ctx.fillText(labels[faceName] || '', centerX, centerY);
       ctx.restore();
     }
     
     setVisible(visible) {
       this._visible = visible;
-      if (this._canvas) {
-        this._canvas.style.display = visible ? 'block' : 'none';
-      }
+      if (this._canvas) this._canvas.style.display = visible ? 'block' : 'none';
     }
     
-    getVisible() {
-      return this._visible;
-    }
+    getVisible() { return this._visible; }
     
     destroy() {
       this._destroyed = true;
@@ -381,7 +298,5 @@
     }
   }
   
-  // Export to global scope
   global.NavCubePlugin = NavCubePlugin;
-  
 })(typeof window !== 'undefined' ? window : this);
