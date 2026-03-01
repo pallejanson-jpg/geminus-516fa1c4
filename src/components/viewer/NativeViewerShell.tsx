@@ -118,8 +118,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       $refs: { assetView: assetViewShim },
       onShowSpacesChanged: (show: boolean) => {
         const scene = viewer.scene;
-        if (!scene?.metaScene?.metaObjects) return;
-        const metaObjects = scene.metaScene.metaObjects;
+        const metaObjects = viewer.metaScene?.metaObjects || scene?.metaScene?.metaObjects;
+        if (!metaObjects) return;
         Object.values(metaObjects).forEach((mo: any) => {
           if (mo.type?.toLowerCase() === 'ifcspace') {
             const entity = scene.objects?.[mo.id];
@@ -137,7 +137,6 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show } }));
       },
       setShowFloorplan: (show: boolean) => {
-        // Handled by ViewerToolbar's 2D mode logic via events
         console.debug('[NativeShim] setShowFloorplan:', show);
       },
     };
