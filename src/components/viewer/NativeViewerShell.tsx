@@ -33,6 +33,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [viewMode, setViewMode] = useState<'2d' | '3d' | '360'>('3d');
   const [showSpaces, setShowSpaces] = useState(false);
+  const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -309,8 +310,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         onViewerReady={handleViewerReady}
       />
 
-      {/* Bottom toolbar (zoom, select, measure, xray, 2d/3d) */}
-      {isViewerReady && !isMobile && (
+      {/* Bottom toolbar (zoom, select, measure, xray, 2d/3d) — always mounted for event logic */}
+      {isViewerReady && (
         <ViewerToolbar
           viewerRef={viewerShimRef}
         />
@@ -328,7 +329,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           onToggleFilterPanel={() => setShowFilterPanel(p => !p)}
           viewMode={viewMode}
           onChangeViewMode={handleChangeViewMode}
-          onOpenSettings={() => {/* handled by VisualizationToolbar */}}
+          onOpenSettings={() => setShowVisualizationMenu(true)}
         />
       )}
 
@@ -351,8 +352,8 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         />
       )}
 
-      {/* Visualization toolbar (desktop — settings menu) */}
-      {isViewerReady && !isMobile && (
+      {/* Visualization toolbar — always mounted, mobile uses settings button as trigger */}
+      {isViewerReady && (
         <VisualizationToolbar
           viewerRef={viewerShimRef}
           buildingFmGuid={buildingFmGuid}
@@ -361,10 +362,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           showSpaces={showSpaces}
           onShowSpacesChange={(show) => {
             setShowSpaces(show);
-            // Directly call the shim's method
             const assetViewer = viewerShimRef.current?.assetViewer || viewerShimRef.current?.$refs?.AssetViewer;
             assetViewer?.onShowSpacesChanged?.(show);
           }}
+          externalOpen={showVisualizationMenu}
+          onExternalOpenChange={setShowVisualizationMenu}
         />
       )}
 
