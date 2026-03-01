@@ -65,8 +65,9 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const { allData, setActiveApp, setViewer3dFmGuid, startInventory, startFaultReport, openEntityInsights } = useContext(AppContext);
-  const [showStoreys, setShowStoreys] = useState(false);
+  const [showStoreys, setShowStoreys] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedFloorIdx, setSelectedFloorIdx] = useState(0);
 
   // Saved views for this building
   const [savedViews, setSavedViews] = useState<Array<{ id: string; name: string; screenshot_url: string | null; created_at: string | null }>>([]);
@@ -655,45 +656,110 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               </CardContent>
             </Card>
 
-            {/* Storeys Carousel */}
-            {isBuilding && showStoreys && (
+            {/* Series-style Floor Tabs + Room Grid */}
+            {isBuilding && childStoreys.length > 0 && (
               <div className="mt-4 sm:mt-6 animate-in fade-in duration-500">
-                <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Floors ({childStoreys.length})</h3>
-                {childStoreys.length > 0 ? (
-                  <Carousel opts={{ align: "start", loop: false }} className="w-full">
-                    <CarouselContent className="-ml-2">
-                      {childStoreys.map((storey) => (
-                        <CarouselItem key={storey.fmGuid} className="md:basis-1/2 lg:basis-1/3 pl-2">
-                          <Card
-                            className="overflow-hidden group cursor-pointer hover:border-primary/50 transition-all"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedFacility(storey);
-                            }}
-                          >
-                            <div className="h-32 sm:h-40 bg-muted relative">
-                              <img
-                                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?q=80&w=800&auto=format&fit=crop"
-                                className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-                                alt={storey.commonName}
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                              <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 right-2 sm:right-3">
-                                <h4 className="font-bold text-white text-sm sm:text-base truncate">{storey.commonName}</h4>
-                              </div>
-                            </div>
-                          </Card>
-                        </CarouselItem>
-                      ))}
-                    </CarouselContent>
-                    <CarouselPrevious className="hidden sm:flex -left-4" />
-                    <CarouselNext className="hidden sm:flex -right-4" />
-                  </Carousel>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">
-                    No floors found for this building.
-                  </div>
-                )}
+                <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4">Våningar ({childStoreys.length})</h3>
+                
+                {/* Floor pills - "Season" tabs */}
+                <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+                  {childStoreys.map((storey, idx) => (
+                    <button
+                      key={storey.fmGuid}
+                      type="button"
+                      onClick={() => setSelectedFloorIdx(idx)}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all ${
+                        selectedFloorIdx === idx
+                          ? 'bg-primary text-primary-foreground shadow-md'
+                          : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {storey.commonName || storey.name || `Våning ${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Room grid - "Episode" cards for selected floor */}
+                {(() => {
+                  const selectedStorey = childStoreys[selectedFloorIdx];
+                  if (!selectedStorey) return null;
+                  const floorSpaces = allData.filter(
+                    (item: any) => item.category === 'Space' && item.levelFmGuid === selectedStorey.fmGuid
+                  );
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          {floorSpaces.length} rum på {selectedStorey.commonName || selectedStorey.name}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => setSelectedFacility({
+                            fmGuid: selectedStorey.fmGuid,
+                            name: selectedStorey.name,
+                            commonName: selectedStorey.commonName,
+                            category: 'Building Storey',
+                            buildingFmGuid: facility.fmGuid,
+                          })}
+                        >
+                          Visa alla detaljer <ChevronRight size={12} />
+                        </Button>
+                      </div>
+                      
+                      {floorSpaces.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+                          {floorSpaces.slice(0, 12).map((space: any) => {
+                            const spaceArea = space.attributes ? 
+                              Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
+                            const areaVal = spaceArea && space.attributes[spaceArea]?.value;
+                            return (
+                              <button
+                                key={space.fmGuid}
+                                type="button"
+                                onClick={() => setSelectedFacility({
+                                  fmGuid: space.fmGuid,
+                                  name: space.name,
+                                  commonName: space.commonName,
+                                  category: 'Space',
+                                  levelFmGuid: space.levelFmGuid,
+                                  buildingFmGuid: space.buildingFmGuid,
+                                  attributes: space.attributes,
+                                })}
+                                className="rounded-xl border border-border bg-card/80 p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group"
+                              >
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <DoorOpen size={14} className="text-primary shrink-0" />
+                                  <span className="font-medium text-xs sm:text-sm truncate">
+                                    {space.commonName || space.name || '(namnlöst)'}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] sm:text-[11px] text-muted-foreground">
+                                  {areaVal ? `${typeof areaVal === 'number' ? areaVal.toFixed(1) : areaVal} m²` : 'Ingen area'}
+                                </div>
+                              </button>
+                            );
+                          })}
+                          {floorSpaces.length > 12 && (
+                            <button
+                              type="button"
+                              onClick={() => onShowRooms(facility)}
+                              className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+                            >
+                              +{floorSpaces.length - 12} fler rum
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center text-muted-foreground py-6 text-sm">
+                          Inga rum registrerade på denna våning
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

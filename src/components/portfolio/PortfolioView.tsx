@@ -37,8 +37,8 @@ const PortfolioView: React.FC = () => {
   // Preload XKT when a building is selected
   useXktPreload(selectedFacility?.category === 'Building' ? selectedFacility.fmGuid : null);
   
-  // Fetch all building settings for hero images
-  const { getHeroImage, refetch: refetchBuildingSettings } = useAllBuildingSettings();
+  // Fetch all building settings for hero images and favorites
+  const { getHeroImage, getFavorites, settingsMap, refetch: refetchBuildingSettings } = useAllBuildingSettings();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -363,6 +363,19 @@ const PortfolioView: React.FC = () => {
     setShowAssetsFor(null);
   };
 
+  // Build favorites row
+  const favoriteFacilities = useMemo(() => {
+    const favGuids = getFavorites();
+    return facilities.filter(f => favGuids.includes(f.fmGuid || ''));
+  }, [facilities, getFavorites]);
+
+  // Pick a hero building (first favorite, or first facility)
+  const heroBuilding = useMemo(() => {
+    if (favoriteFacilities.length > 0) return favoriteFacilities[0];
+    if (facilities.length > 0) return facilities[0];
+    return null;
+  }, [favoriteFacilities, facilities]);
+
   // Show documents view if requested
   if (showDocsFor) {
     return (
@@ -440,6 +453,60 @@ const PortfolioView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col px-3 sm:px-4 md:px-6 py-3 sm:py-4 overflow-auto">
+
+      {/* Hero Spotlight Banner */}
+      {!isLoadingData && heroBuilding && (
+        <div 
+          className="relative w-full h-48 sm:h-64 md:h-72 rounded-2xl overflow-hidden mb-6 cursor-pointer group"
+          onClick={() => navigateToFacility(heroBuilding)}
+        >
+          <img 
+            src={heroBuilding.image || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1200&auto=format&fit=crop'} 
+            alt={heroBuilding.commonName || heroBuilding.name || ''}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+          <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 right-4 sm:right-8">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 rounded bg-primary/90 text-primary-foreground text-[10px] sm:text-xs font-medium">
+                ★ Utvald
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-white mb-1 sm:mb-2 truncate">
+              {heroBuilding.commonName || heroBuilding.name}
+            </h2>
+            <div className="flex items-center gap-4 text-white/70 text-xs sm:text-sm">
+              <span>{heroBuilding.numberOfLevels || 0} våningar</span>
+              <span>{heroBuilding.numberOfSpaces || 0} rum</span>
+              <span>{heroBuilding.area ? `${heroBuilding.area.toLocaleString()} m²` : ''}</span>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button 
+                size="sm" 
+                className="h-8 gap-1.5 text-xs"
+                onClick={(e) => { e.stopPropagation(); navigateToFacility(heroBuilding); }}
+              >
+                Visa detaljer
+              </Button>
+              <Button 
+                size="sm" 
+                variant="secondary" 
+                className="h-8 gap-1.5 text-xs bg-white/20 hover:bg-white/30 text-white border-0"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  if (heroBuilding.fmGuid) {
+                    setViewer3dFmGuid(heroBuilding.fmGuid);
+                    setActiveApp('native_viewer');
+                  }
+                }}
+              >
+                Öppna 3D
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div>
@@ -531,6 +598,39 @@ const PortfolioView: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Favorites Row */}
+          {favoriteFacilities.length > 0 && (
+            <div className="space-y-3 mb-6 sm:mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                    ★ Mina favoriter
+                  </h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {favoriteFacilities.length} {favoriteFacilities.length === 1 ? 'building' : 'buildings'}
+                  </p>
+                </div>
+              </div>
+              <div className="relative px-2 sm:px-12">
+                <Carousel opts={{ align: 'start', loop: false }} className="w-full">
+                  <CarouselContent className="-ml-2 md:-ml-4">
+                    {favoriteFacilities.map((facility) => (
+                      <CarouselItem key={facility.fmGuid} className="pl-2 md:pl-4 basis-full sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
+                        <FacilityCard facility={facility} onClick={navigateToFacility} />
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                  {favoriteFacilities.length > 1 && (
+                    <>
+                      <CarouselPrevious className="hidden sm:flex -left-2 sm:-left-4" />
+                      <CarouselNext className="hidden sm:flex -right-2 sm:-right-4" />
+                    </>
+                  )}
+                </Carousel>
+              </div>
+            </div>
+          )}
 
           {/* Complex Groups with Carousels */}
           {complexGroups.length > 0 ? (
