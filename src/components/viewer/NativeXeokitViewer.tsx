@@ -159,15 +159,25 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.warn('[NativeViewer] Storage list fallback failed, continuing with DB models only:', storageError);
       }
 
-      // Auto-sync fallback: if no models cached, trigger server-side sync from Asset+
-      if (!dbError && (!models || models.length === 0)) {
-        console.log('[NativeViewer] No cached models — triggering auto-sync from Asset+...');
+      // Auto-sync fallback: if no models cached, OR no A-models found, trigger server-side sync from Asset+
+      const hasAnyModels = models && models.length > 0;
+      const namedModelsCheck = hasAnyModels ? models.filter((m: ModelCandidate) => {
+        const name = m.model_name;
+        if (!name || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(name)) return false;
+        return name.toUpperCase().charAt(0) === 'A';
+      }) : [];
+      
+      const needsSync = !hasAnyModels || namedModelsCheck.length === 0;
+      
+      if (!dbError && needsSync) {
+        const reason = !hasAnyModels ? 'no models at all' : 'no A-models found locally';
+        console.log(`[NativeViewer] ${reason} — triggering sync from Asset+...`);
         if (!mountedRef.current) return;
         setPhase('syncing');
 
         try {
           const { data: syncResult, error: syncError } = await supabase.functions.invoke('asset-plus-sync', {
-            body: { action: 'sync-xkt-building', buildingFmGuid }
+            body: { action: 'sync-xkt-building', buildingFmGuid, force: true }
           });
           
           if (syncError) {
@@ -185,8 +195,37 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             .eq('building_fm_guid', buildingFmGuid)
             .order('file_size', { ascending: true });
           
-          models = ((refetch.data as any[]) ?? []).map((m) => ({ ...m, source: 'db' as const }));
+          // Also re-check storage
+          const { data: storageAfterSync } = await supabase.storage
+            .from('xkt-models')
+            .list(buildingFmGuid, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+
+          const remerged = new Map<string, ModelCandidate>();
+          ((refetch.data as any[]) ?? []).forEach((m) => {
+            remerged.set(m.model_id, { ...m, source: 'db' as const });
+          });
+          if (storageAfterSync) {
+            storageAfterSync
+              .filter((f: any) => f.name?.toLowerCase().endsWith('.xkt') && !f.name?.toLowerCase().endsWith('_xkt.xkt'))
+              .forEach((file: any) => {
+                const modelId = file.name.replace(/\.xkt$/i, '');
+                if (!remerged.has(modelId)) {
+                  remerged.set(modelId, {
+                    model_id: modelId,
+                    model_name: modelId,
+                    storage_path: `${buildingFmGuid}/${file.name}`,
+                    file_size: file.metadata?.size ?? null,
+                    storey_fm_guid: null,
+                    synced_at: null,
+                    source: 'storage',
+                  });
+                }
+              });
+          }
+          
+          models = Array.from(remerged.values());
           dbError = refetch.error;
+          console.log(`[NativeViewer] After sync: ${models.length} models found`);
         } catch (e) {
           console.warn('[NativeViewer] Auto-sync error:', e);
         }
@@ -256,8 +295,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       if (loadList.length === 0) {
-        console.warn('[NativeViewer] No architectural (A) models matched filter for initial load');
-        setErrorMsg('Inga arkitekturmodeller (A-*) hittades för initial laddning.');
+        const availableNames = models.map((m: ModelCandidate) => m.model_name || m.model_id).slice(0, 5).join(', ');
+        console.warn(`[NativeViewer] No architectural (A) models matched filter. Available: ${availableNames}`);
+        setErrorMsg(`Inga arkitekturmodeller (A-*) hittades. Tillgängliga modeller: ${availableNames}. Kontrollera att modellerna i Asset+ har korrekt namngivning.`);
         setPhase('error');
         return;
       }
