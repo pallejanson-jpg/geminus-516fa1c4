@@ -26,8 +26,9 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
+import NativeViewerShell from '@/components/viewer/NativeViewerShell';
+
 const AssetPlusViewer = React.lazy(() => import('@/components/viewer/AssetPlusViewer'));
-import NativeXeokitViewer from '@/components/viewer/NativeXeokitViewer';
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
@@ -615,9 +616,9 @@ const UnifiedViewerContent: React.FC<{
         {/* ── SINGLE 3D Viewer — always mounted, CSS-controlled ── */}
         <div style={viewerContainerStyle}>
           {shouldUseNative3D ? (
-            <NativeXeokitViewer
+            <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
-              onClose={is3DMode ? handleGoBack : undefined}
+              onClose={is3DMode ? handleGoBack : () => {}}
             />
           ) : (
             <React.Suspense fallback={<div className="flex items-center justify-center h-full bg-black"><Loader2 className="h-8 w-8 animate-spin text-white/50" /></div>}>
@@ -763,7 +764,7 @@ function MobileUnifiedViewer({
         {/* 3D/2D viewer — always mounted, hidden when 360 active */}
         <div style={{ display: activePanel === '3d' ? 'flex' : 'none', flexDirection: 'column', height: '100%', position: 'relative' }}>
           {viewMode === '3d' || viewMode === '2d' ? (
-            <NativeXeokitViewer
+            <NativeViewerShell
               buildingFmGuid={buildingData.fmGuid}
               onClose={onGoBack}
             />
