@@ -159,6 +159,44 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.warn('[NativeViewer] Storage list fallback failed, continuing with DB models only:', storageError);
       }
 
+      // Resolve model names from Asset+ Building Storey objects (same logic as useModelNames)
+      // XKT files store GUIDs, but the real model names (like "A-40.1") are in the assets table
+      if (models.length > 0) {
+        try {
+          const { data: storeys } = await supabase
+            .from('assets')
+            .select('attributes')
+            .eq('building_fm_guid', buildingFmGuid)
+            .eq('category', 'Building Storey');
+
+          if (storeys && storeys.length > 0) {
+            const assetPlusNames = new Map<string, string>();
+            storeys.forEach((s: any) => {
+              const attrs = typeof s.attributes === 'string' ? JSON.parse(s.attributes) : (s.attributes || {});
+              const guid = attrs.parentBimObjectId;
+              const name = attrs.parentCommonName;
+              if (guid && name && !/^[0-9a-f]{8}-/i.test(name)) {
+                assetPlusNames.set(guid, name);
+                assetPlusNames.set(guid.toLowerCase(), name);
+              }
+            });
+
+            if (assetPlusNames.size > 0) {
+              console.log(`[NativeViewer] Resolved ${assetPlusNames.size / 2} model names from Asset+ storeys`);
+              models.forEach((m) => {
+                const resolved = assetPlusNames.get(m.model_id) || assetPlusNames.get(m.model_id.toLowerCase());
+                if (resolved && resolved !== m.model_name) {
+                  console.log(`[NativeViewer] Name resolution: "${m.model_name}" → "${resolved}"`);
+                  m.model_name = resolved;
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.debug('[NativeViewer] Asset+ name resolution failed, continuing with DB names:', e);
+        }
+      }
+
       // Auto-sync fallback: if no models cached, OR no A-models found, trigger server-side sync from Asset+
       const hasAnyModels = models && models.length > 0;
       const namedModelsCheck = hasAnyModels ? models.filter((m: ModelCandidate) => {
