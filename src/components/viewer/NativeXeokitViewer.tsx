@@ -348,10 +348,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         console.log(`[NativeViewer] UUID fallback pool: ${uuidPool.length} (db=${dbUuidModels.length}, storage=${uuidModels.length - dbUuidModels.length})`);
       }
 
+      if (loadList.length === 0 && models.length > 0) {
+        // Last resort: load the single largest model regardless of naming
+        const fallbackSorted = [...models].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
+        loadList = [fallbackSorted[0]];
+        console.warn(`[NativeViewer] No A-models or named models matched — fallback to largest available: "${fallbackSorted[0].model_name || fallbackSorted[0].model_id}" (${((fallbackSorted[0].file_size || 0) / 1024 / 1024).toFixed(1)} MB)`);
+      }
+
       if (loadList.length === 0) {
-        const availableNames = models.map((m: ModelCandidate) => m.model_name || m.model_id).slice(0, 5).join(', ');
-        console.warn(`[NativeViewer] No architectural (A) models matched filter. Available: ${availableNames}`);
-        setErrorMsg(`Inga arkitekturmodeller (A-*) hittades. Tillgängliga modeller: ${availableNames}. Kontrollera att modellerna i Asset+ har korrekt namngivning.`);
+        console.warn('[NativeViewer] No models found at all for building', buildingFmGuid);
+        setErrorMsg(`Inga XKT-modeller hittades för denna byggnad, varken lokalt eller från Asset+.`);
         setPhase('error');
         return;
       }
@@ -479,6 +485,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           viewer.scene.sao.intensity = 0.15;
           viewer.scene.sao.bias = 0.5;
           viewer.scene.sao.scale = 1000;
+        }
+
+        // Reset any stale colorization — ensure clean default state
+        const scene = viewer.scene;
+        const allIds = scene.objectIds || [];
+        if (allIds.length > 0) {
+          scene.setObjectsColorize(allIds); // Clears colorize to default
+          scene.setObjectsXRayed(allIds, false);
         }
       }
 
