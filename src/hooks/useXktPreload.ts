@@ -166,6 +166,18 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           if (namedModels.length > 0) {
             aModels = namedModels.filter((m: any) => isAModel(m.model_name));
+            if (aModels.length === 0) {
+              // Smart fallback: load largest named model not in exclusion list
+              const nonExcluded = namedModels.filter((m: any) => {
+                const upper = (m.model_name || '').toUpperCase();
+                return !NON_ARCH_PREFIXES.some(p => upper.startsWith(p));
+              });
+              if (nonExcluded.length > 0) {
+                const sorted = [...nonExcluded].sort((a: any, b: any) => (b.file_size || 0) - (a.file_size || 0));
+                aModels = [sorted[0]];
+                console.warn(`XKT Preload: No A-prefixed models — fallback to largest non-excluded: "${sorted[0].model_name}"`);
+              }
+            }
             secondaryModels = []; // Strict mode: never preload secondary/non-A models
           } else {
             // All UUID-named: largest = architectural priority
