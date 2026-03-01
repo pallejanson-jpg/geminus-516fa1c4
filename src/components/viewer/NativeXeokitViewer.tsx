@@ -280,7 +280,23 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       if (namedModels.length > 0) {
         // Use strict name-based filtering: only A-prefixed architectural models
         const archModels = namedModels.filter((m: ModelCandidate) => isArchitectural(m.model_id, m.model_name));
-        loadList = archModels;
+        if (archModels.length > 0) {
+          loadList = archModels;
+        } else {
+          // Smart fallback: no A-models found, but named models exist that aren't explicitly non-architectural
+          // Load the largest non-excluded model (likely architectural with different naming in Asset+)
+          const nonExcluded = namedModels.filter((m: ModelCandidate) => {
+            const upper = (m.model_name || '').toUpperCase();
+            return !NON_ARCH_PREFIXES.some(p => upper.startsWith(p));
+          });
+          if (nonExcluded.length > 0) {
+            const sorted = [...nonExcluded].sort((a, b) => (b.file_size || 0) - (a.file_size || 0));
+            loadList = [sorted[0]];
+            console.warn(`[NativeViewer] No A-prefixed models — fallback to largest non-excluded: "${sorted[0].model_name}" (${((sorted[0].file_size || 0) / 1024 / 1024).toFixed(1)} MB)`);
+          } else {
+            loadList = [];
+          }
+        }
         backgroundList = []; // Strict mode: never auto-load secondary/non-A models
       } else {
         // UUID-only fallback: prioritize DB-known models first, ignore storage-only spillover when possible
