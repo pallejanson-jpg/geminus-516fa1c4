@@ -1185,7 +1185,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           >
             <Box className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground bg-background shadow-md" onClick={onClose} title="Close filter panel">
+          <Button variant="outline" size="icon" className="h-8 w-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground bg-background shadow-md relative z-50" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClose(); }} title="Close filter panel">
             <X className="h-5 w-5" />
           </Button>
         </div>
