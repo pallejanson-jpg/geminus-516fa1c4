@@ -69,6 +69,9 @@ interface VisualizationToolbarProps {
   showSpaces?: boolean;
   /** Callback when "Visa rum" is toggled */
   onShowSpacesChange?: (show: boolean) => void;
+  /** External open control (e.g. mobile settings button) */
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -95,6 +98,8 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
     visibleFloorIds = [],
     showSpaces: externalShowSpaces,
     onShowSpacesChange,
+    externalOpen,
+    onExternalOpenChange,
   } = props;
 
   const { allData } = useContext(AppContext);
@@ -107,6 +112,18 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   const { flashEntitiesByIds } = useFlashHighlight();
 
   const [isOpen, setIsOpen] = useState(false);
+
+  // Sync external open control (mobile settings button)
+  useEffect(() => {
+    if (externalOpen !== undefined) setIsOpen(externalOpen);
+  }, [externalOpen]);
+
+  // Notify parent when isOpen changes
+  const handleSetIsOpen = useCallback((open: boolean) => {
+    setIsOpen(open);
+    onExternalOpenChange?.(open);
+  }, [onExternalOpenChange]);
+
   // Use controlled state if provided, otherwise local state
   const [localShowSpaces, setLocalShowSpaces] = useState(false);
   const showSpaces = externalShowSpaces !== undefined ? externalShowSpaces : localShowSpaces;
@@ -666,7 +683,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
   const handleTouchEnd = useCallback(() => {
     if (touchDelta > 80) {
-      setIsOpen(false); // Close panel on sufficient swipe
+      handleSetIsOpen(false); // Close panel on sufficient swipe
     }
     setTouchStart(null);
     setTouchDelta(0);
@@ -704,7 +721,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   }, [onToggleVisualization, showVisualization]);
 
   const handleAddAsset = useCallback(() => {
-    setIsOpen(false);
+    handleSetIsOpen(false);
     onAddAsset?.();
   }, [onAddAsset]);
 
@@ -727,7 +744,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         variant="secondary"
         size="icon"
         title="Visning"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => handleSetIsOpen(!isOpen)}
         className={cn(
           "shadow-lg bg-card/95 backdrop-blur-sm border",
           "h-8 w-8 sm:h-10 sm:w-10",
@@ -789,7 +806,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               variant="ghost"
               size="icon"
               className="h-7 w-7 sm:h-6 sm:w-6"
-              onClick={() => setIsOpen(false)}
+              onClick={() => handleSetIsOpen(false)}
             >
               <X className="h-4 w-4 sm:h-3 sm:w-3" />
             </Button>
