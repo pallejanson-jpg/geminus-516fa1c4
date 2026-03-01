@@ -73,18 +73,18 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const disabledClass = 'opacity-40 cursor-not-allowed';
 
   // Standardized button style with proper touch targets (min 44x44)
-  const btnClass = "justify-start sm:justify-center gap-2 h-auto py-3 px-3 sm:py-3 sm:px-4";
+  const btnClass = "justify-start sm:justify-center gap-1.5 sm:gap-2 h-auto py-2.5 px-2 sm:py-3 sm:px-4 min-w-0";
   const iconSize = 16;
   const labelClass = "text-[11px] sm:text-xs";
 
   if (isLoading) {
     return (
       <Card className="mt-4 sm:mt-6">
-        <CardHeader className="pb-3 sm:pb-4">
+        <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
           <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+        <CardContent className="px-3 sm:px-6">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-12 rounded-lg" />
             ))}
@@ -96,11 +96,11 @@ const QuickActions: React.FC<QuickActionsProps> = ({
 
   return (
     <Card className="mt-4 sm:mt-6">
-      <CardHeader className="pb-3 sm:pb-4">
+      <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
         <CardTitle className="text-sm sm:text-base">Quick Actions</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+      <CardContent className="px-3 sm:px-6">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 md:gap-4">
           {/* ===== VISUALIZATION TOOLS ===== */}
           
           {/* 2D - Building, Storey, Space */}

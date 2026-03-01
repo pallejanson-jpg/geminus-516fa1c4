@@ -375,7 +375,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
           <div className="space-y-4 sm:space-y-6 mt-6 sm:mt-8">
             {/* Basic Info Card */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-3 sm:pb-4">
+              <CardHeader className="flex flex-row items-center justify-between p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Info size={14} className="sm:w-4 sm:h-4 text-primary" />
                   Basic Information
@@ -409,7 +409,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm">
                   <div>
                     <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
@@ -432,13 +432,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             {/* Building Settings (collapsible) */}
             {showSettings && isBuilding && (
               <Card className="animate-in fade-in duration-300">
-                <CardHeader className="pb-3 sm:pb-4">
+                <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                   <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                     <Settings2 size={14} className="sm:w-4 sm:h-4 text-primary" />
                     Building Settings
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 px-3 sm:px-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="ivionSiteId" className="text-xs">Ivion Site ID</Label>
@@ -623,13 +623,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
             {/* KPI Cards */}
             <Card>
-              <CardHeader className="pb-3 sm:pb-4">
+              <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <BarChart size={14} className="sm:w-4 sm:h-4 text-accent" />
                   Key Metrics
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {isBuilding && (
                     <KpiCard 
@@ -743,7 +743,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
                       {/* Search + Sort controls */}
                       <div className="flex gap-2 items-center flex-wrap">
-                        <div className="relative flex-1 min-w-[140px] max-w-[240px]">
+                        <div className="relative flex-1 min-w-[120px] max-w-[200px] sm:max-w-[240px]">
                           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                           <Input
                             value={roomSearch}
@@ -769,7 +769,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                       
                       {floorSpaces.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
                           {floorSpaces.slice(0, 20).map((space: any) => {
                             const spaceArea = space.attributes ? 
                               Object.keys(space.attributes).find(k => k.toLowerCase().startsWith('nta')) : null;
@@ -788,7 +788,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                                   buildingFmGuid: space.buildingFmGuid,
                                   attributes: space.attributes,
                                 })}
-                                className="rounded-xl border border-border bg-card/80 p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group"
+                                className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
                               >
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <DoorOpen size={14} className="text-primary shrink-0" />
@@ -860,14 +860,14 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
           {/* Saved Views */}
           {isBuilding && savedViews.length > 0 && (
-            <Card className="mt-4 sm:mt-6">
-              <CardHeader className="pb-3 sm:pb-4">
+           <Card className="mt-4 sm:mt-6">
+              <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                   <Eye size={14} className="sm:w-4 sm:h-4 text-primary" />
                   Sparade vyer
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                   {savedViews.map(view => (
                     <button
