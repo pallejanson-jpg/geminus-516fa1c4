@@ -321,9 +321,26 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Also track which model each storey belongs to, to prefer A-model storeys
     const sceneModels = viewer.scene.models || {};
     const entityToModelId = new Map<string, string>();
+    // Method 1: scene model objects (works in Asset+ wrapper)
     Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
-      Object.keys(model.objects || {}).forEach(objId => entityToModelId.set(objId, modelId));
+      const objs = model.objects || model.entityList || {};
+      if (typeof objs === 'object' && objs !== null) {
+        // Handle both Map-like and array-like structures
+        const keys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+        keys.forEach((objId: string) => entityToModelId.set(objId, modelId));
+      }
     });
+
+    // Method 2 (fallback): use metaObject.metaModel.id (native xeokit)
+    if (entityToModelId.size === 0) {
+      Object.values(metaObjects).forEach((mo: any) => {
+        const modelId = mo.metaModel?.id;
+        if (modelId) entityToModelId.set(mo.id, modelId);
+      });
+      if (entityToModelId.size > 0) {
+        console.log(`[FilterPanel] entityToModelId built from metaModel fallback: ${entityToModelId.size} entries`);
+      }
+    }
 
     // Detect A-model IDs (name starts with 'A' or contains 'arkitekt')
     const aModelSceneIds = new Set<string>();
@@ -334,6 +351,17 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           aModelSceneIds.add(m.id);
         }
       });
+    }
+
+    // Also add model IDs from scene that we know are A-models (by matching name)
+    if (aModelSceneIds.size === 0) {
+      // If sharedModels hasn't resolved names yet, try all scene model IDs
+      // since we only load A-models in native viewer
+      const sceneModelIds = Object.keys(sceneModels);
+      if (sceneModelIds.length > 0) {
+        console.log(`[FilterPanel] No A-models from sharedModels, treating all ${sceneModelIds.length} scene models as A-models`);
+        sceneModelIds.forEach(id => aModelSceneIds.add(id));
+      }
     }
 
     const xeokitStoreys: { id: string; sysId: string; name: string; modelId: string }[] = [];
@@ -347,7 +375,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           id: mo.id,
           sysId: (mo.originalSystemId || mo.id || ''),
           name: (mo.name || ''),
-          modelId: entityToModelId.get(mo.id) || '',
+          modelId: entityToModelId.get(mo.id) || mo.metaModel?.id || '',
         });
       } else if (type === 'ifcspace') {
         xeokitSpaces.push({
@@ -395,11 +423,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     });
 
     // Filter storeys: A-model always, non-A only if explicitly checked
+    // Fallback: if no storey has a recognized model ID, include ALL storeys
+    const hasAnyModelMapping = sortedStoreys.some(xs => xs.modelId !== '');
     const eligibleStoreys = sortedStoreys.filter(xs => {
+      // If we couldn't map any storey to a model, include everything
+      if (!hasAnyModelMapping) return true;
       if (aModelSceneIds.has(xs.modelId)) return true;
+      // If modelId is empty (couldn't resolve), include as fallback
+      if (xs.modelId === '') return true;
       // Non-A storey: only include if that source is explicitly checked
-      if (checkedNonASourceGuids.size === 0) return false; // no non-A sources checked
-      // Find the source guid for this storey's model
+      if (checkedNonASourceGuids.size === 0) return false;
       const matchModel = sharedModels.find(m => m.id === xs.modelId);
       if (!matchModel) return false;
       const matchSource = sources.find(s => s.name === matchModel.name);
@@ -463,7 +496,16 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     // Step 4: Also build a source → model objects map using scene.models
     const sceneModels2 = viewer.scene.models || {};
     Object.entries(sceneModels2).forEach(([modelId, model]: [string, any]) => {
-      const modelObjKeys = Object.keys((model as any).objects || {});
+      // Get object keys: try model.objects, entityList, or fallback to entityToModelId
+      let modelObjKeys: string[] = [];
+      const objs = model.objects || model.entityList;
+      if (objs && typeof objs === 'object') {
+        modelObjKeys = Array.isArray(objs) ? objs.map((e: any) => e.id).filter(Boolean) : Object.keys(objs);
+      }
+      // Fallback: collect from entityToModelId
+      if (modelObjKeys.length === 0) {
+        entityToModelId.forEach((mId, objId) => { if (mId === modelId) modelObjKeys.push(objId); });
+      }
       for (const objId of modelObjKeys) {
         const mo = metaObjects[objId];
         if (mo?.type === 'IfcBuildingStorey') {
