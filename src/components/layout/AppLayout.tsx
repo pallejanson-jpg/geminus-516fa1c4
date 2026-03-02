@@ -18,6 +18,9 @@ import { AppContext } from '@/context/AppContext';
 /** Apps that should hide header/sidebars for fullscreen experience */
 const IMMERSIVE_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar'];
 
+/** Apps where the left sidebar should be fully hidden (but hamburger stays) */
+const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer'];
+
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
@@ -26,16 +29,18 @@ const AppLayoutInner: React.FC = () => {
     const isMobile = useIsMobile();
     const { activeApp } = useContext(AppContext);
 
-    const { setIsSidebarExpanded } = useContext(AppContext);
+    const { isSidebarExpanded, setIsSidebarExpanded } = useContext(AppContext);
     // Hide chrome on mobile always for immersive apps
     const isImmersive = isMobile && IMMERSIVE_APPS.includes(activeApp);
+    // On desktop, hide sidebar in viewer apps but keep hamburger
+    const isDesktopViewer = !isMobile && VIEWER_APPS.includes(activeApp);
 
     // Auto-collapse sidebar when entering a viewer app on desktop
     useEffect(() => {
-        if (!isMobile && IMMERSIVE_APPS.includes(activeApp)) {
+        if (isDesktopViewer) {
             setIsSidebarExpanded(false);
         }
-    }, [activeApp, isMobile, setIsSidebarExpanded]);
+    }, [activeApp, isDesktopViewer, setIsSidebarExpanded]);
 
     // Listen for voice settings changes
     useEffect(() => {
@@ -79,7 +84,26 @@ const AppLayoutInner: React.FC = () => {
 
     return (
         <div className="flex h-screen w-full overflow-hidden font-sans relative">
-            {!isImmersive && <LeftSidebar />}
+            {/* Left sidebar: hidden on mobile immersive, hidden on desktop viewer unless expanded */}
+            {!isImmersive && (
+                <div className={`
+                    ${isDesktopViewer && !isSidebarExpanded ? 'hidden' : ''}
+                    transition-all duration-300
+                `}>
+                    <LeftSidebar />
+                </div>
+            )}
+
+            {/* Floating hamburger when sidebar is hidden in desktop viewer */}
+            {isDesktopViewer && !isSidebarExpanded && (
+                <button
+                    onClick={() => setIsSidebarExpanded(true)}
+                    className="fixed top-3 left-3 z-50 h-9 w-9 flex items-center justify-center rounded-lg bg-card/95 backdrop-blur-sm shadow-md border border-border hover:bg-accent transition-colors"
+                    title="Visa meny"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                </button>
+            )}
             
             <div className="flex-1 flex flex-col min-w-0 w-full relative">
                 {!isImmersive && (

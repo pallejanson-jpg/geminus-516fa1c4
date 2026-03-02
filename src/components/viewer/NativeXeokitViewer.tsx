@@ -662,10 +662,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
               </>
             )}
           </p>
-          <p className="text-[10px] text-muted-foreground/60 mt-1 flex items-center gap-1">
-            <Box className="h-3 w-3" />
-            Native xeokit viewer (prototype)
-          </p>
         </div>
       )}
 
@@ -678,12 +674,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         </div>
       )}
 
-      {/* Badge */}
-      {phase === 'ready' && (
-        <div className="absolute top-2 left-2 bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full font-mono z-10">
-          Native xeokit
-        </div>
-      )}
     </div>
   );
 };
