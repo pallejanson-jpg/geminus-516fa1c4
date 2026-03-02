@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Globe, Network, Package, BarChart, Cuboid, 
-  FileText, DoorOpen, Zap, View, Square, Plus, ClipboardList, SplitSquareHorizontal, AlertTriangle, Layers 
+  Globe, Package, BarChart, Cuboid, Square,
+  DoorOpen, View, Plus, ClipboardList, SplitSquareHorizontal, AlertTriangle, Layers 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -205,23 +205,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({
             </Button>
           )}
 
-          {/* Navigator */}
-          <Button variant="ghost" onClick={() => onOpenNavigator(facility)} className={btnClass}>
-            <Network size={iconSize} className="text-primary" />
-            <span className={labelClass}>Navigator</span>
-          </Button>
-
-          {/* Docs+ */}
-          <Button variant="ghost" onClick={() => onShowDocs(facility)} className={btnClass}>
-            <FileText size={iconSize} className="text-muted-foreground" />
-            <span className={labelClass}>Docs+</span>
-          </Button>
-
-          {/* IOT+ */}
-          <Button variant="ghost" onClick={() => onOpenIoT(facility)} className={btnClass}>
-            <Zap size={iconSize} className="text-accent" />
-            <span className={labelClass}>IOT+</span>
-          </Button>
 
           {/* Add Asset */}
           {canAddAsset && onAddAsset && (

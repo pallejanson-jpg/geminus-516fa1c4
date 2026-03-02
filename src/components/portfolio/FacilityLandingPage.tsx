@@ -15,6 +15,7 @@ import { AppContext } from '@/context/AppContext';
 import BuildingMapPicker from '@/components/map/BuildingMapPicker';
 import { Facility } from '@/lib/types';
 import { useBuildingSettings } from '@/hooks/useBuildingSettings';
+import { useAllBuildingSettings } from '@/hooks/useAllBuildingSettings';
 import { useXktPreload } from '@/hooks/useXktPreload';
 import { NavigatorNode } from '@/components/navigator/TreeNode';
 import KpiCard from './KpiCard';
@@ -177,6 +178,24 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     );
   }, [allData, facility, isBuilding, isStorey]);
 
+  // Get child assets for spaces
+  const childAssets = useMemo(() => {
+    if (!allData || !isSpace) return [];
+    const assets = allData.filter((item: any) =>
+      item.category === 'Instance' &&
+      (item.in_room_fm_guid === facility.fmGuid || item.inRoomFmGuid === facility.fmGuid ||
+       (item.levelFmGuid === facility.levelFmGuid && item.buildingFmGuid === facility.buildingFmGuid))
+    );
+    // Deduplicate
+    const seen = new Set<string>();
+    return assets.filter((item: any) => {
+      const guid = item.fmGuid || item.fm_guid;
+      if (!guid || seen.has(guid)) return false;
+      seen.add(guid);
+      return true;
+    });
+  }, [allData, facility, isSpace]);
+
   // Calculate KPIs
   const kpis = useMemo(() => {
     const baseArea = typeof facility.area === 'number' ? facility.area : 0;
@@ -304,9 +323,15 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
     }
   };
 
+  // Fetch building settings map for hero image inheritance
+  const { getHeroImage } = useAllBuildingSettings();
+
   const title = facility.commonName || facility.name || 'Unnamed Object';
   const subTitle = facility.designation || (isBuilding ? facility.address : 'No Designation') || facility.category || 'No Category';
-  const heroImage = settings?.heroImageUrl || facility.image || (isSpace 
+  
+  // For rooms/storeys, inherit building's hero image if no own image
+  const buildingHero = buildingGuid ? getHeroImage(buildingGuid, '') : '';
+  const heroImage = settings?.heroImageUrl || facility.image || buildingHero || (isSpace 
     ? 'https://images.unsplash.com/photo-1611048264355-27a69db69042?q=80&w=1600' 
     : 'https://images.unsplash.com/photo-1515263487990-61b07816b324?q=80&w=1600'
   );
@@ -825,7 +850,57 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
             )}
           </div>
 
-          {/* Quick Actions */}
+          {/* Assets list for Space (Room) pages */}
+          {isSpace && childAssets.length > 0 && (
+            <Card className="mt-4 sm:mt-6">
+              <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-4">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Layers size={14} className="sm:w-4 sm:h-4 text-primary" />
+                  Tillgångar ({childAssets.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 sm:px-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-3">
+                  {childAssets.slice(0, 20).map((asset: any) => (
+                    <button
+                      key={asset.fmGuid || asset.fm_guid}
+                      type="button"
+                      onClick={() => setSelectedFacility({
+                        fmGuid: asset.fmGuid || asset.fm_guid,
+                        name: asset.name,
+                        commonName: asset.commonName || asset.common_name,
+                        category: 'Instance',
+                        levelFmGuid: asset.levelFmGuid || asset.level_fm_guid,
+                        buildingFmGuid: asset.buildingFmGuid || asset.building_fm_guid,
+                        attributes: asset.attributes,
+                      })}
+                      className="rounded-xl border border-border bg-card/80 p-2 sm:p-3 text-left transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.98] group overflow-hidden"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Layers size={14} className="text-accent shrink-0" />
+                        <span className="font-medium text-xs sm:text-sm truncate">
+                          {asset.commonName || asset.common_name || asset.name || '(namnlös)'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
+                        {asset.asset_type || asset.assetType || asset.category || ''}
+                      </div>
+                    </button>
+                  ))}
+                  {childAssets.length > 20 && (
+                    <button
+                      type="button"
+                      onClick={() => onShowAssets(facility)}
+                      className="rounded-xl border border-dashed border-border bg-muted/30 p-3 flex items-center justify-center text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      +{childAssets.length - 20} fler
+                    </button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <QuickActions
             facility={facility}
             ivionSiteId={settings?.ivionSiteId}

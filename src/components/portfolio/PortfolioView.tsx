@@ -438,7 +438,7 @@ const PortfolioView: React.FC = () => {
           onShowInsights={handleShowInsights}
           onOpenIoT={handleOpenIoT}
           onAddAsset={handleAddAsset}
-          setSelectedFacility={setSelectedFacility}
+          setSelectedFacility={navigateToFacility}
           onSettingsChanged={refetchBuildingSettings}
         />
         <AddAssetDialog
