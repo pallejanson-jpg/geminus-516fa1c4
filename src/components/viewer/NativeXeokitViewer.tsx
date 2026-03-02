@@ -82,13 +82,33 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       viewer.camera.up = [0, 1, 0];
       viewer.camera.projection = 'perspective';
 
-      // NavCube
-      if (sdk.NavCubePlugin) {
+      // NavCube — load custom neutral-styled plugin via script tag
+      {
         const navCubeCanvas = document.createElement('canvas');
         navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
         navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
         canvasRef.current.parentElement?.appendChild(navCubeCanvas);
-        new sdk.NavCubePlugin(viewer, { canvasElement: navCubeCanvas });
+
+        let usedCustom = false;
+        if (!(window as any).NavCubePlugin) {
+          // Load the custom NavCube script
+          await new Promise<void>((resolve) => {
+            const script = document.createElement('script');
+            script.src = '/lib/xeokit/NavCubePlugin.js?v=3';
+            script.onload = () => resolve();
+            script.onerror = () => resolve();
+            document.head.appendChild(script);
+          });
+        }
+        const CustomNavCube = (window as any).NavCubePlugin;
+        if (CustomNavCube) {
+          new CustomNavCube(viewer, { canvasElement: navCubeCanvas });
+          usedCustom = true;
+          console.log('[NativeViewer] Custom NavCube loaded');
+        } else if (sdk.NavCubePlugin) {
+          new sdk.NavCubePlugin(viewer, { canvasElement: navCubeCanvas });
+          console.log('[NativeViewer] Fallback SDK NavCube');
+        }
       }
 
       // FastNav
@@ -487,23 +507,30 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           viewer.scene.sao.scale = 1000;
         }
 
-        // Apply neutral default colorize to all objects — prevents raw IFC material
-        // colors (reds, greens etc.) from showing through on architectural models.
-        // Fire models and other specialty models will load with their own colors later.
+        // Leave objects with their native XKT colors — no blanket colorize.
+        // Hide IfcSpace objects by default (rooms should be off until filter enables them).
         const scene = viewer.scene;
         const allIds = scene.objectIds || [];
         if (allIds.length > 0) {
           scene.setObjectsXRayed(allIds, false);
-          // Apply neutral grey to all objects as default base color
-          const NEUTRAL_COLOR = [0.85, 0.85, 0.85];
-          allIds.forEach((id: string) => {
-            const entity = scene.objects?.[id];
-            if (entity) {
-              entity.colorize = NEUTRAL_COLOR;
-            }
-          });
-          console.log(`[NativeViewer] Applied neutral default color to ${allIds.length} objects`);
         }
+        // Hide IfcSpace entities
+        let hiddenSpaces = 0;
+        const metaScene = viewer.metaScene;
+        if (metaScene?.metaObjects) {
+          for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
+            const ifcType = (metaObj.type || '').toLowerCase();
+            if (ifcType === 'ifcspace' || ifcType === 'ifc_space') {
+              const entity = scene.objects?.[id];
+              if (entity) {
+                entity.visible = false;
+                entity.pickable = false;
+                hiddenSpaces++;
+              }
+            }
+          }
+        }
+        console.log(`[NativeViewer] Hidden ${hiddenSpaces} IfcSpace objects by default`);
       }
 
       const totalTime = Math.round(performance.now() - t0);
