@@ -23,6 +23,7 @@ const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFault
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
+const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
 
 // Apps that need overflow:hidden and h-full on BOTH desktop and mobile (3D canvas, maps)
 const VIEWER_APPS = ['assetplus_viewer', 'viewer', 'native_viewer', 'radar', 'senslinc_dashboard', 'globe', 'map'];
@@ -181,6 +182,16 @@ const MainContent: React.FC = () => {
                         </div>
                     }>
                         <CesiumGlobeView />
+                    </Suspense>
+                );
+            case 'support':
+                return (
+                    <Suspense fallback={
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <CustomerPortalView />
                     </Suspense>
                 );
             default:

@@ -1155,6 +1155,106 @@ export type Database = {
           },
         ]
       }
+      support_case_comments: {
+        Row: {
+          case_id: string
+          comment: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          comment: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          comment?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_case_comments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "support_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_cases: {
+        Row: {
+          bcf_issue_id: string | null
+          building_fm_guid: string | null
+          building_name: string | null
+          category: string
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          description: string | null
+          external_reference: string | null
+          id: string
+          priority: string
+          reported_by: string
+          resolved_at: string | null
+          screenshot_url: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          bcf_issue_id?: string | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          category?: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          description?: string | null
+          external_reference?: string | null
+          id?: string
+          priority?: string
+          reported_by: string
+          resolved_at?: string | null
+          screenshot_url?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          bcf_issue_id?: string | null
+          building_fm_guid?: string | null
+          building_name?: string | null
+          category?: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          description?: string | null
+          external_reference?: string | null
+          id?: string
+          priority?: string
+          reported_by?: string
+          resolved_at?: string | null
+          screenshot_url?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_cases_bcf_issue_id_fkey"
+            columns: ["bcf_issue_id"]
+            isOneToOne: false
+            referencedRelation: "bcf_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
