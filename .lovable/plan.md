@@ -1,43 +1,23 @@
 
 
-## Koppla frontend till SWG Support-proxy
+## Använd JWT direkt istället för login
+
+Du har helt rätt. Eftersom login-endpointen returnerar 401 men du kan logga in manuellt, kan vi ta en annan approach: lagra JWT:n som en secret och använda den direkt för API-anrop.
 
 ### Problem
-1. **SupportCaseList** hämtar ärenden från lokal databas (`support_cases`-tabellen) istället för SWG:s API via `support-proxy`
-2. **CreateSupportCase** har felaktiga kategorier -- ska matcha SWG-portalens "Typ av ärende" (se bild 1)
+Login via `/api/users/login` returnerar konsekvent 401 trots korrekta credentials. Kan bero på att endpointen kräver ytterligare headers, CSRF-token, eller annan mekanism som webbläsaren hanterar automatiskt.
 
-### Ändringar
+### Lösning
+1. **Ny secret `SWG_SUPPORT_JWT`** -- du klistrar in JWT:n du får när du loggar in manuellt
+2. **Uppdatera `support-proxy/index.ts`** -- använd `SWG_SUPPORT_JWT` direkt i `jwt`-headern, skippa login-anropet helt
+3. **Fallback-logik** -- om JWT:n ger 401 (utgången), returnera ett tydligt felmeddelande till frontend som säger "JWT har gått ut, uppdatera i backend secrets"
+4. **Frontend** -- visa ett informativt meddelande när JWT:n har gått ut, istället för generiskt fel
 
-#### 1. SupportCaseList.tsx -- Hämta från SWG-proxy
-- Byt `fetchCases` från `supabase.from('support_cases')` till `supabase.functions.invoke('support-proxy', { body: { action: 'list-requests', filter } })`
-- Mappa SWG:s datastruktur (id, namn, område, skapad, typ av ärende, status) till komponentens `SupportCase` interface
-- Uppdatera STATUS_FILTERS till SWG:s statusar: New, UnderReview, AwaitingResponse, AwaitingOrder, Planned, InProgress, Done, Completed, Closed
-- Uppdatera STATUS_CONFIG med matchande svenska etiketter och ikoner
-- Uppdatera CATEGORY_LABELS till SWG:s ärendetyper
-- Ta bort Supabase realtime-prenumeration (inte relevant för externt API)
+### Begränsning
+JWT:n har ~10 timmars TTL (`exp - nbf`). Du behöver uppdatera secreten med en ny JWT när den löper ut. Vi kan eventuellt lösa login-problemet senare för att automatisera detta.
 
-#### 2. CreateSupportCase.tsx -- Rätt ärendetyper + skicka via proxy
-- Byt CATEGORY_OPTIONS till SWG:s typer:
-  - Ritningsfiler - inleverans
-  - Ritningsfiler - inleverans - Revit A
-  - Ritningsfiler - inleverans - Modell, CAD
-  - Ritningsfiler - plottning
-  - Ritningsfiler - utskick
-  - Ändring av areor
-  - Visualisering
-  - Laserskanning
-  - Outdoor
-  - Asset+
-  - Interaxo
-  - Supportärende
-  - Annat ärende
-- Uppdatera `handleSubmit` att skicka till proxy: `supabase.functions.invoke('support-proxy', { body: { action: 'create-request', payload } })`
-- Behåll lokal kopia i `support_cases` som backup
-
-#### 3. SupportCaseDetail.tsx -- Hämta detaljer via proxy
-- Ladda ärende-detaljer och kommentarer via `support-proxy` (actions: `get-request`, `add-comment`)
-- Mappa SWG:s kommentarformat till befintligt interface
-
-#### 4. Notering
-Vi behöver först testa vad `list-requests` returnerar för datastruktur från SWG:s API, så vi kan mappa rätt fält. Jag kör ett test-anrop som del av implementationen och loggar svaret.
+### Teknisk detalj
+- `login()` ersätts med enkel secret-läsning: `Deno.env.get("SWG_SUPPORT_JWT")`
+- `proxyRequest()` fortsätter skicka `jwt`-header som tidigare
+- Vid 401-svar från proxy-anrop: returnera `{ error: "jwt_expired" }` som frontend kan hantera
 
