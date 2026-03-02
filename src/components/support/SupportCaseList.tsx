@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Loader2, Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Clock, AlertCircle, CheckCircle, XCircle, Search, Mail, Phone } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDistanceToNow } from 'date-fns';
@@ -22,6 +23,9 @@ export interface SupportCase {
   contact_email: string | null;
   contact_phone: string | null;
   external_reference: string | null;
+  location_description: string | null;
+  installation_number: string | null;
+  desired_date: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -49,11 +53,22 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-destructive/10 text-destructive',
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  question: 'Fråga',
+  fault: 'Felanmälan',
+  service: 'Service',
+  warranty: 'Garanti',
+  inspection: 'Besiktning',
+  consultation: 'Rådgivning',
+  other: 'Övrigt',
+};
+
 const SupportCaseList: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCase, setSelectedCase] = useState<SupportCase | null>(null);
 
   const fetchCases = async () => {
@@ -82,7 +97,6 @@ const SupportCaseList: React.FC = () => {
     fetchCases();
   }, [filter]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel('support-cases-realtime')
@@ -94,6 +108,14 @@ const SupportCaseList: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [filter]);
 
+  const filteredCases = searchQuery.trim()
+    ? cases.filter(c =>
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        c.id.slice(0, 8).includes(searchQuery.toLowerCase())
+      )
+    : cases;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -104,6 +126,17 @@ const SupportCaseList: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Sök ärenden..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Status filter */}
       <div className="flex gap-2 flex-wrap">
         {STATUS_FILTERS.map(f => (
@@ -119,15 +152,17 @@ const SupportCaseList: React.FC = () => {
       </div>
 
       {/* Case list */}
-      {cases.length === 0 ? (
+      {filteredCases.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-sm">
-          Inga ärenden att visa
+          {searchQuery ? 'Inga ärenden matchar sökningen' : 'Inga ärenden att visa'}
         </div>
       ) : (
         <div className="space-y-2">
-          {cases.map(c => {
+          {filteredCases.map(c => {
             const statusCfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
             const StatusIcon = statusCfg.icon;
+            const caseNumber = `#${c.id.slice(0, 8).toUpperCase()}`;
+            const categoryLabel = CATEGORY_LABELS[c.category] || c.category;
             return (
               <Card
                 key={c.id}
@@ -138,17 +173,30 @@ const SupportCaseList: React.FC = () => {
                   <StatusIcon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${statusCfg.color}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground font-mono">{caseNumber}</span>
                       <span className="font-medium text-sm text-foreground truncate">{c.title}</span>
+                    </div>
+                    {c.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{c.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <Badge variant="secondary" className="text-xs">{categoryLabel}</Badge>
                       <Badge variant="outline" className={`text-xs ${PRIORITY_COLORS[c.priority] || ''}`}>
                         {c.priority}
                       </Badge>
                       {c.bcf_issue_id && (
                         <Badge variant="secondary" className="text-xs">BCF</Badge>
                       )}
+                      {(c.contact_email || c.contact_phone) && (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          {c.contact_email && <Mail className="h-3 w-3" />}
+                          {c.contact_phone && <Phone className="h-3 w-3" />}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                       {c.building_name && <span>{c.building_name}</span>}
-                      <span>•</span>
+                      {c.building_name && <span>•</span>}
                       <span>{formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}</span>
                     </div>
                   </div>
