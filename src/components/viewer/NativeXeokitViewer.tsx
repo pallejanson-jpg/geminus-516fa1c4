@@ -491,7 +491,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const scene = viewer.scene;
         const allIds = scene.objectIds || [];
         if (allIds.length > 0) {
-          scene.setObjectsColorize(allIds); // Clears colorize to default
+          scene.setObjectsColorized(allIds, false); // Clears colorize to default
           scene.setObjectsXRayed(allIds, false);
         }
       }
