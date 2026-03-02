@@ -71,7 +71,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       setPhase('creating_viewer');
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
-        transparent: false,
+        transparent: true,
         saoEnabled: true,
       });
       viewerRef.current = viewer;
@@ -290,8 +290,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       }
 
       if (dbError || !models || models.length === 0) {
-        console.warn('[NativeViewer] No models found for building', buildingFmGuid);
-        setErrorMsg(`Inga XKT-modeller hittades för denna byggnad, varken lokalt eller från Asset+.`);
+        console.warn('[NativeViewer] No models found for building', buildingFmGuid, 'dbError:', dbError);
+        setErrorMsg(`Inga XKT-modeller hittades för byggnad ${buildingFmGuid.substring(0, 8)}. Kontrollera att modeller har synkats.`);
         setPhase('error');
         return;
       }
