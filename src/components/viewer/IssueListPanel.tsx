@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
-interface BcfIssue {
+export interface BcfIssue {
   id: string;
   title: string;
   description: string | null;
@@ -18,6 +18,8 @@ interface BcfIssue {
   created_at: string;
   viewpoint_json: any;
   selected_object_ids: string[] | null;
+  building_fm_guid?: string | null;
+  building_name?: string | null;
 }
 
 const ISSUE_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
@@ -235,4 +237,4 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, compact }) => {
 };
 
 export default IssueListPanel;
-export type { BcfIssue };
+
