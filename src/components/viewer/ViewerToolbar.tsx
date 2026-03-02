@@ -13,6 +13,7 @@ import {
   Settings,
   Eye,
   Crosshair,
+  Home,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -48,7 +49,6 @@ interface ViewerToolbarProps {
   className?: string;
 }
 
-// All available tools with metadata
 interface ToolDef {
   id: string;
   label: string;
@@ -62,6 +62,7 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'orbit', label: 'Orbit', icon: <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'nav' },
   { id: 'firstPerson', label: 'First person', icon: <Move className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'nav' },
   { id: 'fitView', label: 'Fit view', icon: <Focus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'view' },
+  { id: 'resetView', label: 'Återställ vy', icon: <Home className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'view' },
   { id: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
   { id: 'measure', label: 'Measure', icon: <Ruler className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
   { id: 'section', label: 'Section', icon: <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'tool' },
@@ -73,7 +74,7 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'crosshair', label: 'Crosshair', icon: <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
 ];
 
-const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'select', 'measure', 'section', 'viewMode'];
+const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode'];
 
 function getEnabledTools(): string[] {
   try {
@@ -133,8 +134,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
   const [isXrayActive, setIsXrayActive] = useState(false);
+  const [isOnHoverActive, setIsOnHoverActive] = useState(false);
+  const [isCrosshairActive, setIsCrosshairActive] = useState(false);
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
+
+  // Store initial camera for reset
+  const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
 
   const viewModeRef = useRef<ViewMode>(viewMode);
   const colorizedFor2dRef = useRef<Map<string, { colorize: number[] | null; opacity: number; edges: boolean; pickable: boolean; visible: boolean }>>(new Map());
@@ -149,6 +155,22 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   }, [viewer]);
 
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+
+  // Capture initial camera state once viewer is ready
+  useEffect(() => {
+    if (!viewer?.camera || initialCameraRef.current) return;
+    // Wait a moment for camera to settle after model load
+    const timer = setTimeout(() => {
+      if (viewer?.camera) {
+        initialCameraRef.current = {
+          eye: [...viewer.camera.eye],
+          look: [...viewer.camera.look],
+          up: [...viewer.camera.up],
+        };
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [viewer]);
 
   const isReady = !!viewer?.scene;
   const isToolEnabled = (id: string) => enabledTools.includes(id);
@@ -258,6 +280,90 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
+  // ── On-hover highlight logic ─────────────────────────────────────────────
+  const onHoverCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!isOnHoverActive || !viewer?.scene) {
+      onHoverCleanupRef.current?.();
+      onHoverCleanupRef.current = null;
+      return;
+    }
+
+    let lastHighlightedId: string | null = null;
+    const scene = viewer.scene;
+    const canvas = scene.canvas?.canvas;
+    if (!canvas) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const pickResult = scene.pick({
+        canvasPos: [e.offsetX, e.offsetY],
+        pickSurface: false,
+      });
+
+      const newId = pickResult?.entity?.id || null;
+
+      if (lastHighlightedId && lastHighlightedId !== newId) {
+        const prev = scene.objects?.[lastHighlightedId];
+        if (prev) prev.highlighted = false;
+      }
+
+      if (newId) {
+        const entity = scene.objects?.[newId];
+        if (entity) entity.highlighted = true;
+      }
+
+      lastHighlightedId = newId;
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+
+    const cleanup = () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      if (lastHighlightedId) {
+        const prev = scene.objects?.[lastHighlightedId];
+        if (prev) prev.highlighted = false;
+      }
+    };
+
+    onHoverCleanupRef.current = cleanup;
+    return cleanup;
+  }, [isOnHoverActive, viewer]);
+
+  // ── Crosshair overlay ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isCrosshairActive || !viewer?.scene) return;
+
+    const canvas = viewer.scene.canvas?.canvas;
+    if (!canvas) return;
+
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const crosshairEl = document.createElement('div');
+    crosshairEl.id = 'viewer-crosshair';
+    crosshairEl.style.cssText = `
+      position: absolute; top: 50%; left: 50%; 
+      width: 24px; height: 24px; 
+      transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 20;
+    `;
+    crosshairEl.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5">
+        <line x1="12" y1="4" x2="12" y2="10" />
+        <line x1="12" y1="14" x2="12" y2="20" />
+        <line x1="4" y1="12" x2="10" y2="12" />
+        <line x1="14" y1="12" x2="20" y2="12" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    `;
+    parent.appendChild(crosshairEl);
+
+    return () => {
+      crosshairEl.remove();
+    };
+  }, [isCrosshairActive, viewer]);
+
   // ── Navigation handlers — direct xeokit API ──────────────────────────────
 
   const handleZoomIn = useCallback(() => {
@@ -287,6 +393,46 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
     } else {
       viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
     }
+  }, [viewer]);
+
+  const handleResetView = useCallback(() => {
+    if (!viewer?.cameraFlight) return;
+    // Clear selection
+    const selected = viewer.scene?.selectedObjectIds || [];
+    if (selected.length > 0) viewer.scene.setObjectsSelected(selected, false);
+    // Clear section planes
+    const planes = Object.values(viewer.scene.sectionPlanes || {});
+    planes.forEach((sp: any) => { try { sp.destroy(); } catch {} });
+    // Reset visibility
+    const allIds = viewer.scene.objectIds || [];
+    if (allIds.length > 0) {
+      viewer.scene.setObjectsVisible(allIds, true);
+      viewer.scene.setObjectsXRayed(allIds, false);
+      viewer.scene.setObjectsColorized(allIds, false);
+      // Hide IfcSpaces
+      const metaObjects = viewer.metaScene?.metaObjects;
+      if (metaObjects) {
+        Object.values(metaObjects).forEach((mo: any) => {
+          if ((mo.type || '').toLowerCase() === 'ifcspace') {
+            const entity = viewer.scene.objects?.[mo.id];
+            if (entity) { entity.visible = false; entity.pickable = false; }
+          }
+        });
+      }
+    }
+    // Fly to initial camera or scene bounds
+    if (initialCameraRef.current) {
+      viewer.cameraFlight.flyTo({
+        eye: initialCameraRef.current.eye,
+        look: initialCameraRef.current.look,
+        up: initialCameraRef.current.up,
+        duration: 0.5,
+      });
+    } else {
+      viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0.5 });
+    }
+    // Reset x-ray
+    setIsXrayActive(false);
   }, [viewer]);
 
   const handleNavModeChange = useCallback((mode: NavMode) => {
@@ -482,7 +628,6 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
         style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)' }}
       >
         {visibleTools.map((tool, idx) => {
-          // Add separators between groups
           const prevTool = idx > 0 ? visibleTools[idx - 1] : null;
           const showSep = prevTool && prevTool.group !== tool.group;
 
@@ -498,6 +643,9 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
               )}
               {tool.id === 'fitView' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={handleViewFit} disabled={!isReady} />
+              )}
+              {tool.id === 'resetView' && (
+                <ToolButton icon={tool.icon} label={tool.label} onClick={handleResetView} disabled={!isReady} />
               )}
               {tool.id === 'select' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={() => handleToolChange('select')} active={activeTool === 'select'} disabled={!isReady} />
@@ -526,13 +674,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, className }) => {
                 <ToolButton icon={tool.icon} label={tool.label} onClick={handleXrayToggle} active={isXrayActive} disabled={!isReady} />
               )}
               {tool.id === 'onHover' && (
-                <ToolButton icon={tool.icon} label={tool.label} onClick={() => {}} disabled={!isReady} />
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => setIsOnHoverActive(p => !p)} active={isOnHoverActive} disabled={!isReady} />
               )}
               {tool.id === 'zoomIn' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={handleZoomIn} disabled={!isReady} />
               )}
               {tool.id === 'crosshair' && (
-                <ToolButton icon={tool.icon} label={tool.label} onClick={() => {}} disabled={!isReady} />
+                <ToolButton icon={tool.icon} label={tool.label} onClick={() => setIsCrosshairActive(p => !p)} active={isCrosshairActive} disabled={!isReady} />
               )}
             </React.Fragment>
           );
