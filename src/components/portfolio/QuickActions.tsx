@@ -73,9 +73,9 @@ const QuickActions: React.FC<QuickActionsProps> = ({
   const disabledClass = 'opacity-40 cursor-not-allowed';
 
   // Standardized button style with proper touch targets (min 44x44)
-  const btnClass = "justify-start sm:justify-center gap-1 sm:gap-2 h-auto py-2 px-1 sm:py-3 sm:px-4 min-w-0 text-[10px] sm:text-sm";
-  const iconSize = 16;
-  const labelClass = "text-[11px] sm:text-xs";
+  const btnClass = "justify-center gap-0.5 sm:gap-2 h-auto py-1.5 px-0.5 sm:py-3 sm:px-4 min-w-0 text-[10px] sm:text-sm flex-col sm:flex-row";
+  const iconSize = 14;
+  const labelClass = "text-[9px] sm:text-xs leading-tight";
 
   if (isLoading) {
     return (

@@ -514,13 +514,15 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         if (allIds.length > 0) {
           scene.setObjectsXRayed(allIds, false);
         }
-        // Hide IfcSpace entities
+        // Hide IfcSpace entities and pre-colorize them blue so they never flash red
         let hiddenSpaces = 0;
         const metaScene = viewer.metaScene;
         if (metaScene?.metaObjects) {
           for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
             const ifcType = (metaObj.type || '').toLowerCase();
-            if (ifcType === 'ifcspace' || ifcType === 'ifc_space') {
+            // Match all space-like types (various IFC naming conventions)
+            const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
+            if (isSpace) {
               const entity = scene.objects?.[id];
               if (entity) {
                 entity.colorize = [0.5, 0.7, 0.9];
