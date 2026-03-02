@@ -494,6 +494,26 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           scene.setObjectsColorized(allIds, false); // Clears colorize to default
           scene.setObjectsXRayed(allIds, false);
         }
+
+        // Neutralize strongly-red native materials (fire doors, MEP, etc.)
+        // These IFC objects often have vivid red baked into the XKT and look wrong
+        // when shown without a theme. Apply a muted neutral tone instead.
+        let neutralizedCount = 0;
+        const RED_THRESHOLD = 0.7;
+        const GREEN_MAX = 0.35;
+        const BLUE_MAX = 0.35;
+        allIds.forEach((id: string) => {
+          const entity = scene.objects?.[id];
+          if (!entity) return;
+          const c = entity.colorize;
+          if (c && c[0] > RED_THRESHOLD && c[1] < GREEN_MAX && c[2] < BLUE_MAX) {
+            entity.colorize = [0.75, 0.73, 0.70]; // Warm neutral gray
+            neutralizedCount++;
+          }
+        });
+        if (neutralizedCount > 0) {
+          console.log(`[NativeViewer] Neutralized ${neutralizedCount} strongly-red objects`);
+        }
       }
 
       const totalTime = Math.round(performance.now() - t0);
