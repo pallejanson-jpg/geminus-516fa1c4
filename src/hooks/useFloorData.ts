@@ -77,6 +77,8 @@ export function useFloorData(
 
     const metaObjects = viewer.metaScene.metaObjects;
     const floorsByName = new Map<string, FloorInfo>();
+    // Track GUID-named floors separately so they don't merge
+    let guidCounter = 0;
 
     Object.values(metaObjects).forEach((metaObject: any) => {
       if (metaObject?.type?.toLowerCase() !== 'ifcbuildingstorey') return;
@@ -90,23 +92,30 @@ export function useFloorData(
         floorNamesMap.get(fmGuid.toUpperCase());
 
       let displayName = metaObject.name || 'Unknown Floor';
+      let isGuidName = false;
       if (dbName) {
         displayName = dbName;
       } else if (displayName.match(/^[0-9A-Fa-f-]{30,}$/)) {
-        displayName = '__GUID_PLACEHOLDER__';
+        // GUID-like name — give each a UNIQUE placeholder to prevent merging
+        guidCounter++;
+        displayName = `Plan ${guidCounter}`;
+        isGuidName = true;
       }
 
       const shortMatch = displayName.match(/(\d+)/);
       const shortName = shortMatch ? shortMatch[1] : displayName.substring(0, 10);
 
-      if (floorsByName.has(displayName)) {
+      // Only merge floors with the SAME resolved display name (not GUID placeholders)
+      if (!isGuidName && floorsByName.has(displayName)) {
         const existing = floorsByName.get(displayName)!;
         existing.metaObjectIds.push(metaObject.id);
         if (!existing.databaseLevelFmGuids.includes(fmGuid)) {
           existing.databaseLevelFmGuids.push(fmGuid);
         }
       } else {
-        floorsByName.set(displayName, {
+        // Use a unique key for GUID floors to prevent merging
+        const key = isGuidName ? `__guid_${guidCounter}` : displayName;
+        floorsByName.set(key, {
           id: metaObject.id,
           name: displayName,
           shortName,
@@ -118,16 +127,6 @@ export function useFloorData(
 
     const result = Array.from(floorsByName.values());
     result.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-
-    // Replace GUID placeholders with sequential "Plan X"
-    let unknownIndex = 1;
-    result.forEach((floor) => {
-      if (floor.name === '__GUID_PLACEHOLDER__') {
-        floor.name = `Plan ${unknownIndex}`;
-        floor.shortName = String(unknownIndex);
-        unknownIndex++;
-      }
-    });
 
     return result;
   }, [getXeokitViewer, floorNamesMap]);
