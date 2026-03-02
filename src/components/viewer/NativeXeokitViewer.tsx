@@ -523,6 +523,8 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
             if (ifcType === 'ifcspace' || ifcType === 'ifc_space') {
               const entity = scene.objects?.[id];
               if (entity) {
+                entity.colorize = [0.5, 0.7, 0.9];
+                entity.opacity = 0.3;
                 entity.visible = false;
                 entity.pickable = false;
                 hiddenSpaces++;
