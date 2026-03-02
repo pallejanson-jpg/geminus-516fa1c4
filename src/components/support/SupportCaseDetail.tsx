@@ -7,10 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Send, Loader2, User, Clock, MapPin, Link2, Wrench, CalendarDays } from 'lucide-react';
+import { Send, Loader2, User, MapPin, Link2, Wrench, CalendarDays } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
@@ -25,23 +22,6 @@ interface CaseComment {
   profile?: { display_name: string | null; avatar_url: string | null };
 }
 
-const STATUS_OPTIONS = [
-  { value: 'new', label: 'Nytt' },
-  { value: 'in_progress', label: 'Pågående' },
-  { value: 'resolved', label: 'Löst' },
-  { value: 'closed', label: 'Stängt' },
-];
-
-const CATEGORY_LABELS: Record<string, string> = {
-  question: 'Fråga',
-  fault: 'Felanmälan',
-  service: 'Servicebeställning',
-  warranty: 'Garantiärende',
-  inspection: 'Besiktning',
-  consultation: 'Fråga / Rådgivning',
-  other: 'Övrigt',
-};
-
 interface Props {
   supportCase: SupportCase | null;
   open: boolean;
@@ -50,22 +30,64 @@ interface Props {
 }
 
 const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpdated }) => {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [comments, setComments] = useState<CaseComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(supportCase?.status || 'new');
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     if (supportCase) {
-      setCurrentStatus(supportCase.status);
-      fetchComments(supportCase.id);
+      setComments([]);
+      setDetailData(null);
+      // Fetch detail from SWG if it has a swg_id
+      if (supportCase.swg_id) {
+        fetchSwgDetail(String(supportCase.swg_id));
+      } else {
+        // Fallback: fetch local comments
+        fetchLocalComments(supportCase.id);
+      }
     }
   }, [supportCase?.id]);
 
-  const fetchComments = async (caseId: string) => {
+  const fetchSwgDetail = async (requestId: string) => {
+    setLoadingComments(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('support-proxy', {
+        body: { action: 'get-request', requestId },
+      });
+      if (error) throw error;
+      console.log('SWG get-request response:', data);
+      
+      const detail = data?.data;
+      if (detail && typeof detail === 'object') {
+        setDetailData(detail as Record<string, unknown>);
+        // Extract comments from detail if available
+        const rawComments = (detail as Record<string, unknown>).comments || 
+                            (detail as Record<string, unknown>).Comments || 
+                            (detail as Record<string, unknown>).history || [];
+        if (Array.isArray(rawComments)) {
+          setComments(rawComments.map((c: Record<string, unknown>, i: number) => ({
+            id: String(c.id || c.Id || i),
+            user_id: String(c.userId || c.UserId || c.createdBy || c.CreatedBy || ''),
+            comment: String(c.comment || c.Comment || c.text || c.Text || c.message || c.Message || ''),
+            created_at: String(c.created || c.Created || c.createdAt || c.CreatedAt || new Date().toISOString()),
+            profile: {
+              display_name: String(c.userName || c.UserName || c.createdByName || c.CreatedByName || 'SWG'),
+              avatar_url: null,
+            },
+          })));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch SWG detail:', err);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const fetchLocalComments = async (caseId: string) => {
     setLoadingComments(true);
     try {
       const { data, error } = await supabase
@@ -94,14 +116,29 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
     if (!newComment.trim() || !supportCase || !user) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('support_case_comments').insert({
-        case_id: supportCase.id,
-        user_id: user.id,
-        comment: newComment.trim(),
-      });
-      if (error) throw error;
-      setNewComment('');
-      await fetchComments(supportCase.id);
+      if (supportCase.swg_id) {
+        // Send comment to SWG
+        const { error } = await supabase.functions.invoke('support-proxy', {
+          body: {
+            action: 'add-comment',
+            requestId: String(supportCase.swg_id),
+            payload: { comment: newComment.trim() },
+          },
+        });
+        if (error) throw error;
+        setNewComment('');
+        await fetchSwgDetail(String(supportCase.swg_id));
+      } else {
+        // Local comment
+        const { error } = await supabase.from('support_case_comments').insert({
+          case_id: supportCase.id,
+          user_id: user.id,
+          comment: newComment.trim(),
+        });
+        if (error) throw error;
+        setNewComment('');
+        await fetchLocalComments(supportCase.id);
+      }
       toast({ title: 'Kommentar skickad' });
     } catch {
       toast({ title: 'Kunde inte skicka kommentar', variant: 'destructive' });
@@ -110,31 +147,9 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!supportCase || !isAdmin) return;
-    setUpdatingStatus(true);
-    try {
-      const updateData: Record<string, unknown> = { status: newStatus };
-      if (newStatus === 'resolved') updateData.resolved_at = new Date().toISOString();
-      const { error } = await supabase
-        .from('support_cases')
-        .update(updateData)
-        .eq('id', supportCase.id);
-      if (error) throw error;
-      setCurrentStatus(newStatus);
-      onUpdated?.();
-      toast({ title: 'Status uppdaterad' });
-    } catch {
-      toast({ title: 'Kunde inte uppdatera status', variant: 'destructive' });
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
   if (!supportCase) return null;
 
-  const caseNumber = `#${supportCase.id.slice(0, 8).toUpperCase()}`;
-  const categoryLabel = CATEGORY_LABELS[supportCase.category] || supportCase.category;
+  const caseNumber = supportCase.swg_id ? `#${supportCase.swg_id}` : `#${supportCase.id.slice(0, 8).toUpperCase()}`;
 
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
@@ -143,8 +158,10 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
           <SheetTitle className="text-left">{supportCase.title}</SheetTitle>
           <SheetDescription className="text-left flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-xs font-mono text-muted-foreground">{caseNumber}</span>
-            <Badge variant="secondary">{categoryLabel}</Badge>
-            <Badge variant="outline">{supportCase.priority}</Badge>
+            {supportCase.category && <Badge variant="secondary">{supportCase.category}</Badge>}
+            {supportCase.swg_status && (
+              <Badge variant="outline">{supportCase.swg_status}</Badge>
+            )}
             <span className="text-xs text-muted-foreground">
               {format(new Date(supportCase.created_at), 'PPP')}
             </span>
@@ -169,7 +186,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
             <div className="grid grid-cols-2 gap-3 text-sm">
               {supportCase.building_name && (
                 <div>
-                  <span className="text-muted-foreground">Byggnad</span>
+                  <span className="text-muted-foreground">Byggnad / Område</span>
                   <p className="font-medium text-foreground">{supportCase.building_name}</p>
                 </div>
               )}
@@ -212,29 +229,18 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
                   <p className="font-medium text-foreground">{supportCase.contact_phone}</p>
                 </div>
               )}
+              {supportCase.external_reference && (
+                <div>
+                  <span className="text-muted-foreground">Referensnummer</span>
+                  <p className="font-medium text-foreground">{supportCase.external_reference}</p>
+                </div>
+              )}
             </div>
 
             {supportCase.bcf_issue_id && (
               <div className="flex items-center gap-2 text-sm">
                 <Link2 className="h-4 w-4 text-primary" />
                 <span className="text-muted-foreground">Länkad till BCF-issue</span>
-              </div>
-            )}
-
-            {/* Admin status */}
-            {isAdmin && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Status</h4>
-                <Select value={currentStatus} onValueChange={handleStatusChange} disabled={updatingStatus}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             )}
 
